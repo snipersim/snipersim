@@ -12,9 +12,6 @@
 // When # simulated cores > # host cores, this is probably not very useful
 //#define ENABLE_PERF_MODEL_OWN_THREAD
 
-// Enable to queue instructions per basic block
-#define ENABLE_PER_BASIC_BLOCK
-
 #include "fixed_types.h"
 
 #include <vector>
@@ -114,6 +111,8 @@ public:
    bool getEnableSyncReport() const { return m_knob_enable_sync_report; }
    bool getOSEmuPthreadReplace() const { return m_knob_osemu_pthread_replace; }
    UInt32 getOSEmuNprocs() const { return m_knob_osemu_nprocs; }
+   bool getEnablePerBasicblock() const { return m_knob_enable_perbasicblock; }
+   void setEnablePerBasicblock(bool enable) { m_knob_enable_perbasicblock = enable; }
 
    bool getBBVsEnabled() const { return m_knob_bbvs; }
    void setBBVsEnabled(bool enable) { m_knob_bbvs = enable; }
@@ -166,6 +165,7 @@ private:
    static bool m_knob_osemu_pthread_replace;
    static UInt32 m_knob_osemu_nprocs;
    static bool m_knob_bbvs;
+   static bool m_knob_enable_perbasicblock;
 
    static SimulationMode parseSimulationMode(String mode);
    static UInt32 computeCoreIDLength(UInt32 core_count);

@@ -1,0 +1,11 @@
+Version 1.04
+  * Fix instruction dependencies for LEA and stores
+
+Version 1.03
+  * Build changes to improve compatibility with Fedora 16
+
+Version 1.02
+  * Remove unneeded warnings from CPI stack script
+
+Version 1.0
+  * Initial public release

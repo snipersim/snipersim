@@ -269,7 +269,7 @@ struct MicroOp {
 
    void setDebugInfo(String debugInfo);
    String toString() const;
-   String toShortString() const;
+   String toShortString(bool withDisassembly = false) const;
 
    uint64_t getExecTime() const { return this->execTime; }
    void setExecTime(uint64_t time) { this->execTime = time; }

@@ -55,7 +55,7 @@ private:
    UInt64 m_dyninsn_cost;
    UInt64 m_dyninsn_zero_count;
 
-   UInt64 m_l1_line_mask; // Mask corresponding to the L1 cache line size
+   UInt64 m_mem_dep_mask; // Memory access dependency granularity
 
 #if DEBUG_DYN_INSN_LOG
    FILE *m_dyninsn_log;
@@ -82,32 +82,6 @@ private:
 
    SubsecondTime m_cpiStartTime;
    SubsecondTime m_cpiFastforwardTime;
-
-   struct MisalignInfo
-   {
-
-      MisalignInfo(Core *core)
-         : read_misses(0)
-         , write_misses(0)
-         , read_total_miss_latency(0)
-         , write_total_miss_latency(0)
-      {
-         registerStatsMetric("misalign_info", core->getId(), "read_misses", &read_misses);
-         registerStatsMetric("misalign_info", core->getId(), "write_misses", &write_misses);
-         registerStatsMetric("misalign_info", core->getId(), "read_total_miss_latency", &read_total_miss_latency);
-         registerStatsMetric("misalign_info", core->getId(), "write_total_miss_latency", &write_total_miss_latency);
-      }
-
-      ~MisalignInfo()
-      {
-      }
-
-      UInt64 read_misses;
-      UInt64 write_misses;
-      UInt64 read_total_miss_latency;
-      UInt64 write_total_miss_latency;
-
-   } m_misalign_info;
 };
 
 #endif

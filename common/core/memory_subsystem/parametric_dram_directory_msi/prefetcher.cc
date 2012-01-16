@@ -33,8 +33,19 @@ Prefetcher::getNextAddress(IntPtr current_address)
    m_prev_address[n_flow] = current_address;
 
    // But stay within the page
-   if ((prefetch_address & PAGE_MASK) == (current_address & PAGE_MASK))
+   if (stride > 0 && ((prefetch_address & PAGE_MASK) == (current_address & PAGE_MASK)))
       return prefetch_address;
    else
       return 0;
 }
+
+bool
+Prefetcher::hasAddress(IntPtr address)
+{
+   for(UInt32 i = 0; i < n_flows; ++i) {
+      if (m_prev_address[i] == address)
+         return true;
+   }
+   return false;
+}
+

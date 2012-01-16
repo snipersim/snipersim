@@ -39,7 +39,7 @@ UnstructuredBuffer& UnstructuredBuffer::operator>>(std::pair<void*, int> buffer)
    int size = buffer.second;
 
    assert(size >= 0);
-   __attribute(__unused__) bool res = get<UInt8>((UInt8*) buff, size);
+   bool res = get<UInt8>((UInt8*) buff, size);
    assert(res == true);
    return *this;
 }

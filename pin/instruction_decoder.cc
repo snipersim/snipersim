@@ -56,14 +56,21 @@ InstructionDecoder::DecodeResult& InstructionDecoder::decode(INS ins)
 
    for(UINT32 idx = 0; idx < INS_OperandCount(ins); ++idx)
    {
-      if (! INS_OperandIsReg(ins, idx)) continue;
+      if (INS_OperandIsAddressGenerator(ins, idx))
+      {
+         /* LEA instruction */
+         this->decode_result->uop_execute.regs_src.insert(INS_OperandMemoryBaseReg(ins, idx));
+         this->decode_result->uop_execute.regs_src.insert(INS_OperandMemoryIndexReg(ins, idx));
+      }
+      else if (INS_OperandIsReg(ins, idx))
+      {
+         REG reg = INS_OperandReg(ins, idx);
 
-      REG reg = INS_OperandReg(ins, idx);
-
-      if (INS_OperandRead(ins, idx) && mem_regs.count(reg) == 0)
-         this->decode_result->uop_execute.regs_src.insert(reg);
-      if (INS_OperandWritten(ins, idx))
-         this->decode_result->uop_execute.regs_dst.insert(reg);
+         if (INS_OperandRead(ins, idx) && mem_regs.count(reg) == 0)
+            this->decode_result->uop_execute.regs_src.insert(reg);
+         if (INS_OperandWritten(ins, idx))
+            this->decode_result->uop_execute.regs_dst.insert(reg);
+      }
    }
 
    // Not sure if this is needed, the hardware is doing a lot of optimizations on stack operations

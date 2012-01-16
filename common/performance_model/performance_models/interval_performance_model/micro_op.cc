@@ -1,10 +1,12 @@
 #include "micro_op.h"
 #include "windows.h"
 #include "lll_info.h"
+#include "instruction.h"
 
 #include <assert.h>
 #include <iostream>
 #include <sstream>
+#include <iomanip>
 
 // Enabling verification can help if there is memory corruption that is overwriting the MicroOp
 // datastructure and you would like to detect when it is happening
@@ -265,7 +267,7 @@ bool MicroOp::isLast() const {
 
 void MicroOp::copyTo(MicroOp& destination) const {
    VERIFY_MICROOP();
-#if 1
+#ifndef ENABLE_MICROOP_STRINGS
    // Save stuff in destination we shouldn't overwrite
    uint32_t windowIndex = destination.windowIndex;
    uint64_t sequenceNumber = destination.sequenceNumber;
@@ -281,7 +283,6 @@ void MicroOp::copyTo(MicroOp& destination) const {
    destination.first = this->first;
    destination.last = this->last;
    destination.instructionOpcode = this->instructionOpcode;
-   destination.instructionPinOpcode = this->instructionPinOpcode;
    destination.instruction = this->instruction;
 #ifdef ENABLE_MICROOP_STRINGS
    destination.instructionOpcodeName = this->instructionOpcodeName;
@@ -580,43 +581,40 @@ String MicroOp::toString() const {
    return String(out.str().c_str());
 }
 
-String MicroOp::toShortString() const
+String MicroOp::toShortString(bool withDisassembly) const
 {
    std::ostringstream out;
    if (sequenceNumber == INVALID_SEQNR)
       out << "INVALID_SEQNR";
    else
-      out << sequenceNumber;
+      out << std::setw(8) << sequenceNumber;
    if (this->uop_type == UOP_LOAD)
-      out << " LOAD: " << std::hex << address.phys << " ("
-         #ifdef ENABLE_MICROOP_STRINGS
-         << instructionOpcodeName
-         #endif
-         << ":0x" << std::hex << instructionOpcode << std::dec << ")";
+      out << " LOAD:  " << std::hex << std::setw(8) << address.phys;
    else if (this->uop_type == UOP_STORE)
-      out << " STORE: " << std::hex << address.phys << " ("
-         #ifdef ENABLE_MICROOP_STRINGS
-         << instructionOpcodeName
-         #endif
-         << ":0x" << std::hex << instructionOpcode << std::dec << ")";
+      out << " STORE: " << std::hex << std::setw(8) << address.phys;
    else if (this->uop_type == UOP_EXECUTE)
-      out << " EXEC: "
-         << execLatency << " ("
-         #ifdef ENABLE_MICROOP_STRINGS
-         << instructionOpcodeName
-         #endif
-         << ":0x" << std::hex << instructionOpcode << std::dec << ")";
+      out << " EXEC:  " << std::setw(8) << execLatency;
    else
       out << " INVALID";
+   out << " ("
+         #ifdef ENABLE_MICROOP_STRINGS
+         << std::left << std::setw(8) << instructionOpcodeName
+         #endif
+         << ":0x" << std::hex << std::setw(4) << instructionOpcode << std::dec << ")";
 
    out << "  DEPS: ";
+   std::ostringstream deps;
    for(uint32_t i = 0; i < getDependenciesLength(); i++)
    {
       if (getDependency(i) == INVALID_SEQNR)
-         out << "INVALID_SEQNR";
+         deps << "INVALID_SEQNR";
       else
-         out << std::dec << getDependency(i) << " ";
+         deps << std::dec << getDependency(i) << " ";
    }
+   out << std::setw(20) << deps.str();
+
+   if (withDisassembly)
+      out << "  --  " << (this->getInstruction() ? this->getInstruction()->getDisassembly() : "(dynamic)");
 
    return String(out.str().c_str());
 }

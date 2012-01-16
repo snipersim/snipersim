@@ -152,6 +152,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "store-overlapping-misses", &stats.store_overlapping_misses);
    registerStatsMetric(name, core_id, "loads-prefetch", &stats.loads_prefetch);
    registerStatsMetric(name, core_id, "stores-prefetch", &stats.stores_prefetch);
+   registerStatsMetric(name, core_id, "prefetch-hits", &stats.prefetch_hits);
    registerStatsMetric(name, core_id, "evict-shared", &stats.evict_shared);
    registerStatsMetric(name, core_id, "evict-modified", &stats.evict_modified);
    registerStatsMetric(name, core_id, "total-latency", &stats.total_latency);
@@ -288,6 +289,11 @@ MYLOG("L1 miss");
       if (getCacheState(ca_address) != CacheState::INVALID)
          invalidateCacheBlock(ca_address);
 
+      SubsecondTime t_prefetch = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+      bool prefetch_hit = false;
+      if (m_next_cache_cntlr->m_master->m_prefetcher && m_next_cache_cntlr->m_master->m_prefetcher->hasAddress(ca_address))
+         prefetch_hit = true;
+
 MYLOG("processMemOpFromCore l%d before next", m_mem_component);
       hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, ca_address, modeled, false, t_start, false);
       bool next_cache_hit = hit_where != HitWhere::MISS;
@@ -325,10 +331,20 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
          releaseStackLock(ca_address, true);
          #else
          #endif
+      }
 
+
+      if (prefetch_hit) {
+         // If the prefetcher says he had the line prefetched, ignore the access time of the LLC/DRAM
+         getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_prefetch);
+         stats.prefetch_hits++;
+      }
+
+
+      if ((hit_where % HitWhere::SIBLING) > m_next_cache_cntlr->m_mem_component) {
          // Prefetch the next predicted line
          if (modeled && m_next_cache_cntlr)
-            m_next_cache_cntlr->Prefetch(this, mem_op_type, ca_address);
+            m_next_cache_cntlr->Prefetch(this, mem_op_type, ca_address, t_start);
       }
 
 
@@ -430,14 +446,17 @@ MYLOG("copyDataFromNextLevel l%d done", m_mem_component);
 
 
 void
-CacheCntlr::Prefetch(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address)
+CacheCntlr::Prefetch(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, SubsecondTime t_start)
 {
-   if (m_master->m_prefetcher) {
+   if (m_master->m_prefetcher && mem_op_type == Core::READ) {
       UInt64 prefetch_address = 0;
       {
          ScopedLock sl(getLock());
          prefetch_address = m_master->m_prefetcher->getNextAddress(address);
       }
+      #if 0
+      // Right now: prefetcher hit just means that next time latency will be zero, we don't do the actual access until then
+      // This makes the code *much* simpler, but does mean we do not model cache polution and bandwidth usage by non-useful prefetches.
       if (prefetch_address && !operationPermissibleinCache(prefetch_address, Core::READ)) {
          ++stats.prefetches;
          bool haveLock = lastLevelCache()->m_master->getSetLock(address) == lastLevelCache()->m_master->getSetLock(prefetch_address);
@@ -445,11 +464,13 @@ CacheCntlr::Prefetch(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr a
             acquireStackLock(prefetch_address);
          MYLOG("prefetching %lx", prefetch_address);
          SubsecondTime t_before = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-         processShmemReqFromPrevCache(requester, Core::READ, prefetch_address, true, true, t_before, false);
+         getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_start); // Start the prefetch at the same time as the original miss
+         processShmemReqFromPrevCache(requester, Core::READ, prefetch_address, true, true, t_start, false);
          getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_before); // Ignore changes to time made by the prefetch call
          if (!haveLock)
             releaseStackLock(prefetch_address);
       }
+      #endif
    }
 }
 

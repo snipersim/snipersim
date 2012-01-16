@@ -27,6 +27,7 @@ bool Config::m_knob_enable_sync_report;
 bool Config::m_knob_osemu_pthread_replace;
 UInt32 Config::m_knob_osemu_nprocs;
 bool Config::m_knob_bbvs;
+bool Config::m_knob_enable_perbasicblock;
 
 Config *Config::m_singleton;
 

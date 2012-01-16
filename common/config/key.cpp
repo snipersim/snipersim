@@ -5,6 +5,7 @@
 // Author: Charles Gruenwald III
 #include "key.hpp"
 
+#include <iostream>
 #include <boost/version.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
@@ -52,7 +53,7 @@ namespace config
 
     //Determine the type of a given key by trying to cast it to different types
     //and catching the error.
-    const unsigned short Key::DetermineType(String value)
+    unsigned short Key::DetermineType(String value)
     {
         //strings are always valid
         unsigned short valid = TYPE_STRING_VALID;
@@ -99,12 +100,21 @@ namespace config
         return valid;
     }
 
+    void __attribute__((noreturn)) Key::throwInvalid(String type) const
+    {
+        if (m_value == "")
+            std::cerr << "[SNIPER] " << "Required configuration value missing for key " << m_parentPath << "/" << m_name << std::endl;
+        else
+            std::cerr << "[SNIPER] " << "Invalid configuration value of type " << type << " for key " << m_parentPath << "/" << m_name << ": " << m_value << std::endl;
+        throw std::bad_cast();
+    }
+
     bool Key::getBool() const
     {
         if(m_type & TYPE_BOOL_VALID)
             return m_value_b;
         else
-            throw std::bad_cast();
+            throwInvalid("bool");
     }
 
     SInt64 Key::getInt() const
@@ -112,7 +122,7 @@ namespace config
         if(m_type & TYPE_INT_VALID)
             return m_value_i;
         else
-            throw std::bad_cast();
+            throwInvalid("int");
     }
 
     const String Key::getString() const
@@ -125,7 +135,7 @@ namespace config
         if(m_type & TYPE_FLOAT_VALID)
             return m_value_f;
         else
-            throw std::bad_cast();
+            throwInvalid("float");
     }
 
     void Key::getValue(bool &bool_val) const

@@ -55,7 +55,8 @@ namespace config
             const String getName() const { return m_name; }
 
         private:
-            const unsigned short DetermineType(String);
+            unsigned short DetermineType(String);
+            void throwInvalid(String) const;
             String m_name;
 
             String m_value;

@@ -294,7 +294,7 @@ VOID traceCallback(TRACE trace, void *v)
       bool basic_block_is_new = true;
 
       // Instruction modeling
-      #ifdef ENABLE_PER_BASIC_BLOCK
+      if (Sim()->getConfig()->getEnablePerBasicblock()) {
          std::pair<ADDRINT, ADDRINT> key(INS_Address(BBL_InsHead(bbl)), INS_Address(BBL_InsTail(bbl)));
          if (basicblock_cache.count(key) == 0) {
             basic_block = new BasicBlock();
@@ -306,10 +306,10 @@ VOID traceCallback(TRACE trace, void *v)
          }
          // Insert the handleBasicBlock call, before possible rewrite* stuff. We'll fill in the basic_block later
          INSTRUMENT(INSTR_IF_DETAILED_OR_FULL, trace, BBL_InsHead(bbl), IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
-      #endif
+      }
 
       for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins)) {
-         #ifndef ENABLE_PER_BASIC_BLOCK
+         if (!Sim()->getConfig()->getEnablePerBasicblock()) {
             std::pair<ADDRINT, ADDRINT> key(INS_Address(ins), INS_Address(ins));
             if (basicblock_cache.count(key) == 0) {
                basic_block = new BasicBlock();
@@ -320,7 +320,7 @@ VOID traceCallback(TRACE trace, void *v)
                basic_block_is_new = false;
             }
             INSTRUMENT(INSTR_IF_DETAILED_OR_FULL, trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
-         #endif
+         }
 
          bool res = instructionCallback(trace, ins, basic_block_is_new ? basic_block : NULL);
          if (res == false)
@@ -572,6 +572,12 @@ int main(int argc, char *argv[])
    PIN_AddThreadStartFunction (threadStartCallback, 0);
    PIN_AddThreadFiniFunction (threadFiniCallback, 0);
 
+   bool enable_signals = cfg->getBool("general/enable_signals", false);
+   if (enable_signals)
+      Sim()->getConfig()->setEnablePerBasicblock(false);
+   else
+      Sim()->getConfig()->setEnablePerBasicblock(true);
+
    if (cfg->getBool("general/enable_syscall_modeling"))
    {
       if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
@@ -585,9 +591,11 @@ int main(int argc, char *argv[])
       {
          PIN_AddSyscallEntryFunction(lite::syscallEnterRunModel, 0);
          PIN_AddSyscallExitFunction(lite::syscallExitRunModel, 0);
-         PIN_InterceptSignal(SIGILL, lite::interceptSignal, NULL);
-         PIN_InterceptSignal(SIGFPE, lite::interceptSignal, NULL);
-         PIN_InterceptSignal(SIGSEGV, lite::interceptSignal, NULL);
+         if (!enable_signals) {
+            PIN_InterceptSignal(SIGILL, lite::interceptSignal, NULL);
+            PIN_InterceptSignal(SIGFPE, lite::interceptSignal, NULL);
+            PIN_InterceptSignal(SIGSEGV, lite::interceptSignal, NULL);
+         }
       }
    }
 

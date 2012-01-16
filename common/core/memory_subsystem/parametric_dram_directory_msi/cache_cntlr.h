@@ -157,7 +157,7 @@ namespace ParametricDramDirectoryMSI
            SubsecondTime total_latency;
            SubsecondTime snoop_latency;
            SubsecondTime mshr_latency;
-           UInt64 prefetches;
+           UInt64 prefetches, prefetch_hits;
            #ifdef ENABLE_TRANSITIONS
            UInt64 transitions[CacheState::NUM_CSTATE_STATES][CacheState::NUM_CSTATE_STATES];
            UInt64 transition_reasons[Transition::NUM_REASONS][CacheState::NUM_CSTATE_SPECIAL_STATES][CacheState::NUM_CSTATE_SPECIAL_STATES];
@@ -194,7 +194,7 @@ namespace ParametricDramDirectoryMSI
                IntPtr address, Core::mem_op_t mem_op_type);
 
          void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address);
-         void Prefetch(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address);
+         void Prefetch(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, SubsecondTime t_start);
 
          // Cache meta-data operations
          SharedCacheBlockInfo* getCacheBlockInfo(IntPtr address);

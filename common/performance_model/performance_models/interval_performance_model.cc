@@ -7,6 +7,7 @@
 #include "dvfs_manager.h"
 #include "subsecond_time.h"
 #include "micro_op.h"
+#include "utils.h"
 
 #include <cstdio>
 
@@ -34,7 +35,6 @@ IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction
     , m_dyninsn_count(0)
     , m_dyninsn_cost(0)
     , m_dyninsn_zero_count(0)
-    , m_misalign_info(core)
 {
    registerStatsMetric("performance_model", core->getId(), "instruction_count", &m_instruction_count);
    registerStatsMetric("performance_model", core->getId(), "elapsed_time", &m_elapsed_time);
@@ -61,11 +61,10 @@ IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction
    m_cycle_log = std::fopen(cycle_filename.c_str(), "w");
 #endif
 
-   // Create a bitmask for filtering the L1 cache access addresses
-   // The core model needs to handle this because the cache model cannot
-   // Here, line size is assumed to be a power of 2
-   UInt32 l1_line_size = Sim()->getCfg()->getInt("perf_model/l1_dcache/cache_block_size", 64);
-   m_l1_line_mask = ~(l1_line_size - 1);
+   // Granularity of memory dependencies, in bytes
+   UInt32 mem_gran = Sim()->getCfg()->getInt("perf_model/core/interval_timer/memory_dependency_granularity", 4);
+   LOG_ASSERT_ERROR(isPower2(mem_gran), "memory_dependency_granularity needs to be a power of 2. [%u]", mem_gran);
+   m_mem_dep_mask = ~(mem_gran - 1);
 
    m_cpiSyncFutex = SubsecondTime::Zero();
    m_cpiSyncPthreadMutex = SubsecondTime::Zero();
@@ -181,7 +180,6 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
       if (m_current_uops[m].isExecute())
       {
          exec_base_index = m;
-         break;
       }
       if (m_current_uops[m].isStore())
       {
@@ -257,17 +255,14 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
                // Update this uop with load latencies
                m_current_uops[load_index].setExecLatency(memory_cycle_latency);
                Memory::Access addr;
-               addr.set(info->memory_info.addr & m_l1_line_mask); // Enforce L1 cache line dependencies here, because the cache models do not handle it
+               addr.set(info->memory_info.addr & m_mem_dep_mask); // Enforce memory dependency granularity
                m_current_uops[load_index].setAddress(addr);
                m_current_uops[load_index].setDCacheHitWhere(info->memory_info.hit_where);
                ++m_state_num_reads_done;
             }
             else
             {
-               // Because of the differences between the PIN disassembler and disasm64, we sometimes don't always
-               // have a perfect alignment between the number of load operations that exist on an instruction
-               ++m_misalign_info.read_misses;
-               m_misalign_info.read_total_miss_latency += memory_cycle_latency;
+               LOG_PRINT_ERROR("Read operand count mismatch");
             }
 
          }
@@ -290,15 +285,14 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
                // Update this uop with store latencies.
                m_current_uops[store_index].setExecLatency(memory_cycle_latency);
                Memory::Access addr;
-               addr.set(info->memory_info.addr & m_l1_line_mask); // Enforce L1 cache line dependencies because the cache model does not handle it
+               addr.set(info->memory_info.addr & m_mem_dep_mask); // Enforce memory dependency granularity
                m_current_uops[store_index].setAddress(addr);
                m_current_uops[store_index].setDCacheHitWhere(info->memory_info.hit_where);
                ++m_state_num_writes_done;
             }
             else
             {
-               ++m_misalign_info.write_misses;
-               m_misalign_info.write_total_miss_latency += memory_cycle_latency;
+               LOG_PRINT_ERROR("Write operand count mismatch");
             }
 
          }
@@ -514,7 +508,7 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
       }
 
       Memory::Access data_address;
-      data_address.set(mem_dyn_insn->getDataAddress() & m_l1_line_mask); // Address to load.  Enforce L1 line dependencies here, as it does not happen in the cache model
+      data_address.set(mem_dyn_insn->getDataAddress() & m_mem_dep_mask); // Enforce memory dependency granularity
       uop->makeLoad(
            0 // uop offset of 0 (first uop)
          , data_address
