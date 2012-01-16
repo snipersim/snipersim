@@ -20,10 +20,23 @@ else:
     ('libboost-system-dev / boost-devel', '/usr/lib/libboost_system-mt.so'),
   ]
 
+ALTERNATIVES = [
+  ('/usr/lib', '/usr/lib/x86_64-linux-gnu'),
+  ('/usr/lib', '/usr/lib64'),
+]
+
 missing = False
 
+def find_file(filename):
+  if os.path.exists(filename):
+    return True
+  for pattern, replacement in ALTERNATIVES:
+    if os.path.exists(filename.replace(pattern, replacement)):
+      return True
+  return False
+
 for package, filename in DEPENDENCIES:
-  if not os.path.exists(filename) and not os.path.exists(filename.replace('/usr/lib', '/usr/lib/x86_64-linux-gnu')):
+  if not find_file(filename):
     print '*** Please install package %s' % package
     missing = True
 

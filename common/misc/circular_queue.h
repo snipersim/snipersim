@@ -17,7 +17,7 @@ template <class T> class CircularQueue
 
    public:
       typedef T value_type;
-      class iterator : public std::iterator<std::forward_iterator_tag, T, ptrdiff_t, const T*, const T&>
+      class iterator : public std::iterator<std::forward_iterator_tag, T, std::ptrdiff_t, const T*, const T&>
       {
          private:
             const CircularQueue &_queue;
