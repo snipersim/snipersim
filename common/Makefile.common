@@ -1,0 +1,133 @@
+SIM_ROOT ?= $(shell cd "$(CURDIR)/../" && pwd -P)
+
+include $(SIM_ROOT)/Makefile.config
+
+DIRECTORIES = $(SIM_ROOT)/common/core \
+	$(SIM_ROOT)/common/core/memory_subsystem \
+	$(SIM_ROOT)/common/core/memory_subsystem/cache \
+	$(SIM_ROOT)/common/core/memory_subsystem/directory_schemes \
+	$(SIM_ROOT)/common/network \
+	$(SIM_ROOT)/common/transport \
+	$(SIM_ROOT)/common/misc \
+	$(SIM_ROOT)/common/config \
+	$(SIM_ROOT)/common/system \
+	$(SIM_ROOT)/common/scripting \
+	$(SIM_ROOT)/common/sampling \
+	$(SIM_ROOT)/common/performance_model \
+	$(SIM_ROOT)/common/performance_model/branch_predictors \
+	$(SIM_ROOT)/common/performance_model/performance_models \
+	$(SIM_ROOT)/common/performance_model/performance_models/interval_performance_model \
+	$(SIM_ROOT)/common/user \
+	$(SIM_ROOT)/include \
+	$(CURDIR)/ \
+	$(SIM_ROOT)/pin/libdisasm64
+
+INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed2-intel64/include $(SIM_ROOT)/linux
+
+CLEAN=$(findstring clean,$(MAKECMDGOALS))
+
+KERNEL = LENNY
+
+CXXFLAGS += -DKERNEL_$(KERNEL)
+ifeq ($(TARGET_ARCH),ia32)
+  CXXFLAGS += -m32 -DTARGET_IA32
+  LD_FLAGS += -m32
+endif
+ifeq ($(TARGET_ARCH),x86_64)
+  CXXFLAGS += -fPIC -DTARGET_X86_64
+  LD_FLAGS +=
+endif
+
+include $(SIM_ROOT)/Makefile.config
+
+ifeq ($(BOOST_VERSION),1_38)
+	BOOST_ROOT = $(SIM_ROOT)/boost_1_38_0
+	BOOST_INCLUDE = $(BOOST_ROOT)/include
+	BOOST_LIB = $(BOOST_ROOT)/lib
+	BOOST_SUFFIX = il-mt
+	export LD_LIBRARY_PATH := $(BOOST_LIB):$(LD_LIBRARY_PATH)
+	CXXFLAGS += -I$(BOOST_INCLUDE)
+	LD_FLAGS += -L$(BOOST_LIB)
+else
+	BOOST_SUFFIX = mt
+endif
+
+LD_LIBS += -lboost_filesystem-$(BOOST_SUFFIX) -lboost_system-$(BOOST_SUFFIX) -L$(SIM_ROOT)/python_kit/lib -lpython2.7
+
+LD_FLAGS += -L$(SIM_ROOT)/lib
+export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
+
+# Include paths
+CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
+          -I$(SIM_ROOT)/python_kit/include/python2.7 \
+          -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
+
+%.h %.hpp:
+	@echo "\n\tUnable to find $@" >&2
+	@echo "\tYou may want to try running \`\`make empty_deps''\n" >&2
+	@false
+
+ifneq ($(MAKECMDGOALS),clean)
+# Using the SOURCES variable as the OBJECTS variable is not valid at this point
+-include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))
+endif
+
+# Build rules for dependency generation
+%.d: %.cpp
+ifeq ($(SHOW_COMPILE),)
+	@echo '[DEP   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@$(CXX) -MM -MG $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+else
+	$(CXX) -MM -MG $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+endif
+
+%.d: %.cc
+ifeq ($(SHOW_COMPILE),)
+	@echo '[DEP   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@$(CXX) -MM -MG $(CXXFLAGS) -std=c++0x $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+else
+	$(CXX) -MM -MG $(CXXFLAGS) -std=c++0x $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+endif
+
+%.d: %.c
+ifeq ($(SHOW_COMPILE),)
+	@echo '[DEP   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@$(CC) -MM -MG $(CFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+else
+	$(CC) -MM -MG $(CFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+endif
+
+# Build rules for object generation
+%.o: %.cpp
+ifeq ($(SHOW_COMPILE),)
+	@echo '[CXX   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+else
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+endif
+
+%.o : %.cc
+ifeq ($(SHOW_COMPILE),)
+	@echo '[CXX   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@$(CXX) $(CXXFLAGS) -std=c++0x -c $< -o $@
+else
+	$(CXX) $(CXXFLAGS) -std=c++0x -c $< -o $@
+endif
+
+%.o : %.c
+ifeq ($(SHOW_COMPILE),)
+	@echo '[CC    ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@$(CC) $(CFLAGS) -c $< -o $@
+else
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+
+DEPS=$(patsubst %.o,%.d,$(OBJECTS))
+
+# targets
+all: $(DEPS) $(OBJECTS)
+
+ifneq ($(CLEAN),)
+clean:
+	-rm -f *.o *.d
+endif

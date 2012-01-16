@@ -1,0 +1,18 @@
+This is the source code for the Sniper multicore simulator developed
+by the Performance Lab research group at Ghent University, Belgium.
+Please refer to the NOTICE file in the top level directory for 
+licensing and copyright information.
+
+For the latest version of the software or additional information, please
+see our website:
+
+http://snipersim.org
+
+If you are using Sniper, please let us know by posting a message on
+our user forum.  If you use Sniper in your research please
+acknowledge us by referencing our SuperComputing 2011 paper:
+
+Trevor E. Carlson, Wim Heirman, Lieven Eeckhout, "Sniper: Exploring
+the Level of Abstraction for Scalable and Accurate Parallel Multi-Core
+Simulation". Proceedings of the International Conference for High
+Performance Computing, Networking, Storage and Analysis (SC). 2011.

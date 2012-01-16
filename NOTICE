@@ -1,0 +1,15 @@
+Sniper Simulator
+Copyright 2009-2011 Universiteit Gent and Contributors
+
+Portions of this software are based on the Graphite Multicore Simulator
+developed at the Massachusetts Institute of Technology. The original
+software is available from
+   https://github.com/mit-carbon/Graphite/
+
+The interval core simulation model is licensed under an academic-use only
+license, see the file LICENSE.interval in this directory.
+The files that are covered under this license are
+  common/performance_model/performance_models/interval_performance_model/interval_timer.h
+  common/performance_model/performance_models/interval_performance_model/interval_timer.cc
+
+All other files are covered under the MIT license, see the file LICENSE.

@@ -1,0 +1,230 @@
+# A copy of this file is distributed with the binaries of Graphite and Benchmarks
+
+import sys, os, time, re, tempfile, timeout, traceback
+try:
+  import json
+except ImportError:
+  import localjson as json
+
+
+try:
+  import intelqueue, iqclient, packdir, app_constraints
+  ic = iqclient.IntelClient()
+  ic_invalid = False
+except ImportError:
+  ic_invalid = True
+
+
+def get_results(jobid = None, resultsdir = None, partial = None, force = False):
+  if jobid:
+    if ic_invalid:
+      raise RuntimeError('Cannot fetch results from server, make sure BENCHMARKS_ROOT points to a valid copy of benchmarks+iqlib')
+    if partial:
+      raise RuntimeError('Partial results not possible when loading from jobid')
+      # FIXME: could just download sim.stats from the server and re-parse that
+    results = ic.graphite_results(jobid)
+    simcfg = ic.job_output(jobid, 'sim.cfg', force)
+  elif resultsdir:
+    results = parse_results_from_dir(resultsdir, partial = partial)
+    simcfg = file(os.path.join(resultsdir, 'sim.cfg')).read()
+  else:
+    raise ValueError('Need either jobid or resultsdir')
+
+  return {
+    'results': stats_process(results),
+    'config': parse_config(simcfg)
+  }
+
+
+def get_name(jobid = None, resultsdir = None):
+  name = None
+  if jobid:
+    if ic_invalid:
+      raise RuntimeError('Cannot fetch results from server, make sure BENCHMARKS_ROOT points to a valid copy of benchmarks+iqlib')
+    name = ic.job_stat(jobid)['name']
+  elif resultsdir:
+    # Create a jobname from the results directory
+    name = os.path.basename(os.path.realpath(resultsdir))
+  else:
+    raise ValueError('Need either jobid or resultsdir')
+
+  return {
+    'name': name
+  }
+
+
+def stats_process(results):
+  ncores = [ int(r[2]) for r in results if r[0] == 'ncores'][0]
+  stats = {}
+  for key, core, value in results:
+     if core == -1:
+       stats[key] = value
+     else:
+       if key not in stats:
+         stats[key] = [0]*ncores
+       if core < ncores:
+         stats[key][core] = value
+  # add computed stats
+  try:
+    l1access = sum(stats['L1-D.load-misses']) + sum(stats['L1-D.store-misses'])
+    l1time = sum(stats['L1-D.total-latency'])
+    stats['l1misslat'] = l1time / float(l1access or 1)
+  except KeyError:
+    pass
+  stats['pthread_locks_contended'] = float(sum(stats.get('pthread.pthread_mutex_lock_contended', [0]))) / (sum(stats.get('pthread.pthread_mutex_lock_count', [0])) or 1)
+  # femtosecond to cycles conversion
+  freq = stats['corefreq']
+  stats['fs_to_cycles'] = freq / 1e15
+  # DVFS-enabled runs: emulate cycle_count asuming constant (initial) frequency
+  if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
+    stats['performance_model.cycle_count'] = map(lambda t: stats['fs_to_cycles'] * t, stats['performance_model.elapsed_time'])
+  # IPC
+  stats['ipc'] = sum(stats.get('performance_model.instruction_count', [0])) / float(sum(stats.get('performance_model.cycle_count', [0])) or 1e16)
+
+  return stats
+
+
+# Parse sim.cfg, read from file or from ic.job_output(jobid, 'sim.cfg'), into a dictionary
+def parse_config(simcfg):
+  import ConfigParser, cStringIO
+  cp = ConfigParser.ConfigParser()
+  cp.readfp(cStringIO.StringIO(str(simcfg)))
+  cfg = {}
+  for section in cp.sections():
+    for key, value in cp.items(section):
+      if len(value) > 2 and value[0] == '"' and value[-1] == '"':
+        value = value[1:-1]
+      cfg['/'.join((section, key))] = value
+  return cfg
+
+
+def parse_results((simstats, simout, simcfg, stdout, graphiteout, powerpy), partial = None):
+  results = []
+
+  ## sim.cfg
+  simcfg = parse_config(simcfg)
+  ncores = int(simcfg['general/total_cores'])
+
+  results.append(('ncores', -1, ncores))
+  results.append(('corefreq', -1, 1e9 * float(simcfg['perf_model/core/frequency'])))
+
+  ## stdout.txt
+  if '[SNIPER]' in stdout:
+    marker = 'SNIPER'
+  else:
+    marker = 'GRAPHITE'
+  stdout = stdout.split('\n')
+  try:
+    walltime = [ float(line.split()[-2]) for line in stdout if line.startswith('[%s] Leaving ROI after' % marker) ][0]
+  except (IndexError, ValueError):
+    walltime = 0
+  try:
+    roi = [ line for line in stdout if line.startswith('[%s:0] Simulated' % marker)][0]
+    roi = re.match('\[%s:0\] Simulated ([0-9.]+)M instructions @ ([0-9.]+) KIPS \(([0-9.]+) KIPS / target core' % marker, roi)
+    roi = { 'instrs': float(roi.group(1))*1e6, 'ipstotal': float(roi.group(2))*1e3, 'ipscore': float(roi.group(3))*1e3 }
+  except (IndexError, ValueError):
+    roi = { 'instrs': 0, 'ipstotal': 0, 'ipscore': 0 }
+
+  results.append(('roi.walltime', -1, walltime))
+  results.append(('roi.instrs', -1, roi['instrs']))
+  results.append(('roi.ipstotal', -1, roi['ipstotal']))
+  results.append(('roi.ipscore', -1, roi['ipscore']))
+
+  ## graphite.out
+  if graphiteout:
+    # If we're called from inside run-graphite, graphite.out may not yet exist
+    graphiteout = eval(graphiteout)
+    results.append(('walltime', -1, graphiteout['t_elapsed']))
+    results.append(('vmem', -1, graphiteout['vmem']))
+
+  ## sim.stats
+  simstats = simstats.split('\n')
+
+  if partial:
+    k1, k2 = partial[:2]
+  else:
+    k1, k2 = 'roi-begin', 'roi-end'
+
+  stats_begin = dict([ (line.split()[0][len(k1+'.'):], long(line.split()[1])) for line in simstats if line.startswith(k1) ])
+  stats = dict([ (line.split()[0][len(k2+'.'):], long(line.split()[1])) for line in simstats if line.startswith(k2) ])
+
+  if not stats or not stats_begin:
+    raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
+
+  for key, value in stats.items():
+    if key in stats_begin:
+      value -= stats_begin[key]
+      stats[key] = value
+    if '[' in key:
+      key = re.match('(.*)\[(.*)\](.*)', key).groups()
+      key, core = key[0] + key[2], int(key[1])
+    else:
+      core = -1
+    results.append((key, core, value))
+
+  ## power.py
+  power = {}
+  exec(powerpy)
+  for key, value in power.items():
+    results.append(('power.%s' % key, -1, value))
+
+  return results
+
+
+def parse_results_from_dir(dirname, partial = None):
+  files = []
+  for filename in ('sim.stats', 'sim.out', 'sim.cfg', 'stdout.txt', 'graphite.out', 'power.py'):
+    fullname = os.path.join(dirname, filename)
+    if os.path.exists(fullname):
+      files.append(file(fullname).read())
+    else:
+      #sys.stderr.write('%s not available, some results may be missing\n' % filename)
+      files.append('')
+  # if --partial was used with a filename, replace sim.stats with it
+  if partial and len(partial) > 2:
+    fullname = os.path.join(dirname, partial[2])
+    if os.path.exists(fullname):
+      files[0] = file(fullname).read()
+    else:
+      raise ValueError("Partial sim.stats replacement file named %s cannot be opened" % partial[2])
+  return parse_results(files, partial = partial)
+
+
+def get_results_file(filename, jobid = None, resultsdir = None, force = False):
+  if jobid:
+    return ic.job_output(jobid, filename, force)
+  else:
+    filename = os.path.join(resultsdir, filename)
+    if os.path.exists(filename):
+      return file(filename).read()
+    else:
+      return None
+
+
+def format_size(size):
+  i = 0
+  while size > 1024:
+    size /= 1024.
+    i += 1
+  return '%.1f%sB' % (size, [' ', 'K', 'M', 'G', 'T', 'P', 'E'][i])
+
+
+def find_children(pids):
+  try:
+    res = timeout.command('ps --ppid %s -o pid' % ','.join(map(str, pids)), timeout = 2)
+  except timeout.Timeout:
+    return []
+  except:
+    traceback.print_exc()
+    return []
+  children = set(map(int, res.strip().split('\n')[1:]))
+  if children:
+    children.update(find_children(children))
+  return children
+
+
+def kill_children():
+  children = find_children(set([os.getpid()]))
+  for pid in children:
+    try: os.kill(pid, 9)
+    except OSError: pass
