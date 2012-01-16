@@ -81,4 +81,4 @@ empty_deps:
 	find . -name \*.d -exec rm {} \;
 
 package_deps:
-	@./tools/checkdependencies.py
+	@BOOST_INCLUDE=$(BOOST_INCLUDE) BOOST_LIB=$(BOOST_LIB) BOOST_SUFFIX=$(BOOST_SUFFIX) ./tools/checkdependencies.py

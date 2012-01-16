@@ -113,7 +113,7 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       [ 'generic',      .01,    'FU_Generic' ],
     ] ],
     [ 'branch',   .01, 'BranchPredictor' ],
-    [ 'serial',   .01, 'Serialization' ],
+    [ 'serial',   .01, ('Serialization', 'LongLatency') ], # FIXME: can LongLatency be anything other than MFENCE?
     [ 'itlb',     .01, 'ITLBMiss' ],
     [ 'dtlb',     .01, 'DTLBMiss' ],
     [ 'ifetch',   .01, (
@@ -171,6 +171,8 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       [ 'start', 0.01, 'StartTime' ],
       [ 'end',   0.01, 'Imbalance' ],
     ] ],
+    # TODO: We may want to scale the whole stack by 1/(TotalTime-FastforwardTime), extrapolating detailed CPI components towards the whole program
+    [ 'fast-forward', .01, 'FastforwardTime' ],
   ]
 
   if use_simple:

@@ -74,6 +74,9 @@ for o, a in opts:
     config_file_used = True
     graphiteoptions += add_config_file(a)
   if o == '-g':
+    if a[0] != '-' or ('=' in a and a[1] != '-'):
+      print >> sys.stderr, "Missing '-' in -g argument %s" % a
+      sys.exit(-1)
     graphiteoptions.append(pipes.quote(a))
   if o == '--roi':
     graphiteoptions.append('-g --general/magic=true')
