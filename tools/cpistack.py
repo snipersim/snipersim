@@ -208,7 +208,7 @@ def get_compfrac(data, max_time):
 
 
 def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack', outputdir = '.',
-             use_cpi = False, use_roi = True,
+             use_cpi = False, use_abstime = False, use_roi = True,
              use_simple = False, use_simple_mem = True, no_collapse = False,
              gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
              job_name = '', threads = None, csv_threads_mincomp = .5, return_data = False):
@@ -247,6 +247,8 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
         plot_labels.append(name)
         if use_cpi:
           plot_data[core][name] = float(value) / (instrs[core] or 1)
+        elif use_abstime:
+          plot_data[core][name] = (float(value) / cycles_scale) / 1e15 # cycles to femtoseconds to seconds
         else:
           plot_data[core][name] = float(value) / max_cycles
 
@@ -288,7 +290,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
     all_names_with_colors = zip(all_names, range(1,len(all_names)+1))
     plot_labels_with_color = [n for n in all_names_with_colors if n[0] in plot_labels_ordered]
     gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data,
-      ylabel = use_cpi and 'Cycles per instruction' or 'Percent of time')
+      ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Percent of time'))
 
   # Return cpi data if requested
   if return_data and csv_threads:
@@ -309,13 +311,14 @@ if __name__ == '__main__':
   resultsdir = '.'
   outputfile = 'cpi-stack'
   use_cpi = False
+  use_abstime = False
   use_roi = True
   use_simple = False
   use_simple_mem = True
   no_collapse = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -342,6 +345,8 @@ if __name__ == '__main__':
       pass
     if o == '--cpi':
       use_cpi = True
+    if o == '--abstime':
+      use_abstime = True
 
   if args:
     usage()
@@ -352,6 +357,7 @@ if __name__ == '__main__':
     resultsdir = resultsdir,
     outputfile = outputfile,
     use_cpi = use_cpi,
+    use_abstime = use_abstime,
     use_roi = use_roi,
     use_simple = use_simple,
     use_simple_mem = use_simple_mem,

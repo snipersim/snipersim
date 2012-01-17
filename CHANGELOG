@@ -1,5 +1,11 @@
+Version 1.05
+  * [cpistack] Add --abstime command-line parameter to scale Y axis according to absolute time in seconds
+  * [interval] Fix branch resolution latency calculation
+
 Version 1.04
   * Fix instruction dependencies for LEA and stores
+  * Support synchronous signal handling (when using the
+    -g --general/enable_signals=true command-line parameter)
 
 Version 1.03
   * Build changes to improve compatibility with Fedora 16

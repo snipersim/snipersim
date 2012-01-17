@@ -420,7 +420,7 @@ int Windows::calculateBranchResolutionLatency()
    }
 
    // Find/mark producers of producers
-   for (int i = windowIndex(m_window_head__old_window_tail - 1), j = 0; j < m_old_window_length; windowIndex(i), j++)
+   for (int i = windowIndex(m_window_head__old_window_tail - 1), j = 0; j < m_old_window_length; i = windowIndex(i - 1), j++)
    {
       if (m_exec_time_map[i])
       {
