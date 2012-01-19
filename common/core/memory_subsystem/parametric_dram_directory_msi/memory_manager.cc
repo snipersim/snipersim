@@ -275,22 +275,22 @@ MemoryManager::coreInitiateMemoryAccess(
       Core::mem_op_t mem_op_type,
       IntPtr address, UInt32 offset,
       Byte* data_buf, UInt32 data_length,
-      bool modeled)
+      Core::MemModeled modeled)
 {
    LOG_ASSERT_ERROR(mem_component <= m_last_level_cache,
       "Error: invalid mem_component (%d) for coreInitiateMemoryAccess", mem_component);
 
    if (mem_component == MemComponent::L1_ICACHE && m_itlb)
-      accessTLB(m_itlb, address, true);
+      accessTLB(m_itlb, address, true, modeled);
    else if (mem_component == MemComponent::L1_DCACHE && m_dtlb)
-      accessTLB(m_dtlb, address, false);
+      accessTLB(m_dtlb, address, false, modeled);
 
    return m_cache_cntlrs[mem_component]->processMemOpFromCore(
          lock_signal,
          mem_op_type,
          address, offset,
          data_buf, data_length,
-         modeled);
+         modeled == Core::MEM_MODELED_NONE ? false : true);
 }
 
 void
@@ -414,10 +414,10 @@ MYLOG("bcast msg");
 }
 
 void
-MemoryManager::accessTLB(TLB * tlb, IntPtr address, bool isIfetch)
+MemoryManager::accessTLB(TLB * tlb, IntPtr address, bool isIfetch, Core::MemModeled modeled)
 {
    bool hit = tlb->lookup(address);
-   if (! hit) {
+   if (!hit && !(modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT)) {
       Instruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
       getCore()->getPerformanceModel()->queueDynamicInstruction(i);
    }

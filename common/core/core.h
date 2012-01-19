@@ -73,6 +73,7 @@ class Core
       {
          MEM_MODELED_NONE,      /* Not at all (pure backdoor access) */
          MEM_MODELED_COUNT,     /* Count in #accesses/#misses */
+         MEM_MODELED_COUNT_TLBTIME, /* Count in #accesses/#misses, queue TLBMissInstruction on TLB miss */
          MEM_MODELED_TIME,      /* Count + account for access latency (using MemAccessInstruction) */
          MEM_MODELED_FENCED,    /* Count + account for access latency as memory fence (using MemAccessInstruction) */
          MEM_MODELED_DYNINFO,   /* Count + time + queue a DynamicInstructionInfo (corresponds to a real instruction) */

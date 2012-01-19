@@ -199,7 +199,7 @@ MemoryManager::coreInitiateMemoryAccess(
       Core::mem_op_t mem_op_type,
       IntPtr address, UInt32 offset,
       Byte* data_buf, UInt32 data_length,
-      bool modeled)
+      Core::MemModeled modeled)
 {
    static char buf[1024];
    assert(data_buf || data_length < 1024); /* IF we use buf, make sure it's big enough */
@@ -209,7 +209,7 @@ MemoryManager::coreInitiateMemoryAccess(
          mem_op_type,
          address, offset,
          data_buf ? data_buf : (Byte*)buf, data_length,
-         modeled);
+         modeled == Core::MEM_MODELED_NONE ? false : true);
    if (hit)
       return (HitWhere::where_t)mem_component;
    else

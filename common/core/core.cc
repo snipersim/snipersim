@@ -29,6 +29,7 @@ const char * ModeledString(Core::MemModeled modeled) {
    {
       case Core::MEM_MODELED_NONE:           return "none";
       case Core::MEM_MODELED_COUNT:          return "count";
+      case Core::MEM_MODELED_COUNT_TLBTIME:  return "count/tlb";
       case Core::MEM_MODELED_TIME:           return "time";
       case Core::MEM_MODELED_FENCED:         return "fenced";
       case Core::MEM_MODELED_DYNINFO:        return "dyninfo";
@@ -262,7 +263,7 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
 
    Byte buf[instruction_size];
    return initiateMemoryAccess(MemComponent::L1_ICACHE,
-             Core::NONE, Core::READ, address, buf, instruction_size, MEM_MODELED_COUNT, 0);
+             Core::NONE, Core::READ, address, buf, instruction_size, MEM_MODELED_COUNT_TLBTIME, 0);
 }
 
 MemoryResult
@@ -363,7 +364,7 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
                mem_op_type,
                curr_addr_aligned, curr_offset,
                data_buf ? curr_data_buffer_head : NULL, curr_size,
-               modeled == MEM_MODELED_NONE ? false : true);
+               modeled);
 
       if (hit_where != (HitWhere::where_t)mem_component)
       {
@@ -433,6 +434,7 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
          break;
       case MEM_MODELED_NONE:
       case MEM_MODELED_COUNT:
+      case MEM_MODELED_COUNT_TLBTIME:
       case MEM_MODELED_RETURN:
          break;
    }

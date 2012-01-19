@@ -1,3 +1,6 @@
+Version 1.06
+  * Fix queue overflow when many TLB misses occur in a single basic block
+
 Version 1.05
   * [cpistack] Add --abstime command-line parameter to scale Y axis according to absolute time in seconds
   * [interval] Fix branch resolution latency calculation

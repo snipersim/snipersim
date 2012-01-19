@@ -49,7 +49,7 @@ PerformanceModel::PerformanceModel(Core *core)
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
    , m_basic_block_queue(64) // Reduce from default size to keep memory issue time more or less synchronized
    #else
-   , m_basic_block_queue(16) // Need a bit more space for when the dyninsninfo items aren't coming in yet
+   , m_basic_block_queue(128) // Need a bit more space for when the dyninsninfo items aren't coming in yet, or for a boatload of TLBMissInstructions
    #endif
    , m_dynamic_info_queue(640) // Required for REPZ CMPSB instructions with max counts of 256 (256 * 2 memory accesses + space for other dynamic instructions)
    , m_current_ins_index(0)
