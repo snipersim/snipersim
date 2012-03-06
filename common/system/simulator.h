@@ -17,6 +17,7 @@ class PerfCounterManager;
 class SimThreadManager;
 class HooksManager;
 class ClockSkewMinimizationManager;
+class TraceManager;
 class DvfsManager;
 namespace config { class Config; }
 
@@ -29,7 +30,7 @@ public:
    void start();
 
    static Simulator* getSingleton() { return m_singleton; }
-   static void setConfig(config::Config * cfg);
+   static void setConfig(config::Config * cfg, Config::SimulationMode mode = Config::SimulationMode::FROM_CONFIG);
    static void allocate();
    static void release();
 
@@ -50,6 +51,7 @@ public:
    StatsManager *getStatsManager() { return m_stats_manager; }
    DvfsManager *getDvfsManager() { return m_dvfs_manager; }
    HooksManager *getHooksManager() { return m_hooks_manager; }
+   TraceManager *getTraceManager() { return m_trace_manager; }
 
    void ValidateDataUpdate(IntPtr address, Byte* data_buf, UInt32 data_length);
    bool ValidateDataRead(IntPtr address, Byte* data_buf, UInt32 data_length);
@@ -57,7 +59,7 @@ public:
    static void enablePerformanceModelsInCurrentProcess();
    static void disablePerformanceModelsInCurrentProcess();
 
-   void setInstrumentationMode(InstMode::inst_mode_t new_mode) { InstMode::SetInstrumentationMode(new_mode); }
+   void setInstrumentationMode(InstMode::inst_mode_t new_mode);
    InstMode::inst_mode_t getInstrumentationMode() { return InstMode::inst_mode; }
 
    void startTimer();
@@ -90,6 +92,7 @@ private:
    PerfCounterManager *m_perf_counter_manager;
    SimThreadManager *m_sim_thread_manager;
    ClockSkewMinimizationManager *m_clock_skew_minimization_manager;
+   TraceManager *m_trace_manager;
    DvfsManager *m_dvfs_manager;
    HooksManager *m_hooks_manager;
 
@@ -108,6 +111,7 @@ private:
 
    static config::Config *m_config_file;
    static bool m_config_file_allowed;
+   static Config::SimulationMode m_mode;
 };
 
 __attribute__((unused)) static Simulator *Sim()

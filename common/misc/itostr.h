@@ -1,6 +1,8 @@
 #ifndef ITOSTR_H
 #define ITOSTR_H
 
+#include "fixed_types.h"
+
 #include <sstream>
 
 // Don't use std::string externally since it's not multithread safe

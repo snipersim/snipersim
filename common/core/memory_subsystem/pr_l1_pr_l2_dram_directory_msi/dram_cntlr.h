@@ -56,7 +56,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
          DramPerfModel* getDramPerfModel() { return m_dram_perf_model; }
 
-         void getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf);
-         void putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf);
+         void getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
+         void putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
    };
 }

@@ -4,8 +4,10 @@
 #include "pin.H"
 
 #define INSTR_IF_DETAILED_CONDITION         (Sim()->getInstrumentationMode() == InstMode::DETAILED)
+#define INSTR_IF_NOT_DETAILED_CONDITION     (Sim()->getInstrumentationMode() != InstMode::DETAILED)
 #define INSTR_IF_DETAILED_OR_FULL_CONDITION (Sim()->getInstrumentationMode() == InstMode::DETAILED || Sim()->getConfig()->getSimulationMode() == Config::FULL)
 #define INSTR_IF_CACHEONLY_CONDITION        (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
+#define INSTR_IF_FASTFORWARD_CONDITION      (Sim()->getInstrumentationMode() == InstMode::FAST_FORWARD)
 #define INSTR_IF_NOT_FASTFORWARD_CONDITION  (Sim()->getInstrumentationMode() != InstMode::FAST_FORWARD)
 
 #define __INSTRUMENT(predicated, condition, trace, ins, point, func, ...)      \

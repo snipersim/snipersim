@@ -1,10 +1,13 @@
 #ifndef LOCK_H
 #define LOCK_H
 
-#include "timer.h"
+//#define TIME_LOCKS
+
 #include "itostr.h"
 
-//#define TIME_LOCKS
+#ifdef TIME_LOCKS
+#include "timer.h"
+#endif
 
 
 /* Lock Implementation and Creator class (allows ::create to be overridden from inside /pin) */

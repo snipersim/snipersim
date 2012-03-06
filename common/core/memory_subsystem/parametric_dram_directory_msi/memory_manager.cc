@@ -416,7 +416,7 @@ MYLOG("bcast msg");
 void
 MemoryManager::accessTLB(TLB * tlb, IntPtr address, bool isIfetch, Core::MemModeled modeled)
 {
-   bool hit = tlb->lookup(address);
+   bool hit = tlb->lookup(address, getShmemPerfModel()->getElapsedTime());
    if (!hit && !(modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT)) {
       Instruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
       getCore()->getPerformanceModel()->queueDynamicInstruction(i);

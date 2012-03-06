@@ -10,8 +10,6 @@
 
 IOCOOMPerformanceModel::IOCOOMPerformanceModel(Core *core)
    : PerformanceModel(core)
-   , m_instruction_count(0)
-   , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
    , m_register_scoreboard(512, SubsecondTime())
    , m_store_buffer(0)
    , m_load_unit(0)
@@ -43,26 +41,6 @@ void IOCOOMPerformanceModel::outputSummary(std::ostream &os) const
 
    if (getConstBranchPredictor())
       getConstBranchPredictor()->outputSummary(os);
-}
-
-SubsecondTime IOCOOMPerformanceModel::getElapsedTime() const
-{
-   return m_elapsed_time.getElapsedTime();
-}
-
-void IOCOOMPerformanceModel::resetElapsedTime()
-{
-   m_elapsed_time.reset();
-}
-
-void IOCOOMPerformanceModel::setElapsedTime(SubsecondTime time)
-{
-   m_elapsed_time.setElapsedTime(time);
-}
-
-void IOCOOMPerformanceModel::incrementElapsedTime(SubsecondTime time)
-{
-   m_elapsed_time.addLatency(time);
 }
 
 bool IOCOOMPerformanceModel::handleInstruction(Instruction const* instruction)

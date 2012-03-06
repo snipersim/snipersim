@@ -40,10 +40,10 @@ class Cache : public CacheBase
 
       bool invalidateSingleLine(IntPtr addr);
       CacheBlockInfo* accessSingleLine(IntPtr addr,
-            access_t access_type, Byte* buff = NULL, UInt32 bytes = 0);
+            access_t access_type, Byte* buff, UInt32 bytes, SubsecondTime now);
       void insertSingleLine(IntPtr addr, Byte* fill_buff,
             bool* eviction, IntPtr* evict_addr,
-            CacheBlockInfo* evict_block_info, Byte* evict_buff);
+            CacheBlockInfo* evict_block_info, Byte* evict_buff, SubsecondTime now);
       CacheBlockInfo* peekSingleLine(IntPtr addr);
 
       // Update Cache Counters

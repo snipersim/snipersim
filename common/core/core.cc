@@ -261,9 +261,8 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
       last_block = address & blockmask;
    }
 
-   Byte buf[instruction_size];
    return initiateMemoryAccess(MemComponent::L1_ICACHE,
-             Core::NONE, Core::READ, address, buf, instruction_size, MEM_MODELED_COUNT_TLBTIME, 0);
+             Core::NONE, Core::READ, address, NULL, instruction_size, MEM_MODELED_COUNT_TLBTIME, 0);
 }
 
 MemoryResult

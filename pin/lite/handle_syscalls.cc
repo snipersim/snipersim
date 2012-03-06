@@ -5,6 +5,7 @@
 #include "syscall_model.h"
 #include "performance_model.h"
 #include "log.h"
+#include "syscall_strings.h"
 
 #include <syscall.h>
 #include <stdlib.h>
@@ -55,6 +56,7 @@ void syscallEnterRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD s
 
    IntPtr syscall_number = PIN_GetSyscallNumber(ctx, syscall_standard);
    LOG_PRINT("Syscall Number(%d)", syscall_number);
+   //printf("Entering syscall %s(%ld)\n", syscall_string(syscall_number), syscall_number);
 
    // Save the syscall number
    core->getSyscallMdl()->saveSyscallNumber(syscall_number);

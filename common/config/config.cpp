@@ -3,10 +3,10 @@
 */
 // Config Class
 // Author: Charles Gruenwald III
-#include <boost/algorithm/string.hpp>
 
 #include "config.hpp"
 
+#include <boost/algorithm/string.hpp>
 
 namespace config
 {

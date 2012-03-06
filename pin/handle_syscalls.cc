@@ -131,6 +131,7 @@ void syscallEnterRunModel(THREADID threadIndex, CONTEXT *ctx, SYSCALL_STANDARD s
             (syscall_number == SYS_writev) ||
             (syscall_number == SYS_close) ||
             (syscall_number == SYS_lseek) ||
+            (syscall_number == SYS_getcwd) ||
             (syscall_number == SYS_access) ||
 #ifdef TARGET_X86_64
             (syscall_number == SYS_stat) ||
@@ -267,7 +268,6 @@ void syscallEnterRunModel(THREADID threadIndex, CONTEXT *ctx, SYSCALL_STANDARD s
             (syscall_number == SYS_getuid) ||
             (syscall_number == SYS_getegid) ||
             (syscall_number == SYS_getgid) ||
-            (syscall_number == SYS_getcwd) ||
             (syscall_number == SYS_getdents) ||
             (syscall_number == SYS_statfs) ||
             (syscall_number == SYS_unlink) ||
@@ -316,6 +316,7 @@ void syscallExitRunModel(THREADID threadIndex, CONTEXT *ctx, SYSCALL_STANDARD sy
             (syscall_number == SYS_writev) ||
             (syscall_number == SYS_close) ||
             (syscall_number == SYS_lseek) ||
+            (syscall_number == SYS_getcwd) ||
             (syscall_number == SYS_access) ||
 #ifdef TARGET_X86_64
             (syscall_number == SYS_stat) ||
@@ -450,7 +451,6 @@ void syscallExitRunModel(THREADID threadIndex, CONTEXT *ctx, SYSCALL_STANDARD sy
             (syscall_number == SYS_getuid) ||
             (syscall_number == SYS_getegid) ||
             (syscall_number == SYS_getgid) ||
-            (syscall_number == SYS_getcwd) ||
             (syscall_number == SYS_getdents) ||
             (syscall_number == SYS_statfs) ||
             (syscall_number == SYS_unlink) ||

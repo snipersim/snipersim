@@ -9,8 +9,6 @@ using std::endl;
 
 SimplePerformanceModel::SimplePerformanceModel(Core *core)
     : PerformanceModel(core)
-    , m_instruction_count(0)
-    , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
 {
 }
 
@@ -76,18 +74,4 @@ bool SimplePerformanceModel::handleInstruction(Instruction const* instruction)
    m_elapsed_time += cost;
 
    return true;
-}
-
-void SimplePerformanceModel::setElapsedTime(SubsecondTime time)
-{
-   LOG_ASSERT_ERROR((time >= m_elapsed_time.getElapsedTime()) || (m_elapsed_time.getElapsedTime() == SubsecondTime::Zero()),
-         "time(%s) < m_elapsed_time(%s)",
-         itostr(time).c_str(),
-         itostr(m_elapsed_time.getElapsedTime()).c_str());
-   m_elapsed_time.setElapsedTime(time);
-}
-
-void SimplePerformanceModel::incrementElapsedTime(SubsecondTime time)
-{
-   m_elapsed_time.addLatency(time);
 }

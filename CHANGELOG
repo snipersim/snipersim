@@ -1,3 +1,11 @@
+Version 2.0
+  * Multi-program mode
+  * Instruction trace collection tool
+  * New ROI-aware sim.out file generation
+  * CPI components for various SYS_futex system calls
+  * Improve accuracy of the core interval model
+  * GCC 4.6 support
+
 Version 1.06
   * Fix queue overflow when many TLB misses occur in a single basic block
 

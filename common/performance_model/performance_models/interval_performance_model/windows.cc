@@ -60,9 +60,9 @@ void Windows::clear()
 
 void Windows::clearFunctionalUnitStats()
 {
-   for(unsigned int i = 0; i < (unsigned int)MicroOp::UOP_TYPE_SIZE; ++i)
+   for(unsigned int i = 0; i < (unsigned int)MicroOp::UOP_SUBTYPE_SIZE; ++i)
    {
-      m_count_bytype[i] = 0;
+      m_count_byport[i] = 0;
    }
    for(unsigned int i = 0; i < (unsigned int)CPCONTR_TYPE_SIZE; ++i)
    {
@@ -73,14 +73,14 @@ void Windows::clearFunctionalUnitStats()
 
 void Windows::addFunctionalUnitStats(const MicroOp &uop)
 {
-   m_count_bytype[uop.getUopType()]++;
+   m_count_byport[uop.getPort()]++;
    m_cpcontr_bytype[getCpContrType(uop)] += uop.getCpContr();
    m_cpcontr_total += uop.getCpContr();
 }
 
 void Windows::removeFunctionalUnitStats(const MicroOp &uop)
 {
-   m_count_bytype[uop.getUopType()]--;
+   m_count_byport[uop.getPort()]--;
    m_cpcontr_bytype[getCpContrType(uop)] -= uop.getCpContr();
    m_cpcontr_total -= uop.getCpContr();
 }
@@ -204,21 +204,47 @@ WindowStopDispatchReason Windows::shouldStopDispatch()
 
    uint64_t critical_path_length = getCriticalPathLength();
 
-   if (m_count_bytype[MicroOp::UOP_TYPE_LOAD] > critical_path_length)       // port 2
+   if (m_count_byport[MicroOp::UOP_PORT4] > critical_path_length)       // port 2
       r = addWSDR(r, WIN_STOP_DISPATCH_LOAD);
-   if (m_count_bytype[MicroOp::UOP_TYPE_STORE] > critical_path_length)      // port 3+4
+   if (m_count_byport[MicroOp::UOP_PORT23] > critical_path_length)      // port 3+4
       r = addWSDR(r, WIN_STOP_DISPATCH_STORE);
-   if (m_count_bytype[MicroOp::UOP_TYPE_FP_ADDSUB] > critical_path_length)  // port 1
+   if (m_count_byport[MicroOp::UOP_PORT1] > critical_path_length)  // port 1
       r = addWSDR(r, WIN_STOP_DISPATCH_FP_ADDSUB);
-   if (m_count_bytype[MicroOp::UOP_TYPE_FP_MULDIV] > critical_path_length)  // port 0
+   if (m_count_byport[MicroOp::UOP_PORT0] > critical_path_length)  // port 0
       r = addWSDR(r, WIN_STOP_DISPATCH_FP_MULDIV);
-   if (m_count_bytype[MicroOp::UOP_TYPE_BRANCH] > critical_path_length)     // port 5
+   if (m_count_byport[MicroOp::UOP_PORT5] > critical_path_length)     // port 5
       r = addWSDR(r, WIN_STOP_DISPATCH_BRANCH);
-   if ((m_count_bytype[MicroOp::UOP_TYPE_FP_ADDSUB]+m_count_bytype[MicroOp::UOP_TYPE_FP_MULDIV]+m_count_bytype[MicroOp::UOP_TYPE_BRANCH]
-         +m_count_bytype[MicroOp::UOP_TYPE_GENERIC]) > (3*critical_path_length)) // port 0, 1 or 5
+   if ((m_count_byport[MicroOp::UOP_PORT0]+m_count_byport[MicroOp::UOP_PORT1]+m_count_byport[MicroOp::UOP_PORT5]
+         +m_count_byport[MicroOp::UOP_PORT015]) > (3*critical_path_length)) // port 0, 1 or 5
       r = addWSDR(r, WIN_STOP_DISPATCH_GENERIC);
 
    return r;
+}
+
+uint64_t Windows::getEffectiveCriticalPathLength(uint64_t critical_path_length)
+{
+   if (!m_do_functional_unit_contention)
+   {
+      return critical_path_length;
+   }
+
+   // For the standard ports, check if we have exceeded our execution limit
+   for (unsigned int i = 0 ; i < MicroOp::UOP_PORT_SIZE ; i++)
+   {
+      // Skip shared ports
+      if (i != MicroOp::UOP_PORT015)
+      {
+         critical_path_length = std::max(critical_path_length, m_count_byport[i]);
+      }
+   }
+   // Check shared port usage
+   uint64_t port015_use = m_count_byport[MicroOp::UOP_PORT0] + m_count_byport[MicroOp::UOP_PORT1]
+                            + m_count_byport[MicroOp::UOP_PORT5] + m_count_byport[MicroOp::UOP_PORT015];
+   if (port015_use > (3*critical_path_length))
+   {
+      critical_path_length = (port015_use+2) / 3; // +2 to round up to the next cycle
+   }
+   return critical_path_length;
 }
 
 WindowStopDispatchReason Windows::dispatchInstruction()
@@ -242,14 +268,7 @@ WindowStopDispatchReason Windows::dispatchInstruction()
    m_window_length--;
    m_old_window_length++;
 
-   if (m_do_functional_unit_contention)
-   {
-      return shouldStopDispatch();
-   }
-   else
-   {
-      return WIN_STOP_DISPATCH_NO_REASON;
-   }
+   return WIN_STOP_DISPATCH_NO_REASON;
 }
 
 void Windows::clearOldWindow(uint64_t newCpHead)
@@ -514,12 +533,12 @@ String WindowStopDispatchReasonString(WindowStopDispatchReason r)
 
 CpContrType getCpContrType(const MicroOp& uop)
 {
-   switch(uop.getUopType()) {
-      case MicroOp::UOP_TYPE_FP_ADDSUB:
+   switch(uop.getSubtype()) {
+      case MicroOp::UOP_SUBTYPE_FP_ADDSUB:
          return CPCONTR_TYPE_FP_ADDSUB;
-      case MicroOp::UOP_TYPE_FP_MULDIV:
+      case MicroOp::UOP_SUBTYPE_FP_MULDIV:
          return CPCONTR_TYPE_FP_MULDIV;
-      case MicroOp::UOP_TYPE_LOAD:
+      case MicroOp::UOP_SUBTYPE_LOAD:
          switch(uop.getDCacheHitWhere()) {
             case HitWhere::L1_OWN:
                return CPCONTR_TYPE_LOAD_L1;
@@ -533,14 +552,14 @@ CpContrType getCpContrType(const MicroOp& uop)
             default:
                return CPCONTR_TYPE_LOAD_LX;
          }
-      case MicroOp::UOP_TYPE_STORE:
+      case MicroOp::UOP_SUBTYPE_STORE:
          return CPCONTR_TYPE_STORE;
-      case MicroOp::UOP_TYPE_GENERIC:
+      case MicroOp::UOP_SUBTYPE_GENERIC:
          return CPCONTR_TYPE_GENERIC;
-      case MicroOp::UOP_TYPE_BRANCH:
+      case MicroOp::UOP_SUBTYPE_BRANCH:
          return CPCONTR_TYPE_BRANCH;
       default:
-         LOG_ASSERT_ERROR(false, "Unknown uop_type %d", uop.getUopType());
+         LOG_ASSERT_ERROR(false, "Unknown uop_subtype %d", uop.getSubtype());
    }
    assert(false);
 }

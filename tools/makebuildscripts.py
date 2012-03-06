@@ -15,6 +15,7 @@ flags = {
   'GRAPHITE_LD_LIBRARY_PATH': '',
   'GRAPHITE_CC': cc,
   'GRAPHITE_CXX': cxx,
+  'GRAPHITE_LD': cxx,
   'PIN_HOME': pin_home,
   'BOOST_LIB': boost_lib,
   'BOOST_SUFFIX': boost_suffix,

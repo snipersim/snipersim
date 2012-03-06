@@ -8,12 +8,12 @@
 #include "dvfs_manager.h"
 #include "config.hpp"
 
-NetworkModelBusGlobal* NetworkModelBus::_bus = NULL;
+NetworkModelBusGlobal* NetworkModelBus::_bus_global[NUM_STATIC_NETWORKS] = { NULL };
 
-NetworkModelBusGlobal::NetworkModelBusGlobal()
+NetworkModelBusGlobal::NetworkModelBusGlobal(String name)
    : _bandwidth(8 * Sim()->getCfg()->getFloat("network/bus/bandwidth")) /* = 8 * GB/s / Gcycles/s = bits / cycle, round down (implicit: float to int conversion) */
    #ifndef BUS_USE_QUEUE_MODEL
-   , _contention_model("bus", 0)
+   , _contention_model(name, 0)
    #endif
    , _num_packets(0)
    , _num_packets_delayed(0)
@@ -25,11 +25,11 @@ NetworkModelBusGlobal::NetworkModelBusGlobal()
    _queue_model = QueueModel::create(Sim()->getCfg()->getString("network/bus/queue_model/type", "history_list"), 10 * SubsecondTime::NS());
    #endif
    /* 8 * GB/s / Gcycles/s = bits / cycle, round down (implicit: float to int conversion) */
-   registerStatsMetric("bus", 0, "num-packets", &_num_packets);
-   registerStatsMetric("bus", 0, "num-packets-delayed", &_num_packets_delayed);
-   registerStatsMetric("bus", 0, "num-bytes", &_num_bytes);
-   registerStatsMetric("bus", 0, "time-used", &_time_used);
-   registerStatsMetric("bus", 0, "total-delay", &_total_delay);
+   registerStatsMetric(name, 0, "num-packets", &_num_packets);
+   registerStatsMetric(name, 0, "num-packets-delayed", &_num_packets_delayed);
+   registerStatsMetric(name, 0, "num-bytes", &_num_bytes);
+   registerStatsMetric(name, 0, "time-used", &_time_used);
+   registerStatsMetric(name, 0, "total-delay", &_total_delay);
 }
 
 NetworkModelBusGlobal::~NetworkModelBusGlobal()
@@ -57,13 +57,17 @@ NetworkModelBusGlobal::useBus(SubsecondTime t_start, UInt32 length)
    return t_start + t_queue + t_delay;
 }
 
-NetworkModelBus::NetworkModelBus(Network *net)
+NetworkModelBus::NetworkModelBus(Network *net, EStaticNetwork net_type)
    : NetworkModel(net)
    , _enabled(false)
    , _mcp_detour(Sim()->getConfig()->getProcessNumForCore(Sim()->getConfig()->getMCPCoreNum()) != Sim()->getConfig()->getCurrentProcessNum())
+   , _ignore_local(Sim()->getCfg()->getBool("network/bus/ignore_local_traffic", true))
 {
-   if (!_bus)
-      _bus = new NetworkModelBusGlobal();
+   if (!_bus_global[net_type]) {
+      String name = String("network.")+EStaticNetworkStrings[net_type]+".bus";
+      _bus_global[net_type] = new NetworkModelBusGlobal(name);
+   }
+   _bus = _bus_global[net_type];
 }
 
 void
@@ -135,7 +139,13 @@ NetworkModelBus::accountPacket(const NetPacket &pkt)
    LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
          "requester(%i)", requester);
 
-   if ( (!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()) )
+   if (  !_enabled
+         || (_ignore_local && pkt.sender == pkt.receiver)
+            // Data to/from MCP: admin traffic, don't account
+         || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores())
+         || (pkt.sender >= (core_id_t) Config::getSingleton()->getApplicationCores())
+         || (pkt.receiver >= (core_id_t) Config::getSingleton()->getApplicationCores())
+      )
       return false;
    else
       return true;

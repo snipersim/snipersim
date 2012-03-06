@@ -30,6 +30,8 @@ class PinMemoryManager
       PinMemoryManager(Core* core);
       ~PinMemoryManager();
 
+      char *getScratchpad(AccessType access_type) { return m_scratchpad[access_type]; }
+
       // Functions for redirecting general memory accesses
       carbon_reg_t redirectMemOp (IntPtr eip, bool has_lock_prefix, IntPtr tgt_ea, IntPtr size, UInt32 op_num, bool is_read);
       void completeMemWrite (IntPtr eip, bool has_lock_prefix, IntPtr tgt_ea, IntPtr size, UInt32 op_num);

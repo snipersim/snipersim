@@ -11,6 +11,7 @@
 
 #include "log.h"
 #include "subsecond_time.h"
+#include "timer.h"
 
 // -- general LCP functionality
 

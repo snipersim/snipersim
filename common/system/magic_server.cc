@@ -7,6 +7,7 @@
 #include "core_manager.h"
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
+#include "timer.h"
 
 MagicServer::MagicServer(Network &network, UnstructuredBuffer &recv_buffer)
       : m_network(network)

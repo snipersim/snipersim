@@ -10,9 +10,6 @@
  */
 // Config Class
 // Author: Charles Gruenwald III
-#include <vector>
-#include <map>
-#include <iostream>
 
 #include "fixed_types.h"
 
@@ -20,6 +17,9 @@
 #include "section.hpp"
 #include "config_exceptions.hpp"
 
+#include <vector>
+#include <map>
+#include <iostream>
 
 namespace config
 {

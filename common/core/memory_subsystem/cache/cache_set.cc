@@ -114,6 +114,12 @@ CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* evicti
       memcpy(&m_blocks[index * m_blocksize], (void*) fill_buff, m_blocksize);
 }
 
+char*
+CacheSet::getDataPtr(UInt32 line_index, UInt32 offset)
+{
+   return &m_blocks[line_index * m_blocksize + offset];
+}
+
 CacheSet*
 CacheSet::createCacheSet (String replacement_policy,
       CacheBase::cache_t cache_type,

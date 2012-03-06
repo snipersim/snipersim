@@ -3,6 +3,7 @@
 #include "instruction_latencies.h"
 
 static unsigned int instructionLatencies[XED_ICLASS_LAST];
+static unsigned int bypassLatencies[MicroOp::UOP_BYPASS_SIZE];
 
 // Intel Nehalem Latencies
 // http://www.agner.org/optimize
@@ -64,11 +65,37 @@ void initilizeInstructionLatencies()
    instructionLatencies[XED_ICLASS_DIVPD] = 21;
    instructionLatencies[XED_ICLASS_VDIVSD] = 21;
    instructionLatencies[XED_ICLASS_VDIVPD] = 21;
+
+
+   /* bypass latencies */
+   /* http://www.agner.org/optimize/microarchitecture.pdf page 86-87 */
+
+   bypassLatencies[MicroOp::UOP_BYPASS_NONE] = 0;
+   bypassLatencies[MicroOp::UOP_BYPASS_LOAD_FP] = 2;
+   bypassLatencies[MicroOp::UOP_BYPASS_FP_STORE] = 1;
 }
 
 unsigned int getInstructionLatency(xed_iclass_enum_t instruction_type) {
    assert(instruction_type >= 0 && instruction_type < XED_ICLASS_LAST);
    return instructionLatencies[instruction_type];
+}
+
+unsigned int getAluLatency(MicroOp &uop) {
+   switch(uop.getInstructionOpcode()) {
+      case XED_ICLASS_DIV:
+      case XED_ICLASS_IDIV:
+         if (uop.getOperandSize() > 32)
+            return 28; // Approximate, data-dependent
+         else
+            return 9;  // Approximate, data-dependent
+      default:
+         LOG_PRINT_ERROR("Don't know the ALU latency for this MicroOp.");
+   }
+}
+
+unsigned int getBypassLatency(MicroOp::uop_bypass_t bypass_type) {
+   assert(bypass_type >=0 && bypass_type < MicroOp::UOP_BYPASS_SIZE);
+   return bypassLatencies[bypass_type];
 }
 
 unsigned int getLongestLatency()

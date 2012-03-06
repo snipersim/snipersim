@@ -17,6 +17,7 @@
 # include "performance_model.h"
 # include "micro_op.h"
 #endif
+#include "loop_tracer.h"
 
 IntervalTimer::IntervalTimer(
          Core *core, PerformanceModel *_perf,
@@ -34,15 +35,16 @@ IntervalTimer::IntervalTimer(
       , m_windows(new Windows(window_size, do_functional_unit_contention))
       , m_perf_model(_perf)
       , m_frequency_domain(core->getDvfsDomain())
+      , m_loop_tracer(LoopTracer::createLoopTracer(core))
 {
 
    initilizeInstructionLatencies();
    LLLInfo::initialize();
 
-   for(int i = 0; i < MicroOp::UOP_TYPE_SIZE; ++i)
+   for(int i = 0; i < MicroOp::UOP_SUBTYPE_SIZE; ++i)
    {
       m_uop_type_count[i] = 0;
-      registerStatsMetric("interval_timer", core->getId(), String("uop_") + MicroOp::UopTypeString(MicroOp::UopType(i)), &m_uop_type_count[i]);
+      registerStatsMetric("interval_timer", core->getId(), String("uop_") + MicroOp::getSubtypeString(MicroOp::uop_subtype_t(i)), &m_uop_type_count[i]);
    }
 
    m_uops_total = 0;
@@ -142,6 +144,10 @@ IntervalTimer::IntervalTimer(
 
 IntervalTimer::~IntervalTimer() {
    delete m_windows;
+   if (m_loop_tracer)
+   {
+      delete m_loop_tracer;
+   }
 #if DEBUG_IT_INSN_PRINT
    if (m_insn_log)
    {
@@ -158,7 +164,7 @@ boost::tuple<uint64_t,uint64_t> IntervalTimer::simulate(const std::vector<MicroO
    for (std::vector<MicroOp>::const_iterator i = insts.begin() ; i != insts.end(); ++i )
    {
       m_windows->add(*i);
-      m_uop_type_count[i->getUopType()]++;
+      m_uop_type_count[i->getSubtype()]++;
       m_uops_total++;
       if (i->isX87()) m_uops_x87++;
       if (i->isPause()) m_uops_pause++;
@@ -208,6 +214,11 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
       if (micro_op.isLast())
       {
          instructions_executed++;
+      }
+
+      if (m_loop_tracer)
+      {
+         m_loop_tracer->issue(micro_op, micro_op.getExecTime(), micro_op.getExecTime());
       }
 
 #if DEBUG_IT_INSN_PRINT
@@ -277,7 +288,7 @@ uint32_t IntervalTimer::calculateCurrentDispatchRate() {
 
    if (critical_path_length > 0)
    {
-      FixedPoint ipc = FixedPoint(m_windows->getOldWindowLength()) / critical_path_length + m_remaining_dispatch_bandwidth;
+      FixedPoint ipc = FixedPoint(m_windows->getOldWindowLength()) / m_windows->getEffectiveCriticalPathLength(critical_path_length) + m_remaining_dispatch_bandwidth;
       dispatch_rate = FixedPoint::floor(ipc);
       m_remaining_dispatch_bandwidth = (dispatch_rate < m_dispatch_width) ? (ipc - dispatch_rate) : 0;
    }
@@ -444,7 +455,8 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
          uint64_t store_latency = exec_latency;
          uint64_t dispatch_cycle = std::max(max_producer_exec_time, m_windows->getCriticalPathHead());
          uint64_t sched_cycle = dispatch_cycle;
-         uint64_t data_ready_cycle = sched_cycle + 1; // This store result will be ready to use one cycle later
+         uint64_t bypass_latency = getBypassLatency(micro_op.getBypassType());
+         uint64_t data_ready_cycle = sched_cycle + bypass_latency + 1; // This store result will be ready to use one cycle later
          micro_op.setExecTime(data_ready_cycle); // Time the critical path calculation will use
          updateCriticalPath(micro_op, latency);
 
@@ -562,20 +574,21 @@ void IntervalTimer::blockWindow()
    }
 }
 
+// Allow the use of negative times for comparisons
 uint64_t IntervalTimer::getMaxProducerExecTime(MicroOp& micro_op) {
-   uint64_t oldestStartTime = m_windows->getOldestInstruction().getExecTime() - m_windows->getOldestInstruction().getExecLatency();
-   uint64_t oldestFetchTime = m_windows->getOldestInstruction().getFetchTime();
-   uint64_t currentFetchTime = micro_op.getFetchTime();
-   uint64_t relativeFetchTime = currentFetchTime - oldestFetchTime;
+   int64_t oldestStartTime = m_windows->getOldestInstruction().getExecTime() - m_windows->getOldestInstruction().getExecLatency();
+   int64_t oldestFetchTime = m_windows->getOldestInstruction().getFetchTime();
+   int64_t currentFetchTime = micro_op.getFetchTime();
+   int64_t relativeFetchTime = currentFetchTime - oldestFetchTime;
 
-   uint64_t max_producer_exec_time = 0;
+   int64_t max_producer_exec_time = 0;
 
    for(uint32_t i = 0; i < micro_op.getDependenciesLength(); i++) {
       if (m_windows->oldWindowContains(micro_op.getDependency(i))) {
          MicroOp& producer = m_windows->getInstruction(micro_op.getDependency(i));
-         uint64_t producerExecTime = producer.getExecTime();
-         uint64_t producerStartTime = producerExecTime - producer.getExecLatency();
-         uint64_t relativeStartTime = producerStartTime - oldestStartTime;
+         int64_t producerExecTime = producer.getExecTime();
+         int64_t producerStartTime = producerExecTime - producer.getExecLatency();
+         int64_t relativeStartTime = producerStartTime - oldestStartTime;
 
          if (relativeFetchTime > relativeStartTime) {
             if (relativeStartTime < 0)

@@ -26,10 +26,10 @@ L2CacheCntlr::L2CacheCntlr(core_id_t core_id,
    m_shmem_perf_model(shmem_perf_model)
 {
    m_l2_cache = new Cache("L2",
-         l2_cache_size, 
-         l2_cache_associativity, 
-         m_cache_block_size, 
-         l2_cache_replacement_policy, 
+         l2_cache_size,
+         l2_cache_associativity,
+         m_cache_block_size,
+         l2_cache_replacement_policy,
          CacheBase::PR_L2_CACHE);
 }
 
@@ -66,14 +66,14 @@ L2CacheCntlr::invalidateCacheBlock(IntPtr address)
 void
 L2CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf)
 {
-   __attribute(__unused__) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address, Cache::LOAD, data_buf, getCacheBlockSize());
+   __attribute(__unused__) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address, Cache::LOAD, data_buf, getCacheBlockSize(), getShmemPerfModel()->getElapsedTime());
    assert(l2_cache_block_info);
 }
 
 void
 L2CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length)
 {
-   __attribute(__unused__) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address + offset, Cache::STORE, data_buf, data_length);
+   __attribute(__unused__) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime());
    assert(l2_cache_block_info);
 }
 
@@ -86,7 +86,8 @@ L2CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte
    Byte evict_buf[getCacheBlockSize()];
 
    m_l2_cache->insertSingleLine(address, data_buf,
-         &eviction, &evict_address, &evict_block_info, evict_buf);
+         &eviction, &evict_address, &evict_block_info, evict_buf,
+         getShmemPerfModel()->getElapsedTime());
    PrL2CacheBlockInfo* l2_cache_block_info = getCacheBlockInfo(address);
    setCacheState(l2_cache_block_info, cstate);
 
@@ -99,11 +100,11 @@ L2CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte
       if (evict_block_info.getCState() == CacheState::MODIFIED)
       {
          // Send back the data also
-         getMemoryManager()->sendMsg(ShmemMsg::FLUSH_REP, 
-               MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-               m_core_id /* requester */, 
-               home_node_id /* receiver */, 
-               evict_address, 
+         getMemoryManager()->sendMsg(ShmemMsg::FLUSH_REP,
+               MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+               m_core_id /* requester */,
+               home_node_id /* receiver */,
+               evict_address,
                evict_buf, getCacheBlockSize());
       }
       else
@@ -111,10 +112,10 @@ L2CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte
          LOG_ASSERT_ERROR(evict_block_info.getCState() == CacheState::SHARED,
                "evict_address(0x%x), evict_state(%u), cached_loc(%u)",
                evict_address, evict_block_info.getCState(), evict_block_info.getCachedLoc());
-         getMemoryManager()->sendMsg(ShmemMsg::INV_REP, 
-               MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-               m_core_id /* requester */, 
-               home_node_id /* receiver */, 
+         getMemoryManager()->sendMsg(ShmemMsg::INV_REP,
+               MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+               m_core_id /* requester */,
+               home_node_id /* receiver */,
                evict_address);
       }
    }
@@ -172,7 +173,7 @@ L2CacheCntlr::processShmemReqFromL1Cache(MemComponent::component_t req_mem_compo
 
       insertCacheBlockInL1(req_mem_component, address, l2_cache_block_info, cstate, data_buf);
    }
-   
+
    return shmem_req_ends_in_l2_cache;
 }
 
@@ -221,17 +222,17 @@ L2CacheCntlr::processExReqFromL1Cache(ShmemMsg* shmem_msg)
    {
       // This will clear the 'Present' bit also
       invalidateCacheBlock(address);
-      getMemoryManager()->sendMsg(ShmemMsg::INV_REP, 
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-            m_core_id /* requester */, 
-            getHome(address) /* receiver */, 
+      getMemoryManager()->sendMsg(ShmemMsg::INV_REP,
+            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            m_core_id /* requester */,
+            getHome(address) /* receiver */,
             address);
    }
 
-   getMemoryManager()->sendMsg(ShmemMsg::EX_REQ, 
-         MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-         m_core_id /* requester */, 
-         getHome(address) /* receiver */, 
+   getMemoryManager()->sendMsg(ShmemMsg::EX_REQ,
+         MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+         m_core_id /* requester */,
+         getHome(address) /* receiver */,
          address);
 }
 
@@ -240,10 +241,10 @@ L2CacheCntlr::processShReqFromL1Cache(ShmemMsg* shmem_msg)
 {
    IntPtr address = shmem_msg->getAddress();
 
-   getMemoryManager()->sendMsg(ShmemMsg::SH_REQ, 
-         MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-         m_core_id /* requester */, 
-         getHome(address) /* receiver */, 
+   getMemoryManager()->sendMsg(ShmemMsg::SH_REQ,
+         MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+         m_core_id /* requester */,
+         getHome(address) /* receiver */,
          address);
 }
 
@@ -331,7 +332,7 @@ L2CacheCntlr::processShRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
    // Support for non-blocking caches can be added in this way
    MemComponent::component_t mem_component = m_shmem_req_source_map[address];
    insertCacheBlockInL1(mem_component, address, l2_cache_block_info, CacheState::SHARED, data_buf);
-   
+
    // Set the Counters in the Shmem Perf model accordingly
    // Set the counter value in the USER thread to that in the SIM thread
    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD,
@@ -348,7 +349,7 @@ L2CacheCntlr::processInvReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_m
    if (cstate != CacheState::INVALID)
    {
       assert(cstate == CacheState::SHARED);
-  
+
       // Update Shared Mem perf counters for access to L2 Cache
       getMemoryManager()->incrElapsedTime(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
       // Update Shared Mem perf counters for access to L1 Cache
@@ -359,10 +360,10 @@ L2CacheCntlr::processInvReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_m
       // Invalidate the line in the L2 cache also
       invalidateCacheBlock(address);
 
-      getMemoryManager()->sendMsg(ShmemMsg::INV_REP, 
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-            shmem_msg->getRequester() /* requester */, 
-            sender /* receiver */, 
+      getMemoryManager()->sendMsg(ShmemMsg::INV_REP,
+            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            shmem_msg->getRequester() /* requester */,
+            sender /* receiver */,
             address);
    }
    else
@@ -382,7 +383,7 @@ L2CacheCntlr::processFlushReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem
    if (cstate != CacheState::INVALID)
    {
       assert(cstate == CacheState::MODIFIED);
-      
+
       // Update Shared Mem perf counters for access to L2 Cache
       getMemoryManager()->incrElapsedTime(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
       // Update Shared Mem perf counters for access to L1 Cache
@@ -396,11 +397,11 @@ L2CacheCntlr::processFlushReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem
       retrieveCacheBlock(address, data_buf);
       invalidateCacheBlock(address);
 
-      getMemoryManager()->sendMsg(ShmemMsg::FLUSH_REP, 
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-            shmem_msg->getRequester() /* requester */, 
-            sender /* receiver */, 
-            address, 
+      getMemoryManager()->sendMsg(ShmemMsg::FLUSH_REP,
+            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            shmem_msg->getRequester() /* requester */,
+            sender /* receiver */,
+            address,
             data_buf, getCacheBlockSize());
    }
    else
@@ -420,7 +421,7 @@ L2CacheCntlr::processWbReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
    if (cstate != CacheState::INVALID)
    {
       assert(cstate == CacheState::MODIFIED);
- 
+
       // Update Shared Mem perf counters for access to L2 Cache
       getMemoryManager()->incrElapsedTime(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
       // Update Shared Mem perf counters for access to L1 Cache
@@ -434,10 +435,10 @@ L2CacheCntlr::processWbReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
       retrieveCacheBlock(address, data_buf);
       setCacheState(l2_cache_block_info, CacheState::SHARED);
 
-      getMemoryManager()->sendMsg(ShmemMsg::WB_REP, 
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-            shmem_msg->getRequester() /* requester */, 
-            sender /* receiver */, 
+      getMemoryManager()->sendMsg(ShmemMsg::WB_REP,
+            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            shmem_msg->getRequester() /* requester */,
+            sender /* receiver */,
             address,
             data_buf, getCacheBlockSize());
    }
@@ -483,20 +484,20 @@ L2CacheCntlr::acquireL1CacheLock(ShmemMsg::msg_t msg_type, IntPtr address)
    {
       case ShmemMsg::EX_REP:
       case ShmemMsg::SH_REP:
-         
+
          m_l1_cache_cntlr->acquireLock(m_shmem_req_source_map[address]);
          return m_shmem_req_source_map[address];
 
       case ShmemMsg::INV_REQ:
       case ShmemMsg::FLUSH_REQ:
       case ShmemMsg::WB_REQ:
-      
+
          {
             acquireLock();
-            
+
             PrL2CacheBlockInfo* l2_cache_block_info = getCacheBlockInfo(address);
             MemComponent::component_t caching_mem_component = (l2_cache_block_info == NULL) ? MemComponent::INVALID_MEM_COMPONENT : l2_cache_block_info->getCachedLoc();
-            
+
             releaseLock();
 
             //WH: Why?//assert(caching_mem_component != MemComponent::L1_ICACHE);

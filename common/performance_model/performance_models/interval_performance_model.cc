@@ -4,6 +4,7 @@
 #include "branch_predictor.h"
 #include "stats.h"
 #include "lll_info.h"
+#include "instruction_latencies.h"
 #include "dvfs_manager.h"
 #include "subsecond_time.h"
 #include "micro_op.h"
@@ -21,7 +22,7 @@ IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction
        misprediction_penalty,
        Sim()->getCfg()->getInt("perf_model/core/interval_timer/dispatch_width", 4),
        Sim()->getCfg()->getInt("perf_model/core/interval_timer/window_size", 96),
-       Sim()->getCfg()->getBool("perf_model/core/interval_timer/fu_contention", false)
+       Sim()->getCfg()->getBool("perf_model/core/interval_timer/issue_contention", true)
       )
     , m_state_uops_done(false)
     , m_state_icache_done(false)
@@ -29,16 +30,10 @@ IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction
     , m_state_num_writes_done(0)
     , m_state_num_nonmem_done(0)
     , m_state_insn_period(ComponentPeriod::fromFreqHz(1)) // ComponentPeriod() is private, this is a placeholder.  Will be updated at resetState()
-    , m_instruction_count(0)
-    , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
-    , m_idle_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
     , m_dyninsn_count(0)
     , m_dyninsn_cost(0)
     , m_dyninsn_zero_count(0)
 {
-   registerStatsMetric("performance_model", core->getId(), "instruction_count", &m_instruction_count);
-   registerStatsMetric("performance_model", core->getId(), "elapsed_time", &m_elapsed_time);
-   registerStatsMetric("performance_model", core->getId(), "idle_elapsed_time", &m_idle_elapsed_time);
    registerStatsMetric("performance_model", core->getId(), "dyninsn_count", &m_dyninsn_count);
    registerStatsMetric("performance_model", core->getId(), "dyninsn_cost", &m_dyninsn_cost);
    registerStatsMetric("performance_model", core->getId(), "dyninsn_zero_count", &m_dyninsn_zero_count);
@@ -66,22 +61,6 @@ IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction
    LOG_ASSERT_ERROR(isPower2(mem_gran), "memory_dependency_granularity needs to be a power of 2. [%u]", mem_gran);
    m_mem_dep_mask = ~(mem_gran - 1);
 
-   m_cpiSyncFutex = SubsecondTime::Zero();
-   m_cpiSyncPthreadMutex = SubsecondTime::Zero();
-   m_cpiSyncPthreadCond = SubsecondTime::Zero();
-   m_cpiSyncPthreadBarrier = SubsecondTime::Zero();
-   m_cpiSyncJoin = SubsecondTime::Zero();
-   m_cpiSyncDvfsTransition = SubsecondTime::Zero();
-   registerStatsMetric("performance_model", core->getId(), "cpiSyncFutex", &m_cpiSyncFutex);
-   registerStatsMetric("performance_model", core->getId(), "cpiSyncPthreadMutex", &m_cpiSyncPthreadMutex);
-   registerStatsMetric("performance_model", core->getId(), "cpiSyncPthreadCond", &m_cpiSyncPthreadCond);
-   registerStatsMetric("performance_model", core->getId(), "cpiSyncPthreadBarrier", &m_cpiSyncPthreadBarrier);
-   registerStatsMetric("performance_model", core->getId(), "cpiSyncJoin", &m_cpiSyncJoin);
-   registerStatsMetric("performance_model", core->getId(), "cpiSyncDvfsTransition", &m_cpiSyncDvfsTransition);
-
-   m_cpiRecv = SubsecondTime::Zero();
-   registerStatsMetric("performance_model", core->getId(), "cpiRecv", &m_cpiRecv);
-
    m_cpiITLBMiss = SubsecondTime::Zero();
    m_cpiDTLBMiss = SubsecondTime::Zero();
    registerStatsMetric("performance_model", core->getId(), "cpiITLBMiss", &m_cpiITLBMiss);
@@ -90,15 +69,10 @@ IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction
    m_cpiMemAccess = SubsecondTime::Zero();
    registerStatsMetric("performance_model", core->getId(), "cpiSyncMemAccess", &m_cpiMemAccess);
 
-   m_cpiStartTime = SubsecondTime::Zero();
-   m_cpiFastforwardTime = SubsecondTime::Zero();
-   registerStatsMetric("performance_model", core->getId(), "cpiStartTime", &m_cpiStartTime);
-   registerStatsMetric("performance_model", core->getId(), "cpiFastforwardTime", &m_cpiFastforwardTime);
-
    if (! m_serialize_uop) {
       m_serialize_uop = new MicroOp();
       UInt64 interval_sync_cost = 1;
-      m_serialize_uop->makeExecute(0,0,XED_ICLASS_INVALID,"DynamicInsn-Serialize",interval_sync_cost,0,0);
+      m_serialize_uop->makeDynamic("DynamicInsn-Serialize", interval_sync_cost);
       m_serialize_uop->setSerializing(true);
       m_serialize_uop->setFirst(true);
       m_serialize_uop->setLast(true);
@@ -106,7 +80,7 @@ IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction
 
    if (! m_mfence_uop) {
       m_mfence_uop = new MicroOp();
-      m_mfence_uop->makeExecute(0,0,XED_ICLASS_INVALID,"DynamicInsn-MFENCE",1,0,0);
+      m_mfence_uop->makeDynamic("DynamicInsn-MFENCE", 1);
       m_mfence_uop->setMemBarrier(true);
       m_mfence_uop->setFirst(true);
       m_mfence_uop->setLast(true);
@@ -253,7 +227,8 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
                                 "Expected uop %d to be a load.", load_index);
 
                // Update this uop with load latencies
-               m_current_uops[load_index].setExecLatency(memory_cycle_latency);
+               UInt64 bypass_latency = getBypassLatency(m_current_uops[load_index].getBypassType());
+               m_current_uops[load_index].setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
                addr.set(info->memory_info.addr & m_mem_dep_mask); // Enforce memory dependency granularity
                m_current_uops[load_index].setAddress(addr);
@@ -283,7 +258,8 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
                                 "Expected uop %d to be a store. [%d|%s]", store_index, m_current_uops[store_index].getType(), m_current_uops[store_index].toString().c_str());
 
                // Update this uop with store latencies.
-               m_current_uops[store_index].setExecLatency(memory_cycle_latency);
+               UInt64 bypass_latency = getBypassLatency(m_current_uops[store_index].getBypassType());
+               m_current_uops[store_index].setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
                addr.set(info->memory_info.addr & m_mem_dep_mask); // Enforce memory dependency granularity
                m_current_uops[store_index].setAddress(addr);
@@ -411,43 +387,7 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
       // Add the instruction cost immediately to prevent synchronization issues
       new_latency.addLatency(insn_cost);
 
-      if (instruction->getType() == INST_SYNC)
-      {
-         // Keep track of the type of Sync instruction and it's latency to calculate CPI numbers
-         SyncInstruction const* sync_insn = dynamic_cast<SyncInstruction const*>(instruction);
-         LOG_ASSERT_ERROR(sync_insn != NULL, "Expected a SyncInstruction, but did not get one.");
-         switch(sync_insn->getSyncType()) {
-         case(SyncInstruction::FUTEX):
-            m_cpiSyncFutex += insn_cost;
-            break;
-         case(SyncInstruction::PTHREAD_MUTEX):
-            m_cpiSyncPthreadMutex += insn_cost;
-            break;
-         case(SyncInstruction::PTHREAD_COND):
-            m_cpiSyncPthreadCond += insn_cost;
-            break;
-         case(SyncInstruction::PTHREAD_BARRIER):
-            m_cpiSyncPthreadBarrier += insn_cost;
-            break;
-         case(SyncInstruction::JOIN):
-            m_cpiSyncJoin += insn_cost;
-            break;
-         case(SyncInstruction::DVFS_TRANSITION):
-            m_cpiSyncDvfsTransition += insn_cost;
-            break;
-         default:
-            LOG_ASSERT_ERROR(false, "Unexpected SyncInstruction::type_t enum type. (%d)", sync_insn->getSyncType());
-         }
-         m_idle_elapsed_time.addLatency(insn_cost);
-      }
-      else if (instruction->getType() == INST_RECV)
-      {
-         RecvInstruction const* recv_insn = dynamic_cast<RecvInstruction const*>(instruction);
-         LOG_ASSERT_ERROR(recv_insn != NULL, "Expected a RecvInstruction, but did not get one.");
-         m_cpiRecv += insn_cost;
-         m_idle_elapsed_time.addLatency(insn_cost);
-      }
-      else if (instruction->getType() == INST_TLB_MISS)
+      if (instruction->getType() == INST_TLB_MISS)
       {
          TLBMissInstruction const* tlb_miss_insn = dynamic_cast<TLBMissInstruction const*>(instruction);
          LOG_ASSERT_ERROR(tlb_miss_insn != NULL, "Expected a TLBMissInstruction, but did not get one.");
@@ -456,9 +396,13 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
          else
             m_cpiDTLBMiss += insn_cost;
       }
+      else if ((instruction->getType() == INST_SYNC) || (instruction->getType() == INST_RECV))
+      {
+         LOG_PRINT_ERROR("The performance model expects non-idle instructions, not INST_SYNC or INST_RECV");
+      }
       else
       {
-         LOG_ASSERT_ERROR(false, "Unexpectedly received something other than a Sync, Recv or TLBMissInstruction");
+         LOG_PRINT_ERROR("Unexpectedly received something other than a TLBMiss Instruction");
       }
 
 
@@ -514,8 +458,8 @@ bool IntervalPerformanceModel::handleInstruction(Instruction const* instruction)
          , data_address
          , XED_ICLASS_INVALID // opcode
          , instruction->getTypeName()  // instructionName
-         , cost_add_latency_interval // execLatency
       );
+      uop->setExecLatency(cost_add_latency_interval);
       uop->setPeriod(m_state_insn_period);
       uop->setForceLongLatencyLoad(force_lll);
 
@@ -592,28 +536,9 @@ boost::tuple<uint64_t,uint64_t> IntervalPerformanceModel::simulate(const std::ve
    return interval_timer.simulate(insts);
 }
 
-void IntervalPerformanceModel::incrementElapsedTime(SubsecondTime time)
+void IntervalPerformanceModel::notifyElapsedTimeUpdate()
 {
-   m_cpiFastforwardTime += time;
-   m_elapsed_time.addLatency(time);
-}
-
-void IntervalPerformanceModel::setElapsedTime(SubsecondTime time)
-{
-   LOG_ASSERT_ERROR((time >= m_elapsed_time.getElapsedTime()) || (m_elapsed_time.getElapsedTime() == SubsecondTime::Zero()),
-         "time(%s) < m_elapsed_time(%s)",
-         itostr(time).c_str(),
-         itostr(m_elapsed_time.getElapsedTime()).c_str());
-   if (m_elapsed_time.getElapsedTime() == SubsecondTime::Zero())
-   {
-      m_cpiStartTime += time;
-   }
-   else
-   {
-      LOG_PRINT_ERROR("This function should only be used for starting a new thread (SPAWN_INST)");
-   }
-   m_idle_elapsed_time.setElapsedTime(time - m_elapsed_time.getElapsedTime());
-   m_elapsed_time.setElapsedTime(time);
+   interval_timer.synchronize(m_elapsed_time.getCycleCount());
 }
 
 void IntervalPerformanceModel::resetState()

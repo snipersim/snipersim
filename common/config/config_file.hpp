@@ -21,9 +21,10 @@
  * across saves.
  */
 
-#include <fstream>
 #include "config.hpp"
 #include "config_file_grammar.hpp"
+
+#include <fstream>
 
 // #define BOOST_SPIRIT_DEBUG        // define this for debug output
 

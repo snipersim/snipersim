@@ -26,6 +26,7 @@ def getdata(jobid = '', resultsdir = '', data = None):
     times = stats['performance_model.cycle_count']
     cycles_scale = 1
 
+
   data = collections.defaultdict(collections.defaultdict)
   for key, values in stats.items():
     if '.cpi' in key:
@@ -171,8 +172,6 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       [ 'start', 0.01, 'StartTime' ],
       [ 'end',   0.01, 'Imbalance' ],
     ] ],
-    # TODO: We may want to scale the whole stack by 1/(TotalTime-FastforwardTime), extrapolating detailed CPI components towards the whole program
-    [ 'fast-forward', .01, 'FastforwardTime' ],
   ]
 
   if use_simple:
@@ -211,7 +210,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
              use_cpi = False, use_abstime = False, use_roi = True,
              use_simple = False, use_simple_mem = True, no_collapse = False,
              gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
-             job_name = '', threads = None, csv_threads_mincomp = .5, return_data = False):
+             job_name = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False):
 
   data, ncores, instrs, times, cycles_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data)
 
@@ -221,11 +220,15 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
   else:
     threads = range(ncores)
 
-  if csv_threads_mincomp:
+  if threads_mincomp:
     compfrac = get_compfrac(data, cycles_scale * max(times))
-    csv_threads = [ core for core in threads if csv_threads_mincomp < compfrac[core] ]
+    csv_threads = [ core for core in threads if threads_mincomp < compfrac[core] ]
   else:
     csv_threads = threads
+
+  if aggregate:
+    data = { 0: dict([ (key, sum([ data[core][key] for core in threads ]) / len(threads)) for key in data[threads[0]].keys() ]) }
+    threads = [0]
 
   all_items, all_names = get_items(use_simple, use_simple_mem = use_simple_mem)
 
@@ -238,12 +241,14 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
 
   if gen_text_stack: print '                     CPI      CPI %     Time %'
   for core, (res, total, other, scale) in results.items():
-    if gen_text_stack: print 'Core', core
+    if gen_text_stack and not aggregate: print 'Core', core
     plot_data[core] = {}
+    total = 0
     for name, value in res:
       if gen_text_stack:
         print '  %-15s    %6.2f    %6.2f%%    %6.2f%%' % (name, float(value) / (instrs[core] or 1), 100 * float(value) / scale, 100 * float(value) / max_cycles)
-      if gen_plot_stack:
+      total += value
+      if gen_plot_stack or return_data:
         plot_labels.append(name)
         if use_cpi:
           plot_data[core][name] = float(value) / (instrs[core] or 1)
@@ -251,6 +256,9 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
           plot_data[core][name] = (float(value) / cycles_scale) / 1e15 # cycles to femtoseconds to seconds
         else:
           plot_data[core][name] = float(value) / max_cycles
+    if gen_text_stack:
+      print
+      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, float(total) / cycles_scale / 1e15)
 
   # First, create an ordered list of labels that is the superset of all labels used from all cores
   # Then remove items that are not used, creating an ordered list with all currently used labels
@@ -305,7 +313,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi (default: time)]'
+    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]'
 
   jobid = 0
   resultsdir = '.'
@@ -316,9 +324,10 @@ if __name__ == '__main__':
   use_simple = False
   use_simple_mem = True
   no_collapse = False
+  aggregate = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -347,6 +356,8 @@ if __name__ == '__main__':
       use_cpi = True
     if o == '--abstime':
       use_abstime = True
+    if o == '--aggregate':
+      aggregate = True
 
   if args:
     usage()
@@ -361,5 +372,5 @@ if __name__ == '__main__':
     use_roi = use_roi,
     use_simple = use_simple,
     use_simple_mem = use_simple_mem,
-    no_collapse = no_collapse)
-
+    no_collapse = no_collapse,
+    aggregate = aggregate)

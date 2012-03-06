@@ -63,17 +63,42 @@ struct MicroOp {
    /** The microOperation type. */
    uop_type_t uop_type;
 
-   // Used by the resource contention model to determine the port this uop can take
-   enum UopType {
-      UOP_TYPE_FP_ADDSUB,
-      UOP_TYPE_FP_MULDIV,
-      UOP_TYPE_LOAD,
-      UOP_TYPE_STORE,
-      UOP_TYPE_GENERIC,
-      UOP_TYPE_BRANCH,
-      UOP_TYPE_SIZE,
+   enum uop_subtype_t {
+      UOP_SUBTYPE_FP_ADDSUB,
+      UOP_SUBTYPE_FP_MULDIV,
+      UOP_SUBTYPE_LOAD,
+      UOP_SUBTYPE_STORE,
+      UOP_SUBTYPE_GENERIC,
+      UOP_SUBTYPE_BRANCH,
+      UOP_SUBTYPE_SIZE,
    };
-   UopType port_type;
+   uop_subtype_t uop_subtype;
+
+   enum uop_port_t {
+      UOP_PORT0,
+      UOP_PORT1,
+      UOP_PORT23,
+      UOP_PORT4,
+      UOP_PORT5,
+      UOP_PORT015,
+      UOP_PORT_SIZE,
+   };
+   uop_port_t uop_port;
+
+   enum uop_alu_t {
+      UOP_ALU_NONE = 0,
+      UOP_ALU_TRIG,
+      UOP_ALU_SIZE,
+   };
+   uop_alu_t uop_alu;
+
+   enum uop_bypass_t {
+      UOP_BYPASS_NONE,
+      UOP_BYPASS_LOAD_FP,
+      UOP_BYPASS_FP_STORE,
+      UOP_BYPASS_SIZE
+   };
+   uop_bypass_t uop_bypass;
 
    /** This microOp is the first microOp of the instruction. */
    bool first;
@@ -166,6 +191,7 @@ struct MicroOp {
 
    bool m_membar;
    bool is_x87;
+   UInt16 operand_size;
 
    bool m_forceLongLatencyLoad;
 
@@ -180,16 +206,29 @@ struct MicroOp {
 
    void clear();
 
-   void makeLoad(uint32_t offset, const Memory::Access& loadAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint32_t execLatency);
-   void makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint32_t execLatency, bool isBranch, bool jump);
-   void makeStore(uint32_t offset, uint32_t num_execute, const Memory::Access& storeAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint32_t execLatency);
+   void makeLoad(uint32_t offset, const Memory::Access& loadAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName);
+   void makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, bool isBranch, bool jump);
+   void makeStore(uint32_t offset, uint32_t num_execute, const Memory::Access& storeAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName);
+   void makeDynamic(const String& instructionOpcodeName, uint32_t execLatency);
 
-   static UopType getUopType(const MicroOp& uop);
-   static String UopTypeString(UopType uop_type);
-   void setUopType(void) { port_type = getUopType(*this); }
-   UopType getUopType(void) const { return port_type; }
+   static uop_subtype_t getSubtype_Exec(const MicroOp& uop);
+   static uop_subtype_t getSubtype(const MicroOp& uop);
+   static String getSubtypeString(uop_subtype_t uop_subtype);
+   static uop_port_t getPort(const MicroOp& uop);
+   static uop_bypass_t getBypassType(const MicroOp& uop);
+   static bool isFpLoadStore(const MicroOp& uop);
+   void setAlu(void);
+
+   void setTypes() { uop_subtype = getSubtype(*this); uop_port = getPort(*this); uop_bypass = getBypassType(*this); setAlu(); }
+   uop_subtype_t getSubtype(void) const { return uop_subtype; }
+   uop_port_t getPort(void) const { return uop_port; }
+   uop_alu_t getAlu(void) const { return uop_alu; }
+   uop_bypass_t getBypassType(void) const { return uop_bypass; }
+
    void setIsX87(bool _is_x87) { is_x87 = _is_x87; }
    bool isX87(void) const { return is_x87; }
+   void setOperandSize(int size) { operand_size = size; }
+   UInt16 getOperandSize(void) const { return operand_size; }
 
    void setInstruction(Instruction* instr) { instruction = instr; }
    Instruction* getInstruction(void) const { return instruction; }

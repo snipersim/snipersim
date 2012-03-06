@@ -203,12 +203,12 @@ namespace ParametricDramDirectoryMSI
 
          // Cache data operations
          void invalidateCacheBlock(IntPtr address);
-         void retrieveCacheBlock(IntPtr address, Byte* data_buf);
+         void retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::Thread_t thread_num);
 
 
          void insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, ShmemPerfModel::Thread_t thread_num);
-         std::pair<SubsecondTime, bool> updateCacheBlock(IntPtr address, CacheState::cstate_t cstate, Transition::reason_t reason, Byte* out_buf = NULL);
-         void writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length);
+         std::pair<SubsecondTime, bool> updateCacheBlock(IntPtr address, CacheState::cstate_t cstate, Transition::reason_t reason, Byte* out_buf, ShmemPerfModel::Thread_t thread_num);
+         void writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length, ShmemPerfModel::Thread_t thread_num);
 
          // Handle Request from previous level cache
          HitWhere::where_t processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool isPrefetch, SubsecondTime t_issue, bool have_write_lock);

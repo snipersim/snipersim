@@ -9,37 +9,42 @@
 // PIN requires special handling when floating point operations are used inside callbacks
 // To avoid this, use integer arithmetic with values rescaled by 10k
 
-class FixedPoint {
+template<unsigned long one>
+class TFixedPoint
+{
    private:
       SInt64 m_value;
-      static const SInt64 m_one = 10000;
+      static const SInt64 m_one = one;
 
    public:
-      FixedPoint() : m_value(0) {}
-      FixedPoint(SInt64 i) { this->set_int(i); }
+      TFixedPoint() : m_value(0) {}
+      TFixedPoint(SInt64 i) { this->set_int(i); }
 
       void set_raw(SInt64 value) { this->m_value = value; }
-      void set_int(SInt64 value) { assert(INT64_MAX / this->m_one > abs(value)); this->m_value = value * this->m_one; }
-      static FixedPoint from_raw(SInt64 value) { FixedPoint fp; fp.set_raw(value); return fp; }
+      void set_int(SInt64 value) { assert((INT64_MAX / this->m_one) > llabs(value)); this->m_value = value * this->m_one; }
+      static TFixedPoint from_raw(SInt64 value) { TFixedPoint fp; fp.set_raw(value); return fp; }
 
-      bool operator== (const FixedPoint& fp) const { return this->m_value == fp.m_value; }
+      bool operator== (const TFixedPoint& fp) const { return this->m_value == fp.m_value; }
       bool operator== (SInt64 i) const { return this->m_value == i * m_one; }
 
-      FixedPoint operator+ (const FixedPoint& fp) const { return FixedPoint::from_raw(this->m_value + fp.m_value); }
-      FixedPoint operator+ (SInt64 i) const { return FixedPoint::from_raw(this->m_value + i * m_one); }
+      TFixedPoint operator+ (const TFixedPoint& fp) const { return TFixedPoint::from_raw(this->m_value + fp.m_value); }
+      TFixedPoint operator+ (SInt64 i) const { return TFixedPoint::from_raw(this->m_value + i * m_one); }
 
-      FixedPoint operator- (const FixedPoint& fp) const { return FixedPoint::from_raw(this->m_value - fp.m_value); }
-      FixedPoint operator- (SInt64 i) const { return FixedPoint::from_raw(this->m_value - i * m_one); }
+      TFixedPoint operator- (const TFixedPoint& fp) const { return TFixedPoint::from_raw(this->m_value - fp.m_value); }
+      TFixedPoint operator- (SInt64 i) const { return TFixedPoint::from_raw(this->m_value - i * m_one); }
 
-      FixedPoint operator* (const FixedPoint& fp) const { return FixedPoint::from_raw(this->m_value * fp.m_value / this->m_one); }
-      FixedPoint operator* (SInt64 i) const { return FixedPoint::from_raw(this->m_value * i); }
+      TFixedPoint operator* (const TFixedPoint& fp) const { return TFixedPoint::from_raw(this->m_value * fp.m_value / this->m_one); }
+      TFixedPoint operator* (SInt64 i) const { return TFixedPoint::from_raw(this->m_value * i); }
 
-      FixedPoint operator/ (const FixedPoint& fp) const { return FixedPoint::from_raw(__int128_t(this->m_one) * this->m_value / fp.m_value); }
-      FixedPoint operator/ (SInt64 i) const { return FixedPoint::from_raw(this->m_value / i); }
+      TFixedPoint operator/ (const TFixedPoint& fp) const { return TFixedPoint::from_raw(__int128_t(fp.m_one) * this->m_value / fp.m_value); }
+      TFixedPoint operator/ (SInt64 i) const { return TFixedPoint::from_raw(this->m_value / i); }
 
-      static SInt64 floor(const FixedPoint fp) { return fp.m_value / fp.m_one; }
+      static SInt64 floor(const TFixedPoint fp) { return fp.m_value / fp.m_one; }
 };
 
-inline FixedPoint operator/ (SInt64 i, FixedPoint& fp) { return FixedPoint(i) / fp; }
+template <unsigned long one> inline TFixedPoint<one> operator/ (SInt64 i, TFixedPoint<one>& fp) { return TFixedPoint<one>(i) / fp; }
+
+// Default: 16k so mul/div can be done using shift operations
+typedef TFixedPoint<0x4000> FixedPoint;
 
 #endif // FIXED_POINT_H

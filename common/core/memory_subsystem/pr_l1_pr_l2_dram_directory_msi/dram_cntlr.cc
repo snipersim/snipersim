@@ -52,13 +52,14 @@ DramCntlr::~DramCntlr()
 }
 
 void
-DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf)
+DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    if (m_data_map[address] == NULL)
    {
       m_data_map[address] = new Byte[getCacheBlockSize()];
       memset((void*) m_data_map[address], 0x00, getCacheBlockSize());
    }
+
    memcpy((void*) data_buf, (void*) m_data_map[address], getCacheBlockSize());
 
    SubsecondTime dram_access_latency = runDramPerfModel(requester);
@@ -72,7 +73,7 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf)
 }
 
 void
-DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf)
+DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    if (m_data_map[address] == NULL)
    {

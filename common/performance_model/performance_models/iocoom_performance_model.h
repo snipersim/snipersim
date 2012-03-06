@@ -21,15 +21,6 @@ public:
 
    void outputSummary(std::ostream &os) const;
 
-   UInt64 getInstructionCount() const { return m_instruction_count; }
-   SubsecondTime getElapsedTime() const;
-   void resetElapsedTime();
-   SubsecondTime getNonIdleElapsedTime() const { return m_elapsed_time.getElapsedTime(); /* TODO: subtract idle time */ }
-
-protected:
-   void setElapsedTime(SubsecondTime);
-   void incrementElapsedTime(SubsecondTime time);
-
 private:
 
    bool handleInstruction(Instruction const* instruction);
@@ -83,9 +74,6 @@ private:
       Scoreboard m_scoreboard;
       std::vector<IntPtr> m_addresses;
    };
-
-   UInt64 m_instruction_count;
-   ComponentTime m_elapsed_time;
 
    Scoreboard m_register_scoreboard;
    StoreBuffer *m_store_buffer;

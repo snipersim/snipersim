@@ -23,10 +23,11 @@ class SyscallMdl
       };
 
       SyscallMdl(Network *net);
+      ~SyscallMdl();
 
       IntPtr runExit(IntPtr old_return);
       IntPtr runEnter(IntPtr syscall_number, syscall_args_t &args);
-      
+
       // ------------------------------------------------------
       // New stuff added with Memory redirection
 
@@ -41,19 +42,27 @@ class SyscallMdl
       //---------------------------------------------------------
 
    private:
-      
+
       // ------------------------------------------------------
       // New stuff added with Memory redirection
-      
+
       static const UInt32 m_scratchpad_size = 512;
       static const UInt32 m_num_syscall_args = 6;
      
+      static const char *futex_names[16];
+
+      struct futex_counters_t
+      {
+         uint64_t count[16];
+         SubsecondTime delay[16];
+      } *futex_counters;
+
       IntPtr m_syscall_number;
       bool m_called_enter;
       IntPtr m_ret_val;
       struct syscall_args_t m_saved_args;
       char m_scratchpad [m_num_syscall_args] [m_scratchpad_size];
-      
+
       // ------------------------------------------------------
 
       UnstructuredBuffer m_send_buff;
@@ -66,6 +75,7 @@ class SyscallMdl
       IntPtr marshallWritevCall(syscall_args_t &args);
       IntPtr marshallCloseCall(syscall_args_t &args);
       IntPtr marshallLseekCall(syscall_args_t &args);
+      IntPtr marshallGetcwdCall(syscall_args_t &args);
       IntPtr marshallAccessCall(syscall_args_t &args);
 #ifdef TARGET_X86_64
       IntPtr marshallStatCall(syscall_args_t &args);
@@ -88,6 +98,7 @@ class SyscallMdl
 
       // Helper functions
       UInt32 getStrLen (char *str);
+      void futexCount(uint32_t function, Core *core, SubsecondTime delay);
 
 };
 

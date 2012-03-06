@@ -12,17 +12,15 @@ DIRECTORIES = $(SIM_ROOT)/common/core \
 	$(SIM_ROOT)/common/config \
 	$(SIM_ROOT)/common/system \
 	$(SIM_ROOT)/common/scripting \
-	$(SIM_ROOT)/common/sampling \
 	$(SIM_ROOT)/common/performance_model \
 	$(SIM_ROOT)/common/performance_model/branch_predictors \
 	$(SIM_ROOT)/common/performance_model/performance_models \
 	$(SIM_ROOT)/common/performance_model/performance_models/interval_performance_model \
 	$(SIM_ROOT)/common/user \
 	$(SIM_ROOT)/include \
-	$(CURDIR)/ \
-	$(SIM_ROOT)/pin/libdisasm64
+	$(CURDIR)/
 
-INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed2-intel64/include $(SIM_ROOT)/linux
+INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed2-intel64/include $(SIM_ROOT)/linux $(SIM_ROOT)/sift
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
@@ -52,15 +50,15 @@ else
 	BOOST_SUFFIX = mt
 endif
 
-LD_LIBS += -lboost_filesystem-$(BOOST_SUFFIX) -lboost_system-$(BOOST_SUFFIX) -L$(SIM_ROOT)/python_kit/lib -lpython2.7
+LD_LIBS += -lsift -lxed -lboost_filesystem-$(BOOST_SUFFIX) -lboost_system-$(BOOST_SUFFIX) -L$(SIM_ROOT)/python_kit/lib -lpython2.7 -lrt -lz
 
-LD_FLAGS += -L$(SIM_ROOT)/lib
+LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 
 # Include paths
 CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
           -I$(SIM_ROOT)/python_kit/include/python2.7 \
-          -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
+          -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
 
 %.h %.hpp:
 	@echo "\n\tUnable to find $@" >&2

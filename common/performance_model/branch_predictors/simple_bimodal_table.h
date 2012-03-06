@@ -55,7 +55,7 @@ private:
    Addr ilog2(Addr n)
    {
       Addr i;
-      for(i=0;n>0;n>>=1,i++);
+      for(i=0;n>0;n>>=1,i++) {}
       return i-1;
    }
 

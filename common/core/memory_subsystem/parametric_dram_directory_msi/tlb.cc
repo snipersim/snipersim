@@ -16,7 +16,7 @@ TLB::TLB(String name, core_id_t core_id, UInt32 size, UInt32 associativity)
 }
 
 bool
-TLB::lookup(IntPtr address)
+TLB::lookup(IntPtr address, SubsecondTime now)
 {
    m_access++;
 
@@ -28,7 +28,7 @@ TLB::lookup(IntPtr address)
    bool eviction;
    IntPtr evict_addr;
    CacheBlockInfo evict_block_info;
-   m_cache.insertSingleLine(address, NULL, &eviction, &evict_addr, &evict_block_info, NULL);
+   m_cache.insertSingleLine(address, NULL, &eviction, &evict_addr, &evict_block_info, NULL, now);
 
    return false;
 }

@@ -38,6 +38,8 @@ enum EStaticNetwork
    NUM_STATIC_NETWORKS
 };
 
+extern const char* EStaticNetworkStrings[];
+
 // Packets are routed to a static network based on their type. This
 // gives the static network to use for a given packet type.
 static EStaticNetwork g_type_to_static_network_map[] __attribute__((unused)) =

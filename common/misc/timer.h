@@ -26,7 +26,10 @@ class Timer
       UInt64 t_start;
       UInt64 r_start;
       UInt32 cpu_start;
-      static FixedPoint rdtsc_speed;
+      // Default FixedPoint uses a 16k multiplier, this overflows with long simulation times.
+      // Now, we can simulate at least 3 months (0x100 * rdtsc() < INT64_MAX) with sufficient precision
+      typedef TFixedPoint<0x100> RdtscSpeed;
+      static RdtscSpeed rdtsc_speed;
 };
 
 class TotalTimer

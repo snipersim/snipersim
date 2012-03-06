@@ -448,8 +448,9 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
 
       // I have to get the data from DRAM
       Byte data_buf[getCacheBlockSize()];
+      SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
-      m_dram_cntlr->getDataFromDram(address, receiver, data_buf);
+      m_dram_cntlr->getDataFromDram(address, receiver, data_buf, now);
       getMemoryManager()->sendMsg(reply_msg_type,
             MemComponent::DRAM_DIR, MemComponent::L2_CACHE,
             receiver /* requester */,
@@ -513,6 +514,7 @@ void
 DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
 {
    IntPtr address = shmem_msg->getAddress();
+   SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
    assert(directory_entry);
@@ -529,7 +531,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
       ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
 
       // Update times
-      shmem_req->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD));
+      shmem_req->updateTime(now);
       getShmemPerfModel()->updateElapsedTime(shmem_req->getTime(), ShmemPerfModel::_SIM_THREAD);
 
       // An involuntary/voluntary Flush
@@ -540,13 +542,13 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
       else if (shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::SH_REQ)
       {
          // Write Data to Dram
-         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf());
+         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now);
          processShReqFromL2Cache(shmem_req, shmem_msg->getDataBuf());
       }
       else // shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::NULLIFY_REQ
       {
          // Write Data To Dram
-         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf());
+         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now);
          processNullifyReq(shmem_req);
       }
    }
@@ -554,7 +556,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
    {
       // This was just an eviction
       // Write Data to Dram
-      sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf());
+      sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now);
    }
 }
 
@@ -562,6 +564,7 @@ void
 DramDirectoryCntlr::processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
 {
    IntPtr address = shmem_msg->getAddress();
+   SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
    assert(directory_entry);
@@ -579,11 +582,11 @@ DramDirectoryCntlr::processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_ms
       ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
 
       // Update Time
-      shmem_req->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD));
+      shmem_req->updateTime(now);
       getShmemPerfModel()->updateElapsedTime(shmem_req->getTime(), ShmemPerfModel::_SIM_THREAD);
 
       // Write Data to Dram
-      sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf());
+      sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now);
 
       LOG_ASSERT_ERROR(shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::SH_REQ,
             "Address(0x%x), Req(%u)",
@@ -597,10 +600,10 @@ DramDirectoryCntlr::processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_ms
 }
 
 void
-DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf)
+DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    // Write data to Dram
-   m_dram_cntlr->putDataToDram(address, requester, data_buf);
+   m_dram_cntlr->putDataToDram(address, requester, data_buf, now);
 }
 
 }

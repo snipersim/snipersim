@@ -10,7 +10,7 @@
 // By default, only the faster rdtsc is used, but this can give errors when a thread switches cores while timing.
 //#define TIMER_TRACK_CPUID
 
-FixedPoint Timer::rdtsc_speed = 0;
+Timer::RdtscSpeed Timer::rdtsc_speed = 0;
 
 UInt64 rdtsc(void)
 {
@@ -45,7 +45,7 @@ Timer::Timer()
          UInt64 t_start = now(), r_start = rdtsc_and_cpuid(&id1);
          usleep(100000);
          UInt64 t_end = now(), r_end = rdtsc_and_cpuid(&id2);
-         rdtsc_speed = FixedPoint(r_end - r_start) / (t_end - t_start);
+         rdtsc_speed = RdtscSpeed(r_end - r_start) / (t_end - t_start);
       } while (id1 != id2);
    }
    start();
@@ -80,13 +80,13 @@ UInt64 Timer::getTime()
    UInt64 r_now = rdtsc_and_cpuid(&cpu_now);
 
    if (cpu_now == cpu_start)
-      return FixedPoint::floor((r_now - r_start) / rdtsc_speed);
+      return RdtscSpeed::floor((r_now - r_start) / rdtsc_speed);
    else {
       switched = true;
       return now() - t_start;
    }
    #else
-   return FixedPoint::floor((rdtsc() - t_start) / rdtsc_speed);
+   return RdtscSpeed::floor((rdtsc() - t_start) / rdtsc_speed);
    #endif
 }
 

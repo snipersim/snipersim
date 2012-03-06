@@ -12,7 +12,7 @@
 class CacheSet
 {
    public:
-      
+
       static CacheSet* createCacheSet(String replacement_policy, CacheBase::cache_t cache_type, UInt32 associativity, UInt32 blocksize);
       static CacheBase::ReplacementPolicy parsePolicyType(String policy);
 
@@ -39,6 +39,9 @@ class CacheSet
       bool invalidate(IntPtr& tag);
       void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff);
 
+      char* getDataPtr(UInt32 line_index, UInt32 offset = 0);
+      UInt32 getBlockSize(void) const { return m_blocksize; }
+
       virtual UInt32 getReplacementIndex() = 0;
       virtual void updateReplacementIndex(UInt32) = 0;
 };
@@ -46,7 +49,7 @@ class CacheSet
 class CacheSetRoundRobin : public CacheSet
 {
    public:
-      CacheSetRoundRobin(CacheBase::cache_t cache_type, 
+      CacheSetRoundRobin(CacheBase::cache_t cache_type,
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetRoundRobin();
 

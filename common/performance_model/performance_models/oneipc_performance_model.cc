@@ -12,9 +12,6 @@ using std::endl;
 
 OneIPCPerformanceModel::OneIPCPerformanceModel(Core *core)
     : PerformanceModel(core)
-    , m_instruction_count(0)
-    , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
-    , m_idle_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
 {
    /* Maximum latency which is assumed to be completely overlapped. Can be set using
       perf_model/core/iocoom/latency_cutoff, else L1-D hit time, else 3 cycles */
@@ -22,9 +19,6 @@ OneIPCPerformanceModel::OneIPCPerformanceModel(Core *core)
       Sim()->getCfg()->getInt("perf_model/core/iocoom/latency_cutoff",
       Sim()->getCfg()->getInt("perf_model/l1_dcache/data_access_time",
       3));
-   registerStatsMetric("performance_model", core->getId(), "instruction_count", &m_instruction_count);
-   registerStatsMetric("performance_model", core->getId(), "elapsed_time", &m_elapsed_time);
-   registerStatsMetric("performance_model", core->getId(), "idle_elapsed_time", &m_idle_elapsed_time);
 }
 
 OneIPCPerformanceModel::~OneIPCPerformanceModel()
@@ -89,8 +83,7 @@ bool OneIPCPerformanceModel::handleInstruction(Instruction const* instruction)
    else
       cost.addLatency(ComponentLatency(getCore()->getDvfsDomain(), 1).getLatency());
 
-   if (instruction->getType() == INST_SYNC || instruction->getType() == INST_RECV)
-      m_idle_elapsed_time.addLatency(cost);
+   LOG_ASSERT_ERROR((instruction->getType() != INST_SYNC && instruction->getType() != INST_RECV), "Unexpected non-idle instruction")
 
    // update counters
    m_instruction_count++;
@@ -105,19 +98,4 @@ bool OneIPCPerformanceModel::isModeled(Instruction const* instruction) const
    // Dynamic instructions (SYNC, MEMACCESS, etc.): normal latency
    // TODO: Shouldn't we handle String instructions as well?
    return instruction->isDynamic();
-}
-
-void OneIPCPerformanceModel::setElapsedTime(SubsecondTime time)
-{
-   LOG_ASSERT_ERROR((time >= m_elapsed_time.getElapsedTime()) || (m_elapsed_time.getElapsedTime() == SubsecondTime::Zero()),
-         "time(%s) < m_elapsed_time(%s)",
-         itostr(time).c_str(),
-         itostr(m_elapsed_time.getElapsedTime()).c_str());
-   m_idle_elapsed_time.setElapsedTime(time - m_elapsed_time.getElapsedTime());
-   m_elapsed_time.setElapsedTime(time);
-}
-
-void OneIPCPerformanceModel::incrementElapsedTime(SubsecondTime time)
-{
-   m_elapsed_time.addLatency(time);
 }

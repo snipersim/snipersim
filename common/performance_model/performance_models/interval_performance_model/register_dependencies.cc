@@ -12,7 +12,7 @@ void RegisterDependencies::setDependencies(MicroOp& microOp, uint64_t lowestVali
    {
       uint32_t sourceRegister = microOp.getSourceRegister(i);
       uint64_t producerSequenceNumber;
-      LOG_ASSERT_ERROR(sourceRegister >= 0 && sourceRegister < TOTAL_NUM_REGISTERS, "Source register src[%u]=%u is invalid", i, sourceRegister);
+      LOG_ASSERT_ERROR(sourceRegister < TOTAL_NUM_REGISTERS, "Source register src[%u]=%u is invalid", i, sourceRegister);
       if ((producerSequenceNumber = producers[sourceRegister]) != INVALID_SEQNR)
       {
          if (producerSequenceNumber >= lowestValidSequenceNumber)
@@ -30,7 +30,7 @@ void RegisterDependencies::setDependencies(MicroOp& microOp, uint64_t lowestVali
    for(uint32_t i = 0; i < microOp.getDestinationRegistersLength(); i++)
    {
       uint32_t destinationRegister = microOp.getDestinationRegister(i);
-      LOG_ASSERT_ERROR(destinationRegister >= 0 && destinationRegister < TOTAL_NUM_REGISTERS, "Destination register dst[%u] = %u is invalid", i, destinationRegister);
+      LOG_ASSERT_ERROR(destinationRegister < TOTAL_NUM_REGISTERS, "Destination register dst[%u] = %u is invalid", i, destinationRegister);
       producers[destinationRegister] = microOp.getSequenceNumber();
    }
 

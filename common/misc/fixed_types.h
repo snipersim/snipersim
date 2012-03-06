@@ -1,9 +1,28 @@
 #ifndef __FIXED_TYPES_H
 #define __FIXED_TYPES_H
 
-#define __STDC_LIMIT_MACROS
-#define __STDC_CONSTANT_MACROS
+#ifndef __STDC_LIMIT_MACROS
+# define __STDC_LIMIT_MACROS
+#endif
+#ifndef __STDC_CONSTANT_MACROS
+# define __STDC_CONSTANT_MACROS
+#endif
+#ifndef __STDC_FORMAT_MACROS
+# define __STDC_FORMAT_MACROS
+#endif
+
 #include <stdint.h>
+#include <inttypes.h>
+
+// We define __STDC_LIMIT_MACROS and then include stdint.h
+// But if someone else already included stdint.h without first defining __STDC_LIMIT_MACROS,
+// UINT64_MAX and friends will not be defined. Test for this here.
+#ifndef UINT64_MAX
+# error "UINT64_MAX is not defined. Make sure fixed_types.h is first in the include order."
+#endif
+#ifndef PRId64
+# error "PRId64 is not defined. Make sure fixed_types.h is first in the include order."
+#endif
 
 typedef uint64_t UInt64;
 typedef uint32_t UInt32;

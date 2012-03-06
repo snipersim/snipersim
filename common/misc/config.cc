@@ -37,7 +37,7 @@ Config *Config::getSingleton()
    return m_singleton;
 }
 
-Config::Config()
+Config::Config(SimulationMode mode)
       : m_current_process_num((UInt32)-1)
 {
    // NOTE: We can NOT use logging in the config constructor! The log
@@ -60,7 +60,10 @@ Config::Config()
       m_knob_enable_sync_report = Sim()->getCfg()->getBool("clock_skew_minimization/report", false);
 
       // Simulation Mode
-      m_simulation_mode = parseSimulationMode(Sim()->getCfg()->getString("general/mode"));
+      if (mode == SimulationMode::FROM_CONFIG)
+         m_simulation_mode = parseSimulationMode(Sim()->getCfg()->getString("general/mode"));
+      else
+         m_simulation_mode = mode;
       m_knob_bbvs = false; // No config setting here, but enabled by code (BBVSamplingProvider, [py|lua]_bbv) that needs it
 
       // OS Emulation flags

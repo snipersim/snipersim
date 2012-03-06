@@ -32,6 +32,8 @@ enum StopDispatchReason {
 String StopDispatchReasonStringHelper(StopDispatchReason r);
 String StopDispatchReasonString(StopDispatchReason r);
 
+class LoopTracer;
+
 class IntervalTimer {
 public:
 
@@ -40,6 +42,11 @@ public:
 
    // simulate() returns (instructions_executed, latency)
    boost::tuple<uint64_t,uint64_t> simulate(const std::vector<MicroOp>& insts);
+
+   // Update internal time after syncronization event
+   // Since interval_timer currently has no notion of outside time, no need to do anything for now
+   // NOTE: These events are supposed to be long-latency, so we may want to flush the windows here as well
+   void synchronize(uint64_t time) {}
 
 protected:
 
@@ -75,12 +82,14 @@ private:
    PerformanceModel *m_perf_model;
    const ComponentPeriod *m_frequency_domain;
 
+   LoopTracer *m_loop_tracer;
+
 #if DEBUG_IT_INSN_PRINT
    FILE *m_insn_log;
 #endif
 
    // Core statistics
-   UInt64 m_uop_type_count[MicroOp::UOP_TYPE_SIZE];
+   UInt64 m_uop_type_count[MicroOp::UOP_SUBTYPE_SIZE];
    UInt64 m_uops_total;
    UInt64 m_uops_x87;
    UInt64 m_uops_pause;

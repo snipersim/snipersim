@@ -105,6 +105,7 @@ public:
   Iterator getOldWindowIterator() const;
 
   int calculateBranchResolutionLatency();
+  uint64_t getEffectiveCriticalPathLength(uint64_t critical_path_length);
 
   String toString();
 
@@ -132,7 +133,7 @@ private:
   uint64_t m_critical_path_head;
   uint64_t m_critical_path_tail;
 
-  uint64_t m_count_bytype[MicroOp::UOP_TYPE_SIZE];
+  uint64_t m_count_byport[MicroOp::UOP_PORT_SIZE];
   uint64_t m_cpcontr_bytype[CPCONTR_TYPE_SIZE];
   uint64_t m_cpcontr_total;
 

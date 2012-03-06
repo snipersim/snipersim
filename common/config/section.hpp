@@ -5,6 +5,8 @@
  */
 // Config Class
 // Author: Charles Gruenwald III
+#include "fixed_types.h"
+
 #include <vector>
 #include <map>
 

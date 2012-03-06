@@ -63,7 +63,9 @@ private:
     void *m_data[HASH_SIZE];
 };
 
+#if 0
 __attribute__((weak)) TLS* TLS::create()
 {
     return new HashTLS();
 }
+#endif

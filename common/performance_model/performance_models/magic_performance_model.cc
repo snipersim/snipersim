@@ -8,8 +8,6 @@ using std::endl;
 
 MagicPerformanceModel::MagicPerformanceModel(Core *core)
     : PerformanceModel(core)
-    , m_instruction_count(0)
-    , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
 {
 }
 
@@ -79,18 +77,4 @@ bool MagicPerformanceModel::handleInstruction(Instruction const* instruction)
 bool MagicPerformanceModel::isModeled(Instruction const* instruction) const
 {
    return instruction->isDynamic();
-}
-
-void MagicPerformanceModel::setElapsedTime(SubsecondTime time)
-{
-   LOG_ASSERT_ERROR((time >= m_elapsed_time.getElapsedTime()) || (m_elapsed_time.getElapsedTime() == SubsecondTime::Zero()),
-         "time(%s) < m_elapsed_time(%s)",
-         itostr(time).c_str(),
-         itostr(m_elapsed_time.getElapsedTime()).c_str());
-   m_elapsed_time.setElapsedTime(time);
-}
-
-void MagicPerformanceModel::incrementElapsedTime(SubsecondTime time)
-{
-   m_elapsed_time.addLatency(time);
 }

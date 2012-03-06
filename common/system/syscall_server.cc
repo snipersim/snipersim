@@ -74,6 +74,10 @@ void SyscallServer::handleSyscall(core_id_t core_id)
       marshallLseekCall(core_id);
       break;
 
+   case SYS_getcwd:
+      marshallGetcwdCall(core_id);
+      break;
+
    case SYS_access:
       marshallAccessCall(core_id);
       break;
@@ -364,6 +368,48 @@ void SyscallServer::marshallLseekCall(core_id_t core_id)
    m_send_buff << ret_val;
    m_network.netSend(core_id, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
 
+}
+
+void SyscallServer::marshallGetcwdCall(core_id_t core_id)
+{
+   /*
+       Receive
+
+       Field               Type
+       -----------------|--------
+       COUNT               size_t
+
+       Transmit
+
+       Field               Type
+       -----------------|--------
+       STATUS              int
+       BUFFER              void *
+
+   */
+
+   char *read_buf = (char *) m_scratch;
+   size_t count;
+
+   assert(m_recv_buff.size() == sizeof(count));
+   m_recv_buff >> count;
+
+   if (count > m_SYSCALL_SERVER_MAX_BUFF)
+      read_buf = new char[count];
+
+   // Actually do the read call
+   int bytes = syscall(SYS_getcwd, (void *) read_buf, count);
+
+   m_send_buff << bytes;
+   if (bytes != -1)
+      m_send_buff << std::make_pair(read_buf, bytes);
+
+   LOG_PRINT("Getcwd() returns %s, %i", read_buf, bytes);
+
+   m_network.netSend(core_id, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+
+   if (count > m_SYSCALL_SERVER_MAX_BUFF)
+      delete [] read_buf;
 }
 
 void SyscallServer::marshallAccessCall(core_id_t core_id)

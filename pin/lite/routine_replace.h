@@ -23,6 +23,7 @@ void pthreadAfter(THREADID thread_id, ADDRINT type_id, ADDRINT retval);
 
 // os emulation
 IntPtr emuGetNprocs();
+IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp);
 
 AFUNPTR getFunptr(CONTEXT* context, string func_name);
 

@@ -1,11 +1,12 @@
 #ifndef BASIC_HASH_H
 #define BASIC_HASH_H
 
+#include "fixed_types.h"
+
 #include <unordered_map>
 #include <utility>
 #include <iostream>
 #include <assert.h>
-#include "fixed_types.h"
 
 //#define DEBUG_BASIC_HASH
 

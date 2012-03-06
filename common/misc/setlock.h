@@ -3,6 +3,8 @@
 
 #include "lock.h"
 #include "selock.h"
+
+#include <vector>
 #include <pthread.h>
 
 /* Cache set lock */

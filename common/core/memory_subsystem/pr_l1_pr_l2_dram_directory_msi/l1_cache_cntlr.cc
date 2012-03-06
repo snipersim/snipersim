@@ -1,5 +1,5 @@
 #include "l1_cache_cntlr.h"
-#include "l2_cache_cntlr.h" 
+#include "l2_cache_cntlr.h"
 #include "memory_manager.h"
 
 namespace PrL1PrL2DramDirectoryMSI
@@ -25,13 +25,13 @@ L1CacheCntlr::L1CacheCntlr(core_id_t core_id,
 {
    m_l1_icache = new Cache("L1-I",
          l1_icache_size,
-         l1_icache_associativity, 
+         l1_icache_associativity,
          m_cache_block_size,
          l1_icache_replacement_policy,
          CacheBase::PR_L1_CACHE);
    m_l1_dcache = new Cache("L1-D",
          l1_dcache_size,
-         l1_dcache_associativity, 
+         l1_dcache_associativity,
          m_cache_block_size,
          l1_dcache_replacement_policy,
          CacheBase::PR_L1_CACHE);
@@ -41,7 +41,7 @@ L1CacheCntlr::~L1CacheCntlr()
 {
    delete m_l1_icache;
    delete m_l1_dcache;
-}      
+}
 
 void
 L1CacheCntlr::setL2CacheCntlr(L2CacheCntlr* l2_cache_cntlr)
@@ -53,7 +53,7 @@ bool
 L1CacheCntlr::processMemOpFromCore(
       MemComponent::component_t mem_component,
       Core::lock_signal_t lock_signal,
-      Core::mem_op_t mem_op_type, 
+      Core::mem_op_t mem_op_type,
       IntPtr ca_address, UInt32 offset,
       Byte* data_buf, UInt32 data_length,
       bool modeled)
@@ -86,14 +86,14 @@ L1CacheCntlr::processMemOpFromCore(
          getMemoryManager()->incrElapsedTime(mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
 
          accessCache(mem_component, mem_op_type, ca_address, offset, data_buf, data_length);
-                 
+
          if (lock_signal != Core::LOCK)
             releaseLock(mem_component);
          return l1_cache_hit;
       }
 
       getMemoryManager()->incrElapsedTime(mem_component, CachePerfModel::ACCESS_CACHE_TAGS);
-      
+
       if (lock_signal == Core::UNLOCK)
          LOG_PRINT_ERROR("Expected to find address(0x%x) in L1 Cache", ca_address);
 
@@ -101,13 +101,13 @@ L1CacheCntlr::processMemOpFromCore(
       invalidateCacheBlock(mem_component, ca_address);
 
       m_l2_cache_cntlr->acquireLock();
- 
+
       ShmemMsg::msg_t shmem_msg_type = getShmemMsgType(mem_op_type);
 
       if (m_l2_cache_cntlr->processShmemReqFromL1Cache(mem_component, shmem_msg_type, ca_address, modeled))
       {
          m_l2_cache_cntlr->releaseLock();
-         
+
          // Increment Shared Mem Perf model cycle counts
          // L2 Cache
          getMemoryManager()->incrElapsedTime(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
@@ -122,15 +122,15 @@ L1CacheCntlr::processMemOpFromCore(
       }
 
       l1_cache_hit = false;
-      
+
       // Increment shared mem perf model cycle counts
       getMemoryManager()->incrElapsedTime(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
-      
+
       m_l2_cache_cntlr->releaseLock();
       releaseLock(mem_component);
-      
+
       // Send out a request to the network thread for the cache data
-      getMemoryManager()->sendMsg(shmem_msg_type, 
+      getMemoryManager()->sendMsg(shmem_msg_type,
             mem_component, MemComponent::L2_CACHE,
             m_core_id /* requester */,
             m_core_id /* receiver */, ca_address);
@@ -152,11 +152,11 @@ L1CacheCntlr::accessCache(MemComponent::component_t mem_component,
    {
       case Core::READ:
       case Core::READ_EX:
-         l1_cache->accessSingleLine(ca_address + offset, Cache::LOAD, data_buf, data_length);
+         l1_cache->accessSingleLine(ca_address + offset, Cache::LOAD, data_buf, data_length, getShmemPerfModel()->getElapsedTime());
          break;
 
       case Core::WRITE:
-         l1_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length);
+         l1_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime());
          // Write-through cache - Write the L2 Cache also
          m_l2_cache_cntlr->acquireLock();
          m_l2_cache_cntlr->writeCacheBlock(ca_address, offset, data_buf, data_length);
@@ -171,14 +171,14 @@ L1CacheCntlr::accessCache(MemComponent::component_t mem_component,
 
 bool
 L1CacheCntlr::operationPermissibleinL1Cache(
-      MemComponent::component_t mem_component, 
+      MemComponent::component_t mem_component,
       IntPtr address, Core::mem_op_t mem_op_type,
       UInt32 access_num, bool modeled)
 {
    // TODO: Verify why this works
    bool cache_hit = false;
    CacheState::cstate_t cstate = getCacheState(mem_component, address);
-   
+
    switch (mem_op_type)
    {
       case Core::READ:
@@ -214,7 +214,8 @@ L1CacheCntlr::insertCacheBlock(MemComponent::component_t mem_component,
 
    Cache* l1_cache = getL1Cache(mem_component);
    l1_cache->insertSingleLine(address, data_buf,
-         eviction_ptr, evict_address_ptr, &evict_block_info, evict_buf);
+         eviction_ptr, evict_address_ptr, &evict_block_info, evict_buf,
+         getShmemPerfModel()->getElapsedTime());
    setCacheState(mem_component, address, cstate);
 }
 
@@ -224,7 +225,7 @@ L1CacheCntlr::getCacheState(MemComponent::component_t mem_component, IntPtr addr
    Cache* l1_cache = getL1Cache(mem_component);
 
    PrL1CacheBlockInfo* l1_cache_block_info = (PrL1CacheBlockInfo*) l1_cache->peekSingleLine(address);
-   return (l1_cache_block_info == NULL) ? CacheState::INVALID : l1_cache_block_info->getCState(); 
+   return (l1_cache_block_info == NULL) ? CacheState::INVALID : l1_cache_block_info->getCState();
 }
 
 void

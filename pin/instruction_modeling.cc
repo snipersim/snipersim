@@ -5,7 +5,6 @@
 
 #include "simulator.h"
 #include "performance_model.h"
-#include "opcodes.h"
 #include "core_manager.h"
 #include "core.h"
 #include "timer.h"
@@ -46,8 +45,10 @@ static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADD
    PerformanceModel *prfmdl = Sim()->getCoreManager()->getCurrentCore(thread_id)->getPerformanceModel();
    BranchPredictor *bp = prfmdl->getBranchPredictor();
 
-   bool prediction = bp->predict(eip, target);
-   bp->update(prediction, taken, eip, target);
+   if (bp) {
+      bool prediction = bp->predict(eip, target);
+      bp->update(prediction, taken, eip, target);
+   }
 }
 
 static VOID handleMagic(CONTEXT * ctxt, ADDRINT next_eip)
@@ -217,7 +218,7 @@ static void fillOperandList(OperandList *list, INS ins)
    }
 }
 
-std::unordered_map<ADDRINT, std::list<MicroOp *> > instruction_cache;
+std::unordered_map<ADDRINT, std::vector<MicroOp *> > instruction_cache;
 
 BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBlock *basic_block)
 {
@@ -229,7 +230,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
       OperandList list;
       mfence_instruction = new GenericInstruction(list);
       MicroOp * uop = new MicroOp();
-      uop->makeExecute(0,0,XED_ICLASS_INVALID,"MFENCE",1,0,0);
+      uop->makeDynamic("MFENCE", 1);
       uop->setMemBarrier(true);
       uop->setFirst(true);
       uop->setLast(true);
@@ -238,7 +239,8 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
    // Functional modeling
 
-   if (INS_Disassemble(ins) == "xchg bx, bx")
+   // Simics-style magic instruction: xchg bx, bx
+   if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
    {
       INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_CONTEXT, IARG_FALLTHROUGH_ADDR, IARG_END);
       // Trace will be aborted after MAGIC (Redmine #118), so don't add the subsequent instructions to the basic-block list.
@@ -313,21 +315,21 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    {
       switch(INS_Opcode(ins))
       {
-      case OPCODE_DIV:
+      case XED_ICLASS_DIV:
          basic_block->push_back(new ArithInstruction(INST_DIV, list));
          break;
-      case OPCODE_MUL:
+      case XED_ICLASS_MUL:
          basic_block->push_back(new ArithInstruction(INST_MUL, list));
          break;
-      case OPCODE_FDIV:
+      case XED_ICLASS_FDIV:
          basic_block->push_back(new ArithInstruction(INST_FDIV, list));
          break;
-      case OPCODE_FMUL:
+      case XED_ICLASS_FMUL:
          basic_block->push_back(new ArithInstruction(INST_FMUL, list));
          break;
 
-      case OPCODE_SCASB:
-      case OPCODE_CMPSB:
+      case XED_ICLASS_SCASB:
+      case XED_ICLASS_CMPSB:
          if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
          {
             basic_block->push_back(new StringInstruction(list));
@@ -345,25 +347,10 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    basic_block->back()->setAtomic(INS_IsAtomicUpdate(ins));
    basic_block->back()->setDisassembly(INS_Disassemble(ins).c_str());
 
-   if (instruction_cache.count(addr) == 0) {
-      InstructionDecoder* inst_decoder = new InstructionDecoder();
-      InstructionDecoder::DecodeResult& microOpsIterator = inst_decoder->decode(ins);
-      while (microOpsIterator.hasNext()) {
-         MicroOp& uop = microOpsIterator.next();
-         if (uop.isExecute())
-         {
-            if ((INS_Mnemonic(ins) == "MFENCE") || (INS_Mnemonic(ins) == "LFENCE") || (INS_Mnemonic(ins) == "SFENCE"))
-            {
-               uop.setMemBarrier(true);
-            }
-         }
-         uop.setInstruction(basic_block->back());
+   if (instruction_cache.count(addr) == 0)
+      instruction_cache[addr] = InstructionDecoder::decode(INS_Address(ins), INS_XedDec(ins), basic_block->back());
 
-         instruction_cache[addr].push_back(new MicroOp(uop));
-      }
-      delete inst_decoder;
-   }
-   for(std::list<MicroOp*>::iterator it = instruction_cache[addr].begin(); it != instruction_cache[addr].end(); it++) {
+   for(std::vector<MicroOp*>::iterator it = instruction_cache[addr].begin(); it != instruction_cache[addr].end(); it++) {
       basic_block->back()->addMicroOp(*it);
    }
 
@@ -377,4 +364,10 @@ VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address,
 {
    Core* core = localStore[thread_id].core;
    core->countInstructions(address, count);
+}
+
+VOID InstructionModeling::accessInstructionCacheWarmup(THREADID threadid, ADDRINT address, UINT32 size)
+{
+   Core* core = Sim()->getCoreManager()->getCurrentCore(threadid);
+   core->readInstructionMemory(address, size);
 }

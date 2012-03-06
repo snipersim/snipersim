@@ -29,7 +29,9 @@ ThreadManager::ThreadManager(CoreManager *core_manager)
    if (m_master)
    {
       m_thread_state.resize(config->getTotalCores());
-      m_thread_state[0].status = Core::RUNNING;
+      /* In PIN, thread 0 is the main application thread which is always alive */
+      if (Sim()->getConfig()->getSimulationMode() == Config::LITE || Sim()->getConfig()->getSimulationMode() == Config::FULL)
+         m_thread_state[0].status = Core::RUNNING;
 
       if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
       {
@@ -230,7 +232,7 @@ void ThreadManager::masterSpawnThread(ThreadSpawnRequest *req)
 
       LOG_ASSERT_ERROR((UInt32)req->core_id < m_thread_state.size(), "Core id out of range: %d", req->core_id);
    }
-   else // Sim()->getConfig()->getSimulationMode() == Config::LITE
+   else if (Sim()->getConfig()->getSimulationMode() == Config::LITE)
    {
       LOG_PRINT("New Thread to be spawned with core id(%i)", req->core_id);
       ThreadSpawnRequest *req_cpy = new ThreadSpawnRequest;
@@ -246,6 +248,10 @@ void ThreadManager::masterSpawnThread(ThreadSpawnRequest *req)
             MCP_THREAD_SPAWN_REPLY_FROM_MASTER_TYPE,
             &req->core_id,
             sizeof(req->core_id));
+   }
+   else
+   {
+      LOG_PRINT_ERROR("Cannot start new threads in this mode");
    }
 
    LOG_ASSERT_ERROR((UInt32)req->core_id < m_thread_state.size(), "Core id out of range: %d", req->core_id);
@@ -534,6 +540,16 @@ void ThreadManager::resumeThread(core_id_t core_id, core_id_t core_id_by, Subsec
 
    HooksManager::ThreadResume args = { core_id: core_id, core_by: core_id_by, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_RESUME, (void*)&args);
+}
+
+bool ThreadManager::claimThread(core_id_t core_id)
+{
+   // TODO: we should probably take a lock, or go through the MCP...
+   if (m_thread_state[core_id].status != Core::IDLE)
+      return false;
+
+   m_thread_state[core_id].status = Core::RUNNING;
+   return true;
 }
 
 bool ThreadManager::isThreadRunning(core_id_t core_id)

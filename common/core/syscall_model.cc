@@ -12,6 +12,7 @@
 #include "vm_manager.h"
 #include "performance_model.h"
 #include "pthread_emu.h"
+#include "stats.h"
 
 #include <errno.h>
 
@@ -39,11 +40,48 @@
 
 #include "futex_emu.h"
 
+#include <boost/algorithm/string.hpp>
+
+const char *SyscallMdl::futex_names[] =
+{
+   "FUTEX_WAIT", "FUTEX_WAKE", "FUTEX_FD", "FUTEX_REQUEUE",
+   "FUTEX_CMP_REQUEUE", "FUTEX_WAKE_OP", "FUTEX_LOCK_PI", "FUTEX_UNLOCK_PI",
+   "FUTEX_TRYLOCK_PI", "FUTEX_WAIT_BITSET", "FUTEX_WAKE_BITSET", "FUTEX_WAIT_REQUEUE_PI",
+   "FUTEX_CMP_REQUEUE_PI", "FUTEX_UNKNOWN1", "FUTEX_UNKNOWN2", "FUTEX_UNKNOWN3"
+};
+
+void SyscallMdl::futexCount(uint32_t function, Core *core, SubsecondTime delay)
+{
+   uint32_t core_id = core->getId();
+   futex_counters[core_id].count[function]++;
+   futex_counters[core_id].delay[function] += delay;
+}
+
 SyscallMdl::SyscallMdl(Network *net)
       : m_called_enter(false),
       m_ret_val(0),
       m_network(net)
 {
+   UInt32 num_cores = Sim()->getConfig()->getTotalCores();
+   UInt32 futex_counters_size = sizeof(struct futex_counters_t) * num_cores;
+   int rc = posix_memalign((void**)&futex_counters, 64, futex_counters_size); // Align by cache line size to prevent thread contention
+   LOG_ASSERT_ERROR (rc == 0, "posix_memalign failed to allocate memory");
+   bzero(futex_counters, futex_counters_size);
+
+   // Register the metrics
+   for (uint32_t c = 0 ; c < num_cores ; c++ )
+   {
+      for (int e = 0 ; e < 16 ; e++ ) // Currently 13 futex operations, 16 spots to keep it across cache lines
+      {
+         registerStatsMetric("futex", c, boost::to_lower_copy(String(futex_names[e]) + "_count"), &(futex_counters[c].count[e]));
+         registerStatsMetric("futex", c, boost::to_lower_copy(String(futex_names[e]) + "_delay"), &(futex_counters[c].delay[e]));
+      }
+   }
+}
+
+SyscallMdl::~SyscallMdl()
+{
+   free(futex_counters);
 }
 
 // --------------------------------------------
@@ -155,6 +193,11 @@ IntPtr SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
       case SYS_lseek:
             m_called_enter = true;
             m_ret_val = marshallLseekCall(args);
+            break;
+
+      case SYS_getcwd:
+            m_called_enter = true;
+            m_ret_val = marshallGetcwdCall(args);
             break;
 
       case SYS_access:
@@ -530,6 +573,67 @@ IntPtr SyscallMdl::marshallLseekCall(syscall_args_t &args)
    delete [] (Byte*) recv_pkt.data;
 
    return ret_val;
+}
+
+IntPtr SyscallMdl::marshallGetcwdCall(syscall_args_t &args)
+{
+
+   /*
+       Syscall Args
+       int void *buf, size_t count
+
+
+       Transmit
+
+       Field               Type
+       -----------------|--------
+       COUNT               size_t
+
+       Receive
+
+       Field               Type
+       -----------------|--------
+       BYTES               int
+       BUFFER              void *
+
+   */
+
+   void *buf = (void *)args.arg0;
+   size_t count = (size_t)args.arg1;
+
+   // if shared mem, provide the buf to read into
+   m_send_buff << count;
+   m_network->netSend(Config::getSingleton()->getMCPCoreNum(), MCP_REQUEST_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+
+   NetPacket recv_pkt;
+   recv_pkt = m_network->netRecv(Config::getSingleton()->getMCPCoreNum(), MCP_RESPONSE_TYPE);
+
+   assert(recv_pkt.length >= sizeof(int));
+   m_recv_buff << std::make_pair(recv_pkt.data, recv_pkt.length);
+
+   int bytes;
+   m_recv_buff >> bytes;
+
+   if (bytes != -1)
+   {
+      assert(m_recv_buff.size() == bytes);
+
+      // Read data from MCP into a local buffer
+      char* read_buf = new char[bytes];
+      m_recv_buff >> std::make_pair(read_buf, bytes);
+
+      // Write the data to memory
+      Core* core = Sim()->getCoreManager()->getCurrentCore();
+      core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) buf, read_buf, bytes);
+   }
+   else
+   {
+      assert(m_recv_buff.size() == 0);
+   }
+
+   delete [] (Byte*) recv_pkt.data;
+
+   return bytes;
 }
 
 IntPtr SyscallMdl::marshallAccessCall(syscall_args_t &args)
@@ -1201,12 +1305,17 @@ IntPtr SyscallMdl::marshallFutexCall (syscall_args_t &args)
       m_recv_buff.get(ret_val);
       m_recv_buff.get(end_time);
 
-      updateState(core, PthreadEmu::STATE_RUNNING, end_time - start_time);
+      SubsecondTime delay = end_time - start_time;
+
+      updateState(core, PthreadEmu::STATE_RUNNING, delay);
 
       // For FUTEX_WAKE, end_time = start_time
       // Look at common/system/syscall_server.cc for this
       if (end_time > start_time)
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time - start_time, SyncInstruction::FUTEX));
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(delay, SyncInstruction::FUTEX));
+
+      // Update the futex statistics
+      futexCount(cmd, core, delay);
 
       // Delete the data buffer
       delete [] (Byte*) recv_pkt.data;

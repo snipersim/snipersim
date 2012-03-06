@@ -42,6 +42,8 @@ public:
    bool isThreadRunning(core_id_t core_id);
    bool isThreadInitializing(core_id_t core_id);
 
+   bool claimThread(core_id_t core_id);
+
    bool areAllCoresRunning();
 
 private:

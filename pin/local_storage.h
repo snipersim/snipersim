@@ -3,6 +3,10 @@
 
 #define MAX_PIN_THREADS 2048
 
+#include "inst_mode.h"
+
+#include <vector>
+
 class Core;
 
 struct ThreadLocalStorage

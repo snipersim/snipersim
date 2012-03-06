@@ -26,6 +26,7 @@
 #include "syscall_model.h"
 #include "thread_manager.h"
 #include "hooks_manager.h"
+#include "trace_manager.h"
 #include "config_file.hpp"
 #include "handle_args.h"
 #include "thread_start.h"
@@ -36,13 +37,14 @@
 #include "progress_trace.h"
 #include "clock_skew_minimization.h"
 #include "magic_client.h"
+#include "timer.h"
 
 #include "routine_replace.h"
 #include "redirect_memory.h"
 #include "handle_syscalls.h"
-#include "opcodes.h"
 #include "codecache_trace.h"
 #include "local_storage.h"
+#include "toolreg.h"
 
 // lite directories
 #include "lite/routine_replace.h"
@@ -81,8 +83,6 @@ extern PIN_LOCK clone_memory_update_lock;
 
 map <ADDRINT, string> rtn_map;
 PIN_LOCK rtn_map_lock;
-
-std::vector<ThreadLocalStorage> localStore(MAX_PIN_THREADS);
 
 void printRtn (ADDRINT rtn_addr, bool enter)
 {
@@ -268,7 +268,7 @@ VOID traceCallback(TRACE trace, void *v)
 
    // Maintain a per-thread copy of the instrumentation mode, updated only at trace boundaries, to make sure
    // all callbacks (handleBasicBlock, memory*, ...) act consistently.
-   INS_InsertCall(ins_head, IPOINT_BEFORE, (AFUNPTR)updateInstMode, IARG_THREAD_ID, IARG_RETURN_REGS, REG_INST_G4, IARG_END);
+   INS_InsertCall(ins_head, IPOINT_BEFORE, (AFUNPTR)updateInstMode, IARG_THREAD_ID, IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP], IARG_END);
 
    // Progress Trace
    addProgressTrace(ins_head);
@@ -292,6 +292,18 @@ VOID traceCallback(TRACE trace, void *v)
 
       BasicBlock *basic_block = NULL;
       bool basic_block_is_new = true;
+
+      // I-cache modeling during warmup
+      if (Sim()->getConfig()->getEnableICacheModeling()) {
+         INSTRUMENT(
+            INSTR_IF_CACHEONLY,
+            trace, BBL_InsHead(bbl), IPOINT_BEFORE,
+            AFUNPTR(InstructionModeling::accessInstructionCacheWarmup),
+            IARG_THREAD_ID,
+            IARG_ADDRINT, BBL_Address(bbl),
+            IARG_UINT32, BBL_Size(bbl),
+            IARG_END);
+      }
 
       // Instruction modeling
       if (Sim()->getConfig()->getEnablePerBasicblock()) {
@@ -379,6 +391,8 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
       {
          LOG_ASSERT_ERROR(curr_process_num == 0, "Lite mode can only be run with 1 process");
          Sim()->getCoreManager()->initializeThread(0);
+         if (Sim()->getTraceManager())
+            Sim()->getTraceManager()->start();
       }
       else // Sim()->getConfig()->getSimulationMode() == Config::FULL
       {
@@ -505,6 +519,10 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
 VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, VOID *v)
 {
    Sim()->getThreadManager()->onThreadExit();
+
+   if (localStore[threadIndex].core->getId() == 0)
+      if (Sim()->getTraceManager())
+         Sim()->getTraceManager()->stop();
 }
 
 int main(int argc, char *argv[])
@@ -517,6 +535,8 @@ int main(int argc, char *argv[])
    // Global initialization
    PIN_InitSymbols();
    PIN_Init(argc,argv);
+
+   initToolregs();
 
    // To make sure output shows up immediately, make stdout and stderr line buffered
    // (if we're writing into a pipe to run-graphite, or redirected to a file by the job runner, the default will be block buffered)
@@ -611,6 +631,16 @@ int main(int argc, char *argv[])
 
    if (cfg->getBool("log/pin_codecache_trace", false))
       initCodeCacheTracing();
+
+   String syntax = cfg->getString("general/syntax", "intel");
+   if (syntax == "intel")
+      PIN_SetSyntaxIntel();
+   else if (syntax == "att")
+      PIN_SetSyntaxATT();
+   else if (syntax == "xed")
+      PIN_SetSyntaxXED();
+   else
+      LOG_PRINT_ERROR("Unknown assembly syntax %s, should be intel, att or xed.", syntax.c_str());
 
    // Just in case ... might not be strictly necessary
 // PIN_SpawnInternalThread doesn't schedule its threads until after PIN_StartProgram

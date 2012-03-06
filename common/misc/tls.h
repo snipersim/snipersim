@@ -9,7 +9,7 @@ public:
     virtual ~TLS();
 
     virtual void* get(int thread_id = -1) = 0;
-    virtual const void* get(int thread_id = 0) const = 0;
+    virtual const void* get(int thread_id = -1) const = 0;
 
     template<class T>
         T& get(int thread_id = -1) { return *((T*)get(thread_id)); }

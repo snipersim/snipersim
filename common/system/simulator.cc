@@ -12,6 +12,7 @@
 #include "timer.h"
 #include "stats.h"
 #include "pthread_emu.h"
+#include "trace_manager.h"
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
 #include "instruction.h"
@@ -22,6 +23,7 @@
 Simulator *Simulator::m_singleton;
 config::Config *Simulator::m_config_file;
 bool Simulator::m_config_file_allowed = true;
+Config::SimulationMode Simulator::m_mode = Config::SimulationMode::FROM_CONFIG;
 
 static UInt64 getTime()
 {
@@ -37,9 +39,10 @@ void Simulator::allocate()
    m_singleton = new Simulator();
 }
 
-void Simulator::setConfig(config::Config *cfg)
+void Simulator::setConfig(config::Config *cfg, Config::SimulationMode mode)
 {
    m_config_file = cfg;
+   m_mode = mode;
 }
 
 void Simulator::release()
@@ -54,7 +57,7 @@ Simulator::Simulator()
    , m_mcp_thread(NULL)
    , m_lcp(NULL)
    , m_lcp_thread(NULL)
-   , m_config()
+   , m_config(m_mode)
    , m_log(m_config)
    , m_stats_manager(new StatsManager)
    , m_transport(NULL)
@@ -63,6 +66,7 @@ Simulator::Simulator()
    , m_perf_counter_manager(NULL)
    , m_sim_thread_manager(NULL)
    , m_clock_skew_minimization_manager(NULL)
+   , m_trace_manager(NULL)
    , m_dvfs_manager(NULL)
    , m_hooks_manager(NULL)
    , m_finished(false)
@@ -87,6 +91,11 @@ void Simulator::start()
    m_perf_counter_manager = new PerfCounterManager(m_thread_manager);
    m_sim_thread_manager = new SimThreadManager();
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create(getCfg()->getString("clock_skew_minimization/scheme","none"));
+
+   if (Sim()->getCfg()->getBool("traceinput/enabled", false))
+      m_trace_manager = new TraceManager();
+   else
+      m_trace_manager = NULL;
 
    Fxsupport::init();
 
@@ -154,6 +163,7 @@ Simulator::~Simulator()
 
    m_lcp->finish();
 
+   #if 0
    if (Config::getSingleton()->getCurrentProcessNum() == 0)
    {
       std::ofstream os(Config::getSingleton()->getOutputFileName().c_str());
@@ -172,7 +182,9 @@ Simulator::~Simulator()
       m_core_manager->outputSummary(temp);
       assert(temp.str().length() == 0);
    }
+   #endif
 
+   delete m_trace_manager;
    delete m_lcp_thread;
    delete m_mcp_thread;
    delete m_lcp;
@@ -305,4 +317,10 @@ void Simulator::disablePerformanceModelsInCurrentProcess()
    Sim()->stopTimer();
    for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
       Sim()->getCoreManager()->getCoreFromIndex(i)->disablePerformanceModels();
+}
+
+void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode)
+{
+   if (Sim()->getConfig()->getSimulationMode() == Config::LITE || Sim()->getConfig()->getSimulationMode() == Config::FULL)
+      InstMode::SetInstrumentationMode(new_mode);
 }

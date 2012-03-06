@@ -1,11 +1,11 @@
 #ifndef BRANCH_PREDICTOR_RETURN_VALUE
 #define BRANCH_PREDICTOR_RETURN_VALUE
 
+#include "fixed_types.h"
+
 #include <ostream>
 #include <ios>
 #include <boost/io/ios_state.hpp>
-
-#include "fixed_types.h"
 
 class BranchPredictorReturnValue {
 

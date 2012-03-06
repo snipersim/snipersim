@@ -4,6 +4,7 @@
 #include "core.h"
 #include "pin_memory_manager.h"
 #include "performance_model.h"
+#include "toolreg.h"
 
 // FIXME
 // Only need this function because some memory accesses are made before cores have
@@ -28,12 +29,13 @@ bool rewriteStringOp (INS ins)
 
    if (INS_Opcode(ins) == XED_ICLASS_SCASB)
    {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
+      INS_InsertCall(ins, IPOINT_BEFORE,
             AFUNPTR (emuSCASBIns),
             IARG_ADDRINT, INS_Address(ins),
             IARG_CONTEXT,
             IARG_ADDRINT, INS_NextAddress(ins),
             IARG_BOOL, INS_RepPrefix(ins),
+            IARG_FIRST_REP_ITERATION,
             IARG_END);
 
       INS_Delete(ins);
@@ -43,12 +45,13 @@ bool rewriteStringOp (INS ins)
 
    else if (INS_Opcode(ins) == XED_ICLASS_CMPSB)
    {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
+      INS_InsertCall(ins, IPOINT_BEFORE,
             AFUNPTR (emuCMPSBIns),
             IARG_ADDRINT, INS_Address(ins),
             IARG_CONTEXT,
             IARG_ADDRINT, INS_NextAddress(ins),
             IARG_BOOL, INS_RepPrefix(ins),
+            IARG_FIRST_REP_ITERATION,
             IARG_END);
 
       INS_Delete(ins);
@@ -369,7 +372,7 @@ bool rewriteStackOp (INS ins)
                IARG_MEMORYREAD_EA,
                IARG_MEMORYREAD_SIZE,
                IARG_MEMORYWRITE_SIZE,
-               IARG_RETURN_REGS, REG_INST_G0,
+               IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP],
                IARG_END);
       }
 
@@ -383,11 +386,11 @@ bool rewriteStackOp (INS ins)
                IARG_ADDRINT, next_ip,
                IARG_BRANCH_TARGET_ADDR,
                IARG_MEMORYWRITE_SIZE,
-               IARG_RETURN_REGS, REG_INST_G0,
+               IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP],
                IARG_END);
       }
 
-      INS_InsertIndirectJump (ins, IPOINT_AFTER, REG_INST_G0);
+      INS_InsertIndirectJump (ins, IPOINT_AFTER, g_toolregs[TOOLREG_TEMP]);
 
       INS_Delete (ins);
       return true;
@@ -408,10 +411,10 @@ bool rewriteStackOp (INS ins)
             IARG_UINT32, imm,
             IARG_MEMORYREAD_SIZE,
             IARG_UINT32, (UInt32) Core::MEM_MODELED_DYNINFO,
-            IARG_RETURN_REGS, REG_INST_G1,
+            IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP],
             IARG_END);
 
-      INS_InsertIndirectJump (ins, IPOINT_AFTER, REG_INST_G1);
+      INS_InsertIndirectJump (ins, IPOINT_AFTER, g_toolregs[TOOLREG_TEMP]);
 
       INS_Delete (ins);
       return true;
@@ -480,21 +483,23 @@ void rewriteMemOp (INS ins)
 {
    if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
    {
-      REG reg = REG_INST_G0;
+      REG reg = g_toolregs[TOOLREG_MEM0];
       unsigned int num_writes = 0;
 
       for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
       {
          INS_RewriteMemoryOperand(ins, i, reg);
 
-         INS_InsertPredicatedCall (ins, IPOINT_BEFORE,
+         INS_InsertCall (ins, IPOINT_BEFORE,
                AFUNPTR (redirectMemOp),
                IARG_ADDRINT, INS_Address(ins),
                IARG_BOOL, INS_MemoryOperandIsWritten(ins, i) ? INS_IsAtomicUpdate(ins) : false,
+               IARG_EXECUTING,
                IARG_MEMORYOP_EA, i,
                IARG_MEMORYREAD_SIZE,
                IARG_UINT32, i,
                IARG_UINT32, INS_MemoryOperandIsRead(ins, i),
+               IARG_REG_VALUE, reg,
                IARG_RETURN_REGS, reg,
                IARG_END);
 
@@ -506,17 +511,18 @@ void rewriteMemOp (INS ins)
             INS_InsertPredicatedCall (ins, IPOINT_BEFORE,
                   AFUNPTR (redirectMemOpSaveEa),
                   IARG_MEMORYOP_EA, i,
-                  IARG_RETURN_REGS, REG_INST_G3,
+                  IARG_RETURN_REGS, g_toolregs[TOOLREG_WRITEADDR],
                   IARG_END);
 
             IPOINT ipoint = INS_HasFallThrough (ins) ? IPOINT_AFTER : IPOINT_TAKEN_BRANCH;
             assert (ipoint == IPOINT_AFTER);
 
-            INS_InsertPredicatedCall (ins, ipoint,
+            INS_InsertCall (ins, ipoint,
                   AFUNPTR (completeMemWrite),
                   IARG_ADDRINT, INS_Address(ins),
                   IARG_BOOL, INS_IsAtomicUpdate(ins),
-                  IARG_REG_VALUE, REG_INST_G3, // Is IARG_MEMORYWRITE_EA,
+                  IARG_EXECUTING,
+                  IARG_REG_VALUE, g_toolregs[TOOLREG_WRITEADDR], // Is IARG_MEMORYWRITE_EA,
                   IARG_MEMORYWRITE_SIZE,
                   IARG_UINT32, i,
                   IARG_END);
@@ -696,16 +702,27 @@ ADDRINT completePopf (ADDRINT eip, ADDRINT esp, ADDRINT size)
 // Once the memory accesses go through the coherent shared memory system, all LOCK'ed
 // memory accesses from the cores would be handled correctly.
 
-ADDRINT redirectMemOp (ADDRINT eip, bool has_lock_prefix, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num, UInt32 is_read)
+ADDRINT redirectMemOp (ADDRINT eip, bool has_lock_prefix, bool executing, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num, UInt32 is_read, ADDRINT reg_orig)
 {
    Core *core = Sim()->getCoreManager()->getCurrentCore();
 
    if (core)
    {
-      PinMemoryManager *mem_manager = core->getPinMemoryManager ();
-      assert (mem_manager != NULL);
+      if (executing)
+      {
+         PinMemoryManager *mem_manager = core->getPinMemoryManager ();
+         assert (mem_manager != NULL);
 
-      return (ADDRINT) mem_manager->redirectMemOp (eip, has_lock_prefix, (IntPtr) tgt_ea, (IntPtr) size, op_num, is_read);
+         return (ADDRINT) mem_manager->redirectMemOp (eip, has_lock_prefix, (IntPtr) tgt_ea, (IntPtr) size, op_num, is_read);
+      }
+      else
+      {
+         DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), tgt_ea, size, Operand::READ, 0, HitWhere::UNKNOWN);
+         core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+
+         // Don't do the load, instead write the original value back into the target register
+         return reg_orig;
+      }
    }
    else
    {
@@ -723,13 +740,21 @@ ADDRINT redirectMemOpSaveEa(ADDRINT ea)
    return ea;
 }
 
-VOID completeMemWrite (ADDRINT eip, bool has_lock_prefix, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num)
+VOID completeMemWrite (ADDRINT eip, bool has_lock_prefix, bool executing, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num)
 {
    Core *core = Sim()->getCoreManager()->getCurrentCore();
 
    if (core)
    {
-      core->getPinMemoryManager()->completeMemWrite (eip, has_lock_prefix, (IntPtr) tgt_ea, (IntPtr) size, op_num);
+      if (executing)
+      {
+         core->getPinMemoryManager()->completeMemWrite (eip, has_lock_prefix, (IntPtr) tgt_ea, (IntPtr) size, op_num);
+      }
+      else
+      {
+         DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), tgt_ea, size, Operand::WRITE, 0, HitWhere::UNKNOWN);
+         core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+      }
    }
    else
    {

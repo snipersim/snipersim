@@ -1,6 +1,7 @@
 #ifndef COND_H
 #define COND_H
 
+#include "fixed_types.h"
 #include "lock.h"
 
 // Our condition variable interface is slightly different from

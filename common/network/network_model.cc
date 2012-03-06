@@ -36,7 +36,7 @@ NetworkModel::createModel(Network *net, UInt32 model_type, EStaticNetwork net_ty
       return new NetworkModelEMeshHopByHopBroadcastTree(net);
 
    case NETWORK_BUS:
-      return new NetworkModelBus(net);
+      return new NetworkModelBus(net, net_type);
 
    default:
       assert(false);

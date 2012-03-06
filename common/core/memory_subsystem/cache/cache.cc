@@ -56,7 +56,7 @@ Cache::invalidateSingleLine(IntPtr addr)
 
 CacheBlockInfo*
 Cache::accessSingleLine(IntPtr addr, access_t access_type,
-      Byte* buff, UInt32 bytes)
+      Byte* buff, UInt32 bytes, SubsecondTime now)
 {
    //assert((buff == NULL) == (bytes == 0));
 
@@ -74,9 +74,13 @@ Cache::accessSingleLine(IntPtr addr, access_t access_type,
       return NULL;
 
    if (access_type == LOAD)
+   {
       set->read_line(line_index, block_offset, buff, bytes);
+   }
    else
+   {
       set->write_line(line_index, block_offset, buff, bytes);
+   }
 
    return cache_block_info;
 }
@@ -84,7 +88,8 @@ Cache::accessSingleLine(IntPtr addr, access_t access_type,
 void
 Cache::insertSingleLine(IntPtr addr, Byte* fill_buff,
       bool* eviction, IntPtr* evict_addr,
-      CacheBlockInfo* evict_block_info, Byte* evict_buff)
+      CacheBlockInfo* evict_block_info, Byte* evict_buff,
+      SubsecondTime now)
 {
    IntPtr tag;
    UInt32 set_index;

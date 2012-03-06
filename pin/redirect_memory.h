@@ -25,9 +25,9 @@ ADDRINT completePushf (ADDRINT eip, ADDRINT esp, ADDRINT size);
 ADDRINT redirectPopf (ADDRINT eip, ADDRINT tgt_esp, ADDRINT size);
 ADDRINT completePopf (ADDRINT eip, ADDRINT esp, ADDRINT size);
 
-ADDRINT redirectMemOp (ADDRINT eip, bool has_lock_prefix, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num, UInt32 is_read);
+ADDRINT redirectMemOp (ADDRINT eip, bool has_lock_prefix, bool executing, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num, UInt32 is_read, ADDRINT reg_orig);
 ADDRINT redirectMemOpSaveEa(ADDRINT ea);
-VOID completeMemWrite (ADDRINT eip, bool has_lock_prefix, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num);
+VOID completeMemWrite (ADDRINT eip, bool has_lock_prefix, bool executing, ADDRINT tgt_ea, ADDRINT size, UInt32 op_num);
 
 void memOp (ADDRINT eip, Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char *data_buffer, UInt32 data_size);
 

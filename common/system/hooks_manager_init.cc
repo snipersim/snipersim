@@ -4,6 +4,7 @@
 #include "progress.h"
 
 #include "subsecond_time.h"
+#include "fixed_point.h"
 #include "simulator.h"
 #include "stats.h"
 #include "dvfs_manager.h"

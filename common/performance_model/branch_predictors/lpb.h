@@ -276,7 +276,7 @@ private:
          , m_num_entries(entries)
          , m_tag_bitwidth(tag_bitwidth)
       {
-         assert(tag_bitwidth <= 8 && tag_bitwidth >= 0);
+         assert(tag_bitwidth <= 8);
       }
 
       std::vector<uint8_t> m_tags;

@@ -31,23 +31,25 @@ class NetworkModelBusGlobal
       SubsecondTime _time_used;
       SubsecondTime _total_delay;
 
-      NetworkModelBusGlobal();
+      NetworkModelBusGlobal(String name);
       ~NetworkModelBusGlobal();
       SubsecondTime useBus(SubsecondTime t_start, UInt32 length);
 };
 
 class NetworkModelBus : public NetworkModel
 {
-   static NetworkModelBusGlobal* _bus;
+   static NetworkModelBusGlobal* _bus_global[NUM_STATIC_NETWORKS];
 
    private:
       bool _enabled;
       bool _mcp_detour;
+      NetworkModelBusGlobal* _bus;
+      bool _ignore_local;
 
       bool accountPacket(const NetPacket &pkt);
    public:
-      NetworkModelBus(Network *net);
-      ~NetworkModelBus() { }
+      NetworkModelBus(Network *net, EStaticNetwork net_type);
+      ~NetworkModelBus() {}
 
       void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops);
 

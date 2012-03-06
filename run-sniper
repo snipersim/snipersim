@@ -2,7 +2,7 @@
 
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, Queue, socket, pipes, commands
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-import graphite_lib
+import graphite_lib, gen_simout
 
 
 HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
@@ -11,11 +11,12 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Run program under Graphite simulator'
   print 'Usage:'
-  print '  %s  -n <ncores (1)>  -m <machines (1)>  -d <outputdir (.)>  -c <graphite-config>  -g <graphite-options> -- <cmdline>' % sys.argv[0]
+  print '  %s  -n <ncores (1)>  -m <machines (1)>  -d <outputdir (.)>  -c <graphite-config>  -g <graphite-options> {--traces=<trace0>,<trace1>,... | -- <cmdline>}' % sys.argv[0]
   print '  with: -n: number of simulated cores'
   print '        -m: list of machines for distributed simulation'
   sys.exit(2)
 
+standalone = False
 ncores = 1
 machines = None
 outputdir = '.'
@@ -27,12 +28,14 @@ use_gdb = False
 gdb_wait = False
 gdb_quit = False
 use_appdebug = False
+appdebug_manual = False
 appdebug_nowait = False
 run_power = False
 save_patch = False
 pin_stats = False
 curdir = os.getcwd()
 scripts = []
+traces = []
 
 if not sys.argv[1:]:
   usage()
@@ -55,7 +58,7 @@ def add_config_file(filename):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -95,6 +98,9 @@ for o, a in opts:
     gdb_quit = True
   if o == '--appdebug':
     use_appdebug = True
+  if o == '--appdebug-manual':
+    use_appdebug = True
+    appdebug_manual = True
   if o == '--appdebug-enable':
     use_appdebug = True
     appdebug_nowait = True
@@ -113,9 +119,27 @@ for o, a in opts:
     pin_stats = True
   if o == '--curdir':
     curdir = a
+  if o == '--traces':
+    traces.extend(a.split(','))
 
-if not cmdline:
-  usage()
+if cmdline:
+  standalone = False
+  if traces:
+    print 'Cannot combine traces with running a benchmark'
+    usage()
+else:
+  standalone = True
+  if not traces:
+    print 'Need either a set of traces (--traces=) or a benchmark command line'
+    usage()
+
+if standalone:
+  if use_perf:
+    print '--perf not supported in standalone mode'
+    sys.exit(-1)
+  if use_appdebug:
+    print '--appdebug not supported in standalone mode'
+    sys.exit(-1)
 
 if not config_file_used:
   # No config file(s) specified: default to Xeon X5550 Gainestown
@@ -148,6 +172,13 @@ if scripts:
     if args:
       graphiteoptions.append('-g --hooks/script%uargs=%s' % (i, args))
 
+if traces:
+  graphiteoptions.append('-g --traceinput/enabled=true')
+  for core_id, trace in enumerate(traces):
+    if core_id >= ncores:
+      print 'Specified trace file for core', core_id, 'but only', ncores, 'core(s) available'
+      sys.exit(-1)
+    graphiteoptions.append('-g --traceinput/core_%u=%s' % (core_id, os.path.realpath(trace)))
 
 graphiteoptions = ' '.join(graphiteoptions)
 
@@ -203,8 +234,16 @@ else:
     processmap = ' '.join('--process_map/process%u=%s' % item for item in enumerate(machines))
 
 
-graphitecmd = 'export LD_LIBRARY_PATH="%(pin_home)s/intel64/runtime:%(boost_lib)s:%(HOME)s/python_kit/lib:$LD_LIBRARY_PATH"; export PYTHONHOME=%(HOME)s/python_kit; export PYTHONPATH=%(HOME)s/scripts:$PYTHONPATH; %(pin_home)s/intel64/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/pin_sim -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/num_processes=%(nmachines)u --general/output_dir=%(outputdir)s --transport/base_port=%(base_port)u %(processmap)s %(graphiteoptions)s -- ' % locals()
-cmd = graphitecmd + ' '.join(cmdline)
+envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/intel64/runtime:%(boost_lib)s:%(HOME)s/python_kit/lib:$LD_LIBRARY_PATH"; export PYTHONHOME=%(HOME)s/python_kit; export PYTHONPATH=%(HOME)s/scripts:$PYTHONPATH; ' % locals()
+optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/num_processes=%(nmachines)u --general/output_dir=%(outputdir)s --transport/base_port=%(base_port)u %(processmap)s %(graphiteoptions)s' % locals()
+if standalone:
+  if use_gdb:
+    gdbcmd = 'gdb %(HOME)s/lib/sniper --args ' % locals()
+  else:
+    gdbcmd = ''
+  cmd = envcmd + gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
+else:
+  cmd = envcmd + '%(pin_home)s/intel64/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/pin_sim' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
 
 queue = Queue.Queue()
 
@@ -344,10 +383,10 @@ t_start = time.time()
 print '[SNIPER] Start'
 
 try:
-  if use_gdb:
+  if use_gdb and not standalone:
     execute_gdb()
     threads = []
-  elif use_appdebug and not appdebug_nowait:
+  elif use_appdebug and not (appdebug_manual or appdebug_nowait):
     execute_appdebug()
     threads = []
   else:
@@ -388,6 +427,8 @@ file(os.path.join(outputdir, 'graphite.out'), 'w').write(pprint.pformat(stats))
 
 if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpath(outputdir):
   os.system('cp pin.log %s' % outputdir)
+
+gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'))
 
 for i in threads:
   rc = queue.get()

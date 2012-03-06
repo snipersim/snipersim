@@ -47,7 +47,7 @@ all: $(TARGET)
 $(SIM_ROOT)/lib/libcarbon_sim.a:
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
 
-$(TARGET): $(PIN_LIBNAMES) $(SIM_ROOT)/lib/libcarbon_sim.a
+$(TARGET): $(PIN_LIBNAMES) $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
 $(TARGET): $(OBJECTS)
 ifeq ($(SHOW_COMPILE),)
 	@echo '[LD    ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))

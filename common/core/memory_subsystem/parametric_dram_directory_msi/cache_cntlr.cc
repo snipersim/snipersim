@@ -432,7 +432,7 @@ CacheCntlr::copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address)
 MYLOG("copyDataFromNextLevel l%d", m_mem_component);
 
    Byte data_buf[m_next_cache_cntlr->getCacheBlockSize()];
-   m_next_cache_cntlr->retrieveCacheBlock(address, data_buf);
+   m_next_cache_cntlr->retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD);
 VALIDATE(address, data_buf, m_next_cache_cntlr->getCacheBlockSize());
 
    CacheState::cstate_t cstate = mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED;
@@ -531,7 +531,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          SubsecondTime latency = SubsecondTime::Zero();
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
             if (*it != requester) {
-               std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY);
+               std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
                latency = getMax<SubsecondTime>(latency, res.first);
                sibling_hit |= res.second;
             }
@@ -545,7 +545,7 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          SubsecondTime latency = SubsecondTime::Zero();
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
             if (*it != requester) {
-               std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY);
+               std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
                latency = getMax<SubsecondTime>(latency, res.first);
                sibling_hit |= res.second;
             }
@@ -572,7 +572,7 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          SubsecondTime latency = SubsecondTime::Zero();
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
             if (*it != requester)
-               latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE).first);
+               latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_USER_THREAD).first);
          getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
          assert(! cache_block_info->hasCachedLoc());
@@ -606,7 +606,7 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
 
    if (cache_hit) {
       Byte data_buf[getCacheBlockSize()];
-      retrieveCacheBlock(address, data_buf);
+      retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD);
       VALIDATE(address, data_buf, getCacheBlockSize());
       /* Store completion time so we can detect overlapping accesses */
       #ifdef ENABLE_MSHR
@@ -783,16 +783,18 @@ CacheCntlr::accessCache(
    {
       case Core::READ:
       case Core::READ_EX:
-         m_master->m_cache->accessSingleLine(ca_address + offset, Cache::LOAD, data_buf, data_length);
+         m_master->m_cache->accessSingleLine(ca_address + offset, Cache::LOAD, data_buf, data_length,
+                                             getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
          break;
 
       case Core::WRITE:
-         m_master->m_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length);
+         m_master->m_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length,
+                                             getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
          // Write-through cache - Write the next level cache also
          if (m_cache_writethrough) {
             LOG_ASSERT_ERROR(m_next_cache_cntlr, "Writethrough enabled on last-level cache !?");
 MYLOG("writethrough start");
-            m_next_cache_cntlr->writeCacheBlock(ca_address, offset, data_buf, data_length);
+            m_next_cache_cntlr->writeCacheBlock(ca_address, offset, data_buf, data_length, ShmemPerfModel::_USER_THREAD);
 VALIDATE(ca_address + offset, data_buf, data_length);
 MYLOG("writethrough done");
          }
@@ -846,9 +848,10 @@ CacheCntlr::invalidateCacheBlock(IntPtr address)
 }
 
 void
-CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf)
+CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::Thread_t thread_num)
 {
-   SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(address, Cache::LOAD, data_buf, getCacheBlockSize());
+   SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
+      address, Cache::LOAD, data_buf, getCacheBlockSize(), getShmemPerfModel()->getElapsedTime(thread_num));
    LOG_ASSERT_ERROR(cache_block_info != NULL, "Expected block to be there but it wasn't");
 }
 
@@ -870,7 +873,8 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
    LOG_ASSERT_ERROR(getCacheState(address) == CacheState::INVALID, "we already have this line, can't add it again");
 
    m_master->m_cache->insertSingleLine(address, data_buf,
-         &eviction, &evict_address, &evict_block_info, evict_buf);
+         &eviction, &evict_address, &evict_block_info, evict_buf,
+         getShmemPerfModel()->getElapsedTime(thread_num));
    setCacheState(address, cstate);
 
    if (m_next_cache_cntlr)
@@ -909,7 +913,7 @@ MYLOG("evicting @%lx", evict_address);
 
          SubsecondTime latency = SubsecondTime::Zero();
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
-            latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(evict_address, CacheState::INVALID, Transition::EVICT_LOWER).first);
+            latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(evict_address, CacheState::INVALID, Transition::EVICT_LOWER, NULL, thread_num).first);
          getMemoryManager()->incrElapsedTime(latency, thread_num);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
 
@@ -925,7 +929,7 @@ MYLOG("evicting @%lx", evict_address);
          } else {
             /* Send dirty block to next level cache. Probably we have an evict/victim buffer to do that when we're idle, so ignore timing */
             if (evict_block_info.getCState() == CacheState::MODIFIED)
-               m_next_cache_cntlr->writeCacheBlock(evict_address, 0, evict_buf, getCacheBlockSize());
+               m_next_cache_cntlr->writeCacheBlock(evict_address, 0, evict_buf, getCacheBlockSize(), thread_num);
          }
          m_next_cache_cntlr->notifyPrevLevelEvict(m_core_id_master, m_mem_component, evict_address);
 
@@ -966,7 +970,7 @@ MYLOG("insertCacheBlock l%d end", m_mem_component);
 }
 
 std::pair<SubsecondTime, bool>
-CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Transition::reason_t reason, Byte* out_buf)
+CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Transition::reason_t reason, Byte* out_buf, ShmemPerfModel::Thread_t thread_num)
 {
    LOG_ASSERT_ERROR(new_cstate < CacheState::NUM_CSTATE_STATES, "Invalid new cstate %u", new_cstate);
 
@@ -978,7 +982,8 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
    bool sibling_hit = false;
    if (! m_master->m_prev_cache_cntlrs.empty())
       for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
-         std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, new_cstate, reason == Transition::EVICT ? Transition::EVICT_LOWER : reason);
+         std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(
+            address, new_cstate, reason == Transition::EVICT ? Transition::EVICT_LOWER : reason, NULL, thread_num);
          // writeback_time is for the complete stack, so only model it at the last level, ignore latencies returned by previous ones
          //latency = getMax<SubsecondTime>(latency, res.first);
          sibling_hit |= res.second;
@@ -1016,14 +1021,14 @@ MYLOG("@%lx  %c > %c", address, CStateString(cache_block_info ? cache_block_info
          } else if (m_next_cache_cntlr) {
             /* write straight into the next level cache */
             Byte data_buf[getCacheBlockSize()];
-            retrieveCacheBlock(address, data_buf);
-            m_next_cache_cntlr->writeCacheBlock(address, 0, data_buf, getCacheBlockSize());
+            retrieveCacheBlock(address, data_buf, thread_num);
+            m_next_cache_cntlr->writeCacheBlock(address, 0, data_buf, getCacheBlockSize(), thread_num);
             is_writeback = true;
             sibling_hit = true;
 
          } else if (out_buf) {
             /* someone (presumably the directory interfacing code) is waiting to consume the data */
-            retrieveCacheBlock(address, out_buf);
+            retrieveCacheBlock(address, out_buf, thread_num);
 VALIDATE(address, out_buf, getCacheBlockSize());
             buf_written = true;
             is_writeback = true;
@@ -1061,7 +1066,7 @@ VALIDATE(address, out_buf, getCacheBlockSize());
 }
 
 void
-CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length)
+CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length, ShmemPerfModel::Thread_t thread_num)
 {
 MYLOG(" ");
 
@@ -1075,7 +1080,8 @@ assert(data_length==getCacheBlockSize());
          memcpy(m_master->m_evicting_buf + offset, data_buf, data_length);
 VALIDATE(address + offset, data_buf, data_length);
    } else {
-      __attribute(__unused__) SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(address + offset, Cache::STORE, data_buf, data_length);
+      SharedCacheBlockInfo* cache_block_info = (SharedCacheBlockInfo*) m_master->m_cache->accessSingleLine(
+         address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime(thread_num));
 VALIDATE(address + offset, data_buf, data_length);
       LOG_ASSERT_ERROR(cache_block_info, "writethrough expected a hit at next-level cache but got miss");
       LOG_ASSERT_ERROR(cache_block_info->getCState() == CacheState::MODIFIED, "Got writeback for non-MODIFIED line");
@@ -1083,7 +1089,7 @@ VALIDATE(address + offset, data_buf, data_length);
 
    if (m_cache_writethrough) {
       acquireStackLock(true);
-      m_next_cache_cntlr->writeCacheBlock(address, offset, data_buf, data_length);
+      m_next_cache_cntlr->writeCacheBlock(address, offset, data_buf, data_length, thread_num);
       releaseStackLock(true);
    }
 }
@@ -1147,7 +1153,8 @@ MYLOG("have SHARED, upgrading to MODIFIED for #%u", request->cache_cntlr->m_core
             // TODO: only those in cache_block_info->m_cached_locs
             SubsecondTime latency = SubsecondTime::Zero();
             for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
-               latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE).first);
+               latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(
+                  address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_SIM_THREAD).first);
             getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_SIM_THREAD);
             atomic_add_subsecondtime(stats.snoop_latency, latency);
 
@@ -1242,7 +1249,7 @@ MYLOG("processInvReqFromDramDirectory l%d", m_mem_component);
       // Update Shared Mem perf counters for access to L2 Cache
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_SIM_THREAD);
 
-      updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY);
+      updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_SIM_THREAD);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::INV_REP,
             MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
@@ -1276,7 +1283,7 @@ MYLOG("processFlushReqFromDramDirectory l%d", m_mem_component);
 
       // Flush the line
       Byte data_buf[getCacheBlockSize()];
-      updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, data_buf);
+      updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, data_buf, ShmemPerfModel::_SIM_THREAD);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::FLUSH_REP,
             MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
@@ -1311,7 +1318,7 @@ MYLOG("processWbReqFromDramDirectory l%d", m_mem_component);
 
       // Write-Back the line
       Byte data_buf[getCacheBlockSize()];
-      updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, data_buf);
+      updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, data_buf, ShmemPerfModel::_SIM_THREAD);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::WB_REP,
             MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,

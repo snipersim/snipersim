@@ -2,6 +2,7 @@
 #include "windows.h"
 #include "lll_info.h"
 #include "instruction.h"
+#include "instruction_latencies.h"
 
 #include <assert.h>
 #include <iostream>
@@ -68,6 +69,7 @@ void MicroOp::clear() {
 
    this->m_membar = false;
    this->is_x87 = false;
+   this->operand_size = 0;
 
    this->m_forceLongLatencyLoad = false;
 
@@ -94,7 +96,7 @@ void MicroOp::clear() {
 #endif
 }
 
-void MicroOp::makeLoad(uint32_t offset, const Memory::Access& loadAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint32_t execLatency) {
+void MicroOp::makeLoad(uint32_t offset, const Memory::Access& loadAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName) {
    this->clear();
 
    this->uop_type = UOP_LOAD;
@@ -105,11 +107,11 @@ void MicroOp::makeLoad(uint32_t offset, const Memory::Access& loadAccess, xed_ic
    this->instructionOpcode = instructionOpcode;
    this->intraInstructionDependencies = 0;
    this->address = loadAccess;
-   this->execLatency = execLatency;
-   this->setUopType();
+   this->execLatency = 0;
+   this->setTypes();
 }
 
-void MicroOp::makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint32_t execLatency, bool isBranch, bool branchTaken) {
+void MicroOp::makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, bool isBranch, bool branchTaken) {
    this->clear();
 
    this->uop_type = UOP_EXECUTE;
@@ -119,13 +121,13 @@ void MicroOp::makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t
 #ifdef ENABLE_MICROOP_STRINGS
    this->instructionOpcodeName = instructionOpcodeName;
 #endif
-   this->execLatency = execLatency;
    this->branch = isBranch;
    this->branchTaken = branchTaken;
-   this->setUopType();
+   this->execLatency = getInstructionLatency(instructionOpcode);
+   this->setTypes();
 }
 
-void MicroOp::makeStore(uint32_t offset, uint32_t num_execute, const Memory::Access& storeAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint32_t execLatency) {
+void MicroOp::makeStore(uint32_t offset, uint32_t num_execute, const Memory::Access& storeAccess, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName) {
    this->clear();
 
    this->uop_type = UOP_STORE;
@@ -136,24 +138,34 @@ void MicroOp::makeStore(uint32_t offset, uint32_t num_execute, const Memory::Acc
    this->instructionOpcode = instructionOpcode;
    this->intraInstructionDependencies = num_execute;
    this->address = storeAccess;
-   this->execLatency = execLatency;
-   this->setUopType();
+   this->execLatency = 0;
+   this->setTypes();
 }
 
-MicroOp::UopType MicroOp::getUopType(const MicroOp& uop)
+void MicroOp::makeDynamic(const String& instructionOpcodeName, uint32_t execLatency) {
+   this->clear();
+
+   this->uop_type = UOP_EXECUTE;
+   this->microOpTypeOffset = 0;
+   this->intraInstructionDependencies = 0;
+   this->instructionOpcode = XED_ICLASS_INVALID;
+#ifdef ENABLE_MICROOP_STRINGS
+   this->instructionOpcodeName = instructionOpcodeName;
+#endif
+   this->branch = false;
+   this->branchTaken = false;
+   this->execLatency = execLatency;
+   this->setTypes();
+}
+
+
+MicroOp::uop_subtype_t MicroOp::getSubtype_Exec(const MicroOp& uop)
 {
-   // Count all of the ADD/SUB/DIV/LD/ST/BR, and if we have too many, break
-   // Count all of the GENERIC insns, and if we have too many (3x-per-cycle), break
-   if (uop.isLoad())
-      return UOP_TYPE_LOAD;
-   else if (uop.isStore())
-      return UOP_TYPE_STORE;
-   else if (uop.isBranch()) // conditional branches
-      return UOP_TYPE_BRANCH;
-   else if (uop.isExecute())
+   // Get the uop subtype for the EXEC part of this instruction
+   // (ignoring the fact that this particular microop may be a load/store,
+   //  used in determining the data type for load/store when calculating bypass delays)
+   switch(uop.getInstructionOpcode())
    {
-      switch(uop.getInstructionOpcode())
-      {
       case XED_ICLASS_CALL_FAR:
       case XED_ICLASS_CALL_NEAR:
       case XED_ICLASS_JB:
@@ -177,7 +189,7 @@ MicroOp::UopType MicroOp::getUopType(const MicroOp& uop)
       case XED_ICLASS_JZ:
       case XED_ICLASS_RET_FAR:
       case XED_ICLASS_RET_NEAR:
-         return UOP_TYPE_BRANCH;
+         return UOP_SUBTYPE_BRANCH;
       case XED_ICLASS_ADDPD:
       case XED_ICLASS_ADDPS:
       case XED_ICLASS_ADDSD:
@@ -198,7 +210,7 @@ MicroOp::UopType MicroOp::getUopType(const MicroOp& uop)
       case XED_ICLASS_VSUBPS:
       case XED_ICLASS_VSUBSD:
       case XED_ICLASS_VSUBSS:
-         return UOP_TYPE_FP_ADDSUB;
+         return UOP_SUBTYPE_FP_ADDSUB;
       case XED_ICLASS_MULPD:
       case XED_ICLASS_MULPS:
       case XED_ICLASS_MULSD:
@@ -215,35 +227,146 @@ MicroOp::UopType MicroOp::getUopType(const MicroOp& uop)
       case XED_ICLASS_VDIVPS:
       case XED_ICLASS_VDIVSD:
       case XED_ICLASS_VDIVSS:
-         return UOP_TYPE_FP_MULDIV;
+         return UOP_SUBTYPE_FP_MULDIV;
       default:
-         return UOP_TYPE_GENERIC;
-      }
+         return UOP_SUBTYPE_GENERIC;
    }
-   else
-      return UOP_TYPE_GENERIC;
 }
 
-String MicroOp::UopTypeString(UopType uop_type)
+
+MicroOp::uop_subtype_t MicroOp::getSubtype(const MicroOp& uop)
 {
-   switch(uop_type) {
-      case UOP_TYPE_FP_ADDSUB:
+   // Count all of the ADD/SUB/DIV/LD/ST/BR, and if we have too many, break
+   // Count all of the GENERIC insns, and if we have too many (3x-per-cycle), break
+   if (uop.isLoad())
+      return UOP_SUBTYPE_LOAD;
+   else if (uop.isStore())
+      return UOP_SUBTYPE_STORE;
+   else if (uop.isBranch()) // conditional branches
+      return UOP_SUBTYPE_BRANCH;
+   else if (uop.isExecute())
+      return getSubtype_Exec(uop);
+   else
+      return UOP_SUBTYPE_GENERIC;
+}
+
+String MicroOp::getSubtypeString(uop_subtype_t uop_subtype)
+{
+   switch(uop_subtype) {
+      case UOP_SUBTYPE_FP_ADDSUB:
          return "fp_addsub";
-      case UOP_TYPE_FP_MULDIV:
+      case UOP_SUBTYPE_FP_MULDIV:
          return "fp_muldiv";
-      case UOP_TYPE_LOAD:
+      case UOP_SUBTYPE_LOAD:
          return "load";
-      case UOP_TYPE_STORE:
+      case UOP_SUBTYPE_STORE:
          return "store";
-      case UOP_TYPE_GENERIC:
+      case UOP_SUBTYPE_GENERIC:
          return "generic";
-      case UOP_TYPE_BRANCH:
+      case UOP_SUBTYPE_BRANCH:
          return "branch";
       default:
-         LOG_ASSERT_ERROR(false, "Unknown UopType %u", uop_type);
+         LOG_ASSERT_ERROR(false, "Unknown UopType %u", uop_subtype);
          return "unknown";
    }
 }
+
+MicroOp::uop_port_t MicroOp::getPort(const MicroOp& uop)
+{
+   switch(uop.uop_subtype) {
+      case UOP_SUBTYPE_FP_ADDSUB:
+         return UOP_PORT1;
+      case UOP_SUBTYPE_FP_MULDIV:
+         return UOP_PORT0;
+      case UOP_SUBTYPE_LOAD:
+         return UOP_PORT4;
+      case UOP_SUBTYPE_STORE:
+         return UOP_PORT23;
+      case UOP_SUBTYPE_GENERIC:
+         switch(uop.getInstructionOpcode()) {
+            case XED_ICLASS_IMUL:
+               return uop.getOperandSize() == 64 ? UOP_PORT0 : UOP_PORT1;
+            case XED_ICLASS_LEA:
+               return UOP_PORT1; // 0 on Core2, 1 on Nehalem, 0 (simple) or 1 (complex) on Sandy Bridge
+            case XED_ICLASS_MOVSS:
+            case XED_ICLASS_MOVSD_XMM:
+            case XED_ICLASS_MOVAPS:
+            case XED_ICLASS_MOVAPD:
+               return UOP_PORT5;
+            default:
+               return UOP_PORT015;
+         }
+      case UOP_SUBTYPE_BRANCH:
+         return UOP_PORT5;
+      default:
+         LOG_ASSERT_ERROR(false, "Unknown uop_subtype %u", uop.uop_subtype);
+   }
+}
+
+void MicroOp::setAlu()
+{
+   switch(uop_type)
+   {
+      default:
+         uop_alu = UOP_ALU_NONE;
+         break;
+      case UOP_EXECUTE:
+         switch(getInstructionOpcode())
+         {
+            case XED_ICLASS_DIV:
+            case XED_ICLASS_IDIV:
+               uop_alu = UOP_ALU_TRIG;
+               break;
+            default:
+               uop_alu = UOP_ALU_NONE;
+               break;
+         }
+   }
+}
+
+bool MicroOp::isFpLoadStore(const MicroOp& uop)
+{
+   if (uop.isLoad() || uop.isStore())
+   {
+      switch(uop.getInstructionOpcode())
+      {
+         case XED_ICLASS_MOVSS:
+         case XED_ICLASS_MOVSD_XMM:
+         case XED_ICLASS_MOVAPS:
+         case XED_ICLASS_MOVAPD:
+            return true;
+         default:
+            ;
+      }
+   }
+
+   return false;
+}
+
+MicroOp::uop_bypass_t MicroOp::getBypassType(const MicroOp& uop)
+{
+   switch(getSubtype(uop))
+   {
+      case UOP_SUBTYPE_LOAD:
+         if (isFpLoadStore(uop))
+            return UOP_BYPASS_LOAD_FP;
+         break;
+      case UOP_SUBTYPE_STORE:
+         if (isFpLoadStore(uop))
+           return UOP_BYPASS_FP_STORE;
+         break;
+      case UOP_SUBTYPE_FP_ADDSUB:
+      case UOP_SUBTYPE_FP_MULDIV:
+         if (uop.isLoad())
+            return UOP_BYPASS_LOAD_FP;
+         else if (uop.isStore())
+            return UOP_BYPASS_FP_STORE;
+      default:
+         break;
+   }
+   return UOP_BYPASS_NONE;
+}
+
 
 void MicroOp::setFirst(bool first) {
    VERIFY_MICROOP();
@@ -279,7 +402,9 @@ void MicroOp::copyTo(MicroOp& destination) const {
 #else
    // Overwrite all fields ! -> excluded: windowIndex and sequenceNumber
    destination.uop_type = this->uop_type;
-   destination.port_type = this->port_type;
+   destination.uop_subtype = this->uop_subtype;
+   destination.uop_port = this->uop_port;
+   destination.uop_alu = this->uop_alu;
    destination.first = this->first;
    destination.last = this->last;
    destination.instructionOpcode = this->instructionOpcode;
@@ -325,6 +450,8 @@ void MicroOp::copyTo(MicroOp& destination) const {
    destination.iCacheHitWhere = this->iCacheHitWhere;
    destination.iCacheLatency = this->iCacheLatency;
    destination.m_membar = this->m_membar;
+   destination.is_x87 = this->is_x87;
+   destination.operand_size = this->operand_size;
    destination.m_forceLongLatencyLoad = this->m_forceLongLatencyLoad;
 
    // Not clearing/setting the windowIndex -- should we?
@@ -334,7 +461,8 @@ void MicroOp::copyTo(MicroOp& destination) const {
 }
 
 void MicroOp::verify() const {
-   LOG_ASSERT_ERROR(port_type == getUopType(*this), "port_type %u != %u", port_type, getUopType(*this));
+   LOG_ASSERT_ERROR(uop_subtype == MicroOp::getSubtype(*this), "uop_subtype %u != %u", uop_subtype, MicroOp::getSubtype(*this));
+   LOG_ASSERT_ERROR(uop_port == MicroOp::getPort(*this), "uop_port %u != %u", uop_port, MicroOp::getPort(*this));
    LOG_ASSERT_ERROR(sourceRegistersLength < MAXIMUM_NUMBER_OF_SOURCE_REGISTERS, "sourceRegistersLength(%d) > MAX(%u)", sourceRegistersLength, MAXIMUM_NUMBER_OF_SOURCE_REGISTERS);
    LOG_ASSERT_ERROR(destinationRegistersLength < MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS, "destinationRegistersLength(%u) > MAX(%u)", destinationRegistersLength, MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS);
    LOG_ASSERT_ERROR(dependenciesLength < MAXIMUM_NUMBER_OF_DEPENDENCIES, "dependenciesLength(%u) > MAX(%u)", dependenciesLength, MAXIMUM_NUMBER_OF_DEPENDENCIES);
@@ -353,14 +481,14 @@ uint32_t MicroOp::getSourceRegistersLength() const {
 
 uint8_t MicroOp::getSourceRegister(uint32_t index) const {
    VERIFY_MICROOP();
-   assert(index >= 0 && index < this->sourceRegistersLength);
+   assert(index < this->sourceRegistersLength);
    return this->sourceRegisters[index];
 }
 
 #ifdef ENABLE_MICROOP_STRINGS
 const String& MicroOp::getSourceRegisterName(uint32_t index) const {
    VERIFY_MICROOP();
-   assert(index >= 0 && index < this->sourceRegistersLength);
+   assert(index < this->sourceRegistersLength);
    return this->sourceRegisterNames[index];
 }
 #endif
@@ -383,7 +511,7 @@ uint32_t MicroOp::getDestinationRegistersLength() const {
 
 uint8_t MicroOp::getDestinationRegister(uint32_t index) const {
    VERIFY_MICROOP();
-   assert(index >= 0 && index < this->destinationRegistersLength);
+   assert(index < this->destinationRegistersLength);
    return this->destinationRegisters[index];
 }
 
@@ -411,7 +539,7 @@ uint64_t MicroOp::getDependency(uint32_t index) const {
    if (index < this->intraInstructionDependencies) {
       return this->sequenceNumber - this->microOpTypeOffset - this->intraInstructionDependencies + index;
    } else {
-      assert((index - this->intraInstructionDependencies) >= 0 && (index - this->intraInstructionDependencies) < this->dependenciesLength);
+      assert((index >= this->intraInstructionDependencies) && ((index - this->intraInstructionDependencies) < this->dependenciesLength));
       return this->dependencies[index-this->intraInstructionDependencies];
    }
 }

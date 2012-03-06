@@ -1,12 +1,13 @@
 #ifndef LOCKFREE_HASH_H
 #define LOCKFREE_HASH_H
 
+#include "fixed_types.h"
+#include "basic_hash.h"
+
 #include <map>
 #include <utility>
 #include <iostream>
 #include <assert.h>
-#include "basic_hash.h"
-#include "fixed_types.h"
 
 //#define DEBUG_LOCKFREE_HASH
 

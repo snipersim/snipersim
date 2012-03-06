@@ -419,6 +419,7 @@ void routineCallback(RTN rtn, void* v)
    // os emulation
    else if (rtn_name == "get_nprocs")        RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
    else if (rtn_name == "get_nprocs_conf")   RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
+   else if (rtn_name == "clock_gettime")     RTN_Replace(rtn, AFUNPTR(emuClockGettime));
 
    if (Sim()->getConfig()->getOSEmuPthreadReplace()) {
       if (rtn_name.find("pthread_mutex_init") != String::npos)      RTN_Replace(rtn, AFUNPTR(PthreadEmu::MutexInit));
@@ -599,6 +600,28 @@ IntPtr emuGetNprocs()
    return Sim()->getConfig()->getOSEmuNprocs()
    ? Sim()->getConfig()->getOSEmuNprocs()
    : Sim()->getConfig()->getApplicationCores();
+}
+
+IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp)
+{
+   switch(clk_id)
+   {
+      case CLOCK_REALTIME:
+      case CLOCK_MONOTONIC:
+         // Return simulated time
+         if (tp)
+         {
+            Core* core = Sim()->getCoreManager()->getCurrentCore();
+            UInt64 time = core->getPerformanceModel()->getElapsedTime().getNS();
+
+            tp->tv_sec = time / 1000000000;
+            tp->tv_nsec = time % 1000000000;
+         }
+         return 0;
+      default:
+         // Unknown/non-emulated clock types (such as CLOCK_PROCESS_CPUTIME_ID/CLOCK_THREAD_CPUTIME_ID)
+         return clock_gettime(clk_id, tp);
+   }
 }
 
 }

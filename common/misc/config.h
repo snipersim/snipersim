@@ -29,7 +29,9 @@ public:
    {
       FULL = 0,
       LITE,
-      NUM_SIMULATION_MODES
+      STANDALONE,
+      NUM_SIMULATION_MODES,
+      FROM_CONFIG
    };
 
    typedef std::vector<UInt32> CoreToProcMap;
@@ -37,7 +39,7 @@ public:
    typedef std::vector<core_id_t>::const_iterator CLCI;
    typedef std::unordered_map<UInt32,core_id_t> CommToCoreMap;
 
-   Config();
+   Config(SimulationMode mode);
    ~Config();
 
    void loadFromFile(char* filename);

@@ -10,6 +10,15 @@
 #include "subsecond_time.h"
 #include "performance_model.h"
 
+const char* EStaticNetworkStrings[] = {
+   "user-1",
+   "user-2",
+   "shmem-1",
+   "shmem-2",
+   "system",
+};
+
+
 // FIXME: Rework netCreateBuf and netExPacket. We don't need to
 // duplicate the sender/receiver info the packet. This should be known
 // by the transport layer and given to us. We also should be more

@@ -98,6 +98,7 @@ ContentionModel::getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay)
 
       ++m_n_outoforder;
 
+      #if 0
       /* Update time of last seen item */
       m_t_last = t_start;
 
@@ -105,6 +106,7 @@ ContentionModel::getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay)
       m_time[0] = t_end;
       for(UInt32 i = 1; i < m_num_outstanding; ++i)
          m_time[i] = SubsecondTime::Zero();
+      #endif
 
    } else {
       if (t_start == m_t_last)

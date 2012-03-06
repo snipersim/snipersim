@@ -3,17 +3,22 @@ GRAPHITE_ROOT ?= SIM_ROOT
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
+STANDALONE=$(SIM_ROOT)/lib/sniper
 LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a
 LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_USER=$(SIM_ROOT)/lib/libgraphite_user.a
+LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 
-all: package_deps pin python linux output_files builddir $(LIB_CARBON) $(LIB_PIN_SIM) $(LIB_USER) configscripts
+all: package_deps pin python linux output_files builddir $(LIB_CARBON) $(LIB_USER) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE) configscripts
 
 # Include common here
 # - This allows us to override clean below
 include common/Makefile.common
 
-.PHONY: $(LIB_PIN_SIM) $(LIB_CARBON)
+.PHONY: $(STANDALONE) $(LIB_PIN_SIM) $(LIB_CARBON) $(LIB_USER) $(LIB_SIFT)
+
+$(STANDALONE):
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/standalone
 
 $(LIB_PIN_SIM):
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
@@ -23,6 +28,9 @@ $(LIB_CARBON):
 
 $(LIB_USER):
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/user
+
+$(LIB_SIFT):
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/sift
 
 ifneq ($(NO_PIN_CHECK),1)
 pin: $(PIN_HOME)/intel64/bin/pinbin
@@ -64,9 +72,11 @@ empty_config:
 	rm -f config/graphite.py config/buildconf.sh config/buildconf.makefile
 
 clean: empty_logs empty_config empty_deps
+	$(MAKE) $(MAKE_QUIET) -C standalone clean
 	$(MAKE) $(MAKE_QUIET) -C pin clean
 	$(MAKE) $(MAKE_QUIET) -C common clean
 	$(MAKE) $(MAKE_QUIET) -C user clean
+	$(MAKE) $(MAKE_QUIET) -C sift clean
 	@rm -f .build_os
 
 regress_quick: output_files regress_unit regress_apps

@@ -3,13 +3,17 @@
 #include "performance_model.h"
 #include "core_manager.h"
 #include "core.h"
+#include "pin_memory_manager.h"
 #include "inst_mode.h"
 #include "instruction_modeling.h"
 #include "inst_mode_macros.h"
 #include "local_storage.h"
+#include "toolreg.h"
 
 namespace lite
 {
+
+Lock g_atomic_lock;
 
 void addMemoryModeling(TRACE trace, INS ins)
 {
@@ -28,9 +32,10 @@ void addMemoryModeling(TRACE trace, INS ins)
                   IARG_ADDRINT, INS_Address(ins),
                   IARG_BOOL, INS_MemoryOperandIsWritten(ins, i) ? INS_IsAtomicUpdate(ins) : false,
                   IARG_MEMORYOP_EA, i,
-                  IARG_MEMORYREAD_SIZE,
+                  IARG_UINT32, INS_MemoryOperandSize(ins, i),
                   IARG_UINT32, i,
                   IARG_END);
+
             INSTRUMENT(
                   INSTR_IF_DETAILED,
                   trace, ins, IPOINT_BEFORE,
@@ -40,7 +45,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                   IARG_ADDRINT, INS_Address(ins),
                   IARG_BOOL, INS_MemoryOperandIsWritten(ins, i) ? INS_IsAtomicUpdate(ins) : false,
                   IARG_MEMORYOP_EA, i,
-                  IARG_MEMORYREAD_SIZE,
+                  IARG_UINT32, INS_MemoryOperandSize(ins, i),
                   IARG_UINT32, i,
                   IARG_END);
          }
@@ -59,9 +64,10 @@ void addMemoryModeling(TRACE trace, INS ins)
                   IARG_ADDRINT, INS_Address(ins),
                   IARG_BOOL, INS_IsAtomicUpdate(ins),
                   IARG_MEMORYOP_EA, i,
-                  IARG_MEMORYWRITE_SIZE,
+                  IARG_UINT32, INS_MemoryOperandSize(ins, i),
                   IARG_UINT32, i,
                   IARG_END);
+
             INSTRUMENT(
                   INSTR_IF_DETAILED,
                   trace, ins, IPOINT_BEFORE,
@@ -71,7 +77,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                   IARG_ADDRINT, INS_Address(ins),
                   IARG_BOOL, INS_IsAtomicUpdate(ins),
                   IARG_MEMORYOP_EA, i,
-                  IARG_MEMORYWRITE_SIZE,
+                  IARG_UINT32, INS_MemoryOperandSize(ins, i),
                   IARG_UINT32, i,
                   IARG_END);
          }

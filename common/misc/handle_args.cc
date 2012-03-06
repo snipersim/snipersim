@@ -1,3 +1,5 @@
+#include "handle_args.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
@@ -5,7 +7,6 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/split.hpp>
-#include "handle_args.h"
 
 static char*prog_name;
 
