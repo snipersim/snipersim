@@ -37,7 +37,6 @@ class StatTrace:
     self.sd = sim.util.StatsDelta()
     self.stats = {
       'time': [ self.sd.getter('performance_model', core, 'elapsed_time') for core in range(sim.config.ncores) ],
-      'ffwd_time': [ self.sd.getter('fastforward_performance_model', core, 'fastforwarded_time') for core in range(sim.config.ncores) ],
       'stat': [ self.sd.getter(stat_component, core, stat_name) for core in range(sim.config.ncores) ],
     }
     sim.util.Every(interval_ns * sim.util.Time.NS, self.periodic, statsdelta = self.sd, roi_only = True)
@@ -47,7 +46,7 @@ class StatTrace:
       self.fd.write('[STAT:%s] ' % self.stat_name)
     self.fd.write('%u' % (time / 1e6)) # Time in ns
     for core in range(sim.config.ncores):
-      timediff = (self.stats['time'][core].delta - self.stats['ffwd_time'][core].delta) / 1e6 # Time in ns
+      timediff = self.stats['time'][core].delta / 1e6 # Time in ns
       statdiff = self.stats['stat'][core].delta
       value = statdiff / (timediff or 1) # Avoid division by zero
       self.fd.write(' %.3f' % value)

@@ -161,7 +161,7 @@ const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(intptr_t addr,
 {
    if (!scache.count(addr))
    {
-      StaticInstruction *sinst = new StaticInstruction;
+      StaticInstruction *sinst = new StaticInstruction();
       sinst->addr = addr;
       sinst->size = size;
 

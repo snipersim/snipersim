@@ -5,7 +5,8 @@
 //
 // x86-64 only, little-endian
 
-#include <stdint.h>
+#include <cstdint>
+#include <cstddef>
 
 extern "C" {
 #include "xed-interface.h"

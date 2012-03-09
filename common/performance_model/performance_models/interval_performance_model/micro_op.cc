@@ -288,10 +288,34 @@ MicroOp::uop_port_t MicroOp::getPort(const MicroOp& uop)
                return uop.getOperandSize() == 64 ? UOP_PORT0 : UOP_PORT1;
             case XED_ICLASS_LEA:
                return UOP_PORT1; // 0 on Core2, 1 on Nehalem, 0 (simple) or 1 (complex) on Sandy Bridge
-            case XED_ICLASS_MOVSS:
-            case XED_ICLASS_MOVSD_XMM:
-            case XED_ICLASS_MOVAPS:
             case XED_ICLASS_MOVAPD:
+            case XED_ICLASS_MOVAPS:
+            case XED_ICLASS_MOVHLPS:
+            case XED_ICLASS_MOVHPD:
+            case XED_ICLASS_MOVHPS:
+            case XED_ICLASS_MOVLHPS:
+            case XED_ICLASS_MOVLPD:
+            case XED_ICLASS_MOVLPS:
+            case XED_ICLASS_MOVMSKPD:
+            case XED_ICLASS_MOVMSKPS:
+            case XED_ICLASS_MOVSD_XMM:
+            case XED_ICLASS_MOVSHDUP:
+            case XED_ICLASS_MOVSLDUP:
+            case XED_ICLASS_MOVSS:
+            case XED_ICLASS_VMOVAPD:
+            case XED_ICLASS_VMOVAPS:
+            case XED_ICLASS_VMOVHLPS:
+            case XED_ICLASS_VMOVHPD:
+            case XED_ICLASS_VMOVHPS:
+            case XED_ICLASS_VMOVLHPS:
+            case XED_ICLASS_VMOVLPD:
+            case XED_ICLASS_VMOVLPS:
+            case XED_ICLASS_VMOVMSKPD:
+            case XED_ICLASS_VMOVMSKPS:
+            case XED_ICLASS_VMOVSD:
+            case XED_ICLASS_VMOVSHDUP:
+            case XED_ICLASS_VMOVSLDUP:
+            case XED_ICLASS_VMOVSS:
                return UOP_PORT5;
             default:
                return UOP_PORT015;

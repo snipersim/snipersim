@@ -21,7 +21,7 @@ namespace Sift
          intptr_t last_address;
          std::unordered_map<intptr_t, bool> icache;
       public:
-         Writer(std::string filename, GetCodeFunc getCodeFunc, bool useCompression = true);
+         Writer(char *filename, GetCodeFunc getCodeFunc, bool useCompression = true);
          ~Writer();
          void Instruction(intptr_t addr, uint8_t size, uint8_t num_addresses, intptr_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
          void Output(uint8_t fd, const char *data, uint32_t size);

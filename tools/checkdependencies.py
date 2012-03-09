@@ -5,6 +5,7 @@ import sys, os
 # list of (packagename, filename)
 
 DEPENDENCIES = [
+  ('zlib-dev / zlib-devel', '/usr/include/zlib.h'),
 ]
 
 if os.environ.get('BOOST_INCLUDE', ''):

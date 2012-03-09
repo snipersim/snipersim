@@ -9,7 +9,7 @@
 // Enable to print out everything we write
 //#define VERBOSE
 
-Sift::Writer::Writer(std::string filename, GetCodeFunc getCodeFunc, bool useCompression)
+Sift::Writer::Writer(char *filename, GetCodeFunc getCodeFunc, bool useCompression)
    : getCodeFunc(getCodeFunc)
    , ninstrs(0)
    , nbranch(0)
@@ -27,7 +27,7 @@ Sift::Writer::Writer(std::string filename, GetCodeFunc getCodeFunc, bool useComp
    if (useCompression)
       options |= Option::CompressionZlib;
 
-   output = new vofstream(filename.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+   output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
 
    Sift::Header hdr = { Sift::MagicNumber, 0 /* header size */, options};
    output->write(reinterpret_cast<char*>(&hdr), sizeof(hdr));
