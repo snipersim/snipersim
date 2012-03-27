@@ -1,3 +1,6 @@
+Version 2.02
+  * [sift_recorder] Add support for -f (number of instructions to fast-forward) and -d (number of instructions to trace in detail) command-line options
+
 Version 2.01
   * Compilation fixes for GCC 4.6
 

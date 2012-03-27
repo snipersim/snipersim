@@ -22,10 +22,16 @@
 
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "trace", "output");
 KNOB<UINT64> KnobBlocksize(KNOB_MODE_WRITEONCE, "pintool", "b", "0", "blocksize");
+KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
+KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
 
+BOOL in_detail = false;
 UINT64 blocksize;
+UINT64 fast_forward_target = 0;
+UINT64 detailed_target = 0;
 UINT64 blocknum = 0;
 UINT64 icount = 0;
+UINT64 icount_detailed = 0;
 std::deque<ADDRINT> dyn_address_queue;
 
 Sift::Writer *output;
@@ -36,17 +42,29 @@ UINT64 bbv_count = 0;
 void openFile();
 void closeFile();
 
+VOID countInsns(THREADID thread_id, INT32 count)
+{
+   // TODO: support multi-threading
+   assert(thread_id == 0);
+
+   icount += count;
+
+   if (icount >= fast_forward_target)
+   {
+      std::cout << "[SIFT_RECORDER] Changing to detailed after " << icount << " instructions" << std::endl;
+      in_detail = true;
+      icount = 0;
+      PIN_RemoveInstrumentation();
+   }
+}
+
 VOID sendInstruction(THREADID thread_id, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing)
 {
    // TODO: support multi-threading
    assert(thread_id == 0);
 
    ++icount;
-   if (blocksize && icount > blocksize)
-   {
-      openFile();
-      icount = 1;
-   }
+   ++icount_detailed;
 
    if (bbv_base == 0)
    {
@@ -70,6 +88,18 @@ VOID sendInstruction(THREADID thread_id, ADDRINT addr, UINT32 size, UINT32 num_a
    assert(dyn_address_queue.empty());
 
    output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
+
+   if (icount_detailed >= detailed_target)
+   {
+      PIN_Detach();
+      return;
+   }
+
+   if (blocksize && icount >= blocksize)
+   {
+      openFile();
+      icount = 0;
+   }
 }
 
 VOID handleMemory(THREADID thread_id, ADDRINT address)
@@ -117,30 +147,41 @@ VOID traceCallback(TRACE trace, void *v)
 {
    BBL bbl_head = TRACE_BblHead(trace);
 
-   for (BBL bbl = bbl_head; BBL_Valid(bbl); bbl = BBL_Next(bbl)) {
-      for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins)) {
-
-         // For memory instructions, we should populate data items before we send the MicroOp
-         UINT32 num_addresses = addMemoryModeling(ins);
-
-         bool is_branch = INS_IsBranch(ins) && INS_HasFallThrough(ins);
-
-         if (is_branch)
+   for (BBL bbl = bbl_head; BBL_Valid(bbl); bbl = BBL_Next(bbl))
+   {
+      if (!in_detail)
+      {
+         BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)countInsns, IARG_THREAD_ID, IARG_UINT32, BBL_NumIns(bbl), IARG_END);
+      }
+      else
+      {
+         for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins))
          {
-            insertCall(ins, IPOINT_AFTER,        num_addresses, true  /* is_branch */, false /* taken */);
-            insertCall(ins, IPOINT_TAKEN_BRANCH, num_addresses, true  /* is_branch */, true  /* taken */);
-         }
-         else
-            insertCall(ins, IPOINT_BEFORE,       num_addresses, false /* is_branch */, false /* taken */);
+            // For memory instructions, we should populate data items before we send the MicroOp
+            UINT32 num_addresses = addMemoryModeling(ins);
 
-         if (ins == BBL_InsTail(bbl))
-            break;
+            bool is_branch = INS_IsBranch(ins) && INS_HasFallThrough(ins);
+
+            if (is_branch)
+            {
+               insertCall(ins, IPOINT_AFTER,        num_addresses, true  /* is_branch */, false /* taken */);
+               insertCall(ins, IPOINT_TAKEN_BRANCH, num_addresses, true  /* is_branch */, true  /* taken */);
+            }
+            else
+               insertCall(ins, IPOINT_BEFORE,       num_addresses, false /* is_branch */, false /* taken */);
+
+            if (ins == BBL_InsTail(bbl))
+               break;
+         }
       }
    }
 }
 
 VOID syscallEntryCallback(THREADID threadIndex, CONTEXT *ctxt, SYSCALL_STANDARD std, VOID *v)
 {
+   if (!in_detail)
+      return;
+
    ADDRINT syscall_number = PIN_GetContextReg(ctxt, REG_GAX);
    if (syscall_number == SYS_write) {
       int fd = (int)PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
@@ -231,6 +272,10 @@ int main(int argc, char **argv)
    }
 
    blocksize = KnobBlocksize.Value();
+   fast_forward_target = KnobFastForwardTarget.Value();
+   detailed_target = KnobDetailedTarget.Value();
+   if (fast_forward_target == 0)
+      in_detail = true;
 
    openFile();
 

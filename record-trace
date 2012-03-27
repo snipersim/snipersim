@@ -9,18 +9,20 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)>  [ -b <block size (instructions, default=all)> -- <cmdline>' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)>  [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> -- <cmdline>' % sys.argv[0]
   sys.exit(2)
 
 
 outputfile = 'trace'
+fastforward = 0
+detailed = 0
 blocksize = 0
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:b:")
+  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:")
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -31,6 +33,10 @@ for o, a in opts:
     sys.exit()
   if o == '-o':
     outputfile = a
+  if o == '-f':
+    fastforward = long(float(a))
+  if o == '-d':
+    detailed = long(float(a))
   if o == '-b':
     blocksize = long(float(a))
 
@@ -53,7 +59,7 @@ sim_root = HOME
 # convert to absolute path
 outputfile = os.path.realpath(os.path.join(outputfile))
 
-cmd = '%(pin_home)s/pin -mt -injection child -t %(HOME)s/sift/recorder/sift_recorder -b %(blocksize)d -o %(outputfile)s -- ' % locals() + ' '.join(cmdline)
+cmd = '%(pin_home)s/pin -mt -injection child -t %(HOME)s/sift/recorder/sift_recorder -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -- ' % locals() + ' '.join(cmdline)
 
 
 print '[SIFT_RECORDER]', 'Running', cmd

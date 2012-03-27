@@ -98,7 +98,7 @@ def parse_config(simcfg):
   return cfg
 
 
-def parse_results((simstats, simout, simcfg, stdout, graphiteout, powerpy), partial = None):
+def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout, graphiteout, powerpy), partial = None):
   results = []
 
   ## sim.cfg
@@ -138,7 +138,11 @@ def parse_results((simstats, simout, simcfg, stdout, graphiteout, powerpy), part
     results.append(('vmem', -1, graphiteout['vmem']))
 
   ## sim.stats
-  simstats = simstats.split('\n')
+  if simstatsbase and simstatsdelta:
+    simstatsbase = simstatsbase.split('\n')
+    simstats = simstatsdelta.split('\n')
+  else:
+    simstats = simstats.split('\n')
 
   if partial:
     k1, k2 = partial[:2]
@@ -147,6 +151,12 @@ def parse_results((simstats, simout, simcfg, stdout, graphiteout, powerpy), part
 
   stats_begin = dict([ (line.split()[0][len(k1+'.'):], long(line.split()[1])) for line in simstats if line.startswith(k1) ])
   stats = dict([ (line.split()[0][len(k2+'.'):], long(line.split()[1])) for line in simstats if line.startswith(k2) ])
+
+  if simstatsbase and simstatsdelta:
+    for line in simstatsbase:
+      for c in range(ncores):
+        stats_begin.setdefault(line.partition('[]')[0] + ('[%u]' % c) + line.partition('[]')[2], 0)
+        stats.setdefault(line.partition('[]')[0] + ('[%u]' % c) + line.partition('[]')[2], 0)
 
   if not stats or not stats_begin:
     raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
@@ -173,7 +183,7 @@ def parse_results((simstats, simout, simcfg, stdout, graphiteout, powerpy), part
 
 def parse_results_from_dir(dirname, partial = None):
   files = []
-  for filename in ('sim.stats', 'sim.out', 'sim.cfg', 'stdout.txt', 'graphite.out', 'power.py'):
+  for filename in ('sim.stats', 'sim.stats.base', 'sim.stats.delta', 'sim.out', 'sim.cfg', 'stdout.txt', 'graphite.out', 'power.py'):
     fullname = os.path.join(dirname, filename)
     if os.path.exists(fullname):
       files.append(file(fullname).read())
@@ -209,22 +219,35 @@ def format_size(size):
   return '%.1f%sB' % (size, [' ', 'K', 'M', 'G', 'T', 'P', 'E'][i])
 
 
-def find_children(pids):
-  try:
-    res = timeout.command('ps --ppid %s -o pid' % ','.join(map(str, pids)), timeout = 2)
-  except timeout.Timeout:
-    return []
-  except:
-    traceback.print_exc()
-    return []
-  children = set(map(int, res.strip().split('\n')[1:]))
-  if children:
-    children.update(find_children(children))
-  return children
+def find_children(pid):
+  # build list of all children per ppid
+  children = {}
+  for _pid in os.listdir('/proc'):
+    try:
+      _pid = int(_pid)
+    except ValueError:
+      continue # not a pid
+    try:
+      stat = file('/proc/%u/stat' % _pid).read()
+    except IOError:
+      continue # pid already gone
+    ppid = int(stat.split()[3])
+    if ppid not in children:
+      children[ppid] = []
+    children[ppid].append(_pid)
+  # recursive function to return children of a given pid
+  def __find_children(ppid):
+    ret = [ppid]
+    if ppid in children:
+      for pid in children[ppid]:
+        ret.extend(__find_children(pid))
+    return ret
+  return __find_children(pid)
 
 
 def kill_children():
-  children = find_children(set([os.getpid()]))
+  children = find_children(os.getpid())
   for pid in children:
-    try: os.kill(pid, 9)
-    except OSError: pass
+    if pid != os.getpid():
+      try: os.kill(pid, 9)
+      except OSError: pass
