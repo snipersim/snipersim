@@ -89,7 +89,7 @@ VOID sendInstruction(THREADID thread_id, ADDRINT addr, UINT32 size, UINT32 num_a
 
    output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
 
-   if (icount_detailed >= detailed_target)
+   if (detailed_target != 0 && icount_detailed >= detailed_target)
    {
       PIN_Detach();
       return;

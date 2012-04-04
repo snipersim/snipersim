@@ -391,11 +391,12 @@ try:
     threads = []
   else:
     threads = [ threading.Thread(target = execute, args = (i, machine)) for i, machine in enumerate(machines) ]
-    for t in threads: t.start()
+    for t in threads: t.daemon = True; t.start()
     for t in threads: t.join()
 
 except KeyboardInterrupt:
   # Make sure Graphite itself is stopped, even if it didn't respond to the SIGINT
+  print '\n[SNIPER] Ctrl-C detected: Killing all child processes'
   graphite_lib.kill_children()
   sys.exit(-1)
 

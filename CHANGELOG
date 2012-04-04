@@ -1,3 +1,7 @@
+Version 2.03
+  * Fix record-trace -d 0
+  * Fix keyboard interrupt behavior
+
 Version 2.02
   * [sift_recorder] Add support for -f (number of instructions to fast-forward) and -d (number of instructions to trace in detail) command-line options
 
