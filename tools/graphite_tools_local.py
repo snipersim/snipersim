@@ -119,9 +119,9 @@ def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout
   except (IndexError, ValueError):
     walltime = 0
   try:
-    roi = [ line for line in stdout if line.startswith('[%s:0] Simulated' % marker)][0]
-    roi = re.match('\[%s:0\] Simulated ([0-9.]+)M instructions @ ([0-9.]+) KIPS \(([0-9.]+) KIPS / target core' % marker, roi)
-    roi = { 'instrs': float(roi.group(1))*1e6, 'ipstotal': float(roi.group(2))*1e3, 'ipscore': float(roi.group(3))*1e3 }
+    roi = [ line for line in stdout if re.match('^\[%s(:0)?\] Simulated' % marker, line)][0]
+    roi = re.match('\[%s(:0)?\] Simulated ([0-9.]+)M instructions @ ([0-9.]+) KIPS \(([0-9.]+) KIPS / target core' % marker, roi)
+    roi = { 'instrs': float(roi.group(2))*1e6, 'ipstotal': float(roi.group(3))*1e3, 'ipscore': float(roi.group(4))*1e3 }
   except (IndexError, ValueError):
     roi = { 'instrs': 0, 'ipstotal': 0, 'ipscore': 0 }
 
@@ -153,13 +153,16 @@ def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout
   stats = dict([ (line.split()[0][len(k2+'.'):], long(line.split()[1])) for line in simstats if line.startswith(k2) ])
 
   if simstatsbase and simstatsdelta:
+    # End stats may not be empty, check before adding the defaults
+    if not stats:
+      raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
     for line in simstatsbase:
       for c in range(ncores):
         stats_begin.setdefault(line.partition('[]')[0] + ('[%u]' % c) + line.partition('[]')[2], 0)
         stats.setdefault(line.partition('[]')[0] + ('[%u]' % c) + line.partition('[]')[2], 0)
-
-  if not stats or not stats_begin:
-    raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
+  else:
+    if not stats or not stats_begin:
+      raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
 
   for key, value in stats.items():
     if key in stats_begin:

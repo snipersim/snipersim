@@ -119,7 +119,7 @@ bool Sift::Reader::Read(Instruction &inst)
          inst.is_branch = rec.Instruction.is_branch;
          inst.taken = rec.Instruction.taken;
          inst.is_predicate = false;
-         inst.executed = false;
+         inst.executed = true;
       }
       else
       {
