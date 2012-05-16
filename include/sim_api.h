@@ -16,6 +16,8 @@
 #define SIM_CMD_INSTRUMENT_MODE 6
 #define SIM_CMD_MHZ_GET         7
 #define SIM_CMD_IN_SIMULATOR    8
+#define SIM_CMD_PROC_ID         9
+#define SIM_CMD_THREAD_ID       10
 
 #define SIM_OPT_INSTRUMENT_DETAILED    0
 #define SIM_OPT_INSTRUMENT_WARMUP      1
@@ -59,13 +61,15 @@
 
 #define SimRoiStart()             SimMagic0(SIM_CMD_ROI_START)
 #define SimRoiEnd()               SimMagic0(SIM_CMD_ROI_END)
+#define SimGetProcId()            SimMagic0(SIM_CMD_PROC_ID)
+#define SimGetThreadId()          SimMagic0(SIM_CMD_THREAD_ID)
 #define SimSetFreqMHz(proc, mhz)  SimMagic2(SIM_CMD_MHZ_SET, proc, mhz)
 #define SimSetOwnFreqMHz(mhz)     SimSetFreqMHz(UINT64_MAX, mhz)
 #define SimGetFreqMHz(proc)       SimMagic1(SIM_CMD_MHZ_GET, proc)
 #define SimGetOwnFreqMHz()        SimGetFreqMHz(UINT64_MAX)
 #define SimMarker(arg0, arg1)     SimMagic2(SIM_CMD_MARKER, arg0, arg1)
 #define SimUser(cmd, arg)         SimMagic2(SIM_CMD_USER, cmd, arg)
-#define SimSetInstrumentMode(opt) SimMagic1(SMT_CMD_INSTRUMENT_MODE, opt)
+#define SimSetInstrumentMode(opt) SimMagic1(SIM_CMD_INSTRUMENT_MODE, opt)
 #define SimInSimulator()          (SimMagic0(SIM_CMD_IN_SIMULATOR)!=SIM_CMD_IN_SIMULATOR)
 
 #endif /* __SIM_API */

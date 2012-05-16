@@ -4,11 +4,13 @@
 #include "config.h"
 #include "fxsupport.h"
 #include "log.h"
+#include "stats.h"
 #include "config.hpp"
 
 QueueModelHistoryList::QueueModelHistoryList(String name, UInt32 id, SubsecondTime min_processing_time):
    m_min_processing_time(min_processing_time),
    m_utilized_time(SubsecondTime::Zero()),
+   m_total_queue_delay(SubsecondTime::Zero()),
    m_total_requests(0),
    m_total_requests_using_analytical_model(0)
 {
@@ -29,6 +31,11 @@ QueueModelHistoryList::QueueModelHistoryList(String name, UInt32 id, SubsecondTi
    m_average_delay = MovingAverage<SubsecondTime>::createAvgType(MovingAverage<SubsecondTime>::ARITHMETIC_MEAN, max_list_size);
    SubsecondTime max_simulation_time = SubsecondTime::FS() << 63;
    m_free_interval_list.push_back(std::pair<const SubsecondTime,SubsecondTime>(SubsecondTime::Zero(), max_simulation_time));
+
+   registerStatsMetric(name, id, "num-requests", &m_total_requests);
+   registerStatsMetric(name, id, "num-requests-analytical", &m_total_requests_using_analytical_model);
+   registerStatsMetric(name, id, "total-time-used", &m_utilized_time);
+   registerStatsMetric(name, id, "total-queue-delay", &m_total_queue_delay);
 }
 
 QueueModelHistoryList::~QueueModelHistoryList()
@@ -64,6 +71,7 @@ QueueModelHistoryList::computeQueueDelay(SubsecondTime pkt_time, SubsecondTime p
 
    // Increment total queue requests
    m_total_requests ++;
+   m_total_queue_delay += queue_delay;
 
    return queue_delay;
 }

@@ -1,7 +1,7 @@
 #ifndef CORE_THREAD_H
 #define CORE_THREAD_H
 
-#include "thread.h"
+#include "_thread.h"
 #include "fixed_types.h"
 #include "network.h"
 
@@ -18,7 +18,7 @@ private:
 
    static void terminateFunc(void *vp, NetPacket pkt);
 
-   Thread *m_thread;
+   _Thread *m_thread;
 };
 
 #endif // CORE_THREAD_H

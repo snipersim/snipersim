@@ -3,6 +3,7 @@
 #include "performance_model.h"
 #include "core_manager.h"
 #include "core.h"
+#include "thread.h"
 #include "pin_memory_manager.h"
 #include "inst_mode.h"
 #include "instruction_modeling.h"
@@ -112,7 +113,7 @@ void handleMemoryWrite(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_
    /* Optimization for atomic instructions: we know the second (write) access will be a hit. Also, since this is Lite mode,
       we don't need to write back the data. Therefore, only tell the cache to add a hit to its counters and push the
       appropriate DynamicInstructionInfo, but don't keep the cache hierarchy locked for potentially a very long time. */
-   Core* core = localStore[thread_id].core;
+   Core* core = localStore[thread_id].thread->getCore();
    if (is_atomic_update && executing)
       core->logMemoryHit(false, Core::WRITE, write_address, localStore[thread_id].inst_mode == InstMode::DETAILED ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT, eip);
    else if (executing)
@@ -131,7 +132,7 @@ void handleMemoryWriteDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, 
    /* Optimization for atomic instructions: we know the second (write) access will be a hit. Also, since this is Lite mode,
       we don't need to write back the data. Therefore, only tell the cache to add a hit to its counters and push the
       appropriate DynamicInstructionInfo, but don't keep the cache hierarchy locked for potentially a very long time. */
-   Core* core = localStore[thread_id].core;
+   Core* core = localStore[thread_id].thread->getCore();
    if (is_atomic_update && executing)
       core->logMemoryHit(false, Core::WRITE, write_address, localStore[thread_id].inst_mode == InstMode::DETAILED ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT, eip);
    else {

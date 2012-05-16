@@ -62,7 +62,6 @@ def spawn_process(number,command,socket):
     print "Starting process: %d" % number
     env = {}
     env["CARBON_PROCESS_INDEX"] = str(number)
-    env["LD_LIBRARY_PATH"] = "/afs/csail/group/carbon/tools/boost_1_38_0/stage/lib"
 
     #subproc = subprocess.Popen(command, shell=True, env=env, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
     subproc = subprocess.Popen(command, shell=True, env=env, stdout = socket, stderr = socket, stdin = socket)

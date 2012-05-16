@@ -1,7 +1,6 @@
 #include "hooks_py.h"
 #include "simulator.h"
 #include "dvfs_manager.h"
-#include "mcp.h"
 #include "magic_server.h"
 
 
@@ -60,7 +59,8 @@ setFrequency(PyObject *self, PyObject *args)
    if (!domain)
       return NULL;
 
-   Sim()->getMCP()->getMagicServer()->setFrequency(core_id, freq_mhz);
+   // We're running in a hook so we already have the thread lock, call MagicServer directly
+   Sim()->getMagicServer()->setFrequency(core_id, freq_mhz);
 
    Py_RETURN_NONE;
 }

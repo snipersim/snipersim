@@ -50,6 +50,7 @@ class StatsManager {
       StatsManager();
       ~StatsManager();
       void registerMetric(StatsMetricBase *metric);
+      void recordStatsBase();
       void recordStats(String prefix, String fileName = "");
       void recordStats(String prefix, FILE *fp);
       StatsMetricBase *getMetricObject(String objectName, UInt32 index, String metricName);

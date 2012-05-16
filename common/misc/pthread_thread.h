@@ -1,10 +1,10 @@
 #ifndef PTHREAD_THREAD_H
 #define PTHREAD_THREAD_H
 
-#include "thread.h"
+#include "_thread.h"
 #include <pthread.h>
 
-class PthreadThread : public Thread
+class PthreadThread : public _Thread
 {
 public:
    PthreadThread(ThreadFunc func, void *param);

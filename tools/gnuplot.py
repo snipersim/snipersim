@@ -1,10 +1,10 @@
 import sys, subprocess
 
-def make_stacked_bargraph(outfile, titles, data, ylabel = 'Percent of Cycles'):
+def make_stacked_bargraph(outfile, titles, data, ylabel = 'Percent of Cycles', size = (640, 480)):
 
   gnuplot_cmd_list = []
 
-  header = '''set terminal jpeg medium size 400,480
+  header = '''set terminal jpeg medium size %d,%d
 set output "%s.jpg"
 set boxwidth 0.75 absolute
 set style fill solid 1.00 border -1
@@ -15,7 +15,7 @@ set mxtics 2
 set mytics 2
 set ylabel "%s"
 set xlabel "Core"
-''' % (outfile, ylabel)
+''' % (size[0], size[1], outfile, ylabel)
   gnuplot_cmd_list.append(header)
 
   cmd = []

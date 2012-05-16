@@ -17,7 +17,7 @@ PerformanceModel* PerformanceModel::create(Core* core)
    String type;
 
    try {
-      type = Sim()->getCfg()->getString("perf_model/core/type");
+      type = Sim()->getCfg()->getStringArray("perf_model/core/type", core->getId());
    } catch (...) {
       LOG_PRINT_ERROR("No perf model type provided.");
    }
@@ -33,7 +33,7 @@ PerformanceModel* PerformanceModel::create(Core* core)
    else if (type == "interval")
    {
       // The interval model needs the branch misprediction penalty
-      int mispredict_penalty = Sim()->getCfg()->getInt("perf_model/branch_predictor/mispredict_penalty",0);
+      int mispredict_penalty = Sim()->getCfg()->getIntArray("perf_model/branch_predictor/mispredict_penalty", core->getId());
       return new IntervalPerformanceModel(core, mispredict_penalty);
    }
    else
@@ -85,12 +85,6 @@ PerformanceModel::~PerformanceModel()
 
 void PerformanceModel::enable()
 {
-   // MCP perf model should never be enabled
-   if (getCore()->getId() == Config::getSingleton()->getMCPCoreNum())
-      return;
-   if (!Config::getSingleton()->getEnablePerformanceModeling())
-      return;
-
    m_enabled = true;
 }
 
@@ -105,7 +99,8 @@ void PerformanceModel::countInstructions(IntPtr address, UInt32 count)
 
 void PerformanceModel::queueDynamicInstruction(Instruction *i)
 {
-   if (i->getType() == INST_SPAWN) {
+   if (i->getType() == INST_SPAWN)
+   {
       SpawnInstruction const* spawn_insn = dynamic_cast<SpawnInstruction const*>(i);
       LOG_ASSERT_ERROR(spawn_insn != NULL, "Expected a SpawnInstruction, but did not get one.");
       setElapsedTime(spawn_insn->getTime());
@@ -140,12 +135,25 @@ void PerformanceModel::queueBasicBlock(BasicBlock *basic_block)
 
 void PerformanceModel::handleIdleInstruction(Instruction *instruction)
 {
-   SubsecondTime insn_cost = instruction->getCost(getCore());
    if (instruction->getType() == INST_SYNC)
    {
       // Keep track of the type of Sync instruction and it's latency to calculate CPI numbers
       SyncInstruction const* sync_insn = dynamic_cast<SyncInstruction const*>(instruction);
       LOG_ASSERT_ERROR(sync_insn != NULL, "Expected a SyncInstruction, but did not get one.");
+
+      // Thread may wake up on a different core than where it went to sleep, and/or a different thread
+      // may have run on this core while the thread was asleep
+      // So, compute actual delay between our last local time and the time we're supposed to wake up
+      SubsecondTime time_begin = getElapsedTime();
+      SubsecondTime time_end = sync_insn->getTime();
+      SubsecondTime insn_cost;
+
+      if (time_end > time_begin)
+         insn_cost = time_end - time_begin;
+      else
+         // Core may have executed other instructions already
+         insn_cost = SubsecondTime::Zero();
+
       switch(sync_insn->getSyncType()) {
       case(SyncInstruction::FUTEX):
          m_cpiSyncFutex += insn_cost;
@@ -162,17 +170,29 @@ void PerformanceModel::handleIdleInstruction(Instruction *instruction)
       case(SyncInstruction::JOIN):
          m_cpiSyncJoin += insn_cost;
          break;
-      case(SyncInstruction::DVFS_TRANSITION):
-         m_cpiSyncDvfsTransition += insn_cost;
-         break;
       default:
          LOG_ASSERT_ERROR(false, "Unexpected SyncInstruction::type_t enum type. (%d)", sync_insn->getSyncType());
       }
       incrementIdleElapsedTime(insn_cost);
    }
+   else if (instruction->getType() == INST_DELAY)
+   {
+      SubsecondTime insn_cost = instruction->getCost(getCore());
+      DelayInstruction const* delay_insn = dynamic_cast<DelayInstruction const*>(instruction);
+      LOG_ASSERT_ERROR(delay_insn != NULL, "Expected a DelayInstruction, but did not get one.");
+      switch(delay_insn->getDelayType()) {
+      case(DelayInstruction::DVFS_TRANSITION):
+         m_cpiSyncDvfsTransition += insn_cost;
+         break;
+      default:
+         LOG_ASSERT_ERROR(false, "Unexpected DelayInstruction::type_t enum type. (%d)", delay_insn->getDelayType());
+      }
+      incrementIdleElapsedTime(insn_cost);
+   }
    else if (instruction->getType() == INST_RECV)
    {
-      RecvInstruction const* recv_insn = dynamic_cast<RecvInstruction const*>(instruction);
+      SubsecondTime insn_cost = instruction->getCost(getCore());
+      __attribute__((unused)) RecvInstruction const* recv_insn = dynamic_cast<RecvInstruction const*>(instruction);
       LOG_ASSERT_ERROR(recv_insn != NULL, "Expected a RecvInstruction, but did not get one.");
       m_cpiRecv += insn_cost;
       incrementIdleElapsedTime(insn_cost);
@@ -208,7 +228,7 @@ void PerformanceModel::iterate()
       for( ; m_current_ins_index < current_bb->size(); m_current_ins_index++)
       {
          Instruction *ins = current_bb->at(m_current_ins_index);
-         if ((ins->getType() == INST_SYNC) || (ins->getType() == INST_RECV)) {
+         if ((ins->getType() == INST_SYNC) || (ins->getType() == INST_DELAY) || (ins->getType() == INST_RECV)) {
             handleIdleInstruction(ins);
          } else {
             bool res = handleInstruction(ins);
@@ -238,9 +258,9 @@ void PerformanceModel::pushDynamicInstructionInfo(DynamicInstructionInfo &i)
 void PerformanceModel::popDynamicInstructionInfo()
 {
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-      DynamicInstructionInfo i = m_dynamic_info_queue.pop_wait();
+      m_dynamic_info_queue.pop_wait();
    #else
-      DynamicInstructionInfo i = m_dynamic_info_queue.pop();
+      m_dynamic_info_queue.pop();
    #endif
 }
 
@@ -310,8 +330,11 @@ void PerformanceModel::setElapsedTime(SubsecondTime time)
 {
    // TODO: what happens when a core is reused? (See streamcluster, Redmine #37)
    // Is the initial time for the second thread set with another SPAWN_INST? Or maybe a RECV_INST?
-   LOG_ASSERT_ERROR(getElapsedTime() == SubsecondTime::Zero(), "setElapsedTime() can only be called when the current time is 0 (via SPAWN_INSN).")
-   m_cpiStartTime += time;
+   // When using the scheduler and moving an existing thread to this core, SPAWN_INST is now used.
+   //LOG_ASSERT_ERROR(getElapsedTime() == SubsecondTime::Zero(), "setElapsedTime() can only be called when the current time is 0 (via SPAWN_INSN).");
+   LOG_ASSERT_ERROR(time >= getElapsedTime(), "setElapsedTime() cannot go backwards in time");
+
+   m_cpiStartTime += time - getElapsedTime();
    // All time up to now was idle
    m_idle_elapsed_time.setElapsedTime(time);
    // Set the elapsed time

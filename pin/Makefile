@@ -18,13 +18,13 @@ include $(SIM_ROOT)/Makefile.config
 ifeq ($(TARGET_ARCH),ia32)
 	TARGET = ia32
 endif
-ifeq ($(TARGET_ARCH),x86_64)
+ifeq ($(TARGET_ARCH),intel64)
 	TARGET = ia32e
 endif
 
 # When making clean, do not include this configuration file
 # If this is the first fun of a fresh install, this will fail because clean
-#  is called, but pin has not been installed yet 
+#  is called, but pin has not been installed yet
 ifeq ($(CLEAN),)
 PIN_KIT = $(PIN_HOME)
 include $(PIN_HOME)/source/tools/makefile.gnu.config
@@ -35,7 +35,7 @@ CFLAGS += $(CXXFLAGS)
 
 # Sources must come before the Makefile.common include to allow for
 #  the dependency file generation
-SOURCES = $(shell ls $(SIM_ROOT)/pin/*.cc $(SIM_ROOT)/pin/lite/*.cc) $(wildcard $(SIM_ROOT)/pin/libdisasm64/*.c)
+SOURCES = $(wildcard $(SIM_ROOT)/pin/*.cc $(SIM_ROOT)/pin/lite/*.cc)
 
 OBJECTS = $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(SOURCES)))
 
@@ -61,6 +61,10 @@ endif
 #  - The clean command below must be overwritten by this Makefile to correctly clean 'common'
 ifeq ($(CLEAN),)
 include $(SIM_ROOT)/common/Makefile.common
+endif
+
+ifneq ($(CLEAN),clean)
+-include $(patsubst %.cc,%.d,$(SOURCES))
 endif
 
 ifneq ($(CLEAN),)

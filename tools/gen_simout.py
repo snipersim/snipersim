@@ -3,12 +3,13 @@
 import sys, graphite_lib
 
 
-def generate_simout(jobid = None, resultsdir = None, output = sys.stdout):
+def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent = False):
 
   try:
     results = graphite_lib.get_results(jobid = jobid, resultsdir = resultsdir)['results']
-  except ValueError, e:
-    print 'Failed to generated sim.out:', e
+  except (KeyError, ValueError), e:
+    if not silent:
+      print 'Failed to generated sim.out:', e
     return
 
 

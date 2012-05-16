@@ -39,12 +39,12 @@ class TotalTimer
       ~TotalTimer();
 
       void add(UInt64 t, bool switched = false) {
-         atomic_add_int64(total, t);
-         atomic_inc_int64(n);
+         __sync_fetch_and_add(&total, t);
+         __sync_fetch_and_add(&n, 1);
          if (t > max)
             max = t;
          if (switched)
-            atomic_inc_int64(n_switched);
+            __sync_fetch_and_add(&n_switched, 1);
       }
       void report(FILE* fp);
 

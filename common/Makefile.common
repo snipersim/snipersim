@@ -6,19 +6,29 @@ DIRECTORIES = $(SIM_ROOT)/common/core \
 	$(SIM_ROOT)/common/core/memory_subsystem \
 	$(SIM_ROOT)/common/core/memory_subsystem/cache \
 	$(SIM_ROOT)/common/core/memory_subsystem/directory_schemes \
+	$(SIM_ROOT)/common/core/memory_subsystem/parametric_dram_directory_msi \
+	$(SIM_ROOT)/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi \
 	$(SIM_ROOT)/common/network \
 	$(SIM_ROOT)/common/transport \
 	$(SIM_ROOT)/common/misc \
 	$(SIM_ROOT)/common/config \
 	$(SIM_ROOT)/common/system \
+	$(SIM_ROOT)/common/scheduler \
 	$(SIM_ROOT)/common/scripting \
 	$(SIM_ROOT)/common/performance_model \
 	$(SIM_ROOT)/common/performance_model/branch_predictors \
 	$(SIM_ROOT)/common/performance_model/performance_models \
+	$(SIM_ROOT)/common/performance_model/performance_models/micro_op \
+	$(SIM_ROOT)/common/performance_model/performance_models/core_model \
 	$(SIM_ROOT)/common/performance_model/performance_models/interval_performance_model \
 	$(SIM_ROOT)/common/user \
 	$(SIM_ROOT)/include \
 	$(CURDIR)/
+
+LIBCARBON_SOURCES = $(foreach dir,$(DIRECTORIES),$(wildcard $(dir)/*.cc)) \
+	$(wildcard $(SIM_ROOT)/common/config/*.cpp)
+
+LIBCARBON_OBJECTS = $(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(LIBCARBON_SOURCES) ) ) )
 
 INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed2-intel64/include $(SIM_ROOT)/linux $(SIM_ROOT)/sift
 
@@ -28,29 +38,23 @@ KERNEL = LENNY
 
 CXXFLAGS += -DKERNEL_$(KERNEL)
 ifeq ($(TARGET_ARCH),ia32)
-  CXXFLAGS += -m32 -DTARGET_IA32
+  # Add -march=i686 to enable some extra instructions that allow for implementation of 64-bit atomic adds
+  CXXFLAGS += -m32 -march=i686 -DTARGET_IA32
   LD_FLAGS += -m32
 endif
-ifeq ($(TARGET_ARCH),x86_64)
-  CXXFLAGS += -fPIC -DTARGET_X86_64
+ifeq ($(TARGET_ARCH),intel64)
+  CXXFLAGS += -fPIC -DTARGET_INTEL64
   LD_FLAGS +=
 endif
 
 include $(SIM_ROOT)/Makefile.config
 
 ifeq ($(BOOST_VERSION),1_38)
-	BOOST_ROOT = $(SIM_ROOT)/boost_1_38_0
-	BOOST_INCLUDE = $(BOOST_ROOT)/include
-	BOOST_LIB = $(BOOST_ROOT)/lib
-	BOOST_SUFFIX = il-mt
-	export LD_LIBRARY_PATH := $(BOOST_LIB):$(LD_LIBRARY_PATH)
+	BOOST_INCLUDE = $(SIM_ROOT)/boost_1_38_0/include
 	CXXFLAGS += -I$(BOOST_INCLUDE)
-	LD_FLAGS += -L$(BOOST_LIB)
-else
-	BOOST_SUFFIX = mt
 endif
 
-LD_LIBS += -lsift -lxed -lboost_filesystem-$(BOOST_SUFFIX) -lboost_system-$(BOOST_SUFFIX) -L$(SIM_ROOT)/python_kit/lib -lpython2.7 -lrt -lz
+LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/lib -lpython2.7 -lrt -lz
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
@@ -60,15 +64,10 @@ CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
           -I$(SIM_ROOT)/python_kit/include/python2.7 \
           -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
 
-%.h %.hpp:
+%.h %.hh %.hpp:
 	@echo "\n\tUnable to find $@" >&2
 	@echo "\tYou may want to try running \`\`make empty_deps''\n" >&2
 	@false
-
-ifneq ($(MAKECMDGOALS),clean)
-# Using the SOURCES variable as the OBJECTS variable is not valid at this point
--include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))
-endif
 
 # Build rules for dependency generation
 %.d: %.cpp
@@ -118,14 +117,4 @@ ifeq ($(SHOW_COMPILE),)
 	@$(CC) $(CFLAGS) -c $< -o $@
 else
 	$(CC) $(CFLAGS) -c $< -o $@
-endif
-
-DEPS=$(patsubst %.o,%.d,$(OBJECTS))
-
-# targets
-all: $(DEPS) $(OBJECTS)
-
-ifneq ($(CLEAN),)
-clean:
-	-rm -f *.o *.d
 endif

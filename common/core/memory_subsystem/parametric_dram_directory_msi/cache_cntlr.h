@@ -6,6 +6,7 @@
 #include "shared_cache_block_info.h"
 #include "address_home_lookup.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/shmem_msg.h"
+#include "../pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h"
 #include "mem_component.h"
 #include "semaphore.h"
 #include "lock.h"
@@ -21,9 +22,6 @@
 
 /* Enable to track latency by HitWhere */
 //#define TRACK_LATENCY_BY_HITWHERE
-
-/* Enable to use MSHR to track overlapping misses */
-//#define ENABLE_MSHR
 
 // Forward declarations
 namespace ParametricDramDirectoryMSI
@@ -110,12 +108,12 @@ namespace ParametricDramDirectoryMSI
       private:
          Cache* m_cache;
          Lock m_cache_lock;
+         Lock m_smt_lock; //< Only used in L1 cache, to protect against concurrent access from sibling SMT threads
          CacheCntlrList m_prev_cache_cntlrs;
          Prefetcher* m_prefetcher;
+         PrL1PrL2DramDirectoryMSI::DramCntlr* m_dram_cntlr;
 
-         #ifdef ENABLE_MSHR
          Mshr mshr;
-         #endif
          CacheDirectoryWaiterMap m_directory_waiters;
          IntPtr m_evicting_address;
          Byte* m_evicting_buf;
@@ -153,11 +151,17 @@ namespace ParametricDramDirectoryMSI
            UInt64 loads_where[HitWhere::NUM_HITWHERES], stores_where[HitWhere::NUM_HITWHERES];
            UInt64 load_misses_state[CacheState::NUM_CSTATE_STATES], store_misses_state[CacheState::NUM_CSTATE_STATES];
            UInt64 loads_prefetch, stores_prefetch;
+           UInt64 hits_prefetch, // lines which were prefetched and subsequently used by a non-prefetch access
+                  evict_prefetch; // lines which were prefetched and evicted before being used
+                  // Note: hits_prefetch and evict_prefetch will not account for all prefetched lines,
+                  // some may still be in the cache, or have been removed for other reasons (invalidate)
+                  // Also, in a shared cache, the prefetch may have been triggered by another core than the one
+                  // accessing/evicting the line so *_prefetch statistics should be summed across the shared cache
            UInt64 evict_shared, evict_modified;
            SubsecondTime total_latency;
            SubsecondTime snoop_latency;
            SubsecondTime mshr_latency;
-           UInt64 prefetches, prefetch_hits;
+           UInt64 prefetches;
            #ifdef ENABLE_TRANSITIONS
            UInt64 transitions[CacheState::NUM_CSTATE_STATES][CacheState::NUM_CSTATE_STATES];
            UInt64 transition_reasons[Transition::NUM_REASONS][CacheState::NUM_CSTATE_SPECIAL_STATES][CacheState::NUM_CSTATE_SPECIAL_STATES];
@@ -169,6 +173,7 @@ namespace ParametricDramDirectoryMSI
          #endif
 
          void updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cache_hit, CacheState::cstate_t state, bool isPrefetch);
+         void cleanupMshr();
          void transition(IntPtr address, Transition::reason_t reason, CacheState::cstate_t old_state, CacheState::cstate_t new_state);
 
          core_id_t m_core_id;
@@ -214,6 +219,7 @@ namespace ParametricDramDirectoryMSI
          HitWhere::where_t processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool isPrefetch, SubsecondTime t_issue, bool have_write_lock);
 
          // Process Request from L1 Cache
+         void accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf);
          void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, SubsecondTime t_issue);
          void processExReqToDirectory(IntPtr address);
          void processShReqToDirectory(IntPtr address);
@@ -269,6 +275,7 @@ namespace ParametricDramDirectoryMSI
          void setPrevCacheCntlrs(CacheCntlrList& prev_cache_cntlrs);
          void setNextCacheCntlr(CacheCntlr* next_cache_cntlr) { m_next_cache_cntlr = next_cache_cntlr; }
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores) { m_master->createSetLocks(cache_block_size, num_sets, core_offset, num_cores); }
+         void setDRAMDirectAccess(PrL1PrL2DramDirectoryMSI::DramCntlr* dram_cntlr) { m_master->m_dram_cntlr = dram_cntlr; }
 
          HitWhere::where_t processMemOpFromCore(
                Core::lock_signal_t lock_signal,

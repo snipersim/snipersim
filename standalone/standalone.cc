@@ -3,6 +3,16 @@
 #include "config.hpp"
 #include "trace_manager.h"
 #include "magic_client.h"
+#include "logmem.h"
+
+#include <signal.h>
+
+void dumpLogmem(int sig)
+{
+   printf("[SNIPER] Writing logmem allocations\n");
+   logmem_write_allocations();
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -10,6 +20,10 @@ int main(int argc, char* argv[])
    // (if we're writing into a pipe to run-graphite, or redirected to a file by the job runner, the default will be block buffered)
    setvbuf(stdout, NULL, _IOLBF, 0);
    setvbuf(stderr, NULL, _IOLBF, 0);
+
+   #ifdef LOGMEM_ENABLED
+   signal(SIGUSR1, dumpLogmem);
+   #endif
 
    string_vec args;
 

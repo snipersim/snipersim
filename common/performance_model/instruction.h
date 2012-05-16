@@ -30,11 +30,12 @@ enum InstructionType
    INST_SPAWN,
    INST_TLB_MISS,
    INST_MEM_ACCESS, // Not a regular memory access.  These are added latencies and do not correspond to a particular instruction.  Dynamic Instruction
+   INST_DELAY,
    MAX_INSTRUCTION_COUNT
 };
 
 __attribute__ ((unused)) static const char * INSTRUCTION_NAMES [] =
-{"generic","add","sub","mul","div","fadd","fsub","fmul","fdiv","jmp","string", "branch", "dynamic_misc","recv","sync","spawn","tlb_miss","mem_access"};
+{"generic","add","sub","mul","div","fadd","fsub","fmul","fdiv","jmp","string", "branch", "dynamic_misc","recv","sync","spawn","tlb_miss","mem_access","delay"};
 
 class Instruction
 {
@@ -66,10 +67,10 @@ public:
    void setDisassembly(String str) { m_disas = str; }
    const String& getDisassembly(void) const { return m_disas; }
 
-   void addMicroOp(const MicroOp * uop)
-   { m_uops.push_back(uop); }
+   void setMicroOps(const std::vector<const MicroOp *> *uops)
+   { m_uops = uops; }
 
-   const std::vector<const MicroOp *>& getMicroOps(void) const
+   const std::vector<const MicroOp *>* getMicroOps(void) const
    { return m_uops; }
 
 private:
@@ -79,7 +80,7 @@ private:
    InstructionType m_type;
    String m_disas;
 
-   std::vector<const MicroOp *> m_uops;
+   const std::vector<const MicroOp *> *m_uops;
 
    IntPtr m_addr;
    bool m_atomic;
@@ -143,7 +144,9 @@ public:
    {}
 };
 
-class SyncInstruction : public DynamicInstruction
+// wake up after synchronization
+// we may have been rescheduled, so this sets an absolute time
+class SyncInstruction : public Instruction
 {
 public:
    enum sync_type_t {
@@ -152,15 +155,16 @@ public:
       PTHREAD_COND,
       PTHREAD_BARRIER,
       JOIN,
-      DVFS_TRANSITION,
       NUM_TYPES
    };
-   SyncInstruction(SubsecondTime cost, sync_type_t sync_type)
-      : DynamicInstruction(cost, INST_SYNC)
-      , m_sync_type(sync_type)
-   {}
+
+   SyncInstruction(SubsecondTime time, sync_type_t sync_type);
+   SubsecondTime getCost(Core *core) const;
+   SubsecondTime getTime() const { return m_time; }
    sync_type_t getSyncType() const { return m_sync_type; }
+
 private:
+   SubsecondTime m_time;
    sync_type_t m_sync_type;
 };
 
@@ -213,6 +217,22 @@ public:
    IntPtr getDataAddress() const { return m_address; }
    UInt32 getDataSize() const { return m_data_size; }
    bool isFence() const { return m_is_fence; }
+};
+
+class DelayInstruction : public DynamicInstruction
+{
+public:
+   enum delay_type_t {
+      DVFS_TRANSITION,
+      NUM_TYPES
+   };
+   DelayInstruction(SubsecondTime cost, delay_type_t delay_type)
+      : DynamicInstruction(cost, INST_DELAY)
+      , m_delay_type(delay_type)
+   { }
+   delay_type_t getDelayType() const { return m_delay_type; }
+private:
+   delay_type_t m_delay_type;
 };
 
 #endif

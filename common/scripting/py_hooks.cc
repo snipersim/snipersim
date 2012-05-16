@@ -38,21 +38,35 @@ static SInt64 hookCallbackSubsecondTime(PyObject *pFunc, subsecond_time_t argume
 
 static SInt64 hookCallbackMagicMarkerType(PyObject *pFunc, MagicServer::MagicMarkerType* argument)
 {
-   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(lll)", argument->core_id, argument->arg0, argument->arg1));
+   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(iill)", argument->thread_id, argument->core_id, argument->arg0, argument->arg1));
+   return hookCallbackResult(pResult);
+}
+
+static SInt64 hookCallbackThreadTimeType(PyObject *pFunc, HooksManager::ThreadTime* argument)
+{
+   SubsecondTime time(argument->time);
+   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(iL)", argument->thread_id, time.getFS()));
    return hookCallbackResult(pResult);
 }
 
 static SInt64 hookCallbackThreadStallType(PyObject *pFunc, HooksManager::ThreadStall* argument)
 {
    SubsecondTime time(argument->time);
-   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(lL)", argument->core_id, time.getFS()));
+   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(isL)", argument->thread_id, ThreadManager::stall_type_names[argument->reason], time.getFS()));
    return hookCallbackResult(pResult);
 }
 
 static SInt64 hookCallbackThreadResumeType(PyObject *pFunc, HooksManager::ThreadResume* argument)
 {
    SubsecondTime time(argument->time);
-   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(llL)", argument->core_id, argument->core_by, time.getFS()));
+   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(iiL)", argument->thread_id, argument->thread_by, time.getFS()));
+   return hookCallbackResult(pResult);
+}
+
+static SInt64 hookCallbackThreadMigrateType(PyObject *pFunc, HooksManager::ThreadMigrate* argument)
+{
+   SubsecondTime time(argument->time);
+   PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(iiL)", argument->thread_id, argument->core_id, time.getFS()));
    return hookCallbackResult(pResult);
 }
 
@@ -96,11 +110,18 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_MAGIC_USER:
          Sim()->getHooksManager()->registerHook(type, (HooksManager::HookCallbackFunc)hookCallbackMagicMarkerType, (void*)pFunc);
          break;
+      case HookType::HOOK_THREAD_START:
+      case HookType::HOOK_THREAD_EXIT:
+         Sim()->getHooksManager()->registerHook(type, (HooksManager::HookCallbackFunc)hookCallbackThreadTimeType, (void*)pFunc);
+         break;
       case HookType::HOOK_THREAD_STALL:
          Sim()->getHooksManager()->registerHook(type, (HooksManager::HookCallbackFunc)hookCallbackThreadStallType, (void*)pFunc);
          break;
       case HookType::HOOK_THREAD_RESUME:
          Sim()->getHooksManager()->registerHook(type, (HooksManager::HookCallbackFunc)hookCallbackThreadResumeType, (void*)pFunc);
+         break;
+      case HookType::HOOK_THREAD_MIGRATE:
+         Sim()->getHooksManager()->registerHook(type, (HooksManager::HookCallbackFunc)hookCallbackThreadMigrateType, (void*)pFunc);
          break;
       case HookType::HOOK_TYPES_MAX:
          assert(0);

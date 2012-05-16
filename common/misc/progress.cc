@@ -3,6 +3,8 @@
 #include "config.hpp"
 #include "core_manager.h"
 #include "hooks_manager.h"
+#include "trace_manager.h"
+#include "magic_server.h"
 
 bool progress_enabled = false;
 FILE * progress_fp;
@@ -11,7 +13,7 @@ const time_t progress_interval = 2;
 
 void Progress::init(void)
 {
-   String progress_file = Sim()->getCfg()->getString("progress_trace/filename", "");
+   String progress_file = Sim()->getCfg()->getString("progress_trace/filename");
    if (!progress_file.empty()) {
       progress_fp = fopen(progress_file.c_str(), "w");
       progress_enabled = true;
@@ -34,13 +36,17 @@ void Progress::record(bool init, subsecond_time_t simtime)
    if (progress_t_last + progress_interval < time(NULL)) {
       progress_t_last = time(NULL);
 
-      UInt64 ninstrs = 0;
-      if (! init)
-         for(core_id_t id = 0; id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++id)
-            ninstrs += Sim()->getCoreManager()->getCoreFromID(id)->getInstructionCount();
+      UInt64 progress = 0, expect = 0;
+      if (Sim()->getTraceManager())
+      {
+         expect = Sim()->getTraceManager()->getProgressExpect();
+         progress = Sim()->getTraceManager()->getProgressValue();
+      }
+      else if (!init)
+         progress = MagicServer::getGlobalInstructionCount();
 
       rewind(progress_fp);
-      fprintf(progress_fp, "%u %lu %ld", unsigned(time(NULL)), ninstrs, SubsecondTime(simtime).getNS());
+      fprintf(progress_fp, "%u %"PRId64" %"PRId64, unsigned(time(NULL)), progress, expect);
       fflush(progress_fp);
    }
 }

@@ -9,7 +9,7 @@
 
 #include "fixed_point.h"
 #include "windows.h"
-#include "micro_op.h"
+#include "dynamic_micro_op.h"
 #include "boost/tuple/tuple.hpp"
 #include "core.h"
 #include "contention_model.h"
@@ -32,16 +32,18 @@ enum StopDispatchReason {
 String StopDispatchReasonStringHelper(StopDispatchReason r);
 String StopDispatchReasonString(StopDispatchReason r);
 
+class CoreModel;
 class LoopTracer;
 
 class IntervalTimer {
 public:
 
-   IntervalTimer(Core *core, PerformanceModel *perf, int misprediction_penalty, int dispatch_width, int window_size, bool do_functional_unit_contention);
+   IntervalTimer(Core *core, PerformanceModel *perf, const CoreModel *core_model, int misprediction_penalty, int dispatch_width, int window_size, bool do_functional_unit_contention);
    ~IntervalTimer();
+   void free(); // Early-delete of members
 
    // simulate() returns (instructions_executed, latency)
-   boost::tuple<uint64_t,uint64_t> simulate(const std::vector<MicroOp>& insts);
+   boost::tuple<uint64_t,uint64_t> simulate(const std::vector<DynamicMicroOp*>& insts);
 
    // Update internal time after syncronization event
    // Since interval_timer currently has no notion of outside time, no need to do anything for now
@@ -53,14 +55,16 @@ protected:
    // dispatchWindow() returns (instructions_executed, latency)
    boost::tuple<uint64_t,uint64_t> dispatchWindow();
    uint32_t calculateCurrentDispatchRate();
-   void fetchInstruction(MicroOp& instruction);
+   void fetchInstruction(Windows::WindowEntry& instruction);
    // dispatchInstruction() returns instruction_latency
-   uint64_t dispatchInstruction(MicroOp& instruction, StopDispatchReason& continueDispatching);
-   void updateCriticalPath(MicroOp& microOp, uint64_t& latency);
+   uint64_t dispatchInstruction(Windows::WindowEntry& instruction, StopDispatchReason& continueDispatching);
+   void updateCriticalPath(Windows::WindowEntry& microOp, uint64_t& latency);
    void blockWindow();
-   uint64_t getMaxProducerExecTime(MicroOp& instruction);
+   uint64_t getMaxProducerExecTime(Windows::WindowEntry& instruction);
 
 private:
+
+   const CoreModel *m_core_model;
 
    // Interval model parameters
    const uint32_t m_dispatch_width;
@@ -121,9 +125,7 @@ private:
    std::vector<SubsecondTime> m_cpiDataCache;
 
    uint64_t m_cpiBaseStopDispatch[STOP_DISPATCH_SIZE];
-   uint64_t m_cpiBaseWindowStopDispatch[WIN_STOP_DISPATCH_SIZE];
    uint64_t m_cpContrByType[CPCONTR_TYPE_SIZE];
-
 };
 
 #endif /* INTERVALTIMER_HPP_ */

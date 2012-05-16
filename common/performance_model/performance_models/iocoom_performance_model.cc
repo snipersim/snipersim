@@ -18,8 +18,8 @@ IOCOOMPerformanceModel::IOCOOMPerformanceModel(Core *core)
 
    try
    {
-      m_store_buffer = new StoreBuffer(cfg->getInt("perf_model/core/iocoom/num_store_buffer_entries",1));
-      m_load_unit = new LoadUnit(cfg->getInt("perf_model/core/iocoom/num_outstanding_loads",3));
+      m_store_buffer = new StoreBuffer(cfg->getIntArray("perf_model/core/iocoom/num_store_buffer_entries", core->getId()));
+      m_load_unit = new LoadUnit(cfg->getIntArray("perf_model/core/iocoom/num_outstanding_loads", core->getId()));
    }
    catch (...)
    {

@@ -18,7 +18,7 @@ void PinThread::run()
    assert(m_thread_p != INVALID_THREADID);
 }
 
-Thread* Thread::create(ThreadFunc func, void *param)
+_Thread* _Thread::create(ThreadFunc func, void *param)
 {
    return new PinThread(func, param);
 }

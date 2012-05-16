@@ -1,109 +1,84 @@
-//
-// FIXME: this is a hack.
-//
-// Includes temporary hooks for the syscall server. Otherwise, this is
-// the syscall server. The runSyscallServer hook function is to be
-// manually inserted in main thread of the user app. It calls the code
-// the implements the real server. Putting the hook in the user code's
-// main thread gives the server a place to run; we avoid having to spawn
-//
-// a thread or something in the simulator to house the server code.
 #ifndef SYSCALL_SERVER_H
 #define SYSCALL_SERVER_H
 
 #include "fixed_types.h"
-#include "packetize.h"
-#include "transport.h"
-#include "network.h"
+#include "subsecond_time.h"
 
 #include <iostream>
 #include <unordered_map>
-#include <queue>
+#include <list>
 
 // -- For futexes --
 #include <linux/futex.h>
 #include <sys/time.h>
 #include <errno.h>
 
+class Core;
+
 // -- Special Class to Handle Futexes
 class SimFutex
 {
    private:
-      typedef std::queue<core_id_t> ThreadQueue;
+      struct Waiter
+      {
+         Waiter(thread_id_t _thread_id, int _mask, SubsecondTime _timeout)
+            : thread_id(_thread_id), mask(_mask), timeout(_timeout)
+            {}
+         thread_id_t thread_id;
+         int mask;
+         SubsecondTime timeout;
+      };
+      typedef std::list<Waiter> ThreadQueue;
       ThreadQueue m_waiting;
 
    public:
       SimFutex();
       ~SimFutex();
-      void enqueueWaiter(core_id_t core_id, SubsecondTime time);
-      core_id_t dequeueWaiter(core_id_t core_by, SubsecondTime time);
+      bool enqueueWaiter(thread_id_t thread_id, int mask, SubsecondTime time, SubsecondTime timeout_time, SubsecondTime &time_end);
+      thread_id_t dequeueWaiter(thread_id_t thread_by, int mask, SubsecondTime time);
+      thread_id_t requeueWaiter(SimFutex *requeue_futex);
+      void wakeTimedOut(SubsecondTime time);
 };
 
 class SyscallServer
 {
    public:
-      SyscallServer(Network &network,
-                    UnstructuredBuffer &send_buff_, UnstructuredBuffer &recv_buff_,
-                    const UInt32 SERVER_MAX_BUFF,
-                    char *scratch_);
+      struct futex_args_t {
+         int *uaddr;
+         int op;
+         int val;
+         const struct timespec *timeout;
+         int val2;
+         int *uaddr2;
+         int val3;
+      };
 
+      SyscallServer();
       ~SyscallServer();
 
-      void handleSyscall(core_id_t core_id);
+      IntPtr handleFutexCall(thread_id_t thread_id, futex_args_t &args, SubsecondTime curr_time, SubsecondTime &end_time);
 
    private:
-      void marshallOpenCall(core_id_t core_id);
-      void marshallReadCall(core_id_t core_id);
-      void marshallWriteCall(core_id_t core_id);
-      void marshallWritevCall(core_id_t core_id);
-      void marshallCloseCall(core_id_t core_id);
-      void marshallLseekCall(core_id_t core_id);
-      void marshallGetcwdCall(core_id_t core_id);
-      void marshallAccessCall(core_id_t core_id);
-#ifdef TARGET_X86_64
-      void marshallStatCall(IntPtr syscall_number, core_id_t core_id);
-      void marshallFstatCall(core_id_t core_id);
-#endif
-#ifdef TARGET_IA32
-      void marshallFstat64Call(core_id_t core_id);
-#endif
-      void marshallIoctlCall(core_id_t core_id);
-      void marshallGetpidCall(core_id_t core_id);
-      void marshallReadaheadCall(core_id_t core_id);
-      void marshallPipeCall(core_id_t core_id);
-      void marshallMmapCall(core_id_t core_id);
-#ifdef TARGET_IA32
-      void marshallMmap2Call(core_id_t core_id);
-#endif
-      void marshallMunmapCall(core_id_t core_id);
-      void marshallBrkCall(core_id_t core_id);
-      void marshallFutexCall(core_id_t core_id);
-
       // Handling Futexes
-      void futexError(core_id_t core_id, SubsecondTime curr_time);
-      void futexWait(core_id_t core_id, int *uaddr, int val, int act_val, SubsecondTime curr_time);
-      void futexWake(core_id_t core_id, int *uaddr, int nr_wake, SubsecondTime curr_time);
-      void futexWakeOp(core_id_t core_id, int op, int *uaddr, int val, int *uaddr2, int nr_wake, int nr_wake2, SubsecondTime curr_time);
-      void futexCmpRequeue(core_id_t core_id, int *uaddr, int val, int *uaddr2, int val3, int act_val, SubsecondTime curr_time);
-      core_id_t wakeFutexOne(SimFutex *sim_futex, core_id_t core_by, SubsecondTime curr_time);
+      IntPtr futexWait(thread_id_t thread_id, int *uaddr, int val, int act_val, int val3, SubsecondTime curr_time, SubsecondTime timeout_time, SubsecondTime &end_time);
+      IntPtr futexWake(thread_id_t thread_id, int *uaddr, int nr_wake, int val3, SubsecondTime curr_time, SubsecondTime &end_time);
+      IntPtr futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int val, int *uaddr2, int nr_wake, int nr_wake2, SubsecondTime curr_time, SubsecondTime &end_time);
+      IntPtr futexCmpRequeue(thread_id_t thread_id, int *uaddr, int val, int *uaddr2, int val3, int act_val, SubsecondTime curr_time, SubsecondTime &end_time);
+
+      thread_id_t wakeFutexOne(SimFutex *sim_futex, thread_id_t thread_by, int mask, SubsecondTime curr_time);
       int futexDoOp(Core *core, int op, int *uaddr);
 
-      //Note: These structures are shared with the MCP
-   private:
-      Network & m_network;
-      UnstructuredBuffer & m_send_buff;
-      UnstructuredBuffer & m_recv_buff;
-      const UInt32 m_SYSCALL_SERVER_MAX_BUFF;
-      char * const m_scratch;
+      void futexPeriodic(SubsecondTime time);
 
+      static void hook_periodic(SyscallServer* ptr, subsecond_time_t time)
+      { ptr->futexPeriodic(time); }
+
+   private:
       SubsecondTime m_reschedule_cost;
 
       // Handling Futexes
       typedef std::unordered_map<IntPtr, SimFutex> FutexMap;
       FutexMap m_futexes;
-
-
 };
-
 
 #endif

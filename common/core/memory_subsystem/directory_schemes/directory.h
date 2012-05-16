@@ -19,6 +19,7 @@ class Directory
    private:
       DirectoryType m_directory_type;
       UInt32 m_num_entries;
+      UInt32 m_num_entries_allocated;
       UInt32 m_max_hw_sharers;
       UInt32 m_max_num_sharers;
 
@@ -28,7 +29,7 @@ class Directory
       DirectoryEntry** m_directory_entry_list;
 
    public:
-      Directory(String directory_type_str, UInt32 num_entries, UInt32 max_hw_sharers, UInt32 max_num_sharers);
+      Directory(core_id_t core_id, String directory_type_str, UInt32 num_entries, UInt32 max_hw_sharers, UInt32 max_num_sharers);
       ~Directory();
 
       DirectoryEntry* getDirectoryEntry(UInt32 entry_num);

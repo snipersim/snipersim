@@ -4,9 +4,6 @@
 // some forward declarations for cross includes
 class Network;
 class MemoryManagerBase;
-class SyscallMdl;
-class SyncClient;
-class ClockSkewMinimizationClient;
 class PerformanceModel;
 class ShmemPerfModel;
 
@@ -103,14 +100,11 @@ class Core
       PerformanceModel *getPerformanceModel() { return m_performance_model; }
       MemoryManagerBase *getMemoryManager() { return m_memory_manager; }
       PinMemoryManager *getPinMemoryManager() { return m_pin_memory_manager; }
-      SyscallMdl *getSyscallMdl() { return m_syscall_model; }
-      SyncClient *getSyncClient() { return m_sync_client; }
-      ClockSkewMinimizationClient* getClockSkewMinimizationClient() { return m_clock_skew_minimization_client; }
       ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
       const ComponentPeriod* getDvfsDomain() const;
 
-      State getState();
-      void setState(State core_state);
+      State getState() const { return m_core_state; }
+      void setState(State core_state) { m_core_state = core_state; }
       UInt64 getInstructionCount() { return m_instructions; }
       BbvCount *getBbvCount() { return &m_bbv; }
       UInt64 getInstructionsCallback() { return m_instructions_callback; }
@@ -127,9 +121,6 @@ class Core
       PinMemoryManager *m_pin_memory_manager;
       Network *m_network;
       PerformanceModel *m_performance_model;
-      SyscallMdl *m_syscall_model;
-      SyncClient *m_sync_client;
-      ClockSkewMinimizationClient *m_clock_skew_minimization_client;
       Lock m_mem_lock;
       DynamicInstructionInfo m_dyninfo_save;
       bool m_dyninfo_save_used;
@@ -150,6 +141,9 @@ class Core
             IntPtr eip);
 
       PacketType getPktTypeFromUserNetType(carbon_network_t net_type);
+
+      IntPtr m_icache_last_block;
+      UInt64 m_icache_hits;
 
    protected:
       // Optimized version of countInstruction has direct access to m_instructions and m_instructions_callback

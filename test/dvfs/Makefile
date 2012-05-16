@@ -15,4 +15,4 @@ run: dvfs
 	@echo "\nOptional: Run '../../tools/cpistack.py' in this directory to generate cpi-stack output for this run\n"
 
 clean:
-	rm -f dvfs sim.cfg sim.stats *.log *.out *.jpg
+	rm -f dvfs sim.cfg sim.stats* *.log *.out *.jpg

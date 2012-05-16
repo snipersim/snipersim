@@ -27,15 +27,16 @@ namespace PrL1PrL2DramDirectoryMSI
 
          ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
-         void splitAddress(IntPtr address, IntPtr& tag, UInt32& set_index); 
+         void splitAddress(IntPtr address, IntPtr& tag, UInt32& set_index);
          UInt32 getCacheBlockSize() { return m_cache_block_size; }
          UInt32 getLogCacheBlockSize() { return m_log_cache_block_size; }
          UInt32 getNumSets() { return m_num_sets; }
          UInt32 getLogNumSets() { return m_log_num_sets; }
-      
+
       public:
 
-         DramDirectoryCache(String directory_type_str,
+         DramDirectoryCache(core_id_t core_id,
+               String directory_type_str,
                UInt32 total_entries,
                UInt32 associativity,
                UInt32 cache_block_size,
@@ -48,7 +49,7 @@ namespace PrL1PrL2DramDirectoryMSI
          DirectoryEntry* getDirectoryEntry(IntPtr address);
          DirectoryEntry* replaceDirectoryEntry(IntPtr replaced_address, IntPtr address);
          void invalidateDirectoryEntry(IntPtr address);
-         void getReplacementCandidates(IntPtr address, std::vector<DirectoryEntry*>& replacement_candidate_list); 
+         void getReplacementCandidates(IntPtr address, std::vector<DirectoryEntry*>& replacement_candidate_list);
 
    };
 }

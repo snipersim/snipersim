@@ -3,6 +3,7 @@
 #include "simulator.h"
 #include "core_manager.h"
 #include "thread_manager.h"
+#include "thread.h"
 #include "instruction.h"
 #include "basic_block.h"
 #include "performance_model.h"
@@ -10,9 +11,9 @@
 #include "instruction_decoder.h"
 #include "config.hpp"
 
-TraceThread::TraceThread(core_id_t core_id, String tracefile)
-   : m_thread(NULL)
-   , m_core(Sim()->getCoreManager()->getCoreFromID(core_id))
+TraceThread::TraceThread(Thread *thread, String tracefile)
+   : m__thread(NULL)
+   , m_thread(thread)
    , m_trace(tracefile.c_str())
    , m_stop(false)
    , m_bbv_base(0)
@@ -21,7 +22,7 @@ TraceThread::TraceThread(core_id_t core_id, String tracefile)
 {
    m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
 
-   String syntax = Sim()->getCfg()->getString("general/syntax", "intel");
+   String syntax = Sim()->getCfg()->getString("general/syntax");
    if (syntax == "intel")
       m_syntax = XED_SYNTAX_INTEL;
    else if (syntax == "att")
@@ -34,7 +35,7 @@ TraceThread::TraceThread(core_id_t core_id, String tracefile)
 
 TraceThread::~TraceThread()
 {
-   delete m_thread;
+   delete m__thread;
 }
 
 void TraceThread::handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size)
@@ -60,7 +61,7 @@ void TraceThread::handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t siz
          break;
       }
 
-      fprintf(fp, "[TRACE:%u] ", m_core->getId());
+      fprintf(fp, "[TRACE:%u] ", m_thread->getId());
       if (m_output_leftover_size)
       {
          fwrite(m_output_leftover, m_output_leftover_size, 1, fp);
@@ -97,14 +98,12 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
 
    instruction->setAddress(va2pa(inst.sinst->addr));
    instruction->setAtomic(false); // TODO
-   char *disassembly = new char[40];
-   xed_format(m_syntax, &xed_inst, disassembly, 40, inst.sinst->addr);
+   char disassembly[40];
+   xed_format(m_syntax, &xed_inst, disassembly, sizeof(disassembly), inst.sinst->addr);
    instruction->setDisassembly(disassembly);
 
-   std::vector<MicroOp*> uops = InstructionDecoder::decode(inst.sinst->addr, &xed_inst, instruction);
-
-   for(std::vector<MicroOp*>::iterator it = uops.begin(); it != uops.end(); it++)
-      instruction->addMicroOp(*it);
+   const std::vector<const MicroOp*> *uops = InstructionDecoder::decode(inst.sinst->addr, &xed_inst, instruction);
+   instruction->setMicroOps(uops);
 
    BasicBlock *basic_block = new BasicBlock();
    basic_block->push_back(instruction);
@@ -116,14 +115,20 @@ void TraceThread::run()
 {
    m_barrier->wait();
 
-   PerformanceModel *prfmdl = m_core->getPerformanceModel();
-   ClockSkewMinimizationClient *client = m_core->getClockSkewMinimizationClient();
+   Sim()->getThreadManager()->onThreadStart(m_thread->getId(), SubsecondTime::Zero());
+
+   ClockSkewMinimizationClient *client = m_thread->getClockSkewMinimizationClient();
    LOG_ASSERT_ERROR(client != NULL, "Tracing doesn't work without a clock skew minimization scheme"); // as we'd just overrun our basicblock queue
 
-   ThreadSpawnRequest req = { MCP_MESSAGE_THREAD_SPAWN_REQUEST_FROM_REQUESTER,
-                              NULL /* func */, NULL /* arg */, INVALID_CORE_ID /* requester */,
-                              m_core->getId() /* target core_id */, SubsecondTime::Zero() /* start time */};
-   Sim()->getThreadManager()->onThreadStart(&req);
+   if (m_thread->getCore() == NULL)
+   {
+      // We didn't get scheduled on startup, wait here
+      SubsecondTime time = SubsecondTime::Zero();
+      m_thread->reschedule(time, NULL);
+   }
+
+   Core *core = m_thread->getCore();
+   PerformanceModel *prfmdl = core->getPerformanceModel();
 
    Sift::Instruction inst;
    while(m_trace.Read(inst))
@@ -150,7 +155,7 @@ void TraceThread::run()
       if (inst.is_branch)
       {
          // We're the end of a basic block
-         m_core->countInstructions(m_bbv_base, m_bbv_count);
+         core->countInstructions(m_bbv_base, m_bbv_count);
          m_bbv_base = 0; // Next instruction will start a new basic block
          m_bbv_count = 0;
       }
@@ -188,15 +193,18 @@ void TraceThread::run()
       prfmdl->iterate();
 
       client->synchronize(SubsecondTime::Zero(), false);
+      // We may have been rescheduled to a different core
+      core = m_thread->getCore();
+      prfmdl = core->getPerformanceModel();
 
       if (m_stop)
          break;
    }
 
-   printf("[TRACE:%u] -- %s --\n", m_core->getId(), m_stop ? "STOP" : "DONE");
+   printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
 
-   Sim()->getThreadManager()->onThreadExit();
-   Sim()->getTraceManager()->signalDone(m_core->getId());
+   Sim()->getThreadManager()->onThreadExit(m_thread->getId());
+   Sim()->getTraceManager()->signalDone(m_thread->getId());
 
    m_barrier->wait();
 }
@@ -204,6 +212,16 @@ void TraceThread::run()
 void TraceThread::spawn(Barrier *barrier)
 {
    m_barrier = barrier;
-   m_thread = Thread::create(this);
-   m_thread->run();
+   m__thread = _Thread::create(this);
+   m__thread->run();
+}
+
+UInt64 TraceThread::getProgressExpect()
+{
+   return m_trace.getLength();
+}
+
+UInt64 TraceThread::getProgressValue()
+{
+   return m_trace.getPosition();
 }

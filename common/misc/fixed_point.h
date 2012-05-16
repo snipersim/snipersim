@@ -9,7 +9,7 @@
 // PIN requires special handling when floating point operations are used inside callbacks
 // To avoid this, use integer arithmetic with values rescaled by 10k
 
-template<unsigned long one>
+template<SInt64 one>
 class TFixedPoint
 {
    private:
@@ -36,15 +36,15 @@ class TFixedPoint
       TFixedPoint operator* (const TFixedPoint& fp) const { return TFixedPoint::from_raw(this->m_value * fp.m_value / this->m_one); }
       TFixedPoint operator* (SInt64 i) const { return TFixedPoint::from_raw(this->m_value * i); }
 
-      TFixedPoint operator/ (const TFixedPoint& fp) const { return TFixedPoint::from_raw(__int128_t(fp.m_one) * this->m_value / fp.m_value); }
+      TFixedPoint operator/ (const TFixedPoint& fp) const { return TFixedPoint::from_raw(/*__int128_t*/(fp.m_one) * this->m_value / fp.m_value); }
       TFixedPoint operator/ (SInt64 i) const { return TFixedPoint::from_raw(this->m_value / i); }
 
       static SInt64 floor(const TFixedPoint fp) { return fp.m_value / fp.m_one; }
 };
 
-template <unsigned long one> inline TFixedPoint<one> operator/ (SInt64 i, TFixedPoint<one>& fp) { return TFixedPoint<one>(i) / fp; }
+template <SInt64 one> inline TFixedPoint<one> operator/ (SInt64 i, TFixedPoint<one>& fp) { return TFixedPoint<one>(i) / fp; }
 
 // Default: 16k so mul/div can be done using shift operations
-typedef TFixedPoint<0x4000> FixedPoint;
+typedef TFixedPoint<__UINT64_C(0x4000)> FixedPoint;
 
 #endif // FIXED_POINT_H

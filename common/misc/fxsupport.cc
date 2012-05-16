@@ -11,14 +11,14 @@ Fxsupport::Fxsupport(core_id_t core_count)
    m_fx_buf = (char**) malloc (m_core_count * sizeof (char*));
    for (int i = 0; i < m_core_count; i++)
    {
-      int status = posix_memalign ((void**) &m_fx_buf[i], 16, 512);
+      __attribute__((unused)) int status = posix_memalign ((void**) &m_fx_buf[i], 16, 512);
       assert (status == 0);
    }
    m_ref_count = (uint64_t**) malloc (m_core_count * sizeof(uint64_t*));
    for (int i = 0; i < m_core_count; i++)
    {
       // put reference counts on seperate cache lines; 64-bytes is a typical cache-line size
-      int status = posix_memalign ((void**) &m_ref_count[i], 64, sizeof(uint64_t));
+      __attribute__((unused)) int status = posix_memalign ((void**) &m_ref_count[i], 64, sizeof(uint64_t));
       assert (status == 0);
       m_ref_count[i] = 0;
    }
@@ -40,7 +40,7 @@ Fxsupport::~Fxsupport()
 void Fxsupport::init()
 {
    assert (m_singleton == NULL);
-   core_id_t core_count = Sim()->getConfig()->getNumLocalCores();
+   core_id_t core_count = Sim()->getConfig()->getTotalCores();
    m_singleton = new Fxsupport (core_count);
 }
 
@@ -61,7 +61,7 @@ void Fxsupport::fxsave()
    if (Sim()->getCoreManager()->amiUserThread()) {
       LOG_PRINT("fxsave() start");
 
-      core_id_t core_index = Sim()->getCoreManager()->getCurrentCoreIndex();
+      core_id_t core_index = Sim()->getCoreManager()->getCurrentCoreID();
       if (m_ref_count[core_index] == 0)
       {
          char *buf = m_fx_buf[core_index];
@@ -81,7 +81,7 @@ void Fxsupport::fxrstor()
    if (Sim()->getCoreManager()->amiUserThread()) {
       LOG_PRINT("fxrstor() start");
 
-      core_id_t core_index = Sim()->getCoreManager()->getCurrentCoreIndex();
+      core_id_t core_index = Sim()->getCoreManager()->getCurrentCoreID();
 
       m_ref_count[core_index]--;
 

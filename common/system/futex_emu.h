@@ -6,6 +6,9 @@
 #ifndef FUTEX_WAKE_BITSET
 #  define FUTEX_WAKE_BITSET 10
 #endif
+#ifndef FUTEX_BITSET_MATCH_ANY
+#  define FUTEX_BITSET_MATCH_ANY 0xffffffff
+#endif
 
 // Older kernels only cut out the flags they know about, we want just the lower bits
 #undef FUTEX_CMD_MASK

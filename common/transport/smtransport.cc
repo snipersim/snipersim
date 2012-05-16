@@ -8,13 +8,9 @@
 
 SmTransport::SmTransport()
 {
-   LOG_ASSERT_ERROR(Config::getSingleton()->getProcessCount() == 1, "Can only use SmTransport with a single process.");
-
-   Config::getSingleton()->setProcessNum(0);
-
    m_global_node = new SmNode(-1, this);
-   m_core_nodes = new SmNode* [ Config::getSingleton()->getNumLocalCores() ];
-   for (UInt32 i = 0; i < Config::getSingleton()->getNumLocalCores(); i++)
+   m_core_nodes = new SmNode* [ Config::getSingleton()->getTotalCores() ];
+   for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
       m_core_nodes[i] = NULL;
 }
 
@@ -31,7 +27,7 @@ SmTransport::~SmTransport()
 
 Transport::Node* SmTransport::createNode(core_id_t core_id)
 {
-   LOG_ASSERT_ERROR((UInt32)core_id < Config::getSingleton()->getNumLocalCores(),
+   LOG_ASSERT_ERROR((UInt32)core_id < Config::getSingleton()->getTotalCores(),
                     "Request index out of range: %d", core_id);
    LOG_ASSERT_ERROR(m_core_nodes[core_id] == NULL,
                     "Transport already allocated for id: %d.", core_id);
@@ -55,7 +51,7 @@ Transport::Node* SmTransport::getGlobalNode()
 
 SmTransport::SmNode* SmTransport::getNodeFromId(core_id_t core_id)
 {
-   LOG_ASSERT_ERROR((UInt32)core_id < Config::getSingleton()->getNumLocalCores(),
+   LOG_ASSERT_ERROR((UInt32)core_id < Config::getSingleton()->getTotalCores(),
                     "Core id out of range: %d", core_id);
    return m_core_nodes[core_id];
 }
@@ -64,7 +60,7 @@ void SmTransport::clearNodeForId(core_id_t core_id)
 {
    // This is called upon deletion of the node, so we should simply
    // not keep around a dead pointer.
-   if ((UInt32)core_id < Config::getSingleton()->getNumLocalCores())
+   if ((UInt32)core_id < Config::getSingleton()->getTotalCores())
       m_core_nodes[core_id] = NULL;
 }
 

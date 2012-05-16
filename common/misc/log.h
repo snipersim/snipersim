@@ -89,8 +89,9 @@ class Log
 #define LOG_PRINT(...) ((void)(0))
 #define LOG_PRINT_WARNING(...) ((void)(0))
 #define LOG_PRINT_WARNING_ONCE(...) ((void)(0))
-#define LOG_PRINT_ERROR(...) ((void)(0))
+#define LOG_PRINT_ERROR(...) (exit(-1)) // call exit() to inherit its __attribute__ ((__noreturn__))
 #define LOG_ASSERT_WARNING(...) ((void)(0))
+#define LOG_ASSERT_WARNING_ONCE(...) ((void)(0))
 #define LOG_ASSERT_ERROR(...) ((void)(0))
 
 #else
@@ -151,6 +152,14 @@ class Log
       if (!(expr))                                      \
       {                                                 \
          LOG_PRINT_WARNING(__VA_ARGS__);                \
+      }                                                 \
+   }                                                    \
+
+#define LOG_ASSERT_WARNING_ONCE(expr, ...)              \
+   {                                                    \
+      if (!(expr))                                      \
+      {                                                 \
+         LOG_PRINT_WARNING_ONCE(__VA_ARGS__);           \
       }                                                 \
    }                                                    \
 

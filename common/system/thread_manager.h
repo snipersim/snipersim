@@ -1,92 +1,95 @@
 #ifndef THREAD_MANAGER_H
 #define THREAD_MANAGER_H
 
-#include <vector>
-#include <queue>
-#include <map>
-
+#include "fixed_types.h"
 #include "semaphore.h"
 #include "core.h"
-#include "fixed_types.h"
-#include "message_types.h"
 #include "lock.h"
-
-#include "thread_support.h"
 #include "subsecond_time.h"
 
-class CoreManager;
+#include <vector>
+#include <queue>
+
+class TLS;
+class Thread;
+class Scheduler;
 
 class ThreadManager
 {
 public:
-   ThreadManager(CoreManager*);
+   typedef void *(*thread_func_t)(void *);
+
+   enum stall_type_t {
+      STALL_UNSCHEDULED,      // Thread is not scheduled on any core
+      STALL_BROKEN,           // Thread is on a core that suffered hardware failure
+      STALL_JOIN,             // Thread is calling pthread_join
+      STALL_MUTEX,            // Thread is calling pthread_mutex_lock
+      STALL_COND,             // Thread is calling pthread_cond_wait
+      STALL_BARRIER,          // Thread is calling pthread_barrier_wait
+      STALL_FUTEX,            // Thread is calling syscall(SYS_futex, FUTEX_WAIT)
+   };
+   static const char* stall_type_names[];
+
+   ThreadManager();
    ~ThreadManager();
 
+   Lock &getLock() { return m_thread_lock; }
+
+   Thread* createThread();
+
+   Thread *getThreadFromID(thread_id_t thread_id);
+   Thread *getCurrentThread(int threadIndex = -1);
+   UInt64 getNumThreads() const { return m_threads.size(); }
+   Core::State getThreadState(thread_id_t thread_id) const { return m_thread_state.at(thread_id).status; }
+
    // services
-   SInt32 spawnThread(thread_func_t func, void *arg);
-   void joinThread(core_id_t core_id);
+   thread_id_t spawnThread(thread_id_t thread_id, thread_func_t func, void *arg);
+   void joinThread(thread_id_t thread_id, thread_id_t join_thread_id);
 
-   void getThreadToSpawn(ThreadSpawnRequest *req);
-   ThreadSpawnRequest* getThreadSpawnReq();
-   void dequeueThreadSpawnReq (ThreadSpawnRequest *req);
-
-   void terminateThreadSpawners ();
+   thread_id_t getThreadToSpawn(SubsecondTime &time);
+   void waitForThreadStart(thread_id_t thread_id, thread_id_t wait_thread_id);
 
    // events
-   void onThreadStart(ThreadSpawnRequest *req);
-   void onThreadExit();
+   void onThreadStart(thread_id_t thread_id, SubsecondTime time);
+   void onThreadExit(thread_id_t thread_id);
 
    // misc
-   void stallThread(core_id_t core_id, SubsecondTime time);
-   void resumeThread(core_id_t core_id, core_id_t core_id_by, SubsecondTime time);
-   bool isThreadRunning(core_id_t core_id);
-   bool isThreadInitializing(core_id_t core_id);
-
-   bool claimThread(core_id_t core_id);
+   SubsecondTime stallThread(thread_id_t thread_id, stall_type_t reason, SubsecondTime time);
+   void stallThread_async(thread_id_t thread_id, stall_type_t reason, SubsecondTime time);
+   void resumeThread(thread_id_t thread_id, thread_id_t thread_id_by, SubsecondTime time, void *msg = NULL);
+   bool isThreadRunning(thread_id_t thread_id);
+   bool isThreadInitializing(thread_id_t thread_id);
 
    bool areAllCoresRunning();
 
 private:
-
-   friend class LCP;
-   friend class MCP;
-
-   void masterSpawnThread(ThreadSpawnRequest*);
-   void slaveSpawnThread(ThreadSpawnRequest*);
-   void masterSpawnThreadReply(ThreadSpawnRequest*);
-
-   void masterOnThreadExit(core_id_t core_id, SubsecondTime time);
-
-   void slaveTerminateThreadSpawnerAck (core_id_t);
-   void slaveTerminateThreadSpawner ();
-   void updateTerminateThreadSpawner ();
-
-   void masterJoinThread(ThreadJoinRequest *req, SubsecondTime time);
-   void wakeUpWaiter(core_id_t core_id, SubsecondTime time);
-
-   void insertThreadSpawnRequest (ThreadSpawnRequest *req);
+   struct ThreadSpawnRequest
+   {
+      thread_id_t thread_by;
+      thread_id_t thread_id;
+      SubsecondTime time;
+   };
 
    struct ThreadState
    {
       Core::State status;
-      SInt32 waiter;
+      thread_id_t waiter;
 
-      ThreadState()
-         : status(Core::IDLE)
-         , waiter(-1)
-      {}
+      ThreadState() : status(Core::IDLE), waiter(INVALID_THREAD_ID) {}
    };
 
-   bool m_master;
+   Lock m_thread_lock;
+
    std::vector<ThreadState> m_thread_state;
-   std::queue<ThreadSpawnRequest*> m_thread_spawn_list;
-   Semaphore m_thread_spawn_sem;
-   Lock m_thread_spawn_lock;
+   std::queue<ThreadSpawnRequest> m_thread_spawn_list;
 
-   CoreManager *m_core_manager;
+   std::vector<Thread*> m_threads;
+   TLS *m_thread_tls;
 
-   Lock m_thread_spawners_terminated_lock;
-   UInt32 m_thread_spawners_terminated;
+   Scheduler *m_scheduler;
+
+   Thread* createThread_unlocked();
+   void wakeUpWaiter(thread_id_t thread_id, SubsecondTime time);
 };
 
 #endif // THREAD_MANAGER_H

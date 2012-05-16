@@ -24,12 +24,10 @@ protected:
    // Make sure all frequency updates pass through the correct path
    void setCoreDomain(UInt32 core_id, ComponentPeriod new_freq);
    friend class MagicServer;
-   friend class LCP;
 private:
    UInt32 m_cores_per_socket;
    SubsecondTime m_transition_latency;
    UInt32 m_num_proc_domains;
-   UInt32 m_num_local_cores;
    UInt32 m_num_app_cores;
    std::vector<ComponentPeriod> app_proc_domains;
    std::vector<ComponentPeriod> global_domains;

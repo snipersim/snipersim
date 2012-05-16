@@ -37,7 +37,7 @@ namespace config
     using namespace boost::spirit::classic;
 #endif
 
-    enum RuleID { defaultID, sectionID, keyNameID, keyValueID, keyID, sectionNameID, stringID, configID };
+    enum RuleID { defaultID, sectionID, keyNameID, keyValueID, keyValueArrayID, keyValueSpanID, keyID, sectionNameID, stringID, configID };
 
     // Like int_p, but support up to SInt64
     typedef int_parser<SInt64, 10, 1, -1> long_parser_t;
@@ -85,7 +85,7 @@ namespace config
 
                     r_config_node  =  r_config;
 
-                    r_config       =  *r_key_node >> *r_section_node ;
+                    r_config       =  *r_section_node ;
 
                     r_section_node =  access_node_d[ r_section ][Name(sectionNameID)];
 
@@ -95,11 +95,21 @@ namespace config
 
                     r_key          =  r_key_name
                                   >> lexeme_d[ no_node_d[ *space_p ] >> root_node_d[ ch_p('=') ] >> no_node_d[ *space_p ] ]
-                                  >> r_value ;
+                                  >> !r_value ;
 
                     r_key_name     =  access_node_d[ !r_string ][Name(keyNameID)] ;
 
-                    r_value        =  access_node_d[ real_p | long_p | r_string ][Name(keyValueID)];
+                    r_value_array  =  access_node_d[ r_value_array2 ][Name(keyValueArrayID)];
+
+                    r_value_array2 =  r_value_single >> +(no_node_d[ ch_p(',') ] >> !r_value_single);
+
+                    r_value_span   =  access_node_d[ r_value_long >> root_node_d[ ch_p('-') ] >> r_value_long ][Name(keyValueSpanID)];
+
+                    r_value_long   =  access_node_d[ long_p ][Name(keyValueID)];
+
+                    r_value_single =  access_node_d[ real_p | long_p | r_string ][Name(keyValueID)];
+
+                    r_value        =  r_value_array | r_value_span | r_value_single;
 
                     // Terminals
                     // Note, the lexeme directive tells the parser to act character-by-character (don't skip spaces),
@@ -123,14 +133,14 @@ namespace config
                     // Strings and names may either be "quoted" or not.
                     r_string       =
                        (
-                          ( lexeme_d[ token_node_d[ inner_node_d[ confix_p('"', *lex_escape_ch_p, '"') ] ] ] )
+                          ( no_node_d[ *space_p ] >> lexeme_d[ token_node_d[ inner_node_d[ confix_p('"', *lex_escape_ch_p, '"') ] ] ] >> no_node_d[ *space_p ] )
                           |
-                          ( lexeme_d[ token_node_d[ +(alnum_p) >> *(alnum_p | (punct_p - ch_p('=')) ) ] ] )
+                          ( lexeme_d[ token_node_d[ +(alnum_p | ch_p('.') | ch_p('/')) >> *(alnum_p | (punct_p - ch_p('=') - ch_p(',') ) ) ] ] )
                           )
                        ;
                 }
 
-                rule<ScannerT> r_file, r_config, r_config_node, r_section, r_key, r_key_name, r_value, r_key_node, r_section_node, r_section_name, r_section_name_node, r_section_name_node_node, r_string;
+                rule<ScannerT> r_file, r_config, r_config_node, r_section, r_key, r_key_name, r_value, r_value_long, r_value_single, r_value_array, r_value_array2, r_value_span, r_key_node, r_section_node, r_section_name, r_section_name_node, r_section_name_node_node, r_string;
 
                 rule<ScannerT> const&
                     start() const { return r_file; }

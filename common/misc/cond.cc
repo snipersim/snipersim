@@ -35,9 +35,14 @@ void ConditionVariable::wait(Lock& lock, UInt64 timeout_ns)
    ScopedTimer tt(*_timer);
    #endif
 
-   struct timespec timeout = { timeout_ns / 1000000000, timeout_ns % 1000000000 };
+   struct timespec timeout = { time_t(timeout_ns / 1000000000), time_t(timeout_ns % 1000000000) };
 
-   syscall(SYS_futex, (void*) &m_futx, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, 0, timeout_ns > 0 ? &timeout : NULL, NULL, 0);
+   int res;
+   do {
+      res = syscall(SYS_futex, (void*) &m_futx, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, 0, timeout_ns > 0 ? &timeout : NULL, NULL, 0);
+      // Restart futex_wait if it was interrupted by a signal
+   }
+   while (res == -EINTR);
 
    lock.acquire();
 }

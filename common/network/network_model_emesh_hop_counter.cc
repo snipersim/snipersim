@@ -68,7 +68,7 @@ void NetworkModelEMeshHopCounter::routePacket(const NetPacket &pkt,
    if (pkt.receiver == NetPacket::BROADCAST)
    {
       UInt32 total_cores = Config::getSingleton()->getTotalCores();
-   
+
       SubsecondTime curr_time = pkt.time;
       // There's no broadcast tree here, but I guess that won't be a
       // bottleneck at all since there's no contention
@@ -90,7 +90,7 @@ void NetworkModelEMeshHopCounter::routePacket(const NetPacket &pkt,
 
          nextHops.push_back(h);
       }
-   } 
+   }
    else
    {
       computePosition(pkt.receiver, dx, dy);
@@ -121,7 +121,7 @@ NetworkModelEMeshHopCounter::processReceivedPacket(NetPacket &pkt)
       requester = getNetwork()->getCore()->getMemoryManager()->getShmemRequester(pkt.data);
    else // Other Packet types
       requester = pkt.sender;
-   
+
    LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
          "requester(%i)", requester);
 

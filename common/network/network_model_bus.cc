@@ -60,8 +60,7 @@ NetworkModelBusGlobal::useBus(SubsecondTime t_start, UInt32 length)
 NetworkModelBus::NetworkModelBus(Network *net, EStaticNetwork net_type)
    : NetworkModel(net)
    , _enabled(false)
-   , _mcp_detour(Sim()->getConfig()->getProcessNumForCore(Sim()->getConfig()->getMCPCoreNum()) != Sim()->getConfig()->getCurrentProcessNum())
-   , _ignore_local(Sim()->getCfg()->getBool("network/bus/ignore_local_traffic", true))
+   , _ignore_local(Sim()->getCfg()->getBool("network/bus/ignore_local_traffic"))
 {
    if (!_bus_global[net_type]) {
       String name = String("network.")+EStaticNetworkStrings[net_type]+".bus";
@@ -73,37 +72,24 @@ NetworkModelBus::NetworkModelBus(Network *net, EStaticNetwork net_type)
 void
 NetworkModelBus::routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops)
 {
-   if (!_mcp_detour || getNetwork()->getCore()->getId() == Config::getSingleton()->getMCPCoreNum()) {
-      /* On MCP: account for time, send message to destination */
+   SubsecondTime t_recv;
+   if (accountPacket(pkt)) {
+      ScopedLock sl(_bus->_lock);
+      _bus->_num_packets ++;
+      _bus->_num_bytes += getNetwork()->getModeledLength(pkt);
+      t_recv = _bus->useBus(pkt.time, pkt.length);
+   } else
+      t_recv = pkt.time;
 
-      SubsecondTime t_recv;
-      if (accountPacket(pkt)) {
-         ScopedLock sl(_bus->_lock);
-         _bus->_num_packets ++;
-         _bus->_num_bytes += getNetwork()->getModeledLength(pkt);
-         t_recv = _bus->useBus(pkt.time, pkt.length);
-      } else
-         t_recv = pkt.time;
+   if (pkt.receiver == NetPacket::BROADCAST)
+   {
+      UInt32 total_cores = Config::getSingleton()->getTotalCores();
 
-      if (pkt.receiver == NetPacket::BROADCAST)
-      {
-         UInt32 total_cores = Config::getSingleton()->getTotalCores();
-
-         for (SInt32 i = 0; i < (SInt32) total_cores; i++)
-         {
-            Hop h;
-            h.final_dest = i;
-            h.next_dest = i;
-            h.time = t_recv;
-
-            nextHops.push_back(h);
-         }
-      }
-      else
+      for (SInt32 i = 0; i < (SInt32) total_cores; i++)
       {
          Hop h;
-         h.final_dest = pkt.receiver;
-         h.next_dest = pkt.receiver;
+         h.final_dest = i;
+         h.next_dest = i;
          h.time = t_recv;
 
          nextHops.push_back(h);
@@ -111,11 +97,10 @@ NetworkModelBus::routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops)
    }
    else
    {
-      /* On all other cores: send message to MCP core for timing simulation */
       Hop h;
       h.final_dest = pkt.receiver;
-      h.next_dest = Config::getSingleton()->getMCPCoreNum();
-      h.time = pkt.time;
+      h.next_dest = pkt.receiver;
+      h.time = t_recv;
 
       nextHops.push_back(h);
    }
@@ -153,7 +138,7 @@ NetworkModelBus::accountPacket(const NetPacket &pkt)
 
 void NetworkModelBus::outputSummary(std::ostream &out)
 {
-   if (getNetwork()->getCore()->getId() == Config::getSingleton()->getMCPCoreNum()) {
+   if (getNetwork()->getCore()->getId() == 0) {
       out << "    num packets received: " << _bus->_num_packets << std::endl;
       out << "    num bytes received: " << _bus->_num_bytes << std::endl;
       if (_bus->_num_packets == 0)
@@ -161,8 +146,8 @@ void NetworkModelBus::outputSummary(std::ostream &out)
       else
          out << "    average delay: " << (_bus->_total_delay / _bus->_num_packets) << std::endl;
    } else {
-      out << "    num packets received: " << "-->" << std::endl;
-      out << "    num bytes received: " << "-->" << std::endl;
-      out << "    average delay: " << "-->" << std::endl;
+      out << "    num packets received: " << "<--" << std::endl;
+      out << "    num bytes received: " << "<--" << std::endl;
+      out << "    average delay: " << "<--" << std::endl;
    }
 }

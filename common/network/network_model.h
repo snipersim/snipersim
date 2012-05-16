@@ -1,14 +1,14 @@
 #ifndef NETWORK_MODEL_H
 #define NETWORK_MODEL_H
 
-class NetPacket;
-class Network;
-
-#include <vector>
-
 #include "packet_type.h"
 #include "fixed_types.h"
 #include "subsecond_time.h"
+
+#include <vector>
+
+class NetPacket;
+class Network;
 
 // -- Network Models -- //
 

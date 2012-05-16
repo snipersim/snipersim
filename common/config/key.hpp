@@ -28,13 +28,9 @@ namespace config
     class Key
     {
         public:
-            //! \brief Constructor to create a key from a string
-            Key(const String & parentPath, const String & name, const String & value);
-            //! \brief Constructor to create a key from an int
-            Key(const String & parentPath, const String & name, SInt64 value);
-            //! \brief Constructor to create a key from a bool
-            Key(const String & parentPath, const String & name, double value);
-            //! \brief Contructor used when the copy constructor is needed
+            //! \brief Constructor to create a key
+            template <class V>
+            Key(const String & parentPath, const String & name, const V & value);
 
             const String getString() const;
             //Note: The following may throw boost::bad_lexial_cast

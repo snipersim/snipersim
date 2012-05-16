@@ -13,12 +13,8 @@ using std::endl;
 OneIPCPerformanceModel::OneIPCPerformanceModel(Core *core)
     : PerformanceModel(core)
 {
-   /* Maximum latency which is assumed to be completely overlapped. Can be set using
-      perf_model/core/iocoom/latency_cutoff, else L1-D hit time, else 3 cycles */
-   m_latency_cutoff =
-      Sim()->getCfg()->getInt("perf_model/core/iocoom/latency_cutoff",
-      Sim()->getCfg()->getInt("perf_model/l1_dcache/data_access_time",
-      3));
+   /* Maximum latency which is assumed to be completely overlapped. L1-D hit latency should be a good value. */
+   m_latency_cutoff = Sim()->getCfg()->getIntArray("perf_model/core/oneipc/latency_cutoff", core->getId());
 }
 
 OneIPCPerformanceModel::~OneIPCPerformanceModel()
@@ -83,7 +79,7 @@ bool OneIPCPerformanceModel::handleInstruction(Instruction const* instruction)
    else
       cost.addLatency(ComponentLatency(getCore()->getDvfsDomain(), 1).getLatency());
 
-   LOG_ASSERT_ERROR((instruction->getType() != INST_SYNC && instruction->getType() != INST_RECV), "Unexpected non-idle instruction")
+   LOG_ASSERT_ERROR((instruction->getType() != INST_SYNC && instruction->getType() != INST_RECV), "Unexpected non-idle instruction");
 
    // update counters
    m_instruction_count++;

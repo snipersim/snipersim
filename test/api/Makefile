@@ -15,4 +15,4 @@ run: api
 	@echo "\nOptional: Run '../../tools/cpistack.py' in this directory to generate cpi-stack output for this run\n"
 
 clean:
-	rm -f api sim.cfg sim.stats *.log *.out *.jpg
+	rm -f api sim.cfg sim.stats* *.log *.out *.jpg

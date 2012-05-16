@@ -1,11 +1,8 @@
 #include "core.h"
 #include "network.h"
 #include "syscall_model.h"
-#include "sync_client.h"
-#include "network_types.h"
 #include "memory_manager_base.h"
 #include "pin_memory_manager.h"
-#include "clock_skew_minimization_object.h"
 #include "performance_model.h"
 #include "core_manager.h"
 #include "dvfs_manager.h"
@@ -33,8 +30,9 @@ const char * ModeledString(Core::MemModeled modeled) {
       case Core::MEM_MODELED_TIME:           return "time";
       case Core::MEM_MODELED_FENCED:         return "fenced";
       case Core::MEM_MODELED_DYNINFO:        return "dyninfo";
-      default:                         return "?";
+      case Core::MEM_MODELED_RETURN:         return "return";
    }
+  return "?";
 }
 
 
@@ -45,6 +43,9 @@ Core::Core(SInt32 id)
    : m_core_id(id)
    , m_dyninfo_save_used(false)
    , m_bbv(id)
+   , m_core_state(Core::IDLE)
+   , m_icache_last_block(-1)
+   , m_icache_hits(0)
    , m_instructions(0)
    , m_instructions_callback(UINT64_MAX)
 {
@@ -56,63 +57,31 @@ Core::Core(SInt32 id)
 
    m_performance_model = PerformanceModel::create(this);
 
-   if (Config::getSingleton()->isSimulatingSharedMemory())
-   {
-      LOG_PRINT("instantiated shared memory performance model");
-      m_shmem_perf_model = new ShmemPerfModel();
+   m_shmem_perf_model = new ShmemPerfModel();
 
-      LOG_PRINT("instantiated memory manager model");
-      m_memory_manager = MemoryManagerBase::createMMU(
-            Sim()->getCfg()->getString("caching_protocol/type"),
-            this, m_network, m_shmem_perf_model);
+   LOG_PRINT("instantiated memory manager model");
+   m_memory_manager = MemoryManagerBase::createMMU(
+         Sim()->getCfg()->getString("caching_protocol/type"),
+         this, m_network, m_shmem_perf_model);
 
-      m_pin_memory_manager = new PinMemoryManager(this);
-   }
-   else
-   {
-      m_shmem_perf_model = (ShmemPerfModel*) NULL;
-      m_memory_manager = (MemoryManagerBase *) NULL;
-      m_pin_memory_manager = (PinMemoryManager*) NULL;
-
-      LOG_PRINT("No Memory Manager being used");
-   }
-
-   m_syscall_model = new SyscallMdl(m_network);
-   m_sync_client = new SyncClient(this);
-
-   m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(Sim()->getCfg()->getString("clock_skew_minimization/scheme","none"), this);
+   m_pin_memory_manager = new PinMemoryManager(this);
 }
 
 Core::~Core()
 {
-   if (m_clock_skew_minimization_client)
-      delete m_clock_skew_minimization_client;
-
-   delete m_sync_client;
-   delete m_syscall_model;
-   if (Config::getSingleton()->isSimulatingSharedMemory())
-   {
-      delete m_pin_memory_manager;
-      delete m_memory_manager;
-      delete m_shmem_perf_model;
-   }
+   delete m_pin_memory_manager;
+   delete m_memory_manager;
+   delete m_shmem_perf_model;
    delete m_performance_model;
    delete m_network;
 }
 
 void Core::outputSummary(std::ostream &os)
 {
-   if (Config::getSingleton()->getEnablePerformanceModeling())
-   {
-      getPerformanceModel()->outputSummary(os);
-   }
+   getPerformanceModel()->outputSummary(os);
    getNetwork()->outputSummary(os);
-
-   if (Config::getSingleton()->isSimulatingSharedMemory())
-   {
-      getShmemPerfModel()->outputSummary(os);
-      getMemoryManager()->outputSummary(os);
-   }
+   getShmemPerfModel()->outputSummary(os);
+   getMemoryManager()->outputSummary(os);
 }
 
 int Core::coreSendW(int sender, int receiver, char* buffer, int size, carbon_network_t net_type)
@@ -176,9 +145,6 @@ const ComponentPeriod* Core::getDvfsDomain() const
 
 void Core::enablePerformanceModels()
 {
-   if (m_clock_skew_minimization_client)
-      m_clock_skew_minimization_client->enable();
-
    getShmemPerfModel()->enable();
    getMemoryManager()->enableModels();
    getNetwork()->enableModels();
@@ -187,9 +153,6 @@ void Core::enablePerformanceModels()
 
 void Core::disablePerformanceModels()
 {
-   if (m_clock_skew_minimization_client)
-      m_clock_skew_minimization_client->disable();
-
    getShmemPerfModel()->disable();
    getMemoryManager()->disableModels();
    getNetwork()->disableModels();
@@ -208,7 +171,7 @@ Core::countInstructions(IntPtr address, UInt32 count)
       if (m_instructions >= m_instructions_callback)
       {
          disableInstructionsCallback();
-         Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTR_COUNT, (void*)m_core_id);
+         Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTR_COUNT, (void*)(unsigned long)m_core_id);
       }
    }
 }
@@ -240,27 +203,33 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
    LOG_PRINT("Instruction: Address(0x%x), Size(%u), Start READ",
            address, instruction_size);
 
-   static IntPtr last_block = -1;
-   static UInt64 hits = 0;
-
    UInt32 blockmask = ~(getMemoryManager()->getCacheBlockSize() - 1);
-   bool aligned = ((address & blockmask) == ((address + instruction_size - 1) & blockmask));
+   bool single_cache_line = ((address & blockmask) == ((address + instruction_size - 1) & blockmask));
 
    // TODO: Nehalem gets 16 bytes at once from the L1I, so if an access is in the same 16-byte block
    //   as the previous one we shouldn't even count it as a hit
 
-   if (aligned && ((address & blockmask) == last_block)) {
-      hits++;
+   // If we in the same cache line as the last icache access, report a hit
+   if (single_cache_line && ((address & blockmask) == m_icache_last_block))
+   {
+      m_icache_hits++;
       return makeMemoryResult(HitWhere::L1I, getMemoryManager()->getL1HitLatency());
    }
 
-   getMemoryManager()->addL1Hits(true, Core::READ, hits);
-   hits = 0;
-
-   if (aligned) {
-      last_block = address & blockmask;
+   // Update cache counters if needed
+   if (m_icache_hits)
+   {
+      getMemoryManager()->addL1Hits(true, Core::READ, m_icache_hits);
+      m_icache_hits = 0;
    }
 
+   // Update the most recent cache line accessed
+   if (single_cache_line)
+   {
+      m_icache_last_block = address & blockmask;
+   }
+
+   // Cases with multiple cache lines or when we are not sure that it will be a hit call into the caches
    return initiateMemoryAccess(MemComponent::L1_ICACHE,
              Core::NONE, Core::READ, address, NULL, instruction_size, MEM_MODELED_COUNT_TLBTIME, 0);
 }
@@ -463,24 +432,17 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
 MemoryResult
 Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size, MemModeled modeled, IntPtr eip)
 {
-   if (Config::getSingleton()->isSimulatingSharedMemory())
+   if (modeled == MEM_MODELED_DYNINFO)
+      LOG_ASSERT_ERROR(eip != 0, "modeled == MEM_MODELED_DYNINFO but no eip given");
+
+   // In PINTOOL mode, if the data is requested, copy it to/from real memory
+   if (data_buffer && Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
    {
-      if (modeled == MEM_MODELED_DYNINFO)
-         LOG_ASSERT_ERROR(eip != 0, "modeled == MEM_MODELED_DYNINFO but no eip given");
-
-      // In LITE mode, if the data is requested, copy it to/from real memory
-      if (data_buffer && Sim()->getConfig()->getSimulationMode() == Config::LITE) {
-         nativeMemOp (NONE, mem_op_type, d_addr, data_buffer, data_size);
-         data_buffer = NULL; // initiateMemoryAccess's data is not used
-      }
-
-      return initiateMemoryAccess(MemComponent::L1_DCACHE, lock_signal, mem_op_type, d_addr, (Byte*) data_buffer, data_size, modeled, eip);
+      nativeMemOp (NONE, mem_op_type, d_addr, data_buffer, data_size);
+      data_buffer = NULL; // initiateMemoryAccess's data is not used
    }
 
-   else
-   {
-      return nativeMemOp (lock_signal, mem_op_type, d_addr, data_buffer, data_size);
-   }
+   return initiateMemoryAccess(MemComponent::L1_DCACHE, lock_signal, mem_op_type, d_addr, (Byte*) data_buffer, data_size, modeled, eip);
 }
 
 
@@ -514,16 +476,4 @@ Core::nativeMemOp(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr
    }
 
    return makeMemoryResult(HitWhere::UNKNOWN,SubsecondTime::Zero());
-}
-
-Core::State
-Core::getState()
-{
-   return m_core_state;
-}
-
-void
-Core::setState(State core_state)
-{
-   m_core_state = core_state;
 }

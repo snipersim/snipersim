@@ -45,7 +45,7 @@ void CoreThread::run()
 
 void CoreThread::spawn()
 {
-   m_thread = Thread::create(this);
+   m_thread = _Thread::create(this);
    m_thread->run();
 }
 

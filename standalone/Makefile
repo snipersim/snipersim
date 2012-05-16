@@ -12,8 +12,6 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 CXXFLAGS += -c \
             -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
 
-LD_FLAGS += -L$(PIN_HOME)/extras/xed2-intel64/lib
-
 # Use the pin flags for building
 include $(SIM_ROOT)/Makefile.config
 
@@ -47,8 +45,19 @@ ifeq ($(CLEAN),)
 include $(SIM_ROOT)/common/Makefile.common
 endif
 
+ifeq ($(TARGET_ARCH),intel64)
+   CXXFLAGS_ARCH=
+else
+   ifeq ($(TARGET_ARCH),ia32)
+      CXXFLAGS_ARCH=-m32
+   else
+      $(error unknown TARGET_ARCH $(TARGET_ARCH))
+   endif
+endif
+
 # These libraries are used by libcarbon, so add them to the end
 LD_LIBS += -lxed
+LD_FLAGS += -L$(PIN_HOME)/extras/xed2-$(TARGET_ARCH)/lib
 
 ifneq ($(CLEAN),)
 clean:

@@ -12,6 +12,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "pin.H"
 
 #include "sift_writer.h"
@@ -223,7 +226,7 @@ void openFile()
 
    char filename[1024];
    if (blocksize)
-      sprintf(filename, "%s.%lu.sift", KnobOutputFile.Value().c_str(), blocknum);
+      sprintf(filename, "%s.%"PRIu64".sift", KnobOutputFile.Value().c_str(), blocknum);
    else
       sprintf(filename, "%s.sift", KnobOutputFile.Value().c_str());
 
@@ -240,6 +243,7 @@ void openFile()
 
 void closeFile()
 {
+   std::cout << "[SIFT_RECORDER] Recorded " << icount << " instructions" << std::endl;
    delete output;
 
    if (blocksize)
@@ -252,12 +256,12 @@ void closeFile()
       }
 
       char filename[1024];
-      sprintf(filename, "%s.%lu.bbv", KnobOutputFile.Value().c_str(), blocknum);
+      sprintf(filename, "%s.%"PRIu64".bbv", KnobOutputFile.Value().c_str(), blocknum);
 
       FILE *fp = fopen(filename, "w");
-      fprintf(fp, "%lu\n", bbv.getInstructionCount());
+      fprintf(fp, "%"PRIu64"\n", bbv.getInstructionCount());
       for(int i = 0; i < Bbv::NUM_BBV; ++i)
-         fprintf(fp, "%lu\n", bbv.getDimension(i) / bbv.getInstructionCount());
+         fprintf(fp, "%"PRIu64"\n", bbv.getDimension(i) / bbv.getInstructionCount());
       fclose(fp);
 
       bbv.clear();

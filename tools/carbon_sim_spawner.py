@@ -58,7 +58,6 @@ def load_process_list_from_file(filename):
 def spawn_proc(command):
     env = {}
     env["CARBON_PROCESS_INDEX"] = str(0)
-    env["LD_LIBRARY_PATH"] = "/afs/csail/group/carbon/tools/boost_1_38_0/stage/lib"
     proc = subprocess.Popen(command, shell=True, env=env)
     proc.wait()
 

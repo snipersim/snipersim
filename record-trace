@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import sys, os, getopt
+sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
+import debugpin
 
 
 HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
@@ -9,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)>  [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> -- <cmdline>' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)>  [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [--gdb|--gdb-wait|--gdb-quit] -- <cmdline>' % sys.argv[0]
   sys.exit(2)
 
 
@@ -17,12 +19,15 @@ outputfile = 'trace'
 fastforward = 0
 detailed = 0
 blocksize = 0
+gdb = False
+gdb_wait = False
+gdb_quit = False
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:")
+  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:", [ "gdb", "gdb-wait", "gdb-quit" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -39,6 +44,15 @@ for o, a in opts:
     detailed = long(float(a))
   if o == '-b':
     blocksize = long(float(a))
+  if o == '--gdb':
+    use_gdb = True
+  if o == '--gdb-wait':
+    use_gdb = True
+    gdb_wait = True
+  if o == '--gdb-quit':
+    use_gdb = True
+    gdb_wait = False
+    gdb_quit = True
 
 
 
@@ -46,8 +60,10 @@ configfile = os.path.join(HOME, 'config/graphite.py')
 config = {}
 execfile(configfile, {}, config)
 
+arch = config.get('target', 'intel64')
+
 # convert paths in config to absolute paths
-for d in ('pin_home', 'boost_lib'):
+for d in ('pin_home',):
   absdir = os.path.join(HOME, config[d])
   if not os.path.isdir(absdir):
     sys.stderr.write('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
@@ -59,8 +75,14 @@ sim_root = HOME
 # convert to absolute path
 outputfile = os.path.realpath(os.path.join(outputfile))
 
-cmd = '%(pin_home)s/pin -mt -injection child -t %(HOME)s/sift/recorder/sift_recorder -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -- ' % locals() + ' '.join(cmdline)
+pinoptions = '-mt -injection child'
+if use_gdb:
+  pinoptions += ' -pause_tool 1'
 
+cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -- ' % locals() + ' '.join(cmdline)
 
 print '[SIFT_RECORDER]', 'Running', cmd
-os.system(cmd)
+if use_gdb:
+  debugpin.execute_gdb(cmd = cmd, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit)
+else:
+  os.system(cmd)

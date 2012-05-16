@@ -31,10 +31,8 @@ public:
     void set(void *vp)
     {
         LOG_PRINT("%p->set(%p)", this, vp);
-        LOG_ASSERT_ERROR(
-            PIN_SetThreadData(m_key, vp),
-            "Error setting TLS -- pin tid = %d",
-            PIN_ThreadId());
+        __attribute__((unused)) BOOL res = PIN_SetThreadData(m_key, vp);
+        LOG_ASSERT_ERROR(res, "Error setting TLS -- pin tid = %d", PIN_ThreadId());
     }
 
 private:

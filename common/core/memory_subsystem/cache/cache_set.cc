@@ -14,13 +14,7 @@ CacheSet::CacheSet(CacheBase::cache_t cache_type,
       m_cache_block_info_array[i] = CacheBlockInfo::create(cache_type);
    }
 
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
-   {
-      m_blocks = new char[m_associativity * m_blocksize];
-      memset(m_blocks, 0x00, m_associativity * m_blocksize);
-   } else {
-      m_blocks = NULL;
-   }
+   m_blocks = NULL;
 }
 
 CacheSet::~CacheSet()

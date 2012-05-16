@@ -36,10 +36,10 @@ UnstructuredBuffer& UnstructuredBuffer::operator<<(std::pair<const void*, int> b
 UnstructuredBuffer& UnstructuredBuffer::operator>>(std::pair<void*, int> buffer)
 {
    const void *buff = buffer.first;
-   int size = buffer.second;
+   __attribute__((unused)) int size = buffer.second;
 
    assert(size >= 0);
-   bool res = get<UInt8>((UInt8*) buff, size);
+   __attribute__((unused)) bool res = get<UInt8>((UInt8*) buff, size);
    assert(res == true);
    return *this;
 }

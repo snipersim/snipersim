@@ -1,6 +1,6 @@
 #include "hooks_py.h"
 #include "simulator.h"
-#include "mcp.h"
+#include "clock_skew_minimization_object.h"
 #include "stats.h"
 
 
@@ -191,7 +191,7 @@ registerStats(PyObject *self, PyObject *args)
 static PyObject *
 getTime(PyObject *self, PyObject *args)
 {
-   SubsecondTime time = Sim()->getMCP()->getClockSkewMinimizationServer()->getGlobalTime();
+   SubsecondTime time = Sim()->getClockSkewMinimizationServer()->getGlobalTime();
    return PyLong_FromUnsignedLongLong(time.getFS());
 }
 

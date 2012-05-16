@@ -38,14 +38,3 @@ Prefetcher::getNextAddress(IntPtr current_address)
    else
       return 0;
 }
-
-bool
-Prefetcher::hasAddress(IntPtr address)
-{
-   for(UInt32 i = 0; i < n_flows; ++i) {
-      if (m_prev_address[i] == address)
-         return true;
-   }
-   return false;
-}
-

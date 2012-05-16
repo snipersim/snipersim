@@ -24,7 +24,17 @@ namespace config
     typedef int_parser<SInt64, 10, 1, -1> long_parser_t;
     static long_parser_t long_p;
 
-    Key::Key(const String & parentPath_, const String & name_, const String & value_)
+    template <class V>
+    Key::Key(const String & parentPath_, const String & name_, const V & value_)
+        :
+            m_name(name_),
+            m_value(boost::lexical_cast<String>(value_)),
+            m_parentPath(parentPath_),
+            m_type(DetermineType(m_value))
+    {
+    }
+
+    template<> Key::Key(const String & parentPath_, const String & name_, const String & value_)
         :
             m_name(name_),
             m_value(value_),
@@ -32,24 +42,8 @@ namespace config
             m_type(DetermineType(m_value))
     {
     }
-
-    Key::Key(const String & parentPath_, const String & name_, SInt64 value_)
-        :
-            m_name(name_),
-            m_value(boost::lexical_cast<String>(value_)),
-            m_parentPath(parentPath_),
-            m_type(DetermineType(m_value))
-    {
-    }
-
-    Key::Key(const String & parentPath_, const String & name_, double value_)
-        :
-            m_name(name_),
-            m_value(boost::lexical_cast<String>(value_)),
-            m_parentPath(parentPath_),
-            m_type(DetermineType(m_value))
-    {
-    }
+    template Key::Key(const String &, const String &, const SInt64 &);
+    template Key::Key(const String &, const String &, const double &);
 
     //Determine the type of a given key by trying to cast it to different types
     //and catching the error.

@@ -1,7 +1,7 @@
 #ifndef SIM_THREAD_H
 #define SIM_THREAD_H
 
-#include "thread.h"
+#include "_thread.h"
 #include "fixed_types.h"
 #include "network.h"
 
@@ -18,7 +18,7 @@ private:
 
    static void terminateFunc(void *vp, NetPacket pkt);
 
-   Thread *m_thread;
+   _Thread *m_thread;
 };
 
 #endif // SIM_THREAD_H

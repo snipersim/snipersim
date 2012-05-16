@@ -4,8 +4,6 @@
 
 #include "transport.h"
 #include "smtransport.h"
-//#include "mpitransport.h"
-#include "socktransport.h"
 
 #include "config.h"
 #include "log.h"
@@ -20,19 +18,9 @@ Transport::Transport()
 
 Transport* Transport::create()
 {
-   // dynamically choose the transport based on number of processes
-   // this is required since MPICH seems to break in single-process mode
-
    assert(m_singleton == NULL);
 
-   if (Config::getSingleton()->getProcessCount() == 1)
-      m_singleton = new SmTransport();
-
-   else
-      m_singleton = new SockTransport();
-
-   // else if (Config::getSingleton()->getProcessCount() > 1)
-   //    m_singleton = new MpiTransport();
+   m_singleton = new SmTransport();
 
    return m_singleton;
 }

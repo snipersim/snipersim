@@ -79,9 +79,6 @@ void parse_args(string_vec &args, String & config_path, int argc, char **argv)
 
    if(config_path == "")
        usage_error("Should have specified config argument.\n");
-   else
-       fprintf(stderr, "Config path set to: %s\n", config_path.c_str());
-
 }
 
 
@@ -109,9 +106,33 @@ void handle_generic_arg(const String &str, config::ConfigFile & cfg)
    String & value(split_args[1]);
 
    if (setting == "config")
+   {
        /* Merge settings in new config file into the current ConfigFile object */
        cfg.load(value);
+   }
    else
-       cfg.set(setting, value);
-}
+   {
+      string_vec path;
+      boost::split(path, setting, boost::algorithm::is_any_of("/"));
 
+      // Build a valid configuration file from the command line parameters
+      bool first = true;
+      String built_config_file = "[";
+      for (size_t i = 0 ; i < path.size()-1 ; i++ )
+      {
+         if (first)
+         {
+            first = false;
+         }
+         else
+         {
+            built_config_file += "/";
+         }
+
+         built_config_file += path[i];
+      }
+      built_config_file += "]\n" + path[path.size()-1] + "=" + value;
+
+      cfg.loadConfigFromString(built_config_file);
+   }
+}

@@ -7,6 +7,9 @@
 #include <fstream>
 #include <cassert>
 #include <cstring>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 // Enable to print out everything we read
 //#define VERBOSE
@@ -27,15 +30,19 @@ Sift::Reader::Reader(const char *filename)
       xed_initialized = true;
    }
 
-   std::ifstream *_input = new std::ifstream(filename, std::ios::in);
+   inputstream = new std::ifstream(filename, std::ios::in);
 
-   if (!_input->is_open())
+   if (!inputstream->is_open())
    {
       std::cerr << "Cannot open " << filename << std::endl;
       assert(false);
    }
 
-   input = new vifstream(_input);
+   struct stat filestatus;
+   stat(filename, &filestatus);
+   filesize = filestatus.st_size;
+
+   input = new vifstream(inputstream);
 
    Sift::Header hdr;
    input->read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
@@ -87,14 +94,14 @@ bool Sift::Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(bytes), size);
                if (handleOutputFunc)
                   handleOutputFunc(handleOutputArg, fd, bytes, size);
-               delete bytes;
+               delete [] bytes;
                break;
             }
             default:
             {
                uint8_t *bytes = new uint8_t[rec.Other.size];
                input->read(reinterpret_cast<char*>(bytes), rec.Other.size);
-               delete bytes;
+               delete [] bytes;
                break;
             }
          }
@@ -188,4 +195,14 @@ const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(intptr_t addr,
       assert(scache[addr]->size == size);
 
    return scache[addr];
+}
+
+uint64_t Sift::Reader::getPosition()
+{
+   return inputstream->tellg();
+}
+
+uint64_t Sift::Reader::getLength()
+{
+   return filesize;
 }

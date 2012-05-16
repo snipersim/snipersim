@@ -3,9 +3,9 @@
 #include "config.hpp"
 
 // RNG parameters, defaults taken from drand48
-#define RNG_A 0x5DEECE66D
-#define RNG_C 0xB
-#define RNG_M ((1L << 48) - 1)
+#define RNG_A __UINT64_C(0x5DEECE66D)
+#define RNG_C __UINT64_C(0xB)
+#define RNG_M ((__UINT64_C(1) << 48) - 1)
 
 // Same as drand48, but inlined for efficiency
 inline UInt64 rng_next(UInt64 &state)
@@ -24,7 +24,7 @@ BbvCount::BbvCount(core_id_t core_id)
    , m_bbv_counts(NUM_BBV, 0)
    , m_bbv_previous(NUM_BBV, 0)
    // Define N to skip X samples with X uniformely distributed between 0..2*N, so on average 1/N samples
-   , m_sample_period(2 * Sim()->getCfg()->getInt("bbv/sampling", 0))
+   , m_sample_period(2 * Sim()->getCfg()->getInt("bbv/sampling"))
    , m_sample_seed(rng_seed(m_sample_period))
 {
    sampleReset();

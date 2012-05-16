@@ -24,7 +24,11 @@ _ROI_BEGIN = None
 _ROI_END = None
 
 for line in file(FILENAME):
-  cpu, time, state = map(long, line.split())
+  try:
+    cpu, time, state = map(long, line.split())
+  except ValueError:
+    print 'Ignoring invalid line', line
+    continue
   NTHREADS = max(NTHREADS, cpu + 1)
   _TSTART = min(_TSTART, time)
   _TEND = max(_TEND, time)
@@ -53,7 +57,11 @@ laststate = {}
 states = [[ 0 for i in range(NTHREADS) ] for j in range(WIDTH) ]
 
 for line in file(FILENAME):
-  cpu, time, state = map(long, line.split())
+  try:
+    cpu, time, state = map(long, line.split())
+  except ValueError:
+    print 'Ignoring invalid line', line
+    continue
   if state > 3: continue
   if cpu in lasttime:
     t0 = lasttime[cpu]

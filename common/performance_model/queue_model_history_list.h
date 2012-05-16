@@ -28,6 +28,7 @@ private:
 
    // Tracks queue utilization
    SubsecondTime m_utilized_time;
+   SubsecondTime m_total_queue_delay;
    MovingAverage<SubsecondTime>* m_average_delay;
 
    // Is analytical model used ?

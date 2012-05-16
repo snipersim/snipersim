@@ -22,11 +22,9 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
       ComponentBandwidth dram_bandwidth,
       bool dram_queue_model_enabled,
       String dram_queue_model_type,
-      UInt32 cache_block_size,
-      ShmemPerfModel* shmem_perf_model):
+      UInt32 cache_block_size):
    m_memory_manager(memory_manager),
    m_cache_block_size(cache_block_size),
-   m_shmem_perf_model(shmem_perf_model),
    m_reads(0),
    m_writes(0)
 {
@@ -51,51 +49,39 @@ DramCntlr::~DramCntlr()
    delete m_dram_perf_model;
 }
 
-void
+SubsecondTime
 DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
-   if (m_data_map[address] == NULL)
-   {
-      m_data_map[address] = new Byte[getCacheBlockSize()];
-      memset((void*) m_data_map[address], 0x00, getCacheBlockSize());
-   }
-
-   memcpy((void*) data_buf, (void*) m_data_map[address], getCacheBlockSize());
-
-   SubsecondTime dram_access_latency = runDramPerfModel(requester);
-   getShmemPerfModel()->incrElapsedTime(dram_access_latency, ShmemPerfModel::_SIM_THREAD);
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now);
 
    ++m_reads;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
    addToDramAccessCount(address, READ);
    #endif
    MYLOG("R @ %08lx latency %s", address, itostr(dram_access_latency).c_str());
+
+   return dram_access_latency;
 }
 
-void
+SubsecondTime
 DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
-   if (m_data_map[address] == NULL)
-   {
-      LOG_PRINT_ERROR("Data Buffer does not exist");
-   }
-   memcpy((void*) m_data_map[address], (void*) data_buf, getCacheBlockSize());
-
-   runDramPerfModel(requester);
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now);
 
    ++m_writes;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
    addToDramAccessCount(address, WRITE);
    #endif
    MYLOG("W @ %08lx", address);
+
+   return dram_access_latency;
 }
 
 SubsecondTime
-DramCntlr::runDramPerfModel(core_id_t requester)
+DramCntlr::runDramPerfModel(core_id_t requester, SubsecondTime time)
 {
-   SubsecondTime pkt_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
    UInt64 pkt_size = getCacheBlockSize();
-   SubsecondTime dram_access_latency = m_dram_perf_model->getAccessLatency(pkt_time, pkt_size, requester);
+   SubsecondTime dram_access_latency = m_dram_perf_model->getAccessLatency(time, pkt_size, requester);
    return dram_access_latency;
 }
 

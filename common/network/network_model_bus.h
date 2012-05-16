@@ -42,7 +42,6 @@ class NetworkModelBus : public NetworkModel
 
    private:
       bool _enabled;
-      bool _mcp_detour;
       NetworkModelBusGlobal* _bus;
       bool _ignore_local;
 

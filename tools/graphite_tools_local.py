@@ -19,10 +19,7 @@ def get_results(jobid = None, resultsdir = None, partial = None, force = False):
   if jobid:
     if ic_invalid:
       raise RuntimeError('Cannot fetch results from server, make sure BENCHMARKS_ROOT points to a valid copy of benchmarks+iqlib')
-    if partial:
-      raise RuntimeError('Partial results not possible when loading from jobid')
-      # FIXME: could just download sim.stats from the server and re-parse that
-    results = ic.graphite_results(jobid)
+    results = ic.graphite_results(jobid, partial)
     simcfg = ic.job_output(jobid, 'sim.cfg', force)
   elif resultsdir:
     results = parse_results_from_dir(resultsdir, partial = partial)
@@ -94,7 +91,20 @@ def parse_config(simcfg):
     for key, value in cp.items(section):
       if len(value) > 2 and value[0] == '"' and value[-1] == '"':
         value = value[1:-1]
-      cfg['/'.join((section, key))] = value
+      key = '/'.join((section, key))
+      if key in cfg:
+        defval = cfg[key]
+        cfg[key] = collections.defaultdict(lambda:defval)
+        for i, v in enumerate(value.split(',')):
+          if v: # Only fill in entries that have been provided
+            cfg[key][i] = v
+      else: # If there has not been a default value provided, require all array data be populated
+        if ',' in value:
+          cfg[key] = []
+          for i, v in enumerate(value.split(',')):
+            cfg[key].append(v)
+        else:
+          cfg[key] = value
   return cfg
 
 
@@ -157,9 +167,11 @@ def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout
     if not stats:
       raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
     for line in simstatsbase:
+      if not line.strip(): continue
       for c in range(ncores):
-        stats_begin.setdefault(line.partition('[]')[0] + ('[%u]' % c) + line.partition('[]')[2], 0)
-        stats.setdefault(line.partition('[]')[0] + ('[%u]' % c) + line.partition('[]')[2], 0)
+        key = line.split('[]')[0] + ('[%u]' % c) + line.split('[]', 1)[1]
+        stats_begin.setdefault(key, 0)
+        stats.setdefault(key, 0)
   else:
     if not stats or not stats_begin:
       raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))

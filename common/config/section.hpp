@@ -20,7 +20,8 @@ namespace config
     //
     class Section;
     typedef std::map < String, boost::shared_ptr<Section> > SectionList;
-    typedef std::map < String, boost::shared_ptr<Key> > KeyList;
+    typedef std::map < String, boost::shared_ptr<Key> > KeyList;                           // default value
+    typedef std::map < String, std::vector<boost::shared_ptr<Key> > > KeyArrayList;        // overriding values
 
 
     /*! \brief Section: A configuration section entry
@@ -45,7 +46,7 @@ namespace config
              * \param case_sensitive Whether or not the lookup should care about case
              * \return True if name is a key within this section
              */
-            bool hasKey(const String &name) const;
+            bool hasKey(const String &name, UInt64 index) const;
 
             /*! \brief returns true if the given name is a subsection within this section
              * \param name The name of the subsection
@@ -60,11 +61,14 @@ namespace config
             //! Returns the list of keys
             const KeyList & getKeys() const { return m_keys; }
 
+            //! Returns the list of keys
+            const KeyArrayList & getArrayKeys() const { return m_array_keys; }
+
             //! Returns the name of this section
             String getName() const { return m_name; }
 
             //! getKey() returns a key with the given name
-            const Key & getKey(const String & name);
+            const Key & getKey(const String & name, uint64_t index = UINT64_MAX);
 
             /*! addSubSection() Add a subsection with the given name
              * \param name The name of the new subsection
@@ -77,9 +81,9 @@ namespace config
              * \param value The value of the new key (as a string)
              * \return A reference to the newly created key
              */
-            const Key & addKey(const String & name, const String & value);
-            const Key & addKey(const String & name, const SInt64 value);
-            const Key & addKey(const String & name, const double value);
+            const Key & addKey(const String & name, const String & value, UInt64 index = UINT64_MAX) { return addKeyInternal(name, value, index); }
+            const Key & addKey(const String & name, const SInt64 & value, UInt64 index = UINT64_MAX) { return addKeyInternal(name, value, index); }
+            const Key & addKey(const String & name, const double & value, UInt64 index = UINT64_MAX) { return addKeyInternal(name, value, index); }
 
             /*! getSection() Returns a reference to the section with the given name
              * \param name The name of the section we are trying to obtain
@@ -96,6 +100,9 @@ namespace config
             const Section & getParent() const { return m_parent; }
 
         private:
+            template <class V>
+            const Key & addKeyInternal(const String & name, const V & value, UInt64 index = UINT64_MAX);
+
             /*! clear() Clears out any sub-sections, used during a (re)load */
             void clear() { m_subSections.clear(); }
             Section & getSection_unsafe(const String & name);
@@ -107,6 +114,8 @@ namespace config
 
             //! A list of bl::config::Key keys in this current section.
             KeyList m_keys;
+
+            KeyArrayList m_array_keys;
 
             //! A bl::config::Section parent
             Section const & m_parent;

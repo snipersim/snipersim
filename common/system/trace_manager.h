@@ -3,6 +3,7 @@
 
 #include "fixed_types.h"
 #include "barrier.h"
+#include "semaphore.h"
 
 #include <vector>
 
@@ -13,7 +14,7 @@ class TraceManager
    private:
       std::vector<TraceThread *> m_threads;
       Barrier *m_barrier;
-      volatile UInt64 m_done;
+      Semaphore m_done;
    public:
       TraceManager();
       ~TraceManager();
@@ -21,7 +22,10 @@ class TraceManager
       void stop();
       void wait();
       void run();
-      void signalDone(core_id_t core_id) { atomic_inc_int64(m_done); }
+      void signalDone(thread_id_t thread_id) { m_done.signal(); }
+
+      UInt64 getProgressExpect();
+      UInt64 getProgressValue();
 };
 
 #endif // __TRACE_MANAGER_H

@@ -8,6 +8,7 @@ extern "C" {
 }
 
 #include <unordered_map>
+#include <fstream>
 
 class vistream;
 
@@ -42,6 +43,8 @@ namespace Sift
          vistream *input;
          HandleOutputFunc handleOutputFunc;
          void *handleOutputArg;
+         uint64_t filesize;
+         std::ifstream *inputstream;
 
          static bool xed_initialized;
 
@@ -55,6 +58,8 @@ namespace Sift
          Reader(const char *filename);
          bool Read(Instruction&);
          void setHandleOutputFunc(HandleOutputFunc func, void* arg = NULL) { handleOutputFunc = func; handleOutputArg = arg; }
+         uint64_t getPosition();
+         uint64_t getLength();
    };
 };
 

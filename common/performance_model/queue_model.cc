@@ -12,9 +12,9 @@ QueueModel::create(String name, UInt32 id, String model_type, SubsecondTime min_
 {
    if (model_type == "basic")
    {
-      bool moving_avg_enabled = Sim()->getCfg()->getBool("queue_model/basic/moving_avg_enabled", false);
-      UInt32 moving_avg_window_size = Sim()->getCfg()->getInt("queue_model/basic/moving_avg_window_size", 1);
-      String moving_avg_type = Sim()->getCfg()->getString("queue_model/basic/moving_avg_type", "none");
+      bool moving_avg_enabled = Sim()->getCfg()->getBool("queue_model/basic/moving_avg_enabled");
+      UInt32 moving_avg_window_size = Sim()->getCfg()->getInt("queue_model/basic/moving_avg_window_size");
+      String moving_avg_type = Sim()->getCfg()->getString("queue_model/basic/moving_avg_type");
       return new QueueModelBasic(name, id, moving_avg_enabled, moving_avg_window_size, moving_avg_type);
    }
    else if (model_type == "history_list")

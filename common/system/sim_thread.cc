@@ -42,7 +42,7 @@ void SimThread::run()
 
 void SimThread::spawn()
 {
-   m_thread = Thread::create(this);
+   m_thread = _Thread::create(this);
    m_thread->run();
 }
 

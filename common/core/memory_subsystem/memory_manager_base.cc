@@ -68,7 +68,8 @@ MemoryManagerBase::getCoreListWithMemoryControllers()
    try
    {
       num_memory_controllers = Sim()->getCfg()->getInt("perf_model/dram/num_controllers");
-      memory_controllers_interleaving = Sim()->getCfg()->getInt("perf_model/dram/controllers_interleaving", 0);
+      UInt32 smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
+      memory_controllers_interleaving = Sim()->getCfg()->getInt("perf_model/dram/controllers_interleaving") * smt_cores;
       memory_controller_positions_from_cfg_file = Sim()->getCfg()->getString("perf_model/dram/controller_positions");
    }
    catch (...)

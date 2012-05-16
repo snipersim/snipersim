@@ -2,17 +2,16 @@
 #include "barrier_sync_server.h"
 #include "simulator.h"
 #include "thread_manager.h"
+#include "thread.h"
+#include "performance_model.h"
 #include "hooks_manager.h"
-#include "network.h"
 #include "config.h"
 #include "log.h"
 #include "config.hpp"
 
-BarrierSyncServer::BarrierSyncServer(Network &network, UnstructuredBuffer &recv_buff):
-   m_network(network),
-   m_recv_buff(recv_buff),
-   m_global_time(SubsecondTime::Zero()),
-   m_fastforward(false)
+BarrierSyncServer::BarrierSyncServer()
+   : m_global_time(SubsecondTime::Zero())
+   , m_fastforward(false)
 {
    m_thread_manager = Sim()->getThreadManager();
    try
@@ -25,55 +24,48 @@ BarrierSyncServer::BarrierSyncServer(Network &network, UnstructuredBuffer &recv_
    }
 
    m_next_barrier_time = m_barrier_interval;
-   m_num_application_cores = Config::getSingleton()->getApplicationCores();
-   m_local_clock_list.resize(m_num_application_cores);
-   m_barrier_acquire_list.resize(m_num_application_cores);
-   for (UInt32 i = 0; i < m_num_application_cores; i++)
-   {
-      m_local_clock_list[i] = SubsecondTime::Zero();
-      m_barrier_acquire_list[i] = false;
-   }
 }
 
 BarrierSyncServer::~BarrierSyncServer()
 {}
 
 void
-BarrierSyncServer::processSyncMsg(core_id_t core_id)
+BarrierSyncServer::synchronize(thread_id_t thread_id, SubsecondTime time)
 {
-   barrierWait(core_id);
+   ScopedLock sl(Sim()->getThreadManager()->getLock());
+
+   LOG_PRINT("Received 'SIM_BARRIER_WAIT' from Thread(%i), Time(%s)", thread_id, itostr(time).c_str());
+
+   LOG_ASSERT_ERROR(m_thread_manager->isThreadRunning(thread_id) || m_thread_manager->isThreadInitializing(thread_id), "Thread(%i) is not running or initializing at time(%s)", thread_id, itostr(time).c_str());
+
+   if (time < m_next_barrier_time && !m_fastforward)
+   {
+      LOG_PRINT("Sent 'SIM_BARRIER_RELEASE' immediately time(%s), m_next_barrier_time(%s)", itostr(time).c_str(), itostr(m_next_barrier_time).c_str());
+      // LOG_PRINT_WARNING("core_id(%i), local_clock(%llu), m_next_barrier_time(%llu), m_barrier_interval(%llu)", core_id, time, m_next_barrier_time, m_barrier_interval);
+      return;
+   }
+
+   Core *core = Sim()->getThreadManager()->getThreadFromID(thread_id)->getCore();
+   core->getPerformanceModel()->barrierEnter();
+
+   m_local_clock_list[thread_id] = time;
+   m_barrier_acquire_list[thread_id] = true;
+
+   bool mustWait = true;
+   if (isBarrierReached())
+      mustWait = barrierRelease(thread_id);
+
+   if (mustWait)
+      Sim()->getThreadManager()->getThreadFromID(thread_id)->wait(Sim()->getThreadManager()->getLock());
+   else
+      core->getPerformanceModel()->barrierExit();
 }
 
 void
 BarrierSyncServer::signal()
 {
    if (isBarrierReached())
-     barrierRelease();
-}
-
-void
-BarrierSyncServer::barrierWait(core_id_t core_id)
-{
-   SubsecondTime time;
-   m_recv_buff >> time;
-
-   LOG_PRINT("Received 'SIM_BARRIER_WAIT' from Core(%i), Time(%s)", core_id, itostr(time).c_str());
-
-   LOG_ASSERT_ERROR(m_thread_manager->isThreadRunning(core_id) || m_thread_manager->isThreadInitializing(core_id), "Thread on core(%i) is not running or initializing at time(%s)", core_id, itostr(time).c_str());
-
-   if (time < m_next_barrier_time && !m_fastforward)
-   {
-      LOG_PRINT("Sent 'SIM_BARRIER_RELEASE' immediately time(%s), m_next_barrier_time(%s)", itostr(time).c_str(), itostr(m_next_barrier_time).c_str());
-      // LOG_PRINT_WARNING("core_id(%i), local_clock(%llu), m_next_barrier_time(%llu), m_barrier_interval(%llu)", core_id, time, m_next_barrier_time, m_barrier_interval);
-      unsigned int reply = BarrierSyncClient::BARRIER_RELEASE;
-      m_network.netSend(core_id, MCP_SYSTEM_RESPONSE_TYPE, (char*) &reply, sizeof(reply));
-      return;
-   }
-
-   m_local_clock_list[core_id] = time;
-   m_barrier_acquire_list[core_id] = true;
-
-   signal();
+      barrierRelease();
 }
 
 bool
@@ -83,25 +75,25 @@ BarrierSyncServer::isBarrierReached()
 
    // Check if all threads have reached the barrier
    // All least one thread must have (sync_time > m_next_barrier_time)
-   for (core_id_t core_id = 0; core_id < (core_id_t) m_num_application_cores; core_id++)
+   for (thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
    {
       // In fastforward mode, it's enough that a thread is waiting. In detailed mode, it needs to have advanced up to the predefined barrier time
       if (m_fastforward)
       {
-         if (m_barrier_acquire_list[core_id])
+         if (m_barrier_acquire_list[thread_id])
          {
             // At least one thread has reached the barrier
             single_thread_barrier_reached = true;
          }
-         else if (m_thread_manager->isThreadRunning(core_id))
+         else if (m_thread_manager->isThreadRunning(thread_id))
          {
             // Thread is running but hasn't checked in yet. Wait for it to sync.
             return false;
          }
       }
-      else if (m_thread_manager->isThreadRunning(core_id))
+      else if (m_thread_manager->isThreadRunning(thread_id))
       {
-         if (m_local_clock_list[core_id] < m_next_barrier_time)
+         if (m_local_clock_list[thread_id] < m_next_barrier_time)
          {
             // Thread Running on this core has not reached the barrier
             // Wait for it to sync
@@ -118,8 +110,8 @@ BarrierSyncServer::isBarrierReached()
    return single_thread_barrier_reached;
 }
 
-void
-BarrierSyncServer::barrierRelease()
+bool
+BarrierSyncServer::barrierRelease(thread_id_t caller_id)
 {
    LOG_PRINT("Sending 'BARRIER_RELEASE'");
 
@@ -129,11 +121,11 @@ BarrierSyncServer::barrierRelease()
 
    if (m_fastforward)
    {
-      for (core_id_t core_id = 0; core_id < (core_id_t) m_num_application_cores; core_id++)
+      for (thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
       {
          // In barrier mode, skip over (potentially very many) timeslots
-         if (m_local_clock_list[core_id] > m_next_barrier_time)
-            m_next_barrier_time = m_local_clock_list[core_id];
+         if (m_local_clock_list[thread_id] > m_next_barrier_time)
+            m_next_barrier_time = m_local_clock_list[thread_id];
       }
    }
 
@@ -142,6 +134,7 @@ BarrierSyncServer::barrierRelease()
    // forward progress
 
    bool thread_resumed = false;
+   bool must_wait = true;
    while (!thread_resumed)
    {
       m_global_time = m_next_barrier_time;
@@ -150,25 +143,32 @@ BarrierSyncServer::barrierRelease()
       m_next_barrier_time += m_barrier_interval;
       LOG_PRINT("m_next_barrier_time updated to (%s)", itostr(m_next_barrier_time).c_str());
 
-      for (core_id_t core_id = 0; core_id < (core_id_t) m_num_application_cores; core_id++)
+      for (thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
       {
-         if (m_local_clock_list[core_id] < m_next_barrier_time)
+         if (m_local_clock_list[thread_id] < m_next_barrier_time)
          {
-            // Check if this core was running. If yes, send a message to that core
-            if (m_barrier_acquire_list[core_id] == true)
+            // Check if this core was running. If yes, release that core
+            if (m_barrier_acquire_list[thread_id] == true)
             {
-               //LOG_ASSERT_ERROR(m_thread_manager->isThreadRunning(core_id) || m_thread_manager->isThreadInitializing(core_id), "(%i) has acquired barrier, local_clock(%s), m_next_barrier_time(%s), but not initializing or running", core_id, itostr(m_local_clock_list[core_id]).c_str(), itostr(m_next_barrier_time).c_str());
+               //LOG_ASSERT_ERROR(m_thread_manager->isThreadRunning(thread_id) || m_thread_manager->isThreadInitializing(thread_id), "(%i) has acquired barrier, local_clock(%s), m_next_barrier_time(%s), but not initializing or running", thread_id, itostr(m_local_clock_list[thread_id]).c_str(), itostr(m_next_barrier_time).c_str());
 
-               unsigned int reply = BarrierSyncClient::BARRIER_RELEASE;
-               m_network.netSend(core_id, MCP_SYSTEM_RESPONSE_TYPE, (char*) &reply, sizeof(reply));
-
-               m_barrier_acquire_list[core_id] = false;
-
+               m_barrier_acquire_list[thread_id] = false;
                thread_resumed = true;
+
+               if (thread_id == caller_id)
+                  must_wait = false;
+               else
+               {
+                  Thread *thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
+                  if (thread->getCore())
+                     thread->getCore()->getPerformanceModel()->barrierExit();
+                  thread->signal(m_local_clock_list[thread_id]);
+               }
             }
          }
       }
    }
+   return must_wait;
 }
 
 void

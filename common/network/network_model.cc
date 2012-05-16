@@ -5,9 +5,7 @@
 
 #include "network_model_magic.h"
 #include "network_model_emesh_hop_counter.h"
-#include "network_model_analytical.h"
-#include "network_model_emesh_hop_by_hop_basic.h"
-#include "network_model_emesh_hop_by_hop_broadcast_tree.h"
+#include "network_model_emesh_hop_by_hop.h"
 #include "network_model_bus.h"
 #include "log.h"
 
@@ -26,14 +24,8 @@ NetworkModel::createModel(Network *net, UInt32 model_type, EStaticNetwork net_ty
    case NETWORK_EMESH_HOP_COUNTER:
       return new NetworkModelEMeshHopCounter(net);
 
-   case NETWORK_ANALYTICAL_MESH:
-      return new NetworkModelAnalytical(net, net_type);
-
-   case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-      return new NetworkModelEMeshHopByHopBasic(net);
-
-   case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-      return new NetworkModelEMeshHopByHopBroadcastTree(net);
+   case NETWORK_EMESH_HOP_BY_HOP:
+      return new NetworkModelEMeshHopByHop(net, net_type);
 
    case NETWORK_BUS:
       return new NetworkModelBus(net, net_type);
@@ -51,12 +43,8 @@ NetworkModel::parseNetworkType(String str)
       return NETWORK_MAGIC;
    else if (str == "emesh_hop_counter")
       return NETWORK_EMESH_HOP_COUNTER;
-   else if (str == "analytical")
-      return NETWORK_ANALYTICAL_MESH;
-   else if (str == "emesh_hop_by_hop_basic")
-      return NETWORK_EMESH_HOP_BY_HOP_BASIC;
-   else if (str == "emesh_hop_by_hop_broadcast_tree")
-      return NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE;
+   else if (str == "emesh_hop_by_hop")
+      return NETWORK_EMESH_HOP_BY_HOP;
    else if (str == "bus")
       return NETWORK_BUS;
    else
@@ -70,13 +58,11 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
    {
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
-      case NETWORK_ANALYTICAL_MESH:
       case NETWORK_BUS:
          return std::make_pair(false,core_count);
 
-      case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-      case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-         return NetworkModelEMeshHopByHopGeneric::computeCoreCountConstraints(core_count);
+      case NETWORK_EMESH_HOP_BY_HOP:
+         return NetworkModelEMeshHopByHop::computeCoreCountConstraints(core_count);
 
       default:
          LOG_PRINT_ERROR("Unrecognized network type(%u)", network_type);
@@ -91,7 +77,6 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
    {
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
-      case NETWORK_ANALYTICAL_MESH:
       case NETWORK_BUS:
          {
             SInt32 spacing_between_memory_controllers = core_count / num_memory_controllers;
@@ -105,9 +90,8 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
             return std::make_pair(false, core_list_with_memory_controllers);
          }
 
-      case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-      case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-         return NetworkModelEMeshHopByHopGeneric::computeMemoryControllerPositions(num_memory_controllers, core_count);
+      case NETWORK_EMESH_HOP_BY_HOP:
+         return NetworkModelEMeshHopByHop::computeMemoryControllerPositions(num_memory_controllers, core_count);
 
       default:
          LOG_PRINT_ERROR("Unrecognized network type(%u)", network_type);

@@ -7,6 +7,7 @@
 #include "thread_manager.h"
 #include "core_manager.h"
 #include "core.h"
+#include "thread.h"
 #include "log.h"
 #include "network.h"
 #include "packet_type.h"
@@ -22,9 +23,9 @@
 namespace lite
 {
 
-multimap<core_id_t, pthread_t> tid_to_thread_ptr_map;
+multimap<thread_id_t, pthread_t> thread_id_to_thread_ptr_map;
 std::unordered_map<core_id_t, SubsecondTime> pthread_t_start;
-AFUNPTR pthread_create_func = NULL, pthread_join_func = NULL;
+AFUNPTR ptr_exit = NULL;
 
 struct pthread_functions_t {
    String name;
@@ -45,6 +46,21 @@ void printStackTrace(THREADID threadid, char * function, BOOL enter)
    printf("[%u] %s %s\n", threadid, function, enter ? "Enter" : "Exit");
 }
 
+void routineStartCallback(RTN rtn, INS ins)
+{
+   String rtn_name = RTN_Name(rtn).c_str();
+
+   // Routine instrumentation functions can cause a rescheduling need to be called *before* the handleBasicBlock
+   // for any code in the routine, else, we would first issue the basic block to one core and later the send the
+   // dynamic information to another core.
+
+   // Thread Joining
+   if (rtn_name.find("pthread_join") != string::npos)
+   {
+      INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(emuPthreadJoinBefore), IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
+   }
+}
+
 void routineCallback(RTN rtn, void* v)
 {
    String rtn_name = RTN_Name(rtn).c_str();
@@ -57,42 +73,6 @@ void routineCallback(RTN rtn, void* v)
       RTN_Close (rtn);
    }
 
-
-   // If we find pthread_create/pthread_join somewhere, save their pointer
-   if (rtn_name.find("pthread_create") != String::npos)
-      pthread_create_func = RTN_Funptr(rtn);
-   else if (rtn_name.find("pthread_join") != String::npos)
-      pthread_join_func = RTN_Funptr(rtn);
-
-
-   // main
-   if (rtn_name == "main")
-   {
-      if (! Sim()->getConfig()->useMagic()) {
-         RTN_Open(rtn);
-
-         RTN_InsertCall(rtn, IPOINT_BEFORE,
-               AFUNPTR(enablePerformanceGlobal),
-               IARG_END);
-
-         RTN_InsertCall(rtn, IPOINT_AFTER,
-               AFUNPTR(disablePerformanceGlobal),
-               IARG_END);
-
-         RTN_Close(rtn);
-      }
-   }
-   // or, when the application explicitly calls exit(), do it there
-   if (rtn_name == "exit")
-   {
-      if (! Sim()->getConfig()->useMagic()) {
-         RTN_Open (rtn);
-         RTN_InsertCall (rtn, IPOINT_BEFORE,
-               AFUNPTR(disablePerformanceGlobal),
-               IARG_END);
-         RTN_Close (rtn);
-      }
-   }
 
    // CarbonStartSim() and CarbonStopSim()
    if (rtn_name == "CarbonStartSim")
@@ -123,51 +103,12 @@ void routineCallback(RTN rtn, void* v)
    }
 
    // Thread Creation
-   else if (rtn_name == "CarbonSpawnThread")
-   {
-      PROTO proto = PROTO_Allocate(PIN_PARG(carbon_thread_t),
-            CALLINGSTD_DEFAULT,
-            "CarbonSpawnThread",
-            PIN_PARG(thread_func_t),
-            PIN_PARG(void*),
-            PIN_PARG_END());
-
-      RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::emuCarbonSpawnThread),
-            IARG_PROTOTYPE, proto,
-            IARG_CONTEXT,
-            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
-            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
-            IARG_END);
-   }
    else if (rtn_name.find("pthread_create") != string::npos)
    {
       RTN_Open(rtn);
       RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(emuPthreadCreateBefore), IARG_THREAD_ID,
          IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 2, IARG_FUNCARG_ENTRYPOINT_VALUE, 3, IARG_END);
       RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(emuPthreadCreateAfter), IARG_THREAD_ID, IARG_END);
-      RTN_Close(rtn);
-   }
-   // Thread Joining
-   else if (rtn_name == "CarbonJoinThread")
-   {
-      PROTO proto = PROTO_Allocate(PIN_PARG(void),
-            CALLINGSTD_DEFAULT,
-            "CarbonJoinThread",
-            PIN_PARG(carbon_thread_t),
-            PIN_PARG_END());
-
-      RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::emuCarbonJoinThread),
-            IARG_PROTOTYPE, proto,
-            IARG_CONTEXT,
-            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
-            IARG_END);
-   }
-   else if (rtn_name.find("pthread_join") != string::npos)
-   {
-      RTN_Open(rtn);
-      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(emuPthreadJoinBefore), IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
       RTN_Close(rtn);
    }
    // Synchronization
@@ -419,7 +360,23 @@ void routineCallback(RTN rtn, void* v)
    // os emulation
    else if (rtn_name == "get_nprocs")        RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
    else if (rtn_name == "get_nprocs_conf")   RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
-   else if (rtn_name == "clock_gettime")     RTN_Replace(rtn, AFUNPTR(emuClockGettime));
+   if (Sim()->getConfig()->getOSEmuClockReplace())
+   {
+      if (rtn_name == "clock_gettime")       RTN_Replace(rtn, AFUNPTR(emuClockGettime));
+      if (rtn_name.find("gettimeofday") != String::npos)
+                                             RTN_Replace(rtn, AFUNPTR(emuGettimeofday));
+   }
+
+   // icc/openmp compatibility
+   if (rtn_name == "__kmp_reap_monitor")
+   {
+      RTN_Open(rtn);
+      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(emuKmpReapMonitor), IARG_THREAD_ID, IARG_CONTEXT, IARG_END);
+      RTN_Close(rtn);
+   }
+
+   // save pointers to some functions we'll want to call through PIN_CallApplicationFunction
+   if (rtn_name == "exit")                   ptr_exit = RTN_Funptr(rtn);
 
    if (Sim()->getConfig()->getOSEmuPthreadReplace()) {
       if (rtn_name.find("pthread_mutex_init") != String::npos)      RTN_Replace(rtn, AFUNPTR(PthreadEmu::MutexInit));
@@ -460,114 +417,55 @@ AFUNPTR getFunptr(CONTEXT* context, string func_name)
    return RTN_Funptr(rtn);
 }
 
-carbon_thread_t emuCarbonSpawnThread(CONTEXT* context,
-      thread_func_t thread_func, void* arg)
-{
-   LOG_PRINT("Entering emuCarbonSpawnThread(%p, %p)", thread_func, arg);
-
-   core_id_t tid = Sim()->getThreadManager()->spawnThread(thread_func, arg);
-
-   LOG_ASSERT_ERROR(pthread_create_func != NULL, "Could not find pthread_create");
-
-   int ret;
-   pthread_t* thread_ptr = new pthread_t;
-   PIN_CallApplicationFunction(context, PIN_ThreadId(),
-         CALLINGSTD_DEFAULT,
-         pthread_create_func,
-         PIN_PARG(int), &ret,
-         PIN_PARG(pthread_t*), thread_ptr,
-         PIN_PARG(pthread_attr_t*), NULL,
-         PIN_PARG(void* (*)(void*)), thread_func,
-         PIN_PARG(void*), arg,
-         PIN_PARG_END());
-
-   LOG_ASSERT_ERROR(ret == 0, "pthread_create() returned(%i)", ret);
-
-   // FIXME: Figure out if we need to put a lock
-   tid_to_thread_ptr_map.insert(std::pair<core_id_t, pthread_t>(tid, *thread_ptr));
-
-   return tid;
-}
-
-void emuPthreadCreateBefore(THREADID thread_id, ADDRINT thread_ptr, void* (*thread_func)(void*), void* arg)
+void emuPthreadCreateBefore(THREADID threadIndex, ADDRINT thread_ptr, void* (*thread_func)(void*), void* arg)
 {
    // We have to do a loose match on pthread_create (it's sometimes called __pthread_create_2_1),
    // but that can cause recursion on this function. Detect this by keeping a count
    // and only act on the outer call.
-   if (0 == localStore[thread_id].pthread_create.count++) {
-      core_id_t tid = Sim()->getThreadManager()->spawnThread(thread_func, arg);
+   if (0 == localStore[threadIndex].pthread_create.count++) {
+      Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+      thread_id_t new_thread_id = Sim()->getThreadManager()->spawnThread(thread->getId(), thread_func, arg);
 
-      LOG_ASSERT_ERROR(pthread_create_func != NULL, "Could not find pthread_create");
-
-      localStore[thread_id].pthread_create.thread_ptr = thread_ptr;
-      localStore[thread_id].pthread_create.tid = tid;
+      localStore[threadIndex].pthread_create.thread_ptr = thread_ptr;
+      localStore[threadIndex].pthread_create.thread_id = new_thread_id;
     }
 }
 
-void emuPthreadCreateAfter(THREADID thread_id)
+void emuPthreadCreateAfter(THREADID threadIndex)
 {
-   if (0 == --localStore[thread_id].pthread_create.count) {
-      pthread_t* thread_ptr = (pthread_t*)localStore[thread_id].pthread_create.thread_ptr;
-      core_id_t tid = localStore[thread_id].pthread_create.tid;
-      tid_to_thread_ptr_map.insert(std::pair<core_id_t, pthread_t>(tid, *thread_ptr));
+   if (0 == --localStore[threadIndex].pthread_create.count) {
+      pthread_t* thread_ptr = (pthread_t*)localStore[threadIndex].pthread_create.thread_ptr;
+      thread_id_t new_thread_id = localStore[threadIndex].pthread_create.thread_id;
+      thread_id_to_thread_ptr_map.insert(std::pair<thread_id_t, pthread_t>(new_thread_id, *thread_ptr));
+
+      // Waiting for the thread to actually start sounds like a good idea, and even though we do it outside of any callbacks,
+      // deadlocks still seem to occur in Pin if we enable this. Anyway, comparing our supposed start time with the actual time
+      // (as known by the barrier) in ThreadManager::onThreadStart doesn't seem to give big differences anyway, so we should be Ok.
+      //Sim()->getThreadManager()->waitForThreadStart(localStore[threadIndex].thread->getId(), new_thread_id);
    }
 }
 
-void emuCarbonJoinThread(CONTEXT* context,
-      carbon_thread_t tid)
+void emuPthreadJoinBefore(THREADID thread_id, pthread_t pthread)
 {
-   multimap<core_id_t, pthread_t>::iterator it;
+   Thread* thread = Sim()->getThreadManager()->getCurrentThread(thread_id);
+   thread_id_t join_thread_id = INVALID_THREAD_ID;
 
-   it = tid_to_thread_ptr_map.find(tid);
-   LOG_ASSERT_ERROR(it != tid_to_thread_ptr_map.end(),
-         "Cant find thread_ptr for tid(%i)", tid);
-
-   pthread_t thread = it->second;
-
-   LOG_PRINT("Starting emuCarbonJoinThread: thread(%p), tid(%i)", thread, tid);
-
-   Sim()->getThreadManager()->joinThread(tid);
-
-   tid_to_thread_ptr_map.erase(it);
-
-   LOG_ASSERT_ERROR(pthread_join_func != NULL, "Could not find pthread_join");
-
-   int ret;
-   PIN_CallApplicationFunction(context, PIN_ThreadId(),
-         CALLINGSTD_DEFAULT,
-         pthread_join_func,
-         PIN_PARG(int), &ret,
-         PIN_PARG(pthread_t), thread,
-         PIN_PARG(void**), NULL,
-         PIN_PARG_END());
-
-   LOG_ASSERT_ERROR(ret == 0, "pthread_join() returned(%i)", ret);
-
-   LOG_PRINT("Finished emuCarbonJoinThread: thread(%p), tid(%i)", thread, tid);
-}
-
-void emuPthreadJoinBefore(pthread_t thread)
-{
-   core_id_t tid = INVALID_CORE_ID;
-
-   multimap<core_id_t, pthread_t>::iterator it;
-   for (it = tid_to_thread_ptr_map.begin(); it != tid_to_thread_ptr_map.end(); it++)
+   multimap<thread_id_t, pthread_t>::iterator it;
+   for (it = thread_id_to_thread_ptr_map.begin(); it != thread_id_to_thread_ptr_map.end(); it++)
    {
-      if (pthread_equal(it->second, thread) != 0)
+      if (pthread_equal(it->second, pthread) != 0)
       {
-         tid = it->first;
+         join_thread_id = it->first;
          break;
       }
    }
-   LOG_ASSERT_ERROR(tid != INVALID_CORE_ID, "Could not find core_id");
+   LOG_ASSERT_ERROR(join_thread_id != INVALID_CORE_ID, "Could not find core_id");
 
-   LOG_PRINT("Joining Thread_ptr(%p), tid(%i)", &thread, tid);
+   LOG_PRINT("Joining Thread_ptr(%p), tid(%i)", &pthread, join_thread_id);
 
-   Sim()->getThreadManager()->joinThread(tid);
+   Sim()->getThreadManager()->joinThread(thread->getId(), join_thread_id);
 
-   tid_to_thread_ptr_map.erase(it);
-
-   LOG_ASSERT_ERROR(pthread_join_func != NULL, "Could not find pthread_join");
+   thread_id_to_thread_ptr_map.erase(it);
 }
 
 IntPtr nullFunction()
@@ -612,7 +510,8 @@ IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp)
          if (tp)
          {
             Core* core = Sim()->getCoreManager()->getCurrentCore();
-            UInt64 time = core->getPerformanceModel()->getElapsedTime().getNS();
+            UInt64 time = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart()).getNS()
+                        + core->getPerformanceModel()->getElapsedTime().getNS();
 
             tp->tv_sec = time / 1000000000;
             tp->tv_nsec = time % 1000000000;
@@ -622,6 +521,34 @@ IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp)
          // Unknown/non-emulated clock types (such as CLOCK_PROCESS_CPUTIME_ID/CLOCK_THREAD_CPUTIME_ID)
          return clock_gettime(clk_id, tp);
    }
+}
+
+IntPtr emuGettimeofday(struct timeval *tv, struct timezone *tz)
+{
+   LOG_ASSERT_WARNING_ONCE(tz == NULL, "gettimeofday() with non-NULL timezone not supported");
+   LOG_ASSERT_ERROR(tv != NULL, "gettimeofday() called with NULL timeval not supported");
+
+   Core* core = Sim()->getCoreManager()->getCurrentCore();
+   UInt64 time = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart()).getNS()
+               + core->getPerformanceModel()->getElapsedTime().getNS();
+
+   tv->tv_sec = time / 1000000000;
+   tv->tv_usec = (time / 1000) % 1000000;
+
+   return 0;
+}
+
+void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt)
+{
+   // Hack to make ICC's OpenMP runtime library work.
+   // This runtime creates a monitor thread which blocks in a condition variable with a timeout.
+   // On exit, thread 0 executes __kmp_reap_monitor() which join()s on this monitor thread.
+   // In due time, the timeout occurs and the monitor thread returns
+   // from pthread_cond_timedwait(), sees that it should be exiting, and returns.
+   // However, in simulation all of this happens post-ROI, where time is not advancing so the timeout never occurs.
+   // Having time advance using a one-IPC model during pre- and post-ROI would be nice, but for now,
+   // just forcefully terminate the application when the master thread reaches __kmp_reap_monitor().
+   PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, PIN_PARG(int), 0, PIN_PARG_END());
 }
 
 }

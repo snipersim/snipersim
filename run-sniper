@@ -2,7 +2,7 @@
 
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, Queue, socket, pipes, commands
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-import graphite_lib, gen_simout
+import graphite_lib, gen_simout, debugpin
 
 
 HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
@@ -11,14 +11,12 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Run program under Graphite simulator'
   print 'Usage:'
-  print '  %s  -n <ncores (1)>  -m <machines (1)>  -d <outputdir (.)>  -c <graphite-config>  -g <graphite-options> {--traces=<trace0>,<trace1>,... | -- <cmdline>}' % sys.argv[0]
+  print '  %s  -n <ncores (1)>  -d <outputdir (.)>  -c <graphite-config>  -g <graphite-options> {--traces=<trace0>,<trace1>,... | -- <cmdline>}' % sys.argv[0]
   print '  with: -n: number of simulated cores'
-  print '        -m: list of machines for distributed simulation'
   sys.exit(2)
 
 standalone = False
 ncores = 1
-machines = None
 outputdir = '.'
 graphiteoptions = []
 config_file_used = False
@@ -69,8 +67,6 @@ for o, a in opts:
     sys.exit()
   if o == '-n':
     ncores = int(a)
-  if o == '-m':
-    machines = a.split()
   if o == '-d':
     outputdir = a
   if o == '-c':
@@ -134,16 +130,13 @@ else:
     usage()
 
 if standalone:
-  if use_perf:
-    print '--perf not supported in standalone mode'
-    sys.exit(-1)
   if use_appdebug:
     print '--appdebug not supported in standalone mode'
     sys.exit(-1)
 
 if not config_file_used:
-  # No config file(s) specified: default to Xeon X5550 Gainestown
-  graphiteoptions += add_config_file('gainestown')
+  # No config file(s) specified: prepend default Xeon X5550 Gainestown
+  graphiteoptions = add_config_file('gainestown') + graphiteoptions
 
 if scripts:
   graphiteoptions.append('-g --hooks/numscripts=%u' % len(scripts))
@@ -162,23 +155,35 @@ if scripts:
       scriptfile = os.path.abspath(os.path.join(curdir, filename))
       if not os.path.isfile(scriptfile):
         # Predefined script?
-        scriptfile = os.path.join(HOME, 'scripts', filename + '.lua')
+        scriptfile = os.path.join(HOME, 'scripts', filename + '.py')
         if not os.path.isfile(scriptfile):
-          scriptfile = os.path.join(HOME, 'scripts', filename + '.py')
-          if not os.path.isfile(scriptfile):
-            print 'Cannot find script file', scriptfile
-            sys.exit(-1)
+          print 'Cannot find script file', scriptfile
+          sys.exit(-1)
     graphiteoptions.append('-g --hooks/script%uname=%s' % (i, scriptfile))
-    if args:
-      graphiteoptions.append('-g --hooks/script%uargs=%s' % (i, args))
+    graphiteoptions.append('-g --hooks/script%uargs=%s' % (i, args or ''))
+
+def findtrace(trace):
+  for dirname in ('.', os.getenv('BENCHMARKS_TRACES', '.'), os.getenv('BENCHMARKS_ROOT', '.'), os.getenv('BENCHMARKS_ROOT_ORIG', '.')):
+    for subdir in ('.', 'traces'):
+      filename = os.path.realpath(os.path.join(dirname, subdir, trace))
+      if os.path.exists(filename):
+        return filename
+      filename += '.sift'
+      if os.path.exists(filename):
+        return filename
+  return False
 
 if traces:
   graphiteoptions.append('-g --traceinput/enabled=true')
-  for core_id, trace in enumerate(traces):
-    if core_id >= ncores:
-      print 'Specified trace file for core', core_id, 'but only', ncores, 'core(s) available'
+  graphiteoptions.append('-g --traceinput/threads=%d' % len(traces))
+  for thread_id, trace in enumerate(traces):
+    filename = findtrace(trace)
+    if filename:
+      print '[SNIPER] (%u) Using trace file %s' % (thread_id, filename)
+      graphiteoptions.append('-g --traceinput/thread_%u=%s' % (thread_id, filename))
+    else:
+      print 'Cannot find trace', trace
       sys.exit(-1)
-    graphiteoptions.append('-g --traceinput/core_%u=%s' % (core_id, os.path.realpath(trace)))
 
 graphiteoptions = ' '.join(graphiteoptions)
 
@@ -187,13 +192,14 @@ config = {}
 execfile(configfile, {}, config)
 
 # convert paths in config to absolute paths
-for d in ('pin_home', 'boost_lib'):
+for d in ('pin_home',):
   absdir = os.path.join(HOME, config[d])
   if not os.path.isdir(absdir):
     sys.stderr.write('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
     sys.exit(-1)
   exec "%s = '%s'" % (d, absdir)
 sim_root = HOME
+arch = config.get('target', 'intel64')
 
 
 pinoptions = '-mt -injection child'
@@ -201,9 +207,6 @@ if pin_stats:
   pinoptions += ' -xyzzy -profile -statistic -log_inline'
 
 if use_gdb:
-  if machines and len(machines) > 1:
-    print 'Cannot combine --gdb and -m'
-    sys.exit(-1)
   pinoptions += ' -pause_tool 1'
 
 if use_appdebug:
@@ -212,30 +215,9 @@ if use_appdebug:
   else:
     pinoptions += ' -appdebug'
 
-# choose base TCP port number
-base_port = (os.getpid() % 500) * 100 + 2000
 
-
-if not machines:
-  machines = [ False ]
-  nmachines = 1
-  processmap = ''
-else:
-  machines = set(machines) # only start Graphite once per machine, each process will automatically use multiple threads
-  if '--noib' not in graphiteoptions:
-    machines = map(lambda m: m.replace('.gengar.gent.vsc', '.data.cluster'), machines) # use IPoIB hostnames so we'll communicate over Infiniband
-  else:
-    graphiteoptions = graphiteoptions.replace('--noib', '')
-  nmachines = len(machines)
-  if nmachines == 1:
-    machines = [ False ]
-    processmap = ''
-  else:
-    processmap = ' '.join('--process_map/process%u=%s' % item for item in enumerate(machines))
-
-
-envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/intel64/runtime:%(boost_lib)s:%(HOME)s/python_kit/lib:$LD_LIBRARY_PATH"; export PYTHONHOME=%(HOME)s/python_kit; export PYTHONPATH=%(HOME)s/scripts:$PYTHONPATH; ' % locals()
-optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/num_processes=%(nmachines)u --general/output_dir=%(outputdir)s --transport/base_port=%(base_port)u %(processmap)s %(graphiteoptions)s' % locals()
+envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/%(arch)s/runtime:%(HOME)s/python_kit/lib:$LD_LIBRARY_PATH"; export PYTHONPATH=%(HOME)s/scripts:$PYTHONPATH; ' % locals()
+optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(graphiteoptions)s' % locals()
 if standalone:
   if use_gdb:
     gdbcmd = 'gdb %(HOME)s/lib/sniper --args ' % locals()
@@ -243,7 +225,7 @@ if standalone:
     gdbcmd = ''
   cmd = envcmd + gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
 else:
-  cmd = envcmd + '%(pin_home)s/intel64/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/pin_sim' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
+  cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/pin_sim' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
 
 queue = Queue.Queue()
 
@@ -274,70 +256,25 @@ def log_memory(pid):
   threading.Thread(target = do_log_memory).start()
 
 
-def execute(i, machine):
-  envcmd = 'export CARBON_PROCESS_INDEX=%(i)u; ' % locals()
-  mycmd = envcmd + cmd
+def execute():
+  global cmd
 
-  if machine and machine.lower() not in ('localhost', socket.gethostname().lower(), socket.getfqdn().lower()):
-    mycmd = [ 'ssh', machine, 'cd %s; %s' % (os.getcwd(), mycmd) ]
-  else:
-    #mycmd = [ 'bash', '-c', '((' + mycmd + ' |tee %s) 3>&1 1>&2 2>&3 |tee %s 2>&1)' % (os.path.join(outputdir, 'stdout.txt'), os.path.join(outputdir, 'stderr.txt')) ]
-    mycmd = [ 'bash', '-c', mycmd ]
-    if use_perf:
-      mycmd = [ 'perf', 'record', '--force', '--output', os.path.join(outputdir, 'perf.data'), '--' ] + mycmd
+  cmd = [ 'bash', '-c', cmd ]
+  if use_perf:
+    cmd = [ 'perf', 'record', '--force', '--output', os.path.join(outputdir, 'perf.data'), '--' ] + cmd
 
-  print 'Running', mycmd
+  print 'Running', cmd
   sys.stdout.flush()
   sys.stderr.flush()
-  subproc = subprocess.Popen(mycmd)
+  subproc = subprocess.Popen(cmd)
 
   log_memory(subproc.pid)
 
   try:
     subproc.communicate()
   except KeyboardInterrupt:
-    os.kill(subproc.getpid())
-  queue.put(subproc.returncode)
-
-
-def execute_gdb():
-  print 'Running', cmd
-  sys.stdout.flush()
-  sys.stderr.flush()
-
-  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE)
-  g_pid = 0
-  g_symbols = ''
-  while True:
-    line = p_graphite.stdout.readline()
-    if line.startswith('Pausing to attach to pid'):
-      g_pid = line.split()[-1]
-    elif line.startswith('   add-symbol-file'):
-      g_symbols = line
-    if g_pid and g_symbols:
-      break
-
-  def output_graphite():
-    while True:
-      line = p_graphite.stdout.readline()
-      if not line: break
-      print line,
-  threading.Thread(target = output_graphite).start()
-
-  fh, fn = tempfile.mkstemp()
-  f = open(fn, 'w')
-  f.write('attach %s\n%s\n' % (g_pid, g_symbols))
-  if not gdb_wait:
-    f.write('continue\n')
-  # Only quit GDB when we have not seen a signal
-  if gdb_quit:
-    f.write('if ($_siginfo)\n')
-    f.write('else \n')
-    f.write(' quit\n')
-    f.write('end\n')
-  f.close()
-
-  os.system('gdb -quiet -command=%s %s' % (fn, '%(pin_home)s/intel64/bin/pinbin' % globals()))
+    os.kill(subproc.pid, 9)
+  return subproc.returncode
 
 
 def execute_appdebug():
@@ -369,7 +306,7 @@ def execute_appdebug():
   f.write('target remote :%s\n' % g_remote)
   f.close()
 
-  os.system('gdb -quiet -command=%s %s' % (fn, '/proc/%s/exe' % g_pid)) # /proc/<pid>/exe is a symlink to the actual binary
+  return os.system('gdb -quiet -command=%s %s' % (fn, '/proc/%s/exe' % g_pid)) # /proc/<pid>/exe is a symlink to the actual binary
 
 
 if save_patch:
@@ -384,19 +321,16 @@ print '[SNIPER] Start'
 
 try:
   if use_gdb and not standalone:
-    execute_gdb()
-    threads = []
+    rc = debugpin.execute_gdb(cmd = cmd, pin_home = pin_home, arch = arch, wait = gdb_wait, quit = gdb_quit)
   elif use_appdebug and not (appdebug_manual or appdebug_nowait):
-    execute_appdebug()
-    threads = []
+    rc = execute_appdebug()
   else:
-    threads = [ threading.Thread(target = execute, args = (i, machine)) for i, machine in enumerate(machines) ]
-    for t in threads: t.daemon = True; t.start()
-    for t in threads: t.join()
+    rc = execute()
 
 except KeyboardInterrupt:
   # Make sure Graphite itself is stopped, even if it didn't respond to the SIGINT
   print '\n[SNIPER] Ctrl-C detected: Killing all child processes'
+  time.sleep(1)
   graphite_lib.kill_children()
   sys.exit(-1)
 
@@ -414,7 +348,7 @@ if run_power:
 stats = dict(
   host = platform.node(),
   user = os.getenv('USER') or os.getenv('USERNAME'),
-  git_revision = config['git_revision'],
+  git_revision = config.get('git_revision', ''),
   cmdline = sys.argv,
   graphitecmd = cmd,
   vmem = memusage,
@@ -429,10 +363,8 @@ file(os.path.join(outputdir, 'graphite.out'), 'w').write(pprint.pformat(stats))
 if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpath(outputdir):
   os.system('cp pin.log %s' % outputdir)
 
-gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'))
+simoutfile = os.path.join(outputdir, 'sim.out')
+if os.path.exists(simoutfile): os.unlink(simoutfile)
+gen_simout.generate_simout(resultsdir = outputdir, output = open(simoutfile, 'w'), silent = True)
 
-for i in threads:
-  rc = queue.get()
-  if rc != 0:
-    sys.exit(rc)
-sys.exit(0)
+sys.exit(rc)

@@ -48,6 +48,9 @@ public:
    BranchPredictor *getBranchPredictor() { return m_bp; }
    BranchPredictor const* getConstBranchPredictor() const { return m_bp; }
 
+   virtual void barrierEnter() { }
+   virtual void barrierExit() { }
+
    void disable();
    void enable();
    bool isEnabled() { return m_enabled; }

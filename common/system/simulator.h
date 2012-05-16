@@ -6,14 +6,16 @@
 #include "inst_mode.h"
 
 
-class MCP;
-class LCP;
+class _Thread;
+class SyscallServer;
+class SyncServer;
+class MagicServer;
+class ClockSkewMinimizationServer;
 class StatsManager;
 class Transport;
 class CoreManager;
 class Thread;
 class ThreadManager;
-class PerfCounterManager;
 class SimThreadManager;
 class HooksManager;
 class ClockSkewMinimizationManager;
@@ -30,21 +32,22 @@ public:
    void start();
 
    static Simulator* getSingleton() { return m_singleton; }
-   static void setConfig(config::Config * cfg, Config::SimulationMode mode = Config::SimulationMode::FROM_CONFIG);
+   static void setConfig(config::Config * cfg, Config::SimulationMode mode);
    static void allocate();
    static void release();
 
-   MCP *getMCP() { return m_mcp; }
-   LCP *getLCP() { return m_lcp; }
+   SyscallServer* getSyscallServer() { return m_syscall_server; }
+   SyncServer* getSyncServer() { return m_sync_server; }
+   MagicServer* getMagicServer() { return m_magic_server; }
+   ClockSkewMinimizationServer* getClockSkewMinimizationServer() { return m_clock_skew_minimization_server; }
    CoreManager *getCoreManager() { return m_core_manager; }
    SimThreadManager *getSimThreadManager() { return m_sim_thread_manager; }
    ThreadManager *getThreadManager() { return m_thread_manager; }
-   PerfCounterManager *getPerfCounterManager() { return m_perf_counter_manager; }
    ClockSkewMinimizationManager *getClockSkewMinimizationManager() { return m_clock_skew_minimization_manager; }
    Config *getConfig() { return &m_config; }
    config::Config *getCfg() {
-      if (! m_config_file_allowed)
-         fprintf(stderr, "getCfg() called after init, this is not nice\n");
+      //if (! m_config_file_allowed)
+      //   LOG_PRINT_ERROR("getCfg() called after init, this is not nice\n");
       return m_config_file;
    }
    void hideCfg() { m_config_file_allowed = false; }
@@ -53,11 +56,8 @@ public:
    HooksManager *getHooksManager() { return m_hooks_manager; }
    TraceManager *getTraceManager() { return m_trace_manager; }
 
-   void ValidateDataUpdate(IntPtr address, Byte* data_buf, UInt32 data_length);
-   bool ValidateDataRead(IntPtr address, Byte* data_buf, UInt32 data_length);
-
-   static void enablePerformanceModelsInCurrentProcess();
-   static void disablePerformanceModelsInCurrentProcess();
+   static void enablePerformanceModels();
+   static void disablePerformanceModels();
 
    void setInstrumentationMode(InstMode::inst_mode_t new_mode);
    InstMode::inst_mode_t getInstrumentationMode() { return InstMode::inst_mode; }
@@ -67,29 +67,16 @@ public:
    bool finished();
 
 private:
-
-   void startMCP();
-   void endMCP();
-
-   // handle synchronization of shutdown for distributed simulator objects
-   void broadcastFinish();
-   void handleFinish(); // slave processes
-   void deallocateProcess(); // master process
-   friend class LCP;
-
-   MCP *m_mcp;
-   Thread *m_mcp_thread;
-
-   LCP *m_lcp;
-   Thread *m_lcp_thread;
-
    Config m_config;
    Log m_log;
+   SyscallServer *m_syscall_server;
+   SyncServer *m_sync_server;
+   MagicServer *m_magic_server;
+   ClockSkewMinimizationServer *m_clock_skew_minimization_server;
    StatsManager *m_stats_manager;
    Transport *m_transport;
    CoreManager *m_core_manager;
    ThreadManager *m_thread_manager;
-   PerfCounterManager *m_perf_counter_manager;
    SimThreadManager *m_sim_thread_manager;
    ClockSkewMinimizationManager *m_clock_skew_minimization_manager;
    TraceManager *m_trace_manager;
@@ -100,9 +87,6 @@ private:
 
    std::map<IntPtr, Byte> m_memory;
    Lock m_memory_lock;
-
-   bool m_finished;
-   UInt32 m_num_procs_finished;
 
    UInt64 m_boot_time;
    UInt64 m_start_time;

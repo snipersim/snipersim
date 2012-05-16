@@ -20,31 +20,19 @@ static void gatherSummaries(std::vector<String> &summaries)
    Config *cfg = Config::getSingleton();
    Transport::Node *global_node = Transport::getSingleton()->getGlobalNode();
 
-   for (UInt32 p = 0; p < cfg->getProcessCount(); p++)
+   // receive summary
+   for (core_id_t c = 0; c < (core_id_t)cfg->getTotalCores(); c++)
    {
-      LOG_PRINT("Collect from process %d", p);
+      LOG_PRINT("Collect from core %d", c);
 
-      const Config::CoreList &cl = cfg->getCoreListForProcess(p);
+      Byte *buf;
 
-      // signal process to send
-      if (p != 0)
-         global_node->globalSend(p, &p, sizeof(p));
+      buf = global_node->recv();
+      assert(*((core_id_t*)buf) == c);
+      delete [] buf;
 
-      // receive summary
-      for (UInt32 c = 0; c < cl.size(); c++)
-      {
-         LOG_PRINT("Collect from core %d", cl[c]);
-
-         Byte *buf;
-
-         buf = global_node->recv();
-         assert(*((core_id_t*)buf) == cl[c]);
-         delete [] buf;
-
-         buf = global_node->recv();
-         summaries[cl[c]] = String((char*)buf);
-         delete [] buf;
-      }
+      buf = global_node->recv();
+      summaries[c] = String((char*)buf);
    }
 
    for (UInt32 i = 0; i < summaries.size(); i++)
@@ -156,19 +144,6 @@ void addColHeadings(Table &table)
       heading << "Core " << i;
       table(0, i+1) = heading.str().c_str();
    }
-
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
-   {
-      for (unsigned int i = 0; i < Config::getSingleton()->getProcessCount(); i++)
-      {
-         unsigned int core_num = Config::getSingleton()->getThreadSpawnerCoreNum(i);
-         std::stringstream heading;
-         heading << "TS " << i;
-         table(0, core_num + 1) = heading.str().c_str();
-      }
-   }
-
-   table(0, Config::getSingleton()->getMCPCoreNum()+1) = "MCP";
 }
 
 void addCoreSummary(Table &table, core_id_t core, const String &summary)
@@ -220,29 +195,15 @@ void CoreManager::outputSummary(std::ostream &os)
    Config *cfg = Config::getSingleton();
    Transport::Node *global_node = Transport::getSingleton()->getGlobalNode();
 
-   // wait for my turn...
-   if (cfg->getCurrentProcessNum() != 0)
-   {
-      Byte *buf = global_node->recv();
-      assert(*((UInt32*)buf) == cfg->getCurrentProcessNum());
-      delete [] buf;
-   }
-
    // send each summary
-   const Config::CoreList &cl = cfg->getCoreListForProcess(cfg->getCurrentProcessNum());
-
-   for (UInt32 i = 0; i < cl.size(); i++)
+   for (UInt32 i = 0; i < cfg->getTotalCores(); i++)
    {
-      LOG_PRINT("Output summary core %i", cl[i]);
+      LOG_PRINT("Output summary core %i", i);
       std::stringstream ss;
       m_cores[i]->outputSummary(ss);
-      global_node->globalSend(0, &cl[i], sizeof(cl[i]));
+      global_node->globalSend(0, &i, sizeof(i));
       global_node->globalSend(0, ss.str().c_str(), ss.str().length()+1);
    }
-
-   // format (only done on proc 0)
-   if (cfg->getCurrentProcessNum() != 0)
-      return;
 
    std::vector<String> summaries(cfg->getTotalCores());
    String formatted;

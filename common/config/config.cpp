@@ -7,9 +7,22 @@
 #include "config.hpp"
 
 #include <boost/algorithm/string.hpp>
+#include <cstdarg>
+#include <cstdio>
 
 namespace config
 {
+
+   void Error(const char* format, ...)
+   {
+      fprintf(stderr, "\n*** Configuration error ***\n");
+      va_list args;
+      va_start(args, format);
+      vfprintf(stderr, format, args);
+      va_end(args);
+      fprintf(stderr, "\n\n");
+      exit(0);
+   }
 
     bool Config::isLeaf(const String & path)
     {
@@ -65,98 +78,37 @@ namespace config
         m_root.clear();
     }
 
-    const Key & Config::getKey(const String & path)
+    const Key & Config::getKey(const String & path, UInt64 index)
     {
         //Handle the base case
         if(isLeaf(path))
         {
-            if(!m_root.hasKey(path))
-                throw KeyNotFound();
+            if(!m_root.hasKey(path, index))
+            {
+                if (index == UINT64_MAX)
+                    config::Error("Configuration value %s not found.", path.c_str());
+                else
+                    config::Error("Configuration value %s[%i] not found.", path.c_str(), index);
+            }
             else
-                return m_root.getKey(path);
+            {
+                return m_root.getKey(path, index);
+            }
         }
 
         //Disect the path
         PathPair path_pair = Config::splitPath(path);
         Section & section = getSection_unsafe(path_pair.first);
 
-        //add the key if it doesn't already exist
-        if(!section.hasKey(path_pair.second))
+        if(!section.hasKey(path_pair.second, index))
         {
-            section.addKey(path_pair.second, "");
+            if (index == UINT64_MAX)
+                config::Error("Configuration value %s not found.", path.c_str());
+            else
+                config::Error("Configuration value %s[%i] not found.", path.c_str(), index);
         }
 
-        return section.getKey(path_pair.second);
-    }
-
-
-    const Key & Config::getKey(const String & path, SInt64 default_val)
-    {
-        //Handle the base case
-        if(isLeaf(path))
-        {
-            if(!m_root.hasKey(path))
-                m_root.addKey(path, default_val);
-            return m_root.getKey(path);
-        }
-
-        //Disect the path
-        PathPair path_pair = Config::splitPath(path);
-        Section & section = getSection_unsafe(path_pair.first);
-
-        //add the key if it doesn't already exist
-        if(!section.hasKey(path_pair.second))
-        {
-            section.addKey(path_pair.second, default_val);
-        }
-
-        return section.getKey(path_pair.second);
-    }
-
-    const Key & Config::getKey(const String & path, double default_val)
-    {
-        //Handle the base case
-        if(isLeaf(path))
-        {
-            if(!m_root.hasKey(path))
-                m_root.addKey(path, default_val);
-            return m_root.getKey(path);
-        }
-
-        //Disect the path
-        PathPair path_pair = Config::splitPath(path);
-        Section & section = getSection_unsafe(path_pair.first);
-
-        //add the key if it doesn't already exist
-        if(!section.hasKey(path_pair.second))
-        {
-            section.addKey(path_pair.second, default_val);
-        }
-
-        return section.getKey(path_pair.second);
-    }
-
-    const Key & Config::getKey(const String & path, const String &default_val)
-    {
-        //Handle the base case
-        if(isLeaf(path))
-        {
-            if(!m_root.hasKey(path))
-                m_root.addKey(path, default_val);
-            return m_root.getKey(path);
-        }
-
-        //Disect the path
-        PathPair path_pair = Config::splitPath(path);
-        Section & section = getSection_unsafe(path_pair.first);
-
-        //add the key if it doesn't already exist
-        if(!section.hasKey(path_pair.second))
-        {
-            section.addKey(path_pair.second, default_val);
-        }
-
-        return section.getKey(path_pair.second);
+        return section.getKey(path_pair.second, index);
     }
 
     const Section & Config::addSection(const String & path)
@@ -190,37 +142,16 @@ namespace config
         return PathPair(base_path,key_name);
     }
 
-    const Key & Config::addKey(const String & path, const String & value)
+    template <class V>
+    const Key & Config::addKeyInternal(const String & path, const V & value, UInt64 index)
     {
         //Handle the base case
         if(isLeaf(path))
-            return m_root.addKey(path, value);
+            return m_root.addKey(path, value, index);
 
         PathPair path_pair = Config::splitPath(path);
         Section &parent = getSection_unsafe(path_pair.first);
-        return parent.addKey(path_pair.second, value);
-    }
-
-    const Key & Config::addKey(const String & path, SInt64 value)
-    {
-        //Handle the base case
-        if(isLeaf(path))
-            return m_root.addKey(path, value);
-
-        PathPair path_pair = Config::splitPath(path);
-        Section &parent = getSection_unsafe(path_pair.first);
-        return parent.addKey(path_pair.second, value);
-    }
-
-    const Key & Config::addKey(const String & path, double value)
-    {
-        //Handle the base case
-        if(isLeaf(path))
-            return m_root.addKey(path, value);
-
-        PathPair path_pair = Config::splitPath(path);
-        Section &parent = getSection_unsafe(path_pair.first);
-        return parent.addKey(path_pair.second, value);
+        return parent.addKey(path_pair.second, value, index);
     }
 
     //Convert the in-memory representation into a string
@@ -268,56 +199,24 @@ namespace config
     }
 
     //Below are the getters which also handle default values
-    bool Config::getBool(const String & path)
+    bool Config::getBoolArray(const String & path, UInt64 index)
     {
-        return getKey(path).getBool();
+        return getKey(path, index).getBool();
     }
 
-    bool Config::getBool(const String & path, bool default_val)
+    SInt64 Config::getIntArray(const String & path, UInt64 index)
     {
-        String s;
-        if (default_val)
-           s = "true";
-        else
-           s = "false";
-        return getKey(path, s).getBool();
+        return getKey(path, index).getInt();
     }
 
-    bool Config::getBool(const String & path, const String & default_val)
+    const String Config::getStringArray(const String & path, UInt64 index)
     {
-        return getKey(path, default_val).getBool();
+        return getKey(path, index).getString();
     }
 
-    bool Config::getBool(const String & path, const char * default_val)
+    double Config::getFloatArray(const String & path, UInt64 index)
     {
-        return getKey(path, default_val).getBool();
-    }
-
-    SInt64 Config::getInt(const String & path)
-    {
-        return getKey(path).getInt();
-    }
-    SInt64 Config::getInt(const String & path, SInt64 default_val)
-    {
-        return getKey(path,default_val).getInt();
-    }
-
-    const String Config::getString(const String & path)
-    {
-        return getKey(path).getString();
-    }
-    const String Config::getString(const String & path, const String & default_val)
-    {
-        return getKey(path,default_val).getString();
-    }
-
-    double Config::getFloat(const String & path)
-    {
-        return getKey(path).getFloat();
-    }
-    double Config::getFloat(const String & path, double default_val)
-    {
-        return getKey(path,default_val).getFloat();
+        return getKey(path,index).getFloat();
     }
 
 }//end of namespace config

@@ -12,6 +12,7 @@ Instruction::StaticInstructionCosts Instruction::m_instruction_costs;
 
 Instruction::Instruction(InstructionType type, OperandList &operands)
    : m_type(type)
+   , m_uops(NULL)
    , m_addr(0)
    , m_operands(operands)
 {
@@ -19,6 +20,7 @@ Instruction::Instruction(InstructionType type, OperandList &operands)
 
 Instruction::Instruction(InstructionType type)
    : m_type(type)
+   , m_uops(NULL)
    , m_addr(0)
 {
 }
@@ -50,7 +52,7 @@ void Instruction::initializeStaticInstructionModel()
    {
        char key_name [1024];
        snprintf(key_name, 1024, "perf_model/core/static_instruction_costs/%s", INSTRUCTION_NAMES[i]);
-       UInt32 instruction_cost = Sim()->getCfg()->getInt(key_name, 0);
+       UInt32 instruction_cost = Sim()->getCfg()->getInt(key_name);
        m_instruction_costs[i] = instruction_cost;
    }
 }
@@ -111,6 +113,22 @@ SubsecondTime StringInstruction::getCost(Core *core) const
 
    return cost;
 }
+
+
+// SyncInstruction
+
+SyncInstruction::SyncInstruction(SubsecondTime time, sync_type_t sync_type)
+   : Instruction(INST_SYNC)
+   , m_time(time)
+   , m_sync_type(sync_type)
+{ }
+
+SubsecondTime SyncInstruction::getCost(Core *core) const
+{
+   LOG_ASSERT_ERROR(false, "SyncInstruction::getCost() called, this instruction should not have made it into handleInstruction");
+   return SubsecondTime::Zero();
+}
+
 
 // SpawnInstruction
 

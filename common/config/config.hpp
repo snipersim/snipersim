@@ -24,6 +24,8 @@
 namespace config
 {
 
+    __attribute__ ((__noreturn__)) void Error(const char* msg, ...);
+
     //
     typedef std::vector < String > PathElementList;
     typedef std::pair<String,String> PathPair;
@@ -98,67 +100,32 @@ namespace config
              * \param path - Path for key to look up
              * \exception KeyNotFound is thrown if the specified path doesn't exist.
              */
-            bool getBool(const String & path);
-
-            /*! \brief Look up the key at the given path, return default_val if not found.
-             * \param path - Path for key to look up
-             * \param default_val - Value to return if the specified key is not found.
-             */
-            bool getBool(const String & path, bool default_val);
-
-            /*! \brief Look up the key at the given path, return default_val if not found.
-             * \param path - Path for key to look up
-             * \param default_val - Value to return if the specified key is not found.
-             */
-            bool getBool(const String & path, const String & default_val);
-
-            /*! \brief Look up the key at the given path, return default_val if not found.
-             * \param path - Path for key to look up
-             * \param default_val - Value to return if the specified key is not found.
-             * This is a special case to prevent conversion from char* to bool by default
-             */
-            bool getBool(const String & path, const char * default_val);
+            bool getBool(const String & path) { return getBoolArray(path, UINT64_MAX); }
+            bool getBoolArray(const String & path, UInt64 index);
 
             /*! \brief Look up the key at the given path, and return the value of that key as a bool.
              * \param path - Path for key to look up
              * \exception KeyNotFound is thrown if the specified path doesn't exist.
              */
-            SInt64 getInt(const String & path);
-
-            /*! \brief Look up the key at the given path, return default_val if not found.
-             * \param path - Path for key to look up
-             * \param default_val - Value to return if the specified key is not found.
-             */
-            SInt64 getInt(const String & path, SInt64 default_val);
+            SInt64 getInt(const String & path) { return getIntArray(path, UINT64_MAX); }
+            SInt64 getIntArray(const String & path, UInt64 index);
 
             /*! \brief Look up the key at the given path, and return the value of that key as a bool.
              * \param path - Path for key to look up
              * \exception KeyNotFound is thrown if the specified path doesn't exist.
              */
-            const String getString(const String & path);
-
-            /*! \brief Look up the key at the given path, return default_val if not found.
-             * \param path - Path for key to look up
-             * \param default_val - Value to return if the specified key is not found.
-             */
-            const String getString(const String & path, const String & default_val);
+            const String getString(const String & path) { return getStringArray(path, UINT64_MAX); }
+            const String getStringArray(const String & path, UInt64 index);
 
             //! Same as getString()
             const String get(const String &path) { return getString(path); }
-            //! Same as getString()
-            const String get(const String &path, const String & default_val) { return getString(path, default_val); }
 
             /*! \brief Look up the key at the given path, and return the value of that key as a bool.
              * \param path - Path for key to look up
              * \exception KeyNotFound is thrown if the specified path doesn't exist.
              */
-            double getFloat(const String & path);
-
-            /*! \brief Look up the key at the given path, return default_val if not found.
-             * \param path - Path for key to look up
-             * \param default_val - Value to return if the specified key is not found.
-             */
-            double getFloat(const String & path, double default_val);
+            double getFloat(const String & path) { return getFloatArray(path, UINT64_MAX); }
+            double getFloatArray(const String & path, UInt64 index);
 
             /*! \brief Returns a string representation of the tree starting at the specified section
              * \param current The root of the tree for which we are creating a string representation.
@@ -173,13 +140,13 @@ namespace config
              * \param path The path to the new key
              * \param new_key The value for the newly created key
              */
-            const Key & addKey(const String & path, const String & new_key);
+            const Key & addKey(const String & path, const String & new_key, UInt64 index = UINT64_MAX) { return addKeyInternal(path, new_key, index); }
             /*! \overload addKey()
              */
-            const Key & addKey(const String & path, const SInt64 new_key);
+            const Key & addKey(const String & path, const SInt64 new_key, UInt64 index = UINT64_MAX) { return addKeyInternal(path, new_key, index); }
             /*! \overload addKey()
              */
-            const Key & addKey(const String & path, const double new_key);
+            const Key & addKey(const String & path, const double new_key, UInt64 index = UINT64_MAX) { return addKeyInternal(path, new_key, index); }
 
         protected:
             bool m_case_sensitive;
@@ -192,10 +159,12 @@ namespace config
             Key & getKey_unsafe(String const& path);
 
         private:
-            const Key & getKey(const String & path);
-            const Key & getKey(const String & path, SInt64 default_val);
-            const Key & getKey(const String & path, double default_val);
-            const Key & getKey(const String & path, const String &default_val);
+            template <class V>
+            const Key & addKeyInternal(const String & path, const V & new_key, UInt64 index);
+
+            const Key & getKey(const String & path, UInt64 index);
+            template <class V>
+            const Key & getKey(const String & path, const V &default_val, UInt64 index);
 
             //Utility function used to break the last word past the last /
             //from the base path

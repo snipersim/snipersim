@@ -11,8 +11,11 @@ const char* HookType::hook_type_names[] = {
    "HOOK_MAGIC_MARKER",
    "HOOK_MAGIC_USER",
    "HOOK_INSTR_COUNT",
+   "HOOK_THREAD_START",
+   "HOOK_THREAD_EXIT",
    "HOOK_THREAD_STALL",
    "HOOK_THREAD_RESUME",
+   "HOOK_THREAD_MIGRATE",
    "HOOK_INSTRUMENT_MODE",
 };
 

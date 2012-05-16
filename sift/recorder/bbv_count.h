@@ -1,6 +1,7 @@
 #ifndef BBV_COUNT_H
 #define BBV_COUNT_H
 
+#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <vector>
 

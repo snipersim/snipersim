@@ -1,4 +1,4 @@
-$#!/usr/bin/env python
+#!/usr/bin/env python
 
 import sys, addr2line, subprocess
 
@@ -19,13 +19,14 @@ addr2line.set_rdtsc(long(data.next()))
 allocations = {}
 for line in data:
   l = line.split()
-  site, size = tuple(map(long, l[:-1])), long(l[-1])
+  site, size, count = tuple(map(long, l[:-2])), long(l[-2]), long(l[-1])
   if site not in allocations:
-    allocations[site] = 0
-  allocations[site] += size
+    allocations[site] = [0, 0]
+  allocations[site][0] += size
+  allocations[site][1] += count
 
 allocations = allocations.items()
-allocations.sort(key = lambda (site, size): size, reverse = True)
+allocations.sort(key = lambda (site, (size, count)): size, reverse = True)
 
 
 height, width = ex('stty size').split()
@@ -33,11 +34,14 @@ width = int(width)
 if width < 120:
   width = 2*width # if we're line-wrapping anyway: use 2 full lines
 
-for site, size in allocations[:20]:
-  print '%7.2f' % (size/1024.**2),
+print 'Bytes (net)  Allocations (total)'
+for site, (size, count) in allocations[:20]:
+  print '%6.2fM %6dk' % (size/1024.**2, count/1000.),
   lines = []
   for addr in site:
+    if not addr: continue
     (file, function, line) = addr2line.addr2line(addr)
-    function = function[:(width - 8 - len(file) - 1 - 1 - len(line))]
+    if file.endswith('logmem.cc'): continue
+    function = function[:(width - 8 - 8 - len(file) - 1 - 1 - len(line))]
     lines.append(':'.join((file, function, line)).strip())
-  print '\n        '.join(lines)
+  print '\n                '.join(lines)

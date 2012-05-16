@@ -4,9 +4,10 @@
 #include "shared_cache_block_info.h"
 #include "log.h"
 
-CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate):
+CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, bool is_prefetch):
    m_tag(tag),
-   m_cstate(cstate)
+   m_cstate(cstate),
+   m_prefetch(is_prefetch)
 {}
 
 CacheBlockInfo::~CacheBlockInfo()

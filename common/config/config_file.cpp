@@ -6,21 +6,16 @@
 // Author: Charles Gruenwald III
 #include "config_file.hpp"
 #include "config_exceptions.hpp"
+#include "itostr.h"
 
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <errno.h>
 
-#include <boost/filesystem/operations.hpp>
-#include <boost/filesystem/convenience.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/version.hpp>
-
-#if (BOOST_VERSION==103500)
-using namespace boost::spirit;
-#else
-using namespace boost::spirit::classic;
-#endif
+#include <boost/lexical_cast.hpp>
 
 namespace config
 {
@@ -59,7 +54,7 @@ namespace config
         String filename = m_path;
 
         //Make sure the file exists
-        if(!boost::filesystem::exists(filename.c_str()))
+        if(access(filename.c_str(), R_OK) != 0)
             throw FileNotFound();
 
         //Read the data in from the file
@@ -122,6 +117,12 @@ namespace config
 
         else if(rule == sectionNameID)
             value = "sn: " + value;
+
+        else if(rule == keyValueArrayID)
+            value = "kva: " + value;
+
+        else if(rule == keyValueSpanID)
+            value = "kvs: " + value;
 
         // if(rule == sectionID || rule == keyID || rule == keyValueID || rule == keyNameID || rule == sectionNameID)
         // if(rule > 0)
@@ -242,37 +243,55 @@ namespace config
             String key_name = "";
             String key_value = "";
 
-            // Nameless node
-            if(node->children.size() >= 2)
+            // Allow for empty (non-existant) values
+            if (node->children.size() != 1 && node->children.size() != 2)
             {
-                unEscapeText(getNodeValue(node->children.begin()), key_name);
-                unEscapeText(getNodeValue(node->children.begin() + 1), key_value);
+                throw parserError("Internal parser error: Expected one or two keyID children, not " + boost::lexical_cast<String>(node->children.size()));
+            }
+
+            if (getNodeID(node->children.begin()) != keyNameID)
+            {
+                throw parserError("Internal parser error: Expected the first entry to be a keyNameID");
+            }
+
+            unEscapeText(getNodeValue(node->children.begin()), key_name);
+
+            if (node->children.size() == 1)
+            {
+                current.addKey(key_name, key_value);
+            }
+            else if (node->children.size() == 2)
+            {
+                UInt64 index = 0;
+                tree_iter_t const& datanode = node->children.begin() + 1;
+                switch(getNodeID(datanode))
+                {
+                    case keyValueID:
+                        unEscapeText(getNodeValue(datanode), key_value);
+                        current.addKey(key_name, key_value);
+                        break;
+                    case keyValueArrayID:
+                        for(tree_iter_t chi = datanode->children.begin(); chi != datanode->children.end(); chi++)
+                        {
+                            key_value = "";
+                            unEscapeText(getNodeValue(chi), key_value);
+                            if (key_value != "")
+                            {
+                                current.addKey(key_name, key_value, index);
+                            }
+                            ++index;
+                        }
+                        break;
+                    // FIXME: Span should properly create a span of numbers
+                    case keyValueSpanID:
+                    default:
+                        throw parserError("Internal parser error: Unexpected node type");
+                }
             }
             else
             {
-                if(node->children.size() == 0)
-                {
-                    std::ostringstream str;
-                    str << "Internal parser error in section '" << current.getName() << "': "
-                        << "the node's children is empty.";
-                    throw parserError(str.str().c_str());
-                }
-
-                switch(getNodeID(node->children.begin()))
-                {
-                    case keyNameID:
-                        unEscapeText(getNodeValue(node->children.begin()), key_name);
-                        break;
-                    case keyValueID:
-                        unEscapeText(getNodeValue(node->children.begin()), key_value);
-                        break;
-                    default:
-                        throw parserError("Internal parser error while walking parse tree and encountring key entry.");
-                }
+                throw parserError("Internal parser error: Unexpacted number of keyID children found: " + boost::lexical_cast<String>(node->children.size()));
             }
-
-            // add the node to the tree
-            current.addKey(key_name, key_value);
         }
         else
         {
@@ -303,15 +322,12 @@ namespace config
             throw SaveError(e.what());
         }
 
-        try
+        unlink(path.c_str());
+        int res = rename(tmp_path.c_str(), path.c_str());
+        if (res == -1)
         {
-            boost::filesystem::remove(path.c_str());
-            //please don't break here!
-            boost::filesystem::rename(tmp_path.c_str(), path.c_str());
-        }
-        catch(const boost::filesystem::filesystem_error & e)
-        {
-            String error_str("Moving " + tmp_path + " to " + path + ".");
+            int errsv = errno;
+            String error_str("Moving " + tmp_path + " to " + path + ": error(" + itostr(errsv) + ") " + strerror(errsv) + ".");
             throw SaveError(error_str);
         }
     }
@@ -325,6 +341,7 @@ namespace config
             out << "[" << current.getFullPath() << "]" << std::endl;
         }
 
+        // Write out all of the default values
         KeyList const & keys = current.getKeys();
         for(KeyList::const_iterator i = keys.begin(); i != keys.end();i++)
         {
@@ -349,6 +366,50 @@ namespace config
                 escapeText(i->second->getString(), escaped_value);
                 out << " = \"" << escaped_value << "\"" << std::endl;
             }
+
+        }
+
+        //Write out the array data that overrides the defaults
+        KeyArrayList const & arr = current.getArrayKeys();
+        for(KeyArrayList::const_iterator i = arr.begin(); i != arr.end(); ++i)
+        {
+            const String & name = (*i->second.begin())->getName();
+            //Quote the name if it has spaces in it
+            if(boost::find_first(name, " ") || boost::find_first(name, "\""))
+            {
+                String escaped_name;
+                escapeText(name, escaped_name);
+                out << "\"" << escaped_name << "\"";
+            }
+            else
+                out << name;
+
+            out << " = ";
+
+            bool first = true;
+            for (std::vector<boost::shared_ptr<Key> >::const_iterator j = i->second.begin() ; j != i->second.end() ; ++j)
+            {
+                if (first)
+                {
+                    first = false;
+                }
+                else
+                {
+                    out << ",";
+                }
+
+                //Quote the value if it is a string
+                if((*j)->getFloatValid() || (*j)->getIntValid())
+                    out << (*j)->getString();
+                else
+                {
+                    String escaped_value;
+                    escapeText((*j)->getString(), escaped_value);
+                    out << "\"" << escaped_value << "\"";
+                }
+            }
+
+            out << std::endl;
         }
 
         out << std::endl;

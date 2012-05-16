@@ -31,16 +31,16 @@ BranchPredictor* BranchPredictor::create(core_id_t core_id)
       config::Config *cfg = Sim()->getCfg();
       assert(cfg);
 
-      m_mispredict_penalty = cfg->getInt("perf_model/branch_predictor/mispredict_penalty",0);
+      m_mispredict_penalty = cfg->getIntArray("perf_model/branch_predictor/mispredict_penalty", core_id);
 
-      String type = cfg->getString("perf_model/branch_predictor/type","none");
+      String type = cfg->getStringArray("perf_model/branch_predictor/type", core_id);
       if (type == "none")
       {
          return 0;
       }
       else if (type == "one_bit")
       {
-         UInt32 size = cfg->getInt("perf_model/branch_predictor/size");
+         UInt32 size = cfg->getIntArray("perf_model/branch_predictor/size", core_id);
          return new OneBitBranchPredictor("branch_predictor", core_id, size);
       }
       else if (type == "pentium_m")

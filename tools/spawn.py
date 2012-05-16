@@ -25,7 +25,6 @@ def spawn_job(machine_list, command, working_dir = os.getcwd()):
     for i in range(0,len(machine_list)):
 
         exec_command = "export CARBON_PROCESS_INDEX=" + str(i) + "; " + \
-                       "export LD_LIBRARY_PATH=\"" + boost_lib + "\"; " + \
                        command
 
         if (machine_list[i] != "localhost") and (machine_list[i] != r'127.0.0.1'):

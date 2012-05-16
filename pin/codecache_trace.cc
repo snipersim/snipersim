@@ -17,6 +17,8 @@ static FILE* cctrace;
 static FILE* ccstats;
 SubsecondTime next_callback;
 
+#define atomic_inc_int64(a) __sync_fetch_and_add(&(a), 1)
+
 VOID cacheInit()
 {
 }

@@ -112,7 +112,7 @@ inline UnstructuredBuffer& UnstructuredBuffer::operator<<(const SubsecondTime & 
 template<class T>
 UnstructuredBuffer& UnstructuredBuffer::operator>>(T & data)
 {
-    bool res = get<T>(data);
+    __attribute__((unused)) bool res = get<T>(data);
     assert(res);
     return *this;
 }
@@ -122,7 +122,7 @@ template<>
 inline UnstructuredBuffer& UnstructuredBuffer::operator>>(SubsecondTime & _data)
 {
     subsecond_time_t data;
-    bool res = get<subsecond_time_t>(data);
+    __attribute__((unused)) bool res = get<subsecond_time_t>(data);
     assert(res);
     _data = data;
     return *this;

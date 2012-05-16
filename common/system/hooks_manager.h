@@ -3,6 +3,7 @@
 
 #include "fixed_types.h"
 #include "subsecond_time.h"
+#include "thread_manager.h"
 
 #include <vector>
 #include <unordered_map>
@@ -21,8 +22,11 @@ public:
       HOOK_MAGIC_MARKER,        // MagicServer::MagicMarkerType *    Magic marker (SimMarker) in application
       HOOK_MAGIC_USER,          // MagicServer::MagicMarkerType *    Magic user function (SimUser) in application
       HOOK_INSTR_COUNT,         // UInt64 coreid                     Core has executed a preset number of instructions
-      HOOK_THREAD_STALL,        // HooksManager::ThreadStall         Core has entered stalled state
-      HOOK_THREAD_RESUME,       // HooksManager::ThreadResume        Core has entered running state
+      HOOK_THREAD_START,        // HooksManager::ThreadTime          Thread start
+      HOOK_THREAD_EXIT,         // HooksManager::ThreadTime          Thread end
+      HOOK_THREAD_STALL,        // HooksManager::ThreadStall         Thread has entered stalled state
+      HOOK_THREAD_RESUME,       // HooksManager::ThreadResume        Thread has entered running state
+      HOOK_THREAD_MIGRATE,      // HooksManager::ThreadMigrate       Thread was moved to a different core
       HOOK_INSTRUMENT_MODE,     // UInt64 Instrument Mode            Simulation mode change (ex. detailed, ffwd)
       HOOK_TYPES_MAX
    };
@@ -46,14 +50,24 @@ public:
    typedef std::pair<HookCallbackFunc, void*> HookCallback;
 
    typedef struct {
-      core_id_t core_id;      // Core stalling
+      thread_id_t thread_id;
+      subsecond_time_t time;
+   } ThreadTime;
+   typedef struct {
+      thread_id_t thread_id;  // Thread stalling
+      ThreadManager::stall_type_t reason; // Reason for thread stall
       subsecond_time_t time;  // Time at which the stall occurs (if known, else SubsecondTime::MaxTime())
    } ThreadStall;
    typedef struct {
-      core_id_t core_id;      // Core being woken up
-      core_id_t core_by;      // Core triggering the wakeup
+      thread_id_t thread_id;  // Thread being woken up
+      thread_id_t thread_by;  // Thread triggering the wakeup
       subsecond_time_t time;  // Time at which the wakeup occurs (if known, else SubsecondTime::MaxTime())
    } ThreadResume;
+   typedef struct {
+      thread_id_t thread_id;  // Thread being migrated
+      core_id_t core_id;      // Core the thread is now running (or INVALID_CORE_ID == -1 for unscheduled)
+      subsecond_time_t time;  // Current time
+   } ThreadMigrate;
 
    HooksManager();
    void init();

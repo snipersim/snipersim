@@ -5,7 +5,7 @@
 
 ContentionModel::ContentionModel()
    : m_num_outstanding(1)
-   , m_time(m_num_outstanding, SubsecondTime::Zero())
+   , m_time(m_num_outstanding, std::make_pair(SubsecondTime::Zero(), 0))
    , m_t_last(SubsecondTime::Zero())
    , m_proc_period(NULL)
    , m_n_requests(0)
@@ -18,7 +18,7 @@ ContentionModel::ContentionModel()
 
 ContentionModel::ContentionModel(String name, core_id_t core_id, UInt32 num_outstanding)
    : m_num_outstanding(num_outstanding)
-   , m_time(m_num_outstanding, SubsecondTime::Zero())
+   , m_time(m_num_outstanding, std::make_pair(SubsecondTime::Zero(), 0))
    , m_t_last(SubsecondTime::Zero())
    , m_proc_period(Sim()->getDvfsManager()->getCoreDomain(core_id))
    , m_n_requests(0)
@@ -41,28 +41,63 @@ ContentionModel::ContentionModel(String name, core_id_t core_id, UInt32 num_outs
 ContentionModel::~ContentionModel()
 {}
 
-uint64_t
-ContentionModel::getBarrierCompletionTime(uint64_t t_start, uint64_t t_delay)
+bool
+ContentionModel::hasFreeSlot(uint64_t t_start, UInt64 tag)
 {
-    SubsecondTimeCycleConverter conv(m_proc_period);
-	SubsecondTime result = getBarrierCompletionTime(conv.cyclesToSubsecondTime(t_start),
-	                                                conv.cyclesToSubsecondTime(t_delay));
-    return conv.subsecondTimeToCycles(result);
+   SubsecondTimeCycleConverter conv(m_proc_period);
+   return hasFreeSlot(conv.cyclesToSubsecondTime(t_start), tag);
+}
+
+bool
+ContentionModel::hasFreeSlot(SubsecondTime t_start, UInt64 tag)
+{
+   for (UInt32 i = 0; i < m_num_outstanding; ++i)
+   {
+      if (m_time[i].first <= t_start)
+         return true;
+
+      // When using tags: an identical tag that's already in process is also acceptable
+      if (m_time[i].second == tag)
+         return true;
+   }
+   return false;
+}
+
+bool
+ContentionModel::hasTag(UInt64 tag)
+{
+   for (UInt32 i = 0; i < m_num_outstanding; ++i)
+   {
+      if (m_time[i].second == tag)
+         return true;
+   }
+   return false;
+}
+
+uint64_t
+ContentionModel::getBarrierCompletionTime(uint64_t t_start, uint64_t t_delay, UInt64 tag)
+{
+   SubsecondTimeCycleConverter conv(m_proc_period);
+   SubsecondTime result = getBarrierCompletionTime(conv.cyclesToSubsecondTime(t_start),
+                                                   conv.cyclesToSubsecondTime(t_delay),
+                                                   tag);
+   return conv.subsecondTimeToCycles(result);
 }
 
 SubsecondTime
-ContentionModel::getBarrierCompletionTime(SubsecondTime t_start, SubsecondTime t_delay)
+ContentionModel::getBarrierCompletionTime(SubsecondTime t_start, SubsecondTime t_delay, UInt64 tag)
 {
   SubsecondTime max_time = t_start;
   for (UInt32 i = 0; i < m_num_outstanding; ++i)
   {
-    if (m_time[i] > max_time)
-      max_time = m_time[i];
+    if (m_time[i].first > max_time)
+      max_time = m_time[i].first;
   }
 
   for (UInt32 i = 0; i < m_num_outstanding; ++i)
   {
-    m_time[i] = max_time + t_delay;
+    m_time[i].first = max_time + t_delay;
+    m_time[i].second = tag;
   }
 
   m_total_barrier_delay += max_time - t_start;
@@ -72,17 +107,18 @@ ContentionModel::getBarrierCompletionTime(SubsecondTime t_start, SubsecondTime t
 }
 
 uint64_t
-ContentionModel::getCompletionTime(uint64_t t_start, uint64_t t_delay)
+ContentionModel::getCompletionTime(uint64_t t_start, uint64_t t_delay, UInt64 tag)
 {
-    SubsecondTimeCycleConverter conv(m_proc_period);
-	SubsecondTime result = getCompletionTime(conv.cyclesToSubsecondTime(t_start),
-	                                                conv.cyclesToSubsecondTime(t_delay));
-    return conv.subsecondTimeToCycles(result);
+   SubsecondTimeCycleConverter conv(m_proc_period);
+   SubsecondTime result = getCompletionTime(conv.cyclesToSubsecondTime(t_start),
+                                            conv.cyclesToSubsecondTime(t_delay),
+                                            tag);
+   return conv.subsecondTimeToCycles(result);
 }
 
 /* Model utilization. In: start time and utilization time. Out: completion time */
 SubsecondTime
-ContentionModel::getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay)
+ContentionModel::getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay, UInt64 tag)
 {
    if (m_num_outstanding == 0)
       return t_start + t_delay;
@@ -92,7 +128,8 @@ ContentionModel::getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay)
    if (t_start == SubsecondTime::Zero())
       t_end = t_delay;
 
-   else if (t_start < m_t_last) {
+   else if (t_start < m_t_last)
+   {
       /* Out of order packet. Assume no congestion, only transfer latency. */
       t_end = t_start + t_delay;
 
@@ -103,39 +140,50 @@ ContentionModel::getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay)
       m_t_last = t_start;
 
       /* Reset all counters to start again from now */
-      m_time[0] = t_end;
+      m_time[0].first = t_end;
+      m_time[0].second = tag;
       for(UInt32 i = 1; i < m_num_outstanding; ++i)
-         m_time[i] = SubsecondTime::Zero();
+      {
+         m_time[i].first = SubsecondTime::Zero();
+         m_time[i].second = 0;
+      }
       #endif
 
-   } else {
+   }
+   else
+   {
       if (t_start == m_t_last)
          m_n_simultaneous ++;
 
       UInt64 unit = 0;
       /* Find first free entry */
-      for(UInt32 i = 0; i < m_num_outstanding; ++i) {
-         if (m_time[i] <= t_start) {
+      for(UInt32 i = 0; i < m_num_outstanding; ++i)
+      {
+         if (m_time[i].first <= t_start)
+         {
             /* This one is free now */
             unit = i;
             break;
-         } else if (m_time[i] < m_time[unit]) {
+         }
+         else if (m_time[i].first < m_time[unit].first)
+         {
             /* Unit i is the first one free */
             unit = i;
          }
       }
 
       SubsecondTime t_begin;
-      if (t_start < m_time[unit])
+      if (t_start < m_time[unit].first)
          /* Delay until the time the first unit becomes free */
-         t_begin = m_time[unit];
+         t_begin = m_time[unit].first;
       else
          /* We only arrive after this unit became free */
          t_begin = t_start;
       /* Compute end of packet sending time */
       t_end = t_begin + t_delay;
 
-      m_time[unit] = t_end;
+      m_time[unit].first = t_end;
+      m_time[unit].second = tag;
 
       /* Update statistics */
       m_total_delay += t_begin - t_start;
@@ -148,4 +196,3 @@ ContentionModel::getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay)
 
    return t_end;
 }
-

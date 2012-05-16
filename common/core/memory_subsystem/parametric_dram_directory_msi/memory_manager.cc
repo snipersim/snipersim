@@ -38,6 +38,7 @@ MemoryManager::MemoryManager(Core* core,
    std::map<MemComponent::component_t, CacheParameters> cache_parameters;
    std::map<MemComponent::component_t, String> cache_names;
 
+   bool dram_direct_access = false;
    UInt32 dram_directory_total_entries = 0;
    UInt32 dram_directory_associativity = 0;
    UInt32 dram_directory_max_num_sharers = 0;
@@ -57,15 +58,15 @@ MemoryManager::MemoryManager(Core* core,
 
       m_last_level_cache = (MemComponent::component_t)(Sim()->getCfg()->getInt("perf_model/cache/levels") - 2 + MemComponent::L2_CACHE);
 
-      UInt32 itlb_size = Sim()->getCfg()->getInt("perf_model/itlb/size", 0);
+      UInt32 itlb_size = Sim()->getCfg()->getInt("perf_model/itlb/size");
       if (itlb_size)
          m_itlb = new TLB("itlb", getCore()->getId(), itlb_size, Sim()->getCfg()->getInt("perf_model/itlb/associativity"));
-      UInt32 dtlb_size = Sim()->getCfg()->getInt("perf_model/dtlb/size", 0);
+      UInt32 dtlb_size = Sim()->getCfg()->getInt("perf_model/dtlb/size");
       if (dtlb_size)
          m_dtlb = new TLB("dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"));
-      m_tlb_miss_penalty = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/tlb/penalty", 0));
+      m_tlb_miss_penalty = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/tlb/penalty"));
 
-      UInt32 smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus", 1);
+      UInt32 smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
 
       for(UInt32 i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i) {
          String configName, objectName;
@@ -86,7 +87,7 @@ MemoryManager::MemoryManager(Core* core,
          }
 
          const ComponentPeriod *clock_domain = NULL;
-         String domain_name = Sim()->getCfg()->getString("perf_model/" + configName + "/dvfs_domain", "core");
+         String domain_name = Sim()->getCfg()->getString("perf_model/" + configName + "/dvfs_domain");
          if (domain_name == "core")
             clock_domain = core->getDvfsDomain();
          else if (domain_name == "global")
@@ -100,11 +101,13 @@ MemoryManager::MemoryManager(Core* core,
             Sim()->getCfg()->getString("perf_model/" + configName + "/replacement_policy"),
             ComponentLatency(clock_domain, Sim()->getCfg()->getInt("perf_model/" + configName + "/data_access_time")),
             ComponentLatency(clock_domain, Sim()->getCfg()->getInt("perf_model/" + configName + "/tags_access_time")),
-            ComponentLatency(clock_domain, Sim()->getCfg()->getInt("perf_model/" + configName + "/writeback_time", 0)),
+            ComponentLatency(clock_domain, Sim()->getCfg()->getInt("perf_model/" + configName + "/writeback_time")),
             Sim()->getCfg()->getString("perf_model/" + configName + "/perf_model_type"),
             Sim()->getCfg()->getBool(  "perf_model/" + configName + "/writethrough"),
-            Sim()->getCfg()->getInt(   "perf_model/" + configName + "/shared_cores", 1) * smt_cores,
-            Sim()->getCfg()->getBool(  "perf_model/" + configName + "/prefetcher", false)
+            Sim()->getCfg()->getInt(   "perf_model/" + configName + "/shared_cores") * smt_cores,
+            i >= MemComponent::L2_CACHE
+               ? Sim()->getCfg()->getBool(  "perf_model/" + configName + "/prefetcher")
+               : false
          );
          cache_names[(MemComponent::component_t)i] = objectName;
 
@@ -125,6 +128,7 @@ MemoryManager::MemoryManager(Core* core,
       dram_directory_cache_access_time = SubsecondTime::NS() * Sim()->getCfg()->getInt("perf_model/dram_directory/directory_cache_access_time");
 
       // Dram Cntlr
+      dram_direct_access = Sim()->getCfg()->getBool("perf_model/dram/direct_access");
       dram_latency = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/latency"))); // Operate in fs for higher precision before converting to uint64_t/SubsecondTime
       per_dram_controller_bandwidth = ComponentBandwidth(8 * Sim()->getCfg()->getFloat("perf_model/dram/per_controller_bandwidth")); // Convert bytes to bits
       dram_queue_model_enabled = Sim()->getCfg()->getBool("perf_model/dram/queue_model/enabled");
@@ -152,8 +156,7 @@ MemoryManager::MemoryManager(Core* core,
             per_dram_controller_bandwidth,
             dram_queue_model_enabled,
             dram_queue_model_type,
-            getCacheBlockSize(),
-            getShmemPerfModel());
+            getCacheBlockSize());
 
       m_dram_directory_cntlr = new PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr(getCore()->getId(),
             this,
@@ -226,6 +229,12 @@ MemoryManager::MemoryManager(Core* core,
          m_core_id_master,
          cache_parameters[m_last_level_cache].shared_cores
       );
+      if (dram_direct_access && getCore()->getId() < (core_id_t)Sim()->getConfig()->getApplicationCores())
+      {
+         LOG_ASSERT_ERROR(Sim()->getConfig()->getApplicationCores() <= cache_parameters[m_last_level_cache].shared_cores, "DRAM direct access is only possible when there is just a single last-level cache (LLC level %d shared by %d, num cores %d)", m_last_level_cache, cache_parameters[m_last_level_cache].shared_cores, Sim()->getConfig()->getApplicationCores());
+         LOG_ASSERT_ERROR(m_dram_cntlr != NULL, "I'm supposed to have direct access to a DRAM controller, but there isn't one at this node");
+         m_cache_cntlrs[(UInt32)m_last_level_cache]->setDRAMDirectAccess(m_dram_cntlr);
+      }
    }
 
    // Register Call-backs

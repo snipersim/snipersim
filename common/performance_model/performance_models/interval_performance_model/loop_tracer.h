@@ -8,6 +8,7 @@
 class Core;
 class Instruction;
 class MicroOp;
+class DynamicMicroOp;
 
 class LoopTracer
 {
@@ -28,8 +29,8 @@ class LoopTracer
       class Instr {
          public:
             Instr() {}
-            Instr(Instruction *instruction, UInt8 uop_num) : instruction(instruction), uop_num(uop_num), issued() {}
-            Instruction *instruction;
+            Instr(const Instruction *instruction, UInt8 uop_num) : instruction(instruction), uop_num(uop_num), issued() {}
+            const Instruction *instruction;
             UInt8 uop_num;
             std::map<uint64_t, int64_t> issued;
       };
@@ -37,11 +38,11 @@ class LoopTracer
       Instructions m_instructions;
 
    public:
-      static LoopTracer* createLoopTracer(Core *core);
-      LoopTracer(Core *core);
+      static LoopTracer* createLoopTracer(const Core *core);
+      LoopTracer(const Core *core);
       ~LoopTracer();
 
-      void issue(MicroOp &uop, uint64_t cycle_issue, uint64_t cycle_done);
+      void issue(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done);
 };
 
 #endif // __LOOP_TRACER_H

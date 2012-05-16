@@ -115,8 +115,7 @@ MemoryManager::MemoryManager(Core* core,
             per_dram_controller_bandwidth,
             dram_queue_model_enabled,
             dram_queue_model_type,
-            getCacheBlockSize(),
-            getShmemPerfModel());
+            getCacheBlockSize());
 
       m_dram_directory_cntlr = new DramDirectoryCntlr(getCore()->getId(),
             this,

@@ -8,11 +8,7 @@ bool HooksPy::pyInit = false;
 
 void HooksPy::init()
 {
-   // Only process 0 runs any scripts
-   if (Sim()->getConfig()->getCurrentProcessNum() != 0)
-      return;
-
-   UInt64 numscripts = Sim()->getCfg()->getInt("hooks/numscripts", 0);
+   UInt64 numscripts = Sim()->getCfg()->getInt("hooks/numscripts");
    for(UInt64 i = 0; i < numscripts; ++i) {
       String scriptname = Sim()->getCfg()->getString(String("hooks/script") + itostr(i) + "name");
       if (scriptname.substr(scriptname.length()-3) == ".py") {
@@ -20,7 +16,7 @@ void HooksPy::init()
             setup();
          }
 
-         String args = Sim()->getCfg()->getString(String("hooks/script") + itostr(i) + "args", "");
+         String args = Sim()->getCfg()->getString(String("hooks/script") + itostr(i) + "args");
          char *argv[] = { (char*)(scriptname.c_str()), (char*)(args.c_str()) };
          PySys_SetArgvEx(2, argv, 0 /* updatepath */);
 
@@ -38,6 +34,7 @@ void HooksPy::init()
 void HooksPy::setup()
 {
    pyInit = true;
+   Py_SetPythonHome(strdup((String(getenv("GRAPHITE_ROOT")) + "/python_kit").c_str()));
    Py_InitializeEx(0 /* don't initialize signal handlers */);
 
    // set up all components

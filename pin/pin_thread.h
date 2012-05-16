@@ -1,10 +1,10 @@
 #ifndef PIN_THREAD_H
 #define PIN_THREAD_H
 
-#include "thread.h"
+#include "_thread.h"
 #include "pin.H"
 
-class PinThread : public Thread
+class PinThread : public _Thread
 {
 public:
    PinThread(ThreadFunc func, void *param);
@@ -15,7 +15,7 @@ private:
    static const int STACK_SIZE=65536;
 
    THREADID m_thread_p;
-   Thread::ThreadFunc m_func;
+   _Thread::ThreadFunc m_func;
    void *m_param;
 };
 

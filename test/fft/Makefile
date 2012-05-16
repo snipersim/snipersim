@@ -15,4 +15,4 @@ run: fft
 	@echo "\n\nOptional: Run '../../tools/cpistack.py' in this directory to generate cpi-stack output for this run"
 
 clean:
-	rm -f fft sim.cfg sim.stats *.log *.out *.jpg
+	rm -f fft sim.cfg sim.stats* *.log *.out *.jpg

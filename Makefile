@@ -6,30 +6,31 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 STANDALONE=$(SIM_ROOT)/lib/sniper
 LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a
 LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
-LIB_USER=$(SIM_ROOT)/lib/libgraphite_user.a
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
+SIM_TARGETS=$(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE)
 
-all: package_deps pin python linux output_files builddir $(LIB_CARBON) $(LIB_USER) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE) configscripts
+.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus
+# Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
+.PHONY: $(LIB_CARBON)
 
-# Include common here
-# - This allows us to override clean below
+all: dependencies $(SIM_TARGETS) configscripts
+
+dependencies: pin python linux output_files builddir showdebugstatus
+
+$(SIM_TARGETS): dependencies package_deps
+
 include common/Makefile.common
 
-.PHONY: $(STANDALONE) $(LIB_PIN_SIM) $(LIB_CARBON) $(LIB_USER) $(LIB_SIFT)
-
-$(STANDALONE):
+$(STANDALONE): $(LIB_CARBON) $(LIB_SIFT)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/standalone
 
-$(LIB_PIN_SIM):
+$(LIB_PIN_SIM): $(LIB_CARBON) $(LIB_SIFT)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
 
 $(LIB_CARBON):
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
 
-$(LIB_USER):
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/user
-
-$(LIB_SIFT):
+$(LIB_SIFT): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/sift
 
 ifneq ($(NO_PIN_CHECK),1)
@@ -43,7 +44,7 @@ endif
 ifneq ($(NO_PYTHON_DOWNLOAD),1)
 python: python_kit/include/python2.7/Python.h
 python_kit/include/python2.7/Python.h:
-	wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27.tgz" | tar xz
+	wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz
 endif
 
 linux: include/linux/perf_event.h
@@ -59,25 +60,41 @@ ifneq ($(DEBUG),)
 	@echo Using flags: $(OPT_CFLAGS)
 endif
 
-configscripts:
+configscripts: dependencies
 	@mkdir -p config
 	@> config/graphite.py
 	@echo '# This file is auto-generated, changes made to it will be lost. Please edit Makefile instead.' >> config/graphite.py
+	@echo "target=\"$(TARGET_ARCH)\"" >> config/graphite.py
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/graphite.py
-	@./tools/makerelativepath.py boost_lib "$(SIM_ROOT)" "$(BOOST_LIB)" >> config/graphite.py
 	@if [ -e .git ]; then echo "git_revision=\"$(git rev-parse HEAD)\"" >> config/graphite.py; fi
-	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(BOOST_LIB)" "$(BOOST_SUFFIX)" "$(PIN_HOME)" "$(CC)" "$(CXX)"
+	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(TARGET_ARCH)"
 
 empty_config:
+ifeq ($(SHOW_COMPILE),)
+	@echo '[CLEAN ] config'
+	@rm -f config/graphite.py config/buildconf.sh config/buildconf.makefile
+else
 	rm -f config/graphite.py config/buildconf.sh config/buildconf.makefile
+endif
 
 clean: empty_logs empty_config empty_deps
+ifeq ($(SHOW_COMPILE),)
+	@echo '[CLEAN ] standalone'
+	@$(MAKE) $(MAKE_QUIET) -C standalone clean
+	@echo '[CLEAN ] pin'
+	@$(MAKE) $(MAKE_QUIET) -C pin clean
+	@echo '[CLEAN ] common'
+	@$(MAKE) $(MAKE_QUIET) -C common clean
+	@echo '[CLEAN ] sift'
+	@$(MAKE) $(MAKE_QUIET) -C sift clean
+	@rm -f .build_os
+else
 	$(MAKE) $(MAKE_QUIET) -C standalone clean
 	$(MAKE) $(MAKE_QUIET) -C pin clean
 	$(MAKE) $(MAKE_QUIET) -C common clean
-	$(MAKE) $(MAKE_QUIET) -C user clean
 	$(MAKE) $(MAKE_QUIET) -C sift clean
-	@rm -f .build_os
+	rm -f .build_os
+endif
 
 regress_quick: output_files regress_unit regress_apps
 
@@ -85,10 +102,20 @@ output_files:
 	mkdir output_files
 
 empty_logs :
-	rm output_files/* ; true
+ifeq ($(SHOW_COMPILE),)
+	@echo '[CLEAN ] logs'
+	@rm -f output_files/*
+else
+	rm -f output_files/*
+endif
 
 empty_deps:
+ifeq ($(SHOW_COMPILE),)
+	@echo '[CLEAN ] deps'
+	@find . -name \*.d -exec rm {} \;
+else
 	find . -name \*.d -exec rm {} \;
+endif
 
-package_deps:
-	@BOOST_INCLUDE=$(BOOST_INCLUDE) BOOST_LIB=$(BOOST_LIB) BOOST_SUFFIX=$(BOOST_SUFFIX) ./tools/checkdependencies.py
+package_deps: dependencies
+	@BOOST_INCLUDE=$(BOOST_INCLUDE) ./tools/checkdependencies.py

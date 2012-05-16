@@ -1,7 +1,7 @@
 #include "lite/handle_syscalls.h"
 #include "simulator.h"
-#include "core_manager.h"
-#include "core.h"
+#include "thread_manager.h"
+#include "thread.h"
 #include "syscall_model.h"
 #include "performance_model.h"
 #include "log.h"
@@ -13,11 +13,15 @@
 namespace lite
 {
 
-void handleFutexSyscall(THREADID threadIndex, CONTEXT* ctx)
+void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
 {
-   ADDRINT syscall_number = PIN_GetContextReg (ctx, REG_GAX);
-   if (syscall_number != SYS_futex)
-      return;
+   // We shouldn't block on actual SYS_futex calls while inside the SyscallEntry function
+   // Therefore, do all the work here, which is at INS_InsertCall(syscall, IPOINT_BEFORE)
+
+   IntPtr syscall_number = PIN_GetContextReg (ctx, REG_GAX);
+   LOG_PRINT("Syscall Number(%d)", syscall_number);
+   //printf("Entering syscall %s(%ld)\n", syscall_string(syscall_number), syscall_number);
+
 
    SyscallMdl::syscall_args_t args;
 
@@ -30,7 +34,7 @@ void handleFutexSyscall(THREADID threadIndex, CONTEXT* ctx)
    args.arg5 = PIN_GetContextReg (ctx, REG_GBP);
 #endif
 
-#ifdef TARGET_X86_64
+#ifdef TARGET_INTEL64
    // FIXME: The LEVEL_BASE:: ugliness is required by the fact that REG_R8 etc
    // are also defined in /usr/include/sys/ucontext.h
    args.arg0 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GDI);
@@ -41,27 +45,16 @@ void handleFutexSyscall(THREADID threadIndex, CONTEXT* ctx)
    args.arg5 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_R9);
 #endif
 
-   Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
-
-   LOG_ASSERT_ERROR(core != NULL, "Core(NULL)");
-   LOG_PRINT("syscall_number %d", syscall_number);
-
-   core->getSyscallMdl()->runEnter(syscall_number, args);
+   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+   LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
+   thread->getSyscallMdl()->runEnter(syscall_number, args);
 }
 
 void syscallEnterRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD syscall_standard, void* v)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
-   LOG_ASSERT_ERROR(core, "Core(NULL)");
-
-   IntPtr syscall_number = PIN_GetSyscallNumber(ctx, syscall_standard);
-   LOG_PRINT("Syscall Number(%d)", syscall_number);
-   //printf("Entering syscall %s(%ld)\n", syscall_string(syscall_number), syscall_number);
-
-   // Save the syscall number
-   core->getSyscallMdl()->saveSyscallNumber(syscall_number);
-   if (syscall_number == SYS_futex
-      || syscall_number == SYS_clock_gettime)
+   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+   LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
+   if (thread->getSyscallMdl()->isEmulated())
    {
       PIN_SetSyscallNumber(ctx, syscall_standard, SYS_getpid);
    }
@@ -69,34 +62,20 @@ void syscallEnterRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD s
 
 void syscallExitRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD syscall_standard, void* v)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
-   LOG_ASSERT_ERROR(core, "Core(NULL)");
+   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+   LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
 
-   IntPtr syscall_number = core->getSyscallMdl()->retrieveSyscallNumber();
-   if (syscall_number == SYS_futex)
+   if (thread->getSyscallMdl()->isEmulated())
    {
       IntPtr old_return_val = PIN_GetSyscallReturn (ctx, syscall_standard);
-      IntPtr syscall_return = core->getSyscallMdl()->runExit(old_return_val);
+      IntPtr syscall_return = thread->getSyscallMdl()->runExit(old_return_val);
       PIN_SetContextReg(ctx, REG_GAX, syscall_return);
 
-      LOG_PRINT("Syscall(%p) returned (%p)", syscall_number, syscall_return);
-
-   } else if (syscall_number == SYS_clock_gettime) {
-      clockid_t clock = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GDI);
-      struct timespec *ts = (struct timespec *)PIN_GetContextReg (ctx, LEVEL_BASE::REG_GSI);
-      SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
-      IntPtr syscall_return;
-
-      switch(clock) {
-         case CLOCK_REALTIME:
-         case CLOCK_MONOTONIC:
-            ts->tv_sec = time.getNS() / 1000000000;
-            ts->tv_nsec = time.getNS() % 1000000000;
-            syscall_return = 0;
-            break;
-         default:
-            LOG_ASSERT_ERROR(false, "SYS_clock_gettime does not currently support clock(%u)", clock);
-      }
+      LOG_PRINT("Syscall returned (%p)", syscall_return);
+   }
+   else
+   {
+      thread->getSyscallMdl()->runExit(0);
    }
 }
 

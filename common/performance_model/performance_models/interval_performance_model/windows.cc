@@ -1,7 +1,8 @@
 #include "windows.h"
 #include "log.h"
 #include "instruction.h"
-#include "lll_info.h"
+#include "core_model.h"
+#include "interval_contention.h"
 
 #include <algorithm>
 
@@ -10,11 +11,30 @@
 #include <iomanip>
 #include <assert.h>
 
-// For validation of the functional unit contention code, uncomment below at the cost of simulation speed.
-//#define DEBUG_WINDOW_CONTENTION_CHECK
+void Windows::WindowEntry::initialize(DynamicMicroOp* micro_op)
+{
+   if (this->uop)
+   {
+      // Delete our old DynamicMicroOp before we overwrite it
+      delete this->uop;
+   }
 
-Windows::Windows(int window_size, bool doFunctionalUnitContention)
-   : m_double_window(new MicroOp[2*window_size])
+   this->uop = micro_op;
+   this->execTime = 0;
+   this->dispatchTime = 0;
+   this->fetchTime = 0;
+   this->cpContr = 0;
+   this->cphead = 0;
+   this->cptail = 0;
+   this->maxProducer = 0;
+   this->overlapFlags = 0;
+   this->dependent = NO_DEP;
+}
+
+Windows::Windows(int window_size, bool doFunctionalUnitContention, Core *core, const CoreModel *core_model)
+   : m_core_model(core_model)
+   , m_interval_contention(core_model->createIntervalContentionModel(core))
+   , m_double_window(new WindowEntry[2*window_size])
    , m_exec_time_map(new uint32_t[2*window_size])
    , m_do_functional_unit_contention(doFunctionalUnitContention)
    , m_register_dependencies(new RegisterDependencies())
@@ -25,6 +45,7 @@ Windows::Windows(int window_size, bool doFunctionalUnitContention)
 
    for(int i = 0; i < m_double_window_size; i++)
    {
+      m_double_window[i].uop = NULL;
       m_double_window[i].setWindowIndex(i);
    }
 
@@ -34,6 +55,9 @@ Windows::Windows(int window_size, bool doFunctionalUnitContention)
 
 Windows::~Windows()
 {
+   for (int i = 0; i < m_double_window_size; i++)
+      if (m_double_window[i].uop)
+         delete m_double_window[i].uop;
    delete[] m_double_window;
    delete[] m_exec_time_map;
    delete m_register_dependencies;
@@ -60,29 +84,26 @@ void Windows::clear()
 
 void Windows::clearFunctionalUnitStats()
 {
-   for(unsigned int i = 0; i < (unsigned int)MicroOp::UOP_SUBTYPE_SIZE; ++i)
-   {
-      m_count_byport[i] = 0;
-   }
    for(unsigned int i = 0; i < (unsigned int)CPCONTR_TYPE_SIZE; ++i)
    {
       m_cpcontr_bytype[i] = 0;
    }
    m_cpcontr_total = 0;
+   m_interval_contention->clearFunctionalUnitStats();
 }
 
-void Windows::addFunctionalUnitStats(const MicroOp &uop)
+void Windows::addFunctionalUnitStats(const WindowEntry &uop)
 {
-   m_count_byport[uop.getPort()]++;
    m_cpcontr_bytype[getCpContrType(uop)] += uop.getCpContr();
    m_cpcontr_total += uop.getCpContr();
+   m_interval_contention->addFunctionalUnitStats(uop.getDynMicroOp());
 }
 
-void Windows::removeFunctionalUnitStats(const MicroOp &uop)
+void Windows::removeFunctionalUnitStats(const WindowEntry &uop)
 {
-   m_count_byport[uop.getPort()]--;
    m_cpcontr_bytype[getCpContrType(uop)] -= uop.getCpContr();
    m_cpcontr_total -= uop.getCpContr();
+   m_interval_contention->removeFunctionalUnitStats(uop.getDynMicroOp());
 }
 
 bool Windows::wIsFull() const
@@ -113,35 +134,36 @@ int Windows::windowIndex(const int index) const
 /**
  * Add the microOperation to the window and calculate its dependencies.
  */
-void Windows::add(const MicroOp& micro_op)
+void Windows::add(DynamicMicroOp* micro_op)
 {
    LOG_ASSERT_ERROR(!wIsFull(), "Window is full");
 
-   MicroOp& windowMicroOp = getInstructionByIndex(m_window_tail);
+   WindowEntry& entry = getInstructionByIndex(m_window_tail);
    m_window_tail = incrementIndex(m_window_tail);
    m_window_length++;
-   micro_op.copyTo(windowMicroOp);
-   windowMicroOp.setSequenceNumber(m_next_sequence_number);
+   micro_op->setSequenceNumber(m_next_sequence_number);
    m_next_sequence_number++;
 
+   entry.initialize(micro_op);
+
    uint64_t lowestValidSequenceNumber = getInstructionByIndex(m_old_window_head).getSequenceNumber();
-   m_register_dependencies->setDependencies(windowMicroOp, lowestValidSequenceNumber);
-   m_memory_dependencies->setDependencies(windowMicroOp, lowestValidSequenceNumber);
+   m_register_dependencies->setDependencies(*micro_op, lowestValidSequenceNumber);
+   m_memory_dependencies->setDependencies(*micro_op, lowestValidSequenceNumber);
 }
 
-MicroOp& Windows::getInstructionByIndex(int index) const
+Windows::WindowEntry& Windows::getInstructionByIndex(int index) const
 {
    LOG_ASSERT_ERROR(index >= 0 && index < m_double_window_size, "Index is out of bounds");
    return m_double_window[index];
 }
 
-MicroOp& Windows::getInstruction(uint64_t sequenceNumber) const
+Windows::WindowEntry& Windows::getInstruction(uint64_t sequenceNumber) const
 {
-   MicroOp& windowHead = getInstructionByIndex(m_window_head__old_window_tail);
+   Windows::WindowEntry& windowHead = getInstructionByIndex(m_window_head__old_window_tail);
    int distance = windowHead.getSequenceNumber() - sequenceNumber;
    int index = windowIndex(windowHead.getWindowIndex() - distance);
 
-   MicroOp& ret = getInstructionByIndex(index);
+   Windows::WindowEntry& ret = getInstructionByIndex(index);
    if (ret.getSequenceNumber() == sequenceNumber)
    {
       return ret;
@@ -153,101 +175,34 @@ MicroOp& Windows::getInstruction(uint64_t sequenceNumber) const
    }
 }
 
-MicroOp& Windows::getLastAdded() const
+Windows::WindowEntry& Windows::getLastAdded() const
 {
    return getInstructionByIndex(decrementIndex(m_window_tail));
 }
 
-MicroOp& Windows::getInstructionToDispatch() const
+Windows::WindowEntry& Windows::getInstructionToDispatch() const
 {
    return getInstructionByIndex(m_window_head__old_window_tail);
 }
 
-MicroOp& Windows::getOldestInstruction() const
+Windows::WindowEntry& Windows::getOldestInstruction() const
 {
    return getInstructionByIndex(m_old_window_head);
 }
 
-WindowStopDispatchReason addWSDR(WindowStopDispatchReason orig, WindowStopDispatchReason to_add)
-{
-   return WindowStopDispatchReason(int(orig) + int(to_add));
-}
-
-WindowStopDispatchReason Windows::shouldStopDispatch()
-{
-
-   WindowStopDispatchReason r = WIN_STOP_DISPATCH_NO_REASON;
-
-#ifdef DEBUG_WINDOW_CONTENTION_CHECK
-   // Normally, we keep track of this information when microOps are added and removed
-   // from the old window.  Here, we scan over the old window for each request, with
-   // about a 20 to 30% slowdown.  Additionally, we double-check that our faster methods
-   // are correct with assertions.
-   uint64_t count_bytype[UOP_TYPE_SIZE] = { 0 };
-
-   // Count all of the ADD/SUB/DIV/LD/ST, and if we have too many, break
-   // Count all of the GENERIC insns, and if we have too many (3x-per-cycle), break
-   Windows::Iterator i = getOldWindowIterator();
-   while(i.hasNext())
-   {
-      MicroOp &micro_op = i.next();
-      count_bytype[micro_op.getUopType()]++;
-   }
-
-   LOG_ASSERT_ERROR(count_bytype[MicroOp::UOP_TYPE_LOAD] == m_count_bytype[MicroOp::UOP_TYPE_LOAD], "Count Load %ld != %ld", count_bytype[MicroOp::UOP_TYPE_LOAD], m_count_bytype[MicroOp::UOP_TYPE_LOAD]);
-   LOG_ASSERT_ERROR(count_bytype[MicroOp::UOP_TYPE_STORE] == m_count_bytype[MicroOp::UOP_TYPE_STORE], "Count Store %ld != %ld", count_bytype[MicroOp::UOP_TYPE_STORE], m_count_bytype[MicroOp::UOP_TYPE_STORE]);
-   LOG_ASSERT_ERROR(count_bytype[MicroOp::UOP_TYPE_FP_ADDSUB] == m_count_bytype[MicroOp::UOP_TYPE_FP_ADDSUB], "Count FP Add/Sub mismatch %ld != %ld", count_bytype[MicroOp::UOP_TYPE_FP_ADDSUB], m_count_bytype[MicroOp::UOP_TYPE_FP_ADDSUB]);
-   LOG_ASSERT_ERROR(count_bytype[MicroOp::UOP_TYPE_FP_MULDIV] == m_count_bytype[MicroOp::UOP_TYPE_FP_MULDIV], "Count FP Mul/Div mismatch %ld != %ld", count_bytype[MicroOp::UOP_TYPE_FP_MULDIV], m_count_bytype[MicroOp::UOP_TYPE_FP_MULDIV]);
-   LOG_ASSERT_ERROR(count_bytype[MicroOp::UOP_TYPE_GENERIC] == m_count_bytype[MicroOp::UOP_TYPE_GENERIC], "Count Generic mismatch %ld != %ld", count_bytype[MicroOp::UOP_TYPE_GENERIC], m_count_bytype[MicroOp::UOP_TYPE_GENERIC]);
-   LOG_ASSERT_ERROR(count_bytype[MicroOp::UOP_TYPE_BRANCH] == m_count_bytype[MicroOp::UOP_TYPE_BRANCH], "Count Branch mismatch %ld != %ld", count_bytype[MicroOp::UOP_TYPE_BRANCH], m_count_bytype[MicroOp::UOP_TYPE_BRANCH]);
-#endif /* DEBUG_WINDOW_CONTENTION_CHECK */
-
-   uint64_t critical_path_length = getCriticalPathLength();
-
-   if (m_count_byport[MicroOp::UOP_PORT4] > critical_path_length)       // port 2
-      r = addWSDR(r, WIN_STOP_DISPATCH_LOAD);
-   if (m_count_byport[MicroOp::UOP_PORT23] > critical_path_length)      // port 3+4
-      r = addWSDR(r, WIN_STOP_DISPATCH_STORE);
-   if (m_count_byport[MicroOp::UOP_PORT1] > critical_path_length)  // port 1
-      r = addWSDR(r, WIN_STOP_DISPATCH_FP_ADDSUB);
-   if (m_count_byport[MicroOp::UOP_PORT0] > critical_path_length)  // port 0
-      r = addWSDR(r, WIN_STOP_DISPATCH_FP_MULDIV);
-   if (m_count_byport[MicroOp::UOP_PORT5] > critical_path_length)     // port 5
-      r = addWSDR(r, WIN_STOP_DISPATCH_BRANCH);
-   if ((m_count_byport[MicroOp::UOP_PORT0]+m_count_byport[MicroOp::UOP_PORT1]+m_count_byport[MicroOp::UOP_PORT5]
-         +m_count_byport[MicroOp::UOP_PORT015]) > (3*critical_path_length)) // port 0, 1 or 5
-      r = addWSDR(r, WIN_STOP_DISPATCH_GENERIC);
-
-   return r;
-}
-
-uint64_t Windows::getEffectiveCriticalPathLength(uint64_t critical_path_length)
+uint64_t Windows::getEffectiveCriticalPathLength(uint64_t critical_path_length, bool update_reason)
 {
    if (!m_do_functional_unit_contention)
    {
       return critical_path_length;
    }
-
-   // For the standard ports, check if we have exceeded our execution limit
-   for (unsigned int i = 0 ; i < MicroOp::UOP_PORT_SIZE ; i++)
+   else
    {
-      // Skip shared ports
-      if (i != MicroOp::UOP_PORT015)
-      {
-         critical_path_length = std::max(critical_path_length, m_count_byport[i]);
-      }
+      return m_interval_contention->getEffectiveCriticalPathLength(critical_path_length, update_reason);
    }
-   // Check shared port usage
-   uint64_t port015_use = m_count_byport[MicroOp::UOP_PORT0] + m_count_byport[MicroOp::UOP_PORT1]
-                            + m_count_byport[MicroOp::UOP_PORT5] + m_count_byport[MicroOp::UOP_PORT015];
-   if (port015_use > (3*critical_path_length))
-   {
-      critical_path_length = (port015_use+2) / 3; // +2 to round up to the next cycle
-   }
-   return critical_path_length;
 }
 
-WindowStopDispatchReason Windows::dispatchInstruction()
+void Windows::dispatchInstruction()
 {
    if (m_old_window_length == m_window_size)
    {
@@ -267,8 +222,6 @@ WindowStopDispatchReason Windows::dispatchInstruction()
    m_window_head__old_window_tail = incrementIndex(m_window_head__old_window_tail);
    m_window_length--;
    m_old_window_length++;
-
-   return WIN_STOP_DISPATCH_NO_REASON;
 }
 
 void Windows::clearOldWindow(uint64_t newCpHead)
@@ -319,14 +272,14 @@ int Windows::getCriticalPathLength() const
    return (m_critical_path_tail - m_critical_path_head);
 }
 
-uint64_t Windows::longLatencyOperationLatency(MicroOp& uop)
+uint64_t Windows::longLatencyOperationLatency(WindowEntry& uop)
 {
    if (uop.getExecTime() < m_critical_path_tail)
    {
       // No critical path extension
       return 0;
    }
-   else if (uop.getExecTime() - m_critical_path_tail < lll_info.getCutoff())
+   else if (uop.getExecTime() - m_critical_path_tail < m_core_model->getLongLatencyCutoff())
    {
       // Extension smaller than LLL cutoff
       return 0;
@@ -338,48 +291,18 @@ uint64_t Windows::longLatencyOperationLatency(MicroOp& uop)
    }
 }
 
-uint64_t Windows::updateCriticalPathTail(MicroOp& uop)
+uint64_t Windows::updateCriticalPathTail(WindowEntry& uop)
 {
    uint64_t execTime = uop.getExecTime();
    if (execTime > m_critical_path_tail) {
-      if (execTime - m_critical_path_tail > lll_info.getCutoff()) {
+      if (execTime - m_critical_path_tail > m_core_model->getLongLatencyCutoff()) {
          // Extending the critical path by huge amounts isn't healthy (see Redmine #113).
          // Instead, the caller should add the long latency directly (and attribute it) and call clearOldWindow()
-         LOG_PRINT_WARNING_ONCE("Warning: Updating the critical path by %lu > %u cycles", execTime - m_critical_path_tail, lll_info.getCutoff());
+         LOG_PRINT_WARNING_ONCE("Warning: Updating the critical path by %lu > %u cycles", execTime - m_critical_path_tail, m_core_model->getLongLatencyCutoff());
       }
       uop.setCpContr(execTime - m_critical_path_tail);
       m_critical_path_tail = execTime;
    }
-   #if 0
-      // IPC trace per X instructions
-      const int uop_seq_increment = 5000;
-      static int uop_seq_next = 1000;
-      if (uop.getSequenceNumber() > uop_seq_next) {
-         FixedPoint ipc = FixedPoint(getOldWindowLength()) / getCriticalPathLength();
-         printf("IPC [wl=%3u,cpl=%3u] ipKc %4u\n", getOldWindowLength(), getCriticalPathLength(), FixedPoint::floor(ipc*1000));
-         uop_seq_next += uop_seq_increment;
-      }
-   #endif
-   #if 0
-      // All instructions and dependencies with instantaneous IPC
-      const int uop_seq_start = 100000, uop_seq_length = 5000;
-      if (uop.getSequenceNumber() > uop_seq_start && uop.getSequenceNumber() < uop_seq_start + uop_seq_length) {
-         FixedPoint ipc = FixedPoint(getOldWindowLength()) / getCriticalPathLength();
-         printf("[wl=%3u,cpl=%3u] uop s=%5u el=%3u et=%6u   [ipKc %4u] %-8s %-30s   %2u %u dep=",
-            getOldWindowLength(), getCriticalPathLength(), uop.getSequenceNumber(),
-            uop.getExecLatency(), execTime, FixedPoint::floor(ipc*1000),
-            uop.instructionOpcodeName.c_str(),
-            uop.getInstruction() ? uop.getInstruction()->getDisassembly().c_str() : "(dynamic)",
-            uop.getInstructionType(), uop.isX87() ? 1 : 0);
-         for(uint32_t i = 0; i < uop.getDependenciesLength(); i++) {
-            if (oldWindowContains(uop.getDependency(i))) {
-               MicroOp& dependee = getInstruction(uop.getDependency(i));
-               printf(" %5u", dependee.getSequenceNumber());
-            }
-         }
-         printf("\n");
-      }
-   #endif
    return m_critical_path_tail;
 }
 
@@ -388,11 +311,11 @@ int Windows::getMinimalFlushLatency(int width) const
    return (m_old_window_length+(width-1))/width;
 }
 
-uint64_t Windows::getCpContrFraction(CpContrType type) const
+uint64_t Windows::getCpContrFraction(CpContrType type, uint64_t effective_cp_length) const
 {
    assert(m_cpcontr_bytype[type] <= m_cpcontr_total);
    if (m_cpcontr_total > 0)
-      return 1000000 * m_cpcontr_bytype[type] / m_cpcontr_total;
+      return 1000000 * m_cpcontr_bytype[type] / effective_cp_length;
    else
       return 0;
 }
@@ -404,9 +327,9 @@ bool Windows::Iterator::hasNext()
    return index != stop;
 }
 
-MicroOp& Windows::Iterator::next()
+Windows::WindowEntry& Windows::Iterator::next()
 {
-   MicroOp& ret = windows->getInstructionByIndex(index);
+   Windows::WindowEntry& ret = windows->getInstructionByIndex(index);
    index = windows->incrementIndex(index);
    return ret;
 }
@@ -423,18 +346,18 @@ Windows::Iterator Windows::getOldWindowIterator() const
 
 int Windows::calculateBranchResolutionLatency()
 {
-   MicroOp& micro_op = getInstructionToDispatch();
+   Windows::WindowEntry& micro_op = getInstructionToDispatch();
    uint32_t br_resolution_latency = 0;
 
    // The m_exec_time_map is empty when the algorithm starts !
 
    // Mark direct producers of this instruction
-   for(uint32_t i = 0; i < micro_op.getDependenciesLength(); i++)
+   for(uint32_t i = 0; i < micro_op.getDynMicroOp()->getDependenciesLength(); i++)
    {
-      if (oldWindowContains(micro_op.getDependency(i)))
+      if (oldWindowContains(micro_op.getDynMicroOp()->getDependency(i)))
       {
-         MicroOp& producer = getInstruction(micro_op.getDependency(i));
-         m_exec_time_map[producer.getWindowIndex()] = producer.getExecLatency();
+         Windows::WindowEntry& producer = getInstruction(micro_op.getDynMicroOp()->getDependency(i));
+         m_exec_time_map[producer.getWindowIndex()] = producer.getDynMicroOp()->getExecLatency();
       }
    }
 
@@ -444,13 +367,13 @@ int Windows::calculateBranchResolutionLatency()
       if (m_exec_time_map[i])
       {
          // There is a path to the committed branch: check the dependencies
-         MicroOp& op = getInstructionByIndex(i);
-         for (uint32_t k = 0; k < op.getDependenciesLength(); k++)
+         Windows::WindowEntry& op = getInstructionByIndex(i);
+         for (uint32_t k = 0; k < op.getDynMicroOp()->getDependenciesLength(); k++)
          {
-            if (oldWindowContains(op.getDependency(k)))
+            if (oldWindowContains(op.getDynMicroOp()->getDependency(k)))
             {
-               MicroOp& producer = getInstruction(op.getDependency(k));
-               m_exec_time_map[producer.getWindowIndex()] = std::max((producer.getExecLatency() + m_exec_time_map[i]), m_exec_time_map[producer.getWindowIndex()]);
+               Windows::WindowEntry& producer = getInstruction(op.getDynMicroOp()->getDependency(k));
+               m_exec_time_map[producer.getWindowIndex()] = std::max((producer.getDynMicroOp()->getExecLatency() + m_exec_time_map[i]), m_exec_time_map[producer.getWindowIndex()]);
             }
          }
 
@@ -483,63 +406,20 @@ String Windows::toString()
    out << std::endl;
 
    for(int i = 0; i < m_double_window_size; i++)
-      out << getInstructionByIndex(i).toString() << std::endl;
+      out << getInstructionByIndex(i).getMicroOp()->toString() << std::endl;
    return String(out.str().c_str());
 }
 
-String WindowStopDispatchReasonStringHelper(WindowStopDispatchReason r)
+CpContrType getCpContrType(const Windows::WindowEntry& entry)
 {
-   switch(r)
-   {
-   case WIN_STOP_DISPATCH_NO_REASON:
-      return String("NoReason");
-   case WIN_STOP_DISPATCH_FP_ADDSUB:
-      return String("FpAddSub");
-   case WIN_STOP_DISPATCH_FP_MULDIV:
-      return String("FpMulDiv");
-   case WIN_STOP_DISPATCH_LOAD:
-      return String("Load");
-   case WIN_STOP_DISPATCH_STORE:
-      return String("Store");
-   case WIN_STOP_DISPATCH_GENERIC:
-      return String("Generic");
-   case WIN_STOP_DISPATCH_BRANCH:
-      return String("Branch");
-   default:
-      return String("UnknownWindowStopDispatchReason");
-   }
-}
-
-String WindowStopDispatchReasonString(WindowStopDispatchReason r)
-{
-   if (r == WIN_STOP_DISPATCH_NO_REASON)
-   {
-      return WindowStopDispatchReasonStringHelper(r);
-   }
-   String s;
-   for (int i = 0 ; (0x1 << i) < WIN_STOP_DISPATCH_SIZE ; i++ )
-   {
-      if ( (r >> i) & 0x1 )
-      {
-         if (s != "")
-         {
-            s += "+";
-         }
-         s += WindowStopDispatchReasonStringHelper((WindowStopDispatchReason)(0x1 << i));
-      }
-   }
-   return s;
-}
-
-CpContrType getCpContrType(const MicroOp& uop)
-{
+   const MicroOp &uop = *entry.getMicroOp();
    switch(uop.getSubtype()) {
       case MicroOp::UOP_SUBTYPE_FP_ADDSUB:
          return CPCONTR_TYPE_FP_ADDSUB;
       case MicroOp::UOP_SUBTYPE_FP_MULDIV:
          return CPCONTR_TYPE_FP_MULDIV;
       case MicroOp::UOP_SUBTYPE_LOAD:
-         switch(uop.getDCacheHitWhere()) {
+         switch(entry.getDynMicroOp()->getDCacheHitWhere()) {
             case HitWhere::L1_OWN:
                return CPCONTR_TYPE_LOAD_L1;
             case HitWhere::L2_OWN:
@@ -559,7 +439,7 @@ CpContrType getCpContrType(const MicroOp& uop)
       case MicroOp::UOP_SUBTYPE_BRANCH:
          return CPCONTR_TYPE_BRANCH;
       default:
-         LOG_ASSERT_ERROR(false, "Unknown uop_subtype %d", uop.getSubtype());
+         LOG_PRINT_ERROR("Unknown uop_subtype %d", uop.getSubtype());
    }
    assert(false);
 }
@@ -586,7 +466,7 @@ String CpContrTypeString(CpContrType type)
       case CPCONTR_TYPE_BRANCH:
          return "branch";
       default:
-         LOG_ASSERT_ERROR(false, "Unknown CpContrType %u", type);
+         LOG_PRINT_ERROR("Unknown CpContrType %u", type);
          return "unknown";
    }
 }

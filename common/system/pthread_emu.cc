@@ -5,7 +5,6 @@
 #include "performance_model.h"
 #include "sync_api.h"
 #include "log.h"
-#include "thread_support_private.h"
 #include "stats.h"
 #include "logmem.h"
 #include "config.hpp"
@@ -59,7 +58,7 @@ static FILE *trace_fp = NULL;
 void updateState(Core *core, state_t state, SubsecondTime delay) {
    if (trace_fp) {
       ScopedLock sl(trace_lock);
-      fprintf(trace_fp, "%u %lu %u\n", core->getId(), (core->getPerformanceModel()->getElapsedTime() + delay).getNS(), state);
+      fprintf(trace_fp, "%u %"PRIu64" %u\n", core->getId(), (core->getPerformanceModel()->getElapsedTime() + delay).getNS(), state);
    }
 }
 
@@ -69,7 +68,7 @@ void init()
    if (! pthread_stats_added) {
       UInt32 num_cores = Sim()->getConfig()->getTotalCores();
       UInt32 pthread_counters_size = sizeof(struct pthread_counters_t) * num_cores;
-      int rc = posix_memalign((void**)&pthread_counters, 64, pthread_counters_size); // Align by cache line size to prevent thread contention
+      __attribute__((unused)) int rc = posix_memalign((void**)&pthread_counters, 64, pthread_counters_size); // Align by cache line size to prevent thread contention
       LOG_ASSERT_ERROR (rc == 0, "posix_memalign failed to allocate memory");
       bzero(pthread_counters, pthread_counters_size);
 
@@ -86,7 +85,7 @@ void init()
          registerStatsMetric("pthread", c, "pthread_mutex_unlock_contended", &(pthread_counters[c].pthread_mutex_unlock_contended));
       }
 
-      if (Sim()->getCfg()->getBool("log/mutex_trace", false))
+      if (Sim()->getCfg()->getBool("log/mutex_trace"))
         trace_fp = fopen(Sim()->getConfig()->formatOutputFileName("mutextrace.txt").c_str(), "w");
 
       pthread_stats_added = true;
@@ -176,7 +175,7 @@ IntPtr MutexUnlock (pthread_mutex_t *mux)
       // TODO: the latency hit for this should actually be while still holding the lock.
       //   But we can't request the latency until we've contacted the server (which already releases the lock) to tell us whether it's contended
       //   Also, no-one is currently spinning on this (and keeping the line in shared state) -- in fact, we may have even been the last ones to have used it in our matching pthread_mutex_lock call
-      MemoryResult lat = core->accessMemory(Core::NONE, Core::READ_EX, (IntPtr) futexHbAddress(mux), NULL, sizeof (UInt32), Core::MEM_MODELED_FENCED);
+      lat1 = core->accessMemory(Core::NONE, Core::READ_EX, (IntPtr) futexHbAddress(mux), NULL, sizeof (UInt32), Core::MEM_MODELED_FENCED);
       pthread_counters[core->getId()].pthread_mutex_unlock_contended++;
    }
 

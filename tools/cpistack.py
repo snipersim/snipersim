@@ -52,13 +52,31 @@ def getdata(jobid = '', resultsdir = '', data = None):
                                 data[core]['SyncPthreadCond'] - data[core]['SyncPthreadBarrier']  - \
                                 data[core]['Recv']
     # Critical path accounting
-    for cpName, cpiName in (
-      ('interval_timer.cpContr_load_l1', 'DataCacheL1'),
-      ('interval_timer.cpContr_load_l2', 'DataCacheL2'),
-      ('interval_timer.cpContr_load_l3', 'DataCacheL3'),
-      ('interval_timer.cpContr_fp_addsub', 'PathFP'),
-      ('interval_timer.cpContr_fp_muldiv', 'PathFP'),
-    ):
+    cpContrMap = {
+      # critical path components
+      'interval_timer.cpContr_generic': 'PathInt',
+      'interval_timer.cpContr_store': 'PathStore',
+      'interval_timer.cpContr_load_other': 'PathLoadX',
+      'interval_timer.cpContr_branch': 'PathBranch',
+      'interval_timer.cpContr_load_l1': 'DataCacheL1',
+      'interval_timer.cpContr_load_l2': 'DataCacheL2',
+      'interval_timer.cpContr_load_l3': 'DataCacheL3',
+      'interval_timer.cpContr_fp_addsub': 'PathFP',
+      'interval_timer.cpContr_fp_muldiv': 'PathFP',
+      # issue ports
+      'interval_timer.cpContr_port0': 'PathP0',
+      'interval_timer.cpContr_port1': 'PathP1',
+      'interval_timer.cpContr_port2': 'PathP2',
+      'interval_timer.cpContr_port34': 'PathP34',
+      'interval_timer.cpContr_port5': 'PathP5',
+      'interval_timer.cpContr_port05': 'PathP05',
+      'interval_timer.cpContr_port015': 'PathP015',
+    }
+    for k in res['results']:
+      if k.startswith('interval_timer.cpContr_'):
+        if k not in cpContrMap.keys():
+          print 'Missing in cpContrMap: ', k
+    for cpName, cpiName in cpContrMap.items():
       val = float(res['results'].get(cpName, [0]*ncores)[core]) / 1e6
       data[core]['Base'] -= val
       data[core][cpiName] = data[core].get(cpiName, 0) + val
@@ -101,9 +119,20 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
 
   all_items = [
     [ 'dispatch_width', .01,   'Issue' ],
+    [ 'base',           .01,   'Base' ],
     [ 'depend',   .01,   [
-      [ 'int',      .01, 'Base' ],
+      [ 'int',      .01, 'PathInt' ],
       [ 'fp',       .01, 'PathFP' ],
+      [ 'branch',   .01, 'PathBranch' ],
+    ] ],
+    [ 'issue',    .01, [
+      [ 'port0',        .01,    'PathP0' ],
+      [ 'port1',        .01,    'PathP1' ],
+      [ 'port2',       .01,    'PathP2' ],
+      [ 'port34',        .01,    'PathP34' ],
+      [ 'port5',        .01,    'PathP5' ],
+      [ 'port05',      .01,    'PathP05' ],
+      [ 'port015',      .01,    'PathP015' ],
     ] ],
     [ 'contend',  .01, [
       [ 'fp_addsub',    .01,    'FU_FpAddSub' ],
@@ -123,11 +152,12 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
           'InstructionCacheL4',  'InstructionCacheL4_S', 'InstructionCachemiss', 'InstructionCache????',
           'InstructionCachedram-remote', 'InstructionCachecache-remote', 'InstructionCachedram-local',
           'InstructionCachepredicate-false', 'InstructionCacheunknown') ],
+    [ 'smt',            .01,   'SMT' ],
   ]
   if use_simple_mem:
     all_items += [
     [ 'mem',      .01, [
-      [ 'l1d',      .01, ('DataCacheL1', 'DataCacheL1_S') ],
+      [ 'l1d',      .01, ('DataCacheL1', 'DataCacheL1_S', 'PathLoadX', 'PathStore') ],
       [ 'l2',       .01, ('DataCacheL2', 'DataCacheL2_S') ],
       [ 'l3',       .01, ('DataCacheL3', 'DataCacheL3_S') ],
       [ 'l4',       .01, ('DataCacheL4', 'DataCacheL4_S') ],
@@ -139,7 +169,7 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
     all_items += [
     [ 'mem',      .01, [
       [ 'l0d_neighbor', .01, 'DataCacheL1_S' ],
-      [ 'l1d',          .01, 'DataCacheL1' ],
+      [ 'l1d',          .01, 'DataCacheL1', 'PathLoadX', 'PathStore' ],
       [ 'l1_neighbor',  .01, 'DataCacheL2_S' ],
       [ 'l2',           .01, 'DataCacheL2' ],
       [ 'l2_neighbor',  .01, 'DataCacheL3_S' ],
@@ -210,7 +240,8 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
              use_cpi = False, use_abstime = False, use_roi = True,
              use_simple = False, use_simple_mem = True, no_collapse = False,
              gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
-             job_name = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False):
+             job_name = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
+             size = (640, 480)):
 
   data, ncores, instrs, times, cycles_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data)
 
@@ -297,7 +328,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
       all_names.append('other')
     all_names_with_colors = zip(all_names, range(1,len(all_names)+1))
     plot_labels_with_color = [n for n in all_names_with_colors if n[0] in plot_labels_ordered]
-    gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data,
+    gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size,
       ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Percent of time'))
 
   # Return cpi data if requested

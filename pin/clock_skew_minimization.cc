@@ -4,6 +4,7 @@
 #include "thread_manager.h"
 #include "performance_model.h"
 #include "core.h"
+#include "thread.h"
 #include "clock_skew_minimization_object.h"
 #include "utils.h"
 #include "subsecond_time.h"
@@ -84,22 +85,33 @@ static bool enabled()
    return Sim()->getConfig()->getEnableSync();
 }
 
-static bool abortFunc(THREADID thread_id)
+static bool abortFunc(THREADID threadIndex)
 {
-   if (PIN_IsActionPending(thread_id))
+   if (PIN_IsActionPending(threadIndex))
       return true;
    else
       return false;
 }
 
-void handlePeriodicSync(THREADID thread_id, const CONTEXT *ctxt)
+void handlePeriodicSync(THREADID threadIndex, const CONTEXT *ctxt)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(thread_id);
-   assert(core);
-   if (core->getId() >= (core_id_t) Sim()->getConfig()->getApplicationCores())
+   Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
+   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+   assert(thread);
+
+   if (core == NULL)
    {
-      // Thread Spawner Core / MCP
-      return;
+      // This thread isn't scheduled. Normally it shouldn't execute any code,
+      // but just after thread start we do get here.
+      // Wait here until we're scheduled on one of the cores.
+      SubsecondTime time = SubsecondTime::Zero();
+      thread->reschedule(time, core);
+
+      // We should be on a core now, set its performance model to our local time
+      core = thread->getCore();
+      // If the core already has a later time, we have to wait
+      time = std::max(time, core->getPerformanceModel()->getElapsedTime());
+      core->getPerformanceModel()->queueDynamicInstruction(new SpawnInstruction(time));
    }
 
    if (core->getState() == Core::BROKEN)
@@ -108,15 +120,15 @@ void handlePeriodicSync(THREADID thread_id, const CONTEXT *ctxt)
       PIN_ExecuteAt(ctxt);
    }
 
-   ClockSkewMinimizationClient *client = core->getClockSkewMinimizationClient();
+   ClockSkewMinimizationClient *client = thread->getClockSkewMinimizationClient();
    if (client) {
       #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-         core->getPerformanceModel()->setHold(true);
+         thread->getPerformanceModel()->setHold(true);
       #endif
       client->synchronize(
          SubsecondTime::Zero(), false,
          appDebug_enabled ? (bool (*)(void*))abortFunc : NULL,
-         (void*)thread_id
+         (void*)(unsigned long)threadIndex
       );
       #ifdef ENABLE_PERF_MODEL_OWN_THREAD
          core->getPerformanceModel()->setHold(false);

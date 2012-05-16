@@ -265,7 +265,7 @@ inline bool operator> (const SubsecondTime& lhs, const SubsecondTime& rhs)
 
 inline void atomic_add_subsecondtime(SubsecondTime &src_dest, const SubsecondTime &src)
 {
-   atomic_add_int64(src_dest.m_time, src.m_time);
+   __sync_fetch_and_add(&src_dest.m_time, src.m_time);
 }
 
 // Base period (frequency) of a component.  This class is normally referenced as a pointer in other generating classes

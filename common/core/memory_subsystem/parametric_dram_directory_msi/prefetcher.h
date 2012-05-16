@@ -8,7 +8,6 @@ class Prefetcher
    public:
       Prefetcher();
       IntPtr getNextAddress(IntPtr current_address);
-      bool hasAddress(IntPtr address);
 
    private:
       static const UInt32 n_flows = 4;

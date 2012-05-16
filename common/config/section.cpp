@@ -39,6 +39,7 @@ namespace config
     {
         m_subSections.clear();
         m_keys.clear();
+        m_array_keys.clear();
     }
 
     //create a new section and add it to the subsection map
@@ -52,62 +53,87 @@ namespace config
         return *(m_subSections[iname].get());
     }
 
-    //add a new key/value pair to this section
-    const Key & Section::addKey(const String & name_, const String & value)
+    template <class V>
+    const Key & Section::addKeyInternal(const String & name_, const V & value, uint64_t index)
     {
         //Make the key all lower-case if not case sensitive
         String iname(name_);
         if(!m_case_sensitive)
             boost::to_lower(iname);
 
-        //Remove existing key if found
-        KeyList::const_iterator found = m_keys.find(iname);
-        if(found != m_keys.end())
+        // Check for non-index version
+        if (index == UINT64_MAX)
+        {
+            //Remove existing default key
             m_keys.erase(iname);
 
-        m_keys.insert(std::make_pair(iname, new Key(this->getFullPath(),name_,value)));
-        return *(m_keys[iname].get());
+            //Remove overrides
+            m_array_keys.erase(iname);
+
+            m_keys.insert(std::make_pair(iname, new Key(this->getFullPath(),name_,value)));
+            return *(m_keys[iname].get());
+        }
+        else
+        {
+            //Do not remove existing default key for override case
+
+            UInt64 needed_size = index + 1;
+            KeyArrayList::iterator found = m_array_keys.find(iname);
+            if(found != m_array_keys.end())
+            {
+                std::vector<boost::shared_ptr<Key> > & arr = (*found).second;
+                if (arr.size() < needed_size)
+                {
+                    arr.resize(needed_size);
+                }
+                else
+                {
+                    arr[index] = boost::shared_ptr<Key>();
+                }
+            }
+            else
+            {
+                m_array_keys[iname] = std::vector<boost::shared_ptr<Key> >(needed_size);
+            }
+
+            m_array_keys[iname][index] = boost::shared_ptr<Key>(new Key(this->getFullPath(),name_,value));
+
+            return *(m_array_keys[iname][index].get());
+        }
     }
 
-    const Key & Section::addKey(const String & name_, const SInt64 value)
-    {
-        //Make the key all lower-case if not case sensitive
-        String iname(name_);
-        if(!m_case_sensitive)
-            boost::to_lower(iname);
-
-        //Remove existing key if found
-        KeyList::const_iterator found = m_keys.find(iname);
-        if(found != m_keys.end())
-            m_keys.erase(iname);
-
-        m_keys.insert(std::make_pair(iname, new Key(this->getFullPath(),name_,value)));
-        return *(m_keys[iname].get());
-    }
-
-    const Key & Section::addKey(const String & name_, const double value)
-    {
-        //Make the key all lower-case if not case sensitive
-        String iname(name_);
-        if(!m_case_sensitive)
-            boost::to_lower(iname);
-
-        //Remove existing key if found
-        KeyList::const_iterator found = m_keys.find(iname);
-        if(found != m_keys.end())
-            m_keys.erase(iname);
-
-        m_keys.insert(std::make_pair(iname, new Key(this->getFullPath(),name_,value)));
-        return *(m_keys[iname].get());
-    }
+    template const Key & Section::addKeyInternal(const String &, const String &, UInt64);
+    template const Key & Section::addKeyInternal(const String &, const SInt64 &, UInt64);
+    template const Key & Section::addKeyInternal(const String &, const double &, UInt64);
 
     //get a subkey of the given name
-    const Key & Section::getKey(const String & name_)
+    // Not to be called unless the key exists (see hasKey())
+    const Key & Section::getKey(const String & name_, uint64_t index)
     {
         String iname(name_);
         if(!m_case_sensitive)
             boost::to_lower(iname);
-        return *(m_keys[iname].get());
+
+        if (index == UINT64_MAX)
+        {
+            // Default to using non-index version
+            return *(m_keys[iname].get());
+        }
+        else
+        {
+            if ( (m_array_keys.find(iname) != m_array_keys.end()) &&
+                 (m_array_keys[iname].size() >= (index+1))        &&
+                 (m_array_keys[iname][index].get() != NULL)          )
+            {
+                // If we have the key as an override, use it
+                return *(m_array_keys[iname][index].get());
+            }
+            else
+            {
+                // Otherwise, return the value requested from the non-indexed version
+                return *(m_keys[iname].get());
+            }
+        }
     }
 
     //get a subsection of the given name
@@ -134,13 +160,25 @@ namespace config
         return (found != m_subSections.end());
     }
 
-    bool Section::hasKey(const String & name) const
+    bool Section::hasKey(const String & name, UInt64 index) const
     {
         String iname(name);
         if(!m_case_sensitive)
             boost::to_lower(iname);
-        KeyList::const_iterator found = m_keys.find(iname);
-        return (found != m_keys.end());
+
+        if (index == UINT64_MAX)
+        {
+            KeyList::const_iterator found = m_keys.find(iname);
+            return (found != m_keys.end());
+        }
+        else
+        {
+            return ( ( (m_array_keys.find(iname) != m_array_keys.end()) &&
+                       (m_array_keys.find(iname)->second.size() >= (index+1))        &&
+                       (m_array_keys.find(iname)->second[index].get() != NULL)        )
+                     ||
+                       (m_keys.find(iname) != m_keys.end()) );
+        }
     }
 
     const String Section::getFullPath() const

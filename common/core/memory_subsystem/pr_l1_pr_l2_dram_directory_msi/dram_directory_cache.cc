@@ -6,6 +6,7 @@ namespace PrL1PrL2DramDirectoryMSI
 {
 
 DramDirectoryCache::DramDirectoryCache(
+      core_id_t core_id,
       String directory_type_str,
       UInt32 total_entries,
       UInt32 associativity,
@@ -21,9 +22,9 @@ DramDirectoryCache::DramDirectoryCache(
    m_shmem_perf_model(shmem_perf_model)
 {
    m_num_sets = m_total_entries / m_associativity;
-   
+
    // Instantiate the directory
-   m_directory = new Directory(directory_type_str, total_entries, max_hw_sharers, max_num_sharers);
+   m_directory = new Directory(core_id, directory_type_str, total_entries, max_hw_sharers, max_num_sharers);
 
    // Logs
    m_log_num_sets = floorLog2(m_num_sets);
@@ -43,10 +44,10 @@ DramDirectoryCache::getDirectoryEntry(IntPtr address)
 
    IntPtr tag;
    UInt32 set_index;
-   
+
    // Assume that it always hit in the Dram Directory Cache for now
    splitAddress(address, tag, set_index);
-   
+
    // Find the relevant directory entry
    for (UInt32 i = 0; i < m_associativity; i++)
    {
@@ -80,7 +81,7 @@ DramDirectoryCache::getDirectoryEntry(IntPtr address)
       if ((*it)->getAddress() == address)
       {
          return (*it);
-      } 
+      }
    }
 
    return (DirectoryEntry*) NULL;
@@ -90,7 +91,7 @@ void
 DramDirectoryCache::getReplacementCandidates(IntPtr address, std::vector<DirectoryEntry*>& replacement_candidate_list)
 {
    assert(getDirectoryEntry(address) == NULL);
-   
+
    IntPtr tag;
    UInt32 set_index;
    splitAddress(address, tag, set_index);
@@ -127,7 +128,7 @@ DramDirectoryCache::replaceDirectoryEntry(IntPtr replaced_address, IntPtr addres
    }
 
    // Should not reach here
-   assert(false);
+   LOG_PRINT_ERROR("");
 }
 
 void
@@ -142,11 +143,11 @@ DramDirectoryCache::invalidateDirectoryEntry(IntPtr address)
          m_replaced_directory_entry_list.erase(it);
 
          return;
-      } 
+      }
    }
 
    // Should not reach here
-   assert(false);
+   LOG_PRINT_ERROR("");
 }
 
 void

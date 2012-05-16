@@ -3,43 +3,41 @@
  */
 
 #include "interval_timer.h"
-#include <algorithm>
-#include <iostream>
-#include <cstdio>
-
 #include "tools.h"
-#include "instruction_latencies.h"
+#include "core_model.h"
 #include "stats.h"
 #include "core_manager.h"
-#include "lll_info.h"
 #include "itostr.h"
 #if DEBUG_IT_INSN_PRINT
 # include "performance_model.h"
 # include "micro_op.h"
 #endif
 #include "loop_tracer.h"
+#include "config.hpp"
+
+#include <algorithm>
+#include <iostream>
+#include <cstdio>
 
 IntervalTimer::IntervalTimer(
-         Core *core, PerformanceModel *_perf,
+         Core *core, PerformanceModel *_perf, const CoreModel *core_model,
          int misprediction_penalty,
          int dispatch_width,
          int window_size,
          bool do_functional_unit_contention)
-      : m_dispatch_width(dispatch_width)
+      : m_core_model(core_model)
+      , m_dispatch_width(dispatch_width)
       , m_branch_misprediction_penalty(misprediction_penalty)
       , m_remaining_dispatch_bandwidth(0)
       , m_max_store_completion_time(0)
       , m_max_load_completion_time(0)
       , m_loadstore_contention("interval_timer.loadstore_contention", core->getId(),
-           Sim()->getCfg()->getInt("perf_model/core/interval_timer/num_outstanding_loadstores"))
-      , m_windows(new Windows(window_size, do_functional_unit_contention))
+           Sim()->getCfg()->getIntArray("perf_model/core/interval_timer/num_outstanding_loadstores", core->getId()))
+      , m_windows(new Windows(window_size, do_functional_unit_contention, core, core_model))
       , m_perf_model(_perf)
       , m_frequency_domain(core->getDvfsDomain())
       , m_loop_tracer(LoopTracer::createLoopTracer(core))
 {
-
-   initilizeInstructionLatencies();
-   LLLInfo::initialize();
 
    for(int i = 0; i < MicroOp::UOP_SUBTYPE_SIZE; ++i)
    {
@@ -126,14 +124,6 @@ IntervalTimer::IntervalTimer(
       registerStatsMetric("interval_timer", core->getId(), name, &(m_cpiBaseStopDispatch[i]));
    }
 
-   // Do not register WIN_STOP_DISPATCH_NO_REASON (i==0).  It contains data that does not contribute to cpi stack generation
-   for (int i = 1 ; i < WIN_STOP_DISPATCH_SIZE ; i++ )
-   {
-      m_cpiBaseWindowStopDispatch[i] = 0;
-      String name = "detailed-cpiBaseFunctionalUnit-" + WindowStopDispatchReasonString((WindowStopDispatchReason)i);
-      registerStatsMetric("interval_timer", core->getId(), name, &(m_cpiBaseWindowStopDispatch[i]));
-   }
-
    for(unsigned int i = 0; i < (unsigned int)CPCONTR_TYPE_SIZE; ++i)
    {
       m_cpContrByType[i] = 0;
@@ -142,32 +132,48 @@ IntervalTimer::IntervalTimer(
    }
 }
 
-IntervalTimer::~IntervalTimer() {
-   delete m_windows;
-   if (m_loop_tracer)
+IntervalTimer::~IntervalTimer()
+{
+   free();
+}
+
+void IntervalTimer::free()
+{
+   if (m_windows)
    {
-      delete m_loop_tracer;
-   }
+      delete m_windows;
+      if (m_loop_tracer)
+      {
+         delete m_loop_tracer;
+      }
 #if DEBUG_IT_INSN_PRINT
-   if (m_insn_log)
-   {
-      std::fclose(m_insn_log);
-   }
+      if (m_insn_log)
+      {
+         std::fclose(m_insn_log);
+      }
 #endif
+      m_windows = NULL;
+   }
 }
 
 // Simulate a collection of micro-ops and report the number of instructions executed and the latency
-boost::tuple<uint64_t,uint64_t> IntervalTimer::simulate(const std::vector<MicroOp>& insts)
+boost::tuple<uint64_t,uint64_t> IntervalTimer::simulate(const std::vector<DynamicMicroOp*>& insts)
 {
    uint64_t total_instructions_executed = 0, total_latency = 0;
 
-   for (std::vector<MicroOp>::const_iterator i = insts.begin() ; i != insts.end(); ++i )
+   for (std::vector<DynamicMicroOp*>::const_iterator i = insts.begin() ; i != insts.end(); ++i )
    {
+      if ((*i)->isSquashed())
+      {
+         delete *i;
+         continue;
+      }
+
       m_windows->add(*i);
-      m_uop_type_count[i->getSubtype()]++;
+      m_uop_type_count[(*i)->getMicroOp()->getSubtype()]++;
       m_uops_total++;
-      if (i->isX87()) m_uops_x87++;
-      if (i->isPause()) m_uops_pause++;
+      if ((*i)->getMicroOp()->isX87()) m_uops_x87++;
+      if ((*i)->getMicroOp()->isPause()) m_uops_pause++;
 
       if (m_uops_total > 10000 && m_uops_x87 > m_uops_total / 20)
       {
@@ -196,29 +202,28 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
    uint32_t dispatch_rate = calculateCurrentDispatchRate();
 
    StopDispatchReason continue_dispatching = STOP_DISPATCH_NO_REASON;
-   WindowStopDispatchReason window_continue_dispatching = WIN_STOP_DISPATCH_NO_REASON;
 
    SubsecondTime micro_op_period = m_frequency_domain->getPeriod(); // Approximate the current cycle count if we don't find a MicroOp
 
    // Instruction dispatch
    // micro_ops_executed must be < dispatch_rate.  micro_ops_executed <= dispatch_rate will cause significant speedups (see calculateCurrentDispatchRate())
-   while ( (!m_windows->wIsEmpty()) && (instructions_executed < m_dispatch_width) && (micro_ops_executed < dispatch_rate) && (continue_dispatching == STOP_DISPATCH_NO_REASON) && (window_continue_dispatching == WIN_STOP_DISPATCH_NO_REASON))
+   while ( (!m_windows->wIsEmpty()) && (instructions_executed < m_dispatch_width) && (micro_ops_executed < dispatch_rate) && (continue_dispatching == STOP_DISPATCH_NO_REASON))
    {
-      MicroOp& micro_op = m_windows->getInstructionToDispatch();
+      Windows::WindowEntry& micro_op = m_windows->getInstructionToDispatch();
 
       uint64_t instruction_latency = dispatchInstruction(micro_op, continue_dispatching);
       latency += instruction_latency;
-      window_continue_dispatching = m_windows->dispatchInstruction();
+      m_windows->dispatchInstruction();
 
       micro_ops_executed++;
-      if (micro_op.isLast())
+      if (micro_op.getMicroOp()->isLast())
       {
          instructions_executed++;
       }
 
       if (m_loop_tracer)
       {
-         m_loop_tracer->issue(micro_op, micro_op.getExecTime(), micro_op.getExecTime());
+         m_loop_tracer->issue(micro_op.getDynMicroOp(), micro_op.getExecTime(), micro_op.getExecTime());
       }
 
 #if DEBUG_IT_INSN_PRINT
@@ -227,7 +232,7 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
          uint64_t insn_count = m_perf_model->getInstructionCount();
          uint64_t cycle_count = m_perf_model->getCycleCount();
 # ifdef ENABLE_MICROOP_STRINGS
-         const char *opcode_name = micro_op.getInstructionOpcodeName().c_str();
+         const char *opcode_name = micro_op.getMicroOp()->getInstructionOpcodeName().c_str();
 # else
          const char *opcode_name = "Unknown";
 # endif
@@ -235,7 +240,7 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
       }
 #endif
 
-      micro_op_period = micro_op.getPeriod();
+      micro_op_period = micro_op.getDynMicroOp()->getPeriod();
    }
 
    // The minimum latency for dispatching these micro-ops is 1 cycle
@@ -255,9 +260,11 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
          continue_dispatching = ADD_STOP_DISPATCH_REASON(STOP_DISPATCH_DISPATCH_RATE, continue_dispatching);
          // Each time we have to stop because the critical path tells us to:
          //   Add the current critical path components to their corresponding total
-         //   Add the total critical path com
+         //   If the critical path got extended due to issue contention, add that separately
+         int critical_path_length = m_windows->getCriticalPathLength();
+         int effective_cp_length = m_windows->getEffectiveCriticalPathLength(critical_path_length, true);
          for(unsigned int i = 0; i < (unsigned int)CPCONTR_TYPE_SIZE; ++i)
-            m_cpContrByType[i] += m_windows->getCpContrFraction((CpContrType)i);
+            m_cpContrByType[i] += m_windows->getCpContrFraction((CpContrType)i, effective_cp_length);
          #if 0
          printf("cpContr: ");
          for(unsigned int i = 0; i < (unsigned int)CPCONTR_TYPE_SIZE; ++i)
@@ -265,16 +272,11 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
          printf("/ total %4lu\n", m_windows->m_cpcontr_total);
          #endif
       }
-      if (window_continue_dispatching != WIN_STOP_DISPATCH_NO_REASON)
-      {
-         continue_dispatching = ADD_STOP_DISPATCH_REASON(STOP_DISPATCH_WIN_FUNCTIONAL_UNIT, continue_dispatching);
-      }
 
       latency = 1;
       // Update CPI-stacks
       m_cpiBase += 1 * micro_op_period;
       m_cpiBaseStopDispatch[continue_dispatching] += 1;
-      m_cpiBaseWindowStopDispatch[window_continue_dispatching] += 1;
    }
 
    return boost::tuple<uint64_t,uint64_t>(instructions_executed, latency);
@@ -288,7 +290,7 @@ uint32_t IntervalTimer::calculateCurrentDispatchRate() {
 
    if (critical_path_length > 0)
    {
-      FixedPoint ipc = FixedPoint(m_windows->getOldWindowLength()) / m_windows->getEffectiveCriticalPathLength(critical_path_length) + m_remaining_dispatch_bandwidth;
+      FixedPoint ipc = FixedPoint(m_windows->getOldWindowLength()) / m_windows->getEffectiveCriticalPathLength(critical_path_length, false) + m_remaining_dispatch_bandwidth;
       dispatch_rate = FixedPoint::floor(ipc);
       m_remaining_dispatch_bandwidth = (dispatch_rate < m_dispatch_width) ? (ipc - dispatch_rate) : 0;
    }
@@ -301,7 +303,7 @@ uint32_t IntervalTimer::calculateCurrentDispatchRate() {
    return dispatch_rate;
 }
 
-uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReason& continue_dispatching) {
+uint64_t IntervalTimer::dispatchInstruction(Windows::WindowEntry& micro_op, StopDispatchReason& continue_dispatching) {
 
    uint64_t latency = 0;
 
@@ -310,23 +312,23 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
    micro_op.cphead = m_windows->getCriticalPathHead();
    micro_op.cptail = m_windows->getCriticalPathTail();
 
-   bool icache_miss = (micro_op.getICacheHitWhere() != HitWhere::L1I) & (!micro_op.hasOverlapFlag(MicroOp::ICACHE_OVERLAP));
+   bool icache_miss = (micro_op.getDynMicroOp()->getICacheHitWhere() != HitWhere::L1I) & (!micro_op.hasOverlapFlag(Windows::WindowEntry::ICACHE_OVERLAP));
 
    if (icache_miss)
    {
-      uint64_t icache_latency = micro_op.getICacheLatency();
+      uint64_t icache_latency = micro_op.getDynMicroOp()->getICacheLatency();
       latency += icache_latency;
 
       m_windows->clearOldWindow(micro_op.cptail + icache_latency);
 
       continue_dispatching = STOP_DISPATCH_ICACHE_MISS;
       // Update icache CPI-stack counters
-      m_cpiInstructionCache[micro_op.getICacheHitWhere()] += icache_latency * micro_op.getPeriod();
+      m_cpiInstructionCache[micro_op.getDynMicroOp()->getICacheHitWhere()] += icache_latency * micro_op.getDynMicroOp()->getPeriod();
    }
 
-   if (micro_op.isBranch())
+   if (micro_op.getMicroOp()->isBranch())
    {
-      if (micro_op.isBranchMispredicted() && !micro_op.hasOverlapFlag(MicroOp::BPRED_OVERLAP))
+      if (micro_op.getDynMicroOp()->isBranchMispredicted() && !micro_op.hasOverlapFlag(Windows::WindowEntry::BPRED_OVERLAP))
       {
          uint64_t bpred_latency = m_branch_misprediction_penalty + m_windows->calculateBranchResolutionLatency();
          latency += bpred_latency;
@@ -334,24 +336,24 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
          continue_dispatching = STOP_DISPATCH_BRANCH_MISPREDICT;
          m_windows->clearOldWindow(micro_op.cptail + bpred_latency);
          // Update bpred CPI-stack counters
-         m_cpiBranchPredictor += bpred_latency * micro_op.getPeriod();
+         m_cpiBranchPredictor += bpred_latency * micro_op.getDynMicroOp()->getPeriod();
       }
    }
 
-   if (micro_op.isSerializing() || micro_op.isInterrupt())
+   if (micro_op.getMicroOp()->isSerializing() || micro_op.getMicroOp()->isInterrupt())
    {
       uint64_t flushLatency = std::max(m_windows->getCriticalPathLength(), m_windows->getMinimalFlushLatency(m_dispatch_width));
-      uint64_t serialize_latency = flushLatency + micro_op.getExecLatency();
+      uint64_t serialize_latency = flushLatency + micro_op.getDynMicroOp()->getExecLatency();
       latency += serialize_latency;
 
       m_numSerializationInsns++;
       m_totalSerializationLatency += serialize_latency;
-      m_cpiSerialization += serialize_latency * micro_op.getPeriod();
+      m_cpiSerialization += serialize_latency * micro_op.getDynMicroOp()->getPeriod();
 
       micro_op.setExecTime(m_windows->getCriticalPathTail());
       m_windows->clearOldWindow(micro_op.getExecTime());
    }
-   else if (micro_op.isExecute() && micro_op.isMemBarrier())
+   else if (micro_op.getMicroOp()->isExecute() && micro_op.getMicroOp()->isMemBarrier())
    {
       // Handle the M/L/SFENCE operations (when supplied as a single execute operation) now as a strict MFENCE
       //uint64_t current_cycle = m_windows->getCriticalPathTail();
@@ -368,20 +370,20 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
       //   m_totalMfenceLatency += mfence_latency;
       //}
       m_numMfenceInsns++;
-      micro_op.setExecTime(cycle_to_wait_until + micro_op.getExecLatency());
+      micro_op.setExecTime(cycle_to_wait_until + micro_op.getDynMicroOp()->getExecLatency());
       updateCriticalPath(micro_op, latency);
    }
    else
    {
-      uint64_t exec_latency = micro_op.getExecLatency();
+      uint64_t exec_latency = micro_op.getDynMicroOp()->getExecLatency();
 
-      if (micro_op.isLoad())
+      if (micro_op.getMicroOp()->isLoad())
       {
-         if (micro_op.hasOverlapFlag(MicroOp::DCACHE_OVERLAP))
+         if (micro_op.hasOverlapFlag(Windows::WindowEntry::DCACHE_OVERLAP))
          {
             // do nothing for overlapped loads, as they don't add to the critical path and happen in parallel to other loads (MLP > 1)
          }
-         else if (micro_op.isLongLatencyLoad())
+         else if (micro_op.getDynMicroOp()->isLongLatencyLoad())
          {
             uint64_t dcache_latency = exec_latency;
             // Long latency loads trump all other latencies
@@ -389,7 +391,7 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
             uint64_t sched_cycle = dispatch_cycle;
             uint64_t contention_exec_cycle;
             // This logic only works for LFENCEs, when marked on load uops
-            if (micro_op.isMemBarrier())
+            if (micro_op.getMicroOp()->isMemBarrier())
                contention_exec_cycle = m_loadstore_contention.getBarrierCompletionTime(sched_cycle, dcache_latency);
             else
                contention_exec_cycle = m_loadstore_contention.getCompletionTime(sched_cycle, dcache_latency);
@@ -429,7 +431,7 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
             m_numTotalLongLatencyLoadLatency+=long_latency_load_latency;
 
             // Update dcache CPI-stack counters
-            m_cpiDataCache[micro_op.getDCacheHitWhere()] += long_latency_load_latency * micro_op.getPeriod();
+            m_cpiDataCache[micro_op.getDynMicroOp()->getDCacheHitWhere()] += long_latency_load_latency * micro_op.getDynMicroOp()->getPeriod();
          }
          else
          {
@@ -439,7 +441,7 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
             uint64_t sched_cycle = dispatch_cycle;
             uint64_t contentionExecTime;
             // This logic only works for LFENCEs, when marked on load uops
-            if (micro_op.isMemBarrier())
+            if (micro_op.getMicroOp()->isMemBarrier())
                contentionExecTime = m_loadstore_contention.getBarrierCompletionTime(sched_cycle, dcache_latency);
             else
                contentionExecTime = m_loadstore_contention.getCompletionTime(sched_cycle, dcache_latency);
@@ -450,12 +452,12 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
 
          m_max_load_completion_time = std::max(m_max_load_completion_time, micro_op.getExecTime());
 
-      } else if (micro_op.isStore()) {
+      } else if (micro_op.getMicroOp()->isStore()) {
 
          uint64_t store_latency = exec_latency;
          uint64_t dispatch_cycle = std::max(max_producer_exec_time, m_windows->getCriticalPathHead());
          uint64_t sched_cycle = dispatch_cycle;
-         uint64_t bypass_latency = getBypassLatency(micro_op.getBypassType());
+         uint64_t bypass_latency = m_core_model->getBypassLatency(micro_op.getDynMicroOp());
          uint64_t data_ready_cycle = sched_cycle + bypass_latency + 1; // This store result will be ready to use one cycle later
          micro_op.setExecTime(data_ready_cycle); // Time the critical path calculation will use
          updateCriticalPath(micro_op, latency);
@@ -483,7 +485,7 @@ uint64_t IntervalTimer::dispatchInstruction(MicroOp& micro_op, StopDispatchReaso
  * Move a micro_op to the old window. If it extends the critical path
  * by more than the long-latency cut-off, clear the window instead.
  */
-void IntervalTimer::updateCriticalPath(MicroOp& micro_op, uint64_t& latency)
+void IntervalTimer::updateCriticalPath(Windows::WindowEntry& micro_op, uint64_t& latency)
 {
    uint64_t lll = m_windows->longLatencyOperationLatency(micro_op);
    if (lll == 0)
@@ -493,7 +495,7 @@ void IntervalTimer::updateCriticalPath(MicroOp& micro_op, uint64_t& latency)
    else
    {
       latency += lll;
-      m_cpiLongLatency += lll * micro_op.getPeriod();
+      m_cpiLongLatency += lll * micro_op.getDynMicroOp()->getPeriod();
       m_windows->clearOldWindow(micro_op.getExecTime());
    }
 }
@@ -509,28 +511,28 @@ void IntervalTimer::blockWindow()
 
    Windows::Iterator window_iterator = m_windows->getWindowIterator();
 
-   MicroOp& head = window_iterator.next(); // Returns the current head: disregard it.
+   Windows::WindowEntry& head = window_iterator.next(); // Returns the current head: disregard it.
    head.setIndependentMiss();
 
    while(window_iterator.hasNext()) {
-      MicroOp& micro_op = window_iterator.next();
+      Windows::WindowEntry& micro_op = window_iterator.next();
 
       micro_op.clearDependent();
-      micro_op.addOverlapFlag(MicroOp::ICACHE_OVERLAP);
+      micro_op.addOverlapFlag(Windows::WindowEntry::ICACHE_OVERLAP);
       m_numICacheOverlapped++;
 
-      if (micro_op.isSerializing())
+      if (micro_op.getMicroOp()->isSerializing())
          break;
 
-      if (micro_op.isMemBarrier())
+      if (micro_op.getMicroOp()->isMemBarrier())
          mem_barrier_pending = true;
 
       // Generate dependencies using dependencies
-      for(uint32_t i = 0; i < micro_op.getDependenciesLength() && !micro_op.isDependent(); i++)
+      for(uint32_t i = 0; i < micro_op.getDynMicroOp()->getDependenciesLength() && !micro_op.isDependent(); i++)
       {
-         if (m_windows->windowContains(micro_op.getDependency(i)))
+         if (m_windows->windowContains(micro_op.getDynMicroOp()->getDependency(i)))
          {
-            MicroOp& dependee = m_windows->getInstruction(micro_op.getDependency(i));
+            Windows::WindowEntry& dependee = m_windows->getInstruction(micro_op.getDynMicroOp()->getDependency(i));
             if (dependee.isDependent())
             {
                micro_op.setDataDependent();
@@ -538,12 +540,12 @@ void IntervalTimer::blockWindow()
          }
       }
 
-      if (micro_op.isBranch() && !micro_op.isDependent())
+      if (micro_op.getMicroOp()->isBranch() && !micro_op.isDependent())
       {
-          micro_op.addOverlapFlag(MicroOp::BPRED_OVERLAP);
+          micro_op.addOverlapFlag(Windows::WindowEntry::BPRED_OVERLAP);
           m_numBPredOverlapped++;
       }
-      else if (micro_op.isLoad() && !micro_op.isDependent())
+      else if (micro_op.getMicroOp()->isLoad() && !micro_op.isDependent())
       {
          /* no previous membars & not data dependend, mark as overlapped
           * if long latency miss -> mark as independent miss
@@ -551,10 +553,10 @@ void IntervalTimer::blockWindow()
           */
          if (!mem_barrier_pending)
          {
-            if (!micro_op.hasOverlapFlag(MicroOp::DCACHE_OVERLAP))
+            if (!micro_op.hasOverlapFlag(Windows::WindowEntry::DCACHE_OVERLAP))
             {
-               uint64_t overlappedLatency = micro_op.getExecLatency();
-               uint64_t longLatency = head.getExecLatency();
+               uint64_t overlappedLatency = micro_op.getDynMicroOp()->getExecLatency();
+               uint64_t longLatency = head.getDynMicroOp()->getExecLatency();
                m_totalHiddenDCacheLatency += overlappedLatency;
 
                if (overlappedLatency > longLatency)
@@ -563,7 +565,7 @@ void IntervalTimer::blockWindow()
                   m_numHiddenLongerDCacheLatency += 1;
                }
 
-               micro_op.addOverlapFlag(MicroOp::DCACHE_OVERLAP);
+               micro_op.addOverlapFlag(Windows::WindowEntry::DCACHE_OVERLAP);
                m_numDCacheOverlapped++;
 
                micro_op.setIndependentMiss();
@@ -575,19 +577,19 @@ void IntervalTimer::blockWindow()
 }
 
 // Allow the use of negative times for comparisons
-uint64_t IntervalTimer::getMaxProducerExecTime(MicroOp& micro_op) {
-   int64_t oldestStartTime = m_windows->getOldestInstruction().getExecTime() - m_windows->getOldestInstruction().getExecLatency();
+uint64_t IntervalTimer::getMaxProducerExecTime(Windows::WindowEntry& micro_op) {
+   int64_t oldestStartTime = m_windows->getOldestInstruction().getExecTime() - m_windows->getOldestInstruction().getDynMicroOp()->getExecLatency();
    int64_t oldestFetchTime = m_windows->getOldestInstruction().getFetchTime();
    int64_t currentFetchTime = micro_op.getFetchTime();
    int64_t relativeFetchTime = currentFetchTime - oldestFetchTime;
 
    int64_t max_producer_exec_time = 0;
 
-   for(uint32_t i = 0; i < micro_op.getDependenciesLength(); i++) {
-      if (m_windows->oldWindowContains(micro_op.getDependency(i))) {
-         MicroOp& producer = m_windows->getInstruction(micro_op.getDependency(i));
+   for(uint32_t i = 0; i < micro_op.getDynMicroOp()->getDependenciesLength(); i++) {
+      if (m_windows->oldWindowContains(micro_op.getDynMicroOp()->getDependency(i))) {
+         Windows::WindowEntry& producer = m_windows->getInstruction(micro_op.getDynMicroOp()->getDependency(i));
          int64_t producerExecTime = producer.getExecTime();
-         int64_t producerStartTime = producerExecTime - producer.getExecLatency();
+         int64_t producerStartTime = producerExecTime - producer.getDynMicroOp()->getExecLatency();
          int64_t relativeStartTime = producerStartTime - oldestStartTime;
 
          if (relativeFetchTime > relativeStartTime) {

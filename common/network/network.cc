@@ -184,7 +184,7 @@ SInt32 Network::netSend(NetPacket& packet)
       // LOG_ASSERT_ERROR(hopVec[i].time >= packet.time, "hopVec[%d].time(%llu) < packet.time(%llu)", i, hopVec[i].time, packet.time);
 
       // Do a shortcut here
-      if ((Config::getSingleton()->getProcessCount() == 1) && (hopVec[i].final_dest != NetPacket::BROADCAST))
+      if (hopVec[i].final_dest != NetPacket::BROADCAST)
       {
          // 1) Process Count = 1
          // 2) The broadcast tree network model is not used

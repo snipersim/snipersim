@@ -5,14 +5,15 @@
 static PyObject *
 getConfigString(PyObject *self, PyObject *args)
 {
-   const char *key = NULL, *default_val = NULL;
+   const char *key = NULL;
+   SInt64 index = -1;
    String result = "";
 
-   if (!PyArg_ParseTuple(args, "s|s", &key, &default_val))
+   if (!PyArg_ParseTuple(args, "s|i", &key, &index))
       return NULL;
 
-   if (default_val)
-      result = Sim()->getCfg()->getString(key, default_val);
+   if (index != -1)
+      result = Sim()->getCfg()->getStringArray(key, index);
    else
       result = Sim()->getCfg()->getString(key);
 

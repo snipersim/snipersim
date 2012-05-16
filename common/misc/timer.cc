@@ -113,9 +113,9 @@ void TotalTimer::report(FILE* fp)
 {
    //printf("[TIMER] <%-20s> %6.1f s, %lu calls, avg %.0f us/call, max %.0f us, switched = %.3f%% (%lu) ",
    //   name.c_str(), total / 1e9, n, total / (n ? n : 1) / 1e3, max / 1e3, 100. * n_switched / n, n_switched);
-   fprintf(fp, "%lu %lu %lu %lu", total, n, max, n_switched);
+   fprintf(fp, "%"PRIu64" %"PRIu64" %"PRIu64" %"PRIu64, total, n, max, n_switched);
    for(unsigned long i = backtrace_ignore; i < backtrace_ignore + 6; ++i)
-     fprintf(fp, " %lu", i < backtrace_n ? (unsigned long)backtrace_buffer[i] : 0);
+     fprintf(fp, " %"PRIuPTR, i < backtrace_n ? (intptr_t)backtrace_buffer[i] : 0);
    fprintf(fp, " %s\n", name.c_str());
 }
 
@@ -124,7 +124,7 @@ void TotalTimer::reports(void)
    if (numtimers > 0) {
       char * timersfile = strdup(Sim()->getConfig()->formatOutputFileName("sim_timers.out").c_str());
       FILE* fp = fopen(timersfile, "w");
-      fprintf(fp, "%lu\n", (unsigned long)rdtsc);
+      fprintf(fp, "%"PRIuPTR"\n", (intptr_t)rdtsc);
       for(int i = 0; i < numtimers; ++i)
          alltimers[i]->report(fp);
       fclose(fp);
@@ -139,7 +139,7 @@ static UInt64 getHashByStacktrace(void)
    int n = backtrace(buffer, SIZE);
    UInt64 hash = 1861;
    for(int i = 0; i < n; ++i)
-      hash = ((hash * 1994945959) + (UInt64)buffer[i]) % 49492920901;
+      hash = ((hash * __UINT64_C(1994945959)) + (UInt64)buffer[i]) % __UINT64_C(49492920901);
    return hash;
 }
 

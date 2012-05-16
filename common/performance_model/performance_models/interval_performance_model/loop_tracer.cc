@@ -1,26 +1,26 @@
 #include "loop_tracer.h"
 #include "simulator.h"
 #include "config.hpp"
-#include "micro_op.h"
+#include "dynamic_micro_op.h"
 #include "instruction.h"
 #include "core.h"
 
 LoopTracer*
-LoopTracer::createLoopTracer(Core *core)
+LoopTracer::createLoopTracer(const Core *core)
 {
    if (core->getId() >= core_id_t(Sim()->getConfig()->getApplicationCores()))
       return NULL;
-   if (Sim()->getCfg()->getBool("loop_tracer/enabled", false))
+   if (Sim()->getCfg()->getBoolArray("loop_tracer/enabled", core->getId()))
       return new LoopTracer(core);
    else
       return NULL;
 }
 
-LoopTracer::LoopTracer(Core *core)
+LoopTracer::LoopTracer(const Core *core)
    : m_core(core)
-   , m_address_base(strtol(Sim()->getCfg()->getString("loop_tracer/base_address", "0").c_str(), NULL, 16))
-   , m_iter_start(Sim()->getCfg()->getInt("loop_tracer/iter_start", 0))
-   , m_iter_count(Sim()->getCfg()->getInt("loop_tracer/iter_count", 36))
+   , m_address_base(strtol(Sim()->getCfg()->getStringArray("loop_tracer/base_address", core->getId()).c_str(), NULL, 16))
+   , m_iter_start(Sim()->getCfg()->getIntArray("loop_tracer/iter_start", core->getId()))
+   , m_iter_count(Sim()->getCfg()->getIntArray("loop_tracer/iter_count", core->getId()))
    , m_active(false)
    , m_iter_current(-1)
    , m_iter_instr(0)
@@ -42,12 +42,12 @@ LoopTracer::~LoopTracer()
 
    printf("                   %s", String(m_disas_max, ' ').c_str());
    for(uint64_t i = 0; i < num_cycles; i += 10)
-      printf("%-5lu               ", i);
+      printf("%-5"PRIu64"               ", i);
    printf("\n");
 
    printf("                   %s", String(m_disas_max, ' ').c_str());
    for(uint64_t i = 0; i < num_cycles; ++i)
-      printf("%lu ", i % 10);
+      printf("%"PRIu64" ", i % 10);
    printf("\n");
 
    // print per-instruction schedule
@@ -66,14 +66,17 @@ LoopTracer::~LoopTracer()
 }
 
 void
-LoopTracer::issue(MicroOp &uop, uint64_t cycle_issue, uint64_t cycle_done)
+LoopTracer::issue(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done)
 {
    // Ignore dynamic (fake) instructions
-   if (!uop.getInstruction())
+   if (!uop->getMicroOp()->getInstruction())
       return;
 
+   Instruction *inst = uop->getMicroOp()->getInstruction();
+   IntPtr address = inst->getAddress();
+
    // Start of a new loop iteration?
-   if (uop.getInstruction()->getAddress() == m_address_base && uop.isFirst())
+   if (address == m_address_base && uop->getMicroOp()->isFirst())
    {
       ++m_iter_current;
       m_iter_instr = 0;
@@ -84,17 +87,18 @@ LoopTracer::issue(MicroOp &uop, uint64_t cycle_issue, uint64_t cycle_done)
       else
          m_active = false;
 
-   } else if (uop.getInstruction()->getAddress() < m_address_base)
+   } else if (address < m_address_base)
       // We have jumped backwards
       m_active = false;
 
 
    if (m_active)
    {
-      std::pair<IntPtr, UInt8> opid(uop.getInstruction()->getAddress(), m_instr_uop);
-      if (m_instructions.count(opid) == 0) {
-         m_instructions[opid] = Instr(uop.getInstruction(), m_instr_uop);
-         m_disas_max = std::max(m_disas_max, uop.getInstruction()->getDisassembly().length());
+      std::pair<IntPtr, UInt8> opid(address, m_instr_uop);
+      if (m_instructions.count(opid) == 0)
+      {
+         m_instructions[opid] = Instr(inst, m_instr_uop);
+         m_disas_max = std::max(m_disas_max, (uint64_t)inst->getDisassembly().length());
       }
       m_instructions[opid].issued[m_iter_current - m_iter_start] = cycle_issue;
 
@@ -102,7 +106,8 @@ LoopTracer::issue(MicroOp &uop, uint64_t cycle_issue, uint64_t cycle_done)
       m_cycle_max = std::max(m_cycle_max, cycle_issue);
 
       ++m_instr_uop;
-      if (uop.isLast()) {
+      if (uop->getMicroOp()->isLast())
+      {
          ++m_iter_instr;
          m_instr_uop = 0;
       }

@@ -1,5 +1,4 @@
 #include "instruction_modeling.h"
-#include "routine_replace.h"
 #include "inst_mode_macros.h"
 #include "local_storage.h"
 
@@ -7,8 +6,8 @@
 #include "performance_model.h"
 #include "core_manager.h"
 #include "core.h"
+#include "thread.h"
 #include "timer.h"
-#include "mcp.h"
 #include "instruction_decoder.h"
 #include "instruction.h"
 #include "micro_op.h"
@@ -51,10 +50,10 @@ static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADD
    }
 }
 
-static VOID handleMagic(CONTEXT * ctxt, ADDRINT next_eip)
+static VOID handleMagic(THREADID threadIndex, CONTEXT * ctxt, ADDRINT next_eip)
 {
-   ADDRINT res = handleMagicInstruction(PIN_GetContextReg(ctxt, REG_GAX),
-                    PIN_GetContextReg(ctxt, REG_GBX), PIN_GetContextReg(ctxt, REG_GCX));
+   ADDRINT res = handleMagicInstruction(localStore[threadIndex].thread->getId(),
+                    PIN_GetContextReg(ctxt, REG_GAX), PIN_GetContextReg(ctxt, REG_GBX), PIN_GetContextReg(ctxt, REG_GCX));
    PIN_SetContextReg(ctxt, REG_GAX, res);
    // Forcefully abort the current trace (Redmine #118).
    PIN_SetContextReg(ctxt, REG_INST_PTR, next_eip);
@@ -76,111 +75,19 @@ static void handleRdtsc(THREADID thread_id, PIN_REGISTER * gax, PIN_REGISTER * g
 
 static void fillOperandListMemOps(OperandList *list, INS ins)
 {
-   // NOTE: This code is written to reflect rewriteStackOp and
-   // rewriteMemOp etc from redirect_memory.cc and it MUST BE
-   // MAINTAINED to reflect that code.
-
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+   if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
    {
-      // string ops
-      if ((INS_RepPrefix(ins) || INS_RepnePrefix(ins)))
+      // first all reads (dyninstrinfo pushed from redirectMemOp)
+      for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
       {
-         if (INS_Opcode(ins) == XED_ICLASS_SCASB ||
-             INS_Opcode(ins) == XED_ICLASS_CMPSB)
-         {
-            // handled by StringInstruction
-            return;
-         }
-      }
-
-      // stack ops
-      if (INS_Opcode (ins) == XED_ICLASS_PUSH)
-      {
-         if (INS_OperandIsImmediate (ins, 0))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-
-         else if (INS_OperandIsReg (ins, 0))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-
-         else if (INS_OperandIsMemory (ins, 0))
-         {
+         if (INS_MemoryOperandIsRead(ins, i))
             list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
       }
-
-      else if (INS_Opcode (ins) == XED_ICLASS_POP)
+      // then all writes (dyninstrinfo pushed from completeMemWrite)
+      for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
       {
-         if (INS_OperandIsReg (ins, 0))
-         {
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-         }
-
-         else if (INS_OperandIsMemory (ins, 0))
-         {
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
+         if (INS_MemoryOperandIsWritten(ins, i))
             list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
-      }
-
-      else if (INS_IsCall (ins))
-      {
-         if (INS_OperandIsMemory (ins, 0))
-         {
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
-
-         else
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-      }
-
-      else if (INS_IsRet (ins))
-         list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-
-      else if (INS_Opcode (ins) == XED_ICLASS_LEAVE)
-         list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-
-      else if ((INS_Opcode (ins) == XED_ICLASS_PUSHF) || (INS_Opcode (ins) == XED_ICLASS_PUSHFD))
-         list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-
-      else if ((INS_Opcode (ins) == XED_ICLASS_POPF) || (INS_Opcode (ins) == XED_ICLASS_POPFD))
-         list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-
-      // mem ops
-      else if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
-      {
-         // first all reads (dyninstrinfo pushed from redirectMemOp)
-         for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
-         {
-            if (INS_MemoryOperandIsRead(ins, i))
-               list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-         }
-         // then all writes (dyninstrinfo pushed from completeMemWrite)
-         for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
-         {
-            if (INS_MemoryOperandIsWritten(ins, i))
-               list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
-      }
-   }
-
-   else // Sim()->getConfig()->getSimulationMode() == Config::LITE
-   {
-      if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
-      {
-         // first all reads (dyninstrinfo pushed from redirectMemOp)
-         for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
-         {
-            if (INS_MemoryOperandIsRead(ins, i))
-               list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-         }
-         // then all writes (dyninstrinfo pushed from completeMemWrite)
-         for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
-         {
-            if (INS_MemoryOperandIsWritten(ins, i))
-               list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
       }
    }
 }
@@ -218,7 +125,7 @@ static void fillOperandList(OperandList *list, INS ins)
    }
 }
 
-std::unordered_map<ADDRINT, std::vector<MicroOp *> > instruction_cache;
+std::unordered_map<ADDRINT, const std::vector<const MicroOp *> *> instruction_cache;
 
 BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBlock *basic_block)
 {
@@ -229,12 +136,14 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    if (! mfence_instruction) {
       OperandList list;
       mfence_instruction = new GenericInstruction(list);
-      MicroOp * uop = new MicroOp();
+      MicroOp *uop = new MicroOp();
       uop->makeDynamic("MFENCE", 1);
       uop->setMemBarrier(true);
       uop->setFirst(true);
       uop->setLast(true);
-      mfence_instruction->addMicroOp(uop);
+      std::vector<const MicroOp*> *uops = new std::vector<const MicroOp*>();
+      uops->push_back(uop);
+      mfence_instruction->setMicroOps(uops);
    }
 
    // Functional modeling
@@ -242,7 +151,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    // Simics-style magic instruction: xchg bx, bx
    if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
    {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_CONTEXT, IARG_FALLTHROUGH_ADDR, IARG_END);
+      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_THREAD_ID, IARG_CONTEXT, IARG_FALLTHROUGH_ADDR, IARG_END);
       // Trace will be aborted after MAGIC (Redmine #118), so don't add the subsequent instructions to the basic-block list.
       return false;
    }
@@ -273,7 +182,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
       // In detailed mode, push a DynamicInstructionInfo
       INSTRUMENT_PREDICATED(
-         INSTR_IF_DETAILED_OR_FULL,
+         INSTR_IF_DETAILED,
          trace, ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)handleBranch,
          IARG_THREAD_ID,
          IARG_ADDRINT, INS_Address(ins),
@@ -282,7 +191,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
          IARG_END);
 
       INSTRUMENT_PREDICATED(
-         INSTR_IF_DETAILED_OR_FULL,
+         INSTR_IF_DETAILED,
          trace, ins, IPOINT_AFTER, (AFUNPTR)handleBranch,
          IARG_THREAD_ID,
          IARG_ADDRINT, INS_Address(ins),
@@ -328,14 +237,6 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
          basic_block->push_back(new ArithInstruction(INST_FMUL, list));
          break;
 
-      case XED_ICLASS_SCASB:
-      case XED_ICLASS_CMPSB:
-         if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
-         {
-            basic_block->push_back(new StringInstruction(list));
-            break;
-         }
-
       default:
          basic_block->push_back(new GenericInstruction(list));
       }
@@ -350,9 +251,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    if (instruction_cache.count(addr) == 0)
       instruction_cache[addr] = InstructionDecoder::decode(INS_Address(ins), INS_XedDec(ins), basic_block->back());
 
-   for(std::vector<MicroOp*>::iterator it = instruction_cache[addr].begin(); it != instruction_cache[addr].end(); it++) {
-      basic_block->back()->addMicroOp(*it);
-   }
+   basic_block->back()->setMicroOps(instruction_cache[addr]);
 
    if (INS_IsAtomicUpdate(ins))
       basic_block->push_back(mfence_instruction);
@@ -362,7 +261,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
 VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address, INT32 count)
 {
-   Core* core = localStore[thread_id].core;
+   Core* core = localStore[thread_id].thread->getCore();
    core->countInstructions(address, count);
 }
 

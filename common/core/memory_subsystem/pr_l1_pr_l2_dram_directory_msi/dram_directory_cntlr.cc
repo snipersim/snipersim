@@ -36,6 +36,7 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
    evict_shared(0)
 {
    m_dram_directory_cache = new DramDirectoryCache(
+         core_id,
          dram_directory_type_str,
          dram_directory_total_entries,
          dram_directory_associativity,
@@ -450,7 +451,9 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
       Byte data_buf[getCacheBlockSize()];
       SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
-      m_dram_cntlr->getDataFromDram(address, receiver, data_buf, now);
+      SubsecondTime dram_latency = m_dram_cntlr->getDataFromDram(address, receiver, data_buf, now);
+      getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);
+
       getMemoryManager()->sendMsg(reply_msg_type,
             MemComponent::DRAM_DIR, MemComponent::L2_CACHE,
             receiver /* requester */,
@@ -603,7 +606,8 @@ void
 DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    // Write data to Dram
-   m_dram_cntlr->putDataToDram(address, requester, data_buf, now);
+   SubsecondTime dram_latency = m_dram_cntlr->putDataToDram(address, requester, data_buf, now);
+   // DRAM latency is ignored on write
 }
 
 }

@@ -95,7 +95,7 @@ ShmemPerfModel::incrTotalMemoryAccessLatency(SubsecondTime shmem_time)
    {
       //ScopedLock sl(m_shmem_perf_model_lock);
 
-      atomic_inc_int64(m_num_memory_accesses);
+      __sync_fetch_and_add(&m_num_memory_accesses, 1);
       atomic_add_subsecondtime(m_total_memory_access_latency, shmem_time);
    }
 }
