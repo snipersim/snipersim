@@ -39,6 +39,8 @@ template <class T> class CircularQueue
       T pop(void);
       T& front(void);
       const T& front(void) const;
+      T& back(void);
+      const T& back(void) const;
       bool full(void) const;
       bool empty(void) const;
       UInt32 size(void) const;
@@ -116,6 +118,22 @@ CircularQueue<T>::front() const
 {
    assert(!empty());
    return m_queue[m_last];
+}
+
+template <class T>
+T &
+CircularQueue<T>::back()
+{
+   assert(!empty());
+   return m_queue[(m_first + m_size - 1) % m_size];
+}
+
+template <class T>
+const T &
+CircularQueue<T>::back() const
+{
+   assert(!empty());
+   return m_queue[(m_first + m_size - 1) % m_size];
 }
 
 template <class T>

@@ -109,6 +109,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_last_level(NULL),
    m_dram_directory_home_lookup(dram_directory_home_lookup),
    m_perfect_llc(Sim()->getCfg()->getBool("perf_model/perfect_llc")),
+   m_l1_mshr(cache_params.outstanding_misses > 0),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
    m_cache_writethrough(cache_params.writethrough),
@@ -121,9 +122,10 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
 
-   if (isMasterCache()) {
+   if (isMasterCache())
+   {
       /* Master cache */
-      m_master = new CacheMasterCntlr();
+      m_master = new CacheMasterCntlr(name + "_mshr", core_id, cache_params.outstanding_misses);
       m_master->m_cache = new Cache(name,
             cache_params.size,
             cache_params.associativity,
@@ -132,7 +134,9 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
             CacheBase::SHARED_CACHE);
       if (cache_params.prefetcher)
          m_master->m_prefetcher = new Prefetcher();
-   } else {
+   }
+   else
+   {
       /* Shared, non-master cache, we're just a proxy */
       m_master = getMemoryManager()->getCacheCntlrAt(m_core_id_master, mem_component)->m_master;
    }
@@ -268,10 +272,40 @@ MYLOG("L1 hit");
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       hit_where = (HitWhere::where_t)m_mem_component;
 
+      if (modeled && m_l1_mshr)
+      {
+         ScopedLock sl(getLock());
+         SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+         SubsecondTime t_completed = m_master->m_l1_mshr.getTagCompletionTime(ca_address);
+         if (t_completed != SubsecondTime::MaxTime() && t_completed > t_now)
+         {
+            if (mem_op_type == Core::WRITE)
+               ++stats.store_overlapping_misses;
+            else
+               ++stats.load_overlapping_misses;
+
+            SubsecondTime latency = t_completed - t_now;
+            getShmemPerfModel()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
+         }
+      }
+
    } else {
       /* cache miss */
 MYLOG("L1 miss");
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
+
+      SubsecondTime t_miss_begin = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+      SubsecondTime t_mshr_avail = t_miss_begin;
+      if (modeled && m_l1_mshr)
+      {
+         ScopedLock sl(getLock());
+         t_mshr_avail = m_master->m_l1_mshr.getStartTime(t_miss_begin);
+         LOG_ASSERT_ERROR(t_mshr_avail >= t_miss_begin, "t_mshr_avail < t_miss_begin");
+         SubsecondTime mshr_latency = t_mshr_avail - t_miss_begin;
+         // Delay until we have an empty slot in the MSHR
+         getShmemPerfModel()->incrElapsedTime(mshr_latency, ShmemPerfModel::_USER_THREAD);
+         stats.mshr_latency += mshr_latency;
+      }
 
       if (lock_signal == Core::UNLOCK)
          LOG_PRINT_ERROR("Expected to find address(0x%x) in L1 Cache", ca_address);
@@ -344,6 +378,14 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
 
       LOG_ASSERT_ERROR(operationPermissibleinCache(ca_address, mem_op_type),
          "Expected %x to be valid in L1", ca_address);
+
+
+      if (modeled && m_l1_mshr)
+      {
+         SubsecondTime t_miss_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+         ScopedLock sl(getLock());
+         m_master->m_l1_mshr.getCompletionTime(t_miss_begin, t_miss_end - t_mshr_avail, ca_address);
+      }
    }
 
 
@@ -466,7 +508,8 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
 {
    #ifdef PRIVATE_L2_OPTIMIZATION
    bool have_write_lock_internal = have_write_lock;
-   if (! have_write_lock && m_shared_cores > 1) {
+   if (! have_write_lock && m_shared_cores > 1)
+   {
       acquireStackLock(address, true);
       have_write_lock_internal = true;
    }
@@ -499,7 +542,8 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                     we probably shouldn't do this twice */
       /* TODO: if we end up getting the data from a sibling cache, the access time might be only that
          of the previous-level cache, not our (longer) access time */
-      if (modeled) {
+      if (modeled)
+      {
          ScopedLock sl(getLock());
          // This is a hit, but maybe the prefetcher filled it at a future time stamp. If so, delay.
          SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
@@ -516,11 +560,14 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          }
       }
 
-      if (mem_op_type != Core::READ) {
+      if (mem_op_type != Core::READ)
+      {
          /* Invalidate/flush in previous levels */
          SubsecondTime latency = SubsecondTime::Zero();
-         for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
-            if (*it != requester) {
+         for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
+         {
+            if (*it != requester)
+            {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
                latency = getMax<SubsecondTime>(latency, res.first);
                sibling_hit |= res.second;
@@ -530,7 +577,9 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
          assert(! cache_block_info->hasCachedLoc());
-      } else if (cache_block_info->getCState() == CacheState::MODIFIED) {
+      }
+      else if (cache_block_info->getCState() == CacheState::MODIFIED)
+      {
          /* Writeback in previous levels */
          SubsecondTime latency = SubsecondTime::Zero();
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
@@ -545,19 +594,24 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
       }
 
-      if (m_last_remote_hit_where != HitWhere::UNKNOWN) {
+      if (m_last_remote_hit_where != HitWhere::UNKNOWN)
+      {
          // handleMsgFromDramDirectory just provided us with the data. Its source was left in m_last_remote_hit_where
          hit_where = m_last_remote_hit_where;
          m_last_remote_hit_where = HitWhere::UNKNOWN;
-      } else
+      }
+      else
          hit_where = HitWhere::where_t(m_mem_component + (sibling_hit ? HitWhere::SIBLING : 0));
 
-   } else {
+   }
+   else
+   {
       // Increment shared mem perf model cycle counts
       if (modeled)
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
 
-      if (cache_block_info && (cache_block_info->getCState() == CacheState::SHARED)) {
+      if (cache_block_info && (cache_block_info->getCState() == CacheState::SHARED))
+      {
          /* Upgrade, invalidate in previous levels */
          SubsecondTime latency = SubsecondTime::Zero();
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
@@ -575,7 +629,8 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
             invalidateCacheBlock(address);
 
          hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(this, mem_op_type, address, modeled, isPrefetch, t_issue, have_write_lock_internal);
-         if (hit_where != HitWhere::MISS) {
+         if (hit_where != HitWhere::MISS)
+         {
             cache_hit = true;
             /* get the data for ourselves */
             copyDataFromNextLevel(mem_op_type, address);
@@ -589,7 +644,6 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          {
             cache_hit = true;
             hit_where = HitWhere::where_t(m_mem_component);
-            SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
             if (cache_block_info)
                cache_block_info->setCState(CacheState::MODIFIED);
             else
@@ -600,7 +654,6 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
             // Direct DRAM access
             cache_hit = true;
             hit_where = HitWhere::DRAM_LOCAL;
-            SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
             if (cache_block_info)
             {
                // We already have the line: it must have been SHARED and this is a write (else there wouldn't have been a miss)
@@ -623,12 +676,14 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
       }
    }
 
-   if (cache_hit) {
+   if (cache_hit)
+   {
       Byte data_buf[getCacheBlockSize()];
       retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD);
       VALIDATE(address, data_buf, getCacheBlockSize());
       /* Store completion time so we can detect overlapping accesses */
-      if (modeled && m_enabled) {
+      if (modeled && m_enabled)
+      {
          ScopedLock sl(getLock());
          m_master->mshr[address] = make_mshr(t_issue, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
          cleanupMshr();
@@ -636,7 +691,8 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
    }
 
    #ifdef PRIVATE_L2_OPTIMIZATION
-   if (have_write_lock_internal && !have_write_lock) {
+   if (have_write_lock_internal && !have_write_lock)
+   {
       releaseStackLock(address, true);
    }
    #else

@@ -82,13 +82,17 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
 
    OperandList list;
 
-   for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
-      if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
-         list.push_back(Operand(Operand::MEMORY, 0, Operand::READ));
+   // Ignore memory-referencing operands in NOP instructions
+   if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
+   {
+      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+         if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+            list.push_back(Operand(Operand::MEMORY, 0, Operand::READ));
 
-   for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
-      if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
-         list.push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
+      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+         if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+            list.push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
+   }
 
    Instruction *instruction;
    if (inst.is_branch)
@@ -169,21 +173,27 @@ void TraceThread::run()
          prfmdl->pushDynamicInstructionInfo(info);
       }
 
-      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+      // Ignore memory-referencing operands in NOP instructions
+      if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
       {
-         if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
          {
-            DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::READ, 0, HitWhere::UNKNOWN);
-            prfmdl->pushDynamicInstructionInfo(info);
+            if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+            {
+               assert(mem_idx < inst.num_addresses);
+               DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::READ, 0, HitWhere::UNKNOWN);
+               prfmdl->pushDynamicInstructionInfo(info);
+            }
          }
-      }
 
-      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
-      {
-         if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
          {
-            DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::WRITE, 0, HitWhere::UNKNOWN);
-            prfmdl->pushDynamicInstructionInfo(info);
+            if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+            {
+               assert(mem_idx < inst.num_addresses);
+               DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::WRITE, 0, HitWhere::UNKNOWN);
+               prfmdl->pushDynamicInstructionInfo(info);
+            }
          }
       }
 

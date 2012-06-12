@@ -59,15 +59,15 @@ CoreModelNehalem::CoreModelNehalem()
    instructionLatencies[XED_ICLASS_VMULSD] = 5;
    instructionLatencies[XED_ICLASS_VMULPD] = 5;
 
-   instructionLatencies[XED_ICLASS_DIVSS] = 13;
-   instructionLatencies[XED_ICLASS_DIVPS] = 13;
-   instructionLatencies[XED_ICLASS_VDIVSS] = 13;
-   instructionLatencies[XED_ICLASS_VDIVPS] = 13;
+   instructionLatencies[XED_ICLASS_DIVSS] = 11;   // 7-14 (data dependent) according to agner.org
+   instructionLatencies[XED_ICLASS_DIVPS] = 11;
+   instructionLatencies[XED_ICLASS_VDIVSS] = 11;
+   instructionLatencies[XED_ICLASS_VDIVPS] = 11;
 
-   instructionLatencies[XED_ICLASS_DIVSD] = 21;
-   instructionLatencies[XED_ICLASS_DIVPD] = 21;
-   instructionLatencies[XED_ICLASS_VDIVSD] = 21;
-   instructionLatencies[XED_ICLASS_VDIVPD] = 21;
+   instructionLatencies[XED_ICLASS_DIVSD] = 17;   // 7-22 (data dependent) according to agner.org
+   instructionLatencies[XED_ICLASS_DIVPD] = 17;
+   instructionLatencies[XED_ICLASS_VDIVSD] = 17;
+   instructionLatencies[XED_ICLASS_VDIVPD] = 17;
 
 
    instructionLatencies[XED_ICLASS_FLDENV] = 110; // As on X5660 (Westmere)
@@ -102,7 +102,8 @@ unsigned int CoreModelNehalem::getAluLatency(const MicroOp *uop) const
          else
             return 9;  // Approximate, data-dependent
       default:
-         LOG_PRINT_ERROR("Don't know the ALU latency for this MicroOp.");
+         return getInstructionLatency(uop);
+         //LOG_PRINT_ERROR("Don't know the ALU latency for this MicroOp.");
    }
 }
 

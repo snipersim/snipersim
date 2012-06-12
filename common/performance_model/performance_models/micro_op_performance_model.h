@@ -18,7 +18,7 @@ class Allocator;
 class MicroOpPerformanceModel : public PerformanceModel
 {
 public:
-   MicroOpPerformanceModel(Core *core);
+   MicroOpPerformanceModel(Core *core, bool issue_memops);
    ~MicroOpPerformanceModel();
 
    void outputSummary(std::ostream &os) const;
@@ -38,6 +38,7 @@ private:
    static MicroOp* m_memaccess_uop;
 
    Allocator *m_allocator; // Per-thread allocator for DynamicMicroOps
+   const bool m_issue_memops;
 
    std::vector<DynamicMicroOp*> m_current_uops;
    bool m_state_uops_done;

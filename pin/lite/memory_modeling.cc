@@ -115,7 +115,7 @@ void handleMemoryWrite(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_
       appropriate DynamicInstructionInfo, but don't keep the cache hierarchy locked for potentially a very long time. */
    Core* core = localStore[thread_id].thread->getCore();
    if (is_atomic_update && executing)
-      core->logMemoryHit(false, Core::WRITE, write_address, localStore[thread_id].inst_mode == InstMode::DETAILED ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT, eip);
+      core->logMemoryHit(false, Core::WRITE, write_address, Core::MEM_MODELED_COUNT, eip);
    else if (executing)
       core->accessMemory(
             /*(is_atomic_update) ? Core::UNLOCK :*/ Core::NONE,
@@ -134,7 +134,7 @@ void handleMemoryWriteDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, 
       appropriate DynamicInstructionInfo, but don't keep the cache hierarchy locked for potentially a very long time. */
    Core* core = localStore[thread_id].thread->getCore();
    if (is_atomic_update && executing)
-      core->logMemoryHit(false, Core::WRITE, write_address, localStore[thread_id].inst_mode == InstMode::DETAILED ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT, eip);
+      core->logMemoryHit(false, Core::WRITE, write_address, Core::MEM_MODELED_DYNINFO, eip);
    else {
       // Detailed mode: core model will do its own access, just push a dyninfo with the address
       DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, executing, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::UNKNOWN);

@@ -1,4 +1,5 @@
 #include "instruction_decoder.h"
+#include "instruction.h"
 #include "micro_op.h"
 
 extern "C" {
@@ -40,23 +41,27 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
    int numExecs = 0;
    int numStores = 0;
 
-   for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(ins); ++mem_idx)
+   // Ignore memory-referencing operands in NOP instructions
+   if (!xed_decoded_inst_get_attribute(ins, XED_ATTRIBUTE_NOP))
    {
-      std::set<xed_reg_enum_t> regs;
-      regs.insert(xed_decoded_inst_get_base_reg(ins, mem_idx));
-      regs.insert(xed_decoded_inst_get_index_reg(ins, mem_idx));
+      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(ins); ++mem_idx)
+      {
+         std::set<xed_reg_enum_t> regs;
+         regs.insert(xed_decoded_inst_get_base_reg(ins, mem_idx));
+         regs.insert(xed_decoded_inst_get_index_reg(ins, mem_idx));
 
-      if (xed_decoded_inst_mem_read(ins, mem_idx)) {
-         regs_loads.push_back(regs);
-         numLoads++;
+         if (xed_decoded_inst_mem_read(ins, mem_idx)) {
+            regs_loads.push_back(regs);
+            numLoads++;
+         }
+
+         if (xed_decoded_inst_mem_written(ins, mem_idx)) {
+            regs_stores.push_back(regs);
+            numStores++;
+         }
+
+         regs_mem.insert(regs.begin(), regs.end());
       }
-
-      if (xed_decoded_inst_mem_written(ins, mem_idx)) {
-         regs_stores.push_back(regs);
-         numStores++;
-      }
-
-      regs_mem.insert(regs.begin(), regs.end());
    }
 
    const xed_inst_t *inst = xed_decoded_inst_inst(ins);
@@ -128,7 +133,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
                ;
          }
       }
-      operand_size = std::max(operand_size, (uint16_t)xed_operand_width(op));
+      operand_size = std::max(operand_size, (uint16_t)xed_decoded_inst_get_operand_width(ins));
    }
    if (operand_size == 0)
       operand_size = 64;

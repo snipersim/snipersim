@@ -16,6 +16,7 @@ class ContentionModel {
       UInt64 m_n_barriers;
       UInt64 m_n_outoforder;
       UInt64 m_n_simultaneous;
+      UInt64 m_n_hasfreefail;
       SubsecondTime m_total_delay;
       SubsecondTime m_total_barrier_delay;
 
@@ -27,7 +28,12 @@ class ContentionModel {
       SubsecondTime getBarrierCompletionTime(SubsecondTime t_start, SubsecondTime t_delay, UInt64 tag = 0);
       uint64_t getCompletionTime(uint64_t t_start, uint64_t t_delay, UInt64 tag = 0); // Support legacy components
       SubsecondTime getCompletionTime(SubsecondTime t_start, SubsecondTime t_delay, UInt64 tag = 0);
+      uint64_t getStartTime(uint64_t t_start);
+      SubsecondTime getStartTime(SubsecondTime t_start);
 
+      UInt32 getNumUsed(uint64_t t_start);
+      UInt32 getNumUsed(SubsecondTime t_start);
+      SubsecondTime getTagCompletionTime(UInt64 tag);
       bool hasFreeSlot(SubsecondTime t_start, UInt64 tag = -1);
       bool hasFreeSlot(uint64_t t_start, UInt64 tag = -1);
       bool hasTag(UInt64 tag);

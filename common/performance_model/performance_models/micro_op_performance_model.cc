@@ -18,10 +18,11 @@ MicroOp* MicroOpPerformanceModel::m_serialize_uop = NULL;
 MicroOp* MicroOpPerformanceModel::m_mfence_uop = NULL;
 MicroOp* MicroOpPerformanceModel::m_memaccess_uop = NULL;
 
-MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core)
+MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
     : PerformanceModel(core)
     , m_core_model(CoreModel::getCoreModel(Sim()->getCfg()->getStringArray("perf_model/core/core_model", core->getId())))
     , m_allocator(m_core_model->createDMOAllocator())
+    , m_issue_memops(issue_memops)
     , m_state_uops_done(false)
     , m_state_icache_done(false)
     , m_state_num_reads_done(0)
@@ -214,7 +215,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       if (o.m_type == Operand::MEMORY)
       {
          // For each memory operand, there exists a dynamic instruction to process
-         DynamicInstructionInfo *info = getDynamicInstructionInfo(*instruction);
+         DynamicInstructionInfo *info = getDynamicInstructionInfo(*instruction, m_issue_memops);
          if (!info)
             return false;
 
@@ -310,6 +311,11 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       }
 
    }
+
+   // Make sure there was an Operand/DynamicInstructionInfo for each MicroOp
+   // This should detect mismatches between decoding as done by fillOperandListMemOps and InstructionDecoder
+   assert(m_state_num_reads_done == num_loads);
+   assert(m_state_num_writes_done == num_stores);
 
    // Instruction cost resolution
    // Because getCost may fail if there are missing DynInstrInfo's, do not call getCost() anywhere else but here

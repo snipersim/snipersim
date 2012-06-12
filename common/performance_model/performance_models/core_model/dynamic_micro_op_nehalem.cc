@@ -129,6 +129,19 @@ DynamicMicroOpNehalem::uop_alu_t DynamicMicroOpNehalem::getAlu(const MicroOp *uo
          {
             case XED_ICLASS_DIV:
             case XED_ICLASS_IDIV:
+            case XED_ICLASS_FDIV:
+            case XED_ICLASS_FIDIV:
+            case XED_ICLASS_FDIVP:
+            case XED_ICLASS_FDIVR:
+            case XED_ICLASS_FDIVRP:
+            case XED_ICLASS_DIVSS:
+            case XED_ICLASS_DIVPS:
+            case XED_ICLASS_DIVSD:
+            case XED_ICLASS_DIVPD:
+            case XED_ICLASS_VDIVSS:
+            case XED_ICLASS_VDIVPS:
+            case XED_ICLASS_VDIVSD:
+            case XED_ICLASS_VDIVPD:
                return UOP_ALU_TRIG;
             default:
                return UOP_ALU_NONE;

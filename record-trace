@@ -19,7 +19,7 @@ outputfile = 'trace'
 fastforward = 0
 detailed = 0
 blocksize = 0
-gdb = False
+use_gdb = False
 gdb_wait = False
 gdb_quit = False
 

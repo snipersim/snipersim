@@ -171,20 +171,10 @@ namespace std
 // key on both the start and the end address of the basic block.
 std::unordered_map<std::pair<ADDRINT, ADDRINT>, BasicBlock*> basicblock_cache;
 
-static int updateInstMode(THREADID thread_id)
-{
-   localStore[thread_id].inst_mode = Sim()->getInstrumentationMode();
-   return localStore[thread_id].inst_mode;
-}
-
 VOID traceCallback(TRACE trace, void *v)
 {
    BBL bbl_head = TRACE_BblHead(trace);
    INS ins_head = BBL_InsHead(bbl_head);
-
-   // Maintain a per-thread copy of the instrumentation mode, updated only at trace boundaries, to make sure
-   // all callbacks (handleBasicBlock, memory*, ...) act consistently.
-   INS_InsertCall(ins_head, IPOINT_BEFORE, (AFUNPTR)updateInstMode, IARG_THREAD_ID, IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP], IARG_END);
 
    // Progress Trace
    addProgressTrace(ins_head);
@@ -316,7 +306,6 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
 
    memset(&localStore[threadIndex], 0, sizeof(localStore[threadIndex]));
    localStore[threadIndex].thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
-   localStore[threadIndex].inst_mode = Sim()->getInstrumentationMode();
 }
 
 VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, VOID *v)

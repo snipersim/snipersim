@@ -231,7 +231,7 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
 
    // Cases with multiple cache lines or when we are not sure that it will be a hit call into the caches
    return initiateMemoryAccess(MemComponent::L1_ICACHE,
-             Core::NONE, Core::READ, address, NULL, instruction_size, MEM_MODELED_COUNT_TLBTIME, 0);
+             Core::NONE, Core::READ, address, NULL, instruction_size, MEM_MODELED_COUNT_TLBTIME, 0, SubsecondTime::MaxTime());
 }
 
 MemoryResult
@@ -241,7 +241,8 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
       IntPtr address,
       Byte* data_buf, UInt32 data_size,
       MemModeled modeled,
-      IntPtr eip)
+      IntPtr eip,
+      SubsecondTime now)
 {
    MYLOG("access %lx+%u %c%c modeled(%s)", address, data_size, mem_op_type == Core::WRITE ? 'W' : 'R', mem_op_type == Core::READ_EX ? 'X' : ' ', ModeledString(modeled));
 
@@ -256,7 +257,7 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
    }
 
    // Setting the initial time
-   SubsecondTime initial_time = getPerformanceModel()->getElapsedTime();
+   SubsecondTime initial_time = (now == SubsecondTime::MaxTime()) ? getPerformanceModel()->getElapsedTime() : now;
 
    // Protect from concurrent access by user thread (doing rewritten memops) and core thread (doing icache lookups)
    if (lock_signal != Core::UNLOCK)
@@ -412,6 +413,8 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
       getShmemPerfModel()->incrTotalMemoryAccessLatency(shmem_time);
    }
 
+   LOG_ASSERT_ERROR(hit_where != HitWhere::UNKNOWN, "HitWhere == UNKNOWN");
+
    return makeMemoryResult(hit_where, shmem_time);
 }
 
@@ -430,7 +433,7 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
  *   number of misses :: State the number of cache misses
  */
 MemoryResult
-Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size, MemModeled modeled, IntPtr eip)
+Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size, MemModeled modeled, IntPtr eip, SubsecondTime now)
 {
    if (modeled == MEM_MODELED_DYNINFO)
       LOG_ASSERT_ERROR(eip != 0, "modeled == MEM_MODELED_DYNINFO but no eip given");
@@ -442,7 +445,7 @@ Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_add
       data_buffer = NULL; // initiateMemoryAccess's data is not used
    }
 
-   return initiateMemoryAccess(MemComponent::L1_DCACHE, lock_signal, mem_op_type, d_addr, (Byte*) data_buffer, data_size, modeled, eip);
+   return initiateMemoryAccess(MemComponent::L1_DCACHE, lock_signal, mem_op_type, d_addr, (Byte*) data_buffer, data_size, modeled, eip, now);
 }
 
 

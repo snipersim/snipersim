@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, re, collections, gnuplot, buildstack, getopt, graphite_lib
+import os, sys, re, collections, gnuplot, buildstack, getopt, sniper_lib
 
 try:
   collections.defaultdict()
@@ -13,7 +13,7 @@ def getdata(jobid = '', resultsdir = '', data = None):
   if data:
     res = data
   else:
-    res = graphite_lib.get_results(jobid, resultsdir)
+    res = sniper_lib.get_results(jobid, resultsdir)
   stats = res['results']
 
   ncores = int(stats['ncores'])
@@ -25,7 +25,6 @@ def getdata(jobid = '', resultsdir = '', data = None):
     # On error, assume that we are using the pre-DVFS version
     times = stats['performance_model.cycle_count']
     cycles_scale = 1
-
 
   data = collections.defaultdict(collections.defaultdict)
   for key, values in stats.items():
@@ -182,7 +181,8 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
   ]
 
   if use_simple_sync:
-    all_items += [ [ 'sync', .01, ('SyncFutex', 'SyncPthreadMutex', 'SyncPthreadCond', 'SyncPthreadBarrier', 'SyncJoin', 'SyncMemAccess', 'Recv' ) ] ]
+    all_items += [ [ 'sync', .01, ('SyncFutex', 'SyncPthreadMutex', 'SyncPthreadCond', 'SyncPthreadBarrier', 'SyncJoin',
+                                   'SyncPause', 'SyncSleep', 'SyncMemAccess', 'Recv' ) ] ]
   else:
     all_items += [
     [ 'sync',     .01, [
@@ -191,6 +191,8 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       [ 'cond',     .01, 'SyncPthreadCond' ],
       [ 'barrier',  .01, 'SyncPthreadBarrier' ],
       [ 'join',     .01, 'SyncJoin' ],
+      [ 'pause',    .01, 'SyncPause' ],
+      [ 'sleep',    .01, 'SyncSleep' ],
       [ 'memaccess',.01, 'SyncMemAccess' ],
       [ 'recv',     .01, 'Recv' ],
     ] ],
@@ -344,7 +346,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]'
+    print 'Usage:', sys.argv[0], '[-h|--help (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]'
 
   jobid = 0
   resultsdir = '.'
@@ -358,13 +360,13 @@ if __name__ == '__main__':
   aggregate = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate" ])
   except getopt.GetoptError, e:
     print e
     usage()
     sys.exit()
   for o, a in opts:
-    if o == '-h':
+    if o == '-h' or o == '--help':
       usage()
       sys.exit()
     if o == '-d':

@@ -4,7 +4,7 @@
 #include <cstdio>
 
 IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction_penalty)
-    : MicroOpPerformanceModel(core)
+    : MicroOpPerformanceModel(core, true)
     , interval_timer(core,
        this,
        m_core_model,

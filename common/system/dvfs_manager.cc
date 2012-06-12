@@ -35,10 +35,11 @@ DvfsManager::DvfsManager()
    app_proc_domains.resize(m_num_proc_domains, core_period);
 
    // Allow per-core initial frequency overrides
-   for(unsigned int i = 0; i < m_num_app_cores; ++i) {
+   for(unsigned int i = 0; i < m_num_app_cores; ++i)
+   {
       float _core_frequency = Sim()->getCfg()->getFloatArray("perf_model/core/frequency", i);
       if (_core_frequency != core_frequency) {
-         app_proc_domains[i] = ComponentPeriod::fromFreqHz(_core_frequency*1000000000);
+         app_proc_domains[getCoreDomainId(i)] = ComponentPeriod::fromFreqHz(_core_frequency*1000000000);
          printf("Core %d at %.2f GHz (global clock %.2f GHz)\n", i, _core_frequency, core_frequency);
       }
    }

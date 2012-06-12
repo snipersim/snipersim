@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
-import sys, graphite_lib
+import sys, sniper_lib
 
 
 def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent = False):
 
   try:
-    results = graphite_lib.get_results(jobid = jobid, resultsdir = resultsdir)['results']
+    results = sniper_lib.get_results(jobid = jobid, resultsdir = resultsdir)['results']
   except (KeyError, ValueError), e:
     if not silent:
       print 'Failed to generated sim.out:', e

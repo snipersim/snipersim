@@ -14,7 +14,7 @@
 #include "scheduler.h"
 
 const char* ThreadManager::stall_type_names[] = {
-   "unscheduled", "broken", "join", "mutex", "cond", "barrier", "futex"
+   "unscheduled", "broken", "join", "mutex", "cond", "barrier", "futex", "pause"
 };
 
 ThreadManager::ThreadManager()
@@ -270,16 +270,21 @@ SubsecondTime ThreadManager::stallThread(thread_id_t thread_id, stall_type_t rea
    return getThreadFromID(thread_id)->wait(m_thread_lock);
 }
 
-void ThreadManager::resumeThread(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time, void *msg)
+void ThreadManager::resumeThread_async(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time, void *msg)
 {
-   // We still have the m_thread_lock, so thread doesn't actually start running again until caller releases this lock
-   getThreadFromID(thread_id)->signal(time, msg);
-
    LOG_PRINT("Core(%i) -> RUNNING", thread_id);
    m_thread_state[thread_id].status = Core::RUNNING;
 
    HooksManager::ThreadResume args = { thread_id: thread_id, thread_by: thread_by, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_RESUME, (void*)&args);
+}
+
+void ThreadManager::resumeThread(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time, void *msg)
+{
+   // We still have the m_thread_lock, so thread doesn't actually start running again until caller releases this lock
+   getThreadFromID(thread_id)->signal(time, msg);
+
+   resumeThread_async(thread_id, thread_by, time, msg);
 }
 
 bool ThreadManager::isThreadRunning(thread_id_t thread_id)

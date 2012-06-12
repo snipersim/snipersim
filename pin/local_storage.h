@@ -13,7 +13,6 @@ class Core;
 struct ThreadLocalStorage
 {
    Thread* thread;
-   InstMode::inst_mode_t inst_mode;
    struct {
       int count;
       pthread_t thread_ptr;

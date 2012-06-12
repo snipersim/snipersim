@@ -41,7 +41,7 @@ public:
    void countInstructions(IntPtr address, UInt32 count);
    void pushDynamicInstructionInfo(DynamicInstructionInfo &i);
    void popDynamicInstructionInfo();
-   DynamicInstructionInfo* getDynamicInstructionInfo(const Instruction &instruction);
+   DynamicInstructionInfo* getDynamicInstructionInfo(const Instruction &instruction, bool exec_loads = true);
 
    static PerformanceModel *create(Core* core);
 
@@ -104,6 +104,8 @@ private:
    SubsecondTime m_cpiSyncPthreadCond;
    SubsecondTime m_cpiSyncPthreadBarrier;
    SubsecondTime m_cpiSyncJoin;
+   SubsecondTime m_cpiSyncPause;
+   SubsecondTime m_cpiSyncSleep;
    SubsecondTime m_cpiSyncDvfsTransition;
    SubsecondTime m_cpiRecv;
 

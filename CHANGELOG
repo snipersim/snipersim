@@ -1,15 +1,8 @@
-Version 3.0
-  * Support for heterogeneous core types
-  * Separate core microarchitectural characteristics into CoreModel class
-  * Improve CPI stack detail
-  * Add initial implementation for basic L2 prefetcher
-  * Optionally access DRAM directly in configurations with a single LLC
-  * Deprecate replacement of pthread_* synchronization calls
-  * Support more SYS_futex options
-  * Remove unused code for Graphite FULL mode
-  * Fixes to the build system, including parallel builds (make -j)
-  * Support for building on 32-bit hosts
-  * Remove configuration defaults from code, require everything to be specified in a configuration file
+Version 3.01
+  * Add heterogeneous cache configuration support
+  * Emulate pause, sleep system calls
+  * Improve support for 32-bit applications
+  * Pin 2.11 support
 
 Version 2.04
   * Fix trace playback for non-predicated instructions

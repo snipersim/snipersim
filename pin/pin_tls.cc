@@ -18,7 +18,7 @@ public:
     void* get(int thread_id)
     {
         if (thread_id == -1)
-            return PIN_GetThreadData(m_key);
+            return PIN_GetThreadData(m_key, PIN_ThreadId());
         else
             return PIN_GetThreadData(m_key, thread_id);
     }
@@ -31,7 +31,7 @@ public:
     void set(void *vp)
     {
         LOG_PRINT("%p->set(%p)", this, vp);
-        __attribute__((unused)) BOOL res = PIN_SetThreadData(m_key, vp);
+        __attribute__((unused)) BOOL res = PIN_SetThreadData(m_key, vp, PIN_ThreadId());
         LOG_ASSERT_ERROR(res, "Error setting TLS -- pin tid = %d", PIN_ThreadId());
     }
 

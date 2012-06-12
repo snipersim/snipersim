@@ -5,6 +5,7 @@
 #include "thread.h"
 #include "core.h"
 #include "core_manager.h"
+#include "thread_manager.h"
 #include "performance_model.h"
 #include "pthread_emu.h"
 #include "stats.h"
@@ -86,6 +87,44 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          break;
       }
 
+      case SYS_nanosleep:
+      {
+         const struct timespec *req = (struct timespec *)args.arg0;
+         struct timespec *rem = (struct timespec *)args.arg1;
+         Core *core = m_thread->getCore();
+         SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
+
+         // Implemented by just incrementing local time by the requested amount
+         // this way the barrier will keep us asleep until everyone else catches up.
+         // In non-detailed mode, there is no barrier, so we resume right away
+         // FIXME: the thread manager doesn't know we're asleep, so there is no HOOK_THREAD_{STALL,RESUME},
+         //        nor can we be rescheduled / scheduled out
+         SubsecondTime time_wake = time + SubsecondTime::SEC(req->tv_sec) + SubsecondTime::NS(req->tv_nsec);
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time_wake, SyncInstruction::SLEEP));
+
+         if (rem)
+         {
+            // Interruption not supported, always return 0 remaining time
+            rem->tv_sec = 0;
+            rem->tv_nsec = 0;
+         }
+
+         // Always succeeds
+         m_ret_val = 0;
+         m_emulated = true;
+
+         break;
+      }
+
+      case SYS_pause:
+      {
+         // System call is blocking, mark thread as asleep
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         Sim()->getThreadManager()->stallThread_async(m_thread->getId(), ThreadManager::STALL_PAUSE,
+                                                      m_thread->getCore()->getPerformanceModel()->getElapsedTime());
+         break;
+      }
+
       case -1:
       default:
          break;
@@ -96,6 +135,32 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
 IntPtr SyscallMdl::runExit(IntPtr old_return)
 {
+   switch(m_syscall_number)
+   {
+      case SYS_pause:
+      {
+         SubsecondTime time_wake = Sim()->getClockSkewMinimizationServer()
+                                 ? Sim()->getClockSkewMinimizationServer()->getGlobalTime()
+                                 : m_thread->getCore()->getPerformanceModel()->getElapsedTime();
+
+         {
+            // System call is blocking, mark thread as awake
+            ScopedLock sl(Sim()->getThreadManager()->getLock());
+            Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, time_wake, NULL);
+         }
+
+         Core *core = Sim()->getCoreManager()->getCurrentCore();
+         m_thread->reschedule(time_wake, core);
+         core = m_thread->getCore();
+
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time_wake, SyncInstruction::PAUSE));
+         break;
+      }
+
+      default:
+         break;
+   }
+
    if (m_emulated)
    {
       m_emulated = false;

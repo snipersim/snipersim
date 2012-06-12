@@ -2,17 +2,22 @@
 
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, Queue, socket, pipes, commands
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-import graphite_lib, gen_simout, debugpin
+import sniper_lib, gen_simout, debugpin
 
 
 HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 
 
 def usage():
-  print 'Run program under Graphite simulator'
+  print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  -n <ncores (1)>  -d <outputdir (.)>  -c <graphite-config>  -g <graphite-options> {--traces=<trace0>,<trace1>,... | -- <cmdline>}' % sys.argv[0]
-  print '  with: -n: number of simulated cores'
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-g <sniper-options>] {--traces=<trace0>,<trace1>,... | -- <cmdline>}' % sys.argv[0]
+  print
+  print 'Example: $ ./run-sniper -- /bin/ls'
+  print
+  print 'Note: To get started quickly with our integrated benchmarks distribution (supports SPLASH-2 and PARSEC 2.1),'
+  print ' see http://snipersim.org/w/Download_Benchmarks'
+  print
   sys.exit(2)
 
 standalone = False
@@ -38,14 +43,22 @@ traces = []
 if not sys.argv[1:]:
   usage()
 
+def findconfig(filename):
+  for dirname in ('.', os.path.join(HOME, 'config')):
+    configfile = os.path.realpath(os.path.join(dirname, filename))
+    print configfile
+    if os.path.exists(configfile):
+      return configfile
+    configfile += '.cfg'
+    if os.path.exists(configfile):
+      return configfile
+  return False
+
 def add_config_file(filename):
   config_files = []
-  if os.path.isfile(filename):
-    configfile = os.path.abspath(os.path.join(filename))
-  else:
-    configfile = os.path.join(HOME, 'config', filename + '.cfg')
-  if not os.path.isfile(configfile):
-    print 'Cannot find config file', configfile
+  configfile = findconfig(filename)
+  if not configfile:
+    print 'Cannot find config file', filename
     sys.exit(-1)
   # Handle #include
   for line in file(configfile):
@@ -73,9 +86,8 @@ for o, a in opts:
     config_file_used = True
     graphiteoptions += add_config_file(a)
   if o == '-g':
-    if a[0] != '-' or ('=' in a and a[1] != '-'):
-      print >> sys.stderr, "Missing '-' in -g argument %s" % a
-      sys.exit(-1)
+    if not a.startswith('-'):
+      a = '--'+a
     graphiteoptions.append(pipes.quote(a))
   if o == '--roi':
     graphiteoptions.append('-g --general/magic=true')
@@ -202,7 +214,22 @@ sim_root = HOME
 arch = config.get('target', 'intel64')
 
 
+try:
+  pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE).communicate()[0]
+  pin_version = int([ line.split()[3] for line in pin_version.split('\n') if line.startswith('@CHARM-VERSION') ][0])
+  assert 10000 < pin_version < 1000000
+except Exception, e:
+  print >> sys.stderr, 'Cannot get Pin version'
+  print >> sys.stderr
+  print >> sys.stderr, e
+  print >> sys.stderr, pin_version
+  sys.exit(-1)
+
+
 pinoptions = '-mt -injection child'
+if pin_version >= 49303:
+  pinoptions += ' -xyzzy -enable_vsm 0' # TODO: Enable vsm once OpenMP thread exit is solved (Redmine #148)
+
 if pin_stats:
   pinoptions += ' -xyzzy -profile -statistic -log_inline'
 
@@ -331,7 +358,7 @@ except KeyboardInterrupt:
   # Make sure Graphite itself is stopped, even if it didn't respond to the SIGINT
   print '\n[SNIPER] Ctrl-C detected: Killing all child processes'
   time.sleep(1)
-  graphite_lib.kill_children()
+  sniper_lib.kill_children()
   sys.exit(-1)
 
 
@@ -349,6 +376,7 @@ stats = dict(
   host = platform.node(),
   user = os.getenv('USER') or os.getenv('USERNAME'),
   git_revision = config.get('git_revision', ''),
+  pin_version = pin_version,
   cmdline = sys.argv,
   graphitecmd = cmd,
   vmem = memusage,

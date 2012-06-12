@@ -37,4 +37,8 @@ int main(int argc, char* argv[])
             printf("                 -- %s\n", inst.executed ? "executed" : "not executed");
       }
    }
+   else
+   {
+      printf("Usage: %s <file1.sift> [<fileN.sift> ...]\n", argv[0]);
+   }
 }

@@ -73,6 +73,8 @@ PerformanceModel::PerformanceModel(Core *core)
    registerStatsMetric("performance_model", core->getId(), "cpiSyncPthreadCond", &m_cpiSyncPthreadCond);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncPthreadBarrier", &m_cpiSyncPthreadBarrier);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncJoin", &m_cpiSyncJoin);
+   registerStatsMetric("performance_model", core->getId(), "cpiSyncPause", &m_cpiSyncPause);
+   registerStatsMetric("performance_model", core->getId(), "cpiSyncSleep", &m_cpiSyncSleep);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncDvfsTransition", &m_cpiSyncDvfsTransition);
 
    registerStatsMetric("performance_model", core->getId(), "cpiRecv", &m_cpiRecv);
@@ -169,6 +171,12 @@ void PerformanceModel::handleIdleInstruction(Instruction *instruction)
          break;
       case(SyncInstruction::JOIN):
          m_cpiSyncJoin += insn_cost;
+         break;
+      case(SyncInstruction::PAUSE):
+         m_cpiSyncPause += insn_cost;
+         break;
+      case(SyncInstruction::SLEEP):
+         m_cpiSyncSleep += insn_cost;
          break;
       default:
          LOG_ASSERT_ERROR(false, "Unexpected SyncInstruction::type_t enum type. (%d)", sync_insn->getSyncType());
@@ -280,7 +288,7 @@ DynamicInstructionInfo* PerformanceModel::getDynamicInstructionInfo()
    return &m_dynamic_info_queue.front();
 }
 
-DynamicInstructionInfo* PerformanceModel::getDynamicInstructionInfo(const Instruction &instruction)
+DynamicInstructionInfo* PerformanceModel::getDynamicInstructionInfo(const Instruction &instruction, bool exec_loads)
 {
    DynamicInstructionInfo* info = getDynamicInstructionInfo();
 
@@ -292,21 +300,32 @@ DynamicInstructionInfo* PerformanceModel::getDynamicInstructionInfo(const Instru
    if ((info->type == DynamicInstructionInfo::MEMORY_READ || info->type == DynamicInstructionInfo::MEMORY_WRITE)
       && info->memory_info.hit_where == HitWhere::UNKNOWN)
    {
-      if (info->memory_info.executed) {
-         MemoryResult res = m_core->accessMemory(
-            /*instruction.isAtomic()
-               ? (info->type == DynamicInstructionInfo::MEMORY_READ ? Core::LOCK : Core::UNLOCK)
-               :*/ Core::NONE, // Just as in pin/lite/memory_modeling.cc, make the second part of an atomic update implicit
-            info->type == DynamicInstructionInfo::MEMORY_READ ? (instruction.isAtomic() ? Core::READ_EX : Core::READ) : Core::WRITE,
-            info->memory_info.addr,
-            NULL,
-            info->memory_info.size,
-            Core::MEM_MODELED_RETURN,
-            instruction.getAddress()
-         );
-         info->memory_info.latency = res.latency;
-         info->memory_info.hit_where = res.hit_where;
-      } else {
+      if (info->memory_info.executed)
+      {
+         if (exec_loads)
+         {
+            MemoryResult res = m_core->accessMemory(
+               /*instruction.isAtomic()
+                  ? (info->type == DynamicInstructionInfo::MEMORY_READ ? Core::LOCK : Core::UNLOCK)
+                  :*/ Core::NONE, // Just as in pin/lite/memory_modeling.cc, make the second part of an atomic update implicit
+               info->type == DynamicInstructionInfo::MEMORY_READ ? (instruction.isAtomic() ? Core::READ_EX : Core::READ) : Core::WRITE,
+               info->memory_info.addr,
+               NULL,
+               info->memory_info.size,
+               Core::MEM_MODELED_RETURN,
+               instruction.getAddress()
+            );
+            info->memory_info.latency = res.latency;
+            info->memory_info.hit_where = res.hit_where;
+         }
+         else
+         {
+            info->memory_info.latency = SubsecondTime::Zero();
+            info->memory_info.hit_where = HitWhere::UNKNOWN;
+         }
+      }
+      else
+      {
          info->memory_info.latency = 1 * m_core->getDvfsDomain()->getPeriod(); // 1 cycle latency
          info->memory_info.hit_where = HitWhere::PREDICATE_FALSE;
       }

@@ -135,7 +135,7 @@ namespace config
                        (
                           ( no_node_d[ *space_p ] >> lexeme_d[ token_node_d[ inner_node_d[ confix_p('"', *lex_escape_ch_p, '"') ] ] ] >> no_node_d[ *space_p ] )
                           |
-                          ( lexeme_d[ token_node_d[ +(alnum_p | ch_p('.') | ch_p('/')) >> *(alnum_p | (punct_p - ch_p('=') - ch_p(',') ) ) ] ] )
+                          ( lexeme_d[ token_node_d[ +(alnum_p | ch_p('.') | ch_p('/') | ch_p(':')) >> *(alnum_p | (punct_p - ch_p('=') - ch_p(',') ) ) ] ] )
                           )
                        ;
                 }

@@ -36,14 +36,23 @@ void Progress::record(bool init, subsecond_time_t simtime)
    if (progress_t_last + progress_interval < time(NULL)) {
       progress_t_last = time(NULL);
 
-      UInt64 progress = 0, expect = 0;
+      UInt64 expect = 0;
+
+      // Always return global instruction count, so MIPS number as reported by job infrastructure is correct
+      UInt64 progress = MagicServer::getGlobalInstructionCount();
+
       if (Sim()->getTraceManager())
       {
-         expect = Sim()->getTraceManager()->getProgressExpect();
-         progress = Sim()->getTraceManager()->getProgressValue();
+         UInt64 _expect = Sim()->getTraceManager()->getProgressExpect();
+         UInt64 _progress = Sim()->getTraceManager()->getProgressValue();
+
+         // Re-compute expected completion based on file-pointer based % to completion,
+         // and the progress value (instruction count) we'll return
+         if (_progress > 1)
+            expect = progress * _expect / _progress;
+         else
+            expect = 100000 * progress;
       }
-      else if (!init)
-         progress = MagicServer::getGlobalInstructionCount();
 
       rewind(progress_fp);
       fprintf(progress_fp, "%u %"PRId64" %"PRId64, unsigned(time(NULL)), progress, expect);

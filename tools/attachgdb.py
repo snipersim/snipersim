@@ -86,9 +86,9 @@ if __name__ == '__main__':
   actions = [ 'interactive', 'bt' ]
 
   def usage():
-    print 'Attach GDB to a running Graphite process'
+    print 'Attach GDB to a running Sniper process'
     print 'Usage:'
-    print '  %s  [--all-threads] [--action={bt}] [--abt] <pid>' % sys.argv[0]
+    print '  %s  [-h|--help] [--all-threads] [--action={bt}] [--abt] <pid>' % sys.argv[0]
     sys.exit(2)
 
   action = 'interactive'
@@ -98,13 +98,13 @@ if __name__ == '__main__':
     usage()
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "h", [ "all-threads", "action=", "abt" ])
+    opts, args = getopt.getopt(sys.argv[1:], "h", [ "help", "all-threads", "action=", "abt" ])
   except getopt.GetoptError, e:
     # print help information and exit:
     print e
     usage()
   for o, a in opts:
-    if o == '-h':
+    if o == '-h' or o == '--help':
       usage()
       sys.exit()
     if o == '--all-threads':

@@ -9,7 +9,7 @@ LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 SIM_TARGETS=$(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE)
 
-.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus
+.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean manual manualclean
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
@@ -34,10 +34,13 @@ $(LIB_SIFT): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/sift
 
 ifneq ($(NO_PIN_CHECK),1)
+PIN_REV_MINIMUM=41150
 pin: $(PIN_HOME)/intel64/bin/pinbin
+	@g++ -o tools/pinversion -I$(PIN_HOME)/source/include tools/pinversion.cc
+	@if [ "$$(tools/pinversion | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo "\nFound Pin version $$(tools/pinversion) in $(PIN_HOME)\nbut at least revision $(PIN_REV_MINIMUM) is required."; false; fi
 $(PIN_HOME)/intel64/bin/pinbin:
-	@echo "\nCannot find Pin in $(PIN_HOME). Please download and extract Pin into $(PIN_HOME),"
-	@echo "or set the PIN_HOME environment variable.\n"
+	@echo "\nCannot find Pin in $(PIN_HOME). Please download and extract Pin version $(PIN_NEED)"
+	@echo "from http://www.pintool.org/downloads.html into $(PIN_HOME), or set the PIN_HOME environment variable.\n"
 	@false
 endif
 
@@ -69,6 +72,12 @@ configscripts: dependencies
 	@if [ -e .git ]; then echo "git_revision=\"$(git rev-parse HEAD)\"" >> config/graphite.py; fi
 	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(TARGET_ARCH)"
 
+manual:
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/doc/manual
+
+manualclean:
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/doc/manual clean
+
 empty_config:
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CLEAN ] config'
@@ -94,6 +103,14 @@ else
 	$(MAKE) $(MAKE_QUIET) -C common clean
 	$(MAKE) $(MAKE_QUIET) -C sift clean
 	rm -f .build_os
+endif
+
+distclean: clean manualclean
+ifeq ($(SHOW_COMPILE),)
+	@echo '[DISTCL] python_kit'
+	@rm -rf python_kit
+else
+	rm -rf python_kit
 endif
 
 regress_quick: output_files regress_unit regress_apps

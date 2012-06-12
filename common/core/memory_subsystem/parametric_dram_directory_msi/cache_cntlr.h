@@ -13,6 +13,7 @@
 #include "setlock.h"
 #include "fixed_types.h"
 #include "shmem_perf_model.h"
+#include "contention_model.h"
 #include "req_queue_list_template.h"
 #include "stats.h"
 #include "subsecond_time.h"
@@ -62,6 +63,7 @@ namespace ParametricDramDirectoryMSI
          bool writethrough;
          UInt32 shared_cores;
          bool prefetcher;
+         UInt32 outstanding_misses;
 
          CacheParameters()
             : data_access_time(NULL,0)
@@ -70,11 +72,11 @@ namespace ParametricDramDirectoryMSI
          {}
          CacheParameters(UInt32 _size, UInt32 _associativity, String _replacement_policy,
             const ComponentLatency& _data_access_time, const ComponentLatency& _tags_access_time, const ComponentLatency& _writeback_time, String _perf_model_type,
-            bool _writethrough, UInt32 _shared_cores, bool _prefetcher) :
+            bool _writethrough, UInt32 _shared_cores, bool _prefetcher, UInt32 _outstanding_misses) :
             size(_size), associativity(_associativity), replacement_policy(_replacement_policy),
             data_access_time(_data_access_time), tags_access_time(_tags_access_time), writeback_time(_writeback_time),
             perf_model_type(_perf_model_type), writethrough(_writethrough), shared_cores(_shared_cores),
-            prefetcher(_prefetcher)
+            prefetcher(_prefetcher), outstanding_misses(_outstanding_misses)
          {}
    };
 
@@ -114,6 +116,7 @@ namespace ParametricDramDirectoryMSI
          PrL1PrL2DramDirectoryMSI::DramCntlr* m_dram_cntlr;
 
          Mshr mshr;
+         ContentionModel m_l1_mshr;
          CacheDirectoryWaiterMap m_directory_waiters;
          IntPtr m_evicting_address;
          Byte* m_evicting_buf;
@@ -124,6 +127,13 @@ namespace ParametricDramDirectoryMSI
 
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores);
          SetLock* getSetLock(IntPtr addr);
+
+         CacheMasterCntlr(String name, core_id_t core_id, UInt32 outstanding_misses)
+            : m_cache(NULL)
+            , m_prefetcher(NULL)
+            , m_dram_cntlr(NULL)
+            , m_l1_mshr(name, core_id, outstanding_misses)
+         {}
          ~CacheMasterCntlr();
 
          friend class CacheCntlr;
@@ -142,6 +152,7 @@ namespace ParametricDramDirectoryMSI
          AddressHomeLookup* m_dram_directory_home_lookup;
          std::unordered_map<IntPtr, MemComponent::component_t> m_shmem_req_source_map;
          bool m_perfect_llc;
+         bool m_l1_mshr;
 
          struct {
            UInt64 loads, stores;

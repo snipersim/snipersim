@@ -27,6 +27,7 @@ public:
       STALL_COND,             // Thread is calling pthread_cond_wait
       STALL_BARRIER,          // Thread is calling pthread_barrier_wait
       STALL_FUTEX,            // Thread is calling syscall(SYS_futex, FUTEX_WAIT)
+      STALL_PAUSE,            // pause system call
    };
    static const char* stall_type_names[];
 
@@ -57,6 +58,7 @@ public:
    SubsecondTime stallThread(thread_id_t thread_id, stall_type_t reason, SubsecondTime time);
    void stallThread_async(thread_id_t thread_id, stall_type_t reason, SubsecondTime time);
    void resumeThread(thread_id_t thread_id, thread_id_t thread_id_by, SubsecondTime time, void *msg = NULL);
+   void resumeThread_async(thread_id_t thread_id, thread_id_t thread_id_by, SubsecondTime time, void *msg = NULL);
    bool isThreadRunning(thread_id_t thread_id);
    bool isThreadInitializing(thread_id_t thread_id);
 

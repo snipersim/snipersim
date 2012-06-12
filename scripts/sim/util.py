@@ -35,13 +35,13 @@ def register(obj):
 """
 Register a callback for a given SimUser command.
   E.g.: Python script calls sim.util.register_command(0x123, myfunc)
-        Application calls SimUser(0x123, <arg>) in thread/core <core>
+        Application calls SimUser(0x123, <arg>) from core <core>
         Python callback is made for myfunc(<core>, <arg>)
         Return value of SimUser() is that of myfunc()
 """
 
 def register_command(mycmd, func):
-  def callback(core, cmd, arg):
+  def callback(thread, core, cmd, arg):
     if cmd == mycmd:
       return func(core, arg)
   sim.hooks.register(sim.hooks.HOOK_MAGIC_USER, callback)

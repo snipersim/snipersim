@@ -5,17 +5,16 @@ import sys, os
 # list of (packagename, filename)
 
 DEPENDENCIES = [
-  ('zlib-dev / zlib-devel', '/usr/include/zlib.h'),
+  ('zlib1g-dev / zlib-devel', '/usr/include/zlib.h'),
 ]
 
 if os.environ.get('BOOST_INCLUDE', ''):
-  DEPENDENCIES = [
+  DEPENDENCIES += [
     ('boost headers to %s' % os.environ['BOOST_INCLUDE'], '%(BOOST_INCLUDE)s/boost/lexical_cast.hpp' % os.environ),
   ]
 else:
-  DEPENDENCIES = [
+  DEPENDENCIES += [
     ('libboost-dev / boost-devel', '/usr/include/boost/lexical_cast.hpp'),
-    ('libz-dev / libc-devel', '/usr/lib/libz.so'),
   ]
 
 ALTERNATIVES = [

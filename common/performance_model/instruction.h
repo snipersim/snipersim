@@ -155,6 +155,8 @@ public:
       PTHREAD_COND,
       PTHREAD_BARRIER,
       JOIN,
+      PAUSE,
+      SLEEP,
       NUM_TYPES
    };
 
