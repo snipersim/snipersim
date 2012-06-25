@@ -12,6 +12,7 @@
 BarrierSyncServer::BarrierSyncServer()
    : m_global_time(SubsecondTime::Zero())
    , m_fastforward(false)
+   , m_disable(false)
 {
    m_thread_manager = Sim()->getThreadManager();
    try
@@ -33,6 +34,8 @@ void
 BarrierSyncServer::synchronize(thread_id_t thread_id, SubsecondTime time)
 {
    ScopedLock sl(Sim()->getThreadManager()->getLock());
+   if (m_disable)
+       return;
 
    LOG_PRINT("Received 'SIM_BARRIER_WAIT' from Thread(%i), Time(%s)", thread_id, itostr(time).c_str());
 
@@ -64,6 +67,8 @@ BarrierSyncServer::synchronize(thread_id_t thread_id, SubsecondTime time)
 void
 BarrierSyncServer::signal()
 {
+    if (m_disable)
+        return;
    if (isBarrierReached())
       barrierRelease();
 }
@@ -138,7 +143,7 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id)
    while (!thread_resumed)
    {
       m_global_time = m_next_barrier_time;
-      Sim()->getHooksManager()->callHooks(HookType::HOOK_PERIODIC, reinterpret_cast<void*>(static_cast<subsecond_time_t>(m_next_barrier_time).m_time));
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_PERIODIC, static_cast<subsecond_time_t>(m_next_barrier_time).m_time);
 
       m_next_barrier_time += m_barrier_interval;
       LOG_PRINT("m_next_barrier_time updated to (%s)", itostr(m_next_barrier_time).c_str());
@@ -169,6 +174,32 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id)
       }
    }
    return must_wait;
+}
+
+void
+BarrierSyncServer::abortBarrier()
+{
+   for (thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
+   {
+      // Check if this core was running. If yes, release that core
+      if (m_barrier_acquire_list[thread_id] == true)
+      {
+         m_barrier_acquire_list[thread_id] = false;
+
+         Thread *thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
+         if (thread->getCore())
+            thread->getCore()->getPerformanceModel()->barrierExit();
+         thread->signal(m_local_clock_list[thread_id]);
+      }
+   }
+}
+
+void
+BarrierSyncServer::setDisable(bool disable)
+{
+   this->m_disable = disable;
+   if (disable)
+      abortBarrier();
 }
 
 void

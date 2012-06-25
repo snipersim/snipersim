@@ -38,21 +38,34 @@ class TraceThread : public Runnable
       xed_syntax_enum_t m_syntax;
       uint8_t m_output_leftover[160];
       uint16_t m_output_leftover_size;
+      String m_tracefile;
+      String m_responsefile;
 
       void run();
       static void __handleOutputFunc(void* arg, uint8_t fd, const uint8_t *data, uint32_t size)
       { ((TraceThread*)arg)->handleOutputFunc(fd, data, size); }
+      static uint64_t __handleSyscallFunc(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size)
+      { return ((TraceThread*)arg)->handleSyscallFunc(syscall_number, data, size); }
+      static int32_t __handleNewThreadFunc(void* arg)
+      { return ((TraceThread*)arg)->handleNewThreadFunc(); }
+      static int32_t __handleJoinFunc(void* arg, int32_t join_thread_id)
+      { return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
+      uint64_t handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size);
+      int32_t handleNewThreadFunc();
+      int32_t handleJoinFunc(int32_t thread);
       BasicBlock* decode(Sift::Instruction &inst);
 
    public:
-      TraceThread(Thread *thread, String tracefile);
+      TraceThread(Thread *thread, String tracefile, String responsefile = "");
       ~TraceThread();
 
       void spawn(Barrier *barrier);
       void stop() { m_stop = true; }
       UInt64 getProgressExpect();
       UInt64 getProgressValue();
+      Thread* getThread() const { return m_thread; }
+      void handleAccessMemory(Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
 };
 
 #endif // __TRACE_THREAD_H

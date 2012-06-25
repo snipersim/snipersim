@@ -117,7 +117,7 @@ void Simulator::start()
    m_hooks_manager->callHooks(HookType::HOOK_SIM_START, 0);
    m_stats_manager->recordStatsBase();
    m_stats_manager->recordStats("start");
-   if (!Sim()->getConfig()->useMagic())
+   if (Sim()->getConfig()->getSimulationROI() == Config::ROI_FULL)
    {
       // roi-begin
       enablePerformanceGlobal();
@@ -129,7 +129,7 @@ Simulator::~Simulator()
    // Done with all the Pin stuff, allow using Config::Config again
    m_config_file_allowed = true;
 
-   if (!Sim()->getConfig()->useMagic())
+   if (Sim()->getConfig()->getSimulationROI() == Config::ROI_FULL)
    {
       // roi-end
       disablePerformanceGlobal();
@@ -212,5 +212,6 @@ void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode)
    if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
       InstMode::SetInstrumentationMode(new_mode);
 
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (void*)new_mode);
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
+   getClockSkewMinimizationServer()->setDisable(new_mode != InstMode::DETAILED);
 }

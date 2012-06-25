@@ -3,16 +3,19 @@
 
 #include "fixed_types.h"
 
+#include <vector>
+
 class Prefetcher
 {
    public:
-      Prefetcher();
+      Prefetcher(String configName, core_id_t core_id);
       IntPtr getNextAddress(IntPtr current_address);
 
    private:
-      static const UInt32 n_flows = 4;
+      const UInt32 n_flows;
+      const bool stop_at_page;
       UInt32 n_flow_next;
-      IntPtr m_prev_address[n_flows];
+      std::vector<IntPtr> m_prev_address;
 };
 
 #endif // PREFETCHER_H

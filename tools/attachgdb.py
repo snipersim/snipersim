@@ -43,7 +43,7 @@ def strip_possible_schroot(file):
 #  the debug information of the requested binary
 def get_bin_path(pid, bin, strip=True):
   try:
-    path = ex('grep "%s" /proc/%s/maps' % (bin, pid)).split()[5]
+    path = ''.join(ex('grep "%s" /proc/%s/maps' % (bin, pid)).split('\n')[0].partition('/')[1:])
     # Strip the possible chroot path only if the file doesn't exist
     # Later we will update the solib for gdb appropriately to find the proper libraries
     if strip and not os.path.isfile(path):
@@ -53,9 +53,9 @@ def get_bin_path(pid, bin, strip=True):
   except IndexError:
     raise IOError
 
-def attach_gdb(pid, symoff):
+def attach_gdb(pid, symoff, pintoolname = 'pin_sim.so'):
   pinbin = get_bin_path(pid, 'pinbin')
-  pin_sim = get_bin_path(pid, 'pin_sim.so')
+  pin_sim = get_bin_path(pid, pintoolname)
 
   symbols = 'add-symbol-file %s %s -s .data %s -s .bss %s' % (pin_sim, symoff['.text'], symoff['.data'], symoff['.bss'])
 
@@ -84,11 +84,12 @@ def attach_gdb(pid, symoff):
 if __name__ == '__main__':
 
   actions = [ 'interactive', 'bt' ]
+  pintoolname = 'pin_sim.so'
 
   def usage():
     print 'Attach GDB to a running Sniper process'
     print 'Usage:'
-    print '  %s  [-h|--help] [--all-threads] [--action={bt}] [--abt] <pid>' % sys.argv[0]
+    print '  %s  [-h|--help] [--all-threads] [--action={bt}] [--abt] [--toolname={%s}] <pid>' % (sys.argv[0], pintoolname)
     sys.exit(2)
 
   action = 'interactive'
@@ -98,7 +99,7 @@ if __name__ == '__main__':
     usage()
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "h", [ "help", "all-threads", "action=", "abt" ])
+    opts, args = getopt.getopt(sys.argv[1:], "h", [ "help", "all-threads", "action=", "abt", "toolname=" ])
   except getopt.GetoptError, e:
     # print help information and exit:
     print e
@@ -117,6 +118,8 @@ if __name__ == '__main__':
     if o == '--abt':
       all_threads = True
       action = 'bt'
+    if o == '--toolname':
+      pintoolname = a
 
   if len(args) < 1:
     usage()
@@ -134,11 +137,11 @@ if __name__ == '__main__':
   if pgm_orig_state == 'R':
     os.kill(pgm_pid, signal.SIGSTOP)
   try:
-    pin_sim = get_bin_path(pgm_pid, 'pin_sim.so')
+    pin_sim = get_bin_path(pgm_pid, pintoolname)
     base_offset = get_base_offset(pgm_pid, pin_sim)
     symoff = add_offset(get_section_offsets(pin_sim), base_offset)
     for pid in pids:
-      attach_gdb(pid, symoff)
+      attach_gdb(pid, symoff, pintoolname)
   except IOError:
     print ""
     print "Error: Unable to correctly determine the path to a mapped object."

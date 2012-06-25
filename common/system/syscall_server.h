@@ -70,8 +70,11 @@ class SyscallServer
 
       void futexPeriodic(SubsecondTime time);
 
-      static void hook_periodic(SyscallServer* ptr, subsecond_time_t time)
-      { ptr->futexPeriodic(time); }
+      static SInt64 hook_periodic(UInt64 ptr, UInt64 time)
+      {
+         ((SyscallServer*)ptr)->futexPeriodic(*(subsecond_time_t*)(&time));
+         return 0;
+      }
 
    private:
       SubsecondTime m_reschedule_cost;

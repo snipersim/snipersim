@@ -70,6 +70,8 @@ namespace config
 
             void clear();
 
+            bool hasKey(const String & path, UInt64 index = UINT64_MAX);
+
             //! A function that will save a given value to key at the specified path.
             virtual void set(const String & path, const String & new_value);
 
@@ -155,7 +157,7 @@ namespace config
             virtual void loadConfig() = 0;
 
             Section & getSection_unsafe(String const& path);
-            Section & getRoot_unsafe() {return m_root; };
+            Section & getRoot_unsafe() { return m_root; };
             Key & getKey_unsafe(String const& path);
 
         private:
@@ -168,14 +170,14 @@ namespace config
 
             //Utility function used to break the last word past the last /
             //from the base path
-            PathPair splitPath(const String & path);
+            static PathPair splitPath(const String & path);
 
             //This function splits the path up like the function above, but also allows you to
             //pass the path_elements vector in (for later traversal)
-            PathPair splitPathElements(const String & path, PathElementList & path_elements);
+            static PathPair splitPathElements(const String & path, PathElementList & path_elements);
 
             //Utility function to determine if a given path is a leaf (i.e. it has no '/'s in it)
-            bool isLeaf(const String & path);
+            static bool isLeaf(const String & path);
     };
 
 }//end of namespace config

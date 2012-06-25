@@ -273,13 +273,20 @@ namespace config
                     case keyValueArrayID:
                         for(tree_iter_t chi = datanode->children.begin(); chi != datanode->children.end(); chi++)
                         {
-                            key_value = "";
-                            unEscapeText(getNodeValue(chi), key_value);
-                            if (key_value != "")
+                            switch(getNodeID(chi))
                             {
-                                current.addKey(key_name, key_value, index);
+                                case keySeparatorID:
+                                    ++index;
+                                    break;
+                                case keyValueID:
+                                    key_value = "";
+                                    unEscapeText(getNodeValue(chi), key_value);
+                                    if (key_value != "")
+                                        current.addKey(key_name, key_value, index);
+                                    break;
+                                default:
+                                    throw parserError("Internal parser error: Expected separator or value");
                             }
-                            ++index;
                         }
                         break;
                     // FIXME: Span should properly create a span of numbers
@@ -373,40 +380,45 @@ namespace config
         KeyArrayList const & arr = current.getArrayKeys();
         for(KeyArrayList::const_iterator i = arr.begin(); i != arr.end(); ++i)
         {
-            const String & name = (*i->second.begin())->getName();
-            //Quote the name if it has spaces in it
-            if(boost::find_first(name, " ") || boost::find_first(name, "\""))
+            for (uint64_t index = 0; index < i->second.size(); ++index)
             {
-                String escaped_name;
-                escapeText(name, escaped_name);
-                out << "\"" << escaped_name << "\"";
+                // Find a non-default configuration value where we can get the name from
+                if (i->second[index].get())
+                {
+                    const String & name = i->second[index].get()->getName();
+                    //Quote the name if it has spaces in it
+                    if(boost::find_first(name, " ") || boost::find_first(name, "\""))
+                    {
+                        String escaped_name;
+                        escapeText(name, escaped_name);
+                        out << "\"" << escaped_name << "\"";
+                    }
+                    else
+                        out << name;
+                    break;
+                }
             }
-            else
-                out << name;
 
-            out << " = ";
+            out << "[] = ";
 
-            bool first = true;
-            for (std::vector<boost::shared_ptr<Key> >::const_iterator j = i->second.begin() ; j != i->second.end() ; ++j)
+            for (uint64_t index = 0; index < i->second.size(); ++index)
             {
-                if (first)
-                {
-                    first = false;
-                }
-                else
-                {
+                if (index > 0)
                     out << ",";
-                }
 
-                //Quote the value if it is a string
-                if((*j)->getFloatValid() || (*j)->getIntValid())
-                    out << (*j)->getString();
-                else
+                if (i->second[index].get())
                 {
-                    String escaped_value;
-                    escapeText((*j)->getString(), escaped_value);
-                    out << "\"" << escaped_value << "\"";
+                    //Quote the value if it is a string
+                    if(i->second[index].get()->getFloatValid() || i->second[index].get()->getIntValid())
+                        out << i->second[index].get()->getString();
+                    else
+                    {
+                        String escaped_value;
+                        escapeText(i->second[index].get()->getString(), escaped_value);
+                        out << "\"" << escaped_value << "\"";
+                    }
                 }
+                // else: default value, print nothing between the ","
             }
 
             out << std::endl;

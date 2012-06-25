@@ -419,6 +419,11 @@ public:
       : m_period(static_cast<const ComponentPeriod*>(NULL))
    {}
 
+   bool isInfinite() const
+   {
+      return m_bw_in_bits_per_cycle == 0;
+   }
+
    // X bits * femtoseconds-per-cycle / bits/cycle = femtoseconds
    // Multiply by the period first to keep the integer result above zero
    SubsecondTime getLatency(uint64_t bits_transmitted) const

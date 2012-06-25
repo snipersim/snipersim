@@ -8,7 +8,7 @@ class Progress {
       static void init(void);
       static void fini(void);
    private:
-      static void record(bool init, subsecond_time_t time);
+      static SInt64 record(UInt64 init, UInt64 time);
 };
 
 #endif // __PROGRESS_H

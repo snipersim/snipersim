@@ -825,9 +825,11 @@ struct GlobalMemory *Global;
 
   /* do n1 1D FFTs on columns */
   for (j=MyFirst; j<MyLast; j++) {
+    SimMarker(1, j);
     FFT1DOnce(direction, m1, n1, upriv, &scratch[2*j*(n1+pad_length)]);
     TwiddleOneCol(direction, n1, N, j, umain2, &scratch[2*j*(n1+pad_length)],
       pad_length);
+    SimMarker(2, j);
   }
 
   {

@@ -75,6 +75,15 @@ namespace Sift
    typedef enum {
       RecOtherIcache,
       RecOtherOutput,
+      RecOtherSyscallRequest,
+      RecOtherSyscallResponse,
+      RecOtherNewThread,
+      RecOtherNewThreadResponse,
+      RecOtherMemoryRequest,
+      RecOtherMemoryResponse,
+      RecOtherJoin,
+      RecOtherJoinResponse,
+      RecOtherEndResponse,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

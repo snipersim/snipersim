@@ -12,7 +12,7 @@ class HookType
 {
 public:
    enum hook_type_t {
-      // Hook name              Parameter (cast from void*)          Description
+      // Hook name              Parameter (cast from UInt64)         Description
       HOOK_PERIODIC,            // SubsecondTime current_time        Barrier was reached
       HOOK_SIM_START,           // none                              Simulation start
       HOOK_SIM_END,             // none                              Simulation end
@@ -46,8 +46,8 @@ namespace std
 class HooksManager
 {
 public:
-   typedef SInt64 (*HookCallbackFunc)(void*, void*);
-   typedef std::pair<HookCallbackFunc, void*> HookCallback;
+   typedef SInt64 (*HookCallbackFunc)(UInt64, UInt64);
+   typedef std::pair<HookCallbackFunc, UInt64> HookCallback;
 
    typedef struct {
       thread_id_t thread_id;
@@ -72,8 +72,8 @@ public:
    HooksManager();
    void init();
    void fini();
-   void registerHook(HookType::hook_type_t type, HookCallbackFunc func, void* argument);
-   SInt64 callHooks(HookType::hook_type_t type, void* argument, bool expect_return = false);
+   void registerHook(HookType::hook_type_t type, HookCallbackFunc func, UInt64 argument);
+   SInt64 callHooks(HookType::hook_type_t type, UInt64 argument, bool expect_return = false);
 
 private:
    std::unordered_map<HookType::hook_type_t, std::vector<HookCallback> > m_registry;

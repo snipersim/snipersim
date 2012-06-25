@@ -22,6 +22,8 @@ const char *pthread_names[] =
    "pthread_cond_wait", "pthread_cond_signal", "pthread_cond_broadcast",
    "pthread_barrier_wait"
 };
+static_assert(PTHREAD_ENUM_LAST == sizeof(pthread_names) / sizeof(char*), "Not enough values in pthread_names");
+
 struct pthread_counters_t
 {
    UInt64 pthread_count[7];
@@ -58,7 +60,7 @@ static FILE *trace_fp = NULL;
 void updateState(Core *core, state_t state, SubsecondTime delay) {
    if (trace_fp) {
       ScopedLock sl(trace_lock);
-      fprintf(trace_fp, "%u %"PRIu64" %u\n", core->getId(), (core->getPerformanceModel()->getElapsedTime() + delay).getNS(), state);
+      fprintf(trace_fp, "%u %" PRIu64 " %u\n", core->getId(), (core->getPerformanceModel()->getElapsedTime() + delay).getNS(), state);
    }
 }
 

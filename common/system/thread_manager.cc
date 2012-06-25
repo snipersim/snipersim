@@ -16,6 +16,8 @@
 const char* ThreadManager::stall_type_names[] = {
    "unscheduled", "broken", "join", "mutex", "cond", "barrier", "futex", "pause"
 };
+static_assert(ThreadManager::STALL_TYPES_MAX == sizeof(ThreadManager::stall_type_names) / sizeof(char*),
+              "Not enough values in ThreadManager::stall_type_names");
 
 ThreadManager::ThreadManager()
    : m_thread_tls(TLS::create())
@@ -82,7 +84,7 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
    thread->updateCoreTLS();
 
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_START, (void*)&args);
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_START, (UInt64)&args);
 
    Core *core = thread->getCore();
    if (core)
@@ -98,7 +100,7 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
       m_thread_state[thread_id].status = Core::RUNNING;
 
       HooksManager::ThreadMigrate args = { thread_id: thread_id, core_id: core->getId(), time: time };
-      Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_MIGRATE, (void*)&args);
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_MIGRATE, (UInt64)&args);
    }
    else
       m_thread_state[thread_id].status = Core::STALLED;
@@ -124,7 +126,7 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    m_thread_state[thread_id].status = Core::IDLE;
 
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (void*)&args);
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);
    if (Sim()->getClockSkewMinimizationServer())
       Sim()->getClockSkewMinimizationServer()->signal();
 
@@ -259,7 +261,7 @@ void ThreadManager::stallThread_async(thread_id_t thread_id, stall_type_t reason
    m_thread_state[thread_id].status = Core::STALLED;
 
    HooksManager::ThreadStall args = { thread_id: thread_id, reason: reason, time: time };
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_STALL, (void*)&args);
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_STALL, (UInt64)&args);
    if (Sim()->getClockSkewMinimizationServer())
       Sim()->getClockSkewMinimizationServer()->signal();
 }
@@ -267,7 +269,13 @@ void ThreadManager::stallThread_async(thread_id_t thread_id, stall_type_t reason
 SubsecondTime ThreadManager::stallThread(thread_id_t thread_id, stall_type_t reason, SubsecondTime time)
 {
    stallThread_async(thread_id, reason, time);
-   return getThreadFromID(thread_id)->wait(m_thread_lock);
+   // It's possible that a HOOK_PERIODIC, called by SkewMinServer::signal(), called by stallThread_async(), woke us up again.
+   // We will then have been signal()d, but this signal was lost since we weren't in wait()
+   // If this is the case, don't go to sleep but return our wakeup time immediately
+   if (m_thread_state[thread_id].status == Core::RUNNING)
+      return getThreadFromID(thread_id)->getWakeupTime();
+   else
+      return getThreadFromID(thread_id)->wait(m_thread_lock);
 }
 
 void ThreadManager::resumeThread_async(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time, void *msg)
@@ -276,7 +284,7 @@ void ThreadManager::resumeThread_async(thread_id_t thread_id, thread_id_t thread
    m_thread_state[thread_id].status = Core::RUNNING;
 
    HooksManager::ThreadResume args = { thread_id: thread_id, thread_by: thread_by, time: time };
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_RESUME, (void*)&args);
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_RESUME, (UInt64)&args);
 }
 
 void ThreadManager::resumeThread(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time, void *msg)

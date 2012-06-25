@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 // Define to handle processor switches using cpuid and a clock_gettime() fallback when a switch is detected.
 // By default, only the faster rdtsc is used, but this can give errors when a thread switches cores while timing.
@@ -113,9 +114,9 @@ void TotalTimer::report(FILE* fp)
 {
    //printf("[TIMER] <%-20s> %6.1f s, %lu calls, avg %.0f us/call, max %.0f us, switched = %.3f%% (%lu) ",
    //   name.c_str(), total / 1e9, n, total / (n ? n : 1) / 1e3, max / 1e3, 100. * n_switched / n, n_switched);
-   fprintf(fp, "%"PRIu64" %"PRIu64" %"PRIu64" %"PRIu64, total, n, max, n_switched);
+   fprintf(fp, "%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64, total, n, max, n_switched);
    for(unsigned long i = backtrace_ignore; i < backtrace_ignore + 6; ++i)
-     fprintf(fp, " %"PRIuPTR, i < backtrace_n ? (intptr_t)backtrace_buffer[i] : 0);
+     fprintf(fp, " %" PRIuPTR, i < backtrace_n ? (intptr_t)backtrace_buffer[i] : 0);
    fprintf(fp, " %s\n", name.c_str());
 }
 
@@ -124,7 +125,7 @@ void TotalTimer::reports(void)
    if (numtimers > 0) {
       char * timersfile = strdup(Sim()->getConfig()->formatOutputFileName("sim_timers.out").c_str());
       FILE* fp = fopen(timersfile, "w");
-      fprintf(fp, "%"PRIuPTR"\n", (intptr_t)rdtsc);
+      fprintf(fp, "%" PRIuPTR "\n", (intptr_t)rdtsc);
       for(int i = 0; i < numtimers; ++i)
          alltimers[i]->report(fp);
       fclose(fp);

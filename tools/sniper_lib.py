@@ -1,6 +1,6 @@
 # A copy of this file is distributed with the binaries of Graphite and Benchmarks
 
-import sys, os, time, re, tempfile, timeout, traceback
+import sys, os, time, re, tempfile, timeout, traceback, collections
 try:
   import json
 except ImportError:
@@ -27,9 +27,10 @@ def get_results(jobid = None, resultsdir = None, partial = None, force = False):
   else:
     raise ValueError('Need either jobid or resultsdir')
 
+  config = parse_config(simcfg)
   return {
-    'results': stats_process(results),
-    'config': parse_config(simcfg)
+    'config': config,
+    'results': stats_process(config, results),
   }
 
 
@@ -50,8 +51,8 @@ def get_name(jobid = None, resultsdir = None):
   }
 
 
-def stats_process(results):
-  ncores = [ int(r[2]) for r in results if r[0] == 'ncores'][0]
+def stats_process(config, results):
+  ncores = int(config['general/total_cores'])
   stats = {}
   for key, core, value in results:
      if core == -1:
@@ -70,16 +71,24 @@ def stats_process(results):
     pass
   stats['pthread_locks_contended'] = float(sum(stats.get('pthread.pthread_mutex_lock_contended', [0]))) / (sum(stats.get('pthread.pthread_mutex_lock_count', [0])) or 1)
   # femtosecond to cycles conversion
-  freq = stats['corefreq']
-  stats['fs_to_cycles'] = freq / 1e15
+  freq = [ 1e9 * float(get_config(config, 'perf_model/core/frequency', idx)) for idx in range(ncores) ]
+  stats['fs_to_cycles_cores'] = map(lambda f: f / 1e15, freq)
+  # Backwards compatible version returning fs_to_cycles for core 0, for heterogeneous configurations fs_to_cycles_cores needs to be used
+  stats['fs_to_cycles'] = stats['fs_to_cycles_cores'][0]
   # DVFS-enabled runs: emulate cycle_count asuming constant (initial) frequency
   if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
-    stats['performance_model.cycle_count'] = map(lambda t: stats['fs_to_cycles'] * t, stats['performance_model.elapsed_time'])
+    stats['performance_model.cycle_count'] = [ stats['fs_to_cycles_cores'][idx] * stats['performance_model.elapsed_time'][idx] for idx in range(ncores) ]
   # IPC
   stats['ipc'] = sum(stats.get('performance_model.instruction_count', [0])) / float(sum(stats.get('performance_model.cycle_count', [0])) or 1e16)
 
   return stats
 
+
+class DefaultValue:
+  def __init__(self, value):
+    self.val = value
+  def __call__(self):
+    return self.val
 
 # Parse sim.cfg, read from file or from ic.job_output(jobid, 'sim.cfg'), into a dictionary
 def parse_config(simcfg):
@@ -88,13 +97,17 @@ def parse_config(simcfg):
   cp.readfp(cStringIO.StringIO(str(simcfg)))
   cfg = {}
   for section in cp.sections():
-    for key, value in cp.items(section):
+    for key, value in sorted(cp.items(section)):
+      # Run through items sorted by key, so the default comes before the array one
+      # Then cut off the [] array markers as they are only used to prevent duplicate option names which ConfigParser doesn't handle
+      if key.endswith('[]'):
+        key = key[:-2]
       if len(value) > 2 and value[0] == '"' and value[-1] == '"':
         value = value[1:-1]
       key = '/'.join((section, key))
       if key in cfg:
         defval = cfg[key]
-        cfg[key] = collections.defaultdict(lambda:defval)
+        cfg[key] = collections.defaultdict(DefaultValue(defval))
         for i, v in enumerate(value.split(',')):
           if v: # Only fill in entries that have been provided
             cfg[key][i] = v
@@ -108,6 +121,17 @@ def parse_config(simcfg):
   return cfg
 
 
+def get_config(config, key, index = None):
+  is_hetero = (type(config[key]) == collections.defaultdict)
+  if index is None:
+    assert not is_hetero
+    return config[key]
+  elif is_hetero:
+    return config[key][index]
+  else:
+    return config[key]
+
+
 def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout, graphiteout, powerpy), partial = None):
   results = []
 
@@ -115,8 +139,8 @@ def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout
   simcfg = parse_config(simcfg)
   ncores = int(simcfg['general/total_cores'])
 
-  results.append(('ncores', -1, ncores))
-  results.append(('corefreq', -1, 1e9 * float(simcfg['perf_model/core/frequency'])))
+  results += [ ('ncores', -1, ncores) ]
+  results += [ ('corefreq', idx, 1e9 * float(get_config(simcfg, 'perf_model/core/frequency', idx))) for idx in range(ncores) ]
 
   ## stdout.txt
   if '[SNIPER]' in stdout:

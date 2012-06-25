@@ -41,6 +41,7 @@ class Thread
          m_wakeup_msg = msg;
          m_cond.signal();
       }
+      SubsecondTime getWakeupTime() const { return m_wakeup_time; }
       void *getWakeupMsg() const { return m_wakeup_msg; }
 
       Core* getCore() const { return m_core; }

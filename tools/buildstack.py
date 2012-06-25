@@ -1,6 +1,6 @@
 import sys
 
-def merge_items(data, all_items, nocollapse = False):
+def merge_items(data, all_items, nocollapse = False, no_complain_others = False):
   # Recursively walk the contributor list
   # Current list is in <items>, remaining values to be mapped in <values>,
   #   conversion factor to calculate percentages to compare with the threshold in <scale>
@@ -49,9 +49,8 @@ def merge_items(data, all_items, nocollapse = False):
     other += sum(values.values())
     if other:
       res.append(('other', other))
-    others = values.keys()
-    if others:
-      sys.stderr.write('Also found but not in all_items: %s\n' % others)
+    if values and (not no_complain_others or sum(values.values()) > 0):
+      sys.stderr.write('Also found but not in all_items: %s\n' % values)
     results[core] = (res, total, other, scale)
   return results
 

@@ -33,6 +33,13 @@ public:
       NUM_SIMULATION_MODES
    };
 
+   enum SimulationROI
+   {
+      ROI_FULL,
+      ROI_MAGIC,
+      ROI_SCRIPT
+   };
+
    typedef std::unordered_map<UInt32,core_id_t> CommToCoreMap;
 
    Config(SimulationMode mode);
@@ -60,8 +67,9 @@ public:
    { return m_simulation_mode; }
 
    // Knobs
+   bool getEnableSMCSupport() const { return m_knob_enable_smc_support; }
    bool getEnableICacheModeling() const { return m_knob_enable_icache_modeling; }
-   bool useMagic() const { return m_knob_use_magic; }
+   SimulationROI getSimulationROI() const { return m_knob_roi; }
    bool getEnableProgressTrace() const { return m_knob_enable_progress_trace; }
    bool getEnableSync() const { return m_knob_enable_sync; }
    bool getEnableSyncReport() const { return m_knob_enable_sync_report; }
@@ -96,8 +104,9 @@ private:
 
    static String m_knob_output_directory;
    static UInt32 m_knob_total_cores;
+   static bool m_knob_enable_smc_support;
    static bool m_knob_enable_icache_modeling;
-   static bool m_knob_use_magic;
+   static SimulationROI m_knob_roi;
    static bool m_knob_enable_progress_trace;
    static bool m_knob_enable_sync;
    static bool m_knob_enable_sync_report;

@@ -6,12 +6,15 @@ import sys, sniper_lib
 def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent = False):
 
   try:
-    results = sniper_lib.get_results(jobid = jobid, resultsdir = resultsdir)['results']
+    res = sniper_lib.get_results(jobid = jobid, resultsdir = resultsdir)
   except (KeyError, ValueError), e:
     if not silent:
       print 'Failed to generated sim.out:', e
     return
 
+  results = res['results']
+  config = res['config']
+  ncores = int(config['general/total_cores'])
 
   format_int = lambda v: str(long(v))
   def format_ns(digits):
@@ -50,15 +53,15 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
 
 
   lines = []
-  lines.append([''] + [ 'Core %u' % i for i in range(results['ncores']) ])
+  lines.append([''] + [ 'Core %u' % i for i in range(ncores) ])
 
   for title, name, func in template:
     line = [ title ]
     if name and name in results:
-      for core in range(results['ncores']):
+      for core in range(ncores):
         line.append(' '+func(results[name][core]))
     else:
-      line += [''] * results['ncores']
+      line += [''] * ncores
     lines.append(line)
 
 

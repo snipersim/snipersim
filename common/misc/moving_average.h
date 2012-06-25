@@ -109,7 +109,7 @@ class MovingArithmeticMean : public MovingAverage<T>
          sum += next_num;
          curr_window_size ++;
 
-         addToWindow(next_num);
+         this->addToWindow(next_num);
       }
 
       T compute() const
@@ -129,7 +129,7 @@ class MovingGeometricMean : public MovingAverage<T>
 
       void update(T next_num)
       {
-         addToWindow(next_num);
+         this->addToWindow(next_num);
       }
 
       T compute() const
@@ -159,7 +159,7 @@ class MovingMedian : public MovingAverage<T>
 
       void update(T next_num)
       {
-         addToWindow(next_num);
+         this->addToWindow(next_num);
       }
 
       T compute() const

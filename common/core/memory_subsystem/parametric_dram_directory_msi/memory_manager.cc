@@ -96,12 +96,18 @@ MemoryManager::MemoryManager(Core* core,
             LOG_PRINT_ERROR("dvfs_domain %s is invalid", domain_name.c_str());
 
          cache_parameters[(MemComponent::component_t)i] = CacheParameters(
+            configName,
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/cache_size", core->getId()),
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/associativity", core->getId()),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/replacement_policy", core->getId()),
+            Sim()->getCfg()->getBoolArray(  "perf_model/" + configName + "/perfect", core->getId()),
             ComponentLatency(clock_domain, Sim()->getCfg()->getIntArray("perf_model/" + configName + "/data_access_time", core->getId())),
             ComponentLatency(clock_domain, Sim()->getCfg()->getIntArray("perf_model/" + configName + "/tags_access_time", core->getId())),
             ComponentLatency(clock_domain, Sim()->getCfg()->getIntArray("perf_model/" + configName + "/writeback_time", core->getId())),
+            ComponentBandwidthPerCycle(clock_domain,
+               i < (UInt32)m_last_level_cache
+                  ? Sim()->getCfg()->getIntArray("perf_model/" + configName + "/next_level_read_bandwidth", core->getId())
+                  : 0),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/perf_model_type", core->getId()),
             Sim()->getCfg()->getBoolArray(  "perf_model/" + configName + "/writethrough", core->getId()),
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/shared_cores", core->getId()) * smt_cores,

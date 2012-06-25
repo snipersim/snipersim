@@ -25,7 +25,7 @@ protected:
    ClockSkewMinimizationClient() {}
 
 public:
-   ~ClockSkewMinimizationClient() {}
+   virtual ~ClockSkewMinimizationClient() {}
    static ClockSkewMinimizationClient* create(Thread* thread);
 
    virtual void enable() = 0;
@@ -39,7 +39,7 @@ protected:
    ClockSkewMinimizationManager() {}
 
 public:
-   ~ClockSkewMinimizationManager() {}
+   virtual ~ClockSkewMinimizationManager() {}
    static ClockSkewMinimizationManager* create();
 
    virtual void processSyncMsg(Byte* msg) = 0;
@@ -51,11 +51,12 @@ protected:
    ClockSkewMinimizationServer() {}
 
 public:
-   ~ClockSkewMinimizationServer() {}
+   virtual ~ClockSkewMinimizationServer() {}
    static ClockSkewMinimizationServer* create();
 
    virtual void synchronize(thread_id_t thread_id, SubsecondTime time) = 0;
    virtual void signal() = 0;
+   virtual void setDisable(bool disable) { }
    virtual void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime()) = 0;
    virtual SubsecondTime getGlobalTime();
 };

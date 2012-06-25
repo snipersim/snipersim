@@ -1,11 +1,17 @@
 #include "prefetcher.h"
+#include "simulator.h"
+#include "config.hpp"
+
 #include <cstdlib>
 
 const IntPtr PAGE_SIZE = 4096;
 const IntPtr PAGE_MASK = ~(PAGE_SIZE-1);
 
-Prefetcher::Prefetcher()
-   : n_flow_next(0)
+Prefetcher::Prefetcher(String configName, core_id_t core_id)
+   : n_flows(Sim()->getCfg()->getIntArray("perf_model/" + configName + "/prefetcher/flows", core_id))
+   , stop_at_page(Sim()->getCfg()->getBoolArray("perf_model/" + configName + "/prefetcher/stop_at_page_boundary", core_id))
+   , n_flow_next(0)
+   , m_prev_address(n_flows)
 {
 }
 
@@ -32,8 +38,8 @@ Prefetcher::getNextAddress(IntPtr current_address)
 
    m_prev_address[n_flow] = current_address;
 
-   // But stay within the page
-   if (stride > 0 && ((prefetch_address & PAGE_MASK) == (current_address & PAGE_MASK)))
+   // But stay within the page if requested
+   if (stride > 0 && (!stop_at_page || ((prefetch_address & PAGE_MASK) == (current_address & PAGE_MASK))))
       return prefetch_address;
    else
       return 0;

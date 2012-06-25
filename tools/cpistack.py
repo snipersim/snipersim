@@ -16,22 +16,22 @@ def getdata(jobid = '', resultsdir = '', data = None):
     res = sniper_lib.get_results(jobid, resultsdir)
   stats = res['results']
 
-  ncores = int(stats['ncores'])
+  ncores = int(res['config']['general/total_cores'])
   instrs = stats['performance_model.instruction_count']
   try:
     times = stats['performance_model.elapsed_time']
-    cycles_scale = stats['fs_to_cycles']
+    cycles_scale = stats['fs_to_cycles_cores']
   except KeyError:
     # On error, assume that we are using the pre-DVFS version
     times = stats['performance_model.cycle_count']
-    cycles_scale = 1
+    cycles_scale = [ 1. for idx in range(ncores) ]
 
   data = collections.defaultdict(collections.defaultdict)
   for key, values in stats.items():
     if '.cpi' in key:
       key = key.split('.cpi')[1]
       for core in range(ncores):
-        data[core][key] = values[core] * cycles_scale
+        data[core][key] = values[core] * cycles_scale[core]
 
   if not data:
     raise ValueError('No .cpi data found, simulation did not use the interval core model')
@@ -105,7 +105,7 @@ def getdata(jobid = '', resultsdir = '', data = None):
             if 'FunctionalUnit' not in key: # We already accounted for FunctionalUnit above, don't do it twice
               data[core]['Base'] -= values[core]
               data[core]['Issue'] = data[core].get('Issue', 0) + values[core]
-    data[core]['Imbalance'] = cycles_scale * max(times) - sum(data[core].values())
+    data[core]['Imbalance'] = cycles_scale[core] * max(times) - sum(data[core].values())
 
   return data, ncores, instrs, times, cycles_scale
 
@@ -254,7 +254,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
     threads = range(ncores)
 
   if threads_mincomp:
-    compfrac = get_compfrac(data, cycles_scale * max(times))
+    compfrac = get_compfrac(data, cycles_scale[0] * max(times))
     csv_threads = [ core for core in threads if threads_mincomp < compfrac[core] ]
   else:
     csv_threads = threads
@@ -270,7 +270,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
 
   plot_labels = []
   plot_data = {}
-  max_cycles = cycles_scale * max(times)
+  max_cycles = cycles_scale[0] * max(times)
 
   if gen_text_stack: print '                     CPI      CPI %     Time %'
   for core, (res, total, other, scale) in results.items():
@@ -291,7 +291,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
           plot_data[core][name] = float(value) / max_cycles
     if gen_text_stack:
       print
-      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, float(total) / cycles_scale / 1e15)
+      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, (float(total) / cycles_scale[0]) / 1e15)
 
   # First, create an ordered list of labels that is the superset of all labels used from all cores
   # Then remove items that are not used, creating an ordered list with all currently used labels

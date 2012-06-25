@@ -21,6 +21,11 @@ UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, 
 {
    ScopedLock sl(Sim()->getThreadManager()->getLock());
 
+   return Magic_unlocked(thread_id, core_id, cmd, arg0, arg1);
+}
+
+UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
+{
    switch(cmd)
    {
       case SIM_CMD_ROI_TOGGLE:
@@ -38,13 +43,13 @@ UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, 
       case SIM_CMD_MARKER:
       {
          MagicMarkerType args = { thread_id: thread_id, core_id: core_id, arg0: arg0, arg1: arg1 };
-         Sim()->getHooksManager()->callHooks(HookType::HOOK_MAGIC_MARKER, &args);
+         Sim()->getHooksManager()->callHooks(HookType::HOOK_MAGIC_MARKER, (UInt64)&args);
          return 0;
       }
       case SIM_CMD_USER:
       {
          MagicMarkerType args = { thread_id: thread_id, core_id: core_id, arg0: arg0, arg1: arg1 };
-         return Sim()->getHooksManager()->callHooks(HookType::HOOK_MAGIC_USER, &args, true /* expect return value */);
+         return Sim()->getHooksManager()->callHooks(HookType::HOOK_MAGIC_USER, (UInt64)&args, true /* expect return value */);
       }
       case SIM_CMD_INSTRUMENT_MODE:
          return setInstrumentationMode(arg0);
@@ -138,7 +143,7 @@ UInt64 MagicServer::setFrequency(UInt64 core_number, UInt64 freq_in_mhz)
       return 1;
    freq_in_hz = 1000000 * freq_in_mhz;
 
-   printf("[SNIPER] Setting frequency for core %"PRId64" in DVFS domain %d to %"PRId64" MHz\n", core_number, Sim()->getDvfsManager()->getCoreDomainId(core_number), freq_in_mhz);
+   printf("[SNIPER] Setting frequency for core %" PRId64 " in DVFS domain %d to %" PRId64 " MHz\n", core_number, Sim()->getDvfsManager()->getCoreDomainId(core_number), freq_in_mhz);
 
    if (freq_in_hz > 0)
       Sim()->getDvfsManager()->setCoreDomain(core_number, ComponentPeriod::fromFreqHz(freq_in_hz));
@@ -148,7 +153,7 @@ UInt64 MagicServer::setFrequency(UInt64 core_number, UInt64 freq_in_mhz)
    }
 
    // First set frequency, then call hooks so hook script can find the new frequency by querying the DVFS manager
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_CPUFREQ_CHANGE, (void*)core_number);
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_CPUFREQ_CHANGE, core_number);
 
    return 0;
 }

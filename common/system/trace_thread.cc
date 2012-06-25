@@ -10,17 +10,25 @@
 #include "clock_skew_minimization_object.h"
 #include "instruction_decoder.h"
 #include "config.hpp"
+#include "syscall_model.h"
+#include "core.h"
 
-TraceThread::TraceThread(Thread *thread, String tracefile)
+#include <sys/syscall.h>
+
+TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile)
    : m__thread(NULL)
    , m_thread(thread)
-   , m_trace(tracefile.c_str())
+   , m_trace(tracefile.c_str(), responsefile.c_str(), thread->getId())
    , m_stop(false)
    , m_bbv_base(0)
    , m_bbv_count(0)
    , m_output_leftover_size(0)
+   , m_responsefile(responsefile)
 {
    m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
+   m_trace.setHandleSyscallFunc(TraceThread::__handleSyscallFunc, this);
+   m_trace.setHandleNewThreadFunc(TraceThread::__handleNewThreadFunc, this);
+   m_trace.setHandleJoinFunc(TraceThread::__handleJoinFunc, this);
 
    String syntax = Sim()->getCfg()->getString("general/syntax");
    if (syntax == "intel")
@@ -76,6 +84,35 @@ void TraceThread::handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t siz
    }
 }
 
+uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size)
+{
+   uint64_t ret = 0;
+   if (syscall_number != SYS_futex)
+   {
+      return ret;
+   }
+
+   LOG_ASSERT_ERROR(size == sizeof(SyscallMdl::syscall_args_t), "Syscall arguments not the correct size");
+
+   SyscallMdl::syscall_args_t *args = (SyscallMdl::syscall_args_t *) data;
+
+   m_thread->getSyscallMdl()->runEnter(syscall_number, *args);
+   ret = m_thread->getSyscallMdl()->runExit(ret);
+
+   return ret;
+}
+
+int32_t TraceThread::handleNewThreadFunc()
+{
+   return Sim()->getTraceManager()->newThread();
+}
+
+int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)
+{
+   Sim()->getThreadManager()->joinThread(m_thread->getId(), join_thread_id);
+   return 0;
+}
+
 BasicBlock* TraceThread::decode(Sift::Instruction &inst)
 {
    const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
@@ -117,8 +154,6 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
 
 void TraceThread::run()
 {
-   m_barrier->wait();
-
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), SubsecondTime::Zero());
 
    ClockSkewMinimizationClient *client = m_thread->getClockSkewMinimizationClient();
@@ -203,6 +238,7 @@ void TraceThread::run()
       prfmdl->iterate();
 
       client->synchronize(SubsecondTime::Zero(), false);
+
       // We may have been rescheduled to a different core
       core = m_thread->getCore();
       prfmdl = core->getPerformanceModel();
@@ -215,8 +251,6 @@ void TraceThread::run()
 
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
    Sim()->getTraceManager()->signalDone(m_thread->getId());
-
-   m_barrier->wait();
 }
 
 void TraceThread::spawn(Barrier *barrier)
@@ -234,4 +268,42 @@ UInt64 TraceThread::getProgressExpect()
 UInt64 TraceThread::getProgressValue()
 {
    return m_trace.getPosition();
+}
+
+void TraceThread::handleAccessMemory(Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size)
+{
+   Sift::MemoryLockType sift_lock_signal;
+   Sift::MemoryOpType sift_mem_op;
+
+   switch (lock_signal)
+   {
+      case (Core::NONE):
+         sift_lock_signal = Sift::MemNoLock;
+         break;
+      case (Core::LOCK):
+         sift_lock_signal = Sift::MemLock;
+         break;
+      case (Core::UNLOCK):
+         sift_lock_signal = Sift::MemUnlock;
+         break;
+      default:
+         sift_lock_signal = Sift::MemInvalidLock;
+         break;
+   }
+
+   switch (mem_op_type)
+   {
+      case (Core::READ):
+      case (Core::READ_EX):
+         sift_mem_op = Sift::MemRead;
+         break;
+      case (Core::WRITE):
+         sift_mem_op = Sift::MemWrite;
+         break;
+      default:
+         sift_mem_op = Sift::MemInvalidOp;
+         break;
+   }
+
+   m_trace.AccessMemory(sift_lock_signal, sift_mem_op, d_addr, (uint8_t*)data_buffer, data_size);
 }

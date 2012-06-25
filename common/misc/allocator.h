@@ -46,7 +46,7 @@ template <typename T, unsigned MaxItems = 0> class TypedAllocator : public Alloc
       virtual ~TypedAllocator()
       {
          if (m_items)
-            printf("[ALLOC] %"PRIu64" items of type %s not freed\n", m_items, typeid(T).name());
+            printf("[ALLOC] %" PRIu64 " items of type %s not freed\n", m_items, typeid(T).name());
       }
 
       virtual void* alloc(size_t bytes)

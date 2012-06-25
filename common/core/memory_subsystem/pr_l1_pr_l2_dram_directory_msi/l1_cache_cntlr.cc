@@ -209,8 +209,8 @@ L1CacheCntlr::insertCacheBlock(MemComponent::component_t mem_component,
       IntPtr address, CacheState::cstate_t cstate, Byte* data_buf,
       bool* eviction_ptr, IntPtr* evict_address_ptr)
 {
-   __attribute(__unused__) PrL1CacheBlockInfo evict_block_info;
-   __attribute(__unused__) Byte evict_buf[getCacheBlockSize()];
+   PrL1CacheBlockInfo evict_block_info;
+   Byte evict_buf[getCacheBlockSize()];
 
    Cache* l1_cache = getL1Cache(mem_component);
    l1_cache->insertSingleLine(address, data_buf,

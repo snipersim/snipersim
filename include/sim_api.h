@@ -18,44 +18,58 @@
 #define SIM_CMD_IN_SIMULATOR    8
 #define SIM_CMD_PROC_ID         9
 #define SIM_CMD_THREAD_ID       10
+#define SIM_CMD_NUM_PROCS       11
+#define SIM_CMD_NUM_THREADS     12
 
 #define SIM_OPT_INSTRUMENT_DETAILED    0
 #define SIM_OPT_INSTRUMENT_WARMUP      1
 #define SIM_OPT_INSTRUMENT_FASTFORWARD 2
 
+
+#if defined(__i386)
+   #define MAGIC_REG_A "a"
+   #define MAGIC_REG_B "d"
+   #define MAGIC_REG_C "c"
+#else
+   #define MAGIC_REG_A "a"
+   #define MAGIC_REG_B "b"
+   #define MAGIC_REG_C "c"
+#endif
+
+
 // long is guaranteed to be the pointer type of the system,
 // which is usually the largest integer variable size
-#define SimMagic0(cmd) ({              \
-   unsigned long _cmd = (cmd), _res;   \
-   __asm__ __volatile__ (              \
-   "xchg %%bx, %%bx\n"                 \
-   : "=a" (_res)     /* output    */   \
-   : "a" (_cmd)      /* input     */   \
-      );             /* clobbered */   \
-   _res;                               \
+#define SimMagic0(cmd) ({                    \
+   unsigned long _cmd = (cmd), _res;         \
+   __asm__ __volatile__ (                    \
+   "xchg %%bx, %%bx\n"                       \
+   : "=a" (_res)           /* output    */   \
+   : MAGIC_REG_A (_cmd)    /* input     */   \
+      );                   /* clobbered */   \
+   _res;                                     \
 })
 
-#define SimMagic1(cmd, arg0) ({        \
+#define SimMagic1(cmd, arg0) ({              \
    unsigned long _cmd = (cmd), _arg0 = (arg0), _res; \
-   __asm__ __volatile__ (              \
-   "xchg %%bx, %%bx\n"                 \
-   : "=a" (_res)     /* output    */   \
-   : "a" (_cmd),                       \
-     "b" (_arg0)     /* input     */   \
-      );             /* clobbered */   \
-   _res;                               \
+   __asm__ __volatile__ (                    \
+   "xchg %%bx, %%bx\n"                       \
+   : "=a" (_res)           /* output    */   \
+   : MAGIC_REG_A (_cmd),                     \
+     MAGIC_REG_B (_arg0)   /* input     */   \
+      );                   /* clobbered */   \
+   _res;                                     \
 })
 
-#define SimMagic2(cmd, arg0, arg1) ({  \
+#define SimMagic2(cmd, arg0, arg1) ({        \
    unsigned long _cmd = (cmd), _arg0 = (arg0), _arg1 = (arg1), _res; \
-   __asm__ __volatile__ (              \
-   "xchg %%bx, %%bx\n"                 \
-   : "=a" (_res)     /* output    */   \
-   : "a" (_cmd),                       \
-     "b" (_arg0),                      \
-     "c" (_arg1)     /* input     */   \
-      );             /* clobbered */   \
-   _res;                               \
+   __asm__ __volatile__ (                    \
+   "xchg %%bx, %%bx\n"                       \
+   : "=a" (_res)           /* output    */   \
+   : MAGIC_REG_A (_cmd),                     \
+     MAGIC_REG_B (_arg0),                    \
+     MAGIC_REG_C (_arg1)   /* input     */   \
+      );                   /* clobbered */   \
+   _res;                                     \
 })
 
 
@@ -63,6 +77,8 @@
 #define SimRoiEnd()               SimMagic0(SIM_CMD_ROI_END)
 #define SimGetProcId()            SimMagic0(SIM_CMD_PROC_ID)
 #define SimGetThreadId()          SimMagic0(SIM_CMD_THREAD_ID)
+#define SimGetNumProcs()          SimMagic0(SIM_CMD_NUM_PROCS)
+#define SimGetNumThreads()        SimMagic0(SIM_CMD_NUM_THREADS)
 #define SimSetFreqMHz(proc, mhz)  SimMagic2(SIM_CMD_MHZ_SET, proc, mhz)
 #define SimSetOwnFreqMHz(mhz)     SimSetFreqMHz(UINT64_MAX, mhz)
 #define SimGetFreqMHz(proc)       SimMagic1(SIM_CMD_MHZ_GET, proc)

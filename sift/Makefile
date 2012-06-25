@@ -24,7 +24,7 @@ XED_HOME=$(PIN_HOME)/extras/xed2-$(TARGET_ARCH)
 
 CXXFLAGS=$(OPT_CFLAGS) -fPIC -std=c++0x -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
 
-%.o : %.cc *.h Makefile
+%.o : %.cc $(wildcard *.h) Makefile
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CXX   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
 	@$(CXX) -c -o $@ $< $(CXXFLAGS)

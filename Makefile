@@ -15,7 +15,7 @@ SIM_TARGETS=$(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE)
 
 all: dependencies $(SIM_TARGETS) configscripts
 
-dependencies: pin python linux output_files builddir showdebugstatus
+dependencies: pin python mcpat linux output_files builddir showdebugstatus
 
 $(SIM_TARGETS): dependencies package_deps
 
@@ -48,6 +48,13 @@ ifneq ($(NO_PYTHON_DOWNLOAD),1)
 python: python_kit/include/python2.7/Python.h
 python_kit/include/python2.7/Python.h:
 	wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz
+endif
+
+ifneq ($(NO_MCPAT_DOWNLOAD),1)
+mcpat: mcpat/mcpatXeonCore
+mcpat/mcpatXeonCore:
+	mkdir -p mcpat
+	wget -O - --no-verbose "http://snipersim.org/packages/mcpat.tgz" | tar xz -C mcpat
 endif
 
 linux: include/linux/perf_event.h

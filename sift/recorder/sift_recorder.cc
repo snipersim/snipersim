@@ -2,15 +2,20 @@
 #include <fstream>
 #include <stdlib.h>
 #include <syscall.h>
-//#include <unordered_map>
 #include <vector>
 #include <deque>
+#include <map>
 
 #include <cstdio>
 #include <cassert>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <strings.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
+#include <string.h>
+#include <pthread.h>
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -23,91 +28,109 @@
 //#define DEBUG_OUTPUT 1
 #define DEBUG_OUTPUT 0
 
+#define LINE_SIZE_BYTES 64
+#define MAX_NUM_SYSCALLS 4096
+#define MAX_NUM_THREADS 128
+
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "trace", "output");
 KNOB<UINT64> KnobBlocksize(KNOB_MODE_WRITEONCE, "pintool", "b", "0", "blocksize");
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
+KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
 
-BOOL in_detail = false;
 UINT64 blocksize;
 UINT64 fast_forward_target = 0;
 UINT64 detailed_target = 0;
-UINT64 blocknum = 0;
-UINT64 icount = 0;
-UINT64 icount_detailed = 0;
-std::deque<ADDRINT> dyn_address_queue;
+PIN_MUTEX access_memory_lock;
+PIN_MUTEX new_threadid_lock;
+std::deque<ADDRINT> tidptrs;
 
-Sift::Writer *output;
-Bbv bbv;
-ADDRINT bbv_base = 0;
-UINT64 bbv_count = 0;
+typedef struct {
+   Sift::Writer *output;
+   std::deque<ADDRINT> *dyn_address_queue;
+   Bbv *bbv;
+   ADDRINT bbv_base;
+   UINT64 bbv_count;
+   UINT64 blocknum;
+   UINT64 icount;
+   UINT64 icount_detailed;
+   UINT32 last_syscall_number;
+   UINT32 last_syscall_returnval;
+   ADDRINT tid_ptr;
+   BOOL in_detail;
+   BOOL last_syscall_emulated;
+   #if defined(TARGET_IA32)
+      uint8_t __pad[2];
+   #elif defined(TARGET_INTEL64)
+      uint8_t __pad[46];
+   #endif
+} __attribute__((packed)) thread_data_t;
+thread_data_t *thread_data;
 
-void openFile();
-void closeFile();
+static_assert((sizeof(thread_data_t) % LINE_SIZE_BYTES) == 0, "Error: Thread data should be a multiple of the line size to prevent false sharing");
 
-VOID countInsns(THREADID thread_id, INT32 count)
+bool emulateSyscall[MAX_NUM_SYSCALLS] = {0};
+
+void openFile(THREADID threadid);
+void closeFile(THREADID threadid);
+
+VOID countInsns(THREADID threadid, INT32 count)
 {
-   // TODO: support multi-threading
-   assert(thread_id == 0);
+   thread_data[threadid].icount += count;
 
-   icount += count;
-
-   if (icount >= fast_forward_target)
+   if (thread_data[threadid].icount >= fast_forward_target)
    {
-      std::cout << "[SIFT_RECORDER] Changing to detailed after " << icount << " instructions" << std::endl;
-      in_detail = true;
-      icount = 0;
+      std::cerr << "[SIFT_RECORDER:" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
+      thread_data[threadid].in_detail = true;
+      thread_data[threadid].icount = 0;
       PIN_RemoveInstrumentation();
    }
 }
 
-VOID sendInstruction(THREADID thread_id, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing)
+VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing)
 {
-   // TODO: support multi-threading
-   assert(thread_id == 0);
+   ++thread_data[threadid].icount;
+   ++thread_data[threadid].icount_detailed;
 
-   ++icount;
-   ++icount_detailed;
-
-   if (bbv_base == 0)
+   if (thread_data[threadid].bbv_base == 0)
    {
-      bbv_base = addr; // We're the start of a new basic block
+      thread_data[threadid].bbv_base = addr; // We're the start of a new basic block
    }
-   bbv_count++;
+   thread_data[threadid].bbv_count++;
    if (is_branch)
    {
-      bbv.count(bbv_base, bbv_count);
-      bbv_base = 0; // Next instruction starts a new basic block
-      bbv_count = 0;
+      thread_data[threadid].bbv->count(thread_data[threadid].bbv_base, thread_data[threadid].bbv_count);
+      thread_data[threadid].bbv_base = 0; // Next instruction starts a new basic block
+      thread_data[threadid].bbv_count = 0;
    }
 
    intptr_t addresses[Sift::MAX_DYNAMIC_ADDRESSES] = { 0 };
    for(uint8_t i = 0; i < num_addresses; ++i)
    {
-      addresses[i] = dyn_address_queue.front();
-      assert(!dyn_address_queue.empty());
-      dyn_address_queue.pop_front();
+      addresses[i] = thread_data[threadid].dyn_address_queue->front();
+      assert(!thread_data[threadid].dyn_address_queue->empty());
+      thread_data[threadid].dyn_address_queue->pop_front();
    }
-   assert(dyn_address_queue.empty());
+   assert(thread_data[threadid].dyn_address_queue->empty());
 
-   output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
+   thread_data[threadid].output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
 
-   if (detailed_target != 0 && icount_detailed >= detailed_target)
+   if (detailed_target != 0 && thread_data[threadid].icount_detailed >= detailed_target)
    {
       PIN_Detach();
       return;
    }
 
-   if (blocksize && icount >= blocksize)
+   if (blocksize && thread_data[threadid].icount >= blocksize)
    {
-      openFile();
-      icount = 0;
+      openFile(threadid);
+      thread_data[threadid].icount = 0;
    }
 }
 
-VOID handleMemory(THREADID thread_id, ADDRINT address)
+VOID handleMemory(THREADID threadid, ADDRINT address)
 {
-   dyn_address_queue.push_back(address);
+   thread_data[threadid].dyn_address_queue->push_back(address);
 }
 
 UINT32 addMemoryModeling(INS ins)
@@ -146,13 +169,86 @@ VOID insertCall(INS ins, IPOINT ipoint, UINT32 num_addresses, BOOL is_branch, BO
       IARG_END);
 }
 
+// Emulate all system calls
+// Do this as a regular callback (versus syscall enter/exit functions) as those hold the global pin lock
+VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
+{
+   ADDRINT syscall_number = PIN_GetContextReg(ctxt, REG_GAX);
+
+   assert(syscall_number < MAX_NUM_SYSCALLS);
+
+   #if defined(TARGET_IA32)
+      uint32_t args[6];
+      args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBX);
+      args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GCX);
+      args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
+      args[3] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
+      args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
+      args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBP);
+   #elif defined(TARGET_INTEL64)
+      uint64_t args[6];
+      args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
+      args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
+      args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
+      args[3] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R10);
+      args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R8);
+      args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R9);
+   #else
+      #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64"
+   #endif
+
+   if (syscall_number == SYS_write)
+   {
+      int fd = (int)args[0];
+      const char *buf = (const char*)args[1];
+      size_t count = (size_t)args[2];
+
+      if (count > 0 && (fd == 1 || fd == 2))
+         thread_data[threadid].output->Output(fd, buf, count);
+
+      thread_data[threadid].last_syscall_emulated = false;
+   }
+   // Handle SYS_clone child tid capture for proper pthread_join emulation.
+   // When the CLONE_CHILD_CLEARTID option is enabled, remember its child_tidptr and
+   // then when the thread ends, write 0 to the tid mutex and futex_wake it
+   else if (syscall_number == SYS_clone)
+   {
+      thread_data[threadid].output->NewThread();
+      // Store the thread's tid ptr for later use
+      ADDRINT tidptr = args[3];
+      PIN_MutexLock(&new_threadid_lock);
+      tidptrs.push_back(tidptr);
+      PIN_MutexUnlock(&new_threadid_lock);
+   }
+   else if (emulateSyscall[syscall_number])
+   {
+      thread_data[threadid].last_syscall_number = syscall_number;
+      thread_data[threadid].last_syscall_emulated = true;
+      thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+   }
+   else
+   {
+      thread_data[threadid].last_syscall_emulated = false;
+   }
+}
+
 VOID traceCallback(TRACE trace, void *v)
 {
    BBL bbl_head = TRACE_BblHead(trace);
 
    for (BBL bbl = bbl_head; BBL_Valid(bbl); bbl = BBL_Next(bbl))
    {
-      if (!in_detail)
+      BOOL any_thread_in_detail = false;
+      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      {
+         if (thread_data[i].in_detail)
+         {
+            any_thread_in_detail = true;
+            break;
+         }
+      }
+
+      if (!any_thread_in_detail)
       {
          BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)countInsns, IARG_THREAD_ID, IARG_UINT32, BBL_NumIns(bbl), IARG_END);
       }
@@ -173,6 +269,23 @@ VOID traceCallback(TRACE trace, void *v)
             else
                insertCall(ins, IPOINT_BEFORE,       num_addresses, false /* is_branch */, false /* taken */);
 
+            // Handle emulated syscalls
+            if (KnobEmulateSyscalls.Value())
+            {
+               if (INS_IsSyscall(ins))
+               {
+                  INS_InsertPredicatedCall
+                  (
+                     ins,
+                     IPOINT_BEFORE,
+                     AFUNPTR(emulateSyscallFunc),
+                     IARG_THREAD_ID,
+                     IARG_CONST_CONTEXT,
+                     IARG_END
+                  );
+               }
+            }
+
             if (ins == BBL_InsTail(bbl))
                break;
          }
@@ -180,35 +293,40 @@ VOID traceCallback(TRACE trace, void *v)
    }
 }
 
-VOID syscallEntryCallback(THREADID threadIndex, CONTEXT *ctxt, SYSCALL_STANDARD std, VOID *v)
+VOID syscallEntryCallback(THREADID threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, VOID *v)
 {
-   if (!in_detail)
+   if (!thread_data[threadid].last_syscall_emulated)
+   {
       return;
-
-   ADDRINT syscall_number = PIN_GetContextReg(ctxt, REG_GAX);
-   if (syscall_number == SYS_write) {
-      int fd = (int)PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
-      const char *buf = (const char*)PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
-      size_t count = (size_t)PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
-
-      if (count > 0 && (fd == 1 || fd == 2))
-         output->Output(fd, buf, count);
    }
+
+   PIN_SetSyscallNumber(ctxt, syscall_standard, SYS_getpid);
 }
 
-VOID TheEnd()
+VOID syscallExitCallback(THREADID threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, VOID *v)
 {
-   closeFile();
+   if (!thread_data[threadid].last_syscall_emulated)
+   {
+      return;
+   }
+
+   PIN_SetContextReg(ctxt, REG_GAX, thread_data[threadid].last_syscall_returnval);
+   thread_data[threadid].last_syscall_emulated = false;
 }
 
 VOID Fini(INT32 code, VOID *v)
 {
-   TheEnd();
+   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   {
+      if (thread_data[i].output)
+      {
+         closeFile(i);
+      }
+   }
 }
 
 VOID Detach(VOID *v)
 {
-   TheEnd();
 }
 
 void getCode(uint8_t *dst, const uint8_t *src, uint32_t size)
@@ -216,56 +334,171 @@ void getCode(uint8_t *dst, const uint8_t *src, uint32_t size)
    PIN_SafeCopy(dst, src, size);
 }
 
-void openFile()
+void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::MemoryOpType mem_op, uint64_t d_addr, uint8_t* data_buffer, uint32_t data_size)
 {
-   if (output)
+   // Lock memory globally if requested
+   // This operation does not occur very frequently, so this should not impact performance
+   if (lock_signal == Sift::MemLock)
    {
-      closeFile();
-      ++blocknum;
+      PIN_MutexLock(&access_memory_lock);
    }
 
-   char filename[1024];
-   if (blocksize)
-      sprintf(filename, "%s.%"PRIu64".sift", KnobOutputFile.Value().c_str(), blocknum);
+   if (mem_op == Sift::MemRead)
+   {
+      // The simulator is requesting data from us
+      memcpy(data_buffer, reinterpret_cast<void*>(d_addr), data_size);
+   }
+   else if (mem_op == Sift::MemWrite)
+   {
+      // The simulator is requesting that we write data back to memory
+      memcpy(reinterpret_cast<void*>(d_addr), data_buffer, data_size);
+   }
    else
-      sprintf(filename, "%s.sift", KnobOutputFile.Value().c_str());
+   {
+      std::cerr << "Error: invalid memory operation type" << std::endl;
+      assert(false);
+   }
 
-   std::cout << "[SIFT_RECORDER] Output = [" << filename << "]" << std::endl;
-
-   // Open the file for writing
-   try {
-      output = new Sift::Writer(filename, getCode);
-   } catch (...) {
-      std::cout << "[SIFT_RECORDER] Error: Unable to open the output file " << filename << std::endl;
-      exit(1);
+   if (lock_signal == Sift::MemUnlock)
+   {
+      PIN_MutexUnlock(&access_memory_lock);
    }
 }
 
-void closeFile()
+void openFile(THREADID threadid)
 {
-   std::cout << "[SIFT_RECORDER] Recorded " << icount << " instructions" << std::endl;
-   delete output;
+   if (thread_data[threadid].output)
+   {
+      closeFile(threadid);
+      ++thread_data[threadid].blocknum;
+   }
+
+   if (threadid != 0)
+   {
+      assert(KnobEmulateSyscalls.Value() != 0);
+   }
+
+   char filename[1024] = {0};
+   char response_filename[1024] = {0};
+   if (KnobEmulateSyscalls.Value() == 0)
+   {
+      if (blocksize)
+         sprintf(filename, "%s.%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum);
+      else
+         sprintf(filename, "%s.sift", KnobOutputFile.Value().c_str());
+   }
+   else
+   {
+      if (blocksize)
+         sprintf(filename, "%s.%" PRIu64 ".th%u.sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, threadid);
+      else
+         sprintf(filename, "%s.th%u.sift", KnobOutputFile.Value().c_str(), threadid);
+   }
+
+   std::cerr << "[SIFT_RECORDER:" << threadid << "] Output = [" << filename << "]" << std::endl;
+
+   if (KnobEmulateSyscalls.Value())
+   {
+      sprintf(response_filename, "%s_response.th%u.sift", KnobOutputFile.Value().c_str(), threadid);
+      std::cerr << "[SIFT_RECORDER:" << threadid << "] Response = [" << response_filename << "]" << std::endl;
+   }
+
+
+   // Open the file for writing
+   try {
+      thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid);
+   } catch (...) {
+      std::cerr << "[SIFT_RECORDER:" << threadid << "] Error: Unable to open the output file " << filename << std::endl;
+      exit(1);
+   }
+
+   thread_data[threadid].output->setHandleAccessMemoryFunc(handleAccessMemory, reinterpret_cast<void*>(threadid));
+}
+
+void closeFile(THREADID threadid)
+{
+   std::cerr << "[SIFT_RECORDER:" << threadid << "] Recorded " << thread_data[threadid].icount << " instructions" << std::endl;
+   delete thread_data[threadid].output;
+   thread_data[threadid].output = NULL;
 
    if (blocksize)
    {
-      if (bbv_count)
+      if (thread_data[threadid].bbv_count)
       {
-         bbv.count(bbv_base, bbv_count);
-         bbv_base = 0; // Next instruction starts a new basic block
-         bbv_count = 0;
+         thread_data[threadid].bbv->count(thread_data[threadid].bbv_base, thread_data[threadid].bbv_count);
+         thread_data[threadid].bbv_base = 0; // Next instruction starts a new basic block
+         thread_data[threadid].bbv_count = 0;
       }
 
       char filename[1024];
-      sprintf(filename, "%s.%"PRIu64".bbv", KnobOutputFile.Value().c_str(), blocknum);
+      sprintf(filename, "%s.%" PRIu64 ".bbv", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum);
 
       FILE *fp = fopen(filename, "w");
-      fprintf(fp, "%"PRIu64"\n", bbv.getInstructionCount());
+      fprintf(fp, "%" PRIu64 "\n", thread_data[threadid].bbv->getInstructionCount());
       for(int i = 0; i < Bbv::NUM_BBV; ++i)
-         fprintf(fp, "%"PRIu64"\n", bbv.getDimension(i) / bbv.getInstructionCount());
+         fprintf(fp, "%" PRIu64 "\n", thread_data[threadid].bbv->getDimension(i) / thread_data[threadid].bbv->getInstructionCount());
       fclose(fp);
 
-      bbv.clear();
+      thread_data[threadid].bbv->clear();
    }
+}
+
+// The thread that watched this new thread start is responsible for setting up the connection with the simulator
+VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
+{
+   assert(thread_data[threadid].bbv == NULL);
+   assert(thread_data[threadid].dyn_address_queue == NULL);
+
+   // The first thread (master) doesn't need to join with anyone else
+   PIN_MutexLock(&new_threadid_lock);
+   if (tidptrs.size() > 0)
+   {
+      thread_data[threadid].tid_ptr = tidptrs.front();
+      tidptrs.pop_front();
+   }
+   PIN_MutexUnlock(&new_threadid_lock);
+
+   thread_data[threadid].bbv = new Bbv();
+   thread_data[threadid].dyn_address_queue = new std::deque<ADDRINT>();
+
+   openFile(threadid);
+}
+
+VOID threadFinishHelper(VOID *arg)
+{
+   uint64_t threadid = reinterpret_cast<uint64_t>(arg);
+   if (thread_data[threadid].tid_ptr)
+   {
+      // Set this pointer to 0 to indicate that this thread is complete
+      pthread_t *tid = (pthread_t *)thread_data[threadid].tid_ptr;
+      *tid = 0;
+      // Send the FUTEX_WAKE to the simulator to wake up a potential pthread_join() caller
+      uint64_t args[6] = {0};
+      args[0] = (uint64_t)tid;
+      args[1] = FUTEX_WAKE;
+      args[2] = 1;
+      thread_data[threadid].output->Syscall(SYS_futex, (char*)args, sizeof(args));
+   }
+
+   thread_data[threadid].output->End();
+
+   delete thread_data[threadid].dyn_address_queue;
+   delete thread_data[threadid].bbv;
+
+   thread_data[threadid].dyn_address_queue = NULL;
+   thread_data[threadid].bbv = NULL;
+}
+
+VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
+{
+#if DEBUG_OUTPUT
+   std::cerr << "[SIFT_RECORDER:" << threadid << "] Finish Thread" << std::endl;
+#endif
+
+   // To prevent deadlocks during simulation, start a new thread to handle this thread's
+   // cleanup.  This is needed because this function could be called in the context of
+   // another thread, creating a deadlock scenario.
+   PIN_SpawnInternalThread(threadFinishHelper, (VOID*)threadid, NULL, NULL);
 }
 
 int main(int argc, char **argv)
@@ -274,17 +507,40 @@ int main(int argc, char **argv)
       std::cerr << "Error, invalid parameters" << std::endl;
       exit(1);
    }
+   PIN_InitSymbols();
+
+   size_t thread_data_size = MAX_NUM_THREADS * sizeof(*thread_data);
+   if (posix_memalign((void**)&thread_data, LINE_SIZE_BYTES, thread_data_size) != 0)
+   {
+      std::cerr << "Error, posix_memalign() failed" << std::endl;
+      exit(1);
+   }
+   bzero(thread_data, thread_data_size);
+
+   PIN_MutexInit(&access_memory_lock);
+   PIN_MutexInit(&new_threadid_lock);
 
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();
    if (fast_forward_target == 0)
-      in_detail = true;
+   {
+      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      {
+         thread_data[i].in_detail = true;
+      }
+   }
 
-   openFile();
+   if (KnobEmulateSyscalls.Value())
+   {
+      emulateSyscall[SYS_futex] = true;
+      PIN_AddSyscallEntryFunction(syscallEntryCallback, 0);
+      PIN_AddSyscallExitFunction(syscallExitCallback, 0);
+   }
 
    TRACE_AddInstrumentFunction(traceCallback, 0);
-   PIN_AddSyscallEntryFunction(syscallEntryCallback, 0);
+   PIN_AddThreadStartFunction(threadStart, 0);
+   PIN_AddThreadFiniFunction(threadFinish, 0);
    PIN_AddFiniFunction(Fini, 0);
    PIN_AddDetachFunction(Detach, 0);
 

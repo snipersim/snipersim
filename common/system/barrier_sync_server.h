@@ -18,14 +18,17 @@ class BarrierSyncServer : public ClockSkewMinimizationServer
       std::unordered_map<thread_id_t, bool> m_barrier_acquire_list;
       SubsecondTime m_global_time;
       bool m_fastforward;
+      volatile bool m_disable;
 
       bool isBarrierReached(void);
       bool barrierRelease(thread_id_t thread_id = INVALID_THREAD_ID);
+      void abortBarrier(void);
 
    public:
       BarrierSyncServer();
       ~BarrierSyncServer();
 
+      virtual void setDisable(bool disable);
       void synchronize(thread_id_t thread_id, SubsecondTime time);
       void signal();
       void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime());

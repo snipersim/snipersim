@@ -31,7 +31,7 @@ void hook_print_core0_ipc(void*, subsecond_time_t _time)
       UInt64 d_cycles = SubsecondTime::divideRounded(d_time, *clock);
       if (d_cycles) {
          FixedPoint ipc = FixedPoint(d_instructions) / d_cycles;
-         printf("t = %"PRIu64" ns, ipKc = %"PRId64"\n", time.getNS(), FixedPoint::floor(ipc * 1000));
+         printf("t = %" PRIu64 " ns, ipKc = %" PRId64 "\n", time.getNS(), FixedPoint::floor(ipc * 1000));
       }
    }
 

@@ -7,6 +7,7 @@
 #include "core_manager.h"
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
+#include "trace_manager.h"
 #include "simulator.h"
 #include "log.h"
 #include "config.hpp"
@@ -171,7 +172,7 @@ Core::countInstructions(IntPtr address, UInt32 count)
       if (m_instructions >= m_instructions_callback)
       {
          disableInstructionsCallback();
-         Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTR_COUNT, (void*)(unsigned long)m_core_id);
+         Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTR_COUNT, m_core_id);
       }
    }
 }
@@ -439,9 +440,16 @@ Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_add
       LOG_ASSERT_ERROR(eip != 0, "modeled == MEM_MODELED_DYNINFO but no eip given");
 
    // In PINTOOL mode, if the data is requested, copy it to/from real memory
-   if (data_buffer && Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
+   if (data_buffer)
    {
-      nativeMemOp (NONE, mem_op_type, d_addr, data_buffer, data_size);
+      if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
+      {
+         nativeMemOp (NONE, mem_op_type, d_addr, data_buffer, data_size);
+      }
+      else if (Sim()->getConfig()->getSimulationMode() == Config::STANDALONE)
+      {
+         Sim()->getTraceManager()->accessMemory(m_core_id, lock_signal, mem_op_type, d_addr, data_buffer, data_size);
+      }
       data_buffer = NULL; // initiateMemoryAccess's data is not used
    }
 

@@ -1,0 +1,18 @@
+include ../../config/buildconf.makefile
+
+CC=$(GRAPHITE_CC)
+
+all: smc
+	@echo "\nRun 'make run' to run the smc program in the simulator with SMC support"
+	@echo "Run 'make run-fail' to run the smc program in the simulator without SMC support\n"
+
+smc: smc.c Makefile
+	$(CC) -o smc smc.c $(GRAPHITE_LDFLAGS) $(GRAPHITE_CFLAGS)
+
+run: smc
+	../../run-sniper -n 1 -c gainestown -g general/enable_smc_support=true -- ./smc
+run-fail: smc
+	../../run-sniper -n 1 -c gainestown -- ./smc
+
+clean:
+	rm -f smc sim.cfg sim.stats* *.log *.out

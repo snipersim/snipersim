@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-g <sniper-options>] {--traces=<trace0>,<trace1>,... | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-g <sniper-options>] {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -26,6 +26,7 @@ outputdir = '.'
 graphiteoptions = []
 config_file_used = False
 roi_only = False
+roi_script = False
 use_perf = False
 use_gdb = False
 gdb_wait = False
@@ -39,6 +40,7 @@ pin_stats = False
 curdir = os.getcwd()
 scripts = []
 traces = []
+resptraces = []
 
 if not sys.argv[1:]:
   usage()
@@ -46,7 +48,6 @@ if not sys.argv[1:]:
 def findconfig(filename):
   for dirname in ('.', os.path.join(HOME, 'config')):
     configfile = os.path.realpath(os.path.join(dirname, filename))
-    print configfile
     if os.path.exists(configfile):
       return configfile
     configfile += '.cfg'
@@ -69,7 +70,7 @@ def add_config_file(filename):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -90,7 +91,9 @@ for o, a in opts:
       a = '--'+a
     graphiteoptions.append(pipes.quote(a))
   if o == '--roi':
-    graphiteoptions.append('-g --general/magic=true')
+    roi_only = True
+  if o == '--roi-script':
+    roi_script = True
   if o == '-s':
     scripts.append(a)
   if o == '--perf':
@@ -129,6 +132,8 @@ for o, a in opts:
     curdir = a
   if o == '--traces':
     traces.extend(a.split(','))
+  if o == '--response-traces':
+    resptraces.extend(a.split(','))
 
 if cmdline:
   standalone = False
@@ -141,10 +146,19 @@ else:
     print 'Need either a set of traces (--traces=) or a benchmark command line'
     usage()
 
+if roi_only and roi_script:
+  print 'Use either --roi or --roi-script but not both'
+  sys.exit(-1)
+
 if standalone:
   if use_appdebug:
     print '--appdebug not supported in standalone mode'
     sys.exit(-1)
+
+if roi_only:
+  graphiteoptions.append('-g --general/magic=true')
+if roi_script:
+  graphiteoptions.append('-g --general/roi_script=true')
 
 if not config_file_used:
   # No config file(s) specified: prepend default Xeon X5550 Gainestown
@@ -187,12 +201,24 @@ def findtrace(trace):
 
 if traces:
   graphiteoptions.append('-g --traceinput/enabled=true')
-  graphiteoptions.append('-g --traceinput/threads=%d' % len(traces))
+  if ncores > 1:
+    graphiteoptions.append('-g --traceinput/emulate_syscalls=true')
+  else:
+    graphiteoptions.append('-g --traceinput/emulate_syscalls=false')
+  graphiteoptions.append('-g --traceinput/threads=1') # Start only one thread per process
   for thread_id, trace in enumerate(traces):
     filename = findtrace(trace)
     if filename:
       print '[SNIPER] (%u) Using trace file %s' % (thread_id, filename)
       graphiteoptions.append('-g --traceinput/thread_%u=%s' % (thread_id, filename))
+    else:
+      print 'Cannot find trace', trace
+      sys.exit(-1)
+  for thread_id, trace in enumerate(resptraces):
+    filename = findtrace(trace)
+    if filename:
+      print '[SNIPER] (%u) Using response-trace file %s' % (thread_id, filename)
+      graphiteoptions.append('-g --traceinput/thread_response_%u=%s' % (thread_id, filename))
     else:
       print 'Cannot find trace', trace
       sys.exit(-1)

@@ -50,14 +50,21 @@ void routineStartCallback(RTN rtn, INS ins)
 {
    String rtn_name = RTN_Name(rtn).c_str();
 
-   // Routine instrumentation functions can cause a rescheduling need to be called *before* the handleBasicBlock
-   // for any code in the routine, else, we would first issue the basic block to one core and later the send the
-   // dynamic information to another core.
+   // Routine instrumentation functions which can cause a rescheduling, or a jump in application code,
+   // need to be called *before* the handleBasicBlock for any code in the routine,
+   // else, we would first issue the basic block to one core and later the send the
+   // dynamic information to another core, or send dynamic instructions for the wrong basic block.
 
    // Thread Joining
    if (rtn_name.find("pthread_join") != string::npos)
    {
       INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(emuPthreadJoinBefore), IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
+   }
+
+   // icc/openmp compatibility
+   if (rtn_name == "__kmp_reap_monitor")
+   {
+      INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(emuKmpReapMonitor), IARG_THREAD_ID, IARG_CONTEXT, IARG_END);
    }
 }
 
@@ -365,14 +372,6 @@ void routineCallback(RTN rtn, void* v)
       if (rtn_name == "clock_gettime")       RTN_Replace(rtn, AFUNPTR(emuClockGettime));
       if (rtn_name.find("gettimeofday") != String::npos)
                                              RTN_Replace(rtn, AFUNPTR(emuGettimeofday));
-   }
-
-   // icc/openmp compatibility
-   if (rtn_name == "__kmp_reap_monitor")
-   {
-      RTN_Open(rtn);
-      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(emuKmpReapMonitor), IARG_THREAD_ID, IARG_CONTEXT, IARG_END);
-      RTN_Close(rtn);
    }
 
    // save pointers to some functions we'll want to call through PIN_CallApplicationFunction

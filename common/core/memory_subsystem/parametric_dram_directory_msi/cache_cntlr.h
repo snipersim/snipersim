@@ -50,15 +50,29 @@ namespace ParametricDramDirectoryMSI
          };
    };
 
+   class Prefetch
+   {
+      public:
+         enum prefetch_type_t
+         {
+            NONE,    // Not a prefetch
+            OWN,     // Prefetch initiated locally
+            OTHER    // Prefetch initiated by a higher-level cache
+         };
+   };
+
    class CacheParameters
    {
       public:
+         String configName;
          UInt32 size;
          UInt32 associativity;
          String replacement_policy;
+         bool perfect;
          ComponentLatency data_access_time;
          ComponentLatency tags_access_time;
          ComponentLatency writeback_time;
+         ComponentBandwidthPerCycle next_level_read_bandwidth;
          String perf_model_type;
          bool writethrough;
          UInt32 shared_cores;
@@ -70,11 +84,13 @@ namespace ParametricDramDirectoryMSI
             , tags_access_time(NULL,0)
             , writeback_time(NULL,0)
          {}
-         CacheParameters(UInt32 _size, UInt32 _associativity, String _replacement_policy,
-            const ComponentLatency& _data_access_time, const ComponentLatency& _tags_access_time, const ComponentLatency& _writeback_time, String _perf_model_type,
-            bool _writethrough, UInt32 _shared_cores, bool _prefetcher, UInt32 _outstanding_misses) :
-            size(_size), associativity(_associativity), replacement_policy(_replacement_policy),
-            data_access_time(_data_access_time), tags_access_time(_tags_access_time), writeback_time(_writeback_time),
+         CacheParameters(String _configName, UInt32 _size, UInt32 _associativity, String _replacement_policy, bool _perfect,
+            const ComponentLatency& _data_access_time, const ComponentLatency& _tags_access_time,
+            const ComponentLatency& _writeback_time, const ComponentBandwidthPerCycle& _next_level_read_bandwidth,
+            String _perf_model_type, bool _writethrough, UInt32 _shared_cores, bool _prefetcher, UInt32 _outstanding_misses) :
+            configName(_configName), size(_size), associativity(_associativity), replacement_policy(_replacement_policy), perfect(_perfect),
+            data_access_time(_data_access_time), tags_access_time(_tags_access_time),
+            writeback_time(_writeback_time), next_level_read_bandwidth(_next_level_read_bandwidth),
             perf_model_type(_perf_model_type), writethrough(_writethrough), shared_cores(_shared_cores),
             prefetcher(_prefetcher), outstanding_misses(_outstanding_misses)
          {}
@@ -117,6 +133,7 @@ namespace ParametricDramDirectoryMSI
 
          Mshr mshr;
          ContentionModel m_l1_mshr;
+         ContentionModel m_next_level_read_bandwidth;
          CacheDirectoryWaiterMap m_directory_waiters;
          IntPtr m_evicting_address;
          Byte* m_evicting_buf;
@@ -132,7 +149,8 @@ namespace ParametricDramDirectoryMSI
             : m_cache(NULL)
             , m_prefetcher(NULL)
             , m_dram_cntlr(NULL)
-            , m_l1_mshr(name, core_id, outstanding_misses)
+            , m_l1_mshr(name + ".mshr", core_id, outstanding_misses)
+            , m_next_level_read_bandwidth(name + ".next_read", core_id)
          {}
          ~CacheMasterCntlr();
 
@@ -151,8 +169,9 @@ namespace ParametricDramDirectoryMSI
          CacheCntlr* m_last_level;
          AddressHomeLookup* m_dram_directory_home_lookup;
          std::unordered_map<IntPtr, MemComponent::component_t> m_shmem_req_source_map;
-         bool m_perfect_llc;
+         bool m_perfect;
          bool m_l1_mshr;
+         UInt32 m_num_prefetches;
 
          struct {
            UInt64 loads, stores;
@@ -183,7 +202,7 @@ namespace ParametricDramDirectoryMSI
          std::unordered_map<HitWhere::where_t, StatHist> lat_by_where;
          #endif
 
-         void updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cache_hit, CacheState::cstate_t state, bool isPrefetch);
+         void updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cache_hit, CacheState::cstate_t state, Prefetch::prefetch_type_t isPrefetch);
          void cleanupMshr();
          void transition(IntPtr address, Transition::reason_t reason, CacheState::cstate_t old_state, CacheState::cstate_t new_state);
 
@@ -191,6 +210,7 @@ namespace ParametricDramDirectoryMSI
          UInt32 m_cache_block_size;
          bool m_cache_writethrough;
          ComponentLatency m_writeback_time;
+         ComponentBandwidthPerCycle m_next_level_read_bandwidth;
 
          UInt32 m_shared_cores;        /**< Number of cores this cache is shared with */
          core_id_t m_core_id_master;   /**< Core id of the 'master' (actual) cache controller we're proxying */
@@ -209,8 +229,9 @@ namespace ParametricDramDirectoryMSI
          bool operationPermissibleinCache(
                IntPtr address, Core::mem_op_t mem_op_type);
 
-         void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address);
-         void Prefetch(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, SubsecondTime t_start);
+         void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_start);
+         void Prefetch(Core::mem_op_t mem_op_type, IntPtr address, SubsecondTime t_start);
+         void doPrefetch(IntPtr prefetch_address, SubsecondTime t_start);
 
          // Cache meta-data operations
          SharedCacheBlockInfo* getCacheBlockInfo(IntPtr address);
@@ -222,12 +243,12 @@ namespace ParametricDramDirectoryMSI
          void retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::Thread_t thread_num);
 
 
-         void insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, ShmemPerfModel::Thread_t thread_num);
+         SharedCacheBlockInfo* insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, ShmemPerfModel::Thread_t thread_num);
          std::pair<SubsecondTime, bool> updateCacheBlock(IntPtr address, CacheState::cstate_t cstate, Transition::reason_t reason, Byte* out_buf, ShmemPerfModel::Thread_t thread_num);
          void writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length, ShmemPerfModel::Thread_t thread_num);
 
          // Handle Request from previous level cache
-         HitWhere::where_t processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool isPrefetch, SubsecondTime t_issue, bool have_write_lock);
+         HitWhere::where_t processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock);
 
          // Process Request from L1 Cache
          void accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf);

@@ -212,11 +212,22 @@ VOID traceCallback(TRACE trace, void *v)
       // Instruction modeling
       if (Sim()->getConfig()->getEnablePerBasicblock()) {
          std::pair<ADDRINT, ADDRINT> key(INS_Address(BBL_InsHead(bbl)), INS_Address(BBL_InsTail(bbl)));
-         if (basicblock_cache.count(key) == 0) {
+         if (Sim()->getConfig()->getEnableSMCSupport())
+         {
+            // SMC support enabled: never cache BasicBlocks
+            basic_block = new BasicBlock();
+            basic_block_is_new = true;
+         }
+         else if (basicblock_cache.count(key) == 0)
+         {
+            // BasicBlock cache miss
             basic_block = new BasicBlock();
             basic_block_is_new = true;
             basicblock_cache[key] = basic_block;
-         } else {
+         }
+         else
+         {
+            // BasicBlock cache hit
             basic_block = basicblock_cache[key];
             basic_block_is_new = false;
          }
@@ -227,11 +238,22 @@ VOID traceCallback(TRACE trace, void *v)
       for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins)) {
          if (!Sim()->getConfig()->getEnablePerBasicblock()) {
             std::pair<ADDRINT, ADDRINT> key(INS_Address(ins), INS_Address(ins));
-            if (basicblock_cache.count(key) == 0) {
+            if (Sim()->getConfig()->getEnableSMCSupport())
+            {
+               // SMC support enabled: never cache BasicBlocks
+               basic_block = new BasicBlock();
+               basic_block_is_new = true;
+            }
+            else if (basicblock_cache.count(key) == 0)
+            {
+               // BasicBlock cache miss
                basic_block = new BasicBlock();
                basic_block_is_new = true;
                basicblock_cache[key] = basic_block;
-            } else {
+            }
+            else
+            {
+               // BasicBlock cache hit
                basic_block = basicblock_cache[key];
                basic_block_is_new = false;
             }
@@ -250,7 +272,9 @@ VOID traceCallback(TRACE trace, void *v)
 
 VOID traceInvalidate(ADDRINT orig_pc, ADDRINT cache_pc, BOOL success)
 {
-   LOG_PRINT_WARNING_ONCE("Trace invalidation orig_pc(%p) cache_pc(%p) success(%d)", orig_pc, cache_pc, success);
+   LOG_PRINT_WARNING_ONCE("Trace invalidation orig_pc(%p) cache_pc(%p) success(%d)\n\n"
+                          "Self-modifying code (SMC) support is not enabled, strange things may happen.\n"
+                          "Use general/enable_smc_support=true to enable.\n", orig_pc, cache_pc, success);
 }
 
 void ApplicationStart()
@@ -411,7 +435,8 @@ int main(int argc, char *argv[])
 
    initProgressTrace();
 
-   CODECACHE_AddTraceInvalidatedFunction(traceInvalidate, 0);
+   if (!Sim()->getConfig()->getEnableSMCSupport())
+      CODECACHE_AddTraceInvalidatedFunction(traceInvalidate, 0);
 
    PIN_AddDetachFunction(ApplicationDetach, 0);
    PIN_AddFiniUnlockedFunction(ApplicationExit, 0);

@@ -606,7 +606,7 @@ void
 DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    // Write data to Dram
-   SubsecondTime dram_latency = m_dram_cntlr->putDataToDram(address, requester, data_buf, now);
+   __attribute__ ((unused)) SubsecondTime dram_latency = m_dram_cntlr->putDataToDram(address, requester, data_buf, now);
    // DRAM latency is ignored on write
 }
 

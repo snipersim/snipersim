@@ -11,6 +11,7 @@ class vostream
    public:
       virtual ~vostream() {}
       virtual void write(const char* s, std::streamsize n) = 0;
+      virtual void flush() = 0;
 };
 
 class vofstream : public vostream
@@ -23,6 +24,10 @@ class vofstream : public vostream
       virtual ~vofstream() {}
       virtual void write(const char* s, std::streamsize n)
          { stream.write(s, n); }
+      virtual void flush()
+         { stream.flush(); }
+      virtual void fail()
+         { stream.fail(); }
 };
 
 class ozstream : public vostream
@@ -38,6 +43,8 @@ class ozstream : public vostream
       ozstream(vostream *output);
       virtual ~ozstream();
       virtual void write(const char* s, std::streamsize n);
+      virtual void flush()
+         { output->flush(); }
 };
 
 

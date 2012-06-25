@@ -6,6 +6,8 @@
 #include "core.h"
 #include "sim_thread_manager.h"
 
+#include <unistd.h>
+
 CoreThread::CoreThread()
    : m_thread(NULL)
 {

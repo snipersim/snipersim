@@ -42,19 +42,19 @@ LoopTracer::~LoopTracer()
 
    printf("                   %s", String(m_disas_max, ' ').c_str());
    for(uint64_t i = 0; i < num_cycles; i += 10)
-      printf("%-5"PRIu64"               ", i);
+      printf("%-5" PRIu64 "               ", i);
    printf("\n");
 
    printf("                   %s", String(m_disas_max, ' ').c_str());
    for(uint64_t i = 0; i < num_cycles; ++i)
-      printf("%"PRIu64" ", i % 10);
+      printf("%" PRIu64 " ", i % 10);
    printf("\n");
 
    // print per-instruction schedule
 
    for(Instructions::iterator it = m_instructions.begin(); it != m_instructions.end(); ++it)
    {
-      printf("[%8"PRIxPTR"] %-*s (%u)    ", it->second.instruction->getAddress(), int(m_disas_max), it->second.instruction->getDisassembly().c_str(), it->second.uop_num);
+      printf("[%8" PRIxPTR "] %-*s (%u)    ", it->second.instruction->getAddress(), int(m_disas_max), it->second.instruction->getDisassembly().c_str(), it->second.uop_num);
       std::vector<char> line(num_cycles, ' ');
       for(std::map<uint64_t, int64_t>::iterator jt = it->second.issued.begin(); jt != it->second.issued.end(); ++jt)
          if (jt->second - m_cycle_min < num_cycles && jt->first < 36)

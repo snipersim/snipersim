@@ -34,6 +34,10 @@ class HooksPy {
          public:
             static void setup(void);
       };
+      class PyControl {
+          public:
+              static void setup(void);
+      };
       class PyBbv {
          public:
             static void setup(void);

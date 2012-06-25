@@ -24,12 +24,12 @@ disableBbv(PyObject *self, PyObject *args)
 static PyObject *
 getBbv(PyObject *self, PyObject *args)
 {
-   long int core_id = -1;
+   core_id_t core_id = -1;
 
    if (!PyArg_ParseTuple(args, "l", &core_id))
       return NULL;
 
-   if (core_id >= Sim()->getConfig()->getApplicationCores()) {
+   if (core_id >= (core_id_t)Sim()->getConfig()->getApplicationCores()) {
       PyErr_SetString(PyExc_ValueError, "Core does not exist");
       return NULL;
    }

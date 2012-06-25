@@ -57,7 +57,7 @@ class DynamicMicroOp
    public:
 
       DynamicMicroOp(const MicroOp *uop, const CoreModel *core_model, ComponentPeriod period);
-      ~DynamicMicroOp();
+      virtual ~DynamicMicroOp();
 
       template<typename T> static T* alloc(Allocator *alloc, const MicroOp *uop, const CoreModel *core_model, ComponentPeriod period)
       {

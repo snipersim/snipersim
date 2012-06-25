@@ -41,6 +41,8 @@ else
 	$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(PIN_LIBS) $(LDFLAGS)
 endif
 
+include $(SIM_ROOT)/common/Makefile.common
+
 clean:
 ifeq ($(SHOW_COMPILE),)
 	@rm -f *.o sift_recorder

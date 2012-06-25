@@ -5,12 +5,15 @@
 
 #include <cassert>
 #include <cstring>
+#include <iostream>
 
-// Enable to print out everything we write
-//#define VERBOSE
+// Enable (>0) to print out everything we write
+#define VERBOSE 0
+#define VERBOSE_HEX 0
 
-Sift::Writer::Writer(char *filename, GetCodeFunc getCodeFunc, bool useCompression)
-   : getCodeFunc(getCodeFunc)
+Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id)
+   : response(NULL)
+   , getCodeFunc(getCodeFunc)
    , ninstrs(0)
    , nbranch(0)
    , npredicate(0)
@@ -18,9 +21,12 @@ Sift::Writer::Writer(char *filename, GetCodeFunc getCodeFunc, bool useCompressio
    , ninstrext(0)
    , last_address(0)
    , icache()
+   , m_id(id)
 {
    memset(hsize, 0, sizeof(hsize));
    memset(haddr, 0, sizeof(haddr));
+
+   m_response_filename = strdup(response_filename);
 
    uint64_t options = 0;
    bool use_z = false;
@@ -29,24 +35,65 @@ Sift::Writer::Writer(char *filename, GetCodeFunc getCodeFunc, bool useCompressio
 
    output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
 
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write Header" << std::endl;
+   #endif
+
    Sift::Header hdr = { Sift::MagicNumber, 0 /* header size */, options};
    output->write(reinterpret_cast<char*>(&hdr), sizeof(hdr));
+   output->flush();
 
    if (options & Option::CompressionZlib)
       output = new ozstream(output);
 }
 
+void Sift::Writer::End()
+{
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write End" << std::endl;
+   #endif
+
+   if (output)
+   {
+      Record rec;
+      rec.Other.zero = 0;
+      rec.Other.type = RecOtherEnd;
+      rec.Other.size = 0;
+      output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+      output->flush();
+   }
+
+   if (response)
+   {
+/*
+      // Disable EndResponse because of lock-up issues with Pin and sift_recorder
+      #if VERBOSE > 0
+      std::cerr << "[DEBUG:" << m_id << "] Write End - Response Wait" << std::endl;
+      #endif
+
+      Record respRec;
+      response->read(reinterpret_cast<char*>(&respRec), sizeof(respRec.Other));
+      assert(respRec.Other.zero == 0);
+      assert(respRec.Other.type == RecOtherEndResponse);
+*/
+      delete response;
+      response = NULL;
+   }
+
+   if (output)
+   {
+      delete output;
+      output = NULL;
+   }
+}
+
 Sift::Writer::~Writer()
 {
-   Record rec;
-   rec.Other.zero = 0;
-   rec.Other.type = RecOtherEnd;
-   rec.Other.size = 0;
-   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   End();
 
-   delete output;
+   delete m_response_filename;
 
-#if 0
+   #if VERBOSE > 3
    printf("instrs %lu hsize", ninstrs);
    for(int i = 1; i < 16; ++i)
       printf(" %u", hsize[i]);
@@ -55,7 +102,7 @@ Sift::Writer::~Writer()
       printf(" %u", haddr[i]);
    printf(" branch %u predicate %u\n", nbranch, npredicate);
    printf("instrsmall %u ext %u\n", ninstrsmall, ninstrext);
-#endif
+   #endif
 }
 
 void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresses, intptr_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed)
@@ -68,6 +115,9 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
    {
       if (! icache[base_addr])
       {
+         #if VERBOSE > 2
+         std::cerr << "[DEBUG:" << m_id << "] Write icache" << std::endl;
+         #endif
          Record rec;
          rec.Other.zero = 0;
          rec.Other.type = RecOtherIcache;
@@ -83,13 +133,17 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
       }
    }
 
-   #ifdef VERBOSE
+   #if VERBOSE > 2
    printf("%016lx (%d) A%u %c%c %c%c\n", addr, size, num_addresses, is_branch?'B':'.', is_branch?(taken?'T':'.'):'.', is_predicate?'C':'.', is_predicate?(executed?'E':'n'):'.');
    #endif
 
    // Try as simple instruction
    if (addr == last_address && !is_predicate)
    {
+      #if VERBOSE > 2
+      std::cerr << "[DEBUG:" << m_id << "] Write Simple Instruction" << std::endl;
+      #endif
+
       Record rec;
       rec.Instruction.size = size;
       rec.Instruction.num_addresses = num_addresses;
@@ -97,7 +151,7 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
       rec.Instruction.taken = taken;
       output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Instruction));
 
-      #ifdef VERBOSE
+      #if VERBOSE_HEX > 2
       hexdump((char*)&rec, sizeof(rec.Instruction));
       #endif
 
@@ -106,6 +160,10 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
    // Send as full instruction
    else
    {
+      #if VERBOSE > 2
+      std::cerr << "[DEBUG:" << m_id << "] Write Simple Full Instruction" << std::endl;
+      #endif
+
       Record rec;
       memset(&rec, 0, sizeof(rec));
       rec.InstructionExt.type = 0;
@@ -118,7 +176,7 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
       rec.InstructionExt.addr = addr;
       output->write(reinterpret_cast<char*>(&rec), sizeof(rec.InstructionExt));
 
-      #ifdef VERBOSE
+      #if VERBOSE_HEX > 2
       hexdump((char*)&rec, sizeof(rec.InstructionExt));
       #endif
 
@@ -143,11 +201,247 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
 
 void Sift::Writer::Output(uint8_t fd, const char *data, uint32_t size)
 {
+   #if VERBOSE > 1
+   std::cerr << "[DEBUG:" << m_id << "] Write Output" << std::endl;
+   #endif
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherOutput;
    rec.Other.size = sizeof(uint8_t) + size;
+
+   #if VERBOSE_HEX > 1
+   hexdump((char*)&rec, sizeof(rec.Other));
+   hexdump((char*)&fd, sizeof(fd));
+   hexdump((char*)data, size);
+   #endif
+
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    output->write(reinterpret_cast<char*>(&fd), sizeof(uint8_t));
    output->write(data, size);
+}
+
+int32_t Sift::Writer::NewThread()
+{
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write NewThread" << std::endl;
+   #endif
+
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherNewThread;
+   rec.Other.size = 0;
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->flush();
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write NewThread Done" << std::endl;
+   #endif
+
+   if (!response)
+   {
+     assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   int32_t retcode = 0;
+   while (true)
+   {
+      Record respRec;
+      response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      assert(respRec.Other.zero == 0);
+
+      switch(respRec.Other.type)
+      {
+         case RecOtherNewThreadResponse:
+            #if VERBOSE > 0
+            std::cerr << "[DEBUG:" << m_id << "] Read NewThreadResponse" << std::endl;
+            #endif
+            assert(respRec.Other.size == sizeof(retcode));
+            response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
+            #if VERBOSE > 0
+            std::cerr << "[DEBUG:" << m_id << "] Got NewThreadResponse thread=" << retcode << std::endl;
+            #endif
+            return retcode;
+            break;
+         default:
+            assert(false);
+            break;
+      }
+   }
+   return -1;
+}
+
+uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32_t size)
+{
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write Syscall" << std::endl;
+   #endif
+
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherSyscallRequest;
+   rec.Other.size = sizeof(uint16_t) + size;
+   #if VERBOSE_HEX > 0
+   hexdump((char*)&rec, sizeof(rec.Other));
+   hexdump((char*)&syscall_number, sizeof(syscall_number));
+   hexdump((char*)data, size);
+   #endif
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<char*>(&syscall_number), sizeof(uint16_t));
+   output->write(data, size);
+   output->flush();
+
+
+   if (!response)
+   {
+     assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   uint64_t retcode = 0;
+   while (true)
+   {
+      Record respRec;
+      response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      assert(respRec.Other.zero == 0);
+
+      switch(respRec.Other.type)
+      {
+         case RecOtherSyscallResponse:
+            #if VERBOSE > 0
+            std::cerr << "[DEBUG:" << m_id << "] Read SyscallResponse" << std::endl;
+            #endif
+            assert(respRec.Other.size == sizeof(retcode));
+            response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
+            return retcode;
+            break;
+         case RecOtherMemoryRequest:
+            #if VERBOSE > 0
+            std::cerr << "[DEBUG:" << m_id << "] Read MemoryRequest" << std::endl;
+            #endif
+            uint64_t addr;
+            uint32_t size;
+            MemoryLockType lock;
+            MemoryOpType type;
+            assert(respRec.Other.size >= (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type)));
+            response->read(reinterpret_cast<char*>(&addr), sizeof(addr));
+            response->read(reinterpret_cast<char*>(&size), sizeof(size));
+            response->read(reinterpret_cast<char*>(&lock), sizeof(lock));
+            response->read(reinterpret_cast<char*>(&type), sizeof(type));
+            uint32_t payload_size = respRec.Other.size - (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type));
+            assert(handleAccessMemoryFunc);
+            if (type == MemRead)
+            {
+               assert(payload_size == 0);
+               assert(size > 0);
+               char *read_data = new char[size];
+               bzero(read_data, size);
+               // Do the read here via a callback to populate the read buffer
+               handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)read_data, size);
+               rec.Other.zero = 0;
+               rec.Other.type = RecOtherMemoryResponse;
+               rec.Other.size = sizeof(addr) + sizeof(type) + size;
+               #if VEBOSE_HEX > 0
+               hexdump((char*)&rec, sizeof(rec.Other));
+               hexdump((char*)&addr, sizeof(addr));
+               hexdump((char*)&type, sizeof(type));
+               hexdump((char*)read_data, size);
+               #endif
+               #if VERBOSE
+               std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Read" << std::endl;
+               #endif
+
+               output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+               output->write(reinterpret_cast<char*>(&addr), sizeof(addr));
+               output->write(reinterpret_cast<char*>(&type), sizeof(type));
+               output->write(read_data, size);
+               output->flush();
+               delete read_data;
+            }
+            else if (type == MemWrite)
+            {
+               #if VERBOSE > 0
+               std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Write" << std::endl;
+               #endif
+               assert(payload_size > 0);
+               assert(payload_size == size);
+               char *payload = new char[payload_size];
+               response->read(reinterpret_cast<char*>(payload), sizeof(payload_size));
+               // Do the write here via a callback to write the data to the appropriate address
+               handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)payload, payload_size);
+               rec.Other.zero = 0;
+               rec.Other.type = RecOtherMemoryResponse;
+               rec.Other.size = sizeof(addr) + sizeof(type);
+               #if VEBOSE_HEX > 0
+               hexdump((char*)&rec, sizeof(rec.Other));
+               hexdump((char*)&addr, sizeof(addr));
+               hexdump((char*)&type, sizeof(type));
+               #endif
+               output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+               output->write(reinterpret_cast<char*>(&addr), sizeof(addr));
+               output->write(reinterpret_cast<char*>(&type), sizeof(type));
+               output->flush();
+               delete payload;
+            }
+            else
+            {
+               assert(false);
+            }
+            break;
+      }
+   }
+
+   // We should not get here
+   return retcode;
+}
+
+int32_t Sift::Writer::Join(int32_t thread)
+{
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write Join with thread=" << thread << std::endl;
+   #endif
+
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherJoin;
+   rec.Other.size = sizeof(thread);
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<char*>(&thread), sizeof(thread));
+   output->flush();
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write Join Done" << std::endl;
+   #endif
+
+   if (!response)
+   {
+     assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   int32_t retcode = 0;
+   while (true)
+   {
+      #if VERBOSE > 0
+      std::cerr << "[DEBUG:" << m_id << "] Join Waiting for Response" << std::endl;
+      #endif
+      Record respRec;
+      response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      assert(respRec.Other.zero == 0);
+
+      switch(respRec.Other.type)
+      {
+         case RecOtherJoinResponse:
+            #if VERBOSE > 0
+            std::cerr << "[DEBUG:" << m_id << "] Read JoinResponse" << std::endl;
+            #endif
+            assert(respRec.Other.size == sizeof(retcode));
+            response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
+            return retcode;
+            break;
+         default:
+            assert(false);
+            break;
+      }
+   }
+   return -1;
 }

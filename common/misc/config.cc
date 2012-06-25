@@ -12,8 +12,9 @@
 
 String Config::m_knob_output_directory;
 UInt32 Config::m_knob_total_cores;
+bool Config::m_knob_enable_smc_support;
 bool Config::m_knob_enable_icache_modeling;
-bool Config::m_knob_use_magic;
+Config::SimulationROI Config::m_knob_roi;
 bool Config::m_knob_enable_progress_trace;
 bool Config::m_knob_enable_sync;
 bool Config::m_knob_enable_sync_report;
@@ -45,9 +46,16 @@ Config::Config(SimulationMode mode)
    m_knob_output_directory = Sim()->getCfg()->getString("general/output_dir");
    m_knob_total_cores = Sim()->getCfg()->getInt("general/total_cores");
 
+   m_knob_enable_smc_support = Sim()->getCfg()->getBool("general/enable_smc_support");
    m_knob_enable_icache_modeling = Sim()->getCfg()->getBool("general/enable_icache_modeling");
 
-   m_knob_use_magic = Sim()->getCfg()->getBool("general/magic");
+   if (Sim()->getCfg()->getBool("general/roi_script"))
+      m_knob_roi = ROI_SCRIPT;
+   else if (Sim()->getCfg()->getBool("general/magic"))
+      m_knob_roi = ROI_MAGIC;
+   else
+      m_knob_roi = ROI_FULL;
+
    m_knob_enable_progress_trace = Sim()->getCfg()->getBool("progress_trace/enabled");
    m_knob_enable_sync = Sim()->getCfg()->getString("clock_skew_minimization/scheme") != "none";
    m_knob_enable_sync_report = Sim()->getCfg()->getBool("clock_skew_minimization/report");

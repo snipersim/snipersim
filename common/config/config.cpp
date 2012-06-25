@@ -78,6 +78,27 @@ namespace config
         m_root.clear();
     }
 
+    bool Config::hasKey(const String & path, UInt64 index)
+    {
+        //Handle the base case
+        if(isLeaf(path))
+        {
+            if(m_root.hasKey(path, index))
+                return true;
+            else
+                return false;
+        }
+
+        //Disect the path
+        PathPair path_pair = Config::splitPath(path);
+        Section & section = getSection_unsafe(path_pair.first);
+
+        if(section.hasKey(path_pair.second, index))
+            return true;
+        else
+            return false;
+    }
+
     const Key & Config::getKey(const String & path, UInt64 index)
     {
         //Handle the base case

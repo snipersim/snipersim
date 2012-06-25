@@ -53,7 +53,13 @@ static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADD
 static VOID handleMagic(THREADID threadIndex, CONTEXT * ctxt, ADDRINT next_eip)
 {
    ADDRINT res = handleMagicInstruction(localStore[threadIndex].thread->getId(),
-                    PIN_GetContextReg(ctxt, REG_GAX), PIN_GetContextReg(ctxt, REG_GBX), PIN_GetContextReg(ctxt, REG_GCX));
+                    PIN_GetContextReg(ctxt, REG_GAX),
+                    #ifdef TARGET_IA32
+                       PIN_GetContextReg(ctxt, REG_GDX),
+                    #else
+                       PIN_GetContextReg(ctxt, REG_GBX),
+                    #endif
+                    PIN_GetContextReg(ctxt, REG_GCX));
    PIN_SetContextReg(ctxt, REG_GAX, res);
    // Forcefully abort the current trace (Redmine #118).
    PIN_SetContextReg(ctxt, REG_INST_PTR, next_eip);
@@ -248,10 +254,20 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    basic_block->back()->setAtomic(INS_IsAtomicUpdate(ins));
    basic_block->back()->setDisassembly(INS_Disassemble(ins).c_str());
 
-   if (instruction_cache.count(addr) == 0)
-      instruction_cache[addr] = InstructionDecoder::decode(INS_Address(ins), INS_XedDec(ins), basic_block->back());
 
-   basic_block->back()->setMicroOps(instruction_cache[addr]);
+   const std::vector<const MicroOp *> * inst = NULL;
+   if (!Sim()->getConfig()->getEnableSMCSupport()
+       && instruction_cache.count(addr) > 0)
+   {
+      inst = instruction_cache[addr];
+   }
+   else
+   {
+      inst = InstructionDecoder::decode(INS_Address(ins), INS_XedDec(ins), basic_block->back());
+      if (!Sim()->getConfig()->getEnableSMCSupport())
+         instruction_cache[addr] = inst;
+   }
+   basic_block->back()->setMicroOps(inst);
 
    if (INS_IsAtomicUpdate(ins))
       basic_block->push_back(mfence_instruction);

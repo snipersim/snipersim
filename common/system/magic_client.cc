@@ -45,7 +45,7 @@ bool ignoreMagicType(UInt64 cmd)
 UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
 {
    // when --general/magic=false, ignore ROI begin/end magic instructions
-   if (!Sim()->getConfig()->useMagic() && ignoreMagicType(cmd))
+   if (Sim()->getConfig()->getSimulationROI() != Config::ROI_MAGIC && ignoreMagicType(cmd))
       return -1;
 
    switch(cmd)
@@ -66,6 +66,10 @@ UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UI
    }
    case SIM_CMD_THREAD_ID:
       return thread_id;
+   case SIM_CMD_NUM_PROCS:
+      return Sim()->getConfig()->getApplicationCores();
+   case SIM_CMD_NUM_THREADS:
+      return Sim()->getThreadManager()->getNumThreads();
    case SIM_CMD_IN_SIMULATOR:
       return 0;
    default:

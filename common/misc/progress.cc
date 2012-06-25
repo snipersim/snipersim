@@ -17,21 +17,21 @@ void Progress::init(void)
    if (!progress_file.empty()) {
       progress_fp = fopen(progress_file.c_str(), "w");
       progress_enabled = true;
-      Progress::record(true, SubsecondTime::Zero());
+      Progress::record(true, 0);
 
-      Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, (HooksManager::HookCallbackFunc)Progress::record, (void*)false);
+      Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, Progress::record, (UInt64)false);
    }
 }
 
 void Progress::fini(void)
 {
    if (progress_enabled) {
-      Progress::record(false, SubsecondTime::Zero());
+      Progress::record(false, 0);
       fclose(progress_fp);
    }
 }
 
-void Progress::record(bool init, subsecond_time_t simtime)
+SInt64 Progress::record(UInt64 init, UInt64 simtime)
 {
    if (progress_t_last + progress_interval < time(NULL)) {
       progress_t_last = time(NULL);
@@ -55,7 +55,9 @@ void Progress::record(bool init, subsecond_time_t simtime)
       }
 
       rewind(progress_fp);
-      fprintf(progress_fp, "%u %"PRId64" %"PRId64, unsigned(time(NULL)), progress, expect);
+      fprintf(progress_fp, "%u %" PRId64 " %" PRId64, unsigned(time(NULL)), progress, expect);
       fflush(progress_fp);
    }
+
+   return 0;
 }

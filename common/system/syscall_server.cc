@@ -15,7 +15,7 @@ SyscallServer::SyscallServer()
 {
    m_reschedule_cost = SubsecondTime::NS() * Sim()->getCfg()->getInt("perf_model/sync/reschedule_cost");
 
-   Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, (HooksManager::HookCallbackFunc)hook_periodic, (void*)this);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, hook_periodic, (UInt64)this);
 }
 
 SyscallServer::~SyscallServer()

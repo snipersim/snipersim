@@ -42,6 +42,7 @@ void HooksPy::setup()
    PyStats::setup();
    PyHooks::setup();
    PyDvfs::setup();
+   PyControl::setup();
    PyBbv::setup();
 }
 
