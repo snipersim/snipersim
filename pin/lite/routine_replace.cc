@@ -444,27 +444,29 @@ void emuPthreadCreateAfter(THREADID threadIndex)
    }
 }
 
-void emuPthreadJoinBefore(THREADID thread_id, pthread_t pthread)
+static thread_id_t findThreadByPthreadId(pthread_t pthread)
 {
-   Thread* thread = Sim()->getThreadManager()->getCurrentThread(thread_id);
-   thread_id_t join_thread_id = INVALID_THREAD_ID;
-
    multimap<thread_id_t, pthread_t>::iterator it;
    for (it = thread_id_to_thread_ptr_map.begin(); it != thread_id_to_thread_ptr_map.end(); it++)
    {
       if (pthread_equal(it->second, pthread) != 0)
       {
-         join_thread_id = it->first;
-         break;
+         return it->first;
       }
    }
-   LOG_ASSERT_ERROR(join_thread_id != INVALID_CORE_ID, "Could not find core_id");
+   return INVALID_THREAD_ID;
+}
+
+void emuPthreadJoinBefore(THREADID thread_id, pthread_t pthread)
+{
+   Thread* thread = Sim()->getThreadManager()->getCurrentThread(thread_id);
+
+   thread_id_t join_thread_id = findThreadByPthreadId(pthread);
+   LOG_ASSERT_ERROR(join_thread_id != INVALID_THREAD_ID, "Could not find thread_id");
 
    LOG_PRINT("Joining Thread_ptr(%p), tid(%i)", &pthread, join_thread_id);
 
    Sim()->getThreadManager()->joinThread(thread->getId(), join_thread_id);
-
-   thread_id_to_thread_ptr_map.erase(it);
 }
 
 IntPtr nullFunction()

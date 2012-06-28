@@ -15,7 +15,7 @@
 
 #include <sys/syscall.h>
 
-TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile)
+TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, UInt32 app_id)
    : m__thread(NULL)
    , m_thread(thread)
    , m_trace(tracefile.c_str(), responsefile.c_str(), thread->getId())
@@ -24,6 +24,7 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile)
    , m_bbv_count(0)
    , m_output_leftover_size(0)
    , m_responsefile(responsefile)
+   , m_app_id(app_id)
 {
    m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
    m_trace.setHandleSyscallFunc(TraceThread::__handleSyscallFunc, this);
@@ -104,7 +105,7 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 
 int32_t TraceThread::handleNewThreadFunc()
 {
-   return Sim()->getTraceManager()->newThread();
+   return Sim()->getTraceManager()->newThread(/*count*/1, /*spawn*/true, m_app_id);
 }
 
 int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)

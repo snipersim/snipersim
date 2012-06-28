@@ -37,12 +37,13 @@ KNOB<UINT64> KnobBlocksize(KNOB_MODE_WRITEONCE, "pintool", "b", "0", "blocksize"
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
+KNOB<UINT64> KnobSiftCountOffset(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift file index offset (default = 0)");
 
 UINT64 blocksize;
 UINT64 fast_forward_target = 0;
 UINT64 detailed_target = 0;
-PIN_MUTEX access_memory_lock;
-PIN_MUTEX new_threadid_lock;
+PIN_LOCK access_memory_lock;
+PIN_LOCK new_threadid_lock;
 std::deque<ADDRINT> tidptrs;
 
 typedef struct {
@@ -216,9 +217,9 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       thread_data[threadid].output->NewThread();
       // Store the thread's tid ptr for later use
       ADDRINT tidptr = args[3];
-      PIN_MutexLock(&new_threadid_lock);
+      GetLock(&new_threadid_lock, threadid);
       tidptrs.push_back(tidptr);
-      PIN_MutexUnlock(&new_threadid_lock);
+      ReleaseLock(&new_threadid_lock);
    }
    else if (emulateSyscall[syscall_number])
    {
@@ -340,7 +341,7 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
    // This operation does not occur very frequently, so this should not impact performance
    if (lock_signal == Sift::MemLock)
    {
-      PIN_MutexLock(&access_memory_lock);
+      GetLock(&access_memory_lock, 0);
    }
 
    if (mem_op == Sift::MemRead)
@@ -361,7 +362,7 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
 
    if (lock_signal == Sift::MemUnlock)
    {
-      PIN_MutexUnlock(&access_memory_lock);
+      ReleaseLock(&access_memory_lock);
    }
 }
 
@@ -390,16 +391,16 @@ void openFile(THREADID threadid)
    else
    {
       if (blocksize)
-         sprintf(filename, "%s.%" PRIu64 ".th%u.sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, threadid);
+         sprintf(filename, "%s.%" PRIu64 ".th%lu.sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, KnobSiftCountOffset.Value() + threadid);
       else
-         sprintf(filename, "%s.th%u.sift", KnobOutputFile.Value().c_str(), threadid);
+         sprintf(filename, "%s.th%lu.sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
    }
 
    std::cerr << "[SIFT_RECORDER:" << threadid << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobEmulateSyscalls.Value())
    {
-      sprintf(response_filename, "%s_response.th%u.sift", KnobOutputFile.Value().c_str(), threadid);
+      sprintf(response_filename, "%s_response.th%lu.sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
       std::cerr << "[SIFT_RECORDER:" << threadid << "] Response = [" << response_filename << "]" << std::endl;
    }
 
@@ -450,13 +451,13 @@ VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    assert(thread_data[threadid].dyn_address_queue == NULL);
 
    // The first thread (master) doesn't need to join with anyone else
-   PIN_MutexLock(&new_threadid_lock);
+   GetLock(&new_threadid_lock, threadid);
    if (tidptrs.size() > 0)
    {
       thread_data[threadid].tid_ptr = tidptrs.front();
       tidptrs.pop_front();
    }
-   PIN_MutexUnlock(&new_threadid_lock);
+   ReleaseLock(&new_threadid_lock);
 
    thread_data[threadid].bbv = new Bbv();
    thread_data[threadid].dyn_address_queue = new std::deque<ADDRINT>();
@@ -517,8 +518,8 @@ int main(int argc, char **argv)
    }
    bzero(thread_data, thread_data_size);
 
-   PIN_MutexInit(&access_memory_lock);
-   PIN_MutexInit(&new_threadid_lock);
+   InitLock(&access_memory_lock);
+   InitLock(&new_threadid_lock);
 
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();

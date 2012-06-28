@@ -36,6 +36,7 @@ public:
    ~ThreadManager();
 
    Lock &getLock() { return m_thread_lock; }
+   Scheduler *getScheduler() const { return m_scheduler; }
 
    Thread* createThread();
 

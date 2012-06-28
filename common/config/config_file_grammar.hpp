@@ -109,7 +109,7 @@ namespace config
 
                     r_value_long   =  access_node_d[ long_p ][Name(keyValueID)];
 
-                    r_value_single =  access_node_d[ real_p | long_p | r_string ][Name(keyValueID)];
+                    r_value_single =  access_node_d[ r_string ][Name(keyValueID)];
 
                     r_value_single_or_empty = r_value_single | !r_value_single;
 
@@ -139,7 +139,7 @@ namespace config
                        (
                           ( no_node_d[ *space_p ] >> lexeme_d[ token_node_d[ inner_node_d[ confix_p('"', *lex_escape_ch_p, '"') ] ] ] >> no_node_d[ *space_p ] )
                           |
-                          ( lexeme_d[ token_node_d[ +(alnum_p | ch_p('.') | ch_p('/') | ch_p(':')) >> *(alnum_p | (punct_p - ch_p('=') - ch_p(',') - ch_p('[') - ch_p(']') ) ) ] ] )
+                          ( lexeme_d[ token_node_d[ +(alnum_p | (punct_p - ch_p('=') - ch_p(',') - ch_p('[') - ch_p(']') ) ) ] ] )
                           )
                        ;
                 }

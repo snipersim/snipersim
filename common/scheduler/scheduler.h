@@ -13,6 +13,7 @@ class Scheduler
       virtual ~Scheduler() {}
 
       virtual core_id_t threadCreate(thread_id_t thread_id) = 0;
+      virtual void threadSetAffinity(thread_id_t thread_id, size_t cpusetsize, const cpu_set_t *mask) {}
 
    protected:
       ThreadManager *m_thread_manager;

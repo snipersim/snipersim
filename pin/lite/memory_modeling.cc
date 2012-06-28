@@ -97,7 +97,7 @@ void handleMemoryRead(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_a
             NULL,
             read_data_size,
             Core::MEM_MODELED_COUNT,
-            0);
+            eip);
 }
 
 void handleMemoryReadDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size)
@@ -124,7 +124,7 @@ void handleMemoryWrite(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_
             NULL,
             write_data_size,
             Core::MEM_MODELED_COUNT,
-            0);
+            eip);
 }
 
 void handleMemoryWriteDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr write_address, UInt32 write_data_size)

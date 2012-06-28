@@ -24,9 +24,22 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     ('  Instructions', 'performance_model.instruction_count', str),
     ('  Cycles',       'performance_model.cycle_count',       format_int),
     ('  Time',         'performance_model.elapsed_time',      format_ns(0)),
-    ('Branch predictor stats', '', ''),
-    ('  num correct',  'branch_predictor.num-correct', str),
-    ('  num incorrect','branch_predictor.num-incorrect', str),
+  ]
+
+  if 'branch_predictor.num-incorrect' in results:
+    results['branch_predictor.missrate'] = [ 100 * float(results['branch_predictor.num-incorrect'][core])
+      / ((results['branch_predictor.num-correct'][core] + results['branch_predictor.num-incorrect'][core]) or 1) for core in range(ncores) ]
+    results['branch_predictor.mpki'] = [ 1000 * float(results['branch_predictor.num-incorrect'][core])
+      / (results['performance_model.instruction_count'][core] or 1) for core in range(ncores) ]
+    template += [
+      ('Branch predictor stats', '', ''),
+      ('  num correct',  'branch_predictor.num-correct', str),
+      ('  num incorrect','branch_predictor.num-incorrect', str),
+      ('  misprediction rate', 'branch_predictor.missrate', lambda v: '%.2f%%' % v),
+      ('  mpki', 'branch_predictor.mpki', lambda v: '%.2f' % v),
+    ]
+
+  template += [
     ('Cache Summary', '', ''),
   ]
 
@@ -34,11 +47,13 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     results['%s.accesses'%c] = map(sum, zip(results['%s.loads'%c], results['%s.stores'%c]))
     results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results['%s.store-misses'%c]))
     results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b or 1), zip(results['%s.misses'%c], results['%s.accesses'%c]))
+    results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b or 1), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
     template.extend([
       ('  Cache %s'%c, '', ''),
       ('    num cache accesses', '%s.accesses'%c, str),
-      ('    miss rate', '%s.missrate'%c, lambda v: '%.2f%%' % v),
       ('    num cache misses', '%s.misses'%c, str),
+      ('    miss rate', '%s.missrate'%c, lambda v: '%.2f%%' % v),
+      ('    mpki', '%s.mpki'%c, lambda v: '%.2f' % v),
     ])
 
   results['dram.accesses'] = map(sum, zip(results['dram.reads'], results['dram.writes']))
@@ -72,6 +87,9 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
 
 
 if __name__ == '__main__':
+  if len(sys.argv) > 2 and sys.argv[1] == '-j':
+    generate_simout(jobid = int(sys.argv[2]))
+    sys.exit(0)
   if len(sys.argv) > 1:
     resultsdir = sys.argv[1]
   else:

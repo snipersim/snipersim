@@ -8,6 +8,7 @@
 #include "thread_manager.h"
 #include "performance_model.h"
 #include "pthread_emu.h"
+#include "scheduler.h"
 #include "stats.h"
 
 #include <errno.h>
@@ -122,6 +123,29 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          ScopedLock sl(Sim()->getThreadManager()->getLock());
          Sim()->getThreadManager()->stallThread_async(m_thread->getId(), ThreadManager::STALL_PAUSE,
                                                       m_thread->getCore()->getPerformanceModel()->getElapsedTime());
+         break;
+      }
+
+      case SYS_sched_setaffinity:
+      {
+         pid_t pid = (pid_t)args.arg0;
+         size_t cpusetsize = (size_t)args.arg1;
+         const cpu_set_t *cpuset = (const cpu_set_t *)args.arg2;
+
+         if (pid == 0 || pid == syscall(__NR_gettid))
+         {
+            Sim()->getThreadManager()->getScheduler()->threadSetAffinity(m_thread->getId(), cpusetsize, cpuset);
+         }
+         else
+         {
+            // TODO: if we had a pid/tid to thread_id map, use it here
+            LOG_PRINT_WARNING("Ignoring sched_setaffinity() called for a different thread with pid=%d", pid);
+         }
+
+         // Always succeeds
+         m_ret_val = 0;
+         m_emulated = true;
+
          break;
       }
 
