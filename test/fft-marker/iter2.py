@@ -3,14 +3,19 @@
 
 import sim
 class Iter2:
+  def __init__(self):
+    self.iter = 0
   def hook_magic_marker(self, core, thread, a, b):
-    if a == 1 and b == 0:
+    if thread != 0 or a != 1:
+      return
+    self.iter += 1
+    if self.iter == 1:
       print '[SCRIPT] Start of iteration 0: going to WARMUP'
       sim.control.set_instrumentation_mode(sim.control.WARMUP)
-    elif a == 1 and b == 2:
+    elif self.iter == 2:
       print '[SCRIPT] Start of iteration 2: beginning ROI'
       sim.control.set_roi(True)
-    elif a == 2 and b == 3:
+    elif self.iter == 3:
       print '[SCRIPT] End of iteration 3: ending ROI'
       sim.control.set_roi(False)
 sim.util.register(Iter2())

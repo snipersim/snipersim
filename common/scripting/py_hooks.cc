@@ -104,6 +104,7 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_SIM_END:
       case HookType::HOOK_ROI_BEGIN:
       case HookType::HOOK_ROI_END:
+      case HookType::HOOK_PRE_STAT_WRITE:
          Sim()->getHooksManager()->registerHook(type, hookCallbackNone, (UInt64)pFunc);
          break;
       case HookType::HOOK_CPUFREQ_CHANGE:

@@ -2,6 +2,7 @@
 #define CORE_H
 
 // some forward declarations for cross includes
+class Thread;
 class Network;
 class MemoryManagerBase;
 class PerformanceModel;
@@ -96,6 +97,8 @@ class Core
 
       // network accessor since network is private
       int getId() const { return m_core_id; }
+      Thread *getThread() const { return m_thread; }
+      void setThread(Thread *thread) { m_thread = thread; }
       Network *getNetwork() { return m_network; }
       PerformanceModel *getPerformanceModel() { return m_performance_model; }
       MemoryManagerBase *getMemoryManager() { return m_memory_manager; }
@@ -119,6 +122,7 @@ class Core
       core_id_t m_core_id;
       MemoryManagerBase *m_memory_manager;
       PinMemoryManager *m_pin_memory_manager;
+      Thread *m_thread;
       Network *m_network;
       PerformanceModel *m_performance_model;
       Lock m_mem_lock;

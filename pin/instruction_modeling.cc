@@ -79,6 +79,13 @@ static void handleRdtsc(THREADID thread_id, PIN_REGISTER * gax, PIN_REGISTER * g
    gax->dword[0] = cycles & 0xffffffff;
 }
 
+static void handlePause()
+{
+   // Mostly used Inside spinlocks, use it here to increase the probability
+   // that another processor/thread will get some functional execution time
+   PIN_Yield();
+}
+
 static void fillOperandListMemOps(OperandList *list, INS ins)
 {
    if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
@@ -164,6 +171,9 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
    if (INS_IsRDTSC(ins))
       INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+
+   if (INS_Opcode(ins) == XED_ICLASS_PAUSE)
+      INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handlePause, IARG_END);
 
    if (INS_IsBranch(ins) && INS_HasFallThrough(ins))
    {

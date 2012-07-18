@@ -12,12 +12,20 @@ class CacheBlockInfo
    private:
       IntPtr m_tag;
       CacheState::cstate_t m_cstate;
-      bool m_prefetch;
+      UInt8 m_options;  // large enough to hold a bitfield for all available option_t's
+
+      static const char* option_names[];
 
    public:
+      enum option_t
+      {
+         PREFETCH,
+         NUM_OPTIONS
+      };
+
       CacheBlockInfo(IntPtr tag = ~0,
             CacheState::cstate_t cstate = CacheState::INVALID,
-            bool is_preftech = false);
+            UInt64 options = 0);
       virtual ~CacheBlockInfo();
 
       static CacheBlockInfo* create(CacheBase::cache_t cache_type);
@@ -33,9 +41,11 @@ class CacheBlockInfo
       void setTag(IntPtr tag) { m_tag = tag; }
       void setCState(CacheState::cstate_t cstate) { m_cstate = cstate; }
 
-      bool isPrefetch() { return m_prefetch; }
-      void setPrefetch() { m_prefetch = true; }
-      void clearPrefetch() { m_prefetch = false; }
+      bool hasOption(option_t option) { return m_options & (1 << option); }
+      void setOption(option_t option) { m_options |= (1 << option); }
+      void clearOption(option_t option) { m_options &= ~(UInt64(1) << option); }
+
+      static const char* getOptionName(option_t option);
 };
 
 #endif /* __CACHE_BLOCK_INFO_H__ */

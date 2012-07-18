@@ -67,8 +67,8 @@ BarrierSyncServer::synchronize(thread_id_t thread_id, SubsecondTime time)
 void
 BarrierSyncServer::signal()
 {
-    if (m_disable)
-        return;
+   if (m_disable)
+      return;
    if (isBarrierReached())
       barrierRelease();
 }
@@ -128,7 +128,7 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id)
    {
       for (thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
       {
-         // In barrier mode, skip over (potentially very many) timeslots
+         // In fast-forward mode, skip over (potentially very many) timeslots
          if (m_local_clock_list[thread_id] > m_next_barrier_time)
             m_next_barrier_time = m_local_clock_list[thread_id];
       }
@@ -179,7 +179,7 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id)
 void
 BarrierSyncServer::abortBarrier()
 {
-   for (thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
+   for(thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
    {
       // Check if this core was running. If yes, release that core
       if (m_barrier_acquire_list[thread_id] == true)
@@ -206,6 +206,32 @@ void
 BarrierSyncServer::setFastForward(bool fastforward, SubsecondTime next_barrier_time)
 {
    m_fastforward = fastforward;
+
    if (next_barrier_time != SubsecondTime::MaxTime())
       m_next_barrier_time = next_barrier_time;
+
+   if (!fastforward)
+   {
+      // If some threads were behind but still caught the barrier (everyone does in fast-forward mode),
+      // make sure to release them so they have a chance to make progress and hit the barrier again at the proper time.
+      abortBarrier();
+   }
+}
+
+void
+BarrierSyncServer::printState(void)
+{
+   printf("Barrier state:");
+   for(thread_id_t thread_id = 0; thread_id < (thread_id_t) Sim()->getThreadManager()->getNumThreads(); thread_id++)
+   {
+      if (m_local_clock_list[thread_id] >= m_next_barrier_time)
+         printf(" ^");
+      else if (m_barrier_acquire_list[thread_id] == true)
+         printf(" A");
+      else if (m_thread_manager->isThreadRunning(thread_id))
+         printf(" R");
+      else
+         printf(" _");
+   }
+   printf("\n");
 }

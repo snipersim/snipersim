@@ -52,6 +52,8 @@ SyscallMdl::~SyscallMdl()
 
 void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 {
+   Core *core = m_thread->getCore();
+
    LOG_PRINT("Got Syscall: %i", syscall_number);
 
    m_syscall_number = syscall_number;
@@ -126,6 +128,26 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          break;
       }
 
+      case SYS_sched_yield:
+      {
+         {
+            ScopedLock sl(Sim()->getThreadManager()->getLock());
+            Sim()->getThreadManager()->getScheduler()->threadYield(m_thread->getId());
+         }
+
+         // We may have been rescheduled
+         SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
+         if (m_thread->reschedule(time, core))
+            core = m_thread->getCore();
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+
+         // Always succeeds
+         m_ret_val = 0;
+         m_emulated = true;
+
+         break;
+      }
+
       case SYS_sched_setaffinity:
       {
          pid_t pid = (pid_t)args.arg0;
@@ -134,6 +156,7 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
          if (pid == 0 || pid == syscall(__NR_gettid))
          {
+            ScopedLock sl(Sim()->getThreadManager()->getLock());
             Sim()->getThreadManager()->getScheduler()->threadSetAffinity(m_thread->getId(), cpusetsize, cpuset);
          }
          else
@@ -141,6 +164,12 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
             // TODO: if we had a pid/tid to thread_id map, use it here
             LOG_PRINT_WARNING("Ignoring sched_setaffinity() called for a different thread with pid=%d", pid);
          }
+
+         // We may have been rescheduled
+         SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
+         if (m_thread->reschedule(time, core))
+            core = m_thread->getCore();
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
 
          // Always succeeds
          m_ret_val = 0;

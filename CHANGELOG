@@ -1,3 +1,8 @@
+Version 3.04
+  * Support for running multiple multi-threaded workloads in a single simulation
+  * McPAT fixes for heterogeneous configurations
+  * Build system fixes for newer Linux versions
+
 Version 3.03
   * Bugfixes in configuration parser, starting of multi-program workloads
 

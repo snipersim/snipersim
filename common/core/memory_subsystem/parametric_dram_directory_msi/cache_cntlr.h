@@ -332,6 +332,7 @@ namespace ParametricDramDirectoryMSI
          bool isMasterCache(void) { return m_core_id == m_core_id_master; }
          bool isFirstLevel(void) { return m_master->m_prev_cache_cntlrs.empty(); }
          bool isLastLevel(void) { return ! m_next_cache_cntlr; }
+         bool isShared(core_id_t core_id); //< Return true if core shares this cache
 
          void enable() { m_enabled = true; m_master->m_cache->enable(); }
          void disable() { m_enabled = false; m_master->m_cache->disable(); }

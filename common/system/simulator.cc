@@ -212,6 +212,7 @@ void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode)
    if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
       InstMode::SetInstrumentationMode(new_mode);
 
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
    getClockSkewMinimizationServer()->setDisable(new_mode != InstMode::DETAILED);
+
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
 }

@@ -155,7 +155,9 @@ UInt64 TraceManager::getProgressValue()
    {
       for (UInt32 j = start_thread ; j < start_thread + m_app_thread_count_used[a] ; j++)
       {
-         value = std::max(value, 1000000 * m_threads[j]->getProgressValue() / m_threads[j]->getProgressExpect());
+         uint64_t expect = m_threads[j]->getProgressExpect();
+         if (expect)
+            value = std::max(value, 1000000 * m_threads[j]->getProgressValue() / expect);
       }
       start_thread += m_app_thread_count_requested[a];
    }

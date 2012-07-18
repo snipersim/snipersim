@@ -14,6 +14,7 @@ class StatsMetricBase
          objectName(_objectName), index(_index), metricName(_metricName)
       {}
       virtual String recordMetric() = 0;
+      virtual bool isDefault() { return false; } // Return true when value hasn't changed from its initialization value
 };
 
 template <class T> class StatsMetric : public StatsMetricBase
@@ -26,6 +27,10 @@ template <class T> class StatsMetric : public StatsMetricBase
       virtual String recordMetric()
       {
          return itostr(*metric);
+      }
+      virtual bool isDefault()
+      {
+         return recordMetric() == "0";
       }
 };
 
@@ -57,7 +62,11 @@ class StatsManager {
       template <class T> T * getMetric(String objectName, UInt32 index, String metricName);
    private:
       FILE *m_fp;
-      std::vector<StatsMetricBase *> m_objects;
+      // Use std::string here because String (__versa_string) does not provide a hash function for STL containers with gcc < 4.6
+      typedef std::unordered_map<UInt64, StatsMetricBase *> StatsIndexList;
+      typedef std::unordered_map<std::string, StatsIndexList> StatsMetricList;
+      typedef std::unordered_map<std::string, StatsMetricList> StatsObjectList;
+      StatsObjectList m_objects;
 };
 
 template <class T> void registerStatsMetric(String objectName, UInt32 index, String metricName, T *metric)

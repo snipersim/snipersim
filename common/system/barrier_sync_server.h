@@ -33,6 +33,8 @@ class BarrierSyncServer : public ClockSkewMinimizationServer
       void signal();
       void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime());
       SubsecondTime getGlobalTime() { return m_global_time; }
+
+      void printState(void);
 };
 
 #endif /* __BARRIER_SYNC_SERVER_H__ */

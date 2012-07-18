@@ -182,7 +182,7 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
 
   if use_simple_sync:
     all_items += [ [ 'sync', .01, ('SyncFutex', 'SyncPthreadMutex', 'SyncPthreadCond', 'SyncPthreadBarrier', 'SyncJoin',
-                                   'SyncPause', 'SyncSleep', 'SyncMemAccess', 'Recv' ) ] ]
+                                   'SyncPause', 'SyncSleep', 'SyncUnscheduled', 'SyncMemAccess', 'Recv' ) ] ]
   else:
     all_items += [
     [ 'sync',     .01, [
@@ -193,6 +193,7 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       [ 'join',     .01, 'SyncJoin' ],
       [ 'pause',    .01, 'SyncPause' ],
       [ 'sleep',    .01, 'SyncSleep' ],
+      [ 'unscheduled', .01, 'SyncUnscheduled' ],
       [ 'memaccess',.01, 'SyncMemAccess' ],
       [ 'recv',     .01, 'Recv' ],
     ] ],

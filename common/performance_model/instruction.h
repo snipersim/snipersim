@@ -52,6 +52,8 @@ public:
    String getTypeName() const;
    bool isDynamic() const
    { return getType() >= INST_DYNAMIC_MISC; }
+   bool isIdle() const
+   { return getType() == INST_SYNC || getType() == INST_DELAY || getType() == INST_RECV; }
 
    static void initializeStaticInstructionModel();
 
@@ -157,6 +159,7 @@ public:
       JOIN,
       PAUSE,
       SLEEP,
+      UNSCHEDULED,
       NUM_TYPES
    };
 

@@ -35,6 +35,7 @@
 #include "progress_trace.h"
 #include "clock_skew_minimization.h"
 #include "magic_client.h"
+#include "performance_model.h"
 #include "timer.h"
 #include "logmem.h"
 
@@ -154,6 +155,40 @@ BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block)
    return true;
 }
 
+void handleCheckScheduled(THREADID threadIndex, const CONTEXT *ctxt)
+{
+   Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
+
+   if (core == NULL)
+   {
+      Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+      assert(thread);
+
+      // This thread isn't scheduled. Normally it shouldn't execute any code,
+      // but just after thread start we do get here.
+      // Wait here until we're scheduled on one of the cores.
+      SubsecondTime time = SubsecondTime::Zero();
+      thread->reschedule(time, core);
+
+      // We should be on a core now, set its performance model to our local time
+      core = thread->getCore();
+      // If the core already has a later time, we have to wait
+      time = std::max(time, core->getPerformanceModel()->getElapsedTime());
+      core->getPerformanceModel()->queueDynamicInstruction(new SpawnInstruction(time));
+   }
+
+   if (core->getState() == Core::BROKEN)
+   {
+      // Core has failed, don't block (Pin doesn't like this) but restart so we make zero progress
+      PIN_ExecuteAt(ctxt);
+   }
+}
+
+VOID addCheckScheduled(TRACE trace, INS ins_head)
+{
+   INS_InsertCall(ins_head, IPOINT_BEFORE, AFUNPTR(handleCheckScheduled), IARG_THREAD_ID, IARG_CONST_CONTEXT, IARG_END);
+}
+
 namespace std
 {
    template <> struct hash<std::pair<ADDRINT, ADDRINT> > {
@@ -175,6 +210,8 @@ VOID traceCallback(TRACE trace, void *v)
 {
    BBL bbl_head = TRACE_BblHead(trace);
    INS ins_head = BBL_InsHead(bbl_head);
+
+   addCheckScheduled(trace, ins_head);
 
    // Progress Trace
    addProgressTrace(ins_head);

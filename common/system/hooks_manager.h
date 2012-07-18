@@ -28,6 +28,7 @@ public:
       HOOK_THREAD_RESUME,       // HooksManager::ThreadResume        Thread has entered running state
       HOOK_THREAD_MIGRATE,      // HooksManager::ThreadMigrate       Thread was moved to a different core
       HOOK_INSTRUMENT_MODE,     // UInt64 Instrument Mode            Simulation mode change (ex. detailed, ffwd)
+      HOOK_PRE_STAT_WRITE,      // none                              Before statistics are written (update generated stats now!)
       HOOK_TYPES_MAX
    };
    static const char* hook_type_names[];

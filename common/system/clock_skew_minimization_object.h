@@ -59,6 +59,8 @@ public:
    virtual void setDisable(bool disable) { }
    virtual void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime()) = 0;
    virtual SubsecondTime getGlobalTime();
+
+   virtual void printState(void) {}
 };
 
 #endif /* __CLOCK_SKEW_MINIMIZATION_OBJECT_H__ */

@@ -45,7 +45,7 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
 
   for c in [ 'L1-I', 'L1-D' ] + [ 'L%u'%l for l in range(2, 5) if 'L%u.loads'%l in results ]:
     results['%s.accesses'%c] = map(sum, zip(results['%s.loads'%c], results['%s.stores'%c]))
-    results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results['%s.store-misses'%c]))
+    results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results['%s.store-misses-I'%c]))
     results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b or 1), zip(results['%s.misses'%c], results['%s.accesses'%c]))
     results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b or 1), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
     template.extend([

@@ -81,7 +81,7 @@ VOID countInsns(THREADID threadid, INT32 count)
 
    if (thread_data[threadid].icount >= fast_forward_target)
    {
-      std::cerr << "[SIFT_RECORDER:" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       thread_data[threadid].in_detail = true;
       thread_data[threadid].icount = 0;
       PIN_RemoveInstrumentation();
@@ -396,12 +396,12 @@ void openFile(THREADID threadid)
          sprintf(filename, "%s.th%lu.sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
    }
 
-   std::cerr << "[SIFT_RECORDER:" << threadid << "] Output = [" << filename << "]" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobEmulateSyscalls.Value())
    {
       sprintf(response_filename, "%s_response.th%lu.sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
-      std::cerr << "[SIFT_RECORDER:" << threadid << "] Response = [" << response_filename << "]" << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Response = [" << response_filename << "]" << std::endl;
    }
 
 
@@ -409,7 +409,7 @@ void openFile(THREADID threadid)
    try {
       thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid);
    } catch (...) {
-      std::cerr << "[SIFT_RECORDER:" << threadid << "] Error: Unable to open the output file " << filename << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);
    }
 
@@ -418,7 +418,7 @@ void openFile(THREADID threadid)
 
 void closeFile(THREADID threadid)
 {
-   std::cerr << "[SIFT_RECORDER:" << threadid << "] Recorded " << thread_data[threadid].icount << " instructions" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Recorded " << thread_data[threadid].icount << " instructions" << std::endl;
    delete thread_data[threadid].output;
    thread_data[threadid].output = NULL;
 
@@ -493,7 +493,7 @@ VOID threadFinishHelper(VOID *arg)
 VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
 {
 #if DEBUG_OUTPUT
-   std::cerr << "[SIFT_RECORDER:" << threadid << "] Finish Thread" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Finish Thread" << std::endl;
 #endif
 
    // To prevent deadlocks during simulation, start a new thread to handle this thread's

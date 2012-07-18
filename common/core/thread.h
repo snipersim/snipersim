@@ -45,7 +45,7 @@ class Thread
       void *getWakeupMsg() const { return m_wakeup_msg; }
 
       Core* getCore() const { return m_core; }
-      void setCore(Core* core) { m_core = core; }
+      void setCore(Core* core);
 
       bool reschedule(SubsecondTime &time, Core *current_core);
       bool updateCoreTLS(int threadIndex = -1);

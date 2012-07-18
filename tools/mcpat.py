@@ -22,7 +22,7 @@ DRAM_CHIPS_PER_DIMM = 8
 DRAM_DIMMS_PER_SOCKET = 4
 
 
-def dram_power(nread, nwrite, t, config):
+def compute_dram_power(nread, nwrite, t, config):
   sockets = math.ceil(float(config['general/total_cores']) / float(config['perf_model/dram/controllers_interleaving']))
   chips_per_dimm = float(config.get('perf_model/dram/chips_per_dimm', DRAM_CHIPS_PER_DIMM))
   dimms_per_socket = float(config.get('perf_model/dram/dimms_per_controller', DRAM_DIMMS_PER_SOCKET))
@@ -31,10 +31,6 @@ def dram_power(nread, nwrite, t, config):
     is3d = True
   else:
     is3d = False
-
-  # Hack for old ICS sims
-  if chips_per_dimm == 2:
-    is3d = True
 
   ncycles = t * DRAM_CLOCK * 1e6
   read_dc = nread / sockets / ncycles
@@ -47,6 +43,15 @@ def dram_power(nread, nwrite, t, config):
   power_socket_dyn  = power_chip_dyn * chips_per_dimm * dimms_per_socket
   power_socket_stat = power_chip_stat * chips_per_dimm * dimms_per_socket
   return (power_socket_dyn * sockets, power_socket_stat * sockets)
+
+
+def dram_power(results, config):
+  return compute_dram_power(
+    sum(results['dram.reads']),
+    sum(results['dram.writes']),
+    max(results['performance_model.elapsed_time']) * 1e-15,
+    config
+  )
 
 
 all_items = [
@@ -70,10 +75,12 @@ all_names = buildstack.get_names('', all_items)
 
 
 
-def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, no_graph = False, partial = None):
+def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, config = None, no_graph = False, partial = None):
   tempfile = outputfile + '.xml'
 
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
+  if config:
+    results['config'].update(sniper_lib.parse_config(file(config).read()))
   power = edit_XML(results['results'], results['config'], vdd)
   power = map(lambda v: v[0], power)
   file(tempfile, "w").write('\n'.join(power))
@@ -123,12 +130,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, no_gr
     raise ValueError('No valid McPAT output found')
 
   # Add DRAM power
-  dram_dyn, dram_stat = dram_power(
-    sum(results['results']['dram.reads']),
-    sum(results['results']['dram.writes']),
-    max(results['results']['performance_model.elapsed_time']) * 1e-15,
-    results['config']
-  )
+  dram_dyn, dram_stat = dram_power(results['results'], results['config'])
   power_dat['DRAM'] = {
     'Peak Dynamic': dram_dyn,
     'Runtime Dynamic': 0,
@@ -224,41 +226,12 @@ def edit_XML(stats, cfg, vdd):
 
   ncores = int(cfg['general/total_cores'])
 
-#---FROM CONFIG----------
-  latency_bp = long(cfg['perf_model/branch_predictor/mispredict_penalty'])
-  latency_l1_d = long(cfg['perf_model/l1_dcache/data_access_time'])
-  latency_l1_i = long(cfg['perf_model/l1_icache/data_access_time'])
-  latency_l2 = long(cfg.get('perf_model/l2_cache/data_access_time', 0))
-  latency_l3 = long(cfg.get('perf_model/l3_cache/data_access_time', 0))
-  l1_dcacheAssociativity = long(cfg.get('perf_model/l1_dcache/associativity',0))
-  l1_dcacheBlockSize = long(cfg.get('perf_model/l1_dcache/cache_block_size',0))
-  l1_dcacheSize= long(cfg.get('perf_model/l1_dcache/cache_size',0))
-  l1_dcacheSharedCores = long(cfg.get('perf_model/l1_dcache/shared_cores',0))
-  l1_dcacheWriteBackTime = long(cfg.get('perf_model/l1_dcache/writeback_time',0))
-  l1_icacheAssociativity = long(cfg.get('perf_model/l1_icache/associativity',0))
-  l1_icacheBlockSize = long(cfg.get('perf_model/l1_icache/cache_block_size',0))
-  l1_icacheSize = long(cfg.get('perf_model/l1_icache/cache_size',0))
-  l1_icacheSharedCores = long(cfg.get('perf_model/l1_icache/shared_cores',0))
-  l1_icacheWriteBackTime = long(cfg.get('perf_model/l1_icache/writeback_time',0))
-  l2_cacheAssociativity = long(cfg.get('perf_model/l2_cache/associativity',0))
-  l2_cacheSize = long(cfg.get('perf_model/l2_cache/cache_size',0))
-  l2_cacheBlockSize = long(cfg.get('perf_model/l2_cache/cache_block_size',0))
-  l2_cacheSharedCores = long(cfg.get('perf_model/l2_cache/shared_cores',0))
-  l2_cacheWriteBackTime = long(cfg.get('perf_model/l2_cache/writeback_time',0))
-  l3_cacheAssociativity = long(cfg.get('perf_model/l3_cache/associativity',0))
-  l3_cacheBlockSize = long(cfg.get('perf_model/l3_cache/cache_block_size',0))
-  l3_cacheSize = long(cfg.get('perf_model/l3_cache/cache_size',0))
-  l3_cacheSharedCores = long(cfg.get('perf_model/l3_cache/shared_cores',0))
-  l3_cacheWriteBackTime = long(cfg.get('perf_model/l3_cache/writeback_time',0))
-  clock_Frequency  = ((float(cfg['perf_model/core/frequency']))*1000)
-  issue_width = long(cfg['perf_model/core/interval_timer/dispatch_width'])
-  peak_issue_width = long(long(cfg['perf_model/core/interval_timer/dispatch_width']) * 1.5)
-  ALU_per_core = peak_issue_width
-
-
   if not vdd and 'power/vdd' in cfg: # Vdd on command line overrides configuration file
     vdd = float(cfg['power/vdd'])
   technology_node = int(cfg.get('power/technology_node', 45))
+
+  l3_cacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
+  l2_cacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
 
   num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
   if int(cfg['perf_model/cache/levels']) >= 3:
@@ -302,6 +275,40 @@ def edit_XML(stats, cfg, vdd):
   #for j in range(ncores):
   for i in xrange(len(template)-1):
     #for j in range(ncores):
+      if template[i][1] and template[i][1][1] in ('stat', 'cfg', 'comb'):
+        core = template[i][1][2]
+      else:
+        core = None
+      clock_Frequency  = float(sniper_lib.get_config(cfg, 'perf_model/core/frequency', core))*1000
+      issue_width = long(sniper_lib.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core))
+      peak_issue_width = long(long(sniper_lib.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
+      ALU_per_core = peak_issue_width
+      window_size = int(sniper_lib.get_config(cfg, "perf_model/core/interval_timer/window_size", core))
+      latency_bp = long(sniper_lib.get_config(cfg, 'perf_model/branch_predictor/mispredict_penalty', core))
+        #---FROM CONFIG----------
+      latency_l1_d = long(sniper_lib.get_config(cfg, 'perf_model/l1_dcache/data_access_time', core))
+      latency_l1_i = long(sniper_lib.get_config(cfg, 'perf_model/l1_icache/data_access_time', core))
+      latency_l2 = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0, core))
+      latency_l3 = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/data_access_time', 0, core))
+      l1_dcacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/associativity', 0, core))
+      l1_dcacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/cache_block_size', 0, core))
+      l1_dcacheSize= long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/cache_size', 0, core))
+      l1_dcacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/shared_cores', 0, core))
+      l1_dcacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/writeback_time', 0, core))
+      l1_icacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/associativity', 0, core))
+      l1_icacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/cache_block_size', 0, core))
+      l1_icacheSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/cache_size', 0, core))
+      l1_icacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/shared_cores', 0, core))
+      l1_icacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/writeback_time', 0, core))
+      l2_cacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/associativity', 0, core))
+      l2_cacheSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/cache_size', 0, core))
+      l2_cacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/cache_block_size', 0, core))
+      l2_cacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/writeback_time', 0, core))
+      l3_cacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/associativity', 0, core))
+      l3_cacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/cache_block_size', 0, core))
+      l3_cacheSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core))
+      l3_cacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/writeback_time', 0, core))
+
       if template[i][1]:
            #if template[i][1][1]=="cfg":
           #template[i][0] = template[i][0] % int(calc_param(template[i][1][0],config))
@@ -318,9 +325,8 @@ def edit_XML(stats, cfg, vdd):
           elif template[i][1][0]=="ALU_per_core":
             template[i][0] = template[i][0] % ALU_per_core
           elif template[i][1][0]=="window_size":
-            template[i][0] = template[i][0] % int(cfg["perf_model/core/interval_timer/window_size"])
+            template[i][0] = template[i][0] % window_size
         elif template[i][1][1]=="stat":
-          core = template[i][1][2]
           cores_l2s = range(l2_cacheSharedCores*core, min(ncores, l2_cacheSharedCores*core+l2_cacheSharedCores))
           cores_l3s = range(l3_cacheSharedCores*core, min(ncores, l3_cacheSharedCores*core+l3_cacheSharedCores))
           # core statistics
@@ -587,7 +593,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t<param name=\"homogeneous_ccs\" value=\"1\"/><!--cache coherece hardware -->",""])
   template.append(["\t\t<param name=\"homogeneous_NoCs\" value=\"1\"/>",""])
   template.append(["\t\t<param name=\"core_tech_node\" value=\"%u\"/><!-- nm -->"%technology_node,""])
-  template.append(["\t\t<param name=\"target_core_clockrate\" value='%i'/><!--MHz -->",["clockFrequency","cfg"]]) #CFG
+  template.append(["\t\t<param name=\"target_core_clockrate\" value='%i'/><!--MHz -->",["clockFrequency","cfg",None]]) #CFG
   template.append(["\t\t<param name=\"temperature\" value=\"330\"/> <!-- Kelvin -->",""])
   template.append(["\t\t<param name=\"number_cache_levels\" value=\"3\"/>",""])
   template.append(["\t\t<param name=\"interconnect_projection_type\" value=\"0\"/><!--0: agressive wire technology; 1: conservative wire technology -->",""])
@@ -662,9 +668,9 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t<param name=\"instruction_window_scheme\" value=\"1\"/><!-- 0 PHYREG based, 1 RSBASED-->",""])
     template.append(["\t\t\t<!-- McPAT support 2 types of OoO cores, RS based and physical reg based-->",""])
     template.append(["\t\t\t<param name=\"instruction_window_size\" value=\"%u\"/>",["window_size","cfg",iCount],""])  #
-    template.append(["\t\t\t<param name=\"fp_instruction_window_size\" value=\"32\"/>",""])       #
+    template.append(["\t\t\t<param name=\"fp_instruction_window_size\" value=\"%d\"/>",["window_size","cfg",iCount]])       #
     template.append(["\t\t\t<!-- the instruction issue Q as in Alpha 21264; The RS as in Intel P6 -->",""])
-    template.append(["\t\t\t<param name=\"ROB_size\" value=\"128\"/>",""])
+    template.append(["\t\t\t<param name=\"ROB_size\" value=\"%d\"/>",["window_size","cfg",iCount]])
     template.append(["\t\t\t<!-- each in-flight instruction has an entry in ROB -->",""])
     template.append(["\t\t\t<!-- registers -->",""])
     template.append(["\t\t\t<param name=\"archi_Regs_IRF_size\" value=\"16\"/>",""])
@@ -803,7 +809,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t<component id=\"system.core%i.icache\" name=\"icache\">"%iCount,""])
     template.append(["\t\t\t\t<!-- there is no write requests to itlb although writes happen to it after miss, ",""])
     template.append(["\t\t\t\twhich is actually a replacement -->",""])
-    template.append(["\t\t\t\t<param name=\"icache_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["icache_cfg","comb"]])        #calculate this properly
+    template.append(["\t\t\t\t<param name=\"icache_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["icache_cfg","comb",iCount]])        #calculate this properly
     #template.append(["\t\t\t\t<param name=\"icache_config\" value=\"32768,32,8,1,4,4,32,0 \"/>",""])        #the above icache config hardcoded
 
     template.append(["\t\t\t\t<!-- the parameters are capacity,block_width, associativity,bank, throughput w.r.t. core clock, latency w.r.t. core clock,-->",""])
@@ -822,7 +828,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t</component>",""])
     template.append(["\t\t\t<component id=\"system.core%i.dcache\" name=\"dcache\">"%iCount,""])
     template.append(["\t\t\t\t<!-- all the buffer related are optional -->",""])
-    template.append(["\t\t\t\t<param name=\"dcache_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["dcache_cfg","comb"]])
+    template.append(["\t\t\t\t<param name=\"dcache_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["dcache_cfg","comb",iCount]])
     #template.append(["\t\t\t\t<param name=\"dcache_config\" value=\"32768,32,8,1, 4,6, 32,1 \"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"16, 16, 16, 16\"/>",""]) #mcpat will crash for some different sizes of 2nd parameter
     template.append(["\t\t\t\t<!-- cache controller buffer sizes: miss_buffer_size(MSHR),fill_buffer_size,prefetch_buffer_size,wb_buffer_size-->",""])
@@ -876,7 +882,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
 #------------------------------------------------------------------------------------------------------------------------
   for iCount in range(num_l2s):
     template.append(["\t\t<component id=\"system.L2%i\" name=\"L2%i\">"%(iCount,iCount),""])
-    template.append(["\t\t\t\t<param name=\"L2_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["L2_config","comb"]])
+    template.append(["\t\t\t\t<param name=\"L2_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["L2_config","comb",iCount]])
     #template.append(["\t\t\t\t<param name=\"L2_config\" value=\"6291456,64, 16, 8, 8, 23, 32, 1\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"16, 16, 16, 16\"/>",""])
     template.append(["\t\t\t\t<param name=\"clockrate\" value=\"2660\"/>",""])
@@ -892,7 +898,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
 #------------------------------------------------------------------------------------------------------------------------
   for iCount in range(num_l3s):
     template.append(["\t\t<component id=\"system.L3%i\" name=\"L3%i\">"%(iCount,iCount),""])
-    template.append(["\t\t\t\t<param name=\"L3_config\" value=\"%i,%i,%i, %i, %i, %i,%i\"/>",["L3_config","comb"]])
+    template.append(["\t\t\t\t<param name=\"L3_config\" value=\"%i,%i,%i, %i, %i, %i,%i\"/>",["L3_config","comb",iCount]])
     #template.append(["\t\t\t<param name=\"L3_config\" value=\"16777216 , 64 ,16, 16, 16, 100,1\"/>",""])
     template.append(["\t\t<!-- the parameters are capacity,block_width, associativity,bank, throughput w.r.t. core clock, latency w.r.t. core clock,-->",""])
     template.append(["\t\t\t\t<param name=\"clockrate\" value=\"850\"/>",""])
@@ -1022,7 +1028,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-v <Vdd>] [-o <output-file (power{.jpg,.txt,.py})>]' % '|'.join(powertypes)
+    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-v <Vdd>] [-c <override-config>] [-o <output-file (power{.jpg,.txt,.py})>]' % '|'.join(powertypes)
     sys.exit(-1)
 
   jobid = 0
@@ -1030,12 +1036,13 @@ if __name__ == '__main__':
   powertypes = ['dynamic', 'rundynamic', 'static', 'total', 'area']
   powertype = 'dynamic'
   vdd = None
+  config = None
   outputfile = 'power'
   no_graph = False
   partial = None
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:t:v:d:o:", [ 'no-graph', 'partial=' ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:t:c:v:d:o:", [ 'no-graph', 'partial=' ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -1053,6 +1060,8 @@ if __name__ == '__main__':
       powertype = a
     if o == '-v':
       vdd = float(a)
+    if o == '-c':
+      config = a
     if o == '-o':
       outputfile = a
     if o == '--no-graph':
@@ -1064,4 +1073,4 @@ if __name__ == '__main__':
       partial = a.split(':')
 
 
-  main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, vdd = vdd, outputfile = outputfile, no_graph = no_graph, partial = partial)
+  main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, vdd = vdd, config = config, outputfile = outputfile, no_graph = no_graph, partial = partial)

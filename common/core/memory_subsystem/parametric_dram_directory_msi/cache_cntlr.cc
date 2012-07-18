@@ -544,7 +544,7 @@ CacheCntlr::doPrefetch(IntPtr prefetch_address, SubsecondTime t_start)
       waitForNetworkThread();
       wakeUpNetworkThread();
 
-      hit_where = processShmemReqFromPrevCache(this, Core::READ, prefetch_address, true, Prefetch::OWN, t_start, false);
+      hit_where = processShmemReqFromPrevCache(this, Core::READ, prefetch_address, false, Prefetch::OWN, t_start, false);
 
       LOG_ASSERT_ERROR(hit_where != HitWhere::MISS, "Line was not there after prefetch");
    }
@@ -573,6 +573,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
    #endif
 
    bool cache_hit = operationPermissibleinCache(address, mem_op_type), sibling_hit = false;
+   bool first_hit = cache_hit;
    HitWhere::where_t hit_where = HitWhere::MISS;
    SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
 
@@ -596,11 +597,11 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
 
    if (cache_hit)
    {
-      if (isPrefetch == Prefetch::NONE && cache_block_info->isPrefetch())
+      if (isPrefetch == Prefetch::NONE && cache_block_info->hasOption(CacheBlockInfo::PREFETCH))
       {
          // This line was fetched by the prefetcher and has proven useful
          stats.hits_prefetch++;
-         cache_block_info->clearPrefetch();
+         cache_block_info->clearOption(CacheBlockInfo::PREFETCH);
       }
 
       // Increment Shared Mem Perf model cycle counts
@@ -702,7 +703,7 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
             SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
             copyDataFromNextLevel(mem_op_type, address, modeled, t_now);
             if (isPrefetch != Prefetch::NONE)
-               getCacheBlockInfo(address)->setPrefetch();
+               getCacheBlockInfo(address)->setOption(CacheBlockInfo::PREFETCH);
          }
       }
       else
@@ -726,7 +727,7 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
                // Insert the line. Be sure to use SHARED/MODIFIED as appropriate (upgrades are free anyway), we don't want to have to write back clean lines
                insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, data_buf, ShmemPerfModel::_USER_THREAD);
                if (isPrefetch != Prefetch::NONE)
-                  getCacheBlockInfo(address)->setPrefetch();
+                  getCacheBlockInfo(address)->setOption(CacheBlockInfo::PREFETCH);
             }
          }
          else
@@ -741,7 +742,7 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
       Byte data_buf[getCacheBlockSize()];
       retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD);
       /* Store completion time so we can detect overlapping accesses */
-      if (modeled && m_enabled)
+      if (modeled && m_enabled && !first_hit)
       {
          ScopedLock sl(getLock());
          m_master->mshr[address] = make_mshr(t_issue, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
@@ -1056,7 +1057,7 @@ MYLOG("evicting @%lx", evict_address);
          );
 
          // Line was prefetched, but is evicted without ever being used
-         if (evict_block_info.isPrefetch())
+         if (evict_block_info.hasOption(CacheBlockInfo::PREFETCH))
             ++stats.evict_prefetch;
 
          if (old_state == CacheState::MODIFIED)
@@ -1340,7 +1341,7 @@ MYLOG("have SHARED, upgrading to MODIFIED for #%u", request->cache_cntlr->m_core
          }
 
          if (request->isPrefetch)
-            getCacheBlockInfo(address)->setPrefetch();
+            getCacheBlockInfo(address)->setOption(CacheBlockInfo::PREFETCH);
 
          // Set the Counters in the Shmem Perf model accordingly
          // Set the counter value in the USER thread to that in the SIM thread
@@ -1682,6 +1683,13 @@ CacheCntlr::lastLevelCache()
       m_last_level = last_level;
    }
    return m_last_level;
+}
+
+bool
+CacheCntlr::isShared(core_id_t core_id)
+{
+   core_id_t core_id_master = core_id - core_id % m_shared_cores;
+   return core_id_master == m_core_id_master;
 }
 
 

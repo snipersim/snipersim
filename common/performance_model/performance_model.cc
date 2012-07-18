@@ -75,6 +75,7 @@ PerformanceModel::PerformanceModel(Core *core)
    registerStatsMetric("performance_model", core->getId(), "cpiSyncJoin", &m_cpiSyncJoin);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncPause", &m_cpiSyncPause);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncSleep", &m_cpiSyncSleep);
+   registerStatsMetric("performance_model", core->getId(), "cpiSyncUnscheduled", &m_cpiSyncUnscheduled);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncDvfsTransition", &m_cpiSyncDvfsTransition);
 
    registerStatsMetric("performance_model", core->getId(), "cpiRecv", &m_cpiRecv);
@@ -178,6 +179,9 @@ void PerformanceModel::handleIdleInstruction(Instruction *instruction)
       case(SyncInstruction::SLEEP):
          m_cpiSyncSleep += insn_cost;
          break;
+      case(SyncInstruction::UNSCHEDULED):
+         m_cpiSyncUnscheduled += insn_cost;
+         break;
       default:
          LOG_ASSERT_ERROR(false, "Unexpected SyncInstruction::type_t enum type. (%d)", sync_insn->getSyncType());
       }
@@ -236,7 +240,7 @@ void PerformanceModel::iterate()
       for( ; m_current_ins_index < current_bb->size(); m_current_ins_index++)
       {
          Instruction *ins = current_bb->at(m_current_ins_index);
-         if ((ins->getType() == INST_SYNC) || (ins->getType() == INST_DELAY) || (ins->getType() == INST_RECV)) {
+         if (ins->isIdle()) {
             handleIdleInstruction(ins);
          } else {
             bool res = handleInstruction(ins);

@@ -4,6 +4,7 @@
 #include "thread_manager.h"
 #include "core_manager.h"
 #include "sync_client.h"
+#include "performance_model.h"
 #include "clock_skew_minimization_object.h"
 #include "config.hpp"
 
@@ -25,6 +26,20 @@ Thread::~Thread()
 
 }
 
+void Thread::setCore(Core* core)
+{
+   if (m_core)
+      m_core->setThread(NULL);
+
+   m_core = core;
+
+   if (m_core)
+   {
+      LOG_ASSERT_ERROR(core->getThread() == NULL, "Cannot move thread %d to core %d as it is already running thread %d", getId(), core->getId(), core->getThread()->getId());
+      m_core->setThread(this);
+   }
+}
+
 bool Thread::reschedule(SubsecondTime &time, Core *current_core)
 {
    if (m_core == NULL || current_core != m_core)
@@ -36,6 +51,9 @@ bool Thread::reschedule(SubsecondTime &time, Core *current_core)
       // Do a definitive check for m_core, while holding the lock, unoptimized because another thread will be changing it
       while((volatile Core*)m_core == NULL)
          time = Sim()->getThreadManager()->stallThread(getId(), ThreadManager::STALL_UNSCHEDULED, time);
+
+      m_core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+
       updateCoreTLS();
       return true;
    }

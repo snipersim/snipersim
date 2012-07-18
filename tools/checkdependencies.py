@@ -6,6 +6,8 @@ import sys, os
 
 DEPENDENCIES = [
   ('zlib1g-dev / zlib-devel', '/usr/include/zlib.h'),
+  ('g++ / gcc-g++', '/usr/bin/g++'),
+  ('wget', '/usr/bin/wget'),
 ]
 
 if os.environ.get('BOOST_INCLUDE', ''):

@@ -42,6 +42,7 @@ Lock Core::m_global_core_lock;
 
 Core::Core(SInt32 id)
    : m_core_id(id)
+   , m_thread(NULL)
    , m_dyninfo_save_used(false)
    , m_bbv(id)
    , m_core_state(Core::IDLE)

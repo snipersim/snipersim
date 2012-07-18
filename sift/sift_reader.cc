@@ -24,6 +24,11 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , handleOutputArg(NULL)
    , handleSyscallFunc(NULL)
    , handleSyscallArg(NULL)
+   , handleNewThreadFunc(NULL)
+   , handleNewThreadArg(NULL)
+   , handleJoinFunc(NULL)
+   , handleJoinArg(NULL)
+   , filesize(0)
    , last_address(0)
    , icache()
    , m_id(id)
@@ -467,7 +472,10 @@ void Sift::Reader::sendSimpleResponse(RecOtherType type, void *data, uint32_t si
 
 uint64_t Sift::Reader::getPosition()
 {
-   return inputstream->tellg();
+   if (inputstream)
+      return inputstream->tellg();
+   else
+      return 0;
 }
 
 uint64_t Sift::Reader::getLength()

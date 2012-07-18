@@ -41,6 +41,7 @@ curdir = os.getcwd()
 scripts = []
 traces = []
 resptraces = []
+trace_manual = False
 
 if not sys.argv[1:]:
   usage()
@@ -48,10 +49,10 @@ if not sys.argv[1:]:
 def findconfig(filename):
   for dirname in ('.', os.path.join(HOME, 'config')):
     configfile = os.path.realpath(os.path.join(dirname, filename))
-    if os.path.exists(configfile):
+    if os.path.isfile(configfile):
       return configfile
     configfile += '.cfg'
-    if os.path.exists(configfile):
+    if os.path.isfile(configfile):
       return configfile
   return False
 
@@ -70,7 +71,7 @@ def add_config_file(filename):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -134,6 +135,8 @@ for o, a in opts:
     traces.extend(a.split(','))
   if o == '--response-traces':
     resptraces.extend(a.split(','))
+  if o == '--trace-manual':
+    trace_manual = True
 
 if cmdline:
   standalone = False
@@ -142,8 +145,8 @@ if cmdline:
     usage()
 else:
   standalone = True
-  if not traces:
-    print 'Need either a set of traces (--traces=) or a benchmark command line'
+  if not traces and not trace_manual:
+    print 'Need either a set of traces (--traces= or --trace-manual) or a benchmark command line'
     usage()
 
 if roi_only and roi_script:
@@ -246,6 +249,7 @@ sim_root = HOME
 arch = config.get('target', 'intel64')
 
 
+pin_version = 'unknown'
 try:
   pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE).communicate()[0]
   pin_version = int([ line.split()[3] for line in pin_version.split('\n') if line.startswith('@CHARM-VERSION') ][0])

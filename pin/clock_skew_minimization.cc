@@ -93,35 +93,15 @@ static bool abortFunc(THREADID threadIndex)
       return false;
 }
 
-void handlePeriodicSync(THREADID threadIndex, const CONTEXT *ctxt)
+void handlePeriodicSync(THREADID threadIndex)
 {
    Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
    Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
    assert(thread);
 
-   if (core == NULL)
-   {
-      // This thread isn't scheduled. Normally it shouldn't execute any code,
-      // but just after thread start we do get here.
-      // Wait here until we're scheduled on one of the cores.
-      SubsecondTime time = SubsecondTime::Zero();
-      thread->reschedule(time, core);
-
-      // We should be on a core now, set its performance model to our local time
-      core = thread->getCore();
-      // If the core already has a later time, we have to wait
-      time = std::max(time, core->getPerformanceModel()->getElapsedTime());
-      core->getPerformanceModel()->queueDynamicInstruction(new SpawnInstruction(time));
-   }
-
-   if (core->getState() == Core::BROKEN)
-   {
-      // Core has failed, don't block (Pin doesn't like this) but restart so we make zero progress
-      PIN_ExecuteAt(ctxt);
-   }
-
    ClockSkewMinimizationClient *client = thread->getClockSkewMinimizationClient();
-   if (client) {
+   if (client)
+   {
       #ifdef ENABLE_PERF_MODEL_OWN_THREAD
          thread->getPerformanceModel()->setHold(true);
       #endif
@@ -144,7 +124,7 @@ void addPeriodicSync(TRACE trace, INS ins)
    if (enabled() || skew_report_enable()) {
       // There is no concept of time except when in DETAILED mode (the core performance model keeps this)
       // so for other modes, avoid the overhead of this call
-      INSTRUMENT(INSTR_IF_DETAILED, trace, ins, IPOINT_BEFORE, AFUNPTR(handlePeriodicSync), IARG_THREAD_ID, IARG_CONST_CONTEXT, IARG_END);
+      INSTRUMENT(INSTR_IF_DETAILED, trace, ins, IPOINT_BEFORE, AFUNPTR(handlePeriodicSync), IARG_THREAD_ID, IARG_END);
    }
 
    if (! skew_report_added) {

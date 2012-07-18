@@ -4,10 +4,26 @@
 #include "shared_cache_block_info.h"
 #include "log.h"
 
-CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, bool is_prefetch):
+const char* CacheBlockInfo::option_names[] =
+{
+   "prefetch",
+};
+
+const char* CacheBlockInfo::getOptionName(option_t option)
+{
+   static_assert(CacheBlockInfo::NUM_OPTIONS == sizeof(CacheBlockInfo::option_names) / sizeof(char*), "Not enough values in CacheBlockInfo::option_names");
+
+   if (option < NUM_OPTIONS)
+      return option_names[option];
+   else
+      return "invalid";
+}
+
+
+CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, UInt64 options):
    m_tag(tag),
    m_cstate(cstate),
-   m_prefetch(is_prefetch)
+   m_options(options)
 {}
 
 CacheBlockInfo::~CacheBlockInfo()
@@ -45,4 +61,5 @@ CacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
 {
    m_tag = cache_block_info->getTag();
    m_cstate = cache_block_info->getCState();
+   m_options = cache_block_info->m_options;
 }

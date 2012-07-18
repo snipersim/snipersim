@@ -1,5 +1,6 @@
 #include "stats.h"
 #include "simulator.h"
+#include "hooks_manager.h"
 #include "utils.h"
 #include "itostr.h"
 
@@ -12,19 +13,21 @@
 void
 StatsManager::registerMetric(StatsMetricBase *metric)
 {
-   m_objects.push_back(metric);
+   std::string _objectName(metric->objectName.c_str()), _metricName(metric->metricName.c_str());
+   m_objects[_objectName][_metricName][metric->index] = metric;
 }
 
 StatsMetricBase *
 StatsManager::getMetricObject(String objectName, UInt32 index, String metricName)
 {
-   for(std::vector<StatsMetricBase *>::iterator it = m_objects.begin(); it != m_objects.end(); ++it)
-      if (   (*it)->objectName == objectName
-          && (*it)->index == index
-          && (*it)->metricName == metricName
-      )
-         return *it;
-   return NULL;
+   std::string _objectName(objectName.c_str()), _metricName(metricName.c_str());
+   if (m_objects.count(_objectName) == 0)
+      return NULL;
+   if (m_objects[_objectName].count(_metricName) == 0)
+      return NULL;
+   if (m_objects[_objectName][_metricName].count(index) == 0)
+      return NULL;
+   return m_objects[_objectName][_metricName][index];
 }
 
 StatsManager::StatsManager()
@@ -41,6 +44,9 @@ StatsManager::~StatsManager()
 void
 StatsManager::recordStats(String prefix, String fileName)
 {
+   // Allow lazily-maintained statistics to be updated
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_PRE_STAT_WRITE, 0);
+
    if (fileName == "") {
       if (! m_fp) {
          String filename = "sim.stats.delta";
@@ -61,11 +67,20 @@ StatsManager::recordStats(String prefix, String fileName)
 void
 StatsManager::recordStats(String prefix, FILE *fp)
 {
-   for(std::vector<StatsMetricBase *>::iterator it = m_objects.begin(); it != m_objects.end(); ++it)
-      if ((*it)->recordMetric() != "0")
+   for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
+   {
+      for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
       {
-         fprintf(fp, "%s.%s[%u].%s %s\n", prefix.c_str(), (*it)->objectName.c_str(), (*it)->index, (*it)->metricName.c_str(), (*it)->recordMetric().c_str());
+         for(StatsIndexList::iterator it3 = it2->second.begin(); it3 != it2->second.end(); ++it3)
+         {
+            if (!it3->second->isDefault())
+            {
+               fprintf(fp, "%s.%s[%u].%s %s\n", prefix.c_str(), it3->second->objectName.c_str(), it3->second->index,
+                                                it3->second->metricName.c_str(), it3->second->recordMetric().c_str());
+            }
+         }
       }
+   }
    fflush(fp);
 }
 
@@ -79,16 +94,11 @@ StatsManager::recordStatsBase()
    FILE *fp = fopen(filename.c_str(), "w");
    LOG_ASSERT_ERROR(fp, "Cannot open %s for writing", filename.c_str());
 
-   // Use std::string here because String (__versa_string) does not provide a hash function for STL containers with gcc < 4.6
-   std::unordered_set<std::string> metrics;
-   for(std::vector<StatsMetricBase *>::iterator it = m_objects.begin(); it != m_objects.end(); ++it)
+   for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
    {
-      std::stringstream ss;
-      ss << (*it)->objectName << "[]." << (*it)->metricName;
-      if (metrics.count(ss.str()) == 0)
+      for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
       {
-         fprintf(fp, "%s[].%s\n", (*it)->objectName.c_str(), (*it)->metricName.c_str());
-         metrics.insert(ss.str());
+         fprintf(fp, "%s[].%s\n", it1->first.c_str(), it2->first.c_str());
       }
    }
    fflush(fp);

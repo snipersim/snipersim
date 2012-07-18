@@ -17,6 +17,7 @@ const char* HookType::hook_type_names[] = {
    "HOOK_THREAD_RESUME",
    "HOOK_THREAD_MIGRATE",
    "HOOK_INSTRUMENT_MODE",
+   "HOOK_PRE_STAT_WRITE",
 };
 static_assert(HookType::HOOK_TYPES_MAX == sizeof(HookType::hook_type_names) / sizeof(HookType::hook_type_names[0]),
               "Not enough values in HookType::hook_type_names");
