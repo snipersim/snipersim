@@ -1,3 +1,7 @@
+Version 3.06
+  * Fix modeled size of network messages
+  * Build fixes for 32-bit, compiler overrides
+
 Version 3.05
   * Scheduler: expose application ID
   * Add example script roi-iter.py to dynamically select ROI based on SimMarkers

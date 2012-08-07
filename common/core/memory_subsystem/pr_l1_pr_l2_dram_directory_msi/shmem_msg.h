@@ -57,7 +57,7 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 getMsgLen();
 
          // Modeling
-         UInt32 getModeledLength() { return sizeof(*this) + m_data_length; }
+         UInt32 getModeledLength();
 
          msg_t getMsgType() { return m_msg_type; }
          MemComponent::component_t getSenderMemComponent() { return m_sender_mem_component; }

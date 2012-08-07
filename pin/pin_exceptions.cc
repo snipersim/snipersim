@@ -21,8 +21,9 @@ EXCEPT_HANDLING_RESULT exceptionHandler(THREADID tid, EXCEPTION_INFO *pExceptInf
    const int BACKTRACE_SIZE = 16;
    void * backtrace_buffer[BACKTRACE_SIZE];
    unsigned int backtrace_n = get_call_stack_from(backtrace_buffer, BACKTRACE_SIZE,
-                                                  (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_RSP),
-                                                  (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_RBP));
+                                                  (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_STACK_PTR),
+                                                  (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_GBP)
+   );
 
    FILE* fp = fopen(Sim()->getConfig()->formatOutputFileName("debug_backtrace.out").c_str(), "w");
    // so addr2line can calculate the offset where we're really mapped
