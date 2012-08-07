@@ -144,32 +144,32 @@ def get_config_default(config, key, defaultval, index = None):
     return defaultval
 
 
-def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout, graphiteout, powerpy), partial = None):
+def parse_results_from_fileobjs((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout, graphiteout, powerpy), partial = None):
   results = []
 
   ## sim.cfg
-  simcfg = parse_config(simcfg)
+  simcfg = parse_config(simcfg.read())
   ncores = int(simcfg['general/total_cores'])
 
   results += [ ('ncores', -1, ncores) ]
   results += [ ('corefreq', idx, 1e9 * float(get_config(simcfg, 'perf_model/core/frequency', idx))) for idx in range(ncores) ]
 
   ## stdout.txt
-  if '[SNIPER]' in stdout:
-    marker = 'SNIPER'
-  else:
-    marker = 'GRAPHITE'
-  stdout = stdout.split('\n')
-  try:
-    walltime = [ float(line.split()[-2]) for line in stdout if line.startswith('[%s] Leaving ROI after' % marker) ][0]
-  except (IndexError, ValueError):
-    walltime = 0
-  try:
-    roi = [ line for line in stdout if re.match('^\[%s(:0)?\] Simulated' % marker, line)][0]
-    roi = re.match('\[%s(:0)?\] Simulated ([0-9.]+)M instructions @ ([0-9.]+) KIPS \(([0-9.]+) KIPS / target core' % marker, roi)
-    roi = { 'instrs': float(roi.group(2))*1e6, 'ipstotal': float(roi.group(3))*1e3, 'ipscore': float(roi.group(4))*1e3 }
-  except (IndexError, ValueError):
-    roi = { 'instrs': 0, 'ipstotal': 0, 'ipscore': 0 }
+  walltime = 0
+  roi = { 'instrs': 0, 'ipstotal': 0, 'ipscore': 0 }
+  for line in (stdout or []):
+    for marker in ('[SNIPER]', '[GRAPHITE]'):
+      try:
+        if line.startswith('%s Leaving ROI after' % marker):
+          walltime = float(line.split()[-2])
+      except (IndexError, ValueError):
+        pass
+      try:
+        if re.match('^\[%s(:0)?\] Simulated' % marker, line):
+          roi = re.match('\[%s(:0)?\] Simulated ([0-9.]+)M instructions @ ([0-9.]+) KIPS \(([0-9.]+) KIPS / target core' % marker, roi)
+          roi = { 'instrs': float(roi.group(2))*1e6, 'ipstotal': float(roi.group(3))*1e3, 'ipscore': float(roi.group(4))*1e3 }
+      except (IndexError, ValueError):
+        pass
 
   results.append(('roi.walltime', -1, walltime))
   results.append(('roi.instrs', -1, roi['instrs']))
@@ -179,31 +179,31 @@ def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout
   ## graphite.out
   if graphiteout:
     # If we're called from inside run-graphite, graphite.out may not yet exist
-    graphiteout = eval(graphiteout)
+    graphiteout = eval(graphiteout.read())
     results.append(('walltime', -1, graphiteout['t_elapsed']))
     results.append(('vmem', -1, graphiteout['vmem']))
 
   ## sim.stats
-  if simstatsbase and simstatsdelta:
-    simstatsbase = simstatsbase.split('\n')
-    simstats = simstatsdelta.split('\n')
-  else:
-    simstats = simstats.split('\n')
-
   if partial:
     k1, k2 = partial[:2]
   else:
     k1, k2 = 'roi-begin', 'roi-end'
 
-  stats_begin = dict([ (line.split()[0][len(k1+'.'):], long(line.split()[1])) for line in simstats if line.startswith(k1) ])
-  stats = dict([ (line.split()[0][len(k2+'.'):], long(line.split()[1])) for line in simstats if line.startswith(k2) ])
+  stats_begin = {}
+  stats = {}
+  for line in (simstatsdelta or simstats):
+    if line.startswith(k1):
+      stats_begin[line.split()[0][len(k1+'.'):]] = long(line.split()[1])
+    if line.startswith(k2):
+      stats[line.split()[0][len(k2+'.'):]] = long(line.split()[1])
 
-  if simstatsbase and simstatsdelta:
+  if simstatsbase:
     # End stats may not be empty, check before adding the defaults
     if not stats:
       raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
     for line in simstatsbase:
-      if not line.strip(): continue
+      line = line.strip()
+      if not line: continue
       for c in range(ncores):
         key = line.split('[]')[0] + ('[%u]' % c) + line.split('[]', 1)[1]
         stats_begin.setdefault(key, 0)
@@ -225,9 +225,10 @@ def parse_results((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout
 
   ## power.py
   power = {}
-  exec(powerpy)
-  for key, value in power.items():
-    results.append(('power.%s' % key, -1, value))
+  if powerpy:
+    exec(powerpy.read())
+    for key, value in power.items():
+      results.append(('power.%s' % key, -1, value))
 
   return results
 
@@ -237,18 +238,18 @@ def parse_results_from_dir(dirname, partial = None):
   for filename in ('sim.stats', 'sim.stats.base', 'sim.stats.delta', 'sim.out', 'sim.cfg', 'stdout.txt', 'graphite.out', 'power.py'):
     fullname = os.path.join(dirname, filename)
     if os.path.exists(fullname):
-      files.append(file(fullname).read())
+      files.append(file(fullname))
     else:
       #sys.stderr.write('%s not available, some results may be missing\n' % filename)
-      files.append('')
+      files.append(None)
   # if --partial was used with a filename, replace sim.stats with it
   if partial and len(partial) > 2:
     fullname = os.path.join(dirname, partial[2])
     if os.path.exists(fullname):
-      files[0] = file(fullname).read()
+      files[0] = file(fullname)
     else:
       raise ValueError("Partial sim.stats replacement file named %s cannot be opened" % partial[2])
-  return parse_results(files, partial = partial)
+  return parse_results_from_fileobjs(files, partial = partial)
 
 
 def get_results_file(filename, jobid = None, resultsdir = None, force = False):

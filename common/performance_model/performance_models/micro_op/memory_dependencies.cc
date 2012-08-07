@@ -58,7 +58,8 @@ void MemoryDependencies::setDependencies(DynamicMicroOp &microOp, uint64_t lowes
 
 void MemoryDependencies::add(uint64_t sequenceNumber, uint64_t address)
 {
-   producers.push({sequenceNumber, address});
+   Producer producer = {sequenceNumber, address};
+   producers.push(producer);
 }
 
 uint64_t MemoryDependencies::find(uint64_t address)

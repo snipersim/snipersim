@@ -42,6 +42,7 @@
 #include "codecache_trace.h"
 #include "local_storage.h"
 #include "toolreg.h"
+#include "pin_exceptions.h"
 
 // lite directories
 #include "lite/routine_replace.h"
@@ -346,7 +347,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
    if (! done_app_initialization)
    {
       // Spawn the main() thread
-      Sim()->getThreadManager()->spawnThread(INVALID_THREAD_ID, NULL, NULL);
+      Sim()->getThreadManager()->spawnThread(INVALID_THREAD_ID, 0, NULL, NULL);
 
       // Start the trace manager, if any
       if (Sim()->getTraceManager())
@@ -465,6 +466,7 @@ int main(int argc, char *argv[])
    #ifdef LOGMEM_ENABLED
       PIN_InterceptSignal(SIGUSR1, dumpLogmem, NULL);
    #endif
+   PIN_AddInternalExceptionHandler(exceptionHandler, NULL);
 
    RTN_AddInstrumentFunction(lite::routineCallback, 0);
 

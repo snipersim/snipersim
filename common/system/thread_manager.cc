@@ -48,16 +48,16 @@ Thread* ThreadManager::getCurrentThread(int threadIndex)
    return m_thread_tls->getPtr<Thread>(threadIndex);
 }
 
-Thread* ThreadManager::createThread()
+Thread* ThreadManager::createThread(app_id_t app_id)
 {
    ScopedLock sl(m_thread_lock);
-   return createThread_unlocked();
+   return createThread_unlocked(app_id);
 }
 
-Thread* ThreadManager::createThread_unlocked()
+Thread* ThreadManager::createThread_unlocked(app_id_t app_id)
 {
    thread_id_t thread_id = m_threads.size();
-   Thread *thread = new Thread(thread_id);
+   Thread *thread = new Thread(thread_id, app_id);
    m_threads.push_back(thread);
    m_thread_state.push_back(ThreadState());
    m_thread_state[thread->getId()].status = Core::INITIALIZING;
@@ -140,7 +140,7 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    thread->updateCoreTLS();
 }
 
-SInt32 ThreadManager::spawnThread(thread_id_t thread_id, thread_func_t func, void *arg)
+thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id, thread_func_t func, void *arg)
 {
    ScopedLock sl(getLock());
 
@@ -154,7 +154,7 @@ SInt32 ThreadManager::spawnThread(thread_id_t thread_id, thread_func_t func, voi
 
    LOG_PRINT("(1) spawnThread with func: %p and arg: %p", func, arg);
 
-   Thread *new_thread = createThread_unlocked();
+   Thread *new_thread = createThread_unlocked(app_id);
 
    // Insert the request in the thread request queue
    ThreadSpawnRequest req = { thread_id, new_thread->getId(), time_start };

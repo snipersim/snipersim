@@ -1,5 +1,4 @@
-SIM_ROOT ?= $(CURDIR)
-GRAPHITE_ROOT ?= SIM_ROOT
+SIM_ROOT ?= $(shell readlink -f "$(CURDIR)")
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 

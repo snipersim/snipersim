@@ -38,7 +38,7 @@ public:
    Lock &getLock() { return m_thread_lock; }
    Scheduler *getScheduler() const { return m_scheduler; }
 
-   Thread* createThread();
+   Thread* createThread(app_id_t app_id);
 
    Thread *getThreadFromID(thread_id_t thread_id);
    Thread *getCurrentThread(int threadIndex = -1);
@@ -46,7 +46,7 @@ public:
    Core::State getThreadState(thread_id_t thread_id) const { return m_thread_state.at(thread_id).status; }
 
    // services
-   thread_id_t spawnThread(thread_id_t thread_id, thread_func_t func, void *arg);
+   thread_id_t spawnThread(thread_id_t thread_id, app_id_t app_id, thread_func_t func, void *arg);
    void joinThread(thread_id_t thread_id, thread_id_t join_thread_id);
 
    thread_id_t getThreadToSpawn(SubsecondTime &time);
@@ -92,7 +92,7 @@ private:
 
    Scheduler *m_scheduler;
 
-   Thread* createThread_unlocked();
+   Thread* createThread_unlocked(app_id_t app_id);
    void wakeUpWaiter(thread_id_t thread_id, SubsecondTime time);
 };
 

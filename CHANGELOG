@@ -1,3 +1,10 @@
+Version 3.05
+  * Scheduler: expose application ID
+  * Add example script roi-iter.py to dynamically select ROI based on SimMarkers
+  * CPI stacks: --aggregate and --partial support, fixes for heterogeneous configurations
+  * Traces: support for 32-bit executables
+  * Build fixes for older Linux versions
+
 Version 3.04
   * Support for running multiple multi-threaded workloads in a single simulation
   * McPAT fixes for heterogeneous configurations

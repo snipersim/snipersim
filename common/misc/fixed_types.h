@@ -43,11 +43,13 @@ typedef uintptr_t carbon_reg_t;
 
 // Carbon core types
 typedef SInt32 thread_id_t;
+typedef SInt32 app_id_t;
 typedef SInt32 core_id_t;
 typedef SInt32 carbon_thread_t;
 
-#define INVALID_CORE_ID ((core_id_t) -1)
 #define INVALID_THREAD_ID ((thread_id_t) -1)
+#define INVALID_APP_ID ((app_id_t) -1)
+#define INVALID_CORE_ID ((core_id_t) -1)
 #define INVALID_ADDRESS  ((IntPtr) -1)
 
 #ifdef __cplusplus

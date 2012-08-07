@@ -37,12 +37,12 @@ TraceManager::TraceManager()
    }
 }
 
-thread_id_t TraceManager::newThread(size_t count, bool spawn, UInt32 app_id)
+thread_id_t TraceManager::newThread(size_t count, bool spawn, app_id_t app_id)
 {
-   assert(app_id < m_num_apps);
+   assert(static_cast<decltype(app_id)>(m_num_apps) > app_id);
 
    UInt32 app_start_thread = 0, start_thread;
-   for (UInt32 i = 0 ; i < app_id ; i++)
+   for (app_id_t i = 0 ; i < app_id ; i++)
    {
       app_start_thread += m_app_thread_count_requested[i];
    }
@@ -58,7 +58,7 @@ thread_id_t TraceManager::newThread(size_t count, bool spawn, UInt32 app_id)
          responsefile = m_responsefiles[i];
       }
 
-      TraceThread *thread = new TraceThread(Sim()->getThreadManager()->createThread(), m_tracefiles[i], responsefile, app_id);
+      TraceThread *thread = new TraceThread(Sim()->getThreadManager()->createThread(app_id), m_tracefiles[i], responsefile, app_id);
 
       m_threads[i] = thread;
 

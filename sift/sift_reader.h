@@ -19,7 +19,7 @@ namespace Sift
    // Static information
    typedef struct
    {
-      intptr_t addr;
+      uint64_t addr;
       uint8_t size;
       uint8_t data[16];
       const xed_decoded_inst_t xed_inst;
@@ -30,7 +30,7 @@ namespace Sift
    {
       const StaticInstruction *sinst;
       uint8_t num_addresses;
-      intptr_t addresses[MAX_DYNAMIC_ADDRESSES];
+      uint64_t addresses[MAX_DYNAMIC_ADDRESSES];
       bool is_branch;
       bool taken;
       bool is_predicate;
@@ -62,14 +62,15 @@ namespace Sift
          char *m_response_filename;
 
          static bool xed_initialized;
+         xed_state_t m_xed_state_init;
 
-         intptr_t last_address;
-         std::unordered_map<intptr_t, const uint8_t*> icache;
-         std::unordered_map<intptr_t, const StaticInstruction*> scache;
+         uint64_t last_address;
+         std::unordered_map<uint64_t, const uint8_t*> icache;
+         std::unordered_map<uint64_t, const StaticInstruction*> scache;
 
          uint32_t m_id;
 
-         const Sift::StaticInstruction* getStaticInstruction(intptr_t addr, uint8_t size);
+         const Sift::StaticInstruction* getStaticInstruction(uint64_t addr, uint8_t size);
          void sendSyscallResponse(uint64_t return_code);
          void sendSimpleResponse(RecOtherType type, void *data = NULL, uint32_t size = 0);
          void initStream();

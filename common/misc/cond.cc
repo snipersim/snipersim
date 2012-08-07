@@ -1,8 +1,10 @@
 #include "cond.h"
+#include "futex_emu.h"
 
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>
+#include <asm/errno.h> // For EINTR on older kernels
 #include <limits.h>
 
 ConditionVariable::ConditionVariable()

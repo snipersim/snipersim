@@ -32,7 +32,7 @@ $(SIM_ROOT)/lib/libcarbon_sim.a:
 $(TARGET): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
 $(TARGET): $(OBJECTS)
 ifeq ($(SHOW_COMPILE),)
-	@echo '[LD    ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@echo '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	@$(CXX) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(OPT_CFLAGS) -std=c++0x
 else
 	$(CXX) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(OPT_CFLAGS) -std=c++0x

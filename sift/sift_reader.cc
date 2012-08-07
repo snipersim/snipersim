@@ -53,11 +53,11 @@ Sift::Reader::~Reader()
    delete m_response_filename;
    if (response)
       delete response;
-   for(std::unordered_map<intptr_t, const uint8_t*>::iterator i = icache.begin() ; i != icache.end() ; ++i)
+   for(std::unordered_map<uint64_t, const uint8_t*>::iterator i = icache.begin() ; i != icache.end() ; ++i)
    {
       delete [] (*i).second;
    }
-   for(std::unordered_map<intptr_t, const StaticInstruction*>::iterator i = scache.begin() ; i != scache.end() ; ++i)
+   for(std::unordered_map<uint64_t, const StaticInstruction*>::iterator i = scache.begin() ; i != scache.end() ; ++i)
    {
       delete [] (*i).second;
    }
@@ -88,10 +88,22 @@ void Sift::Reader::initStream()
    assert(hdr.magic == Sift::MagicNumber);
    assert(hdr.size == 0);
 
-   if (hdr.options & Option::CompressionZlib)
+   if (hdr.options & CompressionZlib)
    {
       input = new izstream(input);
-      hdr.options &= ~Option::CompressionZlib;
+      hdr.options &= ~CompressionZlib;
+   }
+
+   if (hdr.options & ArchIA32)
+   {
+      xed_state_t init = { XED_MACHINE_MODE_LONG_COMPAT_32, XED_ADDRESS_WIDTH_32b };
+      m_xed_state_init = init;
+      hdr.options &= ~ArchIA32;
+   }
+   else
+   {
+      xed_state_t init = { XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b };
+      m_xed_state_init = init;
    }
 
    // Make sure there are no unrecognized options
@@ -127,10 +139,10 @@ bool Sift::Reader::Read(Instruction &inst)
                return false;
             case RecOtherIcache:
             {
-               assert(rec.Other.size == sizeof(intptr_t) + ICACHE_SIZE);
-               intptr_t address;
+               assert(rec.Other.size == sizeof(uint64_t) + ICACHE_SIZE);
+               uint64_t address;
                uint8_t *bytes = new uint8_t[ICACHE_SIZE];
-               input->read(reinterpret_cast<char*>(&address), sizeof(intptr_t));
+               input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(bytes), ICACHE_SIZE);
                icache[address] = bytes;
                break;
@@ -234,7 +246,7 @@ bool Sift::Reader::Read(Instruction &inst)
       }
 
       uint8_t size;
-      intptr_t addr;
+      uint64_t addr;
 
       if ((byte & 0xf) != 0)
       {
@@ -276,7 +288,7 @@ bool Sift::Reader::Read(Instruction &inst)
       last_address += size;
 
       for(int i = 0; i < inst.num_addresses; ++i)
-         input->read(reinterpret_cast<char*>(&inst.addresses[i]), sizeof(intptr_t));
+         input->read(reinterpret_cast<char*>(&inst.addresses[i]), sizeof(uint64_t));
 
       inst.sinst = getStaticInstruction(addr, size);
 
@@ -380,7 +392,7 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
    }
 }
 
-const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(intptr_t addr, uint8_t size)
+const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(uint64_t addr, uint8_t size)
 {
    if (!scache.count(addr))
    {
@@ -389,7 +401,7 @@ const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(intptr_t addr,
       sinst->size = size;
 
       uint8_t * dst = sinst->data;
-      intptr_t base_addr = addr & ICACHE_PAGE_MASK;
+      uint64_t base_addr = addr & ICACHE_PAGE_MASK;
       while(size > 0)
       {
          uint32_t offset = (dst == sinst->data) ? addr & ICACHE_OFFSET_MASK : 0;
@@ -400,7 +412,7 @@ const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(intptr_t addr,
          base_addr += ICACHE_SIZE;
       }
 
-      xed_state_t xed_state = { XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b };
+      xed_state_t xed_state = m_xed_state_init;
       xed_decoded_inst_zero_set_mode((xed_decoded_inst_t*)&sinst->xed_inst, &xed_state);
       xed_error_enum_t result = xed_decode((xed_decoded_inst_t*)&sinst->xed_inst, sinst->data, sinst->size);
       assert(result == XED_ERROR_NONE);

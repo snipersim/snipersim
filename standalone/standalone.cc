@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
 
    handle_args(args, *cfg);
 
-   Simulator::setConfig(cfg, Config::SimulationMode::STANDALONE);
+   Simulator::setConfig(cfg, Config::STANDALONE);
 
    Simulator::allocate();
    Sim()->start();

@@ -15,7 +15,7 @@
 
 #include <sys/syscall.h>
 
-TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, UInt32 app_id)
+TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id)
    : m__thread(NULL)
    , m_thread(thread)
    , m_trace(tracefile.c_str(), responsefile.c_str(), thread->getId())

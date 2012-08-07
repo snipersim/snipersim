@@ -249,6 +249,16 @@ sim_root = HOME
 arch = config.get('target', 'intel64')
 
 
+os.environ['LD_LIBRARY_PATH'] = ':'.join([
+  'BENCHMARKS_ROOT' in os.environ and '%s/libs:' % os.environ['BENCHMARKS_ROOT'] or '',
+  '%(pin_home)s/%(arch)s/runtime/cpplibs' % locals(),
+  '%(pin_home)s/%(arch)s/runtime' % locals(),
+  '%(HOME)s/python_kit/lib' % locals(),
+  os.environ.get('LD_LIBRARY_PATH', ''),
+])
+os.environ['PYTHONPATH'] = '%(HOME)s/scripts:$PYTHONPATH' % locals()
+
+
 pin_version = 'unknown'
 try:
   pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE).communicate()[0]
@@ -279,16 +289,15 @@ if use_appdebug:
     pinoptions += ' -appdebug'
 
 
-envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/%(arch)s/runtime:%(HOME)s/python_kit/lib:$LD_LIBRARY_PATH"; export PYTHONPATH=%(HOME)s/scripts:$PYTHONPATH; ' % locals()
 optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(graphiteoptions)s' % locals()
 if standalone:
   if use_gdb:
     gdbcmd = 'gdb %(HOME)s/lib/sniper --args ' % locals()
   else:
     gdbcmd = ''
-  cmd = envcmd + gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
+  cmd = gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
 else:
-  cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/pin_sim' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
+  cmd = '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/pin_sim' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
 
 queue = Queue.Queue()
 
@@ -373,13 +382,16 @@ def execute_appdebug():
 
 
 if save_patch:
-  graphiterootdir = os.getenv('GRAPHITE_ROOT')
+  graphiterootdir = HOME
   gitdir = os.path.join(graphiterootdir, '.git')
   patchfile = os.path.join(outputdir, 'sim.patch')
   os.system("git --work-tree='%(graphiterootdir)s' --git-dir='%(gitdir)s' log --max-count=1 --pretty=%%H > '%(patchfile)s'" % locals())
   os.system("git --work-tree='%(graphiterootdir)s' --git-dir='%(gitdir)s' diff >> '%(patchfile)s'" % locals())
 
 t_start = time.time()
+backtracefile = os.path.join(outputdir, 'debug_backtrace.out')
+try: os.unlink(backtracefile)
+except: pass
 print '[SNIPER] Start'
 
 try:
@@ -403,6 +415,9 @@ t_end = time.time()
 t_elapsed = t_end - t_start
 print '[SNIPER] End'
 print '[SNIPER] Elapsed time:', '%.02f' % t_elapsed, 'seconds'
+
+if os.path.exists(backtracefile):
+  os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
 
 if run_power:
   print '[SNIPER] Running McPAT'

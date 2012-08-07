@@ -30,7 +30,7 @@ class TraceManager
       void stop();
       void wait();
       void run();
-      thread_id_t newThread(size_t count, bool spawn, UInt32 app_id);
+      thread_id_t newThread(size_t count, bool spawn, app_id_t app_id);
       void signalDone(thread_id_t thread_id) { m_done.signal(); }
       void accessMemory(int core_id, Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
 

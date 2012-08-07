@@ -35,7 +35,7 @@ SOURCES=$(wildcard *.cc)
 OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
 sift_recorder: $(OBJECTS) ../libsift.a
 ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	@$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(PIN_LIBS) $(LDFLAGS)
 else
 	$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(PIN_LIBS) $(LDFLAGS)

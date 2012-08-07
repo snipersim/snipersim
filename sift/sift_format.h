@@ -3,15 +3,15 @@
 
 // Sniper Instruction Trace File Format
 //
-// x86-64 only, little-endian
+// ia32 and intel64, little-endian
 
 namespace Sift
 {
 
    const uint32_t MagicNumber = 0x54464953; // "SIFT"
    const uint32_t ICACHE_SIZE = 0x1000;
-   const intptr_t ICACHE_OFFSET_MASK = ICACHE_SIZE - 1;
-   const intptr_t ICACHE_PAGE_MASK = ~ICACHE_OFFSET_MASK;
+   const uint64_t ICACHE_OFFSET_MASK = ICACHE_SIZE - 1;
+   const uint64_t ICACHE_PAGE_MASK = ~ICACHE_OFFSET_MASK;
 
    typedef struct
    {
@@ -25,7 +25,7 @@ namespace Sift
    typedef enum
    {
       CompressionZlib = 1,
-      // Nothing yet
+      ArchIA32 = 2,
    } Option;
 
    typedef union
@@ -42,7 +42,7 @@ namespace Sift
          uint8_t num_addresses:2;
          uint8_t is_branch:1;
          uint8_t taken:1;
-         intptr_t addresses[];
+         uint64_t addresses[];
       } __attribute__ ((__packed__)) Instruction;
 
       // Extended format for all instructions
@@ -56,8 +56,8 @@ namespace Sift
          uint8_t taken:1;
          uint8_t is_predicate:1;
          uint8_t executed:1;
-         intptr_t addr;
-         intptr_t addresses[];
+         uint64_t addr;
+         uint64_t addresses[];
       } __attribute__ ((__packed__)) InstructionExt;
 
       // Other stuff

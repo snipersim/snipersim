@@ -8,8 +8,9 @@
 #include "clock_skew_minimization_object.h"
 #include "config.hpp"
 
-Thread::Thread(thread_id_t thread_id)
+Thread::Thread(thread_id_t thread_id, app_id_t app_id)
    : m_thread_id(thread_id)
+   , m_app_id(app_id)
    , m_core(NULL)
 {
    m_syscall_model = new SyscallMdl(this);

@@ -485,22 +485,34 @@ NetworkModelEMeshHopByHop::computeMeshDimensions(SInt32 &mesh_width, SInt32 &mes
    UInt32 smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
    SInt32 concentration = Sim()->getCfg()->getInt("network/emesh_hop_by_hop/concentration") * smt_cores;
    SInt32 dimensions = Sim()->getCfg()->getInt("network/emesh_hop_by_hop/dimensions");
+   String size = Sim()->getCfg()->getString("network/emesh_hop_by_hop/size");
 
-   switch(dimensions)
+   if (size == "")
    {
-      case 1: // line / ring
-         mesh_width = core_count / concentration;
-         mesh_height = 1;
-         break;
-      case 2: // 2-d mesh / torus
-         mesh_width = (SInt32) floor (sqrt(core_count / concentration));
-         mesh_height = (SInt32) ceil (1.0 * core_count / concentration / mesh_width);
-         break;
-      default:
-         LOG_PRINT_ERROR("Invalid value %d for dimensions, only 1 (line/ring) and 2 (mesh/torus) are currently supported", dimensions);
-   }
+      switch(dimensions)
+      {
+         case 1: // line / ring
+            mesh_width = core_count / concentration;
+            mesh_height = 1;
+            break;
+         case 2: // 2-d mesh / torus
+            mesh_width = (SInt32) floor (sqrt(core_count / concentration));
+            mesh_height = (SInt32) ceil (1.0 * core_count / concentration / mesh_width);
+            break;
+         default:
+            LOG_PRINT_ERROR("Invalid value %d for dimensions, only 1 (line/ring) and 2 (mesh/torus) are currently supported", dimensions);
+      }
 
-   LOG_ASSERT_ERROR(core_count == (concentration * mesh_height * mesh_width), "Cannot build a mesh with %d cores (concentration %d), increase NumApplicationCores to %d for a %d x %d mesh", core_count, concentration, concentration * mesh_width * mesh_height, mesh_width, mesh_height);
+      LOG_ASSERT_ERROR(core_count == (concentration * mesh_height * mesh_width), "Cannot build a mesh with %d cores (concentration %d), increase NumApplicationCores to %d for a %d x %d mesh", core_count, concentration, concentration * mesh_width * mesh_height, mesh_width, mesh_height);
+   }
+   else
+   {
+      // ":"-separated, "," is for heterogeneity
+      int res = sscanf(size.c_str(), "%d:%d", &mesh_width, &mesh_height);
+      LOG_ASSERT_ERROR(res == 2, "Invalid mesh size \"%s\", expected \"width:height\"", size.c_str());
+
+      LOG_ASSERT_ERROR(core_count == (concentration * mesh_height * mesh_width), "Invalid mesh size %s for %d cores (concentration %d): %d x %d (x %d) == %d != %d", size.c_str(), core_count, concentration, mesh_width, mesh_height, concentration, concentration * mesh_width * mesh_height, core_count);
+   }
 }
 
 std::pair<bool,SInt32>

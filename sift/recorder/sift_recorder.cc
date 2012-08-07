@@ -105,7 +105,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
       thread_data[threadid].bbv_count = 0;
    }
 
-   intptr_t addresses[Sift::MAX_DYNAMIC_ADDRESSES] = { 0 };
+   uint64_t addresses[Sift::MAX_DYNAMIC_ADDRESSES] = { 0 };
    for(uint8_t i = 0; i < num_addresses; ++i)
    {
       addresses[i] = thread_data[threadid].dyn_address_queue->front();
@@ -391,23 +391,28 @@ void openFile(THREADID threadid)
    else
    {
       if (blocksize)
-         sprintf(filename, "%s.%" PRIu64 ".th%lu.sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, KnobSiftCountOffset.Value() + threadid);
+         sprintf(filename, "%s.%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, KnobSiftCountOffset.Value() + threadid);
       else
-         sprintf(filename, "%s.th%lu.sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
+         sprintf(filename, "%s.th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
    }
 
    std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobEmulateSyscalls.Value())
    {
-      sprintf(response_filename, "%s_response.th%lu.sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
+      sprintf(response_filename, "%s_response.th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
       std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Response = [" << response_filename << "]" << std::endl;
    }
 
 
    // Open the file for writing
    try {
-      thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid);
+      #ifdef TARGET_IA32
+         const bool arch32 = true;
+      #else
+         const bool arch32 = false;
+      #endif
+      thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid, arch32);
    } catch (...) {
       std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);
@@ -499,7 +504,7 @@ VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
    // To prevent deadlocks during simulation, start a new thread to handle this thread's
    // cleanup.  This is needed because this function could be called in the context of
    // another thread, creating a deadlock scenario.
-   PIN_SpawnInternalThread(threadFinishHelper, (VOID*)threadid, NULL, NULL);
+   PIN_SpawnInternalThread(threadFinishHelper, (VOID*)(unsigned long)threadid, 0, NULL);
 }
 
 int main(int argc, char **argv)

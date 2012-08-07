@@ -248,7 +248,7 @@ def edit_XML(stats, cfg, vdd):
   cycles_scale = stats['fs_to_cycles_cores']
   instrs = stats['performance_model.instruction_count']
   times = stats['performance_model.elapsed_time']
-  cycles = map(lambda c, t: c * t, cycles_scale, times)
+  cycles = map(lambda c, t: c * t, cycles_scale[:ncores], times[:ncores])
   data = [ {} for core in range(ncores) ]
   for core in range(ncores):
     data[core]['idle_cycles'] = cycles_scale[core] * stats['performance_model.idle_elapsed_time'][core]
@@ -667,8 +667,8 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t<param name=\"decoded_stream_buffer_size\" value=\"16\"/>",""])
     template.append(["\t\t\t<param name=\"instruction_window_scheme\" value=\"1\"/><!-- 0 PHYREG based, 1 RSBASED-->",""])
     template.append(["\t\t\t<!-- McPAT support 2 types of OoO cores, RS based and physical reg based-->",""])
-    template.append(["\t\t\t<param name=\"instruction_window_size\" value=\"%u\"/>",["window_size","cfg",iCount],""])  #
-    template.append(["\t\t\t<param name=\"fp_instruction_window_size\" value=\"%d\"/>",["window_size","cfg",iCount]])       #
+    template.append(["\t\t\t<param name=\"instruction_window_size\" value=\"36\"/>",""])  #
+    template.append(["\t\t\t<param name=\"fp_instruction_window_size\" value=\"0\"/>",""])       #
     template.append(["\t\t\t<!-- the instruction issue Q as in Alpha 21264; The RS as in Intel P6 -->",""])
     template.append(["\t\t\t<param name=\"ROB_size\" value=\"%d\"/>",["window_size","cfg",iCount]])
     template.append(["\t\t\t<!-- each in-flight instruction has an entry in ROB -->",""])

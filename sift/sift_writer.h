@@ -24,15 +24,15 @@ namespace Sift
          void *handleAccessMemoryArg;
          uint64_t ninstrs, hsize[16], haddr[MAX_DYNAMIC_ADDRESSES+1], nbranch, npredicate, ninstrsmall, ninstrext;
 
-         intptr_t last_address;
-         std::unordered_map<intptr_t, bool> icache;
+         uint64_t last_address;
+         std::unordered_map<uint64_t, bool> icache;
          char *m_response_filename;
          uint32_t m_id;
       public:
-         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0);
+         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false);
          ~Writer();
          void End();
-         void Instruction(intptr_t addr, uint8_t size, uint8_t num_addresses, intptr_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
+         void Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
          void Output(uint8_t fd, const char *data, uint32_t size);
          uint64_t Syscall(uint16_t syscall_number, const char *data, uint32_t size);
          int32_t NewThread();

@@ -40,7 +40,7 @@ class TraceThread : public Runnable
       uint16_t m_output_leftover_size;
       String m_tracefile;
       String m_responsefile;
-      UInt32 m_app_id;
+      app_id_t m_app_id;
 
       void run();
       static void __handleOutputFunc(void* arg, uint8_t fd, const uint8_t *data, uint32_t size)
@@ -58,7 +58,7 @@ class TraceThread : public Runnable
       BasicBlock* decode(Sift::Instruction &inst);
 
    public:
-      TraceThread(Thread *thread, String tracefile, String responsefile, UInt32 app_id);
+      TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id);
       ~TraceThread();
 
       void spawn(Barrier *barrier);

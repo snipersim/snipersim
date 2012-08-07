@@ -10,6 +10,12 @@
 #  define FUTEX_BITSET_MATCH_ANY 0xffffffff
 #endif
 
+#ifndef FUTEX_PRIVATE_FLAG
+// On older kernels that don't know about FUTEX_PRIVATE_FLAG: don't use it
+// (Might be slightly slower but should still work)
+#  define FUTEX_PRIVATE_FLAG 0
+#endif
+
 // Older kernels only cut out the flags they know about, we want just the lower bits
 #undef FUTEX_CMD_MASK
 #define FUTEX_CMD_MASK 0x7f

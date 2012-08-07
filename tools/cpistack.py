@@ -9,11 +9,11 @@ except AttributeError, e:
   sys.exit()
 
 
-def getdata(jobid = '', resultsdir = '', data = None):
+def getdata(jobid = '', resultsdir = '', data = None, partial = None):
   if data:
     res = data
   else:
-    res = sniper_lib.get_results(jobid, resultsdir)
+    res = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   stats = res['results']
 
   ncores = int(res['config']['general/total_cores'])
@@ -239,14 +239,14 @@ def get_compfrac(data, max_time):
   ) for core in data.keys() ])
 
 
-def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack', outputdir = '.',
+def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
              use_cpi = False, use_abstime = False, use_roi = True,
              use_simple = False, use_simple_mem = True, no_collapse = False,
              gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
              job_name = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
              size = (640, 480)):
 
-  data, ncores, instrs, times, cycles_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data)
+  data, ncores, instrs, times, cycles_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
 
   if threads:
     data   = dict([ (i, data[i]) for i in threads ])
@@ -261,7 +261,8 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
     csv_threads = threads
 
   if aggregate:
-    data = { 0: dict([ (key, sum([ data[core][key] for core in threads ]) / len(threads)) for key in data[threads[0]].keys() ]) }
+    data = { 0: dict([ (key, sum([ data[core][key] for core in csv_threads ]) / len(csv_threads)) for key in data[threads[0]].keys() ]) }
+    instrs = { 0: sum(instrs[core] for core in csv_threads) / len(csv_threads) }
     threads = [0]
 
   all_items, all_names = get_items(use_simple, use_simple_mem = use_simple_mem)
@@ -287,7 +288,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, outputfile = 'cpi-stack',
         if use_cpi:
           plot_data[core][name] = float(value) / (instrs[core] or 1)
         elif use_abstime:
-          plot_data[core][name] = (float(value) / cycles_scale) / 1e15 # cycles to femtoseconds to seconds
+          plot_data[core][name] = (float(value) / cycles_scale[0]) / 1e15 # cycles to femtoseconds to seconds
         else:
           plot_data[core][name] = float(value) / max_cycles
     if gen_text_stack:
@@ -351,6 +352,7 @@ if __name__ == '__main__':
 
   jobid = 0
   resultsdir = '.'
+  partial = None
   outputfile = 'cpi-stack'
   use_cpi = False
   use_abstime = False
@@ -361,7 +363,7 @@ if __name__ == '__main__':
   aggregate = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -392,6 +394,11 @@ if __name__ == '__main__':
       use_abstime = True
     if o == '--aggregate':
       aggregate = True
+    if o == '--partial':
+      if ':' not in a:
+        sys.stderr.write('--partial=<from>:<to>\n')
+        usage()
+      partial = a.split(':')
 
   if args:
     usage()
@@ -400,6 +407,7 @@ if __name__ == '__main__':
   cpistack(
     jobid = jobid,
     resultsdir = resultsdir,
+    partial = partial,
     outputfile = outputfile,
     use_cpi = use_cpi,
     use_abstime = use_abstime,

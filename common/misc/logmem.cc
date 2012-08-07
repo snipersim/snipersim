@@ -28,32 +28,7 @@ void logmem_write_allocations() {}
 
 const int NUM_ITEMS = 1024*1024;
 
-struct stack_frame {
-   struct stack_frame* next;
-   void* ret;
-};
-int get_call_stack(void** retaddrs, int max_size) {
-   /* x86/gcc-specific: this tells gcc that the fp
-      variable should be an alias to the %rbp register
-      which keeps the frame pointer */
-   register struct stack_frame* fp asm("rbp");
-   /* the rest just walks through the linked list */
-   struct stack_frame* frame = fp;
-   int i = 0;
-   while(frame && i < max_size)
-   {
-      /* sanity check: if return address or next frame pointer don't look like valid
-         pointers, the frame is not what we think it is so abort before we get ourselves a SIGSEGV */
-      if ((unsigned long)frame->ret < 0x1000)
-         break;
-      if ((unsigned long)frame->next < 0x1000)
-         break;
-      retaddrs[i++] = frame->ret;
-      frame = frame->next;
-   }
-   return i;
-}
-
+#include "callstack.h"
 #include <execinfo.h>
 class AllocItem
 {

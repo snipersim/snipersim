@@ -4,6 +4,7 @@
 
 #include "pin.H"
 #include <pthread.h>
+#include <sys/time.h>
 
 namespace lite
 {

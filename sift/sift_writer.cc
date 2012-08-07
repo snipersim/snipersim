@@ -11,7 +11,7 @@
 #define VERBOSE 0
 #define VERBOSE_HEX 0
 
-Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id)
+Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32)
    : response(NULL)
    , getCodeFunc(getCodeFunc)
    , ninstrs(0)
@@ -31,7 +31,9 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    uint64_t options = 0;
    bool use_z = false;
    if (useCompression)
-      options |= Option::CompressionZlib;
+      options |= CompressionZlib;
+   if (arch32)
+      options |= ArchIA32;
 
    output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
 
@@ -43,7 +45,7 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    output->write(reinterpret_cast<char*>(&hdr), sizeof(hdr));
    output->flush();
 
-   if (options & Option::CompressionZlib)
+   if (options & CompressionZlib)
       output = new ozstream(output);
 }
 
@@ -105,13 +107,13 @@ Sift::Writer::~Writer()
    #endif
 }
 
-void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresses, intptr_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed)
+void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed)
 {
    assert(size < 16);
    assert(num_addresses <= MAX_DYNAMIC_ADDRESSES);
 
    // Send ICACHE record?
-   for(intptr_t base_addr = addr & ICACHE_PAGE_MASK; base_addr <= ((addr + size - 1) & ICACHE_PAGE_MASK); base_addr += ICACHE_SIZE)
+   for(uint64_t base_addr = addr & ICACHE_PAGE_MASK; base_addr <= ((addr + size - 1) & ICACHE_PAGE_MASK); base_addr += ICACHE_SIZE)
    {
       if (! icache[base_addr])
       {
@@ -121,9 +123,9 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
          Record rec;
          rec.Other.zero = 0;
          rec.Other.type = RecOtherIcache;
-         rec.Other.size = sizeof(intptr_t) + ICACHE_SIZE;
+         rec.Other.size = sizeof(uint64_t) + ICACHE_SIZE;
          output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
-         output->write(reinterpret_cast<char*>(&base_addr), sizeof(intptr_t));
+         output->write(reinterpret_cast<char*>(&base_addr), sizeof(uint64_t));
 
          uint8_t buffer[ICACHE_SIZE];
          getCodeFunc(buffer, (const uint8_t *)base_addr, ICACHE_SIZE);
@@ -186,7 +188,7 @@ void Sift::Writer::Instruction(intptr_t addr, uint8_t size, uint8_t num_addresse
    }
 
    for(int i = 0; i < num_addresses; ++i)
-      output->write(reinterpret_cast<char*>(&addresses[i]), sizeof(intptr_t));
+      output->write(reinterpret_cast<char*>(&addresses[i]), sizeof(uint64_t));
 
    last_address += size;
 

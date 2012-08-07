@@ -212,7 +212,7 @@ MemoryManager::coreInitiateMemoryAccess(
    if (hit)
       return (HitWhere::where_t)mem_component;
    else
-      return HitWhere::UNKNOWN;
+      return HitWhere::MISS;
 }
 
 void

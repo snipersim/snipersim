@@ -114,7 +114,7 @@ void initCodeCacheTracing()
 
    next_callback = SubsecondTime::Zero();
 
-   Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, (HooksManager::HookCallbackFunc)codeCachePeriodicCallback, NULL);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, (HooksManager::HookCallbackFunc)codeCachePeriodicCallback, (UInt64)NULL);
 
    //CODECACHE_AddCacheInitFunction(cacheInit, NULL);
    CODECACHE_AddCacheBlockFunction(newCacheBlock, NULL);

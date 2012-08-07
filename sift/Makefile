@@ -26,7 +26,7 @@ CXXFLAGS=$(OPT_CFLAGS) -fPIC -std=c++0x -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
 
 %.o : %.cc $(wildcard *.h) Makefile
 ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	@$(CXX) -c -o $@ $< $(CXXFLAGS)
 else
 	$(CXX) -c -o $@ $< $(CXXFLAGS)
@@ -34,7 +34,7 @@ endif
 
 $(TARGET) : $(OBJECTS)
 ifeq ($(SHOW_COMPILE),)
-	@echo '[AR    ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@echo '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	@$(AR) rcs $@ $^
 else
 	$(AR) rcs $@ $^
@@ -42,7 +42,7 @@ endif
 
 siftdump : siftdump.o $(TARGET)
 ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	@$(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz
 else
 	$(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz

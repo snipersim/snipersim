@@ -1,4 +1,4 @@
-SIM_ROOT ?= $(shell cd "$(CURDIR)/../" && pwd -P)
+SIM_ROOT ?= $(shell readlink -f "$(CURDIR)/../")
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
@@ -22,7 +22,7 @@ include $(SIM_ROOT)/common/Makefile.common
 #  - Therefore, we need to include the other makefile first before setting this target
 $(TARGET): $(OBJECTS)
 ifeq ($(SHOW_COMPILE),)
-	@echo '[AR    ]' $(subst $(abspath $(SIM_ROOT))/,,$(abspath $@))
+	@echo '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	@ar rcs $@ $^
 else
 	ar rcs $@ $^

@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
       Sift::Instruction inst;
       while(reader.Read(inst))
       {
-         printf("%016" PRIxPTR " ", inst.sinst->addr);
+         printf("%016" PRIx64 " ", inst.sinst->addr);
          char buffer[40];
          xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer), inst.sinst->addr);
          printf("%-40s  ", buffer);
@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
          if (inst.num_addresses > 0) {
             printf("                 -- addr");
             for(int i = 0; i < inst.num_addresses; ++i)
-               printf(" %08" PRIxPTR, inst.addresses[i]);
+               printf(" %08" PRIx64, inst.addresses[i]);
             printf("\n");
          }
          if (inst.is_branch)

@@ -49,7 +49,7 @@ namespace config
         if(!m_case_sensitive)
             boost::to_lower(iname);
 
-        m_subSections.insert(std::make_pair(iname, new Section(*this, name_, m_case_sensitive)));
+        m_subSections.insert(std::pair< String, boost::shared_ptr<Section> >(iname, boost::shared_ptr<Section>(new Section(*this, name_, m_case_sensitive))));
         return *(m_subSections[iname].get());
     }
 
@@ -70,7 +70,7 @@ namespace config
             //Remove overrides
             m_array_keys.erase(iname);
 
-            m_keys.insert(std::make_pair(iname, new Key(this->getFullPath(),name_,value)));
+            m_keys.insert(std::pair< String, boost::shared_ptr<Key> >(iname, boost::shared_ptr<Key>(new Key(this->getFullPath(),name_,value))));
             return *(m_keys[iname].get());
         }
         else

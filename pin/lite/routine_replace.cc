@@ -423,7 +423,7 @@ void emuPthreadCreateBefore(THREADID threadIndex, ADDRINT thread_ptr, void* (*th
    // and only act on the outer call.
    if (0 == localStore[threadIndex].pthread_create.count++) {
       Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
-      thread_id_t new_thread_id = Sim()->getThreadManager()->spawnThread(thread->getId(), thread_func, arg);
+      thread_id_t new_thread_id = Sim()->getThreadManager()->spawnThread(thread->getId(), 0, thread_func, arg);
 
       localStore[threadIndex].pthread_create.thread_ptr = thread_ptr;
       localStore[threadIndex].pthread_create.thread_id = new_thread_id;

@@ -13,6 +13,7 @@ class Thread
 {
    private:
       thread_id_t m_thread_id;
+      app_id_t m_app_id;
       ConditionVariable m_cond;
       SubsecondTime m_wakeup_time;
       void *m_wakeup_msg;
@@ -22,10 +23,11 @@ class Thread
       ClockSkewMinimizationClient *m_clock_skew_minimization_client;
 
    public:
-      Thread(thread_id_t thread_id);
+      Thread(thread_id_t thread_id, app_id_t app_id);
       ~Thread();
 
       thread_id_t getId() const { return m_thread_id; }
+      app_id_t getAppId() const { return m_app_id; }
       SyncClient *getSyncClient() const { return m_sync_client; }
       ClockSkewMinimizationClient* getClockSkewMinimizationClient() const { return m_clock_skew_minimization_client; }
 
