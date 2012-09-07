@@ -47,4 +47,11 @@ template <SInt64 one> inline TFixedPoint<one> operator/ (SInt64 i, TFixedPoint<o
 // Default: 16k so mul/div can be done using shift operations
 typedef TFixedPoint<__UINT64_C(0x4000)> FixedPoint;
 
+template<SInt64 one>
+std::ostream & operator<<(std::ostream &os, const TFixedPoint<one> & f)
+{
+   os << TFixedPoint<one>::floor((f*one))/(1.0*one);
+   return os;
+}
+
 #endif // FIXED_POINT_H
