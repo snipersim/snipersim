@@ -303,6 +303,7 @@ env['LD_LIBRARY_PATH'] = ':'.join([
   env.get('LD_LIBRARY_PATH', ''),
 ])
 env['PYTHONPATH'] = '%(HOME)s/scripts:$PYTHONPATH' % locals()
+env['GRAPHITE_ROOT'] = HOME
 
 
 pin_version = 'unknown'
