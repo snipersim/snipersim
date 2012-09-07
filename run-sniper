@@ -158,6 +158,13 @@ if standalone:
     print '--appdebug not supported in standalone mode'
     sys.exit(-1)
 
+if not os.path.exists(outputdir):
+  try:
+    os.makedirs(outputdir)
+  except OSError:
+    print >> sys.stderr, 'Failed to create output directory', outputdir
+    sys.exit(-1)
+
 if roi_only:
   graphiteoptions.append('-g --general/magic=true')
 if roi_script:
