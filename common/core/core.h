@@ -146,6 +146,8 @@ class Core
             SubsecondTime now);
 
       PacketType getPktTypeFromUserNetType(carbon_network_t net_type);
+      void hookPeriodicInsCheck();
+      void hookPeriodicInsCall();
 
       IntPtr m_icache_last_block;
       UInt64 m_icache_hits;
@@ -158,6 +160,11 @@ class Core
       // also when performance modeling is disabled or when instrumenation mode is CACHE_ONLY or FAST_FORWARD
       UInt64 m_instructions;
       UInt64 m_instructions_callback;
+      // HOOK_PERIODIC_INS implementation
+      UInt64 m_instructions_hpi_callback;
+      UInt64 m_instructions_hpi_last;
+      static UInt64 g_instructions_hpi_global;
+      static UInt64 g_instructions_hpi_global_callback;
 };
 
 #endif

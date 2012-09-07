@@ -51,14 +51,14 @@ ifneq ($(BOOST_INCLUDE),)
 	CXXFLAGS += -I$(BOOST_INCLUDE)
 endif
 
-LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/lib -lpython2.7 -lrt -lz
+LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/lib -lpython2.7 -lrt -lz
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 
 # Include paths
 CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
-          -I$(SIM_ROOT)/python_kit/include/python2.7 \
+          -I$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/include/python2.7 \
           -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++0x $(OPT_CFLAGS) #-Werror
 
 %.h %.hh %.hpp:

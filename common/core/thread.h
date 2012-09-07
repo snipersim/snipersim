@@ -26,6 +26,12 @@ class Thread
       Thread(thread_id_t thread_id, app_id_t app_id);
       ~Thread();
 
+      struct {
+         pid_t tid;
+         IntPtr tid_ptr;
+         bool clear_tid;
+      } m_os_info;
+
       thread_id_t getId() const { return m_thread_id; }
       app_id_t getAppId() const { return m_app_id; }
       SyncClient *getSyncClient() const { return m_sync_client; }

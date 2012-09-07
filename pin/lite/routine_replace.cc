@@ -365,6 +365,7 @@ void routineCallback(RTN rtn, void* v)
    }
 
    // os emulation
+   else if (rtn_name == "sched_getcpu")      RTN_Replace(rtn, AFUNPTR(emuGetCPU));
    else if (rtn_name == "get_nprocs")        RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
    else if (rtn_name == "get_nprocs_conf")   RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
    if (Sim()->getConfig()->getOSEmuClockReplace())
@@ -421,7 +422,8 @@ void emuPthreadCreateBefore(THREADID threadIndex, ADDRINT thread_ptr, void* (*th
    // We have to do a loose match on pthread_create (it's sometimes called __pthread_create_2_1),
    // but that can cause recursion on this function. Detect this by keeping a count
    // and only act on the outer call.
-   if (0 == localStore[threadIndex].pthread_create.count++) {
+   if (0 == localStore[threadIndex].pthread_create.count++)
+   {
       Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
       thread_id_t new_thread_id = Sim()->getThreadManager()->spawnThread(thread->getId(), 0, thread_func, arg);
 
@@ -432,10 +434,15 @@ void emuPthreadCreateBefore(THREADID threadIndex, ADDRINT thread_ptr, void* (*th
 
 void emuPthreadCreateAfter(THREADID threadIndex)
 {
-   if (0 == --localStore[threadIndex].pthread_create.count) {
+   if (0 == --localStore[threadIndex].pthread_create.count)
+   {
       pthread_t* thread_ptr = (pthread_t*)localStore[threadIndex].pthread_create.thread_ptr;
       thread_id_t new_thread_id = localStore[threadIndex].pthread_create.thread_id;
       thread_id_to_thread_ptr_map.insert(std::pair<thread_id_t, pthread_t>(new_thread_id, *thread_ptr));
+
+      Thread *new_thread = Sim()->getThreadManager()->getThreadFromID(new_thread_id);
+      new_thread->m_os_info.tid_ptr = (IntPtr)localStore[threadIndex].pthread_create.tid_ptr;
+      new_thread->m_os_info.clear_tid = localStore[threadIndex].pthread_create.clear_tid;
 
       // Waiting for the thread to actually start sounds like a good idea, and even though we do it outside of any callbacks,
       // deadlocks still seem to occur in Pin if we enable this. Anyway, comparing our supposed start time with the actual time
@@ -499,6 +506,12 @@ IntPtr emuGetNprocs()
    return Sim()->getConfig()->getOSEmuNprocs()
    ? Sim()->getConfig()->getOSEmuNprocs()
    : Sim()->getConfig()->getApplicationCores();
+}
+
+IntPtr emuGetCPU()
+{
+   Core* core = Sim()->getCoreManager()->getCurrentCore();
+   return core->getId();
 }
 
 IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp)

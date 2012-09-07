@@ -34,7 +34,12 @@ void HooksPy::init()
 void HooksPy::setup()
 {
    pyInit = true;
-   Py_SetPythonHome(strdup((String(getenv("GRAPHITE_ROOT")) + "/python_kit").c_str()));
+#ifdef TARGET_INTEL64
+   String python_home = String(getenv("GRAPHITE_ROOT")) + "/python_kit/intel64";
+#else
+   String python_home = String(getenv("GRAPHITE_ROOT")) + "/python_kit/ia32";
+#endif
+   Py_SetPythonHome(strdup(python_home.c_str()));
    Py_InitializeEx(0 /* don't initialize signal handlers */);
 
    // set up all components

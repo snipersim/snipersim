@@ -80,6 +80,8 @@ public:
    bool getEnablePerBasicblock() const { return m_knob_enable_perbasicblock; }
    void setEnablePerBasicblock(bool enable) { m_knob_enable_perbasicblock = enable; }
    ClockSkewMinimizationObject::Scheme getClockSkewMinimizationScheme() const { return m_knob_clock_skew_minimization_scheme; }
+   UInt64 getHPIInstructionsPerCore() const { return m_knob_hpi_percore; }
+   UInt64 getHPIInstructionsGlobal() const { return m_knob_hpi_global; }
 
    bool getBBVsEnabled() const { return m_knob_bbvs; }
    void setBBVsEnabled(bool enable) { m_knob_bbvs = enable; }
@@ -117,6 +119,8 @@ private:
    static bool m_knob_bbvs;
    static bool m_knob_enable_perbasicblock;
    static ClockSkewMinimizationObject::Scheme m_knob_clock_skew_minimization_scheme;
+   static UInt64 m_knob_hpi_percore;
+   static UInt64 m_knob_hpi_global;
 
    static SimulationMode parseSimulationMode(String mode);
    static UInt32 computeCoreIDLength(UInt32 core_count);

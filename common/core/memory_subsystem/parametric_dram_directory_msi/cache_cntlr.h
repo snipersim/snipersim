@@ -76,7 +76,7 @@ namespace ParametricDramDirectoryMSI
          String perf_model_type;
          bool writethrough;
          UInt32 shared_cores;
-         bool prefetcher;
+         String prefetcher;
          UInt32 outstanding_misses;
 
          CacheParameters()
@@ -87,7 +87,7 @@ namespace ParametricDramDirectoryMSI
          CacheParameters(String _configName, UInt32 _size, UInt32 _associativity, String _replacement_policy, bool _perfect,
             const ComponentLatency& _data_access_time, const ComponentLatency& _tags_access_time,
             const ComponentLatency& _writeback_time, const ComponentBandwidthPerCycle& _next_level_read_bandwidth,
-            String _perf_model_type, bool _writethrough, UInt32 _shared_cores, bool _prefetcher, UInt32 _outstanding_misses) :
+            String _perf_model_type, bool _writethrough, UInt32 _shared_cores, String _prefetcher, UInt32 _outstanding_misses) :
             configName(_configName), size(_size), associativity(_associativity), replacement_policy(_replacement_policy), perfect(_perfect),
             data_access_time(_data_access_time), tags_access_time(_tags_access_time),
             writeback_time(_writeback_time), next_level_read_bandwidth(_next_level_read_bandwidth),
@@ -171,7 +171,6 @@ namespace ParametricDramDirectoryMSI
          std::unordered_map<IntPtr, MemComponent::component_t> m_shmem_req_source_map;
          bool m_perfect;
          bool m_l1_mshr;
-         UInt32 m_num_prefetches;
 
          struct {
            UInt64 loads, stores;

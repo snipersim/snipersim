@@ -368,6 +368,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
 
    memset(&localStore[threadIndex], 0, sizeof(localStore[threadIndex]));
    localStore[threadIndex].thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
+   localStore[threadIndex].thread->m_os_info.tid = syscall(__NR_gettid);
 }
 
 VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, VOID *v)

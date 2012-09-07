@@ -136,3 +136,19 @@ class Every:
 
       self.time_next = time + self.interval
       self.time_last = time
+
+
+class EveryIns:
+  def __init__(self, interval, callback):
+    self.interval = interval
+    self.callback = callback
+    self.icount_next = interval
+    self.icount_last = 0
+    register(self)
+
+  def hook_periodic_ins(self, icount):
+    if icount >= self.icount_next:
+      self.callback(icount, icount - self.icount_last)
+
+      self.icount_next += self.interval
+      self.icount_last = icount

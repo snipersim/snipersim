@@ -352,8 +352,6 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
    std::cerr << "[DEBUG:" << m_id << "] Read MemoryResponse" << std::endl;
    #endif
    uint64_t addr;
-   uint32_t size;
-   MemoryLockType lock;
    MemoryOpType type;
    input->read(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    #if VERBOSE_HEX > 0

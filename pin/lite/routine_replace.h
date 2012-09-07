@@ -22,6 +22,7 @@ void pthreadAfter(THREADID thread_id, ADDRINT type_id, ADDRINT retval);
 
 // os emulation
 IntPtr emuGetNprocs();
+IntPtr emuGetCPU();
 IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp);
 IntPtr emuGettimeofday(struct timeval *tv, struct timezone *tz);
 void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt);

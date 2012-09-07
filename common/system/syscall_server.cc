@@ -1,5 +1,4 @@
 #include "syscall_server.h"
-#include "sys/syscall.h"
 #include "core.h"
 #include "config.h"
 #include "config.hpp"
@@ -9,7 +8,9 @@
 #include "thread.h"
 #include "core_manager.h"
 #include "log.h"
-#include "futex_emu.h"
+
+#include <sys/syscall.h>
+#include "os_compat.h"
 
 SyscallServer::SyscallServer()
 {
@@ -234,7 +235,7 @@ IntPtr SyscallServer::futexCmpRequeue(thread_id_t thread_id, int *uaddr, int val
    if(val3 != act_val)
    {
       end_time = curr_time;
-      return (int) EAGAIN;
+      return -EAGAIN;
    }
    else
    {

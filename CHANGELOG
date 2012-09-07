@@ -1,3 +1,12 @@
+Version 3.07
+  * Prefetcher improvements, add global history buffer-based prefetcher
+  * HOOK_PERIODIC_INS: Instruction-based periodic callback
+  * Implement CLONE_CHILD_CLEARTID syscall interface
+  * Add example scripts for periodic statistics, periodic McPAT, simulating limited iteration counts
+  * Support for Pin 2.12
+  * Fixes to Python environment
+  * Various bugfixes
+
 Version 3.06
   * Fix modeled size of network messages
   * Build fixes for 32-bit, compiler overrides

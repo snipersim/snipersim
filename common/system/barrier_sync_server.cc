@@ -145,6 +145,10 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id)
       m_global_time = m_next_barrier_time;
       Sim()->getHooksManager()->callHooks(HookType::HOOK_PERIODIC, static_cast<subsecond_time_t>(m_next_barrier_time).m_time);
 
+      // If the barrier was disabled from HOOK_PERIODIC (for instance, if roi-end was triggered from a script), break
+      if (m_disable)
+         return false;
+
       m_next_barrier_time += m_barrier_interval;
       LOG_PRINT("m_next_barrier_time updated to (%s)", itostr(m_next_barrier_time).c_str());
 
@@ -206,16 +210,8 @@ void
 BarrierSyncServer::setFastForward(bool fastforward, SubsecondTime next_barrier_time)
 {
    m_fastforward = fastforward;
-
    if (next_barrier_time != SubsecondTime::MaxTime())
       m_next_barrier_time = next_barrier_time;
-
-   if (!fastforward)
-   {
-      // If some threads were behind but still caught the barrier (everyone does in fast-forward mode),
-      // make sure to release them so they have a chance to make progress and hit the barrier again at the proper time.
-      abortBarrier();
-   }
 }
 
 void

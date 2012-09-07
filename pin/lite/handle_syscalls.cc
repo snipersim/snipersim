@@ -6,6 +6,7 @@
 #include "performance_model.h"
 #include "log.h"
 #include "syscall_strings.h"
+#include "local_storage.h"
 
 #include <syscall.h>
 #include <stdlib.h>
@@ -44,6 +45,12 @@ void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
    args.arg4 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_R8);
    args.arg5 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_R9);
 #endif
+
+   if (syscall_number == SYS_clone)
+   {
+      localStore[threadIndex].pthread_create.tid_ptr = (void*)args.arg4;
+      localStore[threadIndex].pthread_create.clear_tid = args.arg0 & CLONE_CHILD_CLEARTID ? true : false;
+   }
 
    Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
    LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");

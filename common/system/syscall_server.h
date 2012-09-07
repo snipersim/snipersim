@@ -76,12 +76,13 @@ class SyscallServer
          return 0;
       }
 
-   private:
       SubsecondTime m_reschedule_cost;
 
       // Handling Futexes
       typedef std::unordered_map<IntPtr, SimFutex> FutexMap;
       FutexMap m_futexes;
+
+      friend class ThreadManager;
 };
 
 #endif

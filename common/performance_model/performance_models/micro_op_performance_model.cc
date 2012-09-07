@@ -417,7 +417,11 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       new_latency.addCycleLatency(new_latency_cycles);
 
       // Add the instruction cost immediately to prevent synchronization issues
-      new_latency.addLatency(insn_cost);
+      if (insn_cost > SubsecondTime::Zero())
+      {
+         new_latency.addLatency(insn_cost);
+         latency_out_of_band = true;
+      }
 
       if (instruction->getType() == INST_TLB_MISS)
       {
@@ -520,8 +524,11 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       new_latency.addCycleLatency(new_latency_cycles);
 
       // Add a potential LLL cost that needs to be registered right away
-      new_latency.addLatency(cost_add_latency_now);
-      latency_out_of_band = true;
+      if (cost_add_latency_now > SubsecondTime::Zero())
+      {
+         new_latency.addLatency(cost_add_latency_now);
+         latency_out_of_band = true;
+      }
 
       m_dyninsn_count++;
       //m_dyninsn_cost+=insn_cost; // FIXME

@@ -25,6 +25,8 @@ time_t Config::m_knob_osemu_time_start;
 bool Config::m_knob_bbvs;
 bool Config::m_knob_enable_perbasicblock;
 ClockSkewMinimizationObject::Scheme Config::m_knob_clock_skew_minimization_scheme;
+UInt64 Config::m_knob_hpi_percore;
+UInt64 Config::m_knob_hpi_global;
 
 Config *Config::m_singleton;
 
@@ -68,6 +70,10 @@ Config::Config(SimulationMode mode)
    m_knob_osemu_nprocs = Sim()->getCfg()->getInt("osemu/nprocs");
    m_knob_osemu_clock_replace = Sim()->getCfg()->getBool("osemu/clock_replace");
    m_knob_osemu_time_start = Sim()->getCfg()->getInt("osemu/time_start");
+
+   // HOOK_PERIODIC_INS
+   m_knob_hpi_percore = Sim()->getCfg()->getInt("core/hook_periodic_ins/ins_per_core");
+   m_knob_hpi_global = Sim()->getCfg()->getInt("core/hook_periodic_ins/ins_global");
 
    m_knob_clock_skew_minimization_scheme = ClockSkewMinimizationObject::parseScheme(Sim()->getCfg()->getString("clock_skew_minimization/scheme"));
 

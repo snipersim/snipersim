@@ -15,7 +15,7 @@
 #include <sys/syscall.h>
 #include <linux/futex.h>
 
-#include "futex_emu.h"
+#include "os_compat.h"
 
 #include <boost/algorithm/string.hpp>
 
@@ -153,17 +153,20 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          pid_t pid = (pid_t)args.arg0;
          size_t cpusetsize = (size_t)args.arg1;
          const cpu_set_t *cpuset = (const cpu_set_t *)args.arg2;
+         Thread *thread;
+         bool success = false;
 
-         if (pid == 0 || pid == syscall(__NR_gettid))
+         if (pid == 0)
+            thread = m_thread;
+         else
+            thread = Sim()->getThreadManager()->findThreadByTid(pid);
+
+         if (thread)
          {
             ScopedLock sl(Sim()->getThreadManager()->getLock());
-            Sim()->getThreadManager()->getScheduler()->threadSetAffinity(m_thread->getId(), cpusetsize, cpuset);
+            success = Sim()->getThreadManager()->getScheduler()->threadSetAffinity(m_thread->getId(), thread->getId(), cpusetsize, cpuset);
          }
-         else
-         {
-            // TODO: if we had a pid/tid to thread_id map, use it here
-            LOG_PRINT_WARNING("Ignoring sched_setaffinity() called for a different thread with pid=%d", pid);
-         }
+         // else: success is already false, return EINVAL for invalid pid
 
          // We may have been rescheduled
          SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
@@ -171,8 +174,35 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
             core = m_thread->getCore();
          core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
 
-         // Always succeeds
-         m_ret_val = 0;
+         m_ret_val = success ? 0 : -EINVAL;
+         m_emulated = true;
+
+         break;
+      }
+
+      case SYS_sched_getaffinity:
+      {
+         pid_t pid = (pid_t)args.arg0;
+         size_t cpusetsize = (size_t)args.arg1;
+         cpu_set_t *cpuset = (cpu_set_t *)args.arg2;
+         Thread *thread;
+         bool success = false;
+
+         if (pid == 0)
+            thread = m_thread;
+         else
+            thread = Sim()->getThreadManager()->findThreadByTid(pid);
+
+         if (thread)
+         {
+            ScopedLock sl(Sim()->getThreadManager()->getLock());
+            success = Sim()->getThreadManager()->getScheduler()->threadGetAffinity(m_thread->getId(), cpusetsize, cpuset);
+         }
+         // else: success is already false, return EINVAL for invalid pid
+
+         // On success: return size of affinity mask (in bytes) needed to represent however many cores we're modeling
+         // (returning a value that is too large can cause a segfault in the application's libc)
+         m_ret_val = success ? (Sim()->getConfig()->getApplicationCores()+7)/8 : -EINVAL;
          m_emulated = true;
 
          break;

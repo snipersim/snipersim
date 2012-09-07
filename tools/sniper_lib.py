@@ -15,6 +15,9 @@ except ImportError:
   ic_invalid = True
 
 
+class SniperResultsException(Exception): pass
+
+
 def get_results(jobid = None, resultsdir = None, partial = None, force = False):
   if jobid:
     if ic_invalid:
@@ -148,6 +151,8 @@ def parse_results_from_fileobjs((simstats, simstatsbase, simstatsdelta, simout, 
   results = []
 
   ## sim.cfg
+  if not simcfg:
+    raise SniperResultsException("No valid configuration found")
   simcfg = parse_config(simcfg.read())
   ncores = int(simcfg['general/total_cores'])
 

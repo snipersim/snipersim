@@ -45,6 +45,8 @@ public:
    UInt64 getNumThreads() const { return m_threads.size(); }
    Core::State getThreadState(thread_id_t thread_id) const { return m_thread_state.at(thread_id).status; }
 
+   Thread *findThreadByTid(pid_t tid);
+
    // services
    thread_id_t spawnThread(thread_id_t thread_id, app_id_t app_id, thread_func_t func, void *arg);
    void joinThread(thread_id_t thread_id, thread_id_t join_thread_id);

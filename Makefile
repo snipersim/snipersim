@@ -44,9 +44,10 @@ $(PIN_HOME)/intel64/bin/pinbin:
 endif
 
 ifneq ($(NO_PYTHON_DOWNLOAD),1)
-python: python_kit/include/python2.7/Python.h
-python_kit/include/python2.7/Python.h:
-	wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz
+python: python_kit/$(TARGET_ARCH)/include/python2.7/Python.h
+python_kit/$(TARGET_ARCH)/include/python2.7/Python.h:
+	mkdir -p python_kit/$(TARGET_ARCH)
+	wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(TARGET_ARCH)
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)

@@ -1,5 +1,5 @@
 #include "cond.h"
-#include "futex_emu.h"
+#include "os_compat.h"
 
 #include <unistd.h>
 #include <sys/syscall.h>

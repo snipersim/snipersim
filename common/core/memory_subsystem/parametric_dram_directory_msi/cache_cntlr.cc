@@ -106,7 +106,6 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_dram_directory_home_lookup(dram_directory_home_lookup),
    m_perfect(cache_params.perfect),
    m_l1_mshr(cache_params.outstanding_misses > 0),
-   m_num_prefetches(cache_params.prefetcher ? Sim()->getCfg()->getIntArray("perf_model/" + cache_params.configName + "/prefetcher/num_prefetches", core_id) : 0),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
    m_cache_writethrough(cache_params.writethrough),
@@ -133,8 +132,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
             m_cache_block_size,
             cache_params.replacement_policy,
             CacheBase::SHARED_CACHE);
-      if (cache_params.prefetcher)
-         m_master->m_prefetcher = new Prefetcher(cache_params.configName, m_core_id);
+      m_master->m_prefetcher = Prefetcher::createPrefetcher(cache_params.prefetcher, cache_params.configName, m_core_id);
    }
    else
    {
@@ -503,21 +501,18 @@ CacheCntlr::Prefetch(Core::mem_op_t mem_op_type, IntPtr address, SubsecondTime t
 {
    if (m_master->m_prefetcher && mem_op_type == Core::READ)
    {
-      IntPtr prefetch_address = address;
+      std::vector<IntPtr> prefetchList;
 
-      for(UInt32 num_prefetches = 0; num_prefetches < m_num_prefetches; ++num_prefetches)
       {
+         ScopedLock sl(getLock());
+         prefetchList = m_master->m_prefetcher->getNextAddress(address);
+      }
+
+      for(std::vector<IntPtr>::iterator it = prefetchList.begin(); it != prefetchList.end(); ++it)
+      {
+         if (!operationPermissibleinCache(*it, Core::READ))
          {
-            ScopedLock sl(getLock());
-            prefetch_address = m_master->m_prefetcher->getNextAddress(prefetch_address);
-         }
-         if (!prefetch_address)
-         {
-            break;
-         }
-         else if (!operationPermissibleinCache(prefetch_address, Core::READ))
-         {
-            doPrefetch(prefetch_address, t_start);
+            doPrefetch(*it, t_start);
          }
       }
    }

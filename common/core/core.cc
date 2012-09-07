@@ -39,6 +39,8 @@ const char * ModeledString(Core::MemModeled modeled) {
 
 
 Lock Core::m_global_core_lock;
+UInt64 Core::g_instructions_hpi_global = 0;
+UInt64 Core::g_instructions_hpi_global_callback = 0;
 
 Core::Core(SInt32 id)
    : m_core_id(id)
@@ -50,6 +52,8 @@ Core::Core(SInt32 id)
    , m_icache_hits(0)
    , m_instructions(0)
    , m_instructions_callback(UINT64_MAX)
+   , m_instructions_hpi_callback(0)
+   , m_instructions_hpi_last(0)
 {
    LOG_PRINT("Core ctor for: %d", id);
 
@@ -175,6 +179,38 @@ Core::countInstructions(IntPtr address, UInt32 count)
          disableInstructionsCallback();
          Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTR_COUNT, m_core_id);
       }
+   }
+
+   hookPeriodicInsCheck();
+}
+
+void
+Core::hookPeriodicInsCheck()
+{
+   if (m_instructions > m_instructions_hpi_callback)
+   {
+      __sync_fetch_and_add(&g_instructions_hpi_global, m_instructions - m_instructions_hpi_last);
+      m_instructions_hpi_callback += Sim()->getConfig()->getHPIInstructionsPerCore();
+      m_instructions_hpi_last = m_instructions;
+
+      // Quick, unlocked check if we should do the HOOK_PERIODIC_INS callback
+      if (g_instructions_hpi_global > g_instructions_hpi_global_callback)
+         hookPeriodicInsCall();
+   }
+}
+
+void
+Core::hookPeriodicInsCall()
+{
+   // Take the Thread lock, to make sure no other core calls us at the same time
+   // and that the hook callback is also serialized w.r.t. other global events
+   ScopedLock sl(Sim()->getThreadManager()->getLock());
+
+   // Definitive, locked checked if we should do the HOOK_PERIODIC_INS callback
+   if (g_instructions_hpi_global > g_instructions_hpi_global_callback)
+   {
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_PERIODIC_INS, g_instructions_hpi_global);
+      g_instructions_hpi_global_callback += Sim()->getConfig()->getHPIInstructionsGlobal();
    }
 }
 

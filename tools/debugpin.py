@@ -2,7 +2,7 @@
 
 import threading, subprocess, sys, os, tempfile
 
-def execute_gdb(cmd, pin_home, arch, quiet = False, wait = False, quit = False):
+def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = False):
   if wait and quit:
     raise ValueError('Cannot call execute_gdb() with both wait and false == True')
 
@@ -11,7 +11,7 @@ def execute_gdb(cmd, pin_home, arch, quiet = False, wait = False, quit = False):
     sys.stdout.flush()
     sys.stderr.flush()
 
-  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE)
+  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env)
   g_pid = 0
   g_symbols = ''
   while True:
@@ -44,4 +44,3 @@ def execute_gdb(cmd, pin_home, arch, quiet = False, wait = False, quit = False):
   f.close()
 
   return os.system('gdb -quiet -command=%s %s' % (fn, '%(pin_home)s/%(arch)s/bin/pinbin' % locals()))
-

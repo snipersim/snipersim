@@ -8,14 +8,9 @@
 class Prefetcher
 {
    public:
-      Prefetcher(String configName, core_id_t core_id);
-      IntPtr getNextAddress(IntPtr current_address);
+      static Prefetcher* createPrefetcher(String type, String configName, core_id_t core_id);
 
-   private:
-      const UInt32 n_flows;
-      const bool stop_at_page;
-      UInt32 n_flow_next;
-      std::vector<IntPtr> m_prev_address;
+      virtual std::vector<IntPtr> getNextAddress(IntPtr current_address) = 0;
 };
 
 #endif // PREFETCHER_H

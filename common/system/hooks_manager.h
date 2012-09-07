@@ -14,6 +14,7 @@ public:
    enum hook_type_t {
       // Hook name              Parameter (cast from UInt64)         Description
       HOOK_PERIODIC,            // SubsecondTime current_time        Barrier was reached
+      HOOK_PERIODIC_INS,        // UInt64 icount                     Instruction-based periodic callback
       HOOK_SIM_START,           // none                              Simulation start
       HOOK_SIM_END,             // none                              Simulation end
       HOOK_ROI_BEGIN,           // none                              ROI begin

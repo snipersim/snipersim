@@ -13,10 +13,15 @@ class Core;
 struct ThreadLocalStorage
 {
    Thread* thread;
-   struct {
+   // Arguments passed to pthread_create and syscall(clone),
+   // needed on return once we know the new thread's id
+   struct
+   {
       int count;
       pthread_t thread_ptr;
       thread_id_t thread_id;
+      void* tid_ptr;
+      bool clear_tid;
    } pthread_create;
 };
 // Keep track of THREADID to Thread* pointers (and some other stuff), way faster than a PinTLS lookup

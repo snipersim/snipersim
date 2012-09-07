@@ -3,7 +3,7 @@
 
 CacheBase::CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size):
    m_name(name),
-   m_cache_size(k_KILO * cache_size),
+   m_cache_size(k_KILO * UInt64(cache_size)),
    m_associativity(associativity),
    m_blocksize(cache_block_size)
 {

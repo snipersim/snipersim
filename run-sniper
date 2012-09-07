@@ -249,19 +249,58 @@ sim_root = HOME
 arch = config.get('target', 'intel64')
 
 
-os.environ['LD_LIBRARY_PATH'] = ':'.join([
+# Determine libstdc++.so used by default by pin_sim.so using ldd
+# Should take into account the current LD_LIBRARY_PATH
+def get_cxx_inuse():
+  pin_sim = '%s/lib/pin_sim.so' % sim_root
+  try:
+    ldd_out = subprocess.Popen(['ldd', pin_sim], stdout = subprocess.PIPE).communicate()[0]
+    libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
+  except Exception, e:
+    print `e`
+    return None
+  return libcxx_path
+
+# Find libstdc++.so version number in a given path
+def get_cxx_version(path):
+  filename = os.path.join(path, 'libstdc++.so.6')
+  if os.path.exists(filename):
+    realname = os.path.realpath(filename)
+    try:
+      version = int(realname.split('.')[-1])
+      return version
+    except Exception, e:
+      print `e`
+      return 0
+  else:
+    return 0
+
+# Find which libstdc++.so is newer: either the system default one, or the Pin one
+cxx_inuse = get_cxx_inuse()
+cxx_inuse_version = get_cxx_version(cxx_inuse)
+cxx_pin_version = get_cxx_version('%(pin_home)s/%(arch)s/runtime/cpplibs' % locals())
+if cxx_inuse_version > cxx_pin_version:
+  # Prepend current libstdc++.so path to LD_LIBRARY_PATH so it overrides %(pin_home)s/%(arch)s/runtime/cpplibs
+  cxx_touse = cxx_inuse
+else:
+  # Use %(pin_home)s/%(arch)s/runtime/cpplibs as normal
+  cxx_touse = ''
+
+env = dict(os.environ)
+env['LD_LIBRARY_PATH'] = ':'.join([
+  cxx_touse,
   'BENCHMARKS_ROOT' in os.environ and '%s/libs:' % os.environ['BENCHMARKS_ROOT'] or '',
   '%(pin_home)s/%(arch)s/runtime/cpplibs' % locals(),
   '%(pin_home)s/%(arch)s/runtime' % locals(),
-  '%(HOME)s/python_kit/lib' % locals(),
-  os.environ.get('LD_LIBRARY_PATH', ''),
+  '%(HOME)s/python_kit/%(arch)s/lib' % locals(),
+  env.get('LD_LIBRARY_PATH', ''),
 ])
-os.environ['PYTHONPATH'] = '%(HOME)s/scripts:$PYTHONPATH' % locals()
+env['PYTHONPATH'] = '%(HOME)s/scripts:$PYTHONPATH' % locals()
 
 
 pin_version = 'unknown'
 try:
-  pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE).communicate()[0]
+  pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE, env = env).communicate()[0]
   pin_version = int([ line.split()[3] for line in pin_version.split('\n') if line.startswith('@CHARM-VERSION') ][0])
   assert 10000 < pin_version < 1000000
 except Exception, e:
@@ -303,6 +342,7 @@ queue = Queue.Queue()
 
 
 memusage = 0; stopping = False
+usage = None
 
 def log_memory(pid):
   def do_log_memory():
@@ -329,7 +369,7 @@ def log_memory(pid):
 
 
 def execute():
-  global cmd
+  global cmd, usage
 
   cmd = [ 'bash', '-c', cmd ]
   if use_perf:
@@ -338,15 +378,15 @@ def execute():
   print 'Running', cmd
   sys.stdout.flush()
   sys.stderr.flush()
-  subproc = subprocess.Popen(cmd)
+  subproc = subprocess.Popen(cmd, env = env)
 
   log_memory(subproc.pid)
 
   try:
-    subproc.communicate()
+    pid, rc, usage = os.wait4(subproc.pid, 0)
   except KeyboardInterrupt:
     os.kill(subproc.pid, 9)
-  return subproc.returncode
+    return 9
 
 
 def execute_appdebug():
@@ -354,7 +394,7 @@ def execute_appdebug():
   sys.stdout.flush()
   sys.stderr.flush()
 
-  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE)
+  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env)
   while True:
     line = p_graphite.stdout.readline()
     if line.startswith('  target remote :'):
@@ -396,7 +436,7 @@ print '[SNIPER] Start'
 
 try:
   if use_gdb and not standalone:
-    rc = debugpin.execute_gdb(cmd = cmd, pin_home = pin_home, arch = arch, wait = gdb_wait, quit = gdb_quit)
+    rc = debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, wait = gdb_wait, quit = gdb_quit)
   elif use_appdebug and not (appdebug_manual or appdebug_nowait):
     rc = execute_appdebug()
   else:
@@ -416,7 +456,7 @@ t_elapsed = t_end - t_start
 print '[SNIPER] End'
 print '[SNIPER] Elapsed time:', '%.02f' % t_elapsed, 'seconds'
 
-if os.path.exists(backtracefile):
+if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
   os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
 
 if run_power:
@@ -431,6 +471,7 @@ stats = dict(
   cmdline = sys.argv,
   graphitecmd = cmd,
   vmem = memusage,
+  rusage = usage and tuple(usage) or None,
   t_start = t_start,
   t_elapsed = t_elapsed,
 )

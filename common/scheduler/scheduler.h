@@ -14,7 +14,8 @@ class Scheduler
 
       virtual core_id_t threadCreate(thread_id_t thread_id) = 0;
       virtual void threadYield(thread_id_t thread_id) {}
-      virtual void threadSetAffinity(thread_id_t thread_id, size_t cpusetsize, const cpu_set_t *mask) {}
+      virtual bool threadSetAffinity(thread_id_t calling_thread_id, thread_id_t thread_id, size_t cpusetsize, const cpu_set_t *mask) { return false; }
+      virtual bool threadGetAffinity(thread_id_t thread_id, size_t cpusetsize, cpu_set_t *mask) { return false; }
 
    protected:
       ThreadManager *m_thread_manager;

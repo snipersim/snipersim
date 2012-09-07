@@ -107,6 +107,7 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_PRE_STAT_WRITE:
          Sim()->getHooksManager()->registerHook(type, hookCallbackNone, (UInt64)pFunc);
          break;
+      case HookType::HOOK_PERIODIC_INS:
       case HookType::HOOK_CPUFREQ_CHANGE:
       case HookType::HOOK_INSTR_COUNT:
       case HookType::HOOK_INSTRUMENT_MODE:

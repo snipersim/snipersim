@@ -56,6 +56,7 @@ public:
 
    virtual void synchronize(thread_id_t thread_id, SubsecondTime time) = 0;
    virtual void signal() = 0;
+   virtual void release() = 0;
    virtual void setDisable(bool disable) { }
    virtual void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime()) = 0;
    virtual SubsecondTime getGlobalTime();

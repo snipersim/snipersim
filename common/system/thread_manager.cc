@@ -1,5 +1,3 @@
-#include <sys/syscall.h>
-
 #include "thread_manager.h"
 #include "core_manager.h"
 #include "performance_model.h"
@@ -12,6 +10,10 @@
 #include "core.h"
 #include "thread.h"
 #include "scheduler.h"
+#include "syscall_server.h"
+
+#include <sys/syscall.h>
+#include "os_compat.h"
 
 const char* ThreadManager::stall_type_names[] = {
    "unscheduled", "broken", "join", "mutex", "cond", "barrier", "futex", "pause"
@@ -46,6 +48,16 @@ Thread* ThreadManager::getThreadFromID(thread_id_t thread_id)
 Thread* ThreadManager::getCurrentThread(int threadIndex)
 {
    return m_thread_tls->getPtr<Thread>(threadIndex);
+}
+
+Thread* ThreadManager::findThreadByTid(pid_t tid)
+{
+   for (UInt32 thread_id = 0; thread_id < m_threads.size(); ++thread_id)
+   {
+      if (m_threads.at(thread_id)->m_os_info.tid == tid)
+         return m_threads.at(thread_id);
+   }
+   return NULL;
 }
 
 Thread* ThreadManager::createThread(app_id_t app_id)
@@ -125,12 +137,23 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    assert(m_thread_state[thread_id].status == Core::RUNNING);
    m_thread_state[thread_id].status = Core::IDLE;
 
+   // Implement pthread_join
+   wakeUpWaiter(thread_id, time);
+
+   // Implement CLONE_CHILD_CLEARTID
+   if (thread->m_os_info.clear_tid)
+   {
+      uint32_t zero = 0;
+      thread->getCore()->accessMemory(Core::NONE, Core::WRITE, thread->m_os_info.tid_ptr, (char*)&zero, sizeof(zero));
+
+      SubsecondTime end_time; // ignored
+      Sim()->getSyscallServer()->futexWake(thread_id, (int*)thread->m_os_info.tid_ptr, 1, FUTEX_BITSET_MATCH_ANY, time, end_time);
+   }
+
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);
    if (Sim()->getClockSkewMinimizationServer())
       Sim()->getClockSkewMinimizationServer()->signal();
-
-   wakeUpWaiter(thread_id, time);
 
    // Set the CoreState to 'IDLE'
    core_manager->getCurrentCore()->setState(Core::IDLE);

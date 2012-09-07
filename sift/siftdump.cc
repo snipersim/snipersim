@@ -10,7 +10,6 @@ int main(int argc, char* argv[])
 {
    if (argc > 1) {
       Sift::Reader reader(argv[1]);
-      xed_decoded_inst_t xed_inst;
       const xed_syntax_enum_t syntax = XED_SYNTAX_ATT;
 
       Sift::Instruction inst;

@@ -16,6 +16,7 @@ Thread::Thread(thread_id_t thread_id, app_id_t app_id)
    m_syscall_model = new SyscallMdl(this);
    m_sync_client = new SyncClient(this);
    m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(this);
+   memset(&m_os_info, 0, sizeof(m_os_info));
 }
 
 Thread::~Thread()

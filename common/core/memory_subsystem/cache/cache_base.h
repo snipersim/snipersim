@@ -44,7 +44,7 @@ class CacheBase
    protected:
       // input params
       String m_name;
-      UInt32 m_cache_size;
+      UInt64 m_cache_size;
       UInt32 m_associativity;
       UInt32 m_blocksize;
       UInt32 m_num_sets;
