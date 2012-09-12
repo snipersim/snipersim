@@ -26,6 +26,7 @@ namespace Sift
    {
       CompressionZlib = 1,
       ArchIA32 = 2,
+      IcacheVariable = 4,
    } Option;
 
    typedef union
@@ -84,6 +85,7 @@ namespace Sift
       RecOtherJoin,
       RecOtherJoinResponse,
       RecOtherEndResponse,
+      RecOtherIcacheVariable,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

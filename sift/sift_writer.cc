@@ -10,8 +10,9 @@
 // Enable (>0) to print out everything we write
 #define VERBOSE 0
 #define VERBOSE_HEX 0
+#define VERBOSE_ICACHE 0
 
-Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32)
+Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn)
    : response(NULL)
    , getCodeFunc(getCodeFunc)
    , ninstrs(0)
@@ -22,6 +23,7 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    , last_address(0)
    , icache()
    , m_id(id)
+   , m_requires_icache_per_insn(requires_icache_per_insn)
 {
    memset(hsize, 0, sizeof(hsize));
    memset(haddr, 0, sizeof(haddr));
@@ -33,6 +35,8 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
       options |= CompressionZlib;
    if (arch32)
       options |= ArchIA32;
+   if (requires_icache_per_insn)
+      options |= IcacheVariable;
 
    output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
 
@@ -111,26 +115,54 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
    assert(size < 16);
    assert(num_addresses <= MAX_DYNAMIC_ADDRESSES);
 
-   // Send ICACHE record?
-   for(uint64_t base_addr = addr & ICACHE_PAGE_MASK; base_addr <= ((addr + size - 1) & ICACHE_PAGE_MASK); base_addr += ICACHE_SIZE)
+   if (m_requires_icache_per_insn)
    {
-      if (! icache[base_addr])
+      if (! icache[addr])
       {
-         #if VERBOSE > 2
-         std::cerr << "[DEBUG:" << m_id << "] Write icache" << std::endl;
+         #if VERBOSE_ICACHE
+         std::cerr << "[DEBUG:" << m_id << "] Write icache per instruction addr=0x" << std::hex << addr << std::dec << std::endl;
          #endif
          Record rec;
          rec.Other.zero = 0;
-         rec.Other.type = RecOtherIcache;
-         rec.Other.size = sizeof(uint64_t) + ICACHE_SIZE;
+         rec.Other.type = RecOtherIcacheVariable;
+         rec.Other.size = sizeof(uint64_t) + size;
          output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
-         output->write(reinterpret_cast<char*>(&base_addr), sizeof(uint64_t));
+         output->write(reinterpret_cast<char*>(&addr), sizeof(uint64_t));
 
-         uint8_t buffer[ICACHE_SIZE];
-         getCodeFunc(buffer, (const uint8_t *)base_addr, ICACHE_SIZE);
-         output->write(reinterpret_cast<char*>(buffer), ICACHE_SIZE);
+         uint8_t buffer[16] = {0};
+         getCodeFunc(buffer, reinterpret_cast<const uint8_t *>(addr), size);
+         output->write(reinterpret_cast<char*>(buffer), size);
 
-         icache[base_addr] = true;
+         #if VERBOSE_ICACHE
+         hexdump((char*)buffer, sizeof(buffer));
+         #endif
+
+         icache[addr] = true;
+      }
+   }
+   else
+   {
+      // Send ICACHE record?
+      for(uint64_t base_addr = addr & ICACHE_PAGE_MASK; base_addr <= ((addr + size - 1) & ICACHE_PAGE_MASK); base_addr += ICACHE_SIZE)
+      {
+         if (! icache[base_addr])
+         {
+            #if VERBOSE > 2
+            std::cerr << "[DEBUG:" << m_id << "] Write icache" << std::endl;
+            #endif
+            Record rec;
+            rec.Other.zero = 0;
+            rec.Other.type = RecOtherIcache;
+            rec.Other.size = sizeof(uint64_t) + ICACHE_SIZE;
+            output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+            output->write(reinterpret_cast<char*>(&base_addr), sizeof(uint64_t));
+
+            uint8_t buffer[ICACHE_SIZE];
+            getCodeFunc(buffer, (const uint8_t *)base_addr, ICACHE_SIZE);
+            output->write(reinterpret_cast<char*>(buffer), ICACHE_SIZE);
+
+            icache[base_addr] = true;
+         }
       }
    }
 

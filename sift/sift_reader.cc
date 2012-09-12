@@ -14,6 +14,7 @@
 // Enable (>0) to print out everything we read
 #define VERBOSE 0
 #define VERBOSE_HEX 0
+#define VERBOSE_ICACHE 0
 
 bool Sift::Reader::xed_initialized = false;
 
@@ -106,6 +107,8 @@ void Sift::Reader::initStream()
       m_xed_state_init = init;
    }
 
+   hdr.options &= ~IcacheVariable;
+
    // Make sure there are no unrecognized options
    assert(hdr.options == 0);
 
@@ -145,6 +148,36 @@ bool Sift::Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(bytes), ICACHE_SIZE);
                icache[address] = bytes;
+               break;
+            }
+            case RecOtherIcacheVariable:
+            {
+               #if VERBOSE_ICACHE
+               std::cerr << __FUNCTION__ << ": rec=" << std::endl;
+               hexdump(&rec, sizeof(rec.Other));
+               #endif
+               uint64_t address;
+               size_t size = rec.Other.size - sizeof(uint64_t);
+               input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
+               size_t size_left = size;
+               while (size_left > 0)
+               {
+                  uint64_t base_addr = address & ICACHE_PAGE_MASK;
+                  uint8_t *icache_page;
+                  if (icache.count(base_addr) == 0)
+                     icache[base_addr] = new uint8_t[ICACHE_SIZE];
+                  uint64_t offset = address & ICACHE_OFFSET_MASK;
+                  size_t read_amount = std::min(size_left, ICACHE_SIZE - offset);
+                  input->read(const_cast<char*>(reinterpret_cast<const char*>(&(icache[base_addr][offset]))), read_amount);
+
+                  #if VERBOSE_ICACHE
+                  std::cerr << __FUNCTION__ << ": Wrote " << read_amount << " bytes to 0x" << std::hex << (void*)&(icache[base_addr][offset]) << std::dec << std::endl;
+                  hexdump(&(icache[base_addr][offset]), read_amount);
+                  #endif
+
+                  size_left -= read_amount;
+                  address = base_addr + ICACHE_SIZE;
+               }
                break;
             }
             case RecOtherOutput:
