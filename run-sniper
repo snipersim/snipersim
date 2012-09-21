@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-g <sniper-options>] {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-g <sniper-options>] [--roi] [--roi-script] [--perf] [--gdb] [--gdb-wait] [--gdb-quit] [--appdebug] [--appdebug-manual] [--appdebug-enable] [--power] [--cache-only] [--fast-forward] [--no-cache-warming] [--save-patch] [--pin-stats] {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
