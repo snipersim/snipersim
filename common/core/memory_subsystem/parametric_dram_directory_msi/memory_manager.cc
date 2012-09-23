@@ -1,6 +1,7 @@
 #include "core_manager.h"
 #include "memory_manager.h"
 #include "cache_base.h"
+#include "dram_cache.h"
 #include "simulator.h"
 #include "log.h"
 #include "dvfs_manager.h"
@@ -27,6 +28,7 @@ std::map<CoreComponentType, CacheCntlr*> MemoryManager::m_all_cache_cntlrs;
 MemoryManager::MemoryManager(Core* core,
       Network* network, ShmemPerfModel* shmem_perf_model):
    MemoryManagerBase(core, network, shmem_perf_model),
+   m_dram_cache(NULL),
    m_dram_directory_cntlr(NULL),
    m_dram_cntlr(NULL),
    m_itlb(NULL), m_dtlb(NULL),
@@ -170,9 +172,14 @@ MemoryManager::MemoryManager(Core* core,
             dram_queue_model_type,
             getCacheBlockSize());
 
+      if (Sim()->getCfg()->getBoolArray("perf_model/dram/cache/enabled", core->getId()))
+      {
+         m_dram_cache = new DramCache(core->getId(), getCacheBlockSize(), m_dram_cntlr);
+      }
+
       m_dram_directory_cntlr = new PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr(getCore()->getId(),
             this,
-            m_dram_cntlr,
+            m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr,
             dram_directory_total_entries,
             dram_directory_associativity,
             getCacheBlockSize(),
@@ -245,7 +252,7 @@ MemoryManager::MemoryManager(Core* core,
       {
          LOG_ASSERT_ERROR(Sim()->getConfig()->getApplicationCores() <= cache_parameters[m_last_level_cache].shared_cores, "DRAM direct access is only possible when there is just a single last-level cache (LLC level %d shared by %d, num cores %d)", m_last_level_cache, cache_parameters[m_last_level_cache].shared_cores, Sim()->getConfig()->getApplicationCores());
          LOG_ASSERT_ERROR(m_dram_cntlr != NULL, "I'm supposed to have direct access to a DRAM controller, but there isn't one at this node");
-         m_cache_cntlrs[(UInt32)m_last_level_cache]->setDRAMDirectAccess(m_dram_cntlr);
+         m_cache_cntlrs[(UInt32)m_last_level_cache]->setDRAMDirectAccess(m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr);
       }
    }
 
@@ -281,6 +288,9 @@ MemoryManager::~MemoryManager()
       delete m_cache_cntlrs[(MemComponent::component_t)i];
       m_cache_cntlrs[(MemComponent::component_t)i] = NULL;
    }
+
+   if (m_dram_cache)
+      delete m_dram_cache;
 
    if (m_dram_cntlr_present)
    {

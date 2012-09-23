@@ -6,6 +6,7 @@ DIRECTORIES = $(SIM_ROOT)/common/core \
 	$(SIM_ROOT)/common/core/memory_subsystem \
 	$(SIM_ROOT)/common/core/memory_subsystem/cache \
 	$(SIM_ROOT)/common/core/memory_subsystem/directory_schemes \
+	$(SIM_ROOT)/common/core/memory_subsystem/dram \
 	$(SIM_ROOT)/common/core/memory_subsystem/parametric_dram_directory_msi \
 	$(SIM_ROOT)/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi \
 	$(SIM_ROOT)/common/network \

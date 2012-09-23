@@ -10,13 +10,14 @@
 #include "shmem_msg.h"
 #include "fixed_types.h"
 #include "memory_manager_base.h"
+#include "dram_cntlr_interface.h"
 #include "subsecond_time.h"
 
 class FaultInjector;
 
 namespace PrL1PrL2DramDirectoryMSI
 {
-   class DramCntlr
+   class DramCntlr : public DramCntlrInterface
    {
       public:
          typedef enum

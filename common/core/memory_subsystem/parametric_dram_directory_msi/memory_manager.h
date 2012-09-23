@@ -1,7 +1,5 @@
 #pragma once
 
-#include <map>
-
 #include "memory_manager_base.h"
 #include "cache_base.h"
 #include "cache_cntlr.h"
@@ -17,6 +15,10 @@
 #include "shared_cache_block_info.h"
 #include "subsecond_time.h"
 
+#include <map>
+
+class DramCache;
+
 namespace ParametricDramDirectoryMSI
 {
    typedef std::pair<core_id_t, MemComponent::component_t> CoreComponentType;
@@ -26,6 +28,7 @@ namespace ParametricDramDirectoryMSI
    {
       private:
          CacheCntlr* m_cache_cntlrs[MemComponent::LAST_LEVEL_CACHE + 1];
+         DramCache* m_dram_cache;
          PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr* m_dram_directory_cntlr;
          PrL1PrL2DramDirectoryMSI::DramCntlr* m_dram_cntlr;
          AddressHomeLookup* m_dram_directory_home_lookup;

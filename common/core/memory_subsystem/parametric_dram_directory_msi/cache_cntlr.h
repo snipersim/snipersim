@@ -6,7 +6,6 @@
 #include "shared_cache_block_info.h"
 #include "address_home_lookup.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/shmem_msg.h"
-#include "../pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h"
 #include "mem_component.h"
 #include "semaphore.h"
 #include "lock.h"
@@ -17,6 +16,8 @@
 #include "req_queue_list_template.h"
 #include "stats.h"
 #include "subsecond_time.h"
+
+class DramCntlrInterface;
 
 /* Enable to get a detailed count of state transitions */
 //#define ENABLE_TRANSITIONS
@@ -133,7 +134,7 @@ namespace ParametricDramDirectoryMSI
          Lock m_smt_lock; //< Only used in L1 cache, to protect against concurrent access from sibling SMT threads
          CacheCntlrList m_prev_cache_cntlrs;
          Prefetcher* m_prefetcher;
-         PrL1PrL2DramDirectoryMSI::DramCntlr* m_dram_cntlr;
+         DramCntlrInterface* m_dram_cntlr;
 
          Mshr mshr;
          ContentionModel m_l1_mshr;
@@ -311,7 +312,7 @@ namespace ParametricDramDirectoryMSI
          void setPrevCacheCntlrs(CacheCntlrList& prev_cache_cntlrs);
          void setNextCacheCntlr(CacheCntlr* next_cache_cntlr) { m_next_cache_cntlr = next_cache_cntlr; }
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores) { m_master->createSetLocks(cache_block_size, num_sets, core_offset, num_cores); }
-         void setDRAMDirectAccess(PrL1PrL2DramDirectoryMSI::DramCntlr* dram_cntlr) { m_master->m_dram_cntlr = dram_cntlr; }
+         void setDRAMDirectAccess(DramCntlrInterface* dram_cntlr) { m_master->m_dram_cntlr = dram_cntlr; }
 
          HitWhere::where_t processMemOpFromCore(
                Core::lock_signal_t lock_signal,

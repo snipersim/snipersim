@@ -17,7 +17,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
 DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
       MemoryManagerBase* memory_manager,
-      DramCntlr* dram_cntlr,
+      DramCntlrInterface* dram_cntlr,
       UInt32 dram_directory_total_entries,
       UInt32 dram_directory_associativity,
       UInt32 cache_block_size,

@@ -9,6 +9,8 @@
 #include "mem_component.h"
 #include "memory_manager_base.h"
 
+class DramCntlrInterface;
+
 namespace PrL1PrL2DramDirectoryMSI
 {
    class DramDirectoryCntlr
@@ -18,7 +20,7 @@ namespace PrL1PrL2DramDirectoryMSI
          MemoryManagerBase* m_memory_manager;
          DramDirectoryCache* m_dram_directory_cache;
          ReqQueueList* m_dram_directory_req_queue_list;
-         DramCntlr* m_dram_cntlr;
+         DramCntlrInterface* m_dram_cntlr;
 
          core_id_t m_core_id;
          UInt32 m_cache_block_size;
@@ -49,7 +51,7 @@ namespace PrL1PrL2DramDirectoryMSI
       public:
          DramDirectoryCntlr(core_id_t core_id,
                MemoryManagerBase* memory_manager,
-               DramCntlr* dram_cntlr,
+               DramCntlrInterface* dram_cntlr,
                UInt32 dram_directory_total_entries,
                UInt32 dram_directory_associativity,
                UInt32 cache_block_size,
