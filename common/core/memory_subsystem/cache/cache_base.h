@@ -73,6 +73,8 @@ class CacheBase
       IntPtr tagToAddress(const IntPtr tag);
       String getName(void) { return m_name; }
 
+      static hash_t parseAddressHash(String hash_name);
+
       // Output Summary
       virtual void outputSummary(std::ostream& out) {}
 };

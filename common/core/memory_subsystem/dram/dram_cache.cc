@@ -23,9 +23,7 @@ DramCache::DramCache(core_id_t core_id, UInt32 cache_block_size, DramCntlrInterf
       m_cache_block_size,
       Sim()->getCfg()->getStringArray("perf_model/dram/cache/replacement_policy", core_id),
       CacheBase::PR_L1_CACHE,
-      /* Make sure to use a different hash function than the address-to-memorycontroller mapping,
-         else we won't use all available sets! */
-      CacheBase::HASH_RNG2_MOD,
+      CacheBase::parseAddressHash(Sim()->getCfg()->getStringArray("perf_model/dram/cache/address_hash", core_id)),
       NULL /* FaultinjectionManager */
    );
 

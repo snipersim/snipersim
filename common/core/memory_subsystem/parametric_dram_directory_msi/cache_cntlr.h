@@ -69,6 +69,7 @@ namespace ParametricDramDirectoryMSI
          String configName;
          UInt32 size;
          UInt32 associativity;
+         String hash_function;
          String replacement_policy;
          bool perfect;
          bool coherent;
@@ -87,11 +88,11 @@ namespace ParametricDramDirectoryMSI
             , tags_access_time(NULL,0)
             , writeback_time(NULL,0)
          {}
-         CacheParameters(String _configName, UInt32 _size, UInt32 _associativity, String _replacement_policy, bool _perfect, bool _coherent,
+         CacheParameters(String _configName, UInt32 _size, UInt32 _associativity, String _hash_function, String _replacement_policy, bool _perfect, bool _coherent,
             const ComponentLatency& _data_access_time, const ComponentLatency& _tags_access_time,
             const ComponentLatency& _writeback_time, const ComponentBandwidthPerCycle& _next_level_read_bandwidth,
             String _perf_model_type, bool _writethrough, UInt32 _shared_cores, String _prefetcher, UInt32 _outstanding_misses) :
-            configName(_configName), size(_size), associativity(_associativity), replacement_policy(_replacement_policy), perfect(_perfect), coherent(_coherent),
+            configName(_configName), size(_size), associativity(_associativity), hash_function(_hash_function), replacement_policy(_replacement_policy), perfect(_perfect), coherent(_coherent),
             data_access_time(_data_access_time), tags_access_time(_tags_access_time),
             writeback_time(_writeback_time), next_level_read_bandwidth(_next_level_read_bandwidth),
             perf_model_type(_perf_model_type), writethrough(_writethrough), shared_cores(_shared_cores),

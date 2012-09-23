@@ -101,6 +101,7 @@ MemoryManager::MemoryManager(Core* core,
             configName,
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/cache_size", core->getId()),
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/associativity", core->getId()),
+            Sim()->getCfg()->getStringArray("perf_model/" + configName + "/address_hash", core->getId()),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/replacement_policy", core->getId()),
             Sim()->getCfg()->getBoolArray(  "perf_model/" + configName + "/perfect", core->getId()),
             i == MemComponent::L1_ICACHE
