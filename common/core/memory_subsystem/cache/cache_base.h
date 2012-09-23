@@ -34,6 +34,15 @@ class CacheBase
          NUM_CACHE_TYPES = MAX_CACHE_TYPE - MIN_CACHE_TYPE + 1
       };
 
+      enum hash_t
+      {
+         INVALID_HASH_TYPE,
+         HASH_MASK,
+         HASH_MOD,
+         HASH_RNG1_MOD,
+         HASH_RNG2_MOD,
+      };
+
       enum ReplacementPolicy
       {
          ROUND_ROBIN = 0,
@@ -47,6 +56,7 @@ class CacheBase
       UInt64 m_cache_size;
       UInt32 m_associativity;
       UInt32 m_blocksize;
+      CacheBase::hash_t m_hash;
       UInt32 m_num_sets;
 
       // computed params
@@ -54,7 +64,7 @@ class CacheBase
 
    public:
       // constructors/destructors
-      CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size);
+      CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash);
       virtual ~CacheBase();
 
       // utilities

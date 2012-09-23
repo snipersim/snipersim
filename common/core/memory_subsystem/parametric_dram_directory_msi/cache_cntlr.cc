@@ -136,6 +136,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
             m_cache_block_size,
             cache_params.replacement_policy,
             CacheBase::SHARED_CACHE,
+            CacheBase::HASH_MASK,
             Sim()->getFaultinjectionManager()
                ? Sim()->getFaultinjectionManager()->getFaultInjector(m_core_id_master, mem_component)
                : NULL);

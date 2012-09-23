@@ -9,9 +9,10 @@ Cache::Cache(String name,
       UInt32 associativity, UInt32 cache_block_size,
       String replacement_policy,
       cache_t cache_type,
+      hash_t hash,
       FaultInjector *fault_injector) :
 
-   CacheBase(name, cache_size, associativity, cache_block_size),
+   CacheBase(name, cache_size, associativity, cache_block_size, hash),
    m_enabled(false),
    m_num_accesses(0),
    m_num_hits(0),
