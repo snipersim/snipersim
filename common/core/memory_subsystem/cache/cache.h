@@ -1,8 +1,6 @@
 #ifndef CACHE_H
 #define CACHE_H
 
-#include <cassert>
-
 #include "cache_base.h"
 #include "cache_set.h"
 #include "cache_block_info.h"
@@ -13,6 +11,9 @@
 #include "log.h"
 #include "core.h"
 #include "fault_injection.h"
+
+// Define to enable the set usage histogram
+//#define ENABLE_SET_USAGE_HIST
 
 class Cache : public CacheBase
 {
@@ -28,6 +29,10 @@ class Cache : public CacheBase
       CacheSet** m_sets;
 
       FaultInjector *m_fault_injector;
+
+      #ifdef ENABLE_SET_USAGE_HIST
+      UInt64* m_set_usage_hist;
+      #endif
 
    public:
 

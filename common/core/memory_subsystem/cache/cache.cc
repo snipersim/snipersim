@@ -24,10 +24,24 @@ Cache::Cache(String name,
    {
       m_sets[i] = CacheSet::createCacheSet(replacement_policy, m_cache_type, m_associativity, m_blocksize);
    }
+
+   #ifdef ENABLE_SET_USAGE_HIST
+   m_set_usage_hist = new UInt64[m_num_sets];
+   for (UInt32 i = 0; i < m_num_sets; i++)
+      m_set_usage_hist[i] = 0;
+   #endif
 }
 
 Cache::~Cache()
 {
+   #ifdef ENABLE_SET_USAGE_HIST
+   printf("Cache %s set usage:", m_name.c_str());
+   for (SInt32 i = 0; i < (SInt32) m_num_sets; i++)
+      printf(" %" PRId64, m_set_usage_hist[i]);
+   printf("\n");
+   delete [] m_set_usage_hist;
+   #endif
+
    for (SInt32 i = 0; i < (SInt32) m_num_sets; i++)
       delete m_sets[i];
    delete [] m_sets;
@@ -121,6 +135,10 @@ Cache::insertSingleLine(IntPtr addr, Byte* fill_buff,
 
       m_fault_injector->postWrite(addr, set_index * m_associativity + line_index, m_sets[set_index]->getBlockSize(), (Byte*)m_sets[set_index]->getDataPtr(line_index, 0), now);
    }
+
+   #ifdef ENABLE_SET_USAGE_HIST
+   ++m_set_usage_hist[set_index];
+   #endif
 
    delete cache_block_info;
 }
