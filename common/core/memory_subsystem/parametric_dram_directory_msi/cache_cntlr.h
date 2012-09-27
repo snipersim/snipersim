@@ -70,6 +70,7 @@ namespace ParametricDramDirectoryMSI
          UInt32 associativity;
          String replacement_policy;
          bool perfect;
+         bool coherent;
          ComponentLatency data_access_time;
          ComponentLatency tags_access_time;
          ComponentLatency writeback_time;
@@ -85,11 +86,11 @@ namespace ParametricDramDirectoryMSI
             , tags_access_time(NULL,0)
             , writeback_time(NULL,0)
          {}
-         CacheParameters(String _configName, UInt32 _size, UInt32 _associativity, String _replacement_policy, bool _perfect,
+         CacheParameters(String _configName, UInt32 _size, UInt32 _associativity, String _replacement_policy, bool _perfect, bool _coherent,
             const ComponentLatency& _data_access_time, const ComponentLatency& _tags_access_time,
             const ComponentLatency& _writeback_time, const ComponentBandwidthPerCycle& _next_level_read_bandwidth,
             String _perf_model_type, bool _writethrough, UInt32 _shared_cores, String _prefetcher, UInt32 _outstanding_misses) :
-            configName(_configName), size(_size), associativity(_associativity), replacement_policy(_replacement_policy), perfect(_perfect),
+            configName(_configName), size(_size), associativity(_associativity), replacement_policy(_replacement_policy), perfect(_perfect), coherent(_coherent),
             data_access_time(_data_access_time), tags_access_time(_tags_access_time),
             writeback_time(_writeback_time), next_level_read_bandwidth(_next_level_read_bandwidth),
             perf_model_type(_perf_model_type), writethrough(_writethrough), shared_cores(_shared_cores),
@@ -173,6 +174,7 @@ namespace ParametricDramDirectoryMSI
          AddressHomeLookup* m_dram_directory_home_lookup;
          std::unordered_map<IntPtr, MemComponent::component_t> m_shmem_req_source_map;
          bool m_perfect;
+         bool m_coherent;
          bool m_l1_mshr;
 
          struct {

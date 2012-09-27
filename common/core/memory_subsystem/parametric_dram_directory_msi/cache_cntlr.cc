@@ -108,6 +108,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_last_level(NULL),
    m_dram_directory_home_lookup(dram_directory_home_lookup),
    m_perfect(cache_params.perfect),
+   m_coherent(cache_params.coherent),
    m_l1_mshr(cache_params.outstanding_misses > 0),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
@@ -1103,6 +1104,13 @@ MYLOG("evicting @%lx", evict_address);
       {
          // Nothing to do in this case
       }
+      else if (!m_coherent)
+      {
+         // Don't notify the next level, it may have already evicted the line itself and won't like our notifyPrevLevelEvict
+         // Make sure the line wasn't modified though (unless we're writethrough), else data would have been lost
+         if (!m_cache_writethrough)
+            LOG_ASSERT_ERROR(evict_block_info.getCState() != CacheState::MODIFIED, "Non-coherent cache is throwing away dirty data");
+      }
       else if (m_next_cache_cntlr)
       {
          if (m_cache_writethrough) {
@@ -1231,7 +1239,7 @@ MYLOG("@%lx  %c > %c", address, CStateString(cache_block_info ? cache_block_info
          cache_block_info->setCState(CacheState::SHARED);
       }
 
-      if (new_cstate == CacheState::INVALID) {
+      if (new_cstate == CacheState::INVALID && m_coherent) {
          invalidateCacheBlock(address);
 
       } else if (new_cstate == CacheState::SHARED) {

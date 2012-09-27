@@ -101,6 +101,9 @@ MemoryManager::MemoryManager(Core* core,
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/associativity", core->getId()),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/replacement_policy", core->getId()),
             Sim()->getCfg()->getBoolArray(  "perf_model/" + configName + "/perfect", core->getId()),
+            i == MemComponent::L1_ICACHE
+               ? Sim()->getCfg()->getBoolArray(  "perf_model/" + configName + "/coherent", core->getId())
+               : true,
             ComponentLatency(clock_domain, Sim()->getCfg()->getIntArray("perf_model/" + configName + "/data_access_time", core->getId())),
             ComponentLatency(clock_domain, Sim()->getCfg()->getIntArray("perf_model/" + configName + "/tags_access_time", core->getId())),
             ComponentLatency(clock_domain, Sim()->getCfg()->getIntArray("perf_model/" + configName + "/writeback_time", core->getId())),
