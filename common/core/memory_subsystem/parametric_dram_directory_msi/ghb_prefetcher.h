@@ -19,14 +19,16 @@ class GhbPrefetcher : public Prefetcher
       {
          UInt32 nextIndex; //index of the next entry belonging to the same list
          SInt64 delta; //delta between last address and current address
-         GHBEntry() : nextIndex(INVALID_INDEX), delta(INVALID_DELTA) {}
+         UInt32 generation;
+         GHBEntry() : nextIndex(INVALID_INDEX), delta(INVALID_DELTA), generation(0) {}
       };
 
       struct TableEntry
       {
          UInt32 ghbIndex;
          SInt64 delta;
-         TableEntry() : ghbIndex(INVALID_INDEX), delta(INVALID_DELTA) {}
+         UInt32 generation;
+         TableEntry() : ghbIndex(INVALID_INDEX), delta(INVALID_DELTA), generation(0) {}
       };
 
       UInt32 m_prefetchWidth;
@@ -37,6 +39,7 @@ class GhbPrefetcher : public Prefetcher
       //circular global history buffer
       UInt32 m_ghbSize;
       UInt32 m_ghbHead;
+      UInt32 m_generation;
       std::vector<GHBEntry> m_ghb;
 
       UInt32 m_tableSize;
