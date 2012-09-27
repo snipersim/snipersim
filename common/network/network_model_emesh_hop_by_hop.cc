@@ -543,7 +543,7 @@ NetworkModelEMeshHopByHop::computeMemoryControllerPositions(SInt32 num_memory_co
    for (SInt32 i = 0; i < mesh_width; i++)
       core_id_list_along_perimeter.push_back(i);
 
-   if (dimensions > 1)
+   if (dimensions > 1 && mesh_height > 1)
    {
       for (SInt32 i = 1; i < (mesh_height-1); i++)
          core_id_list_along_perimeter.push_back((i * mesh_width) + mesh_width-1);
