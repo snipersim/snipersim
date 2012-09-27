@@ -100,7 +100,9 @@ namespace ParametricDramDirectoryMSI
    class CacheCntlrList : public std::vector<CacheCntlr*>
    {
       public:
+         #ifdef ENABLE_TRACK_SHARING_PREVCACHES
          PrevCacheIndex find(core_id_t core_id, MemComponent::component_t mem_component);
+         #endif
    };
 
    class CacheDirectoryWaiter

@@ -64,6 +64,7 @@ MshrEntry make_mshr(SubsecondTime t_issue, SubsecondTime t_complete) {
    return e;
 }
 
+#ifdef ENABLE_TRACK_SHARING_PREVCACHES
 PrevCacheIndex CacheCntlrList::find(core_id_t core_id, MemComponent::component_t mem_component)
 {
    for(PrevCacheIndex idx = 0; idx < size(); ++idx)
@@ -71,6 +72,7 @@ PrevCacheIndex CacheCntlrList::find(core_id_t core_id, MemComponent::component_t
          return idx;
    LOG_PRINT_ERROR("");
 }
+#endif
 
 void CacheMasterCntlr::createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores)
 {
@@ -209,7 +211,9 @@ CacheCntlr::setPrevCacheCntlrs(CacheCntlrList& prev_cache_cntlrs)
    for(CacheCntlrList::iterator it = prev_cache_cntlrs.begin(); it != prev_cache_cntlrs.end(); it++)
       if ((*it)->isMasterCache())
          m_master->m_prev_cache_cntlrs.push_back(*it);
+   #ifdef ENABLE_TRACK_SHARING_PREVCACHES
    LOG_ASSERT_ERROR(m_master->m_prev_cache_cntlrs.size() <= MAX_NUM_PREVCACHES, "shared locations vector too small, increase MAX_NUM_PREVCACHES to at least %u", m_master->m_prev_cache_cntlrs.size());
+   #endif
 }
 
 
@@ -642,7 +646,9 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
 MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
+         #ifdef ENABLE_TRACK_SHARING_PREVCACHES
          assert(! cache_block_info->hasCachedLoc());
+         #endif
       }
       else if (cache_block_info->getCState() == CacheState::MODIFIED)
       {
@@ -685,7 +691,9 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
                latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_USER_THREAD).first);
          getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
+         #ifdef ENABLE_TRACK_SHARING_PREVCACHES
          assert(! cache_block_info->hasCachedLoc());
+         #endif
       }
 
       if (m_next_cache_cntlr)
@@ -764,10 +772,12 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
 void
 CacheCntlr::notifyPrevLevelInsert(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address)
 {
+   #ifdef ENABLE_TRACK_SHARING_PREVCACHES
    SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
    assert(cache_block_info);
    PrevCacheIndex idx = m_master->m_prev_cache_cntlrs.find(core_id, mem_component);
    cache_block_info->setCachedLoc(idx);
+   #endif
 }
 
 void
@@ -777,11 +787,13 @@ MYLOG("@%lx", address);
    if (m_master->m_evicting_buf && address == m_master->m_evicting_address) {
 MYLOG("here being evicted");
    } else {
+      #ifdef ENABLE_TRACK_SHARING_PREVCACHES
       SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
 MYLOG("here in state %c", CStateString(getCacheState(address)));
       assert(cache_block_info);
       PrevCacheIndex idx = m_master->m_prev_cache_cntlrs.find(core_id, mem_component);
       cache_block_info->clearCachedLoc(idx);
+      #endif
    }
 }
 

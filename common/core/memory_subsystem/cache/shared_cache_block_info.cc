@@ -1,6 +1,8 @@
 #include "shared_cache_block_info.h"
 #include "log.h"
 
+#ifdef ENABLE_TRACK_SHARING_PREVCACHES
+
 PrevCacheIndex
 SharedCacheBlockInfo::getCachedLoc()
 {
@@ -28,17 +30,23 @@ SharedCacheBlockInfo::clearCachedLoc(PrevCacheIndex idx)
    m_cached_locs.reset(idx);
 }
 
+#endif
+
 void
 SharedCacheBlockInfo::invalidate()
 {
+   #ifdef ENABLE_TRACK_SHARING_PREVCACHES
    for(PrevCacheIndex idx = 0; idx < m_cached_locs.size(); ++idx)
       m_cached_locs.reset(idx);
+   #endif
    CacheBlockInfo::invalidate();
 }
 
 void
 SharedCacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
 {
+   #ifdef ENABLE_TRACK_SHARING_PREVCACHES
    m_cached_locs = ((SharedCacheBlockInfo*) cache_block_info)->getCachedLocs();
+   #endif
    CacheBlockInfo::clone(cache_block_info);
 }
