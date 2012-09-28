@@ -115,6 +115,15 @@ void handlePeriodicSync(THREADID threadIndex)
       #endif
    }
 
+   if (!Sim()->isRunning())
+   {
+      // Main thread has exited, but we still seem to be running.
+      // Don't touch any more simulator structure as they're being deallocated right now.
+      // Just wait here until the whole application terminates us.
+      while(1)
+         PIN_Yield();
+   }
+
    if (skew_do && core->getId() == 0)
       skew_record_all();
 }

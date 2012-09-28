@@ -50,6 +50,7 @@ void Simulator::setConfig(config::Config *cfg, Config::SimulationMode mode)
 
 void Simulator::release()
 {
+   m_singleton->m_running = false;
    // Fxsupport::fini();
    delete m_singleton;
    m_singleton = NULL;
@@ -69,6 +70,7 @@ Simulator::Simulator()
    , m_dvfs_manager(NULL)
    , m_hooks_manager(NULL)
    , m_faultinjection_manager(NULL)
+   , m_running(false)
    , m_boot_time(getTime())
    , m_start_time(0)
    , m_stop_time(0)
@@ -132,6 +134,8 @@ void Simulator::start()
    {
       Sim()->getFastForwardPerformanceManager()->enable();
    }
+
+   m_running = true;
 }
 
 Simulator::~Simulator()
