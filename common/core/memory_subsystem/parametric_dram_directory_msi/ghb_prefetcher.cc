@@ -117,6 +117,7 @@ GhbPrefetcher::getNextAddress(IntPtr currentAddress)
       { //prevDelta not found ==> add entry to table
          m_ghbTable[m_tableHead].delta = prevDelta;
          m_ghbTable[m_tableHead].ghbIndex = m_ghbHead;
+         m_ghbTable[m_tableHead].generation = m_generation;
 
          m_tableHead = (m_tableHead + 1) % m_tableSize;
       }
