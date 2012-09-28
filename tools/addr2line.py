@@ -5,7 +5,7 @@ import sys, os, subprocess
 def ex(cmd):
   return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
 
-bin = os.path.join(os.getenv('GRAPHITE_ROOT'), 'lib', 'pin_sim.so')
+bin = os.path.join(os.getenv('SNIPER_ROOT') or os.getenv('GRAPHITE_ROOT'), 'lib', 'pin_sim.so')
 base = eval('0x' + ex('nm %s | grep _Z5rdtscv' % bin).split()[0])
 text = eval('0x' + ex(r'objdump -h %s | grep "\.text"' % bin).split()[5])
 
