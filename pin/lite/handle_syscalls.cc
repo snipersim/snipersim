@@ -48,7 +48,7 @@ void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
 
    if (syscall_number == SYS_clone)
    {
-      localStore[threadIndex].pthread_create.tid_ptr = (void*)args.arg4;
+      localStore[threadIndex].pthread_create.tid_ptr = (void*)args.arg3;
       localStore[threadIndex].pthread_create.clear_tid = args.arg0 & CLONE_CHILD_CLEARTID ? true : false;
    }
 
