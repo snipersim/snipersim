@@ -214,13 +214,9 @@ if traces:
   graphiteoptions.append('-g --traceinput/enabled=true')
   if resptraces:
     graphiteoptions.append('-g --traceinput/emulate_syscalls=true')
-    graphiteoptions.append('-g --traceinput/threads_to_start=1') # Start only one thread per process
-    graphiteoptions.append('-g --traceinput/num_threads=%s' % (len(traces)))
     graphiteoptions.append('-g --traceinput/num_apps=1')
   else:
     graphiteoptions.append('-g --traceinput/emulate_syscalls=false')
-    graphiteoptions.append('-g --traceinput/threads_to_start=1')
-    graphiteoptions.append('-g --traceinput/num_threads=1')
     graphiteoptions.append('-g --traceinput/num_apps=%u' % len(traces))
   for thread_id, trace in enumerate(traces):
     filename = findtrace(trace)

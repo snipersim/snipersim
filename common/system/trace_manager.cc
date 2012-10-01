@@ -4,113 +4,95 @@
 #include "thread_manager.h"
 #include "config.hpp"
 
-#define MAX_NUM_THREADS 1024
+#include <sys/types.h>
+#include <sys/stat.h>
 
 TraceManager::TraceManager()
-   : m_threads(MAX_NUM_THREADS)
+   : m_threads(0)
    , m_done(0)
    , m_stop_with_first_thread(Sim()->getCfg()->getBool("traceinput/stop_with_first_thread"))
    , m_emulate_syscalls(Sim()->getCfg()->getBool("traceinput/emulate_syscalls"))
    , m_num_apps(Sim()->getCfg()->getInt("traceinput/num_apps"))
-   , m_app_thread_count_to_start(m_num_apps, 0)
-   , m_app_thread_count_requested(m_num_apps, 0)
-   , m_app_thread_count_used(m_num_apps, 0)
+   , m_app_thread_count(m_num_apps, 1)
 {
-   UInt32 total_threads_requested = 0;
-   for (UInt32 i = 0 ; i < m_num_apps ; i++ )
+   if (m_emulate_syscalls)
    {
-      m_app_thread_count_to_start[i] = Sim()->getCfg()->getIntArray("traceinput/threads_to_start", i);
-      m_app_thread_count_requested[i] = Sim()->getCfg()->getIntArray("traceinput/num_threads", i);
-      total_threads_requested += m_app_thread_count_requested[i];
-   }
-   for (UInt32 i = 0 ; i < total_threads_requested ; i++ )
-   {
-      m_tracefiles.push_back(Sim()->getCfg()->getString("traceinput/thread_" + itostr(i)));
-      if (m_emulate_syscalls)
+      m_trace_prefix = Sim()->getCfg()->getString("traceinput/trace_prefix");
+      for (UInt32 i = 0 ; i < m_num_apps ; i++ )
       {
-         m_responsefiles.push_back(Sim()->getCfg()->getString("traceinput/thread_response_" + itostr(i)));
+         m_tracefiles.push_back(getFifoName(i, 0, false /*response*/, false /*create*/));
+         m_responsefiles.push_back(getFifoName(i, 0, true /*response*/, false /*create*/));
+         newThread(i /*app_id*/, true /*first*/);
       }
    }
-   for (UInt32 i = 0 ; i < m_num_apps ; i++ )
+   else
    {
-      newThread(/*count*/m_app_thread_count_to_start[i], /*spawn*/false, i);
+      for (UInt32 i = 0 ; i < m_num_apps ; i++ )
+      {
+         m_tracefiles.push_back(Sim()->getCfg()->getString("traceinput/thread_" + itostr(i)));
+         newThread(i /*app_id*/, true /*first*/);
+      }
    }
 }
 
-thread_id_t TraceManager::newThread(size_t count, bool spawn, app_id_t app_id)
+String TraceManager::getFifoName(app_id_t app_id, UInt64 thread_num, bool response, bool create)
+{
+   String filename = m_trace_prefix + (response ? "_response" : "") + ".app" + itostr(app_id) + ".th" + itostr(thread_num) + ".sift";
+   if (create)
+      mkfifo(filename.c_str(), 0600);
+   return filename;
+}
+
+thread_id_t TraceManager::newThread(app_id_t app_id, bool first)
 {
    assert(static_cast<decltype(app_id)>(m_num_apps) > app_id);
+   ScopedLock sl(m_lock);
 
-   UInt32 app_start_thread = 0, start_thread;
-   for (app_id_t i = 0 ; i < app_id ; i++)
+   String tracefile = "", responsefile = "";
+   if (first)
    {
-      app_start_thread += m_app_thread_count_requested[i];
-   }
-   start_thread = app_start_thread + m_app_thread_count_used[app_id];
-
-   assert((start_thread + count) <= MAX_NUM_THREADS);
-   for(size_t i = start_thread; i < start_thread + count; ++i)
-   {
-      String responsefile = "";
-
+      tracefile = m_tracefiles[app_id];
       if (m_emulate_syscalls)
-      {
-         responsefile = m_responsefiles[i];
-      }
-
-      TraceThread *thread = new TraceThread(Sim()->getThreadManager()->createThread(app_id), m_tracefiles[i], responsefile, app_id);
-
-      m_threads[i] = thread;
-
-      if (spawn)
-      {
-         thread->spawn(NULL);
-      }
+         responsefile = m_responsefiles[app_id];
    }
-   m_app_thread_count_used[app_id] += count;
-   // For now, return the last thread's id
-   return m_threads[app_start_thread+m_app_thread_count_used[app_id]-1]->getThread()->getId();
+   else
+   {
+      int thread_num = m_app_thread_count[app_id]++;
+      tracefile = getFifoName(app_id, thread_num, false /*response*/, true /*create*/);
+      if (m_emulate_syscalls)
+         responsefile = getFifoName(app_id, thread_num, true /*response*/, true /*create*/);
+   }
+
+   Thread *thread = Sim()->getThreadManager()->createThread(app_id);
+   TraceThread *tthread = new TraceThread(thread, tracefile, responsefile, app_id, first ? false : true /*cleaup*/);
+   m_threads.push_back(tthread);
+
+   if (!first)
+   {
+      /* First thread of each app spawns only when initialization is done,
+         next threads are created once we're running so spanw them right away. */
+      tthread->spawn(NULL);
+   }
+
+   return thread->getId();
 }
 
 TraceManager::~TraceManager()
 {
-   UInt32 start_thread = 0;
-   for (UInt32 a = 0 ; a < m_num_apps ; a++)
-   {
-      for (UInt32 j = start_thread ; j < start_thread + m_app_thread_count_used[a] ; j++)
-      {
-         assert(m_threads[j]);
-         delete m_threads[j];
-      }
-      start_thread += m_app_thread_count_requested[a];
-   }
+   for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
+      delete *it;
 }
 
 void TraceManager::start()
 {
-   UInt32 start_thread = 0;
-   for (UInt32 a = 0 ; a < m_num_apps ; a++)
-   {
-      for (UInt32 j = start_thread ; j < start_thread + m_app_thread_count_used[a] ; j++)
-      {
-         m_threads[j]->spawn(NULL);
-      }
-      start_thread += m_app_thread_count_requested[a];
-   }
+   for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
+      (*it)->spawn(NULL);
 }
 
 void TraceManager::stop()
 {
-   // Signal everyone to stop
-   UInt32 start_thread = 0;
-   for (UInt32 a = 0 ; a < m_num_apps ; a++)
-   {
-      for (UInt32 j = start_thread ; j < start_thread + m_app_thread_count_used[a] ; j++)
-      {
-         m_threads[j]->stop();
-      }
-      start_thread += m_app_thread_count_requested[a];
-   }
+   for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
+      (*it)->stop();
 }
 
 void TraceManager::wait()
@@ -125,12 +107,7 @@ void TraceManager::wait()
       stop();
    }
 
-   UInt32 thread_count = 0;
-   for (UInt32 a = 0 ; a < m_num_apps ; a++)
-   {
-      thread_count += m_app_thread_count_used[a];
-   }
-   for (size_t i = 1 ; i < thread_count ; ++i)
+   for (size_t i = 1 ; i < m_threads.size() ; ++i)
    {
       m_done.wait();
    }
@@ -150,16 +127,11 @@ UInt64 TraceManager::getProgressExpect()
 UInt64 TraceManager::getProgressValue()
 {
    UInt64 value = 0;
-   UInt32 start_thread = 0;
-   for (UInt32 a = 0 ; a < m_num_apps ; a++)
+   for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
    {
-      for (UInt32 j = start_thread ; j < start_thread + m_app_thread_count_used[a] ; j++)
-      {
-         uint64_t expect = m_threads[j]->getProgressExpect();
-         if (expect)
-            value = std::max(value, 1000000 * m_threads[j]->getProgressValue() / expect);
-      }
-      start_thread += m_app_thread_count_requested[a];
+      uint64_t expect = (*it)->getProgressExpect();
+      if (expect)
+         value = std::max(value, 1000000 * (*it)->getProgressValue() / expect);
    }
    return value;
 }
@@ -167,20 +139,15 @@ UInt64 TraceManager::getProgressValue()
 // This should only be called when already holding the thread lock to prevent migrations while we scan for a core id match
 void TraceManager::accessMemory(int core_id, Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size)
 {
-   UInt32 start_thread = 0;
-   for (UInt32 a = 0 ; a < m_num_apps ; a++)
+   for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
    {
-      for (UInt32 j = start_thread ; j < start_thread + m_app_thread_count_used[a] ; j++)
+      TraceThread *tthread = *it;
+      assert(tthread != NULL);
+      if (tthread->getThread() && tthread->getThread()->getCore() && core_id == tthread->getThread()->getCore()->getId())
       {
-         TraceThread *tthread = m_threads[j];
-         assert(tthread != NULL);
-         if (tthread->getThread() && tthread->getThread()->getCore() && core_id == tthread->getThread()->getCore()->getId())
-         {
-            tthread->handleAccessMemory(lock_signal, mem_op_type, d_addr, data_buffer, data_size);
-            return;
-         }
+         tthread->handleAccessMemory(lock_signal, mem_op_type, d_addr, data_buffer, data_size);
+         return;
       }
-      start_thread += m_app_thread_count_requested[a];
    }
    LOG_PRINT_ERROR("Unable to find core %d", core_id);
 }

@@ -37,7 +37,7 @@ KNOB<UINT64> KnobBlocksize(KNOB_MODE_WRITEONCE, "pintool", "b", "0", "blocksize"
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
-KNOB<UINT64> KnobSiftCountOffset(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift file index offset (default = 0)");
+KNOB<UINT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift app id (default = 0)");
 
 UINT64 blocksize;
 UINT64 fast_forward_target = 0;
@@ -81,7 +81,7 @@ VOID countInsns(THREADID threadid, INT32 count)
 
    if (thread_data[threadid].icount >= fast_forward_target)
    {
-      std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       thread_data[threadid].in_detail = true;
       thread_data[threadid].icount = 0;
       PIN_RemoveInstrumentation();
@@ -391,17 +391,17 @@ void openFile(THREADID threadid)
    else
    {
       if (blocksize)
-         sprintf(filename, "%s.%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, KnobSiftCountOffset.Value() + threadid);
+         sprintf(filename, "%s.%" PRIu64 ".app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, KnobSiftAppId.Value(), (UINT64)threadid);
       else
-         sprintf(filename, "%s.th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
+         sprintf(filename, "%s.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftAppId.Value(), (UINT64)threadid);
    }
 
-   std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Output = [" << filename << "]" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobEmulateSyscalls.Value())
    {
-      sprintf(response_filename, "%s_response.th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftCountOffset.Value() + threadid);
-      std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Response = [" << response_filename << "]" << std::endl;
+      sprintf(response_filename, "%s_response.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftAppId.Value(), (UINT64)threadid);
+      std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Response = [" << response_filename << "]" << std::endl;
    }
 
 
@@ -414,7 +414,7 @@ void openFile(THREADID threadid)
       #endif
       thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid, arch32);
    } catch (...) {
-      std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Error: Unable to open the output file " << filename << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);
    }
 
@@ -423,7 +423,7 @@ void openFile(THREADID threadid)
 
 void closeFile(THREADID threadid)
 {
-   std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Recorded " << thread_data[threadid].icount << " instructions" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Recorded " << thread_data[threadid].icount << " instructions" << std::endl;
    delete thread_data[threadid].output;
    thread_data[threadid].output = NULL;
 
@@ -498,7 +498,7 @@ VOID threadFinishHelper(VOID *arg)
 VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
 {
 #if DEBUG_OUTPUT
-   std::cerr << "[SIFT_RECORDER:" << KnobSiftCountOffset.Value() + threadid << "] Finish Thread" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Finish Thread" << std::endl;
 #endif
 
    // To prevent deadlocks during simulation, start a new thread to handle this thread's
