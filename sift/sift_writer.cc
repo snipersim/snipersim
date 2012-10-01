@@ -274,6 +274,7 @@ int32_t Sift::Writer::NewThread()
    {
      assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
+     assert(!response->fail());
    }
 
    int32_t retcode = 0;
@@ -329,6 +330,7 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    {
      assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
+     assert(!response->fail());
    }
 
    uint64_t retcode = 0;
