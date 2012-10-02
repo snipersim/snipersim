@@ -167,7 +167,7 @@ bool Sift::Reader::Read(Instruction &inst)
                   if (icache.count(base_addr) == 0)
                      icache[base_addr] = new uint8_t[ICACHE_SIZE];
                   uint64_t offset = address & ICACHE_OFFSET_MASK;
-                  size_t read_amount = std::min(size_left, ICACHE_SIZE - offset);
+                  size_t read_amount = std::min(size_left, size_t(ICACHE_SIZE - offset));
                   input->read(const_cast<char*>(reinterpret_cast<const char*>(&(icache[base_addr][offset]))), read_amount);
 
                   #if VERBOSE_ICACHE
