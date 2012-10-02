@@ -63,10 +63,11 @@ typedef struct {
    ADDRINT tid_ptr;
    BOOL in_detail;
    BOOL last_syscall_emulated;
+   BOOL running;
    #if defined(TARGET_IA32)
-      uint8_t __pad[2];
+      uint8_t __pad[1];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[46];
+      uint8_t __pad[45];
    #endif
 } __attribute__((packed)) thread_data_t;
 thread_data_t *thread_data;
@@ -93,12 +94,22 @@ VOID handleMagic(ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
             std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] ROI Begin" << std::endl;
          }
          any_thread_in_detail = true;
+         for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+         {
+            if (thread_data[i].running && !thread_data[i].in_detail)
+               openFile(i);
+         }
          PIN_RemoveInstrumentation();
       }
       else if (gax == SIM_CMD_ROI_END)
       {
          std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] ROI End" << std::endl;
          any_thread_in_detail = false;
+         for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+         {
+            if (thread_data[i].running && thread_data[i].in_detail)
+               closeFile(i);
+         }
          PIN_RemoveInstrumentation();
       }
 
@@ -116,6 +127,8 @@ VOID countInsns(THREADID threadid, INT32 count)
    if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value())
    {
       std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
+      if (!thread_data[threadid].in_detail)
+         openFile(threadid);
       thread_data[threadid].in_detail = true;
       thread_data[threadid].icount = 0;
       any_thread_in_detail = true;
@@ -125,6 +138,10 @@ VOID countInsns(THREADID threadid, INT32 count)
 
 VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing)
 {
+   // We're still called for instructions in the same basic block as ROI end, ignore these
+   if (!thread_data[threadid].in_detail)
+      return;
+
    ++thread_data[threadid].icount;
    ++thread_data[threadid].icount_detailed;
 
@@ -153,6 +170,8 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 
    if (detailed_target != 0 && thread_data[threadid].icount_detailed >= detailed_target)
    {
+      thread_data[threadid].in_detail = false;
+      closeFile(threadid);
       PIN_Detach();
       return;
    }
@@ -166,6 +185,10 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 
 VOID handleMemory(THREADID threadid, ADDRINT address)
 {
+   // We're still called for instructions in the same basic block as ROI end, ignore these
+   if (!thread_data[threadid].in_detail)
+      return;
+
    thread_data[threadid].dyn_address_queue->push_back(address);
 }
 
@@ -460,6 +483,9 @@ void openFile(THREADID threadid)
 
 void closeFile(THREADID threadid)
 {
+   if (thread_data[threadid].output)
+      thread_data[threadid].output->End();
+
    std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Recorded " << thread_data[threadid].icount_detailed;
    if (thread_data[threadid].icount > thread_data[threadid].icount_detailed)
       std::cerr << " (out of " << thread_data[threadid].icount << ")";
@@ -507,7 +533,13 @@ VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    thread_data[threadid].bbv = new Bbv();
    thread_data[threadid].dyn_address_queue = new std::deque<ADDRINT>();
 
-   openFile(threadid);
+   if (any_thread_in_detail)
+   {
+      openFile(threadid);
+      thread_data[threadid].in_detail = true;
+   }
+
+   thread_data[threadid].running = true;
 }
 
 VOID threadFinishHelper(VOID *arg)
@@ -526,13 +558,17 @@ VOID threadFinishHelper(VOID *arg)
       thread_data[threadid].output->Syscall(SYS_futex, (char*)args, sizeof(args));
    }
 
-   thread_data[threadid].output->End();
-
    delete thread_data[threadid].dyn_address_queue;
    delete thread_data[threadid].bbv;
 
    thread_data[threadid].dyn_address_queue = NULL;
    thread_data[threadid].bbv = NULL;
+
+   if (thread_data[threadid].in_detail)
+   {
+      thread_data[threadid].in_detail = false;
+      closeFile(threadid);
+   }
 }
 
 VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
@@ -540,6 +576,8 @@ VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
 #if DEBUG_OUTPUT
    std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Finish Thread" << std::endl;
 #endif
+
+   thread_data[threadid].running = false;
 
    // To prevent deadlocks during simulation, start a new thread to handle this thread's
    // cleanup.  This is needed because this function could be called in the context of
