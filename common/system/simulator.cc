@@ -200,6 +200,8 @@ Simulator::~Simulator()
    delete m_thread_manager;
    delete m_core_manager;
    delete m_magic_server;
+   delete m_hooks_manager;
+   delete m_tags_manager;
    delete m_transport;
 }
 
