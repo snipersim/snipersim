@@ -23,6 +23,7 @@ class FastForwardPerformanceManager;
 class TraceManager;
 class DvfsManager;
 class FaultinjectionManager;
+class TagsManager;
 namespace config { class Config; }
 
 class Simulator
@@ -59,6 +60,7 @@ public:
    HooksManager *getHooksManager() { return m_hooks_manager; }
    FaultinjectionManager *getFaultinjectionManager() { return m_faultinjection_manager; }
    TraceManager *getTraceManager() { return m_trace_manager; }
+   TagsManager *getTagsManager() { return m_tags_manager; }
 
    bool isRunning() { return m_running; }
    static void enablePerformanceModels();
@@ -89,6 +91,8 @@ private:
    DvfsManager *m_dvfs_manager;
    HooksManager *m_hooks_manager;
    FaultinjectionManager *m_faultinjection_manager;
+   TagsManager *m_tags_manager;
+
    bool m_running;
 
    static Simulator *m_singleton;
