@@ -24,6 +24,7 @@
 
 #include "sift_writer.h"
 #include "bbv_count.h"
+#include "../../include/sim_api.h"
 
 //#define DEBUG_OUTPUT 1
 #define DEBUG_OUTPUT 0
@@ -34,6 +35,7 @@
 
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "trace", "output");
 KNOB<UINT64> KnobBlocksize(KNOB_MODE_WRITEONCE, "pintool", "b", "0", "blocksize");
+KNOB<UINT64> KnobUseROI(KNOB_MODE_WRITEONCE, "pintool", "roi", "0", "use ROI markers");
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
@@ -45,6 +47,7 @@ UINT64 detailed_target = 0;
 PIN_LOCK access_memory_lock;
 PIN_LOCK new_threadid_lock;
 std::deque<ADDRINT> tidptrs;
+BOOL any_thread_in_detail = false;
 
 typedef struct {
    Sift::Writer *output;
@@ -75,15 +78,47 @@ bool emulateSyscall[MAX_NUM_SYSCALLS] = {0};
 void openFile(THREADID threadid);
 void closeFile(THREADID threadid);
 
+VOID handleMagic(ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
+{
+   if (KnobUseROI.Value())
+   {
+      if (gax == SIM_CMD_ROI_START)
+      {
+         if (any_thread_in_detail)
+         {
+            std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] Error: ROI_START seen, but we have already started." << std::endl;
+         }
+         else
+         {
+            std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] ROI Begin" << std::endl;
+         }
+         any_thread_in_detail = true;
+         PIN_RemoveInstrumentation();
+      }
+      else if (gax == SIM_CMD_ROI_END)
+      {
+         std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] ROI End" << std::endl;
+         any_thread_in_detail = false;
+         PIN_RemoveInstrumentation();
+      }
+
+      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      {
+         thread_data[i].in_detail = any_thread_in_detail;
+      }
+   }
+}
+
 VOID countInsns(THREADID threadid, INT32 count)
 {
    thread_data[threadid].icount += count;
 
-   if (thread_data[threadid].icount >= fast_forward_target)
+   if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value())
    {
       std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       thread_data[threadid].in_detail = true;
       thread_data[threadid].icount = 0;
+      any_thread_in_detail = true;
       PIN_RemoveInstrumentation();
    }
 }
@@ -239,14 +274,16 @@ VOID traceCallback(TRACE trace, void *v)
 
    for (BBL bbl = bbl_head; BBL_Valid(bbl); bbl = BBL_Next(bbl))
    {
-      BOOL any_thread_in_detail = false;
-      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins))
       {
-         if (thread_data[i].in_detail)
+         // Simics-style magic instruction: xchg bx, bx
+         if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
          {
-            any_thread_in_detail = true;
-            break;
+            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_REG_VALUE, REG_GAX, IARG_REG_VALUE, REG_GBX, IARG_REG_VALUE, REG_GCX, IARG_END);
          }
+
+         if (ins == BBL_InsTail(bbl))
+            break;
       }
 
       if (!any_thread_in_detail)
@@ -423,7 +460,10 @@ void openFile(THREADID threadid)
 
 void closeFile(THREADID threadid)
 {
-   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Recorded " << thread_data[threadid].icount << " instructions" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Recorded " << thread_data[threadid].icount_detailed;
+   if (thread_data[threadid].icount > thread_data[threadid].icount_detailed)
+      std::cerr << " (out of " << thread_data[threadid].icount << ")";
+   std::cerr << " instructions" << std::endl;
    delete thread_data[threadid].output;
    thread_data[threadid].output = NULL;
 
@@ -529,11 +569,12 @@ int main(int argc, char **argv)
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();
-   if (fast_forward_target == 0)
+   if (fast_forward_target == 0 && !KnobUseROI.Value())
    {
       for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
       {
          thread_data[i].in_detail = true;
+         any_thread_in_detail = true;
       }
    }
 
