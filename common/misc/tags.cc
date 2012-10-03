@@ -35,8 +35,6 @@ void TagsManager::init()
             bool valid = ids[id]->getBool();
             TagsManager *tm = Sim()->getTagsManager();
 
-            std::cout << objname << " " << id << " " << tag << " " << valid << std::endl;
-
             if (valid)
                tm->addTag(objname, id, tag, valid);
          }

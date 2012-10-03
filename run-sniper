@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-g <sniper-options>] [--roi] [--roi-script] [--perf] [--gdb] [--gdb-wait] [--gdb-quit] [--appdebug] [--appdebug-manual] [--appdebug-enable] [--power] [--cache-only] [--fast-forward] [--no-cache-warming] [--save-patch] [--pin-stats] {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -42,32 +42,69 @@ scripts = []
 traces = []
 resptraces = []
 trace_manual = False
+heteroconfig = None
 
 if not sys.argv[1:]:
   usage()
 
-def findconfig(filename):
+def findconfig(filename, extension = '.cfg'):
   for dirname in ('.', os.path.join(HOME, 'config')):
     configfile = os.path.realpath(os.path.join(dirname, filename))
     if os.path.isfile(configfile):
       return configfile
-    configfile += '.cfg'
+    configfile += extension
     if os.path.isfile(configfile):
       return configfile
   return False
 
-def add_config_file(filename):
+def add_config_file(filename, extension = '.cfg'):
   config_files = []
-  configfile = findconfig(filename)
+  configfile = findconfig(filename, extension)
   if not configfile:
     print 'Cannot find config file', filename
-    sys.exit(-1)
+    sys.exit(1)
   # Handle #include
   for line in file(configfile):
     if line.startswith('#include'):
-      config_files += add_config_file(line.split()[1])
+      config_files += add_config_file(line.split()[1], extension)
   config_files += ['--config=' + configfile]
   return config_files
+
+def make_hetero_config(confignames, objname='core', extension='.cfg'):
+  configfiles = map(lambda x:findconfig(x,extension), confignames)
+  configfiledata = map(lambda x:open(x).read(), configfiles)
+  configs = map(sniper_lib.parse_config, configfiledata)
+
+  # Generate a set of all config options
+  opts = set()
+  for config in configs:
+    for key in config.keys():
+      opts.add(key)
+
+  # Combine all of the heterogeneous configurations
+  newconfig = ''
+  newconfig += '# Generated from ' + ', '.join(set(configfiles)) + '\n'
+  for opt in opts:
+    title, _, key = opt.rpartition('/')
+    newconfig += '[%s]\n%s=' % (title,key)
+    heteroopts = []
+    for config in configs:
+      if opt in config:
+        heteroopts.append(config[opt])
+      else:
+        heteroopts.append('')
+    newconfig += ','.join(heteroopts)+'\n'
+
+  # Create initial tags for the heterogeneous configurations
+  # The tags are the basename without the extension.
+  # config/big.cfg with have the tag 'big'
+  tags = map(lambda x:os.path.splitext(os.path.split(x)[1])[0], configfiles)
+  for tag in set(tags):
+    enabled = map(lambda x:(x == tag) and '1' or '0', tags)
+    newconfig += '[tags/%s]\n' % objname
+    newconfig += '%s=%s\n' % (tag,','.join(enabled))
+
+  return newconfig
 
 
 try:
@@ -85,8 +122,14 @@ for o, a in opts:
   if o == '-d':
     outputdir = a
   if o == '-c':
-    config_file_used = True
-    graphiteoptions += add_config_file(a)
+    if ':' in a or ',' in a:
+      obj, _, cfg = a.rpartition(':')
+      if not obj:
+        obj = 'core'
+      heteroconfig = make_hetero_config(cfg.split(','), objname=obj)
+    else:
+      config_file_used = True
+      graphiteoptions += add_config_file(a)
   if o == '-g':
     if not a.startswith('-'):
       a = '--'+a
@@ -138,6 +181,7 @@ for o, a in opts:
   if o == '--trace-manual':
     trace_manual = True
 
+
 if cmdline:
   standalone = False
   if traces:
@@ -158,12 +202,19 @@ if standalone:
     print '--appdebug not supported in standalone mode'
     sys.exit(-1)
 
+outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
   try:
     os.makedirs(outputdir)
   except OSError:
     print >> sys.stderr, 'Failed to create output directory', outputdir
     sys.exit(-1)
+
+if heteroconfig:
+  hcfgfile = os.path.join(outputdir,'sim.hetero.cfg')
+  with open(hcfgfile, 'w') as fp:
+    fp.write(heteroconfig)
+  graphiteoptions.append('--config=%s' % hcfgfile)
 
 if roi_only:
   graphiteoptions.append('-g --general/magic=true')
