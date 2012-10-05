@@ -338,6 +338,7 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      assert(!response->fail());
       assert(respRec.Other.zero == 0);
 
       switch(respRec.Other.type)
