@@ -278,7 +278,11 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    {
       thread_data[threadid].output->NewThread();
       // Store the thread's tid ptr for later use
-      ADDRINT tidptr = args[3];
+      #if defined(TARGET_IA32)
+         ADDRINT tidptr = args[2];
+      #elif defined(TARGET_INTEL64)
+         ADDRINT tidptr = args[3];
+      #endif
       GetLock(&new_threadid_lock, threadid);
       tidptrs.push_back(tidptr);
       ReleaseLock(&new_threadid_lock);
