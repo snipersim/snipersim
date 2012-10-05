@@ -75,6 +75,11 @@ thread_data_t *thread_data;
 static_assert((sizeof(thread_data_t) % LINE_SIZE_BYTES) == 0, "Error: Thread data should be a multiple of the line size to prevent false sharing");
 
 bool emulateSyscall[MAX_NUM_SYSCALLS] = {0};
+#if defined(TARGET_IA32)
+   typedef uint32_t syscall_args_t[6];
+#elif defined(TARGET_INTEL64)
+   typedef uint64_t syscall_args_t[6];
+#endif
 
 void openFile(THREADID threadid);
 void closeFile(THREADID threadid);
@@ -236,8 +241,8 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 
    assert(syscall_number < MAX_NUM_SYSCALLS);
 
+   syscall_args_t args;
    #if defined(TARGET_IA32)
-      uint32_t args[6];
       args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBX);
       args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GCX);
       args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
@@ -245,7 +250,6 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
       args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBP);
    #elif defined(TARGET_INTEL64)
-      uint64_t args[6];
       args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
       args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
       args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
@@ -548,11 +552,11 @@ VOID threadFinishHelper(VOID *arg)
    if (thread_data[threadid].tid_ptr)
    {
       // Set this pointer to 0 to indicate that this thread is complete
-      pthread_t *tid = (pthread_t *)thread_data[threadid].tid_ptr;
-      *tid = 0;
+      intptr_t tid = (intptr_t)thread_data[threadid].tid_ptr;
+      *(int*)tid = 0;
       // Send the FUTEX_WAKE to the simulator to wake up a potential pthread_join() caller
-      uint64_t args[6] = {0};
-      args[0] = (uint64_t)tid;
+      syscall_args_t args = {0};
+      args[0] = (intptr_t)tid;
       args[1] = FUTEX_WAKE;
       args[2] = 1;
       thread_data[threadid].output->Syscall(SYS_futex, (char*)args, sizeof(args));
