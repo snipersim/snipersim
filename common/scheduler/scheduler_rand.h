@@ -10,8 +10,6 @@ class SchedulerRand : public SchedulerDynamic
    public:
       SchedulerRand(ThreadManager *thread_manager);
 
-      virtual void init();
-
       virtual core_id_t threadCreate(thread_id_t);
       virtual void periodic(SubsecondTime time);
       virtual void threadStart(thread_id_t thread_id, SubsecondTime time);
@@ -21,16 +19,13 @@ class SchedulerRand : public SchedulerDynamic
 
    private:
       std::map<core_id_t, thread_id_t> m_coreToThreadMapping;
-      
+
       uint64_t m_nBigCores;
       uint64_t m_nSmallCores;
-      
+
       SubsecondTime m_quantum;
       SubsecondTime m_quantum_left;
       SubsecondTime m_last_periodic;
-
-      //uint64_t m_nBigCores;
-      //uint64_t m_nSmallCores;
 
       void reschedule(SubsecondTime time);
 };

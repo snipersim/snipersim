@@ -17,26 +17,7 @@ SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
    uint64_t t = Sim()->getCfg()->getInt("scheduler/quantum");
    m_quantum = SubsecondTime::US(t);
 
-   // Small and Big cores can be defined to be anything, using tags to identify them.
-   //m_nSmallCores = m_nBigCores= 0;
-   //for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
-   //{
-      //bool isBig = Sim()->getTagsManager()->hasTag("core", coreId, "big");
-      //if (isBig) m_nBigCores++; else m_nSmallCores++;
-      
-
-      //bool inOrder = Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", coreId); 
-      //if (inOrder) m_nSmallCores++; else m_nBigCores++;
-   //}
-   //std::cout << "big: " << m_nBigCores << " small: " << m_nSmallCores << std::endl;
-
-}
-
-void SchedulerRand::init()
-{
-   // Small and Big cores can be defined to be anything, using tags to identify them.
-   // Cannot be done in the contructor because the tagsManager is not properly setup yet
-   m_nSmallCores = m_nBigCores= 0;
+   m_nSmallCores = m_nBigCores = 0;
    for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
    {
       bool isBig = Sim()->getTagsManager()->hasTag("core", coreId, "big");
@@ -96,13 +77,13 @@ void SchedulerRand::periodic(SubsecondTime time)
 
 void SchedulerRand::reschedule(SubsecondTime time)
 {
-   // For any scheduler, it is generally a good idea to randomize the core order to avoid 
+   // For any scheduler, it is generally a good idea to randomize the core order to avoid
    // biasing due to original thread-to-core mapping.
    std::list< std::pair< uint64_t, core_id_t  > > cid;
    for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
    {
       cid.push_back( std::pair< uint64_t, core_id_t >( rand() , coreId) );
-      
+
       m_threads_stats[ m_coreToThreadMapping[coreId] ]->update(time);
 
    }
@@ -125,7 +106,7 @@ void SchedulerRand::reschedule(SubsecondTime time)
    std::list< std::pair< uint64_t , core_id_t> >::reverse_iterator rit= mapping.rbegin();
    std::list< std::pair< uint64_t , core_id_t> >::iterator it= mapping.begin();
    for( uint64_t i=0; i < m_nSmallCores ; i++)
-   {  
+   {
       core_id_t coreId = it->second;
 
       bool isSmall = Sim()->getTagsManager()->hasTag("core", coreId, "small");
@@ -137,14 +118,14 @@ void SchedulerRand::reschedule(SubsecondTime time)
       }
       else
       {
-         // This thread has a low enough value so that it should end up on a small core, but it 
+         // This thread has a low enough value so that it should end up on a small core, but it
          // is currently running on a big core. Find a suitable candidate to swap with: the thread
          // with the highest value that is currently scheduled on a big core type.
          while ( Sim()->getTagsManager()->hasTag("core", rit->second, "big") )
          {
             rit++;
          }
-         
+
          // Move thread on the big core to a temp core (invalid core).
          moveThread( m_coreToThreadMapping[rit->second] , INVALID_CORE_ID, time);
          // Move thread on the small core to the big core.
@@ -166,7 +147,7 @@ void SchedulerRand::reschedule(SubsecondTime time)
    for(uint64_t i = 0; i < Sim()->getConfig()->getApplicationCores(); ++i)
    {
       std::cout << "( c"<< i << "::t" << Sim()->getThreadManager()->getThreadFromID(i)->getCore()->getId() << ") ";
-   } 
+   }
    std::cout << std::endl;
 
    m_quantum_left = m_quantum;
