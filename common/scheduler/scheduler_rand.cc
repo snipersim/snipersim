@@ -17,14 +17,12 @@ SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
    m_quantum = SubsecondTime::US(t);
 
    // Small and Big cores can be defined to be anything, using tags to identify them.
-   uint64_t m_nSmallCores = m_nBigCores= 0;
+   m_nSmallCores = m_nBigCores= 0;
    for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
    {
       bool inOrder = Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", coreId); 
       if (inOrder) m_nSmallCores++; else m_nBigCores++;
    }
-   std::cout << "m_nSmallCores " << m_nSmallCores << std::endl;
-   std::cout << "m_nBigCores " << m_nSmallCores << std::endl;
 }
 
 core_id_t SchedulerRand::threadCreate(thread_id_t thread_id)
@@ -102,19 +100,6 @@ void SchedulerRand::reschedule(SubsecondTime time)
    }
    mapping.sort();
 
-   std::cout << "m_nSmallCores " << m_nSmallCores << std::endl;
-   std::cout << "m_nBigCores " << m_nSmallCores << std::endl;
-   // Something is overwriting these value, TODO: track down the culprit.
-   m_nSmallCores = m_nBigCores = 0;
-   for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
-   {
-      bool inOrder = Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", coreId); 
-      if (inOrder) m_nSmallCores++; else m_nBigCores++;
-   }
-   std::cout << "m_nSmallCores " << m_nSmallCores << std::endl;
-   std::cout << "m_nBigCores " << m_nSmallCores << std::endl;
-   
-   
    // The threads with the lowest values get scheduled on the small cores, the remaining ones
    // end up on the big cores.
    std::list< std::pair< uint64_t , core_id_t> >::reverse_iterator rit= mapping.rbegin();
