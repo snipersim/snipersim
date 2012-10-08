@@ -38,6 +38,7 @@ namespace Sift
          uint64_t Syscall(uint16_t syscall_number, const char *data, uint32_t size);
          int32_t NewThread();
          int32_t Join(int32_t);
+         void Sync();
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }
    };
 };

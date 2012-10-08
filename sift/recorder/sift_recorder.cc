@@ -40,6 +40,7 @@ KNOB<UINT64> KnobUseROI(KNOB_MODE_WRITEONCE, "pintool", "roi", "0", "use ROI mar
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
+KNOB<UINT64> KnobFlowControl(KNOB_MODE_WRITEONCE, "pintool", "flow", "1000", "number of instructions to send before syncing up");
 KNOB<UINT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift app id (default = 0)");
 
 INT32 app_id;
@@ -62,14 +63,15 @@ typedef struct {
    UINT64 icount_detailed;
    UINT32 last_syscall_number;
    UINT32 last_syscall_returnval;
+   UINT64 flowcontrol_target;
    ADDRINT tid_ptr;
    BOOL in_detail;
    BOOL last_syscall_emulated;
    BOOL running;
    #if defined(TARGET_IA32)
-      uint8_t __pad[1];
+      uint8_t __pad[57];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[45];
+      uint8_t __pad[37];
    #endif
 } __attribute__((packed)) thread_data_t;
 thread_data_t *thread_data;
@@ -184,6 +186,12 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
    assert(thread_data[threadid].dyn_address_queue->empty());
 
    thread_data[threadid].output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
+
+   if (KnobEmulateSyscalls.Value() && KnobFlowControl.Value() && thread_data[threadid].icount > thread_data[threadid].flowcontrol_target)
+   {
+      thread_data[threadid].output->Sync();
+      thread_data[threadid].flowcontrol_target = thread_data[threadid].icount + KnobFlowControl.Value();
+   }
 
    if (detailed_target != 0 && thread_data[threadid].icount_detailed >= detailed_target)
    {

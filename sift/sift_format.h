@@ -86,6 +86,8 @@ namespace Sift
       RecOtherJoinResponse,
       RecOtherEndResponse,
       RecOtherIcacheVariable,
+      RecOtherSync,
+      RecOtherSyncResponse,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

@@ -481,3 +481,27 @@ int32_t Sift::Writer::Join(int32_t thread)
    }
    return -1;
 }
+
+void Sift::Writer::Sync()
+{
+   // send sync
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherSync;
+   rec.Other.size = 0;
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->flush();
+
+   if (!response)
+   {
+     assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   // wait for reply
+   Record respRec;
+   response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+   assert(respRec.Other.zero == 0);
+   assert(respRec.Other.type == RecOtherSyncResponse);
+   assert(respRec.Other.size == 0);
+}

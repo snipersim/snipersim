@@ -267,6 +267,12 @@ bool Sift::Reader::Read(Instruction &inst)
                }
                break;
             }
+            case RecOtherSync:
+            {
+               assert(rec.Other.size == 0);
+               sendSimpleResponse(RecOtherSyncResponse, NULL, 0);
+               break;
+            }
             default:
             {
                uint8_t *bytes = new uint8_t[rec.Other.size];
