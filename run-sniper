@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -40,6 +40,7 @@ pin_stats = False
 curdir = os.getcwd()
 scripts = []
 use_mpi = False
+mpi_ranks = 0
 traces = []
 resptraces = []
 trace_manual = False
@@ -109,7 +110,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "mpi" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "mpi", "mpi-ranks=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -183,6 +184,8 @@ for o, a in opts:
     trace_manual = True
   if o == '--mpi':
     use_mpi = True
+  if o == '--mpi-ranks':
+    mpi_ranks = long(a)
 
 
 if cmdline:
@@ -292,19 +295,21 @@ if traces:
       print 'Cannot find trace', trace
       sys.exit(-1)
 elif use_mpi:
+  if not mpi_ranks:
+    mpi_ranks = ncores
   graphiteoptions.append('-g --traceinput/enabled=true')
   graphiteoptions.append('-g --traceinput/emulate_syscalls=true')
   graphiteoptions.append('-g --traceinput/stop_with_first_thread=false') # Only stop once all MPI ranks have completed
-  graphiteoptions.append('-g --traceinput/num_apps=%d' % ncores)
+  graphiteoptions.append('-g --traceinput/num_apps=%d' % mpi_ranks)
   basefname = 'run_benchmarks'
   tracetempdir = tempfile.mkdtemp()
   tracefiles_created = [] # FIFOs to be cleaned up
   traceprefix = os.path.join(tracetempdir, basefname)
   graphiteoptions.append('-g --traceinput/trace_prefix=%s' % traceprefix)
   # Create FIFOs for first thread of each application
-  for n in range(ncores):
+  for r in range(mpi_ranks):
     for f in ('','_response'):
-      filename = '%s%s.app%d.th%d.sift' % (traceprefix, f, n, 0)
+      filename = '%s%s.app%d.th%d.sift' % (traceprefix, f, r, 0)
       os.mkfifo(filename)
       tracefiles_created.append(filename)
   # Start app with trace recorder in a thread
