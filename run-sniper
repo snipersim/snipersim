@@ -313,7 +313,7 @@ elif use_mpi:
       os.mkfifo(filename)
       tracefiles_created.append(filename)
   # Start app with trace recorder in a thread
-  tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix, '--roi', '-e', '1', '-s', '-1', '--follow', '--' ] + cmdline
+  tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix, '--roi', '-e', '1', '-s', '-1', '--follow', '--pa', '--' ] + cmdline
   print '[SNIPER] Running', tracecmd
   threading.Thread(target = lambda: time.sleep(1) or subprocess.Popen(tracecmd).communicate()).start()
 

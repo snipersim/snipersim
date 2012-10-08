@@ -33,6 +33,7 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , last_address(0)
    , icache()
    , m_id(id)
+   , m_trace_has_pa(false)
 {
    if (!xed_initialized)
    {
@@ -107,6 +108,12 @@ void Sift::Reader::initStream()
       m_xed_state_init = init;
    }
 
+   if (hdr.options & PhysicalAddress)
+   {
+      m_trace_has_pa = true;
+      hdr.options &= ~PhysicalAddress;
+   }
+
    hdr.options &= ~IcacheVariable;
 
    // Make sure there are no unrecognized options
@@ -178,6 +185,15 @@ bool Sift::Reader::Read(Instruction &inst)
                   size_left -= read_amount;
                   address = base_addr + ICACHE_SIZE;
                }
+               break;
+            }
+            case RecOtherLogical2Physical:
+            {
+               assert(rec.Other.size == 2 * sizeof(uint64_t));
+               uint64_t vp, pp;
+               input->read(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
+               vcache[vp] = pp;
                break;
             }
             case RecOtherOutput:
@@ -443,6 +459,7 @@ const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(uint64_t addr,
       {
          uint32_t offset = (dst == sinst->data) ? addr & ICACHE_OFFSET_MASK : 0;
          uint32_t _size = std::min(uint32_t(size), ICACHE_SIZE - offset);
+         assert(icache.count(base_addr));
          memcpy(dst, icache[base_addr] + offset, _size);
          dst += _size;
          size -= _size;
@@ -530,4 +547,18 @@ uint64_t Sift::Reader::getPosition()
 uint64_t Sift::Reader::getLength()
 {
    return filesize;
+}
+
+uint64_t Sift::Reader::va2pa(uint64_t va)
+{
+   if (m_trace_has_pa)
+   {
+      intptr_t vp = va / PAGE_SIZE;
+      intptr_t vo = va & (PAGE_SIZE-1);
+      assert(vcache.count(vp));
+      intptr_t pp = vcache[vp];
+      return (pp * PAGE_SIZE) | vo;
+   }
+   else
+      return va;
 }

@@ -19,6 +19,7 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, 
    : m__thread(NULL)
    , m_thread(thread)
    , m_trace(tracefile.c_str(), responsefile.c_str(), thread->getId())
+   , m_trace_has_pa(false)
    , m_stop(false)
    , m_bbv_base(0)
    , m_bbv_count(0)
@@ -52,6 +53,14 @@ TraceThread::~TraceThread()
       unlink(m_tracefile.c_str());
       unlink(m_responsefile.c_str());
    }
+}
+
+UInt64 TraceThread::va2pa(UInt64 va)
+{
+   if (m_trace_has_pa)
+      return m_trace.va2pa(va);
+   else
+      return (UInt64(m_thread->getId()) << pa_core_shift) | (va & pa_va_mask);
 }
 
 void TraceThread::handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size)
@@ -176,6 +185,9 @@ void TraceThread::run()
 
    Core *core = m_thread->getCore();
    PerformanceModel *prfmdl = core->getPerformanceModel();
+
+   m_trace.initStream();
+   m_trace_has_pa = m_trace.getTraceHasPhysicalAddresses();
 
    Sift::Instruction inst;
    while(m_trace.Read(inst))

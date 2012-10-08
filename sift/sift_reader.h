@@ -67,17 +67,20 @@ namespace Sift
          uint64_t last_address;
          std::unordered_map<uint64_t, const uint8_t*> icache;
          std::unordered_map<uint64_t, const StaticInstruction*> scache;
+         std::unordered_map<uint64_t, uint64_t> vcache;
 
          uint32_t m_id;
+
+         bool m_trace_has_pa;
 
          const Sift::StaticInstruction* getStaticInstruction(uint64_t addr, uint8_t size);
          void sendSyscallResponse(uint64_t return_code);
          void sendSimpleResponse(RecOtherType type, void *data = NULL, uint32_t size = 0);
-         void initStream();
 
       public:
          Reader(const char *filename, const char *response_filename = "", uint32_t id = 0);
          ~Reader();
+         void initStream();
          bool Read(Instruction&);
          void AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size);
 
@@ -87,6 +90,8 @@ namespace Sift
          void setHandleJoinFunc(HandleJoinFunc func, void* arg = NULL) { assert(func); handleJoinFunc = func; handleJoinArg = arg; }
          uint64_t getPosition();
          uint64_t getLength();
+         bool getTraceHasPhysicalAddresses() const { return m_trace_has_pa; }
+         uint64_t va2pa(uint64_t va);
    };
 };
 

@@ -25,11 +25,12 @@ class TraceThread : public Runnable
       static const UInt64 pa_core_size = 16;
       static const UInt64 pa_va_mask = ~(((UInt64(1) << pa_core_size) - 1) << pa_core_shift);
 
-      UInt64 va2pa(UInt64 va) { return (UInt64(m_thread->getId()) << pa_core_shift) | (va & pa_va_mask); }
+      UInt64 va2pa(UInt64 va);
 
       _Thread *m__thread;
       Thread *m_thread;
       Sift::Reader m_trace;
+      bool m_trace_has_pa;
       bool m_stop;
       Barrier *m_barrier;
       std::unordered_map<IntPtr, BasicBlock *> m_icache;

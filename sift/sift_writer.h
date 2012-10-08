@@ -26,11 +26,18 @@ namespace Sift
 
          uint64_t last_address;
          std::unordered_map<uint64_t, bool> icache;
+         int fd_va;
+         std::unordered_map<intptr_t, bool> m_va2pa;
          char *m_response_filename;
          uint32_t m_id;
          bool m_requires_icache_per_insn;
+         bool m_send_va2pa_mapping;
+
+         void send_va2pa(uint64_t va);
+         uint64_t va2pa_lookup(uint64_t va);
+
       public:
-         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false, bool requires_icache_per_insn = false);
+         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false, bool requires_icache_per_insn = false, bool send_va2pa_mapping = false);
          ~Writer();
          void End();
          void Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);

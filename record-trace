@@ -26,12 +26,13 @@ use_gdb = False
 gdb_wait = False
 gdb_quit = False
 use_follow = False
+use_pa = False
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:", [ "roi", "gdb", "gdb-wait", "gdb-quit", "follow" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:", [ "roi", "gdb", "gdb-wait", "gdb-quit", "follow", "pa" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -65,6 +66,8 @@ for o, a in opts:
     gdb_quit = True
   if o == '--follow':
     use_follow = True
+  if o == '--pa':
+    use_pa = True
 
 configfile = os.path.join(HOME, 'config/graphite.py')
 config = {}
@@ -93,7 +96,8 @@ if use_follow:
 
 envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/%(arch)s/runtime:$LD_LIBRARY_PATH"; ' % locals()
 value_roi = use_roi and 1 or 0
-cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -- ' % locals() + ' '.join(cmdline)
+value_pa = use_pa and 1 or 0
+cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -pa %(value_pa)d -- ' % locals() + ' '.join(cmdline)
 
 print '[SIFT_RECORDER]', 'Running', cmd
 if use_gdb:

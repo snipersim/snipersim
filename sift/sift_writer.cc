@@ -6,13 +6,16 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 // Enable (>0) to print out everything we write
 #define VERBOSE 0
 #define VERBOSE_HEX 0
 #define VERBOSE_ICACHE 0
 
-Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn)
+Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn, bool send_va2pa_mapping)
    : response(NULL)
    , getCodeFunc(getCodeFunc)
    , ninstrs(0)
@@ -22,8 +25,11 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    , ninstrext(0)
    , last_address(0)
    , icache()
+   , fd_va(-1)
+   , m_va2pa()
    , m_id(id)
    , m_requires_icache_per_insn(requires_icache_per_insn)
+   , m_send_va2pa_mapping(send_va2pa_mapping)
 {
    memset(hsize, 0, sizeof(hsize));
    memset(haddr, 0, sizeof(haddr));
@@ -37,6 +43,8 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
       options |= ArchIA32;
    if (requires_icache_per_insn)
       options |= IcacheVariable;
+   if (m_send_va2pa_mapping)
+      options |= PhysicalAddress;
 
    output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
 
@@ -169,6 +177,10 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
    #if VERBOSE > 2
    printf("%016lx (%d) A%u %c%c %c%c\n", addr, size, num_addresses, is_branch?'B':'.', is_branch?(taken?'T':'.'):'.', is_predicate?'C':'.', is_predicate?(executed?'E':'n'):'.');
    #endif
+
+   send_va2pa(addr);
+   for(int i = 0; i < num_addresses; ++i)
+      send_va2pa(addresses[i]);
 
    // Try as simple instruction
    if (addr == last_address && !is_predicate)
@@ -504,4 +516,47 @@ void Sift::Writer::Sync()
    assert(respRec.Other.zero == 0);
    assert(respRec.Other.type == RecOtherSyncResponse);
    assert(respRec.Other.size == 0);
+}
+
+uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
+{
+   if (fd_va == -1)
+   {
+      fd_va = open("/proc/self/pagemap", O_RDONLY);
+      if (fd_va == -1)
+      {
+         perror("Cannot open /proc/self/pagemap");
+         exit(1);
+      }
+   }
+   off64_t index = vp * sizeof(intptr_t);
+   off64_t offset = lseek64(fd_va, index, SEEK_SET);
+   assert(offset == index);
+   intptr_t pp;
+   ssize_t size = read(fd_va, &pp, sizeof(intptr_t));
+   assert(size == sizeof(intptr_t));
+
+   return pp;
+}
+
+void Sift::Writer::send_va2pa(uint64_t va)
+{
+   if (m_send_va2pa_mapping)
+   {
+      intptr_t vp = va / PAGE_SIZE;
+      if (m_va2pa.count(vp) == 0)
+      {
+         Record rec;
+         rec.Other.zero = 0;
+         rec.Other.type = RecOtherLogical2Physical;
+         rec.Other.size = 2 * sizeof(uint64_t);
+         output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+
+         uint64_t pp = va2pa_lookup(vp);
+         output->write(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
+         output->write(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
+
+         m_va2pa[vp] = true;
+      }
+   }
 }

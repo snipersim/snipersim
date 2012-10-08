@@ -40,6 +40,7 @@ KNOB<UINT64> KnobUseROI(KNOB_MODE_WRITEONCE, "pintool", "roi", "0", "use ROI mar
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
+KNOB<BOOL>   KnobSendPhysicalAddresses(KNOB_MODE_WRITEONCE, "pintool", "pa", "0", "send logical to physical address mapping");
 KNOB<UINT64> KnobFlowControl(KNOB_MODE_WRITEONCE, "pintool", "flow", "1000", "number of instructions to send before syncing up");
 KNOB<UINT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift app id (default = 0)");
 
@@ -500,7 +501,7 @@ void openFile(THREADID threadid)
       #else
          const bool arch32 = false;
       #endif
-      thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid, arch32);
+      thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid, arch32, false, KnobSendPhysicalAddresses.Value());
    } catch (...) {
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);

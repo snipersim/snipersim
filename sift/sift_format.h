@@ -9,6 +9,7 @@ namespace Sift
 {
 
    const uint32_t MagicNumber = 0x54464953; // "SIFT"
+   const uint64_t PAGE_SIZE = 4096;
    const uint32_t ICACHE_SIZE = 0x1000;
    const uint64_t ICACHE_OFFSET_MASK = ICACHE_SIZE - 1;
    const uint64_t ICACHE_PAGE_MASK = ~ICACHE_OFFSET_MASK;
@@ -27,6 +28,7 @@ namespace Sift
       CompressionZlib = 1,
       ArchIA32 = 2,
       IcacheVariable = 4,
+      PhysicalAddress = 8,
    } Option;
 
    typedef union
@@ -88,6 +90,7 @@ namespace Sift
       RecOtherIcacheVariable,
       RecOtherSync,
       RecOtherSyncResponse,
+      RecOtherLogical2Physical,
       RecOtherEnd = 0xff,
    } RecOtherType;
 
