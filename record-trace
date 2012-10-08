@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [--gdb|--gdb-wait|--gdb-quit] -- <cmdline>' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [--gdb|--gdb-wait|--gdb-quit] [--follow] -- <cmdline>' % sys.argv[0]
   sys.exit(2)
 
 
@@ -25,12 +25,13 @@ siftcountoffset = 0
 use_gdb = False
 gdb_wait = False
 gdb_quit = False
+use_follow = False
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:", [ "roi", "gdb", "gdb-wait", "gdb-quit" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:", [ "roi", "gdb", "gdb-wait", "gdb-quit", "follow" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -62,7 +63,8 @@ for o, a in opts:
     use_gdb = True
     gdb_wait = False
     gdb_quit = True
-
+  if o == '--follow':
+    use_follow = True
 
 configfile = os.path.join(HOME, 'config/graphite.py')
 config = {}
@@ -86,6 +88,8 @@ outputfile = os.path.realpath(os.path.join(outputfile))
 pinoptions = '-mt -injection child'
 if use_gdb:
   pinoptions += ' -pause_tool 1'
+if use_follow:
+  pinoptions += ' -follow_execv'
 
 envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/%(arch)s/runtime:$LD_LIBRARY_PATH"; ' % locals()
 value_roi = use_roi and 1 or 0

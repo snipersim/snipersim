@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <strings.h>
 #include <sys/syscall.h>
+#include <sys/file.h>
 #include <linux/futex.h>
 #include <string.h>
 #include <pthread.h>
@@ -41,6 +42,7 @@ KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instr
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
 KNOB<UINT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift app id (default = 0)");
 
+INT32 app_id;
 UINT64 blocksize;
 UINT64 fast_forward_target = 0;
 UINT64 detailed_target = 0;
@@ -81,6 +83,7 @@ bool emulateSyscall[MAX_NUM_SYSCALLS] = {0};
    typedef uint64_t syscall_args_t[6];
 #endif
 
+void findMyAppId();
 void openFile(THREADID threadid);
 void closeFile(THREADID threadid);
 
@@ -90,13 +93,16 @@ VOID handleMagic(ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
    {
       if (gax == SIM_CMD_ROI_START)
       {
+         if (app_id < 0)
+            findMyAppId();
+
          if (any_thread_in_detail)
          {
-            std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] Error: ROI_START seen, but we have already started." << std::endl;
+            std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: ROI_START seen, but we have already started." << std::endl;
          }
          else
          {
-            std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] ROI Begin" << std::endl;
+            std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
          }
          any_thread_in_detail = true;
          for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
@@ -108,13 +114,19 @@ VOID handleMagic(ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
       }
       else if (gax == SIM_CMD_ROI_END)
       {
-         std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << "] ROI End" << std::endl;
+         // Delete our .appid file
+         char filename[1024] = {0};
+         sprintf(filename, "%s.app%" PRIu64 ".appid", KnobOutputFile.Value().c_str(), app_id);
+         unlink(filename);
+
+         std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
          any_thread_in_detail = false;
          for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
          {
             if (thread_data[i].running && thread_data[i].in_detail)
                closeFile(i);
          }
+
          PIN_RemoveInstrumentation();
       }
 
@@ -131,7 +143,7 @@ VOID countInsns(THREADID threadid, INT32 count)
 
    if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value())
    {
-      std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       if (!thread_data[threadid].in_detail)
          openFile(threadid);
       thread_data[threadid].in_detail = true;
@@ -459,17 +471,17 @@ void openFile(THREADID threadid)
    else
    {
       if (blocksize)
-         sprintf(filename, "%s.%" PRIu64 ".app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, KnobSiftAppId.Value(), (UINT64)threadid);
+         sprintf(filename, "%s.%" PRIu64 ".app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, app_id, (UINT64)threadid);
       else
-         sprintf(filename, "%s.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftAppId.Value(), (UINT64)threadid);
+         sprintf(filename, "%s.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
    }
 
-   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobEmulateSyscalls.Value())
    {
-      sprintf(response_filename, "%s_response.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), KnobSiftAppId.Value(), (UINT64)threadid);
-      std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Response = [" << response_filename << "]" << std::endl;
+      sprintf(response_filename, "%s_response.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Response = [" << response_filename << "]" << std::endl;
    }
 
 
@@ -482,7 +494,7 @@ void openFile(THREADID threadid)
       #endif
       thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid, arch32);
    } catch (...) {
-      std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Error: Unable to open the output file " << filename << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);
    }
 
@@ -494,7 +506,7 @@ void closeFile(THREADID threadid)
    if (thread_data[threadid].output)
       thread_data[threadid].output->End();
 
-   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Recorded " << thread_data[threadid].icount_detailed;
+   std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Recorded " << thread_data[threadid].icount_detailed;
    if (thread_data[threadid].icount > thread_data[threadid].icount_detailed)
       std::cerr << " (out of " << thread_data[threadid].icount << ")";
    std::cerr << " instructions" << std::endl;
@@ -582,7 +594,7 @@ VOID threadFinishHelper(VOID *arg)
 VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
 {
 #if DEBUG_OUTPUT
-   std::cerr << "[SIFT_RECORDER:" << KnobSiftAppId.Value() << ":" << threadid << "] Finish Thread" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Finish Thread" << std::endl;
 #endif
 
    thread_data[threadid].running = false;
@@ -591,6 +603,56 @@ VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
    // cleanup.  This is needed because this function could be called in the context of
    // another thread, creating a deadlock scenario.
    PIN_SpawnInternalThread(threadFinishHelper, (VOID*)(unsigned long)threadid, 0, NULL);
+}
+
+void findMyAppId()
+{
+   // FIFOs for thread 0 of each application have been created beforehand
+   // Protocol to figure out our application id is to lock a .app file
+   // Try to lock from app_id 0 onwards, claiming the app_id if the lock succeeds,
+   // and fail when there are no more files
+   for(uint64_t id = 0; id < 1000; ++id)
+   {
+      char filename[1024] = {0};
+
+      // First check whether this many appids are supported by stat()ing the request FIFO for thread 0
+      struct stat sts;
+      sprintf(filename, "%s.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), id, (uint64_t)0);
+      if (stat(filename, &sts) != 0)
+      {
+         break;
+      }
+
+      // Atomically create .appid file
+      sprintf(filename, "%s.app%" PRIu64 ".appid", KnobOutputFile.Value().c_str(), id);
+      int fd = open(filename, O_CREAT | O_EXCL, 0600);
+      if (fd != -1)
+      {
+         // Success: use this app_id
+         app_id = id;
+         std::cerr << "[SIFT_RECORDER:" << app_id << "] Application started" << std::endl;
+         return;
+      }
+      // Could not create, probably someone else raced us to it. Try next app_id
+   }
+   std::cerr << "[SIFT_RECORDER] Cannot find free application id, too many processes!" << std::endl;
+   exit(1);
+}
+
+BOOL followChild(CHILD_PROCESS childProcess, VOID *val)
+{
+   if (any_thread_in_detail)
+   {
+      fprintf(stderr, "EXECV ignored while in ROI\n");
+      return false; // Cannot fork/execv after starting ROI
+   }
+   else
+      return true;
+}
+
+VOID forkBefore(THREADID threadid, const CONTEXT *ctxt, VOID *v)
+{
+   assert(!any_thread_in_detail); // Cannot fork after starting ROI
 }
 
 int main(int argc, char **argv)
@@ -612,6 +674,7 @@ int main(int argc, char **argv)
    InitLock(&access_memory_lock);
    InitLock(&new_threadid_lock);
 
+   app_id = KnobSiftAppId.Value();
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();
@@ -636,6 +699,9 @@ int main(int argc, char **argv)
    PIN_AddThreadFiniFunction(threadFinish, 0);
    PIN_AddFiniFunction(Fini, 0);
    PIN_AddDetachFunction(Detach, 0);
+
+   PIN_AddFollowChildProcessFunction(followChild, 0);
+   PIN_AddForkFunction(FPOINT_BEFORE, forkBefore, 0);
 
    PIN_StartProgram();
 

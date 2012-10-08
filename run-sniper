@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -39,6 +39,7 @@ save_patch = False
 pin_stats = False
 curdir = os.getcwd()
 scripts = []
+use_mpi = False
 traces = []
 resptraces = []
 trace_manual = False
@@ -108,7 +109,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "mpi" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -180,10 +181,15 @@ for o, a in opts:
     resptraces.extend(a.split(','))
   if o == '--trace-manual':
     trace_manual = True
+  if o == '--mpi':
+    use_mpi = True
 
 
 if cmdline:
-  standalone = False
+  if use_mpi:
+    standalone = True
+  else:
+    standalone = False
   if traces:
     print 'Cannot combine traces with running a benchmark'
     usage()
@@ -285,6 +291,26 @@ if traces:
     else:
       print 'Cannot find trace', trace
       sys.exit(-1)
+elif use_mpi:
+  graphiteoptions.append('-g --traceinput/enabled=true')
+  graphiteoptions.append('-g --traceinput/emulate_syscalls=true')
+  graphiteoptions.append('-g --traceinput/stop_with_first_thread=false') # Only stop once all MPI ranks have completed
+  graphiteoptions.append('-g --traceinput/num_apps=%d' % ncores)
+  basefname = 'run_benchmarks'
+  tracetempdir = tempfile.mkdtemp()
+  tracefiles_created = [] # FIFOs to be cleaned up
+  traceprefix = os.path.join(tracetempdir, basefname)
+  graphiteoptions.append('-g --traceinput/trace_prefix=%s' % traceprefix)
+  # Create FIFOs for first thread of each application
+  for n in range(ncores):
+    for f in ('','_response'):
+      filename = '%s%s.app%d.th%d.sift' % (traceprefix, f, n, 0)
+      os.mkfifo(filename)
+      tracefiles_created.append(filename)
+  # Start app with trace recorder in a thread
+  tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix, '--roi', '-e', '1', '-s', '-1', '--follow', '--' ] + cmdline
+  print '[SNIPER] Running', tracecmd
+  threading.Thread(target = lambda: subprocess.Popen(tracecmd).communicate()).start()
 
 graphiteoptions = ' '.join(graphiteoptions)
 
@@ -510,6 +536,12 @@ t_end = time.time()
 t_elapsed = t_end - t_start
 print '[SNIPER] End'
 print '[SNIPER] Elapsed time:', '%.02f' % t_elapsed, 'seconds'
+
+if use_mpi:
+  # Cleanup the pipes and temporary directory
+  for f in tracefiles_created:
+    os.unlink(f)
+  os.rmdir(tracetempdir)
 
 if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
   os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
