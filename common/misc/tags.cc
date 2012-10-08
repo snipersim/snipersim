@@ -15,9 +15,14 @@
 // We currently do not support assigning tag values via the configuration variables,
 //   but it's value is initialized to 1.
 //
-void TagsManager::init()
+void TagsManager::init(config::Config *config, TagsManager *tm)
 {
-   const config::Section &section = Sim()->getCfg()->getSection("tags");
+   if (config == NULL)
+      config = Sim()->getCfg();
+   if (tm == NULL)
+      tm = Sim()->getTagsManager();
+
+   const config::Section &section = config->getSection("tags");
    const config::SectionList &objs = section.getSubsections();
    for (auto obj = objs.begin() ; obj != objs.end() ; ++obj)
    {
@@ -33,7 +38,6 @@ void TagsManager::init()
          for (unsigned int id = 0 ; id < ids.size() ; id++)
          {
             bool valid = ids[id]->getBool();
-            TagsManager *tm = Sim()->getTagsManager();
 
             if (valid)
                tm->addTag(objname, id, tag, valid);

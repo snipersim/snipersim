@@ -76,6 +76,7 @@ public:
 private:
    Config m_config;
    Log m_log;
+   TagsManager *m_tags_manager;
    SyscallServer *m_syscall_server;
    SyncServer *m_sync_server;
    MagicServer *m_magic_server;
@@ -91,7 +92,6 @@ private:
    DvfsManager *m_dvfs_manager;
    HooksManager *m_hooks_manager;
    FaultinjectionManager *m_faultinjection_manager;
-   TagsManager *m_tags_manager;
 
    bool m_running;
 

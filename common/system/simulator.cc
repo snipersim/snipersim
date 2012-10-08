@@ -60,6 +60,7 @@ void Simulator::release()
 Simulator::Simulator()
    : m_config(m_mode)
    , m_log(m_config)
+   , m_tags_manager(new TagsManager(m_config_file))
    , m_stats_manager(new StatsManager)
    , m_transport(NULL)
    , m_core_manager(NULL)
@@ -96,7 +97,6 @@ void Simulator::start()
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();
    m_clock_skew_minimization_server = ClockSkewMinimizationServer::create();
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
-   m_tags_manager = new TagsManager();
 
    if (Sim()->getCfg()->getBool("traceinput/enabled"))
       m_trace_manager = new TraceManager();
@@ -108,8 +108,6 @@ void Simulator::start()
    PthreadEmu::init();
 
    m_hooks_manager->init();
-
-   m_tags_manager->init();
 
    m_thread_manager->init();
 

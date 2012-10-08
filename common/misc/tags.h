@@ -6,6 +6,11 @@
 #include <string>
 #include <map>
 
+namespace config
+{
+   class Config;
+}
+
 // Tags
 //
 //   An object (String) can have a number of tags (String) associated with it. Additionally, each tag can be assigned
@@ -42,6 +47,11 @@ struct Tag {
 class TagsManager
 {
 public:
+   TagsManager(config::Config *config = NULL)
+   {
+      init(config, this);
+   }
+
    void addTag(String objname, UInt64 id, String tag, UInt64 value = 1)
    {
       m_tags[objname][Tag(tag,id)] = value;
@@ -67,7 +77,7 @@ public:
       m_tags[objname].erase(Tag(tag,id));
    }
 
-   static void init(void);
+   static void init(config::Config *config = NULL, TagsManager *tm = NULL);
 
 private:
    // FIXME: An unordered_map should be faster than a map
