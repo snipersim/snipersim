@@ -315,7 +315,7 @@ elif use_mpi:
   # Start app with trace recorder in a thread
   tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix, '--roi', '-e', '1', '-s', '-1', '--follow', '--' ] + cmdline
   print '[SNIPER] Running', tracecmd
-  threading.Thread(target = lambda: subprocess.Popen(tracecmd).communicate()).start()
+  threading.Thread(target = lambda: time.sleep(1) or subprocess.Popen(tracecmd).communicate()).start()
 
 graphiteoptions = ' '.join(graphiteoptions)
 
@@ -544,9 +544,13 @@ print '[SNIPER] Elapsed time:', '%.02f' % t_elapsed, 'seconds'
 
 if use_mpi:
   # Cleanup the pipes and temporary directory
-  for f in tracefiles_created:
-    os.unlink(f)
-  os.rmdir(tracetempdir)
+  try:
+    for f in tracefiles_created:
+      os.unlink(f)
+    os.rmdir(tracetempdir)
+  except OSError:
+    pass
+    
 
 if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
   os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
