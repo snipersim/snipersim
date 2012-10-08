@@ -4,6 +4,7 @@
 #include "thread.h"
 #include "performance_model.h"
 #include "core_manager.h"
+#include "misc/tags.h"
 #include <list>
 
 SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
@@ -17,13 +18,32 @@ SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
    m_quantum = SubsecondTime::US(t);
 
    // Small and Big cores can be defined to be anything, using tags to identify them.
+   //m_nSmallCores = m_nBigCores= 0;
+   //for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
+   //{
+      //bool isBig = Sim()->getTagsManager()->hasTag("core", coreId, "big");
+      //if (isBig) m_nBigCores++; else m_nSmallCores++;
+      
+
+      //bool inOrder = Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", coreId); 
+      //if (inOrder) m_nSmallCores++; else m_nBigCores++;
+   //}
+   //std::cout << "big: " << m_nBigCores << " small: " << m_nSmallCores << std::endl;
+
+}
+
+void SchedulerRand::init()
+{
+   // Small and Big cores can be defined to be anything, using tags to identify them.
+   // Cannot be done in the contructor because the tagsManager is not properly setup yet
    m_nSmallCores = m_nBigCores= 0;
    for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
    {
-      bool inOrder = Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", coreId); 
-      if (inOrder) m_nSmallCores++; else m_nBigCores++;
+      bool isBig = Sim()->getTagsManager()->hasTag("core", coreId, "big");
+      if (isBig) m_nBigCores++; else m_nSmallCores++;
    }
 }
+
 
 core_id_t SchedulerRand::threadCreate(thread_id_t thread_id)
 {
@@ -107,9 +127,9 @@ void SchedulerRand::reschedule(SubsecondTime time)
    for( uint64_t i=0; i < m_nSmallCores ; i++)
    {  
       core_id_t coreId = it->second;
-      bool inOrder = Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", coreId); 
 
-      if (inOrder)
+      bool isSmall = Sim()->getTagsManager()->hasTag("core", coreId, "small");
+      if (isSmall)
       {
          // This thread needs to end up on a small core (low value), but already is; don't move it.
          it++;
@@ -120,7 +140,7 @@ void SchedulerRand::reschedule(SubsecondTime time)
          // This thread has a low enough value so that it should end up on a small core, but it 
          // is currently running on a big core. Find a suitable candidate to swap with: the thread
          // with the highest value that is currently scheduled on a big core type.
-         while ( Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", rit->second ) != 1 )
+         while ( Sim()->getTagsManager()->hasTag("core", rit->second, "big") )
          {
             rit++;
          }

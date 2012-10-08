@@ -10,6 +10,8 @@ class SchedulerRand : public SchedulerDynamic
    public:
       SchedulerRand(ThreadManager *thread_manager);
 
+      virtual void init();
+
       virtual core_id_t threadCreate(thread_id_t);
       virtual void periodic(SubsecondTime time);
       virtual void threadStart(thread_id_t thread_id, SubsecondTime time);
