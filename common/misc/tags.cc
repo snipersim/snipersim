@@ -15,9 +15,9 @@
 // We currently do not support assigning tag values via the configuration variables,
 //   but it's value is initialized to 1.
 //
-TagsManager::TagsManager()
+TagsManager::TagsManager(config::Config *config)
 {
-   const config::Section &section = Sim()->getCfg()->getSection("tags");
+   const config::Section &section = config->getSection("tags");
    const config::SectionList &objs = section.getSubsections();
 
    for (auto obj = objs.begin() ; obj != objs.end() ; ++obj)

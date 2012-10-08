@@ -47,7 +47,7 @@ struct Tag {
 class TagsManager
 {
 public:
-   TagsManager();
+   TagsManager(config::Config *config);
 
    void addTag(String objname, UInt64 id, String tag, UInt64 value = 1)
    {
