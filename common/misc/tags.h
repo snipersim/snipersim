@@ -47,10 +47,7 @@ struct Tag {
 class TagsManager
 {
 public:
-   TagsManager(config::Config *config = NULL)
-   {
-      init(config, this);
-   }
+   TagsManager();
 
    void addTag(String objname, UInt64 id, String tag, UInt64 value = 1)
    {
@@ -76,8 +73,6 @@ public:
    {
       m_tags[objname].erase(Tag(tag,id));
    }
-
-   static void init(config::Config *config = NULL, TagsManager *tm = NULL);
 
 private:
    // FIXME: An unordered_map should be faster than a map
