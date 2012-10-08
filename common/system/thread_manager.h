@@ -35,6 +35,8 @@ public:
    ThreadManager();
    ~ThreadManager();
 
+   void init();
+
    Lock &getLock() { return m_thread_lock; }
    Scheduler *getScheduler() const { return m_scheduler; }
 

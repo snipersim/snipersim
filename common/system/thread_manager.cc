@@ -40,6 +40,11 @@ ThreadManager::~ThreadManager()
    delete m_scheduler;
 }
 
+void ThreadManager::init()
+{
+   m_scheduler->init();
+}
+
 Thread* ThreadManager::getThreadFromID(thread_id_t thread_id)
 {
    LOG_ASSERT_ERROR((size_t)thread_id < m_threads.size(), "Invalid thread_id %d", thread_id);
