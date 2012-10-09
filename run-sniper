@@ -377,6 +377,7 @@ env['LD_LIBRARY_PATH'] = ':'.join([
   'BENCHMARKS_ROOT' in os.environ and '%s/libs:' % os.environ['BENCHMARKS_ROOT'] or '',
   '%(pin_home)s/%(arch)s/runtime/cpplibs' % locals(),
   '%(pin_home)s/%(arch)s/runtime' % locals(),
+  '%(HOME)s/python_kit/%(arch)s/lib' % locals(),
   env.get('LD_LIBRARY_PATH', ''),
 ])
 env['PYTHONPATH'] = '%(HOME)s/scripts:$PYTHONPATH' % locals()
@@ -416,9 +417,12 @@ if use_appdebug:
 optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(graphiteoptions)s' % locals()
 if standalone:
   if use_gdb:
-    # Create a GDB command file to handle --gdb, --gdb-wait and --gdb-quit for standalone mode
     fh, fn = tempfile.mkstemp()
     f = open(fn, 'w')
+    # When using GDB in standalone mode, do set the LD_LIBRARY_PATH for GDB, but instead set it explicity inside GDB
+    f.write("set solib-search-path '%s'\n" % env['LD_LIBRARY_PATH'])
+    del env['LD_LIBRARY_PATH']
+    # Create a GDB command file to handle --gdb, --gdb-wait and --gdb-quit for standalone mode
     if not gdb_wait:
       f.write('run\n')
     # Only quit GDB when we have not seen a signal
