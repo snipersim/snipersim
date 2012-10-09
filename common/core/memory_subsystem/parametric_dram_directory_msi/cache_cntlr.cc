@@ -444,15 +444,10 @@ MYLOG("access done");
    }
 
 
-   // Prefetch (but not for atomic instructions as that causes a locking mess)
-   if (lock_signal != Core::LOCK)
+   // Call Prefetch on next-level caches (but not for atomic instructions as that causes a locking mess)
+   if (lock_signal != Core::LOCK && modeled && m_next_cache_cntlr)
    {
-      if ((hit_where % HitWhere::SIBLING) >= m_next_cache_cntlr->m_mem_component)
-      {
-         // Prefetch the next predicted line
-         if (modeled && m_next_cache_cntlr)
-            m_next_cache_cntlr->Prefetch(mem_op_type, ca_address, t_start);
-      }
+      m_next_cache_cntlr->Prefetch(t_start);
    }
 
 
@@ -507,28 +502,40 @@ MYLOG("copyDataFromNextLevel l%d done", m_mem_component);
 
 
 void
-CacheCntlr::Prefetch(Core::mem_op_t mem_op_type, IntPtr address, SubsecondTime t_start)
+CacheCntlr::Prefetch(SubsecondTime t_now)
 {
-   if (m_master->m_prefetcher && mem_op_type == Core::READ)
+   IntPtr address_to_prefetch = INVALID_ADDRESS;
+
    {
-      std::vector<IntPtr> prefetchList;
+      ScopedLock sl(getLock());
 
+      if (m_master->m_prefetch_next <= t_now)
       {
-         ScopedLock sl(getLock());
-         prefetchList = m_master->m_prefetcher->getNextAddress(address);
-      }
-
-      for(std::vector<IntPtr>::iterator it = prefetchList.begin(); it != prefetchList.end(); ++it)
-      {
-         if (!operationPermissibleinCache(*it, Core::READ))
+         while(!m_master->m_prefetch_list.empty())
          {
-            doPrefetch(*it, t_start);
+            IntPtr address = m_master->m_prefetch_list.front();
+            m_master->m_prefetch_list.pop_front();
+
+            // Check address again, maybe some other core already brought it into the cache
+            if (!operationPermissibleinCache(address, Core::READ))
+            {
+               address_to_prefetch = address;
+               // Do at most one prefetch now, save the rest for a future call
+               break;
+            }
          }
       }
    }
+
+   if (address_to_prefetch != INVALID_ADDRESS)
+   {
+      doPrefetch(address_to_prefetch, m_master->m_prefetch_next);
+      atomic_add_subsecondtime(m_master->m_prefetch_next, PREFETCH_INTERVAL);
+   }
+
    // In case the next-level cache has a prefetcher, run it
    if (m_next_cache_cntlr)
-      m_next_cache_cntlr->Prefetch(mem_op_type, address, t_start);
+      m_next_cache_cntlr->Prefetch(t_now);
 }
 
 void
@@ -756,6 +763,38 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          ScopedLock sl(getLock());
          m_master->mshr[address] = make_mshr(t_issue, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
          cleanupMshr();
+      }
+   }
+
+   if (modeled && m_master->m_prefetcher)
+   {
+      ScopedLock sl(getLock());
+
+      // Misses replace the current prefetch list, hits append to it
+      if (cache_hit)
+      {
+         if (m_master->m_prefetch_list.empty())
+         {
+            // No next-level request made yet, let's do one right away
+            m_master->m_prefetch_next = t_issue;
+         }
+         // else: keep old value of m_prefetch_next, even if it is in the past because of fluffy time issues
+      }
+      else
+      {
+         m_master->m_prefetch_list.clear();
+         // Just talked to the next-level cache, wait a bit before we start to prefetch
+         m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
+      }
+
+      std::vector<IntPtr> prefetchList = m_master->m_prefetcher->getNextAddress(address);
+      for(std::vector<IntPtr>::iterator it = prefetchList.begin(); it != prefetchList.end(); ++it)
+      {
+         // Keep at most PREFETCH_MAX_QUEUE_LENGTH entries in the prefetch queue
+         if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
+            break;
+         if (!operationPermissibleinCache(*it, Core::READ))
+            m_master->m_prefetch_list.push_back(*it);
       }
    }
 

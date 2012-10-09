@@ -33,6 +33,11 @@ namespace ParametricDramDirectoryMSI
 }
 class FaultInjector;
 
+// Maximum size of the list of addresses to prefetch
+#define PREFETCH_MAX_QUEUE_LENGTH 32
+// Time between prefetches
+#define PREFETCH_INTERVAL SubsecondTime::NS(1)
+
 namespace ParametricDramDirectoryMSI
 {
    class Transition
@@ -148,6 +153,9 @@ namespace ParametricDramDirectoryMSI
          UInt32 m_log_blocksize;
          UInt32 m_num_sets;
 
+         std::deque<IntPtr> m_prefetch_list;
+         SubsecondTime m_prefetch_next;
+
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores);
          SetLock* getSetLock(IntPtr addr);
 
@@ -157,6 +165,8 @@ namespace ParametricDramDirectoryMSI
             , m_dram_cntlr(NULL)
             , m_l1_mshr(name + ".mshr", core_id, outstanding_misses)
             , m_next_level_read_bandwidth(name + ".next_read", core_id)
+            , m_prefetch_list()
+            , m_prefetch_next(SubsecondTime::Zero())
          {}
          ~CacheMasterCntlr();
 
@@ -236,7 +246,7 @@ namespace ParametricDramDirectoryMSI
                IntPtr address, Core::mem_op_t mem_op_type);
 
          void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_start);
-         void Prefetch(Core::mem_op_t mem_op_type, IntPtr address, SubsecondTime t_start);
+         void Prefetch(SubsecondTime t_start);
          void doPrefetch(IntPtr prefetch_address, SubsecondTime t_start);
 
          // Cache meta-data operations
