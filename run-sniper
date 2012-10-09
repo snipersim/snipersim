@@ -416,7 +416,19 @@ if use_appdebug:
 optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(graphiteoptions)s' % locals()
 if standalone:
   if use_gdb:
-    gdbcmd = 'gdb %(HOME)s/lib/sniper --args ' % locals()
+    # Create a GDB command file to handle --gdb, --gdb-wait and --gdb-quit for standalone mode
+    fh, fn = tempfile.mkstemp()
+    f = open(fn, 'w')
+    if not gdb_wait:
+      f.write('run\n')
+    # Only quit GDB when we have not seen a signal
+    if gdb_quit:
+      f.write('if ($_siginfo)\n')
+      f.write('else \n')
+      f.write(' quit\n')
+      f.write('end\n')
+    f.close()
+    gdbcmd = 'gdb -quiet --command=%(fn)s %(HOME)s/lib/sniper --args ' % locals()
   else:
     gdbcmd = ''
   cmd = gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
