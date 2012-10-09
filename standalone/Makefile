@@ -59,6 +59,10 @@ endif
 LD_LIBS += -lxed
 LD_FLAGS += -L$(PIN_HOME)/extras/xed2-$(TARGET_ARCH)/lib
 
+ifneq ($(CLEAN),clean)
+-include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))
+endif
+
 ifneq ($(CLEAN),)
 clean:
 	-rm -f $(TARGET) $(OBJECTS) $(OBJECTS:%.o=%.d)
