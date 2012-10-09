@@ -377,7 +377,6 @@ env['LD_LIBRARY_PATH'] = ':'.join([
   'BENCHMARKS_ROOT' in os.environ and '%s/libs:' % os.environ['BENCHMARKS_ROOT'] or '',
   '%(pin_home)s/%(arch)s/runtime/cpplibs' % locals(),
   '%(pin_home)s/%(arch)s/runtime' % locals(),
-  '%(HOME)s/python_kit/%(arch)s/lib' % locals(),
   env.get('LD_LIBRARY_PATH', ''),
 ])
 env['PYTHONPATH'] = '%(HOME)s/scripts:$PYTHONPATH' % locals()
