@@ -1,11 +1,11 @@
 import sys, subprocess
 
-def make_stacked_bargraph(outfile, titles, data, ylabel = 'Percent of Cycles', size = (640, 480)):
+def make_stacked_bargraph(outfile, titles, data, ylabel = 'Percent of Cycles', size = (640, 480), title = ''):
 
   gnuplot_cmd_list = []
 
-  header = '''set terminal jpeg medium size %d,%d
-set output "%s.jpg"
+  header = '''set terminal png medium size %d,%d
+set output "%s.png"
 set boxwidth 0.75 absolute
 set style fill solid 1.00 border -1
 set style histogram rowstacked
@@ -17,6 +17,9 @@ set ylabel "%s"
 set xlabel "Core"
 ''' % (size[0], size[1], outfile, ylabel)
   gnuplot_cmd_list.append(header)
+
+  if title:
+    gnuplot_cmd_list.append('set title "%s"\n' % title)
 
   cmd = []
   for i in range(2,len(titles)+2):

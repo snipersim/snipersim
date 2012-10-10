@@ -252,7 +252,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
              use_cpi = False, use_abstime = False, use_roi = True,
              use_simple = False, use_simple_mem = True, no_collapse = False,
              gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
-             job_name = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
+             job_name = '', title = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
              size = (640, 480)):
 
   data, ncores, instrs, times, cycles_scale, fastforward_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
@@ -341,7 +341,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
       all_names.append('other')
     all_names_with_colors = zip(all_names, range(1,len(all_names)+1))
     plot_labels_with_color = [n for n in all_names_with_colors if n[0] in plot_labels_ordered]
-    gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size,
+    gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
       ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Percent of time'))
 
   # Return cpi data if requested
@@ -357,12 +357,13 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h|--help (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]'
+    print 'Usage:', sys.argv[0], '[-h|--help (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--title=""] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]'
 
   jobid = 0
   resultsdir = '.'
   partial = None
   outputfile = 'cpi-stack'
+  title = ''
   use_cpi = False
   use_abstime = False
   use_roi = True
@@ -372,7 +373,7 @@ if __name__ == '__main__':
   aggregate = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "title=", "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -387,6 +388,8 @@ if __name__ == '__main__':
       jobid = long(a)
     if o == '-o':
       outputfile = a
+    if o == '--title':
+      title = a
     if o == '--without-roi':
       use_roi = False
     if o == '--simplified':
@@ -418,6 +421,7 @@ if __name__ == '__main__':
     resultsdir = resultsdir,
     partial = partial,
     outputfile = outputfile,
+    title = title,
     use_cpi = use_cpi,
     use_abstime = use_abstime,
     use_roi = use_roi,
