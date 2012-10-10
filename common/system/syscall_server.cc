@@ -200,7 +200,10 @@ IntPtr SyscallServer::futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int
    SimFutex *sim_futex2 = &m_futexes[(IntPtr) uaddr2];
    int num_procs_woken_up = 0;
 
-   int op_ret = futexDoOp(Sim()->getCoreManager()->getCoreFromID(thread_id), op, uaddr2);
+   Thread *thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
+   Core *core = thread->getCore();
+   LOG_ASSERT_ERROR(core != NULL, "Cannot execute futexWakeOp() for a thread that is unscheduled");
+   int op_ret = futexDoOp(core, op, uaddr2);
 
    for (int i = 0; i < nr_wake; i++)
    {
