@@ -119,7 +119,7 @@ VOID handleMagic(ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
       {
          // Delete our .appid file
          char filename[1024] = {0};
-         sprintf(filename, "%s.app%" PRIu64 ".appid", KnobOutputFile.Value().c_str(), app_id);
+         sprintf(filename, "%s.app%" PRId32 ".appid", KnobOutputFile.Value().c_str(), app_id);
          unlink(filename);
 
          std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
@@ -480,16 +480,16 @@ void openFile(THREADID threadid)
    else
    {
       if (blocksize)
-         sprintf(filename, "%s.%" PRIu64 ".app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, app_id, (UINT64)threadid);
+         sprintf(filename, "%s.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, app_id, (UINT64)threadid);
       else
-         sprintf(filename, "%s.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
+         sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
    }
 
    std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobEmulateSyscalls.Value())
    {
-      sprintf(response_filename, "%s_response.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
+      sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Response = [" << response_filename << "]" << std::endl;
    }
 
