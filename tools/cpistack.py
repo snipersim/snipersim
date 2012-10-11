@@ -25,6 +25,8 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
     # On error, assume that we are using the pre-DVFS version
     times = stats['performance_model.cycle_count']
     cycles_scale = [ 1. for idx in range(ncores) ]
+  time0_begin = max(stats['performance_model.elapsed_time_begin'])
+  time0_end = max(stats['performance_model.elapsed_time_end'])
 
   if stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:
     fastforward_scale = times[0] / (times[0] - stats['fastforward_performance_model.fastforwarded_time'][0])
@@ -114,9 +116,20 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
             if 'FunctionalUnit' not in key: # We already accounted for FunctionalUnit above, don't do it twice
               data[core]['Base'] -= values[core]
               data[core]['Issue'] = data[core].get('Issue', 0) + values[core]
+    # Fix up large cpiSync fractions that started before but ended inside our interval
+    time0_me = stats['performance_model.elapsed_time_begin'][core]
+    if time0_me < time0_begin:
+      time0_extra = time0_begin - time0_me
+      #    Number of cycles that weren't accounted for when starting this interval
+      cycles_extra = time0_extra * cycles_scale[core]
+      #    Components that could be the cause of cycles_extra. It should be just one, but if there's many, we'll have to guess
+      sync_components = dict([ (key, value) for key, value in data[core].items() if key.startswith('Sync') and value > cycles_extra ])
+      sync_total = sum(sync_components.values())
+      for key, value in sync_components.items():
+        data[core][key] -= cycles_extra*value/float(sync_total)
     data[core]['Imbalance'] = cycles_scale[core] * max(times) - sum(data[core].values())
 
-  return data, ncores, instrs, times, cycles_scale, fastforward_scale
+  return data, ncores, instrs, [time0_end-time0_begin for core in range(ncores)], cycles_scale, fastforward_scale
 
 
 def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True):
