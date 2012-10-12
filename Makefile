@@ -14,9 +14,9 @@ SIM_TARGETS=$(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE)
 
 all: dependencies $(SIM_TARGETS) configscripts
 
-dependencies: pin python mcpat linux output_files builddir showdebugstatus
+dependencies: package_deps pin python mcpat linux output_files builddir showdebugstatus
 
-$(SIM_TARGETS): dependencies package_deps
+$(SIM_TARGETS): dependencies
 
 include common/Makefile.common
 
@@ -34,7 +34,7 @@ $(LIB_SIFT): $(LIB_CARBON)
 
 ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=54730
-pin: $(PIN_HOME)/intel64/bin/pinbin
+pin: $(PIN_HOME)/intel64/bin/pinbin package_deps
 	@g++ -o tools/pinversion -I$(PIN_HOME)/source/include tools/pinversion.cc
 	@if [ "$$(tools/pinversion | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo "\nFound Pin version $$(tools/pinversion) in $(PIN_HOME)\nbut at least revision $(PIN_REV_MINIMUM) is required."; false; fi
 $(PIN_HOME)/intel64/bin/pinbin:
@@ -141,5 +141,5 @@ else
 	find . -name \*.d -exec rm {} \;
 endif
 
-package_deps: dependencies
+package_deps:
 	@BOOST_INCLUDE=$(BOOST_INCLUDE) ./tools/checkdependencies.py
