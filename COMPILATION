@@ -1,20 +1,20 @@
 How to compile an application to run under Sniper
 =================================================
 
-All options are defined in ${GRAPHITE_ROOT}/config/buildconf.<format>
+All options are defined in ${SNIPER_ROOT}/config/buildconf.<format>
 where <format> is:
 
 * sh: for inclusion in shell-based build scripts:
-    source ${GRAPHITE_ROOT}/config/buildconf.sh
+    source ${SNIPER_ROOT}/config/buildconf.sh
 
 * makefile: for inclusion in make-based builds:
-    include ${GRAPHITE_ROOT}/config/buildconf.makefile
+    include ${SNIPER_ROOT}/config/buildconf.makefile
 
 
 Single-threaded and Pthread applications
 ----------------------------------------
 
 * No source code modifications necessary
-* Link with the GRAPHITE_LDFLAGS options
-* Run with LD_LIBRARY_PATH set to GRAPHITE_LD_LIBRARY_PATH
+* Link with the SNIPER_LDFLAGS options
+* Run with LD_LIBRARY_PATH set to SNIPER_LD_LIBRARY_PATH
 
