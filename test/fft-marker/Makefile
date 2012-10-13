@@ -1,6 +1,6 @@
 include ../../config/buildconf.makefile
 
-CC=$(GRAPHITE_CC)
+CC=$(SNIPER_CC)
 
 all: fft
 	@echo "\nRun 'make run' to run the fft program in the simulator"
@@ -10,7 +10,7 @@ fft.c:
 	@ln -s ../fft/fft.c fft.c
 
 fft: fft.c Makefile
-	$(CC) -o fft fft.c -lm -pthread $(GRAPHITE_LDFLAGS) $(GRAPHITE_CFLAGS)
+	$(CC) -o fft fft.c -lm -pthread $(SNIPER_LDFLAGS) $(SNIPER_CFLAGS)
 
 run: fft
 	../../run-sniper -n 2 -s markers --roi -- ./fft -p 2 -m 6
