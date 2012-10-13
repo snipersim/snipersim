@@ -4,7 +4,7 @@ import os, sys
 
 
 def local_sniper_root():
-  return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+  return os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 
 def sniper_root():
@@ -15,8 +15,8 @@ def sniper_root():
       if not os.path.isfile(os.path.join(root,'run-sniper')):
 	print >> sys.stderr, 'Error: %s does not appear to be valid [%s]' % (rootname, root)
       else:
-	if os.path.abspath(root) != local_sniper_root():
-	  print >> sys.stderr, 'Warning: %s is different from current script directory [%s]!=[%s]' % (rootname, root, local_sniper_root())
+	if os.path.realpath(root) != local_sniper_root():
+	  print >> sys.stderr, 'Warning: %s is different from current script directory [%s]!=[%s]' % (rootname, os.path.realpath(root), local_sniper_root())
 	return root
 
   # Use the root corresponding to this file when nothing has been set
@@ -37,9 +37,9 @@ def benchmarks_root():
 
   # Try to determine what the BENCHMARKS_ROOT should be if it is not set
   benchtry = []
-  benchtry.append(os.path.abspath(os.path.join(sniper_root(),'..','benchmarks','run-sniper')))
-  benchtry.append(os.path.abspath(os.path.join(sniper_root(),'benchmarks','run-sniper')))
-  benchtry.append(os.path.abspath(os.path.join(sniper_root(),'..','run-sniper')))
+  benchtry.append(os.path.realpath(os.path.join(sniper_root(),'..','benchmarks','run-sniper')))
+  benchtry.append(os.path.realpath(os.path.join(sniper_root(),'benchmarks','run-sniper')))
+  benchtry.append(os.path.realpath(os.path.join(sniper_root(),'..','run-sniper')))
 
   for bt in benchtry:
     if os.path.isfile(bt):
