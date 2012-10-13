@@ -2,10 +2,10 @@
 
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, Queue, socket, pipes, commands
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-import sniper_lib, gen_simout, debugpin
+import sniper_lib, gen_simout, debugpin, env_setup
 
 
-HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
+HOME = env_setup.sim_root()
 
 
 def usage():
@@ -385,6 +385,7 @@ env['PIN_LD_RESTORE_REQUIRED'] = '1'
 env['PIN_VM_LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH'] # Pin VM and Pintool (Sniper) use LD_LIBRARY_PATH as modified above
 env['PIN_APP_LD_LIBRARY_PATH'] = ld_library_path_orig  # Application uses original LD_LIBRARY_PATH
 env['PYTHONPATH'] = '%(HOME)s/scripts:$PYTHONPATH' % locals()
+env['SNIPER_ROOT'] = HOME
 env['GRAPHITE_ROOT'] = HOME
 
 
