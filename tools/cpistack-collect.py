@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import sys, os
-sys.path.append(os.path.join(os.getenv('BENCHMARKS_ROOT'), 'tools', 'scheduler'))
+import sys, os, env_setup
+sys.path.append(os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler'))
 import getopt, intelqueue, iqclient, iqlib, cpistack, buildstack, gnuplot
 
 ic = iqclient.IntelClient()

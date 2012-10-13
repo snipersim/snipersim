@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import os, sys, time, re, getopt, subprocess
-sys.path.extend([ os.getenv('BENCHMARKS_ROOT'), os.path.join(os.getenv('BENCHMARKS_ROOT'), 'tools', 'scheduler') ])
+import os, sys, time, re, getopt, subprocess, env_setup
+sys.path.extend([ env_setup.benchmarks_root(), os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler') ])
 import iqclient, iqlib, intelqueue
 
 ic = iqclient.IntelClient()
@@ -10,7 +10,7 @@ ic = iqclient.IntelClient()
 def ex_ret(cmd):
   return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
 def git(args):
-  return ex_ret('git --git-dir=$GRAPHITE_ROOT/.git %s' % args).strip()
+  return ex_ret('git --git-dir="%s/.git" %s' % (env_setup.sim_root(),args)).strip()
 
 
 if len(sys.argv) < 3:
