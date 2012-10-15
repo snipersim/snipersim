@@ -9,6 +9,7 @@
 #include "utils.h"
 #include "subsecond_time.h"
 #include "inst_mode_macros.h"
+#include "local_storage.h"
 
 #include <stdlib.h>
 
@@ -95,9 +96,9 @@ static bool abortFunc(THREADID threadIndex)
 
 void handlePeriodicSync(THREADID threadIndex)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
-   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
-   assert(thread);
+   Thread* thread = localStore[threadIndex].thread;
+   Core* core = thread->getCore();
+   assert(core);
 
    ClockSkewMinimizationClient *client = thread->getClockSkewMinimizationClient();
    if (client)

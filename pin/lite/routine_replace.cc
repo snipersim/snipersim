@@ -365,14 +365,17 @@ void routineCallback(RTN rtn, void* v)
    }
 
    // os emulation
-   else if (rtn_name == "sched_getcpu")      RTN_Replace(rtn, AFUNPTR(emuGetCPU));
+   else if (rtn_name == "sched_getcpu")      RTN_ReplaceSignature(rtn, AFUNPTR(emuGetCPU), IARG_THREAD_ID, IARG_END);
    else if (rtn_name == "get_nprocs")        RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
    else if (rtn_name == "get_nprocs_conf")   RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
    if (Sim()->getConfig()->getOSEmuClockReplace())
    {
-      if (rtn_name == "clock_gettime")       RTN_Replace(rtn, AFUNPTR(emuClockGettime));
+      if (rtn_name == "clock_gettime")
+         RTN_ReplaceSignature(rtn, AFUNPTR(emuClockGettime), IARG_THREAD_ID,
+                              IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
       if (rtn_name.find("gettimeofday") != String::npos)
-                                             RTN_Replace(rtn, AFUNPTR(emuGettimeofday));
+         RTN_ReplaceSignature(rtn, AFUNPTR(emuGettimeofday), IARG_THREAD_ID,
+                              IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
    }
 
    // save pointers to some functions we'll want to call through PIN_CallApplicationFunction
@@ -484,14 +487,16 @@ IntPtr nullFunction()
 
 void pthreadBefore(THREADID thread_id)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(thread_id);
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
    pthread_t_start[thread_id] = core->getPerformanceModel()->getElapsedTime();
    updateState(core, PthreadEmu::STATE_WAITING);
 }
 
 void pthreadAfter(THREADID thread_id, ADDRINT type_id, ADDRINT retval)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(thread_id);
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
    PthreadEmu::state_t new_state;
    if (pthread_functions[type_id].state_after == PthreadEmu::STATE_BY_RETURN)
       new_state = retval == EBUSY ? PthreadEmu::STATE_RUNNING : PthreadEmu::STATE_INREGION;
@@ -508,13 +513,14 @@ IntPtr emuGetNprocs()
    : Sim()->getConfig()->getApplicationCores();
 }
 
-IntPtr emuGetCPU()
+IntPtr emuGetCPU(THREADID thread_id)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore();
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
    return core->getId();
 }
 
-IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp)
+IntPtr emuClockGettime(THREADID thread_id, clockid_t clk_id, struct timespec *tp)
 {
    switch(clk_id)
    {
@@ -523,7 +529,8 @@ IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp)
          // Return simulated time
          if (tp)
          {
-            Core* core = Sim()->getCoreManager()->getCurrentCore();
+            Core *core = localStore[thread_id].thread->getCore();
+            assert(core);
             UInt64 time = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart()).getNS()
                         + core->getPerformanceModel()->getElapsedTime().getNS();
 
@@ -537,12 +544,13 @@ IntPtr emuClockGettime(clockid_t clk_id, struct timespec *tp)
    }
 }
 
-IntPtr emuGettimeofday(struct timeval *tv, struct timezone *tz)
+IntPtr emuGettimeofday(THREADID thread_id, struct timeval *tv, struct timezone *tz)
 {
    LOG_ASSERT_WARNING_ONCE(tz == NULL, "gettimeofday() with non-NULL timezone not supported");
    LOG_ASSERT_ERROR(tv != NULL, "gettimeofday() called with NULL timeval not supported");
 
-   Core* core = Sim()->getCoreManager()->getCurrentCore();
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
    UInt64 time = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart()).getNS()
                + core->getPerformanceModel()->getElapsedTime().getNS();
 

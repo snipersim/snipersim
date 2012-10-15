@@ -178,7 +178,8 @@ void addMemoryModeling(TRACE trace, INS ins)
 
 void handleMemoryRead(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(thread_id);
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
    if (executing)
       core->accessMemory(
             /*(is_atomic_update) ? Core::LOCK :*/ Core::NONE,
@@ -192,7 +193,8 @@ void handleMemoryRead(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_a
 
 void handleMemoryReadDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(thread_id);
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
    // Detailed mode: core model will do its own access, just push a dyninfo with the address
    DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, executing, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::UNKNOWN);
    core->getPerformanceModel()->pushDynamicInstructionInfo(info);

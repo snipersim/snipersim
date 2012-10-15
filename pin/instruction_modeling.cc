@@ -21,7 +21,9 @@
 
 void InstructionModeling::handleBasicBlock(THREADID thread_id, BasicBlock *sim_basic_block)
 {
-   PerformanceModel *prfmdl = Sim()->getCoreManager()->getCurrentCore(thread_id)->getPerformanceModel();
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
+   PerformanceModel *prfmdl = core->getPerformanceModel();
 
    prfmdl->queueBasicBlock(sim_basic_block);
 
@@ -32,8 +34,9 @@ void InstructionModeling::handleBasicBlock(THREADID thread_id, BasicBlock *sim_b
 
 static void handleBranch(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
 {
-   assert(Sim() && Sim()->getCoreManager() && Sim()->getCoreManager()->getCurrentCore(thread_id));
-   PerformanceModel *prfmdl = Sim()->getCoreManager()->getCurrentCore(thread_id)->getPerformanceModel();
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
+   PerformanceModel *prfmdl = core->getPerformanceModel();
 
    DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(eip, taken, target);
    prfmdl->pushDynamicInstructionInfo(info);
@@ -41,7 +44,9 @@ static void handleBranch(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT ta
 
 static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
 {
-   PerformanceModel *prfmdl = Sim()->getCoreManager()->getCurrentCore(thread_id)->getPerformanceModel();
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
+   PerformanceModel *prfmdl = core->getPerformanceModel();
    BranchPredictor *bp = prfmdl->getBranchPredictor();
 
    if (bp) {
@@ -68,7 +73,7 @@ static VOID handleMagic(THREADID threadIndex, CONTEXT * ctxt, ADDRINT next_eip)
 
 static void handleRdtsc(THREADID thread_id, PIN_REGISTER * gax, PIN_REGISTER * gdx)
 {
-   Core *core = Sim()->getCoreManager()->getCurrentCore(thread_id);
+   Core *core = localStore[thread_id].thread->getCore();
    assert (core);
    SubsecondTime cycles_fs = core->getPerformanceModel()->getElapsedTime();
    // Convert SubsecondTime to cycles in global clock domain
@@ -293,6 +298,7 @@ VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address,
 
 VOID InstructionModeling::accessInstructionCacheWarmup(THREADID threadid, ADDRINT address, UINT32 size)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(threadid);
+   Core *core = localStore[threadid].thread->getCore();
+   assert(core);
    core->readInstructionMemory(address, size);
 }
