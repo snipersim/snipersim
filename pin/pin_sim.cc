@@ -158,13 +158,11 @@ BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block)
 
 void handleCheckScheduled(THREADID threadIndex, const CONTEXT *ctxt)
 {
-   Core* core = Sim()->getCoreManager()->getCurrentCore(threadIndex);
+   Thread* thread = localStore[threadIndex].thread;
+   Core* core = thread->getCore();
 
    if (core == NULL)
    {
-      Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
-      assert(thread);
-
       // This thread isn't scheduled. Normally it shouldn't execute any code,
       // but just after thread start we do get here.
       // Wait here until we're scheduled on one of the cores.
