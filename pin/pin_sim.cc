@@ -32,7 +32,6 @@
 #include "handle_args.h"
 #include "log.h"
 #include "instruction_modeling.h"
-#include "progress_trace.h"
 #include "clock_skew_minimization.h"
 #include "magic_client.h"
 #include "performance_model.h"
@@ -109,8 +108,6 @@ VOID printInsInfo(CONTEXT* ctxt)
 
 void showInstructionInfo(INS ins)
 {
-   if (Sim()->getCoreManager()->getCurrentCore()->getId() != 0)
-      return;
    printf("\t");
    if (INS_IsMemoryRead(ins) || INS_IsMemoryWrite(ins))
       printf("* ");
@@ -211,9 +208,6 @@ VOID traceCallback(TRACE trace, void *v)
    INS ins_head = BBL_InsHead(bbl_head);
 
    addCheckScheduled(trace, ins_head);
-
-   // Progress Trace
-   addProgressTrace(ins_head);
 
    // Clock Skew Minimization
    addPeriodicSync(trace, ins_head);
@@ -324,7 +318,6 @@ void ApplicationExit(int, void*)
 
    LOG_PRINT("Application exit.");
    Simulator::release();
-   shutdownProgressTrace();
    delete cfg;
 }
 
@@ -340,8 +333,6 @@ void PinDetach(void)
 
 VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID *v)
 {
-   threadStartProgressTrace();
-
    if (! done_app_initialization)
    {
       // Spawn the main() thread
@@ -470,8 +461,6 @@ int main(int argc, char *argv[])
    RTN_AddInstrumentFunction(lite::routineCallback, 0);
 
    TRACE_AddInstrumentFunction(traceCallback, 0);
-
-   initProgressTrace();
 
    if (!Sim()->getConfig()->getEnableSMCSupport())
       CODECACHE_AddTraceInvalidatedFunction(traceInvalidate, 0);
