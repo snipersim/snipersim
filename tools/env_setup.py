@@ -1,6 +1,6 @@
 #!//usr/bin/env python
 
-import os, sys
+import os, sys, errno
 
 
 def local_sniper_root():
@@ -13,7 +13,7 @@ def sniper_root():
     root = os.getenv(rootname)
     if root:
       if not os.path.isfile(os.path.join(root,'run-sniper')):
-	print >> sys.stderr, 'Error: %s does not appear to be valid [%s]' % (rootname, root)
+        raise EnvironmentError((errno.EINVAL, 'Invalid %s directory [%s]' % (rootname, root)))
       else:
 	if os.path.realpath(root) != local_sniper_root():
 	  print >> sys.stderr, 'Warning: %s is different from current script directory [%s]!=[%s]' % (rootname, os.path.realpath(root), local_sniper_root())
@@ -33,7 +33,7 @@ def benchmarks_root():
     if os.path.isfile(os.path.join(os.getenv('BENCHMARKS_ROOT'),'run-sniper')):
       return os.getenv('BENCHMARKS_ROOT')
     else:
-      print >> sys.stderr, 'Warning: BENCHMARKS_ROOT does not appear to be valid [%s]' % os.getenv('BENCHMARKS_ROOT')
+      raise EnvironmentError((errno.EINVAL, 'Invalid BENCHMARKS_ROOT directory [%s]' % os.getenv('BENCHMARKS_ROOT')))
 
   # Try to determine what the BENCHMARKS_ROOT should be if it is not set
   benchtry = []
@@ -45,8 +45,14 @@ def benchmarks_root():
     if os.path.isfile(bt):
       return os.path.dirname(bt)
 
-  return None
+  raise EnvironmentError((errno.EINVAL, 'Unable to determine the BENCHMARKS_ROOT directory'))
 
 
 if __name__ == "__main__":
-    print sniper_root(), benchmarks_root()
+    roots = {'SNIPER_ROOT': None, 'GRAPHITE_ROOT': None, 'BENCHMARKS_ROOT': None}
+    roots['SNIPER_ROOT'] = roots['GRAPHITE_ROOT'] = sniper_root()
+    try:
+      roots['BENCHMARKS_ROOT'] = benchmarks_root()
+    except EnvironmentError, e:
+      pass
+    print roots
