@@ -120,8 +120,10 @@ class Every:
 
   def hook_roi_begin(self):
     self.in_roi = True
+    self.hook_periodic(sim.stats.time())
 
   def hook_roi_end(self):
+    self.hook_periodic(sim.stats.time())
     self.in_roi = False
 
   def hook_periodic(self, time):
