@@ -197,9 +197,9 @@ def parse_results_from_fileobjs((simstats, simstatsbase, simstatsdelta, simout, 
   stats_begin = {}
   stats = {}
   for line in (simstatsdelta or simstats):
-    if line.startswith(k1):
+    if line.startswith(k1+'.'):
       stats_begin[line.split()[0][len(k1+'.'):]] = long(line.split()[1])
-    if line.startswith(k2):
+    if line.startswith(k2+'.'):
       stats[line.split()[0][len(k2+'.'):]] = long(line.split()[1])
 
   if simstatsbase:
