@@ -230,7 +230,14 @@ void ThreadManager::moveThread(thread_id_t thread_id, core_id_t core_id, Subseco
    else
    {
       if (thread->getCore() == NULL)
-         resumeThread(thread_id, INVALID_THREAD_ID, time);
+      {
+         // Unless core was stalled for sync/futex/..., wake it up
+         if (
+            m_thread_state[thread_id].status == Core::STALLED
+            && m_thread_state[thread_id].stalled_reason == STALL_UNSCHEDULED
+         )
+            resumeThread(thread_id, INVALID_THREAD_ID, time);
+      }
 
       Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
       thread->setCore(core);
@@ -309,6 +316,7 @@ void ThreadManager::stallThread_async(thread_id_t thread_id, stall_type_t reason
 {
    LOG_PRINT("Core(%i) -> STALLED", thread_id);
    m_thread_state[thread_id].status = Core::STALLED;
+   m_thread_state[thread_id].stalled_reason = reason;
 
    HooksManager::ThreadStall args = { thread_id: thread_id, reason: reason, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_STALL, (UInt64)&args);

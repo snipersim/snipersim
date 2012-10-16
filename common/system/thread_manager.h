@@ -81,6 +81,7 @@ private:
    struct ThreadState
    {
       Core::State status;
+      stall_type_t stalled_reason; //< If status == Core::STALLED, why?
       thread_id_t waiter;
 
       ThreadState() : status(Core::IDLE), waiter(INVALID_THREAD_ID) {}
