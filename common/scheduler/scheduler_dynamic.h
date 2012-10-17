@@ -48,11 +48,12 @@ class SchedulerDynamic : public Scheduler
       };
 
       std::vector<bool> m_threads_runnable;
-      std::unordered_map<thread_id_t, ThreadStats*> m_threads_stats;
 
       void moveThread(thread_id_t thread_id, core_id_t core_id, SubsecondTime time);
+      const std::unordered_map<thread_id_t, ThreadStats*>& getThreadStats() { return m_threads_stats; }
 
    private:
+      std::unordered_map<thread_id_t, ThreadStats*> m_threads_stats;
       bool m_in_periodic;
 
       void __periodic(SubsecondTime time);

@@ -25,6 +25,8 @@ class SchedulerRand : public SchedulerDynamic
       SubsecondTime m_quantum_left;
       SubsecondTime m_last_periodic;
 
+      bool m_debug_output;
+
       void reschedule(SubsecondTime time);
       void remap( std::list< std::pair< uint64_t, core_id_t> > &mapping, SubsecondTime time );
 
