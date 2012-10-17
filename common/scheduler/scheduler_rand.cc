@@ -12,7 +12,7 @@ SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
    , m_quantum(SubsecondTime::US(1000))
    , m_last_periodic(SubsecondTime::Zero())
 {
-   std::cout<< "created random scheduler" << std::endl;
+   std::cout<< "[scheduler] created random scheduler" << std::endl;
 
    uint64_t t = Sim()->getCfg()->getInt("scheduler/quantum");
    m_quantum = SubsecondTime::US(t);
@@ -32,31 +32,33 @@ core_id_t SchedulerRand::threadCreate(thread_id_t thread_id)
    core_id_t freeCoreId = findFirstFreeCore();
    LOG_ASSERT_ERROR(freeCoreId != INVALID_CORE_ID, "[scheduler] No cores available for spawnThread request.");
 
-   m_coreToThreadMapping.insert( std::pair<core_id_t,thread_id_t>( freeCoreId, thread_id ));
-
-   m_quantum_left = m_quantum;
-
+   std::cout << "[scheduler] created thread "<<  thread_id << " on core " << freeCoreId << " in randomscheduler" << std::endl;
    return freeCoreId;
 }
 
 void SchedulerRand::threadStart(thread_id_t thread_id, SubsecondTime time)
 {
+   std::cout << "[scheduler] thread "<< thread_id << " started" << std::endl;
+
    // Nothing needs to be done
 }
 
 void SchedulerRand::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
 {
-   // currently unsupported: thread will just waste a core
+   std::cout << "[scheduler] thread "<< thread_id << " stalled" << std::endl;
+   // thread will just waste a core
 }
 
 void SchedulerRand::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
 {
-   // Nothing needs to be done: stalling is not supported
+   std::cout << "[scheduler] thread "<< thread_id << " resumed" << std::endl;
+   // Nothing needs to be done
 }
 
 void SchedulerRand::threadExit(thread_id_t thread_id, SubsecondTime time)
 {
-   // currently unsupported: thread will just waste a core
+   std::cout << "[scheduler] thread "<< thread_id << " EXIT" << std::endl;
+   // Nothing needs to be done
 }
 
 void SchedulerRand::periodic(SubsecondTime time)
@@ -77,35 +79,39 @@ void SchedulerRand::periodic(SubsecondTime time)
 
 void SchedulerRand::reschedule(SubsecondTime time)
 {
-   // For any scheduler, it is generally a good idea to randomize the core order to avoid
-   // biasing due to original thread-to-core mapping.
    std::list< std::pair< uint64_t, core_id_t  > > cid;
    for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
    {
       cid.push_back( std::pair< uint64_t, core_id_t >( rand() , coreId) );
 
-      m_threads_stats[ m_coreToThreadMapping[coreId] ]->update(time);
-
+      if (  Sim()->getCoreManager()->getCoreFromID(coreId)->getState() != Core::IDLE  )
+      {
+         thread_id_t threadId = Sim()->getCoreManager()->getCoreFromID(coreId)->getThread()->getId();
+         m_threads_stats[ threadId ]->update(time);
+      }
    }
    // Sorting using a random value generates a random ordering.
    cid.sort();
 
-   // Now sort all threads based on some optimization criterium
-   // note: for this random scheduler, this value is, euhm, random.
-   std::list< std::pair< uint64_t, core_id_t> > mapping;
-   for( std::list< std::pair< uint64_t, core_id_t> >::iterator it= cid.begin(); it != cid.end(); ++it)
-   {
-      core_id_t coreId = it->second;
-      uint64_t someValue = rand();
-      mapping.push_back( std::pair< uint64_t, core_id_t >( someValue, coreId  ) );
-   }
-   mapping.sort();
+   remap(cid, time);
+   
+   std::cout << "[scheduler] mapping: " ; printMapping();
 
-   // The threads with the lowest values get scheduled on the small cores, the remaining ones
+   m_quantum_left = m_quantum;
+}
+
+
+void SchedulerRand::remap(std::list< std::pair< uint64_t, core_id_t> > &mapping, SubsecondTime time )
+{
+   // The threads with the lowest value get scheduled on the small cores, the remaining ones
    // end up on the big cores.
-   std::list< std::pair< uint64_t , core_id_t> >::reverse_iterator rit= mapping.rbegin();
    std::list< std::pair< uint64_t , core_id_t> >::iterator it= mapping.begin();
-   for( uint64_t i=0; i < m_nSmallCores ; i++)
+   std::list< std::pair< uint64_t , core_id_t> >::iterator rit= mapping.end(); rit--;
+   
+   uint64_t left = 0;
+   uint64_t right = mapping.size()-1;
+
+   while ( left < right )
    {
       core_id_t coreId = it->second;
 
@@ -113,7 +119,7 @@ void SchedulerRand::reschedule(SubsecondTime time)
       if (isSmall)
       {
          // This thread needs to end up on a small core (low value), but already is; don't move it.
-         it++;
+         it++; left++;
          continue;
       }
       else
@@ -121,34 +127,48 @@ void SchedulerRand::reschedule(SubsecondTime time)
          // This thread has a low enough value so that it should end up on a small core, but it
          // is currently running on a big core. Find a suitable candidate to swap with: the thread
          // with the highest value that is currently scheduled on a big core type.
-         while ( Sim()->getTagsManager()->hasTag("core", rit->second, "big") )
+         while ( Sim()->getTagsManager()->hasTag("core", rit->second, "big") && (left < right) )  
          {
-            rit++;
+            rit--; right--;
          }
+        
+         if ( left != right )
+         {
+            core_id_t srcId = it->second;
+            core_id_t destId = rit->second;
+            Core::State srcState = Sim()->getCoreManager()->getCoreFromID(srcId)->getState();
+            Core::State destState = Sim()->getCoreManager()->getCoreFromID(destId)->getState();
 
-         // Move thread on the big core to a temp core (invalid core).
-         moveThread( m_coreToThreadMapping[rit->second] , INVALID_CORE_ID, time);
-         // Move thread on the small core to the big core.
-         moveThread( m_coreToThreadMapping[it->second] , rit->second, time);
-         // Move thread from the temp core to the small core.
-         moveThread( m_coreToThreadMapping[rit->second] , it->second, time);
+            if ((srcState == Core::INITIALIZING) || (destState == Core::INITIALIZING))
+            {
+               std::cout << "[scheduler] Will not move thread that is initializing" <<std::endl;
+            }
+            else
+            {
 
-         uint64_t tmp = m_coreToThreadMapping[it->second];
-         m_coreToThreadMapping[it->second] = m_coreToThreadMapping[rit->second];
-         m_coreToThreadMapping[rit->second] = tmp;
+               if (( srcState == Core::IDLE ) && ( destState != Core::IDLE ))
+               {
+                  thread_id_t threadId = Sim()->getCoreManager()->getCoreFromID(destId)->getThread()->getId();
+                  moveThread( threadId , srcId, time);
+               }
+               else if (( srcState != Core::IDLE ) && ( destState == Core::IDLE ))
+               {
+                  thread_id_t threadId = Sim()->getCoreManager()->getCoreFromID(srcId)->getThread()->getId();
+                  moveThread( threadId , destId, time);
+               }
+               else if  (( srcState != Core::IDLE ) && ( destState != Core::IDLE ))
+               {
+                  thread_id_t srcThreadId = Sim()->getCoreManager()->getCoreFromID(srcId)->getThread()->getId();
+                  thread_id_t destThreadId = Sim()->getCoreManager()->getCoreFromID(destId)->getThread()->getId();
 
-         rit++;
-         it++;
+                  moveThread( destThreadId, INVALID_CORE_ID, time);
+                  moveThread( srcThreadId , destId, time);
+                  moveThread( destThreadId, srcId, time);
+               }
+            }
+         }
+         rit--; right--;
+         it++; left++;
       }
    }
-
-   // Print mapping
-   printf("mapping: ");
-   for(uint64_t i = 0; i < Sim()->getConfig()->getApplicationCores(); ++i)
-   {
-      std::cout << "( c"<< i << "::t" << Sim()->getThreadManager()->getThreadFromID(i)->getCore()->getId() << ") ";
-   }
-   std::cout << std::endl;
-
-   m_quantum_left = m_quantum;
 }

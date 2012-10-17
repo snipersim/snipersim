@@ -22,6 +22,7 @@ class Scheduler
 
       // Utility functions
       core_id_t findFirstFreeCore();
+      void printMapping();
 };
 
 #endif // __SCHEDULER_H

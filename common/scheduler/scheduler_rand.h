@@ -3,7 +3,7 @@
 
 #include "scheduler_dynamic.h"
 
-#include <map>
+#include <list>
 
 class SchedulerRand : public SchedulerDynamic
 {
@@ -18,8 +18,6 @@ class SchedulerRand : public SchedulerDynamic
       virtual void threadExit(thread_id_t thread_id, SubsecondTime time);
 
    private:
-      std::map<core_id_t, thread_id_t> m_coreToThreadMapping;
-
       uint64_t m_nBigCores;
       uint64_t m_nSmallCores;
 
@@ -28,6 +26,8 @@ class SchedulerRand : public SchedulerDynamic
       SubsecondTime m_last_periodic;
 
       void reschedule(SubsecondTime time);
+      void remap( std::list< std::pair< uint64_t, core_id_t> > &mapping, SubsecondTime time );
+
 };
 
 #endif // __SCHEDULER_RAND_H
