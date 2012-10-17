@@ -82,7 +82,11 @@ bool SchedulerRoundRobin::threadSetAffinity(thread_id_t calling_thread_id, threa
    {
       if (CPU_ISSET_S(cpu, cpusetsize, mask))
       {
-         LOG_ASSERT_ERROR(core_id == INVALID_CORE_ID, "This scheduler only allows sched_setaffinity() with a single core");
+         if (core_id != INVALID_CORE_ID)
+         {
+            LOG_PRINT_WARNING_ONCE("This scheduler only allows sched_setaffinity() with a single core. Call to sched_setaffinity() with multiple cores specified is ignored.");
+            return false;
+         }
          core_id = cpu;
       }
    }
