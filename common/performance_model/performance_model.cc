@@ -126,22 +126,26 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
       return;
    }
 
-   if (m_fastforward)
+   if (i->isIdle())
    {
-      if (i->isIdle())
-         handleIdleInstruction(i);
-      else
-         m_fastforward_model->queueDynamicInstruction(i);
+      handleIdleInstruction(i);
    }
    else
    {
-      BasicBlock *bb = new BasicBlock(true);
-      bb->push_back(i);
-      #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-         m_basic_block_queue.push_wait(bb);
-      #else
-         m_basic_block_queue.push(bb);
-      #endif
+      if (m_fastforward)
+      {
+         m_fastforward_model->queueDynamicInstruction(i);
+      }
+      else
+      {
+         BasicBlock *bb = new BasicBlock(true);
+         bb->push_back(i);
+         #ifdef ENABLE_PERF_MODEL_OWN_THREAD
+            m_basic_block_queue.push_wait(bb);
+         #else
+            m_basic_block_queue.push(bb);
+         #endif
+      }
    }
 }
 
@@ -258,14 +262,12 @@ void PerformanceModel::iterate()
       for( ; m_current_ins_index < current_bb->size(); m_current_ins_index++)
       {
          Instruction *ins = current_bb->at(m_current_ins_index);
-         if (ins->isIdle()) {
-            handleIdleInstruction(ins);
-         } else {
-            bool res = handleInstruction(ins);
-            if (!res)
-               // DynamicInstructionInfo not available
-               return;
-         }
+         LOG_ASSERT_ERROR(!ins->isIdle(), "Idle instructions should not make it here!");
+
+         bool res = handleInstruction(ins);
+         if (!res)
+            // DynamicInstructionInfo not available
+            return;
       }
 
       if (current_bb->isDynamic())
