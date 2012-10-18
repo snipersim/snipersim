@@ -28,6 +28,8 @@ SchedulerDynamic::~SchedulerDynamic()
 
 void SchedulerDynamic::__periodic(SubsecondTime time)
 {
+   updateThreadStats();
+
    m_in_periodic = true;
    periodic(time);
    m_in_periodic = false;
@@ -96,8 +98,10 @@ void SchedulerDynamic::moveThread(thread_id_t thread_id, core_id_t core_id, Subs
 
 void SchedulerDynamic::updateThreadStats()
 {
+   SubsecondTime now = Sim()->getClockSkewMinimizationServer()->getGlobalTime();
+
    for(std::unordered_map<thread_id_t, ThreadStats*>::iterator it = m_threads_stats.begin(); it != m_threads_stats.end(); ++it)
-      it->second->update(Sim()->getClockSkewMinimizationServer()->getGlobalTime());
+      it->second->update(now);
 }
 
 SchedulerDynamic::ThreadStats::ThreadStats(thread_id_t thread_id, SubsecondTime time)
