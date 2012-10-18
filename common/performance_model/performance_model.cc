@@ -370,22 +370,17 @@ void PerformanceModel::incrementIdleElapsedTime(SubsecondTime time)
       m_fastforward_model->notifyElapsedTimeUpdate();
 }
 
-// Only called at the start of the simulation (SPAWN_INST)
+// Only called at the start of a new thread (SPAWN_INST)
 void PerformanceModel::setElapsedTime(SubsecondTime time)
 {
-   // TODO: what happens when a core is reused? (See streamcluster, Redmine #37)
-   // Is the initial time for the second thread set with another SPAWN_INST? Or maybe a RECV_INST?
-   // When using the scheduler and moving an existing thread to this core, SPAWN_INST is now used.
-   //LOG_ASSERT_ERROR(getElapsedTime() == SubsecondTime::Zero(), "setElapsedTime() can only be called when the current time is 0 (via SPAWN_INSN).");
    LOG_ASSERT_ERROR(time >= getElapsedTime(), "setElapsedTime() cannot go backwards in time");
 
-   m_cpiStartTime += time - getElapsedTime();
-   // All time up to now was idle
-   m_idle_elapsed_time.setElapsedTime(time);
-   // Set the elapsed time
-   m_elapsed_time.setElapsedTime(time);
-   // Let the performance model know time has jumped
-   notifyElapsedTimeUpdate();
-   if (m_fastforward)
-      m_fastforward_model->notifyElapsedTimeUpdate();
+   SubsecondTime insn_cost = time - getElapsedTime();
+   if (getElapsedTime() > SubsecondTime::Zero())
+      // Core has run something before, account as unscheduled time
+      m_cpiSyncUnscheduled += insn_cost;
+   else
+      // First thread to run on this core
+      m_cpiStartTime += insn_cost;
+   incrementIdleElapsedTime(insn_cost);
 }

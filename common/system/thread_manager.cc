@@ -105,7 +105,6 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
       core->setState(Core::RUNNING);
 
       PerformanceModel *pm = core->getPerformanceModel();
-      pm->resetElapsedTime();
       pm->queueDynamicInstruction(new SpawnInstruction(time));
 
       LOG_PRINT("Setting status[%i] -> RUNNING", thread_id);

@@ -35,7 +35,6 @@ public:
 
    UInt64 getInstructionCount() const { return m_instruction_count; }
 
-   void resetElapsedTime() { m_elapsed_time.reset(); }
    SubsecondTime getElapsedTime() const { return m_elapsed_time.getElapsedTime(); }
    SubsecondTime getNonIdleElapsedTime() const { return getElapsedTime() - m_idle_elapsed_time.getElapsedTime(); }
 
