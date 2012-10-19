@@ -34,12 +34,19 @@ void HooksPy::init()
 void HooksPy::setup()
 {
    pyInit = true;
-   const char* graphite_root = getenv("GRAPHITE_ROOT");
-   LOG_ASSERT_ERROR(graphite_root, "Please make sure GRAPHITE_ROOT is set");
+   const char* sim_root = NULL;
+   const char env_roots[2][16] = {"SNIPER_ROOT", "GRAPHITE_ROOT"};
+   for (unsigned int i = 0 ; i < 2 ; i++)
+   {
+      sim_root = getenv(env_roots[i]);
+      if (sim_root)
+         break;
+   }
+   LOG_ASSERT_ERROR(sim_root, "Please make sure SNIPER_ROOT or GRAPHITE_ROOT is set");
 #ifdef TARGET_INTEL64
-   String python_home = String(graphite_root) + "/python_kit/intel64";
+   String python_home = String(sim_root) + "/python_kit/intel64";
 #else
-   String python_home = String(graphite_root) + "/python_kit/ia32";
+   String python_home = String(sim_root) + "/python_kit/ia32";
 #endif
    Py_SetPythonHome(strdup(python_home.c_str()));
    Py_InitializeEx(0 /* don't initialize signal handlers */);
