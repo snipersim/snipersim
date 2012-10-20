@@ -339,7 +339,7 @@ arch = config.get('target', 'intel64')
 def get_cxx_inuse():
   pin_sim = '%s/lib/pin_sim.so' % sim_root
   try:
-    ldd_out = subprocess.Popen(['ldd', pin_sim], stdout = subprocess.PIPE).communicate()[0]
+    ldd_out = subprocess.Popen(['ldd', pin_sim], stdout = subprocess.PIPE, stderr = open('/dev/null','w')).communicate()[0]
     libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
   except Exception, e:
     print `e`
