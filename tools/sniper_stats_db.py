@@ -1,8 +1,8 @@
-import os, bsddb, struct
+import os, bsddb, struct, zlib
 
 class SniperStatsDbObject:
   def __init__(self, data):
-    self.data = data
+    self.data = zlib.decompress(data)
     self.offset = 0
   def end(self):
     return self.offset >= len(self.data)

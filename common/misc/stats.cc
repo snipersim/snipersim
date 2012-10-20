@@ -11,6 +11,7 @@
 #include <string>
 #include <cstring>
 #include <db.h>
+#include <zlib.h>
 
 template <> UInt64 makeStatsValue<UInt64>(UInt64 t) { return t; }
 template <> UInt64 makeStatsValue<SubsecondTime>(SubsecondTime t) { return t.getFS(); }
@@ -44,9 +45,47 @@ StatsManager::init()
    recordStatsBase();
 }
 
-class StatStream : public std::stringstream
+class StatStream
 {
+   private:
+      std::stringstream value;
+      z_stream zstream;
+      static const size_t chunksize = 64*1024;
+      static const int level = 9;
+      char buffer[chunksize];
+
+      void write(const char* data, size_t size)
+      {
+         zstream.next_in = (Bytef*)data;
+         zstream.avail_in = size;
+         doCompress(false);
+      }
+      void doCompress(bool finish)
+      {
+         int ret;
+         do
+         {
+            zstream.next_out = (Bytef*)buffer;
+            zstream.avail_out = chunksize;
+            ret = deflate(&zstream, finish ? Z_FINISH : Z_NO_FLUSH);
+            assert(ret != Z_STREAM_ERROR);
+            value.write(buffer, chunksize - zstream.avail_out);
+         }
+         while(zstream.avail_out == 0);
+         assert(zstream.avail_in == 0);     /* all input will be used */
+         if (finish)
+            assert(ret == Z_STREAM_END);
+      }
+
    public:
+      StatStream()
+      {
+         zstream.zalloc = Z_NULL;
+         zstream.zfree = Z_NULL;
+         zstream.opaque = Z_NULL;
+         int ret = deflateInit(&zstream, level);
+         assert(ret == Z_OK);
+      }
       void writeInt32(SInt32 value)
       {
          this->write((const char*)&value, sizeof(value));
@@ -64,6 +103,11 @@ class StatStream : public std::stringstream
       {
          this->writeInt32(value.size());
          this->write(value.c_str(), value.size());
+      }
+      std::string str()
+      {
+         doCompress(true);
+         return value.str();
       }
 };
 
