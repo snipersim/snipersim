@@ -3,15 +3,16 @@
 import sys, os, getopt, sniper_lib
 
 def usage():
-  print 'Usage:', sys.argv[0], '[-h (help)] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [<resultsdir (default: .)>]'
+  print 'Usage:', sys.argv[0], '[-h (help)] [--list] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [<resultsdir (default: .)>]'
 
 
 jobid = 0
 resultsdir = '.'
 partial = None
+do_list = False
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hj:d:", [ "partial=" ])
+  opts, args = getopt.getopt(sys.argv[1:], "hj:d:", [ 'list', 'partial=' ])
 except getopt.GetoptError, e:
   print e
   usage()
@@ -29,10 +30,23 @@ for o, a in opts:
       sys.stderr.write('--partial=<from>:<to>\n')
       usage()
     partial = a.split(':')
+  if o == '--list':
+    do_list = True
 
 if args:
   usage()
   sys.exit(-1)
+
+
+if do_list:
+  if jobid:
+    print >> sys.stderr, "--list not supported with jobid"
+    sys.exit(1)
+  else:
+    import sniper_stats_db
+    stats = sniper_stats_db.SniperStatsDb(os.path.join(resultsdir, 'sim.stats.db'))
+    print ', '.join(stats.get_snapshots())
+    sys.exit(0)
 
 
 results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
