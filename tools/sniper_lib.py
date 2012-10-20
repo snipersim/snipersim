@@ -1,7 +1,7 @@
 # A copy of this file is distributed with the binaries of Graphite and Benchmarks
 
 import sys, os, time, re, tempfile, timeout, traceback, collections
-import sniper_stats_compat
+import sniper_stats_db, sniper_stats_compat
 try:
   import json
 except ImportError:
@@ -199,7 +199,10 @@ def parse_results_from_dir(resultsdir, partial = None):
   else:
     k1, k2 = 'roi-begin', 'roi-end'
 
-  results += sniper_stats_compat.parse_stats(resultsdir, (k1, k2), ncores)
+  if os.path.exists(os.path.join(resultsdir, 'sim.stats.db')):
+    results += sniper_stats_db.parse_stats(resultsdir, (k1, k2), ncores)
+  else:
+    results += sniper_stats_compat.parse_stats(resultsdir, (k1, k2), ncores)
 
   ## power.py
   power = {}
