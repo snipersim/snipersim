@@ -9,78 +9,138 @@
 #include <sstream>
 #include <unordered_set>
 #include <string>
+#include <cstring>
+#include <db.h>
 
 StatsManager::StatsManager()
-   : m_fp(NULL)
+   : m_keyid(0)
+   , m_prefixnum(0)
+   , m_db(NULL)
 {
 }
 
 StatsManager::~StatsManager()
 {
-   if (m_fp)
-      fclose(m_fp);
+   if (m_db)
+      m_db->close(m_db, 0);
 }
 
 void
 StatsManager::init()
 {
-   String filename = "sim.stats.delta";
-   filename = Sim()->getConfig()->formatOutputFileName(filename);
-   m_fp = fopen(filename.c_str(), "w");
-   LOG_ASSERT_ERROR(m_fp, "Cannot open %s for writing", filename.c_str());
+   String filename = Sim()->getConfig()->formatOutputFileName("sim.stats.db");
+   int ret;
+
+   ret = db_create(&m_db, NULL, 0);
+   LOG_ASSERT_ERROR(ret == 0, "Cannot create DB");
+
+   ret = m_db->open(m_db, NULL, filename.c_str(), NULL, DB_HASH, DB_CREATE | DB_TRUNCATE, 0);
+   LOG_ASSERT_ERROR(ret == 0, "Cannot create DB");
 
    recordStatsBase();
 }
 
+class StatStream : public std::stringstream
+{
+   public:
+      void writeInt32(SInt32 value)
+      {
+         this->write((const char*)&value, sizeof(value));
+      }
+      void writeString(std::string value)
+      {
+         this->writeInt32(value.size());
+         this->write(value.c_str(), value.size());
+      }
+      void writeString(String value)
+      {
+         this->writeInt32(value.size());
+         this->write(value.c_str(), value.size());
+      }
+};
+
 void
 StatsManager::recordStats(String prefix)
 {
-   LOG_ASSERT_ERROR(m_fp, "m_fp not yet set up !?");
+   LOG_ASSERT_ERROR(m_db, "m_db not yet set up !?");
 
    // Allow lazily-maintained statistics to be updated
    Sim()->getHooksManager()->callHooks(HookType::HOOK_PRE_STAT_WRITE, 0);
+
+   StatStream data;
+   data.writeInt32(m_prefixnum++);
 
    for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
    {
       for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
       {
-         for(StatsIndexList::iterator it3 = it2->second.begin(); it3 != it2->second.end(); ++it3)
+         data.writeInt32(it2->second.first); // Metric ID
+         for(StatsIndexList::iterator it3 = it2->second.second.begin(); it3 != it2->second.second.end(); ++it3)
          {
             if (!it3->second->isDefault())
             {
-               fprintf(m_fp, "%s.%s[%u].%s %s\n", prefix.c_str(), it3->second->objectName.c_str(), it3->second->index,
-                                                  it3->second->metricName.c_str(), it3->second->recordMetric().c_str());
+               data.writeInt32(it3->second->index);
+               data.writeString(it3->second->recordMetric());
             }
          }
+         data.writeInt32(-12345); // Last
       }
    }
-   fflush(m_fp);
+
+   db_write(std::string("d") + prefix.c_str(), data.str());
 }
 
 void
 StatsManager::recordStatsBase()
 {
-   // Print out all possible parameters without any actual statistics
-   String filename = "sim.stats.base";
-   filename = Sim()->getConfig()->formatOutputFileName(filename);
-   FILE *fp = fopen(filename.c_str(), "w");
-   LOG_ASSERT_ERROR(fp, "Cannot open %s for writing", filename.c_str());
+   StatStream s;
 
+   // Record all possible parameters without any actual statistics
    for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
    {
       for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
       {
-         fprintf(fp, "%s[].%s\n", it1->first.c_str(), it2->first.c_str());
+         s.writeInt32(it2->second.first);    // Metric ID
+         s.writeString(it1->first);          // Object name
+         s.writeString(it2->first);          // Metric name
       }
    }
-   fflush(fp);
+
+   db_write(std::string("k"), s.str());
+}
+
+void
+StatsManager::db_write(std::string key, std::string data)
+{
+   DBT _key, _data;
+   memset(&_key, 0, sizeof(DBT));
+   memset(&_data, 0, sizeof(DBT));
+
+   _key.data = (void*)key.c_str();
+   _key.size = key.size();
+
+   _data.data = (void*)data.c_str();
+   _data.size = data.size();
+
+   int res = m_db->put(m_db, NULL, &_key, &_data, DB_OVERWRITE_DUP);
+   LOG_ASSERT_ERROR(res == 0, "Error when writing stats");
+   m_db->sync(m_db, 0);
 }
 
 void
 StatsManager::registerMetric(StatsMetricBase *metric)
 {
    std::string _objectName(metric->objectName.c_str()), _metricName(metric->metricName.c_str());
-   m_objects[_objectName][_metricName][metric->index] = metric;
+   m_objects[_objectName][_metricName].second[metric->index] = metric;
+   if (m_objects[_objectName][_metricName].first == 0)
+   {
+      m_objects[_objectName][_metricName].first = ++m_keyid;
+      if (m_db)
+      {
+         // Metrics name record was already written, but a new metric was registered afterwards: write a new record
+         recordStatsBase();
+      }
+   }
 }
 
 StatsMetricBase *
@@ -91,9 +151,9 @@ StatsManager::getMetricObject(String objectName, UInt32 index, String metricName
       return NULL;
    if (m_objects[_objectName].count(_metricName) == 0)
       return NULL;
-   if (m_objects[_objectName][_metricName].count(index) == 0)
+   if (m_objects[_objectName][_metricName].second.count(index) == 0)
       return NULL;
-   return m_objects[_objectName][_metricName][index];
+   return m_objects[_objectName][_metricName].second[index];
 }
 
 

@@ -53,7 +53,7 @@ ifneq ($(BOOST_INCLUDE),)
 	CXXFLAGS += -I$(BOOST_INCLUDE)
 endif
 
-LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/lib -lpython2.7 -lrt -lz
+LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/lib -lpython2.7 -lrt -lz -ldb
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)

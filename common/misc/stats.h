@@ -2,7 +2,9 @@
 
 #include "simulator.h"
 #include "itostr.h"
+
 #include <strings.h>
+#include <db.h>
 
 class StatsMetricBase
 {
@@ -62,14 +64,18 @@ class StatsManager
       template <class T> T * getMetric(String objectName, UInt32 index, String metricName);
 
    private:
-      FILE *m_fp;
+      UInt64 m_keyid;
+      UInt64 m_prefixnum;
+      DB *m_db;
       // Use std::string here because String (__versa_string) does not provide a hash function for STL containers with gcc < 4.6
       typedef std::unordered_map<UInt64, StatsMetricBase *> StatsIndexList;
-      typedef std::unordered_map<std::string, StatsIndexList> StatsMetricList;
+      typedef std::pair<UInt64, StatsIndexList> StatsMetricWithKey;
+      typedef std::unordered_map<std::string, StatsMetricWithKey> StatsMetricList;
       typedef std::unordered_map<std::string, StatsMetricList> StatsObjectList;
       StatsObjectList m_objects;
 
       void recordStatsBase();
+      void db_write(std::string key, std::string data);
 };
 
 template <class T> void registerStatsMetric(String objectName, UInt32 index, String metricName, T *metric)

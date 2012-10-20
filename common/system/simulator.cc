@@ -201,6 +201,7 @@ Simulator::~Simulator()
    delete m_hooks_manager;
    delete m_tags_manager;
    delete m_transport;
+   delete m_stats_manager;
 }
 
 void Simulator::startTimer()
