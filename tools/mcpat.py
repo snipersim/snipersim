@@ -1068,7 +1068,7 @@ if __name__ == '__main__':
       no_graph = True
     if o == '--partial':
       if ':' not in a:
-        sys.stderr.write('--partial=<from>:<to>[:filename]\n')
+        sys.stderr.write('--partial=<from>:<to>\n')
         usage()
       partial = a.split(':')
 

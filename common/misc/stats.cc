@@ -10,26 +10,6 @@
 #include <unordered_set>
 #include <string>
 
-void
-StatsManager::registerMetric(StatsMetricBase *metric)
-{
-   std::string _objectName(metric->objectName.c_str()), _metricName(metric->metricName.c_str());
-   m_objects[_objectName][_metricName][metric->index] = metric;
-}
-
-StatsMetricBase *
-StatsManager::getMetricObject(String objectName, UInt32 index, String metricName)
-{
-   std::string _objectName(objectName.c_str()), _metricName(metricName.c_str());
-   if (m_objects.count(_objectName) == 0)
-      return NULL;
-   if (m_objects[_objectName].count(_metricName) == 0)
-      return NULL;
-   if (m_objects[_objectName][_metricName].count(index) == 0)
-      return NULL;
-   return m_objects[_objectName][_metricName][index];
-}
-
 StatsManager::StatsManager()
    : m_fp(NULL)
 {
@@ -42,31 +22,24 @@ StatsManager::~StatsManager()
 }
 
 void
-StatsManager::recordStats(String prefix, String fileName)
+StatsManager::init()
 {
-   // Allow lazily-maintained statistics to be updated
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_PRE_STAT_WRITE, 0);
+   String filename = "sim.stats.delta";
+   filename = Sim()->getConfig()->formatOutputFileName(filename);
+   m_fp = fopen(filename.c_str(), "w");
+   LOG_ASSERT_ERROR(m_fp, "Cannot open %s for writing", filename.c_str());
 
-   if (fileName == "") {
-      if (! m_fp) {
-         String filename = "sim.stats.delta";
-         filename = Sim()->getConfig()->formatOutputFileName(filename);
-         m_fp = fopen(filename.c_str(), "w");
-         LOG_ASSERT_ERROR(m_fp, "Cannot open %s for writing", filename.c_str());
-      }
-      recordStats(prefix, m_fp);
-   } else {
-      String filename = Sim()->getConfig()->formatOutputFileName(fileName);
-      FILE *fp = fopen(filename.c_str(), "a");
-      LOG_ASSERT_ERROR(fp, "Cannot open %s for writing", filename.c_str());
-      recordStats(prefix, fp);
-      fclose(fp);
-   }
+   recordStatsBase();
 }
 
 void
-StatsManager::recordStats(String prefix, FILE *fp)
+StatsManager::recordStats(String prefix)
 {
+   LOG_ASSERT_ERROR(m_fp, "m_fp not yet set up !?");
+
+   // Allow lazily-maintained statistics to be updated
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_PRE_STAT_WRITE, 0);
+
    for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
    {
       for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
@@ -75,15 +48,14 @@ StatsManager::recordStats(String prefix, FILE *fp)
          {
             if (!it3->second->isDefault())
             {
-               fprintf(fp, "%s.%s[%u].%s %s\n", prefix.c_str(), it3->second->objectName.c_str(), it3->second->index,
-                                                it3->second->metricName.c_str(), it3->second->recordMetric().c_str());
+               fprintf(m_fp, "%s.%s[%u].%s %s\n", prefix.c_str(), it3->second->objectName.c_str(), it3->second->index,
+                                                  it3->second->metricName.c_str(), it3->second->recordMetric().c_str());
             }
          }
       }
    }
-   fflush(fp);
+   fflush(m_fp);
 }
-
 
 void
 StatsManager::recordStatsBase()
@@ -102,6 +74,26 @@ StatsManager::recordStatsBase()
       }
    }
    fflush(fp);
+}
+
+void
+StatsManager::registerMetric(StatsMetricBase *metric)
+{
+   std::string _objectName(metric->objectName.c_str()), _metricName(metric->metricName.c_str());
+   m_objects[_objectName][_metricName][metric->index] = metric;
+}
+
+StatsMetricBase *
+StatsManager::getMetricObject(String objectName, UInt32 index, String metricName)
+{
+   std::string _objectName(objectName.c_str()), _metricName(metricName.c_str());
+   if (m_objects.count(_objectName) == 0)
+      return NULL;
+   if (m_objects[_objectName].count(_metricName) == 0)
+      return NULL;
+   if (m_objects[_objectName][_metricName].count(index) == 0)
+      return NULL;
+   return m_objects[_objectName][_metricName][index];
 }
 
 

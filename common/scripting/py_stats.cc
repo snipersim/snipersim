@@ -131,12 +131,12 @@ getStatsGetter(PyObject *self, PyObject *args)
 static PyObject *
 writeStats(PyObject *self, PyObject *args)
 {
-   const char *prefix = NULL, *filename = "";
+   const char *prefix = NULL;
 
-   if (!PyArg_ParseTuple(args, "s|s", &prefix, &filename))
+   if (!PyArg_ParseTuple(args, "s", &prefix))
       return NULL;
 
-   Sim()->getStatsManager()->recordStats(prefix, filename);
+   Sim()->getStatsManager()->recordStats(prefix);
 
    Py_RETURN_NONE;
 }

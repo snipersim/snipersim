@@ -124,8 +124,8 @@ void Simulator::start()
 // PIN_SpawnInternalThread doesn't schedule its threads until after PIN_StartProgram
 //   m_transport->barrier();
 
+   m_stats_manager->init();
    m_hooks_manager->callHooks(HookType::HOOK_SIM_START, 0);
-   m_stats_manager->recordStatsBase();
    m_stats_manager->recordStats("start");
    if (Sim()->getConfig()->getSimulationROI() == Config::ROI_FULL)
    {

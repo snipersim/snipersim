@@ -26,7 +26,7 @@ for o, a in opts:
     jobid = long(a)
   if o == '--partial':
     if ':' not in a:
-      sys.stderr.write('--partial=<from>:<to>[:filename]\n')
+      sys.stderr.write('--partial=<from>:<to>\n')
       usage()
     partial = a.split(':')
 

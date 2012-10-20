@@ -50,16 +50,17 @@ class StatsMetricCallback : public StatsMetricBase
 };
 
 
-class StatsManager {
+class StatsManager
+{
    public:
       StatsManager();
       ~StatsManager();
+      void init();
+      void recordStats(String prefix);
       void registerMetric(StatsMetricBase *metric);
-      void recordStatsBase();
-      void recordStats(String prefix, String fileName = "");
-      void recordStats(String prefix, FILE *fp);
       StatsMetricBase *getMetricObject(String objectName, UInt32 index, String metricName);
       template <class T> T * getMetric(String objectName, UInt32 index, String metricName);
+
    private:
       FILE *m_fp;
       // Use std::string here because String (__versa_string) does not provide a hash function for STL containers with gcc < 4.6
@@ -67,6 +68,8 @@ class StatsManager {
       typedef std::unordered_map<std::string, StatsIndexList> StatsMetricList;
       typedef std::unordered_map<std::string, StatsMetricList> StatsObjectList;
       StatsObjectList m_objects;
+
+      void recordStatsBase();
 };
 
 template <class T> void registerStatsMetric(String objectName, UInt32 index, String metricName, T *metric)
