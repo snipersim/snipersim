@@ -1,6 +1,7 @@
 # A copy of this file is distributed with the binaries of Graphite and Benchmarks
 
 import sys, os, time, re, tempfile, timeout, traceback, collections
+import sniper_stats_compat
 try:
   import json
 except ImportError:
@@ -147,13 +148,14 @@ def get_config_default(config, key, defaultval, index = None):
     return defaultval
 
 
-def parse_results_from_fileobjs((simstats, simstatsbase, simstatsdelta, simout, simcfg, stdout, graphiteout, powerpy), partial = None):
+def parse_results_from_dir(resultsdir, partial = None):
   results = []
 
   ## sim.cfg
-  if not simcfg:
+  simcfg = os.path.join(resultsdir, 'sim.cfg')
+  if not os.path.exists(simcfg):
     raise SniperResultsException("No valid configuration found")
-  simcfg = parse_config(simcfg.read())
+  simcfg = parse_config(open(simcfg).read())
   ncores = int(simcfg['general/total_cores'])
 
   results += [ ('ncores', -1, ncores) ]
@@ -162,7 +164,9 @@ def parse_results_from_fileobjs((simstats, simstatsbase, simstatsdelta, simout, 
   ## stdout.txt
   walltime = 0
   roi = { 'instrs': 0, 'ipstotal': 0, 'ipscore': 0 }
-  for line in (stdout or []):
+  stdout = os.path.join(resultsdir, 'stdout.txt')
+  stdout = os.path.exists(stdout) and open(stdout) or []
+  for line in stdout:
     for marker in ('[SNIPER]', '[GRAPHITE]'):
       try:
         if line.startswith('%s Leaving ROI after' % marker):
@@ -182,9 +186,10 @@ def parse_results_from_fileobjs((simstats, simstatsbase, simstatsdelta, simout, 
   results.append(('roi.ipscore', -1, roi['ipscore']))
 
   ## graphite.out
-  if graphiteout:
+  graphiteout = os.path.join(resultsdir, 'graphite.out')
+  if os.path.exists(graphiteout):
     # If we're called from inside run-graphite, graphite.out may not yet exist
-    graphiteout = eval(graphiteout.read())
+    graphiteout = eval(open(graphiteout).read())
     results.append(('walltime', -1, graphiteout['t_elapsed']))
     results.append(('vmem', -1, graphiteout['vmem']))
 
@@ -194,67 +199,17 @@ def parse_results_from_fileobjs((simstats, simstatsbase, simstatsdelta, simout, 
   else:
     k1, k2 = 'roi-begin', 'roi-end'
 
-  stats_begin = {}
-  stats = {}
-  for line in (simstatsdelta or simstats):
-    if line.startswith(k1+'.'):
-      stats_begin[line.split()[0][len(k1+'.'):]] = long(line.split()[1])
-    if line.startswith(k2+'.'):
-      stats[line.split()[0][len(k2+'.'):]] = long(line.split()[1])
-
-  if simstatsbase:
-    # End stats may not be empty, check before adding the defaults
-    if not stats:
-      raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
-    for line in simstatsbase:
-      line = line.strip()
-      if not line: continue
-      for c in range(ncores):
-        key = line.split('[]')[0] + ('[%u]' % c) + line.split('[]', 1)[1]
-        stats_begin.setdefault(key, 0)
-        stats.setdefault(key, 0)
-  else:
-    if not stats or not stats_begin:
-      raise ValueError("Could not find stats in sim.stats (%s:%s)" % (k1, k2))
-
-  for key, value in stats.items():
-    if key in stats_begin:
-      value -= stats_begin[key]
-      stats[key] = value
-    if '[' in key:
-      key = re.match('(.*)\[(.*)\](.*)', key).groups()
-      key, core = key[0] + key[2], int(key[1])
-    else:
-      core = -1
-    results.append((key, core, value))
+  results += sniper_stats_compat.parse_stats(resultsdir, (k1, k2), ncores)
 
   ## power.py
   power = {}
-  if powerpy:
-    exec(powerpy.read())
+  powerfile = os.path.join(resultsdir, 'power.py')
+  if os.path.exists(powerfile):
+    exec(open(powerfile).read())
     for key, value in power.items():
       results.append(('power.%s' % key, -1, value))
 
   return results
-
-
-def parse_results_from_dir(dirname, partial = None):
-  files = []
-  for filename in ('sim.stats', 'sim.stats.base', 'sim.stats.delta', 'sim.out', 'sim.cfg', 'stdout.txt', 'graphite.out', 'power.py'):
-    fullname = os.path.join(dirname, filename)
-    if os.path.exists(fullname):
-      files.append(file(fullname))
-    else:
-      #sys.stderr.write('%s not available, some results may be missing\n' % filename)
-      files.append(None)
-  # if --partial was used with a filename, replace sim.stats with it
-  if partial and len(partial) > 2:
-    fullname = os.path.join(dirname, partial[2])
-    if os.path.exists(fullname):
-      files[0] = file(fullname)
-    else:
-      raise ValueError("Partial sim.stats replacement file named %s cannot be opened" % partial[2])
-  return parse_results_from_fileobjs(files, partial = partial)
 
 
 def get_results_file(filename, jobid = None, resultsdir = None, force = False):
