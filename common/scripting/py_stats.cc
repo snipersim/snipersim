@@ -24,9 +24,7 @@ getStatsValue(PyObject *self, PyObject *args)
       return NULL;
    }
 
-   // FIXME: For now, return everything as string. We may want to do some templating tricks
-   // to have StatsMetric<T> define a toPython() function that returns a suitable Python data type
-   return PyString_FromString(metric->recordMetric().c_str());
+   return PyInt_FromLong(metric->recordMetric());
 }
 
 
@@ -44,10 +42,7 @@ statsGetterGet(PyObject *self, PyObject *args, PyObject *kw)
 {
    statsGetterObject *getter = (statsGetterObject *)self;
    StatsMetricBase *metric = getter->metric;
-
-   // FIXME: For now, return everything as string. We may want to do some templating tricks
-   // to have StatsMetric<T> define a toPython() function that returns a suitable Python data type
-   return PyString_FromString(metric->recordMetric().c_str());
+   return PyInt_FromLong(metric->recordMetric());
 }
 
 static PyTypeObject statsGetterType = {

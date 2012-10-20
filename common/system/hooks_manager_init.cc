@@ -15,28 +15,29 @@
 void hook_print_core0_ipc(void*, subsecond_time_t _time)
 {
    SubsecondTime time(_time);
-   static ComponentTime *s_time = NULL;
-   static SubsecondTime l_time = SubsecondTime::Zero();
-   static UInt64 *s_instructions = NULL, l_instructions = 0;
+   static StatsMetricBase *s_time = NULL;
+   static UInt64 l_time = 0;
+   static StatsMetricBase *s_instructions = NULL;
+   static UInt64 l_instructions = 0;
    static const ComponentPeriod *clock = NULL;
 
    if (!s_time) {
-      s_time = Sim()->getStatsManager()->getMetric<ComponentTime>("performance_model", 0, "elapsed_time");
-      s_instructions = Sim()->getStatsManager()->getMetric<UInt64>("performance_model", 0, "instruction_count");
+      s_time = Sim()->getStatsManager()->getMetricObject("performance_model", 0, "elapsed_time");
+      s_instructions = Sim()->getStatsManager()->getMetricObject("performance_model", 0, "instruction_count");
       clock = Sim()->getDvfsManager()->getCoreDomain(0);
       LOG_ASSERT_ERROR(s_time && s_instructions && clock, "Could not find stats / dvfs domain for core 0");
    } else {
-      UInt64 d_instructions = *s_instructions - l_instructions;
-      SubsecondTime d_time = s_time->getElapsedTime() - l_time;
-      UInt64 d_cycles = SubsecondTime::divideRounded(d_time, *clock);
+      UInt64 d_instructions = s_instructions->recordMetric() - l_instructions;
+      UInt64 d_time = s_time->recordMetric() - l_time;
+      UInt64 d_cycles = SubsecondTime::divideRounded(SubsecondTime::FS(d_time), *clock);
       if (d_cycles) {
          FixedPoint ipc = FixedPoint(d_instructions) / d_cycles;
          printf("t = %" PRIu64 " ns, ipKc = %" PRId64 "\n", time.getNS(), FixedPoint::floor(ipc * 1000));
       }
    }
 
-   l_time = s_time->getElapsedTime();
-   l_instructions = *s_instructions;
+   l_time = s_time->recordMetric();
+   l_instructions = s_instructions->recordMetric();
 }
 
 

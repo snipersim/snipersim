@@ -10,6 +10,10 @@ class SniperStatsDbObject:
     (value,) = struct.unpack_from("i", self.data, self.offset)
     self.offset += 4
     return value
+  def read_uint64(self):
+    (value,) = struct.unpack_from("L", self.data, self.offset)
+    self.offset += 8
+    return value
   def read_string(self):
     size = self.read_int32()
     (value,) = struct.unpack_from("%ds" % size, self.data, self.offset)
@@ -45,7 +49,7 @@ class SniperStatsDb:
       while True:
         index = data.read_int32()
         if index == -12345: break
-        value = data.read_string()
+        value = data.read_uint64()
         items[index] = value
       values[metricid] = items
     return values
@@ -59,8 +63,8 @@ def parse_stats(resultsdir, (k1, k2), ncores):
   for metricid, list in v2.items():
     name = '%s.%s' % stats.names[metricid]
     for idx in range(min(0, min(list.keys() or [0])), max(ncores, max(list.keys() or [0])+1)):
-      val1 = long(v1.get(metricid, {}).get(idx, 0))
-      val2 = long(v2.get(metricid, {}).get(idx, 0))
+      val1 = v1.get(metricid, {}).get(idx, 0)
+      val2 = v2.get(metricid, {}).get(idx, 0)
       results.append((name, idx, val2 - val1))
       if name == 'performance_model.elapsed_time' and idx < ncores:
         results.append(('performance_model.elapsed_time_begin', idx, val1))

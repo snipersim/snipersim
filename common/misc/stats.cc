@@ -12,6 +12,10 @@
 #include <cstring>
 #include <db.h>
 
+template <> UInt64 makeStatsValue<UInt64>(UInt64 t) { return t; }
+template <> UInt64 makeStatsValue<SubsecondTime>(SubsecondTime t) { return t.getFS(); }
+template <> UInt64 makeStatsValue<ComponentTime>(ComponentTime t) { return t.getElapsedTime().getFS(); }
+
 StatsManager::StatsManager()
    : m_keyid(0)
    , m_prefixnum(0)
@@ -44,6 +48,10 @@ class StatStream : public std::stringstream
 {
    public:
       void writeInt32(SInt32 value)
+      {
+         this->write((const char*)&value, sizeof(value));
+      }
+      void writeUInt64(UInt64 value)
       {
          this->write((const char*)&value, sizeof(value));
       }
@@ -80,7 +88,7 @@ StatsManager::recordStats(String prefix)
             if (!it3->second->isDefault())
             {
                data.writeInt32(it3->second->index);
-               data.writeString(it3->second->recordMetric());
+               data.writeUInt64(it3->second->recordMetric());
             }
          }
          data.writeInt32(-12345); // Last

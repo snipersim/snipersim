@@ -15,9 +15,11 @@ class StatsMetricBase
       StatsMetricBase(String _objectName, UInt32 _index, String _metricName) :
          objectName(_objectName), index(_index), metricName(_metricName)
       {}
-      virtual String recordMetric() = 0;
+      virtual UInt64 recordMetric() = 0;
       virtual bool isDefault() { return false; } // Return true when value hasn't changed from its initialization value
 };
+
+template <class T> UInt64 makeStatsValue(T t);
 
 template <class T> class StatsMetric : public StatsMetricBase
 {
@@ -26,17 +28,17 @@ template <class T> class StatsMetric : public StatsMetricBase
       StatsMetric(String _objectName, UInt32 _index, String _metricName, T *_metric) :
          StatsMetricBase(_objectName, _index, _metricName), metric(_metric)
       {}
-      virtual String recordMetric()
+      virtual UInt64 recordMetric()
       {
-         return itostr(*metric);
+         return makeStatsValue<T>(*metric);
       }
       virtual bool isDefault()
       {
-         return recordMetric() == "0";
+         return recordMetric() == 0;
       }
 };
 
-typedef String (*StatsCallback)(String objectName, UInt32 index, String metricName, void *arg);
+typedef UInt64 (*StatsCallback)(String objectName, UInt32 index, String metricName, void *arg);
 class StatsMetricCallback : public StatsMetricBase
 {
    public:
@@ -45,7 +47,7 @@ class StatsMetricCallback : public StatsMetricBase
       StatsMetricCallback(String _objectName, UInt32 _index, String _metricName, StatsCallback _func, void *_arg) :
          StatsMetricBase(_objectName, _index, _metricName), func(_func), arg(_arg)
       {}
-      virtual String recordMetric()
+      virtual UInt64 recordMetric()
       {
          return func(objectName, index, metricName, arg);
       }
@@ -61,7 +63,6 @@ class StatsManager
       void recordStats(String prefix);
       void registerMetric(StatsMetricBase *metric);
       StatsMetricBase *getMetricObject(String objectName, UInt32 index, String metricName);
-      template <class T> T * getMetric(String objectName, UInt32 index, String metricName);
 
    private:
       UInt64 m_keyid;
@@ -82,19 +83,6 @@ template <class T> void registerStatsMetric(String objectName, UInt32 index, Str
 {
    Sim()->getStatsManager()->registerMetric(new StatsMetric<T>(objectName, index, metricName, metric));
 }
-
-template <class T> T *
-StatsManager::getMetric(String objectName, UInt32 index, String metricName)
-{
-   StatsMetricBase* metric = getMetricObject(objectName, index, metricName);
-   if (metric) {
-      StatsMetric<T>* m = dynamic_cast<StatsMetric<T>*>(metric);
-      LOG_ASSERT_ERROR(m, "Casting stats metric %s[%u].%s to invalid type", objectName.c_str(), index, metricName.c_str());
-      return m->metric;
-   } else
-      return NULL;
-}
-
 
 
 class StatHist {

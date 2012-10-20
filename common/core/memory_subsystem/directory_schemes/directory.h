@@ -19,7 +19,7 @@ class Directory
    private:
       DirectoryType m_directory_type;
       UInt32 m_num_entries;
-      UInt32 m_num_entries_allocated;
+      UInt64 m_num_entries_allocated;
       UInt32 m_max_hw_sharers;
       UInt32 m_max_num_sharers;
 
