@@ -174,7 +174,8 @@ StatsManager::db_write(std::string key, std::string data)
    _data.data = (void*)data.c_str();
    _data.size = data.size();
 
-   int res = m_db->put(m_db, NULL, &_key, &_data, DB_OVERWRITE_DUP);
+   m_db->del(m_db, NULL, &_key, NULL); // Remove previous verion, if any
+   int res = m_db->put(m_db, NULL, &_key, &_data, NULL);
    LOG_ASSERT_ERROR(res == 0, "Error when writing stats");
    m_db->sync(m_db, 0);
 }
