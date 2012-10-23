@@ -5,9 +5,11 @@ class SniperStatsBase:
     v1 = self.read_snapshot(k1)
     v2 = self.read_snapshot(k2)
     results = []
-    for metricid, list in v2.items():
+    for metricid in self.names.keys():
       name = '%s.%s' % self.names[metricid]
-      for idx in range(min(0, min(list.keys() or [0])), max(ncores, max(list.keys() or [0])+1)):
+      id_min = min(min(v2.get(metricid, {}).keys() or [0]), 0)
+      id_max = max(max(v2.get(metricid, {}).keys() or [0])+1, ncores)
+      for idx in range(id_min, id_max):
         val1 = v1.get(metricid, {}).get(idx, 0)
         val2 = v2.get(metricid, {}).get(idx, 0)
         results.append((name, idx, val2 - val1))
