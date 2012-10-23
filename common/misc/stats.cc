@@ -17,6 +17,15 @@ template <> UInt64 makeStatsValue<UInt64>(UInt64 t) { return t; }
 template <> UInt64 makeStatsValue<SubsecondTime>(SubsecondTime t) { return t.getFS(); }
 template <> UInt64 makeStatsValue<ComponentTime>(ComponentTime t) { return t.getElapsedTime().getFS(); }
 
+const char* db_create_stmts[] = {
+   "CREATE TABLE `names` (nameid INTEGER, objectname TEXT, metricname TEXT);",
+   "CREATE TABLE `prefixes` (prefixid INTEGER, prefixname TEXT);",
+   "CREATE TABLE `values` (prefixid INTEGER, nameid INTEGER, core INTEGER, value INTEGER);",
+};
+const char db_insert_stmt_name[] = "INSERT INTO `names` (nameid, objectname, metricname) VALUES (?, ?, ?);";
+const char db_insert_stmt_prefix[] = "INSERT INTO `prefixes` (prefixid, prefixname) VALUES (?, ?);";
+const char db_insert_stmt_value[] = "INSERT INTO `values` (prefixid, nameid, core, value) VALUES (?, ?, ?, ?);";
+
 StatsManager::StatsManager()
    : m_keyid(0)
    , m_prefixnum(0)
@@ -27,89 +36,59 @@ StatsManager::StatsManager()
 StatsManager::~StatsManager()
 {
    if (m_db)
-      m_db->close(m_db, 0);
+   {
+      sqlite3_finalize(m_stmt_insert_name);
+      sqlite3_finalize(m_stmt_insert_prefix);
+      sqlite3_finalize(m_stmt_insert_value);
+      sqlite3_close(m_db);
+   }
 }
 
 void
 StatsManager::init()
 {
-   String filename = Sim()->getConfig()->formatOutputFileName("sim.stats.db");
+   String filename = Sim()->getConfig()->formatOutputFileName("sim.stats.sqlite3");
    int ret;
 
-   ret = db_create(&m_db, NULL, 0);
-   LOG_ASSERT_ERROR(ret == 0, "Cannot create DB");
+   unlink(filename.c_str());
+   ret = sqlite3_open(filename.c_str(), &m_db);
+   LOG_ASSERT_ERROR(ret == SQLITE_OK, "Cannot create DB");
+   sqlite3_exec(m_db, "PRAGMA synchronous = OFF", NULL, NULL, NULL);
+   sqlite3_exec(m_db, "PRAGMA journal_mode = MEMORY", NULL, NULL, NULL);
 
-   ret = m_db->open(m_db, NULL, filename.c_str(), NULL, DB_HASH, DB_CREATE | DB_TRUNCATE, 0);
-   LOG_ASSERT_ERROR(ret == 0, "Cannot create DB");
+   for(unsigned int i = 0; i < sizeof(db_create_stmts)/sizeof(db_create_stmts[0]); ++i)
+   {
+      int res; char* err;
+      res = sqlite3_exec(m_db, db_create_stmts[i], NULL, NULL, &err);
+      LOG_ASSERT_ERROR(res == SQLITE_OK, "Error executing SQL statement \"%s\": %s", db_create_stmts[i], err);
+   }
 
-   recordStatsBase();
+   sqlite3_prepare_v2(m_db, db_insert_stmt_name, -1, &m_stmt_insert_name, NULL);
+   sqlite3_prepare_v2(m_db, db_insert_stmt_prefix, -1, &m_stmt_insert_prefix, NULL);
+   sqlite3_prepare_v2(m_db, db_insert_stmt_value, -1, &m_stmt_insert_value, NULL);
+
+   sqlite3_exec(m_db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+   for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
+   {
+      for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
+      {
+         recordMetricName(it2->second.first, it1->first, it2->first);
+      }
+   }
+   sqlite3_exec(m_db, "END TRANSACTION", NULL, NULL, NULL);
 }
 
-class StatStream
+void
+StatsManager::recordMetricName(UInt64 keyId, std::string objectName, std::string metricName)
 {
-   private:
-      std::stringstream value;
-      z_stream zstream;
-      static const size_t chunksize = 64*1024;
-      static const int level = 9;
-      char buffer[chunksize];
-
-      void write(const char* data, size_t size)
-      {
-         zstream.next_in = (Bytef*)data;
-         zstream.avail_in = size;
-         doCompress(false);
-      }
-      void doCompress(bool finish)
-      {
-         int ret;
-         do
-         {
-            zstream.next_out = (Bytef*)buffer;
-            zstream.avail_out = chunksize;
-            ret = deflate(&zstream, finish ? Z_FINISH : Z_NO_FLUSH);
-            assert(ret != Z_STREAM_ERROR);
-            value.write(buffer, chunksize - zstream.avail_out);
-         }
-         while(zstream.avail_out == 0);
-         assert(zstream.avail_in == 0);     /* all input will be used */
-         if (finish)
-            assert(ret == Z_STREAM_END);
-      }
-
-   public:
-      StatStream()
-      {
-         zstream.zalloc = Z_NULL;
-         zstream.zfree = Z_NULL;
-         zstream.opaque = Z_NULL;
-         int ret = deflateInit(&zstream, level);
-         assert(ret == Z_OK);
-      }
-      void writeInt32(SInt32 value)
-      {
-         this->write((const char*)&value, sizeof(value));
-      }
-      void writeUInt64(UInt64 value)
-      {
-         this->write((const char*)&value, sizeof(value));
-      }
-      void writeString(std::string value)
-      {
-         this->writeInt32(value.size());
-         this->write(value.c_str(), value.size());
-      }
-      void writeString(String value)
-      {
-         this->writeInt32(value.size());
-         this->write(value.c_str(), value.size());
-      }
-      std::string str()
-      {
-         doCompress(true);
-         return value.str();
-      }
-};
+   int res;
+   sqlite3_reset(m_stmt_insert_name);
+   sqlite3_bind_int(m_stmt_insert_name, 1, keyId);
+   sqlite3_bind_text(m_stmt_insert_name, 2, objectName.c_str(), -1, SQLITE_TRANSIENT);
+   sqlite3_bind_text(m_stmt_insert_name, 3, metricName.c_str(), -1, SQLITE_TRANSIENT);
+   res = sqlite3_step(m_stmt_insert_name);
+   LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement");
+}
 
 void
 StatsManager::recordStats(String prefix)
@@ -119,65 +98,37 @@ StatsManager::recordStats(String prefix)
    // Allow lazily-maintained statistics to be updated
    Sim()->getHooksManager()->callHooks(HookType::HOOK_PRE_STAT_WRITE, 0);
 
-   StatStream data;
-   data.writeInt32(m_prefixnum++);
+   int res;
+   int prefixid = ++m_prefixnum;
+
+   sqlite3_exec(m_db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+
+   sqlite3_reset(m_stmt_insert_prefix);
+   sqlite3_bind_int(m_stmt_insert_prefix, 1, prefixid);
+   sqlite3_bind_text(m_stmt_insert_prefix, 2, prefix.c_str(), -1, SQLITE_TRANSIENT);
+   res = sqlite3_step(m_stmt_insert_prefix);
+   LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement");
 
    for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
    {
       for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
       {
-         data.writeInt32(it2->second.first); // Metric ID
          for(StatsIndexList::iterator it3 = it2->second.second.begin(); it3 != it2->second.second.end(); ++it3)
          {
             if (!it3->second->isDefault())
             {
-               data.writeInt32(it3->second->index);
-               data.writeUInt64(it3->second->recordMetric());
+               sqlite3_reset(m_stmt_insert_value);
+               sqlite3_bind_int(m_stmt_insert_value, 1, prefixid);
+               sqlite3_bind_int(m_stmt_insert_value, 2, it2->second.first);   // Metric ID
+               sqlite3_bind_int(m_stmt_insert_value, 3, it3->second->index);  // Core ID
+               sqlite3_bind_int64(m_stmt_insert_value, 4, it3->second->recordMetric());
+               res = sqlite3_step(m_stmt_insert_value);
+               LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement");
             }
          }
-         data.writeInt32(-12345); // Last
       }
    }
-
-   db_write(std::string("d") + prefix.c_str(), data.str());
-}
-
-void
-StatsManager::recordStatsBase()
-{
-   StatStream s;
-
-   // Record all possible parameters without any actual statistics
-   for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
-   {
-      for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
-      {
-         s.writeInt32(it2->second.first);    // Metric ID
-         s.writeString(it1->first);          // Object name
-         s.writeString(it2->first);          // Metric name
-      }
-   }
-
-   db_write(std::string("k"), s.str());
-}
-
-void
-StatsManager::db_write(std::string key, std::string data)
-{
-   DBT _key, _data;
-   memset(&_key, 0, sizeof(DBT));
-   memset(&_data, 0, sizeof(DBT));
-
-   _key.data = (void*)key.c_str();
-   _key.size = key.size();
-
-   _data.data = (void*)data.c_str();
-   _data.size = data.size();
-
-   m_db->del(m_db, NULL, &_key, NULL); // Remove previous verion, if any
-   int res = m_db->put(m_db, NULL, &_key, &_data, NULL);
-   LOG_ASSERT_ERROR(res == 0, "Error when writing stats");
-   m_db->sync(m_db, 0);
+   sqlite3_exec(m_db, "END TRANSACTION", NULL, NULL, NULL);
 }
 
 void
@@ -191,7 +142,7 @@ StatsManager::registerMetric(StatsMetricBase *metric)
       if (m_db)
       {
          // Metrics name record was already written, but a new metric was registered afterwards: write a new record
-         recordStatsBase();
+         recordMetricName(m_keyid, _objectName, _metricName);
       }
    }
 }

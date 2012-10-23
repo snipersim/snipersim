@@ -8,7 +8,7 @@ DEPENDENCIES = [
   ('zlib1g-dev / zlib-devel', '/usr/include/zlib.h'),
   ('g++ / gcc-c++', '/usr/bin/g++'),
   ('wget', '/usr/bin/wget'),
-  ('libdb-dev / db4-devel', '/usr/include/db.h'),
+  ('libsqlite3-dev / sqlite-devel', '/usr/include/sqlite3.h'),
 ]
 
 if os.environ.get('BOOST_INCLUDE', ''):

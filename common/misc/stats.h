@@ -4,7 +4,7 @@
 #include "itostr.h"
 
 #include <strings.h>
-#include <db.h>
+#include <sqlite3.h>
 
 class StatsMetricBase
 {
@@ -67,7 +67,12 @@ class StatsManager
    private:
       UInt64 m_keyid;
       UInt64 m_prefixnum;
-      DB *m_db;
+
+      sqlite3 *m_db;
+      sqlite3_stmt *m_stmt_insert_name;
+      sqlite3_stmt *m_stmt_insert_prefix;
+      sqlite3_stmt *m_stmt_insert_value;
+
       // Use std::string here because String (__versa_string) does not provide a hash function for STL containers with gcc < 4.6
       typedef std::unordered_map<UInt64, StatsMetricBase *> StatsIndexList;
       typedef std::pair<UInt64, StatsIndexList> StatsMetricWithKey;
@@ -75,8 +80,7 @@ class StatsManager
       typedef std::unordered_map<std::string, StatsMetricList> StatsObjectList;
       StatsObjectList m_objects;
 
-      void recordStatsBase();
-      void db_write(std::string key, std::string data);
+      void recordMetricName(UInt64 keyId, std::string objectName, std::string metricName);
 };
 
 template <class T> void registerStatsMetric(String objectName, UInt32 index, String metricName, T *metric)
