@@ -18,7 +18,10 @@ class SniperStatsBase:
 
 
 def SniperStats(resultsdir):
-  if os.path.exists(os.path.join(resultsdir, 'sim.stats.db')):
+  if os.path.exists(os.path.join(resultsdir, 'sim.stats.sqlite3')):
+    import sniper_stats_sqlite
+    return sniper_stats_sqlite.SniperStatsSqlite(os.path.join(resultsdir, 'sim.stats.sqlite3'))
+  elif os.path.exists(os.path.join(resultsdir, 'sim.stats.db')):
     import sniper_stats_db
     return sniper_stats_db.SniperStatsDb(os.path.join(resultsdir, 'sim.stats.db'))
   else:
