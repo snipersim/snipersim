@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, getopt, sniper_lib
+import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
   print 'Usage:', sys.argv[0], '[-h (help)] [--list] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [<resultsdir (default: .)>]'
@@ -43,8 +43,8 @@ if do_list:
     print >> sys.stderr, "--list not supported with jobid"
     sys.exit(1)
   else:
-    import sniper_stats_db
-    stats = sniper_stats_db.SniperStatsDb(os.path.join(resultsdir, 'sim.stats.db'))
+    import sniper_stats
+    stats = sniper_stats.SniperStats(resultsdir)
     print ', '.join(stats.get_snapshots())
     sys.exit(0)
 
