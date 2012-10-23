@@ -63,9 +63,9 @@ StatsManager::init()
       LOG_ASSERT_ERROR(res == SQLITE_OK, "Error executing SQL statement \"%s\": %s", db_create_stmts[i], err);
    }
 
-   sqlite3_prepare_v2(m_db, db_insert_stmt_name, -1, &m_stmt_insert_name, NULL);
-   sqlite3_prepare_v2(m_db, db_insert_stmt_prefix, -1, &m_stmt_insert_prefix, NULL);
-   sqlite3_prepare_v2(m_db, db_insert_stmt_value, -1, &m_stmt_insert_value, NULL);
+   sqlite3_prepare(m_db, db_insert_stmt_name, -1, &m_stmt_insert_name, NULL);
+   sqlite3_prepare(m_db, db_insert_stmt_prefix, -1, &m_stmt_insert_prefix, NULL);
+   sqlite3_prepare(m_db, db_insert_stmt_value, -1, &m_stmt_insert_value, NULL);
 
    sqlite3_exec(m_db, "BEGIN TRANSACTION", NULL, NULL, NULL);
    for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
