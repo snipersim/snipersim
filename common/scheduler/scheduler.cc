@@ -2,6 +2,7 @@
 #include "scheduler_static.h"
 #include "scheduler_round_robin.h"
 #include "scheduler_rand.h"
+#include "scheduler_static_mask.h"
 #include "simulator.h"
 #include "config.hpp"
 #include "core_manager.h"
@@ -18,6 +19,8 @@ Scheduler* Scheduler::create(ThreadManager *thread_manager)
       return new SchedulerRoundRobin(thread_manager);
    else if (type == "rand")
       return new SchedulerRand(thread_manager);
+   else if (type == "static_mask")
+      return new SchedulerStaticMask(thread_manager);
    else
       LOG_PRINT_ERROR("Unknown scheduler type %s", type.c_str());
 }
