@@ -109,6 +109,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_dram_directory_home_lookup(dram_directory_home_lookup),
    m_perfect(cache_params.perfect),
    m_coherent(cache_params.coherent),
+   m_prefetch_on_prefetch_hit(mem_component == MemComponent::L2_CACHE ? Sim()->getCfg()->getBoolArray("perf_model/l2_cache/prefetcher/prefetch_on_prefetch_hit", core_id) : false),
    m_l1_mshr(cache_params.outstanding_misses > 0),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
@@ -584,7 +585,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
    bool have_write_lock_internal = true;
    #endif
 
-   bool cache_hit = operationPermissibleinCache(address, mem_op_type), sibling_hit = false;
+   bool cache_hit = operationPermissibleinCache(address, mem_op_type), sibling_hit = false, prefetch_hit = false;
    bool first_hit = cache_hit;
    HitWhere::where_t hit_where = HitWhere::MISS;
    SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
@@ -613,6 +614,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       {
          // This line was fetched by the prefetcher and has proven useful
          stats.hits_prefetch++;
+         prefetch_hit = true;
          cache_block_info->clearOption(CacheBlockInfo::PREFETCH);
       }
 
@@ -770,31 +772,24 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
    {
       ScopedLock sl(getLock());
 
-      // Misses replace the current prefetch list, hits append to it
-      if (cache_hit)
-      {
-         if (m_master->m_prefetch_list.empty())
-         {
-            // No next-level request made yet, let's do one right away
-            m_master->m_prefetch_next = t_issue;
-         }
-         // else: keep old value of m_prefetch_next, even if it is in the past because of fluffy time issues
-      }
-      else
+      // Always train the prefetcher
+      std::vector<IntPtr> prefetchList = m_master->m_prefetcher->getNextAddress(address);
+
+      // Only do prefetches on misses, or on hits to lines previously brought in by the prefetcher (if enabled)
+      if (!cache_hit || (m_prefetch_on_prefetch_hit && prefetch_hit))
       {
          m_master->m_prefetch_list.clear();
          // Just talked to the next-level cache, wait a bit before we start to prefetch
          m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
-      }
 
-      std::vector<IntPtr> prefetchList = m_master->m_prefetcher->getNextAddress(address);
-      for(std::vector<IntPtr>::iterator it = prefetchList.begin(); it != prefetchList.end(); ++it)
-      {
-         // Keep at most PREFETCH_MAX_QUEUE_LENGTH entries in the prefetch queue
-         if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
-            break;
-         if (!operationPermissibleinCache(*it, Core::READ))
-            m_master->m_prefetch_list.push_back(*it);
+         for(std::vector<IntPtr>::iterator it = prefetchList.begin(); it != prefetchList.end(); ++it)
+         {
+            // Keep at most PREFETCH_MAX_QUEUE_LENGTH entries in the prefetch queue
+            if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
+               break;
+            if (!operationPermissibleinCache(*it, Core::READ))
+               m_master->m_prefetch_list.push_back(*it);
+         }
       }
    }
 
