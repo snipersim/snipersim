@@ -10,7 +10,6 @@
 #include <unordered_set>
 #include <string>
 #include <cstring>
-#include <db.h>
 #include <zlib.h>
 
 template <> UInt64 makeStatsValue<UInt64>(UInt64 t) { return t; }
