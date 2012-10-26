@@ -144,7 +144,9 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
 
   # Build stack
   ncores = int(results['config']['general/total_cores'])
-  seconds = max(results['results']['performance_model.elapsed_time'])/1e15
+  time0_begin = max(results['results']['performance_model.elapsed_time_begin'])
+  time0_end = max(results['results']['performance_model.elapsed_time_end'])
+  seconds = (time0_end - time0_begin)/1e15
   results = power_stack(power_dat, powertype)
   # Plot stack
   plot_labels = []
