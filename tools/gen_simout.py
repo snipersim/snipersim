@@ -20,10 +20,21 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   def format_ns(digits):
     return lambda v: ('%%.%uf' % digits) % (v/1e6)
 
+  time0_begin = max(results['performance_model.elapsed_time_begin'])
+  time0_end = max(results['performance_model.elapsed_time_end'])
+  results['performance_model.elapsed_time_fixed'] = [
+    results['performance_model.elapsed_time_end'][c] - time0_begin
+    for c in range(ncores)
+  ]
+  results['performance_model.cycle_count_fixed'] = [
+    results['performance_model.elapsed_time_fixed'][c] * results['fs_to_cycles_cores'][c]
+    for c in range(ncores)
+  ]
+
   template = [
     ('  Instructions', 'performance_model.instruction_count', str),
-    ('  Cycles',       'performance_model.cycle_count',       format_int),
-    ('  Time',         'performance_model.elapsed_time',      format_ns(0)),
+    ('  Cycles',       'performance_model.cycle_count_fixed', format_int),
+    ('  Time',         'performance_model.elapsed_time_fixed', format_ns(0)),
   ]
 
   if 'branch_predictor.num-incorrect' in results:
