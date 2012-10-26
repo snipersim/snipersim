@@ -109,7 +109,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_dram_directory_home_lookup(dram_directory_home_lookup),
    m_perfect(cache_params.perfect),
    m_coherent(cache_params.coherent),
-   m_prefetch_on_prefetch_hit(mem_component == MemComponent::L2_CACHE ? Sim()->getCfg()->getBoolArray("perf_model/l2_cache/prefetcher/prefetch_on_prefetch_hit", core_id) : false),
+   m_prefetch_on_prefetch_hit(false),
    m_l1_mshr(cache_params.outstanding_misses > 0),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
@@ -148,6 +148,9 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       /* Shared, non-master cache, we're just a proxy */
       m_master = getMemoryManager()->getCacheCntlrAt(m_core_id_master, mem_component)->m_master;
    }
+
+   if (m_master->m_prefetcher)
+      m_prefetch_on_prefetch_hit = Sim()->getCfg()->getBoolArray("perf_model/l2_cache/prefetcher/prefetch_on_prefetch_hit", core_id);
 
    bzero(&stats, sizeof(stats));
 
