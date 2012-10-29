@@ -90,7 +90,7 @@ void findMyAppId();
 void openFile(THREADID threadid);
 void closeFile(THREADID threadid);
 
-VOID handleMagic(ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
+ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 {
    if (KnobUseROI.Value())
    {
@@ -132,12 +132,23 @@ VOID handleMagic(ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 
          PIN_RemoveInstrumentation();
       }
+      else
+      {
+         if (thread_data[threadid].running && thread_data[threadid].in_detail)
+         {
+            uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
+            return res;
+         }
+      }
 
       for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
       {
          thread_data[i].in_detail = any_thread_in_detail;
       }
    }
+
+   // Default: don't modify gax
+   return gax;
 }
 
 VOID countInsns(THREADID threadid, INT32 count)
@@ -331,7 +342,7 @@ VOID traceCallback(TRACE trace, void *v)
          // Simics-style magic instruction: xchg bx, bx
          if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
          {
-            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_REG_VALUE, REG_GAX, IARG_REG_VALUE, REG_GBX, IARG_REG_VALUE, REG_GCX, IARG_END);
+            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_RETURN_REGS, REG_GAX, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX, IARG_REG_VALUE, REG_GBX, IARG_REG_VALUE, REG_GCX, IARG_END);
          }
 
          if (ins == BBL_InsTail(bbl))

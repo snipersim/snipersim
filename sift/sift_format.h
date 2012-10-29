@@ -91,6 +91,8 @@ namespace Sift
       RecOtherSync,
       RecOtherSyncResponse,
       RecOtherLogical2Physical,
+      RecOtherMagicInstruction,
+      RecOtherMagicInstructionResponse,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

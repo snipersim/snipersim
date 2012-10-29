@@ -43,6 +43,7 @@ namespace Sift
       typedef uint64_t (*HandleSyscallFunc)(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size);
       typedef int32_t (*HandleNewThreadFunc)(void* arg);
       typedef int32_t (*HandleJoinFunc)(void* arg, int32_t thread);
+      typedef uint64_t (*HandleMagicFunc)(void* arg, uint64_t a, uint64_t b, uint64_t c);
 
       private:
          vistream *input;
@@ -55,6 +56,8 @@ namespace Sift
          void *handleNewThreadArg;
          HandleJoinFunc handleJoinFunc;
          void *handleJoinArg;
+         HandleMagicFunc handleMagicFunc;
+         void *handleMagicArg;
          uint64_t filesize;
          std::ifstream *inputstream;
 
@@ -88,6 +91,7 @@ namespace Sift
          void setHandleSyscallFunc(HandleSyscallFunc func, void* arg = NULL) { assert(func); handleSyscallFunc = func; handleSyscallArg = arg; }
          void setHandleNewThreadFunc(HandleNewThreadFunc func, void* arg = NULL) { assert(func); handleNewThreadFunc = func; handleNewThreadArg = arg; }
          void setHandleJoinFunc(HandleJoinFunc func, void* arg = NULL) { assert(func); handleJoinFunc = func; handleJoinArg = arg; }
+         void setHandleMagicFunc(HandleMagicFunc func, void* arg = NULL) { assert(func); handleMagicFunc = func; handleMagicArg = arg; }
          uint64_t getPosition();
          uint64_t getLength();
          bool getTraceHasPhysicalAddresses() const { return m_trace_has_pa; }

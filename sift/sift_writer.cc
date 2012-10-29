@@ -518,6 +518,36 @@ void Sift::Writer::Sync()
    assert(respRec.Other.size == 0);
 }
 
+uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
+{
+   // send magic
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherMagicInstruction;
+   rec.Other.size = 3 * sizeof(uint64_t);
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<char*>(&a), sizeof(uint64_t));
+   output->write(reinterpret_cast<char*>(&b), sizeof(uint64_t));
+   output->write(reinterpret_cast<char*>(&c), sizeof(uint64_t));
+   output->flush();
+
+   if (!response)
+   {
+     assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   // wait for reply
+   Record respRec;
+   response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+   assert(respRec.Other.zero == 0);
+   assert(respRec.Other.type == RecOtherMagicInstructionResponse);
+   assert(respRec.Other.size == sizeof(uint64_t));
+   uint64_t result;
+   response->read(reinterpret_cast<char*>(&result), sizeof(uint64_t));
+   return result;
+}
+
 uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
 {
    // Ignore vsyscall range

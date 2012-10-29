@@ -29,6 +29,8 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , handleNewThreadArg(NULL)
    , handleJoinFunc(NULL)
    , handleJoinArg(NULL)
+   , handleMagicFunc(NULL)
+   , handleMagicArg(NULL)
    , filesize(0)
    , last_address(0)
    , icache()
@@ -287,6 +289,25 @@ bool Sift::Reader::Read(Instruction &inst)
             {
                assert(rec.Other.size == 0);
                sendSimpleResponse(RecOtherSyncResponse, NULL, 0);
+               break;
+            }
+            case RecOtherMagicInstruction:
+            {
+               assert(rec.Other.size == 3 * sizeof(uint64_t));
+               uint64_t a, b, c;
+               input->read(reinterpret_cast<char*>(&a), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&b), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&c), sizeof(uint64_t));
+               uint64_t result;
+               if (handleMagicFunc)
+               {
+                  result = handleMagicFunc(handleMagicArg, a, b, c);
+               }
+               else
+               {
+                  result = a; // Do not modify GAX register
+               }
+               sendSimpleResponse(RecOtherMagicInstructionResponse, &result, sizeof(result));
                break;
             }
             default:

@@ -9,7 +9,7 @@
 
 static UInt64 handleMagic(thread_id_t thread_id, UInt64 cmd, UInt64 arg0 = 0, UInt64 arg1 = 0)
 {
-   Thread *thread = thread_id == INVALID_THREAD_ID ? NULL : Sim()->getThreadManager()->getCurrentThread();
+   Thread *thread = (thread_id == INVALID_THREAD_ID) ? NULL : Sim()->getThreadManager()->getThreadFromID(thread_id);
    Core *core = thread == NULL ? NULL : thread->getCore();
    return Sim()->getMagicServer()->Magic(thread_id, core ? core->getId() : INVALID_CORE_ID, cmd, arg0, arg1);
 }

@@ -46,6 +46,7 @@ namespace Sift
          int32_t NewThread();
          int32_t Join(int32_t);
          void Sync();
+         uint64_t Magic(uint64_t a, uint64_t b, uint64_t c);
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }
    };
 };

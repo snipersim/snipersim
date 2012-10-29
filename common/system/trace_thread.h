@@ -53,10 +53,13 @@ class TraceThread : public Runnable
       { return ((TraceThread*)arg)->handleNewThreadFunc(); }
       static int32_t __handleJoinFunc(void* arg, int32_t join_thread_id)
       { return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
+      static uint64_t __handleMagicFunc(void* arg, uint64_t a, uint64_t b, uint64_t c)
+      { return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
       uint64_t handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size);
       int32_t handleNewThreadFunc();
       int32_t handleJoinFunc(int32_t thread);
+      uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c);
       BasicBlock* decode(Sift::Instruction &inst);
 
    public:

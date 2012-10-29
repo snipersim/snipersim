@@ -12,6 +12,7 @@
 #include "config.hpp"
 #include "syscall_model.h"
 #include "core.h"
+#include "magic_client.h"
 
 #include <sys/syscall.h>
 
@@ -33,6 +34,7 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, 
    m_trace.setHandleSyscallFunc(TraceThread::__handleSyscallFunc, this);
    m_trace.setHandleNewThreadFunc(TraceThread::__handleNewThreadFunc, this);
    m_trace.setHandleJoinFunc(TraceThread::__handleJoinFunc, this);
+   m_trace.setHandleMagicFunc(TraceThread::__handleMagicFunc, this);
 
    String syntax = Sim()->getCfg()->getString("general/syntax");
    if (syntax == "intel")
@@ -128,6 +130,11 @@ int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)
 {
    Sim()->getThreadManager()->joinThread(m_thread->getId(), join_thread_id);
    return 0;
+}
+
+uint64_t TraceThread::handleMagicFunc(uint64_t a, uint64_t b, uint64_t c)
+{
+   return handleMagicInstruction(m_thread->getId(), a, b, c);
 }
 
 BasicBlock* TraceThread::decode(Sift::Instruction &inst)
