@@ -520,6 +520,10 @@ void Sift::Writer::Sync()
 
 uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
 {
+   // Ignore vsyscall range
+   if (vp >= 0xffffffffff600 && vp < 0xfffffffffffff)
+      return vp;
+
    if (fd_va == -1)
    {
       fd_va = open("/proc/self/pagemap", O_RDONLY);
