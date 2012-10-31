@@ -453,10 +453,9 @@ usage = None
 def log_memory(pid):
   def do_log_memory():
     global memusage
-    pids = set([pid])
     while not stopping:
       # find children of all known pid's
-      pids.update(map(int, commands.getoutput('ps --ppid %s -o pid' % ','.join(map(str, pids))).split('\n')[1:]))
+      pids = sniper_lib.find_children(pid)
       # sum memory usage of all children
       _memusage = 0
       for _pid in pids:
