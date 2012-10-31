@@ -20,6 +20,8 @@ const char* db_create_stmts[] = {
    "CREATE TABLE `names` (nameid INTEGER, objectname TEXT, metricname TEXT);",
    "CREATE TABLE `prefixes` (prefixid INTEGER, prefixname TEXT);",
    "CREATE TABLE `values` (prefixid INTEGER, nameid INTEGER, core INTEGER, value INTEGER);",
+   "CREATE INDEX `idx_prefix_name` ON `prefixes`(`prefixname`);",
+   "CREATE INDEX `idx_value_prefix` ON `values`(`prefixid`);",
 };
 const char db_insert_stmt_name[] = "INSERT INTO `names` (nameid, objectname, metricname) VALUES (?, ?, ?);";
 const char db_insert_stmt_prefix[] = "INSERT INTO `prefixes` (prefixid, prefixname) VALUES (?, ?);";
