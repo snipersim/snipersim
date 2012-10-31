@@ -80,6 +80,9 @@ class StatsManager
       typedef std::unordered_map<std::string, StatsMetricList> StatsObjectList;
       StatsObjectList m_objects;
 
+      static int __busy_handler(void* self, int count) { return ((StatsManager*)self)->busy_handler(count); }
+      int busy_handler(int count);
+
       void recordMetricName(UInt64 keyId, std::string objectName, std::string metricName);
 };
 

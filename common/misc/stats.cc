@@ -56,6 +56,7 @@ StatsManager::init()
    LOG_ASSERT_ERROR(ret == SQLITE_OK, "Cannot create DB");
    sqlite3_exec(m_db, "PRAGMA synchronous = OFF", NULL, NULL, NULL);
    sqlite3_exec(m_db, "PRAGMA journal_mode = MEMORY", NULL, NULL, NULL);
+   sqlite3_busy_handler(m_db, __busy_handler, this);
 
    for(unsigned int i = 0; i < sizeof(db_create_stmts)/sizeof(db_create_stmts[0]); ++i)
    {
@@ -77,6 +78,18 @@ StatsManager::init()
       }
    }
    sqlite3_exec(m_db, "END TRANSACTION", NULL, NULL, NULL);
+}
+
+int
+StatsManager::busy_handler(int count)
+{
+   // With a usleep below of 10 ms, at most one warning every 10s
+   if (count % 1000 == 999)
+   {
+      LOG_PRINT_WARNING("Difficulty locking sim.stats.sqlite3, retrying...");
+   }
+   usleep(10000);
+   return 1;
 }
 
 void
@@ -102,13 +115,14 @@ StatsManager::recordStats(String prefix)
    int res;
    int prefixid = ++m_prefixnum;
 
-   sqlite3_exec(m_db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+   res = sqlite3_exec(m_db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+   LOG_ASSERT_ERROR(res == SQLITE_OK, "Error executing SQL statement: %s", sqlite3_errmsg(m_db));
 
    sqlite3_reset(m_stmt_insert_prefix);
    sqlite3_bind_int(m_stmt_insert_prefix, 1, prefixid);
    sqlite3_bind_text(m_stmt_insert_prefix, 2, prefix.c_str(), -1, SQLITE_TRANSIENT);
    res = sqlite3_step(m_stmt_insert_prefix);
-   LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement");
+   LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement: %s", sqlite3_errmsg(m_db));
 
    for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
    {
@@ -124,12 +138,13 @@ StatsManager::recordStats(String prefix)
                sqlite3_bind_int(m_stmt_insert_value, 3, it3->second->index);  // Core ID
                sqlite3_bind_int64(m_stmt_insert_value, 4, it3->second->recordMetric());
                res = sqlite3_step(m_stmt_insert_value);
-               LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement");
+               LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement: %s", sqlite3_errmsg(m_db));
             }
          }
       }
    }
-   sqlite3_exec(m_db, "END TRANSACTION", NULL, NULL, NULL);
+   res = sqlite3_exec(m_db, "END TRANSACTION", NULL, NULL, NULL);
+   LOG_ASSERT_ERROR(res == SQLITE_OK, "Error executing SQL statement: %s", sqlite3_errmsg(m_db));
 }
 
 void
