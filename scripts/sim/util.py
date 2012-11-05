@@ -141,15 +141,23 @@ class Every:
 
 
 class EveryIns:
-  def __init__(self, interval, callback):
+  def __init__(self, interval, callback, roi_only = True):
     self.interval = interval
     self.callback = callback
+    self.roi_only = roi_only
     self.icount_next = interval
     self.icount_last = 0
+    self.in_roi = False
     register(self)
 
+  def hook_roi_begin(self):
+    self.in_roi = True
+
+  def hook_roi_end(self):
+    self.in_roi = False
+
   def hook_periodic_ins(self, icount):
-    if icount >= self.icount_next:
+    if (not self.roi_only or self.in_roi) and icount >= self.icount_next:
       self.callback(icount, icount - self.icount_last)
 
       self.icount_next += self.interval
