@@ -244,7 +244,8 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       return res
     def findall(*keys): return tuple(_findall(all_items, keys))
     all_items = [
-      [ 'compute', 0, findall('issue', 'depend', 'branch', 'itlb', 'dtlb', 'ifetch', 'serial') ],
+      [ 'compute', 0, findall('dispatch_width', 'base', 'issue', 'depend', 'contend',
+                              'branch', 'itlb', 'dtlb', 'ifetch', 'serial', 'dvfs-transition') ],
       [ 'communicate', 0, findall('mem') ],
       [ 'synchronize', 0, findall('sync', 'recv', 'imbalance') ],
     ]
