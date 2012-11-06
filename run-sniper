@@ -23,8 +23,8 @@ def usage():
 standalone = False
 ncores = 1
 outputdir = '.'
+configfiles = []
 graphiteoptions = []
-config_file_used = False
 roi_only = False
 roi_script = False
 use_perf = False
@@ -69,7 +69,7 @@ def add_config_file(filename, extension = '.cfg'):
   for line in file(configfile):
     if line.startswith('#include'):
       config_files += add_config_file(line.split()[1], extension)
-  config_files += ['--config=' + configfile]
+  config_files.append(configfile)
   return config_files
 
 def make_hetero_config(confignames, objname='core', extension='.cfg'):
@@ -130,8 +130,7 @@ for o, a in opts:
         obj = 'core'
       heteroconfig = make_hetero_config(cfg.split(','), objname=obj)
     else:
-      config_file_used = True
-      graphiteoptions += add_config_file(a)
+      configfiles.extend(add_config_file(a))
   if o == '-g':
     if not a.startswith('-'):
       a = '--'+a
@@ -223,16 +222,18 @@ if heteroconfig:
   hcfgfile = os.path.join(outputdir,'sim.hetero.cfg')
   with open(hcfgfile, 'w') as fp:
     fp.write(heteroconfig)
-  graphiteoptions.append('--config=%s' % hcfgfile)
+  configfiles.append(hcfgfile)
+
+if not configfiles:
+  # No config file(s) specified: prepend default Xeon X5550 Gainestown
+  configfiles = add_config_file('gainestown')
+# Prepend config files to options, so -g options are always later on the command line and override config files
+graphiteoptions = [ '--config=%s' % cfgfile for cfgfile in configfiles ] + graphiteoptions
 
 if roi_only:
   graphiteoptions.append('-g --general/magic=true')
 if roi_script:
   graphiteoptions.append('-g --general/roi_script=true')
-
-if not config_file_used:
-  # No config file(s) specified: prepend default Xeon X5550 Gainestown
-  graphiteoptions = add_config_file('gainestown') + graphiteoptions
 
 if scripts:
   graphiteoptions.append('-g --hooks/numscripts=%u' % len(scripts))
