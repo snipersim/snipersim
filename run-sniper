@@ -391,33 +391,34 @@ env['GRAPHITE_ROOT'] = HOME
 
 
 pin_version = 'unknown'
-try:
-  pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE, env = env).communicate()[0]
-  pin_version = int([ line.split()[3] for line in pin_version.split('\n') if line.startswith('@CHARM-VERSION') ][0])
-  assert 10000 < pin_version < 1000000
-except Exception, e:
-  print >> sys.stderr, 'Cannot get Pin version'
-  print >> sys.stderr
-  print >> sys.stderr, e
-  print >> sys.stderr, pin_version
-  sys.exit(-1)
+pinoptions = ''
+if not standalone:
+  try:
+    pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE, env = env).communicate()[0]
+    pin_version = int([ line.split()[3] for line in pin_version.split('\n') if line.startswith('@CHARM-VERSION') ][0])
+    assert 10000 < pin_version < 1000000
+  except Exception, e:
+    print >> sys.stderr, 'Cannot get Pin version'
+    print >> sys.stderr
+    print >> sys.stderr, e
+    print >> sys.stderr, pin_version
+    sys.exit(-1)
 
+  pinoptions = '-mt -injection child'
+  if pin_version >= 49303:
+    pinoptions += ' -xyzzy -enable_vsm 0' # TODO: Enable vsm once OpenMP thread exit is solved (Redmine #148)
 
-pinoptions = '-mt -injection child'
-if pin_version >= 49303:
-  pinoptions += ' -xyzzy -enable_vsm 0' # TODO: Enable vsm once OpenMP thread exit is solved (Redmine #148)
+  if pin_stats:
+    pinoptions += ' -xyzzy -profile -statistic -log_inline'
 
-if pin_stats:
-  pinoptions += ' -xyzzy -profile -statistic -log_inline'
+  if use_gdb:
+    pinoptions += ' -pause_tool 1'
 
-if use_gdb:
-  pinoptions += ' -pause_tool 1'
-
-if use_appdebug:
-  if appdebug_nowait:
-    pinoptions += ' -appdebug_enable -appdebug_silent'
-  else:
-    pinoptions += ' -appdebug'
+  if use_appdebug:
+    if appdebug_nowait:
+      pinoptions += ' -appdebug_enable -appdebug_silent'
+    else:
+      pinoptions += ' -appdebug'
 
 
 optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(graphiteoptions)s' % locals()
