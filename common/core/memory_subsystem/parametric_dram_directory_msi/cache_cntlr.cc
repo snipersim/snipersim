@@ -734,18 +734,18 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          {
             // Direct DRAM access
             cache_hit = true;
-            hit_where = HitWhere::DRAM_LOCAL;
             if (cache_block_info)
             {
                // We already have the line: it must have been SHARED and this is a write (else there wouldn't have been a miss)
                // Upgrade silently
                cache_block_info->setCState(CacheState::MODIFIED);
+               hit_where = HitWhere::where_t(m_mem_component);
             }
             else
             {
                Byte data_buf[getCacheBlockSize()];
                // Do the DRAM access and increment local time
-               accessDRAM(Core::READ, address, isPrefetch != Prefetch::NONE, data_buf);
+               hit_where = accessDRAM(Core::READ, address, isPrefetch != Prefetch::NONE, data_buf);
                // Insert the line. Be sure to use SHARED/MODIFIED as appropriate (upgrades are free anyway), we don't want to have to write back clean lines
                insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, data_buf, ShmemPerfModel::_USER_THREAD);
                if (isPrefetch != Prefetch::NONE)
@@ -837,23 +837,24 @@ MYLOG("here in state %c", CStateString(getCacheState(address)));
    }
 }
 
-void
+HitWhere::where_t
 CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf)
 {
    ScopedLock sl(getLock()); // DRAM is shared and owned by m_master
 
    SubsecondTime t_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
    SubsecondTime dram_latency;
+   HitWhere::where_t hit_where;
 
    switch (mem_op_type)
    {
       case Core::READ:
-         dram_latency = m_master->m_dram_cntlr->getDataFromDram(address, m_core_id_master, data_buf, t_issue);
+         boost::tie(dram_latency, hit_where) = m_master->m_dram_cntlr->getDataFromDram(address, m_core_id_master, data_buf, t_issue);
          break;
 
       case Core::READ_EX:
       case Core::WRITE:
-         dram_latency = m_master->m_dram_cntlr->putDataToDram(address, m_core_id_master, data_buf, t_issue);
+         boost::tie(dram_latency, hit_where) = m_master->m_dram_cntlr->putDataToDram(address, m_core_id_master, data_buf, t_issue);
          break;
 
       default:
@@ -862,6 +863,8 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
 
    // Increment local time with access latency
    getMemoryManager()->incrElapsedTime(dram_latency, ShmemPerfModel::_USER_THREAD);
+
+   return hit_where;
 }
 
 void

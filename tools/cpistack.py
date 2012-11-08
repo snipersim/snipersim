@@ -172,6 +172,7 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
           'DataCacheL1I', 'InstructionCacheL1I', 'InstructionCacheL1', 'InstructionCacheL1_S',
           'InstructionCacheL2', 'InstructionCacheL2_S', 'InstructionCacheL3', 'InstructionCacheL3_S',
           'InstructionCacheL4',  'InstructionCacheL4_S', 'InstructionCachemiss', 'InstructionCache????',
+          'InstructionCachedram-cache', 'InstructionCachedram',
           'InstructionCachedram-remote', 'InstructionCachecache-remote', 'InstructionCachedram-local',
           'InstructionCachepredicate-false', 'InstructionCacheunknown') ],
     [ 'smt',            .01,   'SMT' ],
@@ -184,7 +185,8 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       [ 'l3',       .01, ('DataCacheL3', 'DataCacheL3_S') ],
       [ 'l4',       .01, ('DataCacheL4', 'DataCacheL4_S') ],
       [ 'remote',   .01, 'DataCachecache-remote' ],
-      [ 'dram',     .01, ('DataCachedram-local', 'DataCachedram-remote', 'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
+      [ 'dram-cache', .01, 'DataCachedram-cache' ],
+      [ 'dram',     .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote', 'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
     ] ],
   ]
   else:

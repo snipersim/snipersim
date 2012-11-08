@@ -20,6 +20,7 @@ class MemComponent
          */
          LAST_LEVEL_CACHE = 20,
          DRAM_DIR,
+         DRAM_CACHE,
          DRAM,
          MAX_MEM_COMPONENT = DRAM,
          NUM_MEM_COMPONENTS = MAX_MEM_COMPONENT - MIN_MEM_COMPONENT + 1

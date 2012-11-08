@@ -450,9 +450,14 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
       // I have to get the data from DRAM
       Byte data_buf[getCacheBlockSize()];
       SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+      SubsecondTime dram_latency;
+      HitWhere::where_t hit_where;
 
-      SubsecondTime dram_latency = m_dram_cntlr->getDataFromDram(address, receiver, data_buf, now);
+      boost::tie(dram_latency, hit_where) = m_dram_cntlr->getDataFromDram(address, receiver, data_buf, now);
       getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);
+
+      if (hit_where == HitWhere::DRAM)
+         hit_where = (receiver == m_core_id) ? HitWhere::DRAM_LOCAL : HitWhere::DRAM_REMOTE;
 
       getMemoryManager()->sendMsg(reply_msg_type,
             MemComponent::DRAM_DIR, MemComponent::L2_CACHE,
@@ -460,7 +465,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
             receiver /* receiver */,
             address,
             data_buf, getCacheBlockSize(),
-            receiver == m_core_id ? HitWhere::DRAM_LOCAL : HitWhere::DRAM_REMOTE,
+            hit_where,
             ShmemPerfModel::_SIM_THREAD);
    }
 }
@@ -606,7 +611,7 @@ void
 DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    // Write data to Dram
-   __attribute__ ((unused)) SubsecondTime dram_latency = m_dram_cntlr->putDataToDram(address, requester, data_buf, now);
+   m_dram_cntlr->putDataToDram(address, requester, data_buf, now);
    // DRAM latency is ignored on write
 }
 

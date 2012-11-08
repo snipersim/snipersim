@@ -12,8 +12,8 @@ class DramCache : public DramCntlrInterface
       DramCache(core_id_t core_id, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr);
       ~DramCache();
 
-      virtual SubsecondTime getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
-      virtual SubsecondTime putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
+      virtual boost::tuple<SubsecondTime, HitWhere::where_t> getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
+      virtual boost::tuple<SubsecondTime, HitWhere::where_t> putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
 
    private:
       UInt32 m_cache_block_size;

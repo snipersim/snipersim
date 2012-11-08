@@ -46,7 +46,7 @@ DramCache::~DramCache()
       delete m_queue_model;
 }
 
-SubsecondTime
+boost::tuple<SubsecondTime, HitWhere::where_t>
 DramCache::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    std::pair<bool, SubsecondTime> res = doAccess(Cache::LOAD, address, requester, data_buf, now);
@@ -55,10 +55,10 @@ DramCache::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
       ++m_read_misses;
    ++m_reads;
 
-   return res.second;
+   return boost::tuple<SubsecondTime, HitWhere::where_t>(res.second, res.first ? HitWhere::DRAM_CACHE : HitWhere::DRAM);
 }
 
-SubsecondTime
+boost::tuple<SubsecondTime, HitWhere::where_t>
 DramCache::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    std::pair<bool, SubsecondTime> res = doAccess(Cache::STORE, address, requester, data_buf, now);
@@ -67,7 +67,7 @@ DramCache::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
       ++m_write_misses;
    ++m_writes;
 
-   return res.second;
+   return boost::tuple<SubsecondTime, HitWhere::where_t>(res.second, res.first ? HitWhere::DRAM_CACHE : HitWhere::DRAM);
 }
 
 std::pair<bool, SubsecondTime>
@@ -87,7 +87,9 @@ DramCache::doAccess(Cache::access_t access, IntPtr address, core_id_t requester,
       if (access == Cache::LOAD)
       {
          // For LOADs, get data from DRAM
-         SubsecondTime dram_latency = m_dram_cntlr->getDataFromDram(address, requester, data_buf, now);
+         SubsecondTime dram_latency;
+         HitWhere::where_t hit_where;
+         boost::tie(dram_latency, hit_where) = m_dram_cntlr->getDataFromDram(address, requester, data_buf, now);
          latency += dram_latency;
       }
          // For STOREs, we only do complete cache lines so we don't need to read from DRAM

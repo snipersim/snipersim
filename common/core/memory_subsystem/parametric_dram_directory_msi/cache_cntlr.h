@@ -268,7 +268,7 @@ namespace ParametricDramDirectoryMSI
          HitWhere::where_t processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock);
 
          // Process Request from L1 Cache
-         void accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf);
+         HitWhere::where_t accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf);
          void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, SubsecondTime t_issue);
          void processExReqToDirectory(IntPtr address);
          void processShReqToDirectory(IntPtr address);
