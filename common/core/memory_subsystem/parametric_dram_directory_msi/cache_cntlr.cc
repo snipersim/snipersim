@@ -123,6 +123,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_shmem_perf_model(shmem_perf_model)
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
+   Sim()->getConfig()->logTopology(name, core_id, m_core_id_master);
 
    LOG_ASSERT_ERROR(!Sim()->getCfg()->hasKey("perf_model/perfect_llc"),
                     "perf_model/perfect_llc is deprecated, use perf_model/lX_cache/perfect instead");

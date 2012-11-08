@@ -172,10 +172,12 @@ MemoryManager::MemoryManager(Core* core,
             dram_queue_model_enabled,
             dram_queue_model_type,
             getCacheBlockSize());
+      Sim()->getConfig()->logTopology("dram-cntlr", core->getId(), core->getId());
 
       if (Sim()->getCfg()->getBoolArray("perf_model/dram/cache/enabled", core->getId()))
       {
          m_dram_cache = new DramCache(core->getId(), getCacheBlockSize(), m_dram_cntlr);
+         Sim()->getConfig()->logTopology("dram-cache", core->getId(), core->getId());
       }
 
       m_dram_directory_cntlr = new PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr(getCore()->getId(),
@@ -189,6 +191,7 @@ MemoryManager::MemoryManager(Core* core,
             dram_directory_type_str,
             dram_directory_cache_access_time,
             getShmemPerfModel());
+      Sim()->getConfig()->logTopology("dram-dir", core->getId(), core->getId());
    }
 
    m_dram_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
