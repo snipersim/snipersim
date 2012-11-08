@@ -16,6 +16,7 @@
 // Forward Decls
 class Core;
 class BranchPredictor;
+class FastforwardPerformanceModel;
 
 class PerformanceModel
 {
@@ -48,6 +49,9 @@ public:
    BranchPredictor *getBranchPredictor() { return m_bp; }
    BranchPredictor const* getConstBranchPredictor() const { return m_bp; }
 
+   FastforwardPerformanceModel *getFastforwardPerformanceModel() { return m_fastforward_model; }
+   FastforwardPerformanceModel const* getFastforwardPerformanceModel() const { return m_fastforward_model; }
+
    virtual void barrierEnter() { }
    virtual void barrierExit() { }
 
@@ -56,8 +60,17 @@ public:
    bool isEnabled() { return m_enabled; }
    void setHold(bool hold) { m_hold = hold; }
 
+   bool isFastForward() { return m_fastforward; }
+   void setFastForward(bool fastforward) {
+      m_fastforward = fastforward;
+      // Fastforward performance model has controlled time for a while, now let the detailed model know time has advanced
+      if (fastforward == false)
+         notifyElapsedTimeUpdate();
+   }
+
 protected:
    friend class SpawnInstruction;
+   friend class FastforwardPerformanceModel;
 
    void setElapsedTime(SubsecondTime time);
    void incrementElapsedTime(SubsecondTime time) { m_elapsed_time.addLatency(time); }
@@ -87,6 +100,9 @@ private:
    Core* m_core;
 
    bool m_enabled;
+
+   bool m_fastforward;
+   FastforwardPerformanceModel* m_fastforward_model;
 
    bool m_hold;
 

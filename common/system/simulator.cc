@@ -8,14 +8,15 @@
 #include "magic_server.h"
 #include "sim_thread_manager.h"
 #include "clock_skew_minimization_object.h"
+#include "fastforward_performance_manager.h"
 #include "fxsupport.h"
 #include "timer.h"
 #include "stats.h"
 #include "pthread_emu.h"
 #include "trace_manager.h"
 #include "dvfs_manager.h"
-#include "fault_injection.h"
 #include "hooks_manager.h"
+#include "fault_injection.h"
 #include "instruction.h"
 #include "config.hpp"
 #include "magic_client.h"
@@ -63,6 +64,7 @@ Simulator::Simulator()
    , m_thread_manager(NULL)
    , m_sim_thread_manager(NULL)
    , m_clock_skew_minimization_manager(NULL)
+   , m_fastforward_performance_manager(NULL)
    , m_trace_manager(NULL)
    , m_dvfs_manager(NULL)
    , m_hooks_manager(NULL)
@@ -90,6 +92,7 @@ void Simulator::start()
    m_sim_thread_manager = new SimThreadManager();
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();
    m_clock_skew_minimization_server = ClockSkewMinimizationServer::create();
+   m_fastforward_performance_manager = FastForwardPerformanceManager::create();
 
    if (Sim()->getCfg()->getBool("traceinput/enabled"))
       m_trace_manager = new TraceManager();
@@ -124,6 +127,10 @@ void Simulator::start()
    {
       // roi-begin
       enablePerformanceGlobal();
+   }
+   else if (Sim()->getFastForwardPerformanceManager())
+   {
+      Sim()->getFastForwardPerformanceManager()->enable();
    }
 }
 
@@ -201,6 +208,8 @@ void Simulator::stopTimer()
 void Simulator::enablePerformanceModels()
 {
    Sim()->startTimer();
+   if (Sim()->getFastForwardPerformanceManager())
+      Sim()->getFastForwardPerformanceManager()->disable();
    for (UInt32 i = 0; i < Sim()->getConfig()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->enablePerformanceModels();
 }
@@ -210,6 +219,8 @@ void Simulator::disablePerformanceModels()
    Sim()->stopTimer();
    for (UInt32 i = 0; i < Sim()->getConfig()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->disablePerformanceModels();
+   if (Sim()->getFastForwardPerformanceManager())
+      Sim()->getFastForwardPerformanceManager()->enable();
 }
 
 void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode)
@@ -217,7 +228,10 @@ void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode)
    if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
       InstMode::SetInstrumentationMode(new_mode);
 
-   getClockSkewMinimizationServer()->setDisable(new_mode != InstMode::DETAILED);
+   // If there is a fast-forward performance model, it needs to take care of barrier synchronization.
+   // Else, disable the barrier in fast-forward/cache-only
+   if (!Sim()->getFastForwardPerformanceManager())
+      getClockSkewMinimizationServer()->setDisable(new_mode != InstMode::DETAILED);
 
    Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
 }

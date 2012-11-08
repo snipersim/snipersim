@@ -19,6 +19,7 @@ class ThreadManager;
 class SimThreadManager;
 class HooksManager;
 class ClockSkewMinimizationManager;
+class FastForwardPerformanceManager;
 class TraceManager;
 class DvfsManager;
 class FaultinjectionManager;
@@ -45,6 +46,7 @@ public:
    SimThreadManager *getSimThreadManager() { return m_sim_thread_manager; }
    ThreadManager *getThreadManager() { return m_thread_manager; }
    ClockSkewMinimizationManager *getClockSkewMinimizationManager() { return m_clock_skew_minimization_manager; }
+   FastForwardPerformanceManager *getFastForwardPerformanceManager() { return m_fastforward_performance_manager; }
    Config *getConfig() { return &m_config; }
    config::Config *getCfg() {
       //if (! m_config_file_allowed)
@@ -81,6 +83,7 @@ private:
    ThreadManager *m_thread_manager;
    SimThreadManager *m_sim_thread_manager;
    ClockSkewMinimizationManager *m_clock_skew_minimization_manager;
+   FastForwardPerformanceManager *m_fastforward_performance_manager;
    TraceManager *m_trace_manager;
    DvfsManager *m_dvfs_manager;
    HooksManager *m_hooks_manager;

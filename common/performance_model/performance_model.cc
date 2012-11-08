@@ -1,5 +1,6 @@
 #include "core.h"
 #include "performance_model.h"
+#include "fastforward_performance_model.h"
 #include "branch_predictor.h"
 #include "simulator.h"
 #include "simple_performance_model.h"
@@ -47,6 +48,8 @@ PerformanceModel* PerformanceModel::create(Core* core)
 PerformanceModel::PerformanceModel(Core *core)
    : m_core(core)
    , m_enabled(false)
+   , m_fastforward(false)
+   , m_fastforward_model(new FastforwardPerformanceModel(core, this))
    , m_hold(false)
    , m_instruction_count(0)
    , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
@@ -84,6 +87,7 @@ PerformanceModel::PerformanceModel(Core *core)
 PerformanceModel::~PerformanceModel()
 {
    delete m_bp;
+   delete m_fastforward_model;
 }
 
 void PerformanceModel::enable()
@@ -98,6 +102,10 @@ void PerformanceModel::disable()
 
 void PerformanceModel::countInstructions(IntPtr address, UInt32 count)
 {
+   if (m_fastforward)
+   {
+      m_fastforward_model->countInstructions(address, count);
+   }
 }
 
 void PerformanceModel::queueDynamicInstruction(Instruction *i)
@@ -118,6 +126,15 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
       return;
    }
 
+   if (m_fastforward)
+   {
+      if (i->isIdle())
+         handleIdleInstruction(i);
+      else
+         m_fastforward_model->queueDynamicInstruction(i);
+   }
+   else
+   {
       BasicBlock *bb = new BasicBlock(true);
       bb->push_back(i);
       #ifdef ENABLE_PERF_MODEL_OWN_THREAD
@@ -125,6 +142,7 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
       #else
          m_basic_block_queue.push(bb);
       #endif
+   }
 }
 
 void PerformanceModel::queueBasicBlock(BasicBlock *basic_block)
@@ -346,6 +364,8 @@ void PerformanceModel::incrementIdleElapsedTime(SubsecondTime time)
    incrementElapsedTime(time);
    // Let the performance model know time has jumped
    notifyElapsedTimeUpdate();
+   if (m_fastforward)
+      m_fastforward_model->notifyElapsedTimeUpdate();
 }
 
 // Only called at the start of the simulation (SPAWN_INST)
@@ -364,4 +384,6 @@ void PerformanceModel::setElapsedTime(SubsecondTime time)
    m_elapsed_time.setElapsedTime(time);
    // Let the performance model know time has jumped
    notifyElapsedTimeUpdate();
+   if (m_fastforward)
+      m_fastforward_model->notifyElapsedTimeUpdate();
 }
