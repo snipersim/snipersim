@@ -105,6 +105,8 @@ def parse_config(simcfg):
   cfg = {}
   for section in cp.sections():
     for key, value in sorted(cp.items(section)):
+      # Remove comments at the end of a line
+      value = value.split('#')[0]
       # Run through items sorted by key, so the default comes before the array one
       # Then cut off the [] array markers as they are only used to prevent duplicate option names which ConfigParser doesn't handle
       if key.endswith('[]'):
