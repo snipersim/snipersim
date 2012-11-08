@@ -12,6 +12,7 @@
 #include "shmem_perf_model.h"
 #include "log.h"
 #include "core.h"
+#include "fault_injection.h"
 
 class Cache : public CacheBase
 {
@@ -26,6 +27,8 @@ class Cache : public CacheBase
       cache_t m_cache_type;
       CacheSet** m_sets;
 
+      FaultInjector *m_fault_injector;
+
    public:
 
       // constructors/destructors
@@ -33,7 +36,8 @@ class Cache : public CacheBase
             UInt32 cache_size,
             UInt32 associativity, UInt32 cache_block_size,
             String replacement_policy,
-            cache_t cache_type);
+            cache_t cache_type,
+            FaultInjector *fault_injector = NULL);
       ~Cache();
 
       Lock& getSetLock(IntPtr addr);

@@ -5,6 +5,7 @@
 #include "simulator.h"
 #include "subsecond_time.h"
 #include "config.hpp"
+#include "fault_injection.h"
 
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
@@ -131,7 +132,10 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
             cache_params.associativity,
             m_cache_block_size,
             cache_params.replacement_policy,
-            CacheBase::SHARED_CACHE);
+            CacheBase::SHARED_CACHE,
+            Sim()->getFaultinjectionManager()
+               ? Sim()->getFaultinjectionManager()->getFaultInjector(m_core_id_master, mem_component)
+               : NULL);
       m_master->m_prefetcher = Prefetcher::createPrefetcher(cache_params.prefetcher, cache_params.configName, m_core_id);
    }
    else

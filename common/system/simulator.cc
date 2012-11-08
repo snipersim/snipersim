@@ -14,6 +14,7 @@
 #include "pthread_emu.h"
 #include "trace_manager.h"
 #include "dvfs_manager.h"
+#include "fault_injection.h"
 #include "hooks_manager.h"
 #include "instruction.h"
 #include "config.hpp"
@@ -65,6 +66,7 @@ Simulator::Simulator()
    , m_trace_manager(NULL)
    , m_dvfs_manager(NULL)
    , m_hooks_manager(NULL)
+   , m_faultinjection_manager(NULL)
    , m_boot_time(getTime())
    , m_start_time(0)
    , m_stop_time(0)
@@ -82,6 +84,7 @@ void Simulator::start()
    m_magic_server = new MagicServer();
    m_transport = Transport::create();
    m_dvfs_manager = new DvfsManager();
+   m_faultinjection_manager = FaultinjectionManager::create();
    m_thread_manager = new ThreadManager();
    m_core_manager = new CoreManager();
    m_sim_thread_manager = new SimThreadManager();
@@ -176,6 +179,8 @@ Simulator::~Simulator()
    #endif
 
    delete m_trace_manager;
+   if (m_faultinjection_manager)
+      delete m_faultinjection_manager;
    delete m_sim_thread_manager;
    delete m_thread_manager;
    delete m_core_manager;

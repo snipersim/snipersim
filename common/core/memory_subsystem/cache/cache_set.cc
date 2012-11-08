@@ -14,7 +14,13 @@ CacheSet::CacheSet(CacheBase::cache_t cache_type,
       m_cache_block_info_array[i] = CacheBlockInfo::create(cache_type);
    }
 
-   m_blocks = NULL;
+   if (Sim()->getFaultinjectionManager())
+   {
+      m_blocks = new char[m_associativity * m_blocksize];
+      memset(m_blocks, 0x00, m_associativity * m_blocksize);
+   } else {
+      m_blocks = NULL;
+   }
 }
 
 CacheSet::~CacheSet()

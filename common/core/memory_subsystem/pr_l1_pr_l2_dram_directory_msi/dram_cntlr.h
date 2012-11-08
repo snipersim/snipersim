@@ -12,6 +12,8 @@
 #include "memory_manager_base.h"
 #include "subsecond_time.h"
 
+class FaultInjector;
+
 namespace PrL1PrL2DramDirectoryMSI
 {
    class DramCntlr
@@ -29,6 +31,7 @@ namespace PrL1PrL2DramDirectoryMSI
          std::unordered_map<IntPtr, Byte*> m_data_map;
          DramPerfModel* m_dram_perf_model;
          UInt32 m_cache_block_size;
+         FaultInjector* m_fault_injector;
 
          typedef std::unordered_map<IntPtr,UInt64> AccessCountMap;
          AccessCountMap* m_dram_access_count;

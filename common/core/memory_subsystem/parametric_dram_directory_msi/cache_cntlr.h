@@ -30,6 +30,7 @@ namespace ParametricDramDirectoryMSI
    class CacheCntlr;
    class MemoryManager;
 }
+class FaultInjector;
 
 namespace ParametricDramDirectoryMSI
 {

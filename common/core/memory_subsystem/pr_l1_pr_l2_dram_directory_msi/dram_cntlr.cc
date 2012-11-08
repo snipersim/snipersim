@@ -36,6 +36,10 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
          dram_queue_model_type,
          cache_block_size);
 
+   m_fault_injector = Sim()->getFaultinjectionManager()
+      ? Sim()->getFaultinjectionManager()->getFaultInjector(memory_manager->getCore()->getId(), MemComponent::DRAM)
+      : NULL;
+
    m_dram_access_count = new AccessCountMap[NUM_ACCESS_TYPES];
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "reads", &m_reads);
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "writes", &m_writes);
@@ -52,6 +56,21 @@ DramCntlr::~DramCntlr()
 SubsecondTime
 DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
+   if (Sim()->getFaultinjectionManager())
+   {
+      if (m_data_map.count(address) == 0)
+      {
+         m_data_map[address] = new Byte[getCacheBlockSize()];
+         memset((void*) m_data_map[address], 0x00, getCacheBlockSize());
+      }
+
+      // NOTE: assumes error occurs in memory. If we want to model bus errors, insert the error into data_buf instead
+      if (m_fault_injector)
+         m_fault_injector->preRead(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
+
+      memcpy((void*) data_buf, (void*) m_data_map[address], getCacheBlockSize());
+   }
+
    SubsecondTime dram_access_latency = runDramPerfModel(requester, now);
 
    ++m_reads;
@@ -66,6 +85,19 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
 SubsecondTime
 DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
+   if (Sim()->getFaultinjectionManager())
+   {
+      if (m_data_map[address] == NULL)
+      {
+         LOG_PRINT_ERROR("Data Buffer does not exist");
+      }
+      memcpy((void*) m_data_map[address], (void*) data_buf, getCacheBlockSize());
+
+      // NOTE: assumes error occurs in memory. If we want to model bus errors, insert the error into data_buf instead
+      if (m_fault_injector)
+         m_fault_injector->postWrite(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
+   }
+
    SubsecondTime dram_access_latency = runDramPerfModel(requester, now);
 
    ++m_writes;

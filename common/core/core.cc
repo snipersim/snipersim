@@ -471,13 +471,13 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
  *   number of misses :: State the number of cache misses
  */
 MemoryResult
-Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size, MemModeled modeled, IntPtr eip, SubsecondTime now)
+Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size, MemModeled modeled, IntPtr eip, SubsecondTime now, bool is_fault_mask)
 {
    if (modeled == MEM_MODELED_DYNINFO)
       LOG_ASSERT_ERROR(eip != 0, "modeled == MEM_MODELED_DYNINFO but no eip given");
 
    // In PINTOOL mode, if the data is requested, copy it to/from real memory
-   if (data_buffer)
+   if (data_buffer && !is_fault_mask)
    {
       if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
       {

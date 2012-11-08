@@ -21,6 +21,7 @@ class HooksManager;
 class ClockSkewMinimizationManager;
 class TraceManager;
 class DvfsManager;
+class FaultinjectionManager;
 namespace config { class Config; }
 
 class Simulator
@@ -54,6 +55,7 @@ public:
    StatsManager *getStatsManager() { return m_stats_manager; }
    DvfsManager *getDvfsManager() { return m_dvfs_manager; }
    HooksManager *getHooksManager() { return m_hooks_manager; }
+   FaultinjectionManager *getFaultinjectionManager() { return m_faultinjection_manager; }
    TraceManager *getTraceManager() { return m_trace_manager; }
 
    static void enablePerformanceModels();
@@ -82,6 +84,7 @@ private:
    TraceManager *m_trace_manager;
    DvfsManager *m_dvfs_manager;
    HooksManager *m_hooks_manager;
+   FaultinjectionManager *m_faultinjection_manager;
 
    static Simulator *m_singleton;
 
