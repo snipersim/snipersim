@@ -214,6 +214,33 @@ void ThreadManager::waitForThreadStart(thread_id_t thread_id, thread_id_t wait_t
    }
 }
 
+void ThreadManager::moveThread(thread_id_t thread_id, core_id_t core_id, SubsecondTime time)
+{
+   LOG_ASSERT_ERROR(getThreadState(thread_id) != Core::INITIALIZING, "Thread is initializing, it cannot be moved right now.");
+
+   Thread *thread = getThreadFromID(thread_id);
+
+   if (Core *core = thread->getCore())
+      core->setState(Core::IDLE);
+
+   if (core_id == INVALID_CORE_ID)
+   {
+      thread->setCore(NULL);
+   }
+   else
+   {
+      if (thread->getCore() == NULL)
+         resumeThread(thread_id, INVALID_THREAD_ID, time);
+
+      Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
+      thread->setCore(core);
+      core->setState(Core::RUNNING);
+   }
+
+   HooksManager::ThreadMigrate args = { thread_id: thread_id, core_id: core_id, time: time };
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_MIGRATE, (UInt64)&args);
+}
+
 bool ThreadManager::areAllCoresRunning()
 {
    // Check if all the cores are running

@@ -66,6 +66,8 @@ public:
    bool isThreadRunning(thread_id_t thread_id);
    bool isThreadInitializing(thread_id_t thread_id);
 
+   void moveThread(thread_id_t thread_id, core_id_t core_id, SubsecondTime time);
+
    bool areAllCoresRunning();
 
 private:
