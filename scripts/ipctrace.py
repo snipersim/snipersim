@@ -22,6 +22,7 @@ class IpcTrace:
     self.sd = sim.util.StatsDelta()
     self.stats = {
       'time': [ self.sd.getter('performance_model', core, 'elapsed_time') for core in range(sim.config.ncores) ],
+      'ffwd_time': [ self.sd.getter('fastforward_performance_model', core, 'fastforwarded_time') for core in range(sim.config.ncores) ],
       'instrs': [ self.sd.getter('performance_model', core, 'instruction_count') for core in range(sim.config.ncores) ],
       'coreinstrs': [ self.sd.getter('core', core, 'instructions') for core in range(sim.config.ncores) ],
     }
@@ -32,6 +33,13 @@ class IpcTrace:
       self.fd.write('[IPC] ')
     self.fd.write('%u' % (time / 1e6)) # Time in ns
     for core in range(sim.config.ncores):
+      # detailed-only IPC
+      cycles = (self.stats['time'][core].delta - self.stats['ffwd_time'][core].delta) * sim.dvfs.get_frequency(core) / 1e9 # convert fs to cycles
+      instrs = self.stats['instrs'][core].delta
+      ipc = instrs / (cycles or 1) # Avoid division by zero
+      #self.fd.write(' %.3f' % ipc)
+
+      # include fast-forward IPCs
       cycles = self.stats['time'][core].delta * sim.dvfs.get_frequency(core) / 1e9 # convert fs to cycles
       instrs = self.stats['coreinstrs'][core].delta
       ipc = instrs / (cycles or 1)

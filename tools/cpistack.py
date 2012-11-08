@@ -26,6 +26,15 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
     times = stats['performance_model.cycle_count']
     cycles_scale = [ 1. for idx in range(ncores) ]
 
+  if stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:
+    fastforward_scale = times[0] / (times[0] - stats['fastforward_performance_model.fastforwarded_time'][0])
+    times = [ t-f for t, f in zip(times, stats['fastforward_performance_model.fastforwarded_time']) ]
+  else:
+    fastforward_scale = 1.
+  if 'performance_model.cpiFastforwardTime' in stats:
+    del stats['performance_model.cpiFastforwardTime']
+
+
   data = collections.defaultdict(collections.defaultdict)
   for key, values in stats.items():
     if '.cpi' in key:
@@ -107,7 +116,7 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
               data[core]['Issue'] = data[core].get('Issue', 0) + values[core]
     data[core]['Imbalance'] = cycles_scale[core] * max(times) - sum(data[core].values())
 
-  return data, ncores, instrs, times, cycles_scale
+  return data, ncores, instrs, times, cycles_scale, fastforward_scale
 
 
 def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True):
@@ -246,7 +255,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
              job_name = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
              size = (640, 480)):
 
-  data, ncores, instrs, times, cycles_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
+  data, ncores, instrs, times, cycles_scale, fastforward_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
 
   if threads:
     data   = dict([ (i, data[i]) for i in threads ])
@@ -288,12 +297,12 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
         if use_cpi:
           plot_data[core][name] = float(value) / (instrs[core] or 1)
         elif use_abstime:
-          plot_data[core][name] = (float(value) / cycles_scale[0]) / 1e15 # cycles to femtoseconds to seconds
+          plot_data[core][name] = fastforward_scale * (float(value) / cycles_scale[0]) / 1e15 # cycles to femtoseconds to seconds
         else:
           plot_data[core][name] = float(value) / max_cycles
     if gen_text_stack:
       print
-      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, (float(total) / cycles_scale[0]) / 1e15)
+      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, fastforward_scale * (float(total) / cycles_scale[0]) / 1e15)
 
   # First, create an ordered list of labels that is the superset of all labels used from all cores
   # Then remove items that are not used, creating an ordered list with all currently used labels
