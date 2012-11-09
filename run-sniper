@@ -74,6 +74,10 @@ def add_config_file(filename, extension = '.cfg'):
 
 def make_hetero_config(confignames, objname='core', extension='.cfg'):
   configfiles = map(lambda x:findconfig(x,extension), confignames)
+  if not all(configfiles):
+    notfound = [ name for name, found in zip(confignames, configfiles) if not found ]
+    print >> sys.stderr, 'Config file not found:', ', '.join(notfound)
+    sys.exit(1)
   configfiledata = map(lambda x:open(x).read(), configfiles)
   configs = map(sniper_lib.parse_config, configfiledata)
 
