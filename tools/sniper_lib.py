@@ -226,12 +226,12 @@ def get_results_file(filename, jobid = None, resultsdir = None, force = False):
       return None
 
 
-def format_size(size):
+def format_size(size, digits = 1):
   i = 0
-  while size > 1024:
+  while size >= 1024:
     size /= 1024.
     i += 1
-  return '%.1f%sB' % (size, [' ', 'K', 'M', 'G', 'T', 'P', 'E'][i])
+  return '%.*f%sB' % (digits, size, [' ', 'K', 'M', 'G', 'T', 'P', 'E'][i])
 
 
 def find_children(pid):
