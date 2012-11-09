@@ -248,10 +248,25 @@ MemoryManager::MemoryManager(Core* core,
    // The core id to use when sending messages to the directory (master node of the last-level cache)
    m_core_id_master = getCore()->getId() - getCore()->getId() % cache_parameters[m_last_level_cache].shared_cores;
 
-   if (m_core_id_master == getCore()->getId()) {
+   if (m_core_id_master == getCore()->getId())
+   {
+      UInt32 num_sets = k_KILO * cache_parameters[MemComponent::L1_DCACHE].size / (cache_parameters[MemComponent::L1_DCACHE].associativity * getCacheBlockSize());
+      // With heterogeneous caches, or fancy hash functions, we can no longer be certain that operations
+      // only have effect within a set as we see it. Turn of optimization...
+      if (num_sets != (1 << floorLog2(num_sets)))
+         num_sets = 1;
+      for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
+      {
+         if (Sim()->getCfg()->getIntArray("perf_model/l1_dcache/cache_size", core_id) != cache_parameters[MemComponent::L1_DCACHE].size)
+            num_sets = 1;
+         if (Sim()->getCfg()->getStringArray("perf_model/l1_dcache/address_hash", core_id) != "mask")
+            num_sets = 1;
+         // FIXME: We really should check all cache levels
+      }
+
       m_cache_cntlrs[(UInt32)m_last_level_cache]->createSetLocks(
          getCacheBlockSize(),
-         k_KILO * cache_parameters[MemComponent::L1_DCACHE].size / (cache_parameters[MemComponent::L1_DCACHE].associativity * getCacheBlockSize()),
+         num_sets,
          m_core_id_master,
          cache_parameters[m_last_level_cache].shared_cores
       );
