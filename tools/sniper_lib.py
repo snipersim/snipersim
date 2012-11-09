@@ -1,7 +1,6 @@
 # A copy of this file is distributed with the binaries of Graphite and Benchmarks
 
-import sys, os, time, re, tempfile, timeout, traceback, collections
-import sniper_stats
+import sys, os, re, sniper_stats, sniper_config
 try:
   import json
 except ImportError:
@@ -31,7 +30,7 @@ def get_results(jobid = None, resultsdir = None, partial = None, force = False):
   else:
     raise ValueError('Need either jobid or resultsdir')
 
-  config = parse_config(simcfg)
+  config = sniper_config.parse_config(simcfg)
   return {
     'config': config,
     'results': stats_process(config, results),
@@ -78,7 +77,7 @@ def stats_process(config, results):
     pass
   stats['pthread_locks_contended'] = float(sum(stats.get('pthread.pthread_mutex_lock_contended', [0]))) / (sum(stats.get('pthread.pthread_mutex_lock_count', [0])) or 1)
   # femtosecond to cycles conversion
-  freq = [ 1e9 * float(get_config(config, 'perf_model/core/frequency', idx)) for idx in range(ncores) ]
+  freq = [ 1e9 * float(sniper_config.get_config(config, 'perf_model/core/frequency', idx)) for idx in range(ncores) ]
   stats['fs_to_cycles_cores'] = map(lambda f: f / 1e15, freq)
   # Backwards compatible version returning fs_to_cycles for core 0, for heterogeneous configurations fs_to_cycles_cores needs to be used
   stats['fs_to_cycles'] = stats['fs_to_cycles_cores'][0]
@@ -91,65 +90,6 @@ def stats_process(config, results):
   return stats
 
 
-class DefaultValue:
-  def __init__(self, value):
-    self.val = value
-  def __call__(self):
-    return self.val
-
-# Parse sim.cfg, read from file or from ic.job_output(jobid, 'sim.cfg'), into a dictionary
-def parse_config(simcfg):
-  import ConfigParser, cStringIO
-  cp = ConfigParser.ConfigParser()
-  cp.readfp(cStringIO.StringIO(str(simcfg)))
-  cfg = {}
-  for section in cp.sections():
-    for key, value in sorted(cp.items(section)):
-      # Remove comments at the end of a line
-      value = value.split('#')[0]
-      # Run through items sorted by key, so the default comes before the array one
-      # Then cut off the [] array markers as they are only used to prevent duplicate option names which ConfigParser doesn't handle
-      if key.endswith('[]'):
-        key = key[:-2]
-      if len(value) > 2 and value[0] == '"' and value[-1] == '"':
-        value = value[1:-1]
-      key = '/'.join((section, key))
-      if key in cfg:
-        defval = cfg[key]
-        cfg[key] = collections.defaultdict(DefaultValue(defval))
-        for i, v in enumerate(value.split(',')):
-          if v: # Only fill in entries that have been provided
-            cfg[key][i] = v
-      else: # If there has not been a default value provided, require all array data be populated
-        if ',' in value:
-          cfg[key] = []
-          for i, v in enumerate(value.split(',')):
-            cfg[key].append(v)
-        else:
-          cfg[key] = value
-  return cfg
-
-
-def get_config(config, key, index = None):
-  is_hetero = (type(config[key]) == collections.defaultdict)
-  if index is None:
-    if is_hetero:
-      return config[key].default_factory()
-    else:
-      return config[key]
-  elif is_hetero:
-    return config[key][index]
-  else:
-    return config[key]
-
-
-def get_config_default(config, key, defaultval, index = None):
-  if key in config:
-    return get_config(config, key, index)
-  else:
-    return defaultval
-
-
 def parse_results_from_dir(resultsdir, partial = None):
   results = []
 
@@ -157,11 +97,11 @@ def parse_results_from_dir(resultsdir, partial = None):
   simcfg = os.path.join(resultsdir, 'sim.cfg')
   if not os.path.exists(simcfg):
     raise SniperResultsException("No valid configuration found")
-  simcfg = parse_config(open(simcfg).read())
+  simcfg = sniper_config.parse_config(open(simcfg).read())
   ncores = int(simcfg['general/total_cores'])
 
   results += [ ('ncores', -1, ncores) ]
-  results += [ ('corefreq', idx, 1e9 * float(get_config(simcfg, 'perf_model/core/frequency', idx))) for idx in range(ncores) ]
+  results += [ ('corefreq', idx, 1e9 * float(sniper_config.get_config(simcfg, 'perf_model/core/frequency', idx))) for idx in range(ncores) ]
 
   ## stdout.txt
   walltime = 0

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, math, re, collections, buildstack, gnuplot, getopt, pprint, sniper_lib
+import os, sys, math, re, collections, buildstack, gnuplot, getopt, pprint, sniper_lib, sniper_config
 import math
 
 #ISSUE_WIDTH = 4
@@ -80,7 +80,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
 
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   if config:
-    results['config'].update(sniper_lib.parse_config(file(config).read()))
+    results['config'].update(sniper_config.parse_config(file(config).read()))
   power = edit_XML(results['results'], results['config'], vdd)
   power = map(lambda v: v[0], power)
   file(tempfile, "w").write('\n'.join(power))
@@ -232,8 +232,8 @@ def edit_XML(stats, cfg, vdd):
     vdd = float(cfg['power/vdd'])
   technology_node = int(cfg.get('power/technology_node', 45))
 
-  l3_cacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
-  l2_cacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
+  l3_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
+  l2_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
 
   num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
   if int(cfg['perf_model/cache/levels']) >= 3:
@@ -281,35 +281,35 @@ def edit_XML(stats, cfg, vdd):
         core = template[i][1][2]
       else:
         core = None
-      clock_Frequency  = float(sniper_lib.get_config(cfg, 'perf_model/core/frequency', core))*1000
-      issue_width = long(sniper_lib.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core))
-      peak_issue_width = long(long(sniper_lib.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
+      clock_Frequency  = float(sniper_config.get_config(cfg, 'perf_model/core/frequency', core))*1000
+      issue_width = long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core))
+      peak_issue_width = long(long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
       ALU_per_core = peak_issue_width
-      window_size = int(sniper_lib.get_config(cfg, "perf_model/core/interval_timer/window_size", core))
-      latency_bp = long(sniper_lib.get_config(cfg, 'perf_model/branch_predictor/mispredict_penalty', core))
+      window_size = int(sniper_config.get_config(cfg, "perf_model/core/interval_timer/window_size", core))
+      latency_bp = long(sniper_config.get_config(cfg, 'perf_model/branch_predictor/mispredict_penalty', core))
         #---FROM CONFIG----------
-      latency_l1_d = long(sniper_lib.get_config(cfg, 'perf_model/l1_dcache/data_access_time', core))
-      latency_l1_i = long(sniper_lib.get_config(cfg, 'perf_model/l1_icache/data_access_time', core))
-      latency_l2 = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0, core))
-      latency_l3 = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/data_access_time', 0, core))
-      l1_dcacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/associativity', 0, core))
-      l1_dcacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/cache_block_size', 0, core))
-      l1_dcacheSize= long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/cache_size', 0, core))
-      l1_dcacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/shared_cores', 0, core))
-      l1_dcacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_dcache/writeback_time', 0, core))
-      l1_icacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/associativity', 0, core))
-      l1_icacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/cache_block_size', 0, core))
-      l1_icacheSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/cache_size', 0, core))
-      l1_icacheSharedCores = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/shared_cores', 0, core))
-      l1_icacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l1_icache/writeback_time', 0, core))
-      l2_cacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/associativity', 0, core))
-      l2_cacheSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/cache_size', 0, core))
-      l2_cacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/cache_block_size', 0, core))
-      l2_cacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l2_cache/writeback_time', 0, core))
-      l3_cacheAssociativity = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/associativity', 0, core))
-      l3_cacheBlockSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/cache_block_size', 0, core))
-      l3_cacheSize = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core))
-      l3_cacheWriteBackTime = long(sniper_lib.get_config_default(cfg, 'perf_model/l3_cache/writeback_time', 0, core))
+      latency_l1_d = long(sniper_config.get_config(cfg, 'perf_model/l1_dcache/data_access_time', core))
+      latency_l1_i = long(sniper_config.get_config(cfg, 'perf_model/l1_icache/data_access_time', core))
+      latency_l2 = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0, core))
+      latency_l3 = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/data_access_time', 0, core))
+      l1_dcacheAssociativity = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/associativity', 0, core))
+      l1_dcacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_block_size', 0, core))
+      l1_dcacheSize= long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_size', 0, core))
+      l1_dcacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/shared_cores', 0, core))
+      l1_dcacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/writeback_time', 0, core))
+      l1_icacheAssociativity = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/associativity', 0, core))
+      l1_icacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_block_size', 0, core))
+      l1_icacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_size', 0, core))
+      l1_icacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/shared_cores', 0, core))
+      l1_icacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/writeback_time', 0, core))
+      l2_cacheAssociativity = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/associativity', 0, core))
+      l2_cacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_size', 0, core))
+      l2_cacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_block_size', 0, core))
+      l2_cacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/writeback_time', 0, core))
+      l3_cacheAssociativity = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/associativity', 0, core))
+      l3_cacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_block_size', 0, core))
+      l3_cacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core))
+      l3_cacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/writeback_time', 0, core))
 
       if template[i][1]:
            #if template[i][1][1]=="cfg":

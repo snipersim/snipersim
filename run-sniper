@@ -2,7 +2,7 @@
 
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, Queue, socket, pipes, commands
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-import sniper_lib, gen_simout, debugpin, env_setup
+import sniper_lib, sniper_config, gen_simout, debugpin, env_setup
 
 
 HOME = env_setup.sim_root()
@@ -79,7 +79,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
     print >> sys.stderr, 'Config file not found:', ', '.join(notfound)
     sys.exit(1)
   configfiledata = map(lambda x:open(x).read(), configfiles)
-  configs = map(sniper_lib.parse_config, configfiledata)
+  configs = map(sniper_config.parse_config, configfiledata)
 
   # Generate a set of all config options
   opts = set()

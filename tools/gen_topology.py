@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, collections, sniper_lib
+import sys, os, collections, sniper_lib, sniper_config
 
 
 names = ('hwcontext', 'smt', 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'dram-cache', 'dram-dir', 'dram-cntlr')
@@ -15,16 +15,16 @@ for line in open('sim.topo'):
   ids[name][int(lid)] = int(mid)
   max_id = max(max_id, int(lid))
 
-config = sniper_lib.parse_config(open('sim.cfg').read())
+config = sniper_config.parse_config(open('sim.cfg').read())
 
 
 def format_config(name, lid):
   caches = {'L1-I': 'l1_icache', 'L1-D': 'l1_icache', 'L2': 'l2_cache', 'L3': 'l3_cache', 'L4': 'l4_cache'}
   if name in caches:
-    value = sniper_lib.get_config(config, 'perf_model/%s/cache_size' % caches[name], lid)
+    value = sniper_config.get_config(config, 'perf_model/%s/cache_size' % caches[name], lid)
     return sniper_lib.format_size(1024 * long(value), digits = 0)
   elif name == 'dram-cache':
-    value = sniper_lib.get_config(config, 'perf_model/dram/cache/cache_size', lid)
+    value = sniper_config.get_config(config, 'perf_model/dram/cache/cache_size', lid)
     return sniper_lib.format_size(1024 * long(value), digits = 0)
   else:
     return ''
