@@ -180,18 +180,21 @@ MemoryManager::MemoryManager(Core* core,
          Sim()->getConfig()->logTopology("dram-cache", core->getId(), core->getId());
       }
 
-      m_dram_directory_cntlr = new PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr(getCore()->getId(),
-            this,
-            m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr,
-            dram_directory_total_entries,
-            dram_directory_associativity,
-            getCacheBlockSize(),
-            dram_directory_max_num_sharers,
-            dram_directory_max_hw_sharers,
-            dram_directory_type_str,
-            dram_directory_cache_access_time,
-            getShmemPerfModel());
-      Sim()->getConfig()->logTopology("dram-dir", core->getId(), core->getId());
+      if (!dram_direct_access)
+      {
+         m_dram_directory_cntlr = new PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr(getCore()->getId(),
+               this,
+               m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr,
+               dram_directory_total_entries,
+               dram_directory_associativity,
+               getCacheBlockSize(),
+               dram_directory_max_num_sharers,
+               dram_directory_max_hw_sharers,
+               dram_directory_type_str,
+               dram_directory_cache_access_time,
+               getShmemPerfModel());
+         Sim()->getConfig()->logTopology("dram-dir", core->getId(), core->getId());
+      }
    }
 
    m_dram_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
@@ -295,12 +298,10 @@ MemoryManager::~MemoryManager()
 
    if (m_dram_cache)
       delete m_dram_cache;
-
-   if (m_dram_cntlr_present)
-   {
+   if (m_dram_cntlr)
       delete m_dram_cntlr;
+   if (m_dram_directory_cntlr)
       delete m_dram_directory_cntlr;
-   }
 }
 
 HitWhere::where_t
