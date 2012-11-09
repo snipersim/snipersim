@@ -302,9 +302,16 @@ VOID traceCallback(TRACE trace, void *v)
 
 VOID traceInvalidate(ADDRINT orig_pc, ADDRINT cache_pc, BOOL success)
 {
-   LOG_PRINT_WARNING_ONCE("Trace invalidation orig_pc(%p) cache_pc(%p) success(%d)\n\n"
-                          "Self-modifying code (SMC) support is not enabled, strange things may happen.\n"
-                          "Use general/enable_smc_support=true to enable.\n", orig_pc, cache_pc, success);
+   if (!Sim()->getConfig()->getEnableSMCSupport())
+   {
+      // It should be safe to turn on SMC support at runtime
+      // (which means: stop using caches for basic blocks and decoded instruction from now on).
+      // Just in case enabling this half-way through isn't reliable, keep the warning for now.
+      LOG_PRINT_WARNING_ONCE("Trace invalidation orig_pc(%p) cache_pc(%p) success(%d)\n\n"
+                             "Self-modifying code (SMC) support now enabled.\n"
+                             "Use general/enable_smc_support=true to enable manually.\n", orig_pc, cache_pc, success);
+      Sim()->getConfig()->forceEnableSMCSupport();
+   }
 }
 
 void ApplicationStart()

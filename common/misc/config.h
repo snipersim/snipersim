@@ -68,6 +68,7 @@ public:
 
    // Knobs
    bool getEnableSMCSupport() const { return m_knob_enable_smc_support; }
+   void forceEnableSMCSupport() { m_knob_enable_smc_support = true; }
    bool getEnableICacheModeling() const { return m_knob_enable_icache_modeling; }
    SimulationROI getSimulationROI() const { return m_knob_roi; }
    bool getEnableProgressTrace() const { return m_knob_enable_progress_trace; }
