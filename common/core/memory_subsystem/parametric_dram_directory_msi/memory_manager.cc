@@ -253,7 +253,7 @@ MemoryManager::MemoryManager(Core* core,
       UInt32 num_sets = k_KILO * cache_parameters[MemComponent::L1_DCACHE].size / (cache_parameters[MemComponent::L1_DCACHE].associativity * getCacheBlockSize());
       // With heterogeneous caches, or fancy hash functions, we can no longer be certain that operations
       // only have effect within a set as we see it. Turn of optimization...
-      if (num_sets != (1 << floorLog2(num_sets)))
+      if (num_sets != (1UL << floorLog2(num_sets)))
          num_sets = 1;
       for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
       {
