@@ -27,4 +27,6 @@ class MemComponent
       };
 };
 
+const char * MemComponentString(MemComponent::component_t mem_component);
+
 #endif /* __MEM_COMPONENT_H__ */
