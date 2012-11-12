@@ -1,14 +1,8 @@
-include ../../config/buildconf.makefile
+TARGET=signal
+include ../shared/Makefile.shared
 
-CC=$(SNIPER_CC)
+$(TARGET): $(TARGET).o
+	$(CC) $(TARGET).o -lm $(SNIPER_LDFLAGS) -o $(TARGET)
 
-all: signal
-
-signal: signal.c Makefile
-	$(CC) -o signal signal.c -lm -pthread $(SNIPER_LDFLAGS) $(SNIPER_CFLAGS)
-
-run: signal
+run_$(TARGET):
 	../../run-sniper -n 2 -c gainestown -g --general/enable_signals=true -- ./signal -p 2
-
-clean:
-	rm -f signal signal.o

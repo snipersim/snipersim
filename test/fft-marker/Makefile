@@ -3,8 +3,10 @@ include ../../config/buildconf.makefile
 CC=$(SNIPER_CC)
 
 all: fft
-	@echo "\nRun 'make run' to run the fft program in the simulator"
-	@echo "Run 'make run-iter2' to run the fft program in the simulator, using SimMarker and Python hooks to execute only the second iteration in detailed mode\n"
+	@echo
+	@echo "Run 'make run' to run the fft program in the simulator"
+	@echo "Run 'make run-iter2' to run the fft program in the simulator, using SimMarker and Python hooks to execute only the second iteration in detailed mode"
+	@echo
 
 fft.c:
 	@ln -s ../fft/fft.c fft.c

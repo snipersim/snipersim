@@ -1,12 +1,9 @@
-include ../../config/buildconf.makefile
 
-CXX=$(SNIPER_CXX)
+TARGET=true
+include ../shared/Makefile.shared
 
-true: true.cc Makefile
-	$(CXX) -o true true.cc $(SNIPER_LDFLAGS) $(SNIPER_CFLAGS)
+$(TARGET): $(TARGET).o
+	$(CC) $(TARGET).o -lm $(SNIPER_LDFLAGS) -o $(TARGET)
 
-run: true
+run_$(TARGET):
 	../../run-sniper -n 1 -- ./true
-
-clean:
-	rm -f true sim.cfg sim.stats* *.log *.out *.jpg

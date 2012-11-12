@@ -1,0 +1,23 @@
+include ../../config/buildconf.makefile
+
+ifeq ($(TARGET),)
+$(error The TARGET variable must be set to use the shared Makefile)
+endif
+
+CC=$(SNIPER_CC)
+LDFLAGS=$(SNIPER_LDFLAGS)
+CFLAGS=$(SNIPER_CFLAGS)
+
+# '--roi' allows for ROI timing with program hooks instead of full-program timing
+# See ${SNIPER_ROOT}/include/sim_api.h for more information
+run: $(TARGET) run_$(TARGET)
+	@echo
+	@echo
+	@echo "Optional: Run '../../tools/cpistack.py' in this directory to generate cpi-stack output for this run"
+	@echo "Optional: Run '../../tools/mcpat.py' in this directory to generate power output for this run"
+	@echo "Optional: Run '../../tools/dumpstats.py' in this directory to view detailed statistics for this run"
+	@echo "Optional: Run '../../tools/gen_topology.py' in this directory to view the system topology for this run"
+	@echo
+
+clean:
+	rm -f $(TARGET) sim.* *.log *.out *.jpg *.o $(CLEAN_EXTRA)
