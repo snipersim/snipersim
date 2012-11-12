@@ -1,7 +1,40 @@
 #!/usr/bin/env python
 
-import sys, os, collections, sniper_lib, sniper_config
+import sys, os, collections, sniper_lib, sniper_config, getopt
 
+outputfilename = 'topo.svg'
+validformats = ('svg', 'text')
+format = 'svg'
+
+def usage():
+  print 'Usage: %s [-h|--help (help)]  [-o|--output (output filename/"-" for stdout)]  [-f|--format (options: %s)]' % (sys.argv[0], validformats)
+
+try:
+  opts, args = getopt.getopt(sys.argv[1:], "ho:f:", [ "help", "output=", "format=" ])
+except getopt.GetoptError, e:
+  print e
+  usage()
+  sys.exit()
+for o, a in opts:
+  if o == '-h' or o == '--help':
+    usage()
+    sys.exit()
+  elif o == '-o' or o == '--output':
+    outputfilename = a
+  elif o == '-f' or o == '--format':
+    if a not in validformats:
+      print >> sys.stderr, '%s is not a valid format' % a
+      usage()
+      sys.exit()
+    format = a
+  else:
+    usage()
+    sys.exit()
+
+if outputfilename == '-':
+  output = sys.stdout
+else:
+  output = open(outputfilename, 'w')
 
 names = ('hwcontext', 'smt', 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'dram-cache', 'dram-dir', 'dram-cntlr')
 ids = dict([ (name, collections.defaultdict(lambda: None)) for name in names ])
@@ -30,17 +63,15 @@ def format_config(name, lid):
     return ''
 
 
-format = 'svg'
-
 if format == 'text':
-  print ' '*20,
+  print >> output, ' '*20,
   for lid in range(max_id+1):
-    print '%3d' % lid,
-  print
+    print >> output, '%3d' % lid,
+  print >> output
 
   for name in names:
     if ids[name].keys():
-      print '%-20s' % name,
+      print >> output, '%-20s' % name,
       for lid in range(max_id+1):
         mid = ids[name][lid]
         if mid is None:
@@ -49,8 +80,8 @@ if format == 'text':
           value = 'X'
         else:
           value = '<'
-        print '%3s' % value,
-      print
+        print >> output, '%3s' % value,
+      print >> output
 
 
 elif format == 'svg':
@@ -58,7 +89,7 @@ elif format == 'svg':
   margin_y = 50; step_y = 50
   items = []
   def paint_init(w, h):
-    print '''\
+    print >> output, '''\
 <?xml version="1.0" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">
@@ -76,8 +107,8 @@ elif format == 'svg':
     items.append((zorder, svg))
   def paint_fini():
     for order, svg in sorted(items, reverse = True):
-      print svg
-    print '''\
+      print >> output, svg
+    print >> output, '''\
 </g>
 </svg>
 '''
