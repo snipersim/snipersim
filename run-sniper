@@ -500,6 +500,8 @@ def execute():
     os.kill(subproc.pid, 9)
     return 9
 
+  rc >>= 8
+  return rc
 
 def execute_appdebug():
   print 'Running', cmd
@@ -530,7 +532,10 @@ def execute_appdebug():
   f.write('target remote :%s\n' % g_remote)
   f.close()
 
-  return os.system('gdb -quiet -command=%s %s' % (fn, '/proc/%s/exe' % g_pid)) # /proc/<pid>/exe is a symlink to the actual binary
+  rc = os.system('gdb -quiet -command=%s %s' % (fn, '/proc/%s/exe' % g_pid)) # /proc/<pid>/exe is a symlink to the actual binary
+  rc >>= 8
+
+  return rc
 
 
 if save_patch:
