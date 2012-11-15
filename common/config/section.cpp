@@ -168,8 +168,12 @@ namespace config
 
         if (index == UINT64_MAX)
         {
-            KeyList::const_iterator found = m_keys.find(iname);
-            return (found != m_keys.end());
+            if (m_keys.count(iname))
+               return true;
+            else if (m_array_keys.count(iname))
+               return true;
+            else
+               return false;
         }
         else
         {
