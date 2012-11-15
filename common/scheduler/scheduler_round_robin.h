@@ -29,6 +29,8 @@ class SchedulerRoundRobin : public SchedulerDynamic
 
       // Configuration
       const SubsecondTime m_quantum;
+      const bool m_core_domask;
+      std::vector<bool> m_core_mask;
       // Global state
       core_id_t m_next_core;
       SubsecondTime m_last_periodic;
