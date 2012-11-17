@@ -242,7 +242,12 @@ MemoryManager::MemoryManager(Core* core,
 
 
    if (m_dram_cntlr_present)
-      LOG_ASSERT_ERROR(m_cache_cntlrs[m_last_level_cache]->isMasterCache() == true, "DRAM controllers may only be at 'master' node of shared caches");
+      LOG_ASSERT_ERROR(m_cache_cntlrs[m_last_level_cache]->isMasterCache() == true,
+                       "DRAM controllers may only be at 'master' node of shared caches\n"
+                       "\n"
+                       "Make sure perf_model/dram/controllers_interleaving is a multiple of perf_model/l%d_cache/shared_cores\n",
+                       Sim()->getCfg()->getInt("perf_model/cache/levels")
+                      );
 
 
    // The core id to use when sending messages to the directory (master node of the last-level cache)
