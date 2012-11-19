@@ -24,7 +24,7 @@ class PeriodicStats:
       sim.util.Every(self.interval, self.periodic, roi_only = True)
 
   def periodic(self, time, time_delta):
-    if self.num_snapshots > self.max_snapshots:
+    if self.max_snapshots and self.num_snapshots > self.max_snapshots:
       self.num_snapshots /= 2
       cursor = sim.stats.db.cursor()
       for t in range(self.interval, time, self.interval * 2):
