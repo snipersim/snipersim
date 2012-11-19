@@ -261,7 +261,7 @@ def get_compfrac(data, max_time):
   return dict([ (
     core,
     1 - (data[core].get('StartTime', 0) + data[core].get('Imbalance', 0) + data[core].get('SyncPthreadCond', 0) + \
-         data[core].get('SyncPthreadBarrier', 0) + data[core].get('SyncJoin', 0) + data[core].get('Recv', 0)) / float(max_time)
+         data[core].get('SyncPthreadBarrier', 0) + data[core].get('SyncJoin', 0) + data[core].get('Recv', 0)) / (float(max_time) or 1.)
   ) for core in data.keys() ])
 
 
@@ -299,6 +299,9 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
   plot_labels = []
   plot_data = {}
   max_cycles = cycles_scale[0] * max(times)
+
+  if not max_cycles:
+    raise ValueError("No cycles accounted during interval")
 
   if gen_text_stack: print '                     CPI      CPI %     Time %'
   for core, (res, total, other, scale) in results.items():
