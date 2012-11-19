@@ -32,6 +32,7 @@ StatsManager::StatsManager()
    , m_prefixnum(0)
    , m_db(NULL)
 {
+   init();
 }
 
 StatsManager::~StatsManager()
