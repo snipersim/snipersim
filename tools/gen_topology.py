@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, collections, sniper_lib, sniper_config, getopt
+import sys, os, collections, sqlite3, sniper_lib, sniper_config, getopt
 
 outputfilename = 'topo.svg'
 validformats = ('svg', 'text')
@@ -40,8 +40,8 @@ names = ('hwcontext', 'smt', 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'dram-cache', 'dr
 ids = dict([ (name, collections.defaultdict(lambda: None)) for name in names ])
 
 max_id = 0
-for line in open('sim.topo'):
-  name, lid, mid = line.split()
+db = sqlite3.connect('sim.stats.sqlite3')
+for name, lid, mid in db.execute('SELECT componentname, coreid, masterid FROM topology').fetchall():
   if name not in names:
     print >> sys.stderr, 'Unknown component', name
     continue

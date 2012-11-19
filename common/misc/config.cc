@@ -88,17 +88,10 @@ Config::Config(SimulationMode mode)
    //m_total_cores = getNearestAcceptableCoreCount(m_total_cores);
 
    m_core_id_length = computeCoreIDLength(m_total_cores);
-
-   m_topo_fp = fopen(formatOutputFileName("sim.topo").c_str(), "w");
 }
 
 Config::~Config()
 {
-   if (m_topo_fp)
-   {
-      fclose(m_topo_fp);
-      m_topo_fp = NULL;
-   }
 }
 
 UInt32 Config::getTotalCores()
@@ -215,9 +208,4 @@ UInt32 Config::getNearestAcceptableCoreCount(UInt32 core_count)
       nearest_acceptable_core_count = core_count;
 
    return nearest_acceptable_core_count;
-}
-
-void Config::logTopology(String component, core_id_t core_id, core_id_t master_id)
-{
-   fprintf(m_topo_fp, "%s %d %d\n", component.c_str(), core_id, master_id);
 }

@@ -17,11 +17,14 @@ template <> UInt64 makeStatsValue<SubsecondTime>(SubsecondTime t) { return t.get
 template <> UInt64 makeStatsValue<ComponentTime>(ComponentTime t) { return t.getElapsedTime().getFS(); }
 
 const char* db_create_stmts[] = {
+   // Statistics
    "CREATE TABLE `names` (nameid INTEGER, objectname TEXT, metricname TEXT);",
    "CREATE TABLE `prefixes` (prefixid INTEGER, prefixname TEXT);",
    "CREATE TABLE `values` (prefixid INTEGER, nameid INTEGER, core INTEGER, value INTEGER);",
    "CREATE INDEX `idx_prefix_name` ON `prefixes`(`prefixname`);",
    "CREATE INDEX `idx_value_prefix` ON `values`(`prefixid`);",
+   // Other users
+   "CREATE TABLE `topology` (componentname TEXT, coreid INTEGER, masterid INTEGER);",
 };
 const char db_insert_stmt_name[] = "INSERT INTO `names` (nameid, objectname, metricname) VALUES (?, ?, ?);";
 const char db_insert_stmt_prefix[] = "INSERT INTO `prefixes` (prefixid, prefixname) VALUES (?, ?);";
@@ -177,6 +180,18 @@ StatsManager::getMetricObject(String objectName, UInt32 index, String metricName
    return m_objects[_objectName][_metricName].second[index];
 }
 
+void
+StatsManager::logTopology(String component, core_id_t core_id, core_id_t master_id)
+{
+   sqlite3_stmt *stmt;
+   sqlite3_prepare(m_db, "INSERT INTO topology (componentname, coreid, masterid) VALUES (?, ?, ?);", -1, &stmt, NULL);
+   sqlite3_bind_text(stmt, 1, component.c_str(), -1, SQLITE_TRANSIENT);
+   sqlite3_bind_int(stmt, 2, core_id);
+   sqlite3_bind_int(stmt, 3, master_id);
+   int res = sqlite3_step(stmt);
+   LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement: %s", sqlite3_errmsg(m_db));
+   sqlite3_finalize(stmt);
+}
 
 StatHist &
 StatHist::operator += (StatHist & stat)

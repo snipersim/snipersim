@@ -63,6 +63,7 @@ class StatsManager
       void recordStats(String prefix);
       void registerMetric(StatsMetricBase *metric);
       StatsMetricBase *getMetricObject(String objectName, UInt32 index, String metricName);
+      void logTopology(String component, core_id_t core_id, core_id_t master_id);
 
    private:
       UInt64 m_keyid;

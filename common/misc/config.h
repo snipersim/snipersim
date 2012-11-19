@@ -91,7 +91,6 @@ public:
    String getOutputDirectory() const;
    String formatOutputFileName(String filename) const;
    void logCoreMap();
-   void logTopology(String component, core_id_t core_id, core_id_t master_id);
 
    static Config *getSingleton();
 
@@ -103,8 +102,6 @@ private:
 
    // Simulation Mode
    SimulationMode m_simulation_mode;
-
-   FILE *m_topo_fp;
 
    static Config *m_singleton;
 

@@ -58,7 +58,7 @@ Core::Core(SInt32 id)
    LOG_PRINT("Core ctor for: %d", id);
 
    registerStatsMetric("core", id, "instructions", &m_instructions);
-   Sim()->getConfig()->logTopology("hwcontext", id, id);
+   Sim()->getStatsManager()->logTopology("hwcontext", id, id);
 
    m_network = new Network(this);
 
