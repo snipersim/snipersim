@@ -58,7 +58,7 @@ MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
 #endif
 
    // Granularity of memory dependencies, in bytes
-   UInt32 mem_gran = Sim()->getCfg()->getIntArray("perf_model/core/interval_timer/memory_dependency_granularity", core->getId());
+   UInt64 mem_gran = Sim()->getCfg()->getIntArray("perf_model/core/interval_timer/memory_dependency_granularity", core->getId());
    LOG_ASSERT_ERROR(isPower2(mem_gran), "memory_dependency_granularity needs to be a power of 2. [%u]", mem_gran);
    m_mem_dep_mask = ~(mem_gran - 1);
 
