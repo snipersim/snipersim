@@ -44,8 +44,9 @@ $(PIN_HOME)/intel64/bin/pinbin:
 endif
 
 ifneq ($(NO_PYTHON_DOWNLOAD),1)
-python: python_kit/$(TARGET_ARCH)/include/python2.7/Python.h
-python_kit/$(TARGET_ARCH)/include/python2.7/Python.h:
+PYTHON_DEP=python_kit/$(TARGET_ARCH)/lib/python2.7/lib-dynload/_sqlite3.so
+python: $(PYTHON_DEP)
+$(PYTHON_DEP):
 	mkdir -p python_kit/$(TARGET_ARCH)
 	wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(TARGET_ARCH)
 endif
