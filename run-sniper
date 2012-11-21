@@ -24,7 +24,7 @@ standalone = False
 ncores = 1
 outputdir = '.'
 configfiles = []
-graphiteoptions = []
+sniperoptions = []
 roi_only = False
 roi_script = False
 use_perf = False
@@ -138,7 +138,7 @@ for o, a in opts:
   if o == '-g':
     if not a.startswith('-'):
       a = '--'+a
-    graphiteoptions.append(pipes.quote(a))
+    sniperoptions.append(pipes.quote(a))
   if o == '--roi':
     roi_only = True
   if o == '--roi-script':
@@ -167,12 +167,12 @@ for o, a in opts:
   if o == '--power':
     run_power = True
   if o == '--cache-only':
-    graphiteoptions.append('-g --general/inst_mode_roi=cache_only')
+    sniperoptions.append('-g --general/inst_mode_roi=cache_only')
   if o == '--fast-forward':
-    graphiteoptions.append('-g --general/inst_mode_init=fast_forward')
-    graphiteoptions.append('-g --general/inst_mode_roi=fast_forward')
+    sniperoptions.append('-g --general/inst_mode_init=fast_forward')
+    sniperoptions.append('-g --general/inst_mode_roi=fast_forward')
   if o == '--no-cache-warming':
-    graphiteoptions.append('-g --general/inst_mode_init=fast_forward')
+    sniperoptions.append('-g --general/inst_mode_init=fast_forward')
   if o == '--save-patch':
     save_patch = True
   if o == '--pin-stats':
@@ -233,15 +233,15 @@ if not configfiles:
   # No config file(s) specified: prepend default Xeon X5550 Gainestown
   configfiles = add_config_file('gainestown')
 # Prepend config files to options, so -g options are always later on the command line and override config files
-graphiteoptions = [ '--config=%s' % cfgfile for cfgfile in configfiles ] + graphiteoptions
+sniperoptions = [ '--config=%s' % cfgfile for cfgfile in configfiles ] + sniperoptions
 
 if roi_only:
-  graphiteoptions.append('-g --general/magic=true')
+  sniperoptions.append('-g --general/magic=true')
 if roi_script:
-  graphiteoptions.append('-g --general/roi_script=true')
+  sniperoptions.append('-g --general/roi_script=true')
 
 if scripts:
-  graphiteoptions.append('-g --hooks/numscripts=%u' % len(scripts))
+  sniperoptions.append('-g --hooks/numscripts=%u' % len(scripts))
   for i, script in enumerate(scripts):
     if ':' in script:
       filename, args = script.split(':', 1)
@@ -261,8 +261,8 @@ if scripts:
         if not os.path.isfile(scriptfile):
           print 'Cannot find script file', scriptfile
           sys.exit(-1)
-    graphiteoptions.append('-g --hooks/script%uname=%s' % (i, scriptfile))
-    graphiteoptions.append('-g --hooks/script%uargs=%s' % (i, args or ''))
+    sniperoptions.append('-g --hooks/script%uname=%s' % (i, scriptfile))
+    sniperoptions.append('-g --hooks/script%uargs=%s' % (i, args or ''))
 
 def findtrace(trace):
   for dirname in ('.', os.getenv('BENCHMARKS_TRACES', '.'), os.getenv('BENCHMARKS_ROOT', '.'), os.getenv('BENCHMARKS_ROOT_ORIG', '.')):
@@ -277,18 +277,18 @@ def findtrace(trace):
 
 # If using traces via this front-end, support either multi-program workloads or a single multi-threaded application
 if traces:
-  graphiteoptions.append('-g --traceinput/enabled=true')
+  sniperoptions.append('-g --traceinput/enabled=true')
   if resptraces:
-    graphiteoptions.append('-g --traceinput/emulate_syscalls=true')
-    graphiteoptions.append('-g --traceinput/num_apps=1')
+    sniperoptions.append('-g --traceinput/emulate_syscalls=true')
+    sniperoptions.append('-g --traceinput/num_apps=1')
   else:
-    graphiteoptions.append('-g --traceinput/emulate_syscalls=false')
-    graphiteoptions.append('-g --traceinput/num_apps=%u' % len(traces))
+    sniperoptions.append('-g --traceinput/emulate_syscalls=false')
+    sniperoptions.append('-g --traceinput/num_apps=%u' % len(traces))
   for thread_id, trace in enumerate(traces):
     filename = findtrace(trace)
     if filename:
       print '[SNIPER] (%u) Using trace file %s' % (thread_id, filename)
-      graphiteoptions.append('-g --traceinput/thread_%u=%s' % (thread_id, filename))
+      sniperoptions.append('-g --traceinput/thread_%u=%s' % (thread_id, filename))
     else:
       print 'Cannot find trace', trace
       sys.exit(-1)
@@ -296,22 +296,22 @@ if traces:
     filename = findtrace(trace)
     if filename:
       print '[SNIPER] (%u) Using response-trace file %s' % (thread_id, filename)
-      graphiteoptions.append('-g --traceinput/thread_response_%u=%s' % (thread_id, filename))
+      sniperoptions.append('-g --traceinput/thread_response_%u=%s' % (thread_id, filename))
     else:
       print 'Cannot find trace', trace
       sys.exit(-1)
 elif use_mpi:
   if not mpi_ranks:
     mpi_ranks = ncores
-  graphiteoptions.append('-g --traceinput/enabled=true')
-  graphiteoptions.append('-g --traceinput/emulate_syscalls=true')
-  graphiteoptions.append('-g --traceinput/stop_with_first_thread=false') # Only stop once all MPI ranks have completed
-  graphiteoptions.append('-g --traceinput/num_apps=%d' % mpi_ranks)
+  sniperoptions.append('-g --traceinput/enabled=true')
+  sniperoptions.append('-g --traceinput/emulate_syscalls=true')
+  sniperoptions.append('-g --traceinput/stop_with_first_thread=false') # Only stop once all MPI ranks have completed
+  sniperoptions.append('-g --traceinput/num_apps=%d' % mpi_ranks)
   basefname = 'run_benchmarks'
   tracetempdir = tempfile.mkdtemp()
   tracefiles_created = [] # FIFOs to be cleaned up
   traceprefix = os.path.join(tracetempdir, basefname)
-  graphiteoptions.append('-g --traceinput/trace_prefix=%s' % traceprefix)
+  sniperoptions.append('-g --traceinput/trace_prefix=%s' % traceprefix)
   # Create FIFOs for first thread of each application
   for r in range(mpi_ranks):
     for f in ('','_response'):
@@ -323,7 +323,7 @@ elif use_mpi:
   print '[SNIPER] Running', tracecmd
   threading.Thread(target = lambda: time.sleep(1) or subprocess.Popen(tracecmd).communicate()).start()
 
-graphiteoptions = ' '.join(graphiteoptions)
+sniperoptions = ' '.join(sniperoptions)
 
 configfile = os.path.join(HOME, 'config/graphite.py')
 config = {}
@@ -426,7 +426,7 @@ if not standalone:
       pinoptions += ' -appdebug'
 
 
-optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(graphiteoptions)s' % locals()
+optcmd = ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(sniperoptions)s' % locals()
 if standalone:
   if use_gdb:
     fh, fn = tempfile.mkstemp()
@@ -508,9 +508,9 @@ def execute_appdebug():
   sys.stdout.flush()
   sys.stderr.flush()
 
-  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env)
+  p_sniper = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env)
   while True:
-    line = p_graphite.stdout.readline()
+    line = p_sniper.stdout.readline()
     if line.startswith('  target remote :'):
       info = file(os.path.join(outputdir, 'appdebug_port.out')).read()
       g_pid, g_remote = map(long, info.split())
@@ -520,12 +520,12 @@ def execute_appdebug():
   print "To interrupt the application, use: kill -INT %s" % g_pid
   print
 
-  def output_graphite():
+  def output_sniper():
     while True:
-      line = p_graphite.stdout.readline()
+      line = p_sniper.stdout.readline()
       if not line: break
       print line,
-  threading.Thread(target = output_graphite).start()
+  threading.Thread(target = output_sniper).start()
 
   fh, fn = tempfile.mkstemp()
   f = open(fn, 'w')
@@ -539,11 +539,11 @@ def execute_appdebug():
 
 
 if save_patch:
-  graphiterootdir = HOME
-  gitdir = os.path.join(graphiterootdir, '.git')
+  sniperrootdir = HOME
+  gitdir = os.path.join(sniperrootdir, '.git')
   patchfile = os.path.join(outputdir, 'sim.patch')
-  os.system("git --work-tree='%(graphiterootdir)s' --git-dir='%(gitdir)s' log --max-count=1 --pretty=%%H > '%(patchfile)s'" % locals())
-  os.system("git --work-tree='%(graphiterootdir)s' --git-dir='%(gitdir)s' diff >> '%(patchfile)s'" % locals())
+  os.system("git --work-tree='%(sniperrootdir)s' --git-dir='%(gitdir)s' log --max-count=1 --pretty=%%H > '%(patchfile)s'" % locals())
+  os.system("git --work-tree='%(sniperrootdir)s' --git-dir='%(gitdir)s' diff >> '%(patchfile)s'" % locals())
 
 t_start = time.time()
 backtracefile = os.path.join(outputdir, 'debug_backtrace.out')
@@ -560,7 +560,7 @@ try:
     rc = execute()
 
 except KeyboardInterrupt:
-  # Make sure Graphite itself is stopped, even if it didn't respond to the SIGINT
+  # Make sure Sniper itself is stopped, even if it didn't respond to the SIGINT
   print '\n[SNIPER] Ctrl-C detected: Killing all child processes'
   time.sleep(1)
   sniper_lib.kill_children()
