@@ -57,7 +57,6 @@ Log::~Log()
 
    if (_systemFile)
       fclose(_systemFile);
-   fclose(_defaultFile);
 }
 
 Log* Log::getSingleton()
@@ -91,8 +90,6 @@ void Log::initFileDescriptors()
    _simLocks = new Lock [_coreCount];
 
    _systemFile = NULL;
-
-   _defaultFile = fopen(formatFileName("system-default.log").c_str(),"w");
 }
 
 void Log::parseModules(std::set<String> &mods, String list)

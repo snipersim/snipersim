@@ -57,12 +57,6 @@ class Log
       FILE* _systemFile;
       Lock _systemLock;
 
-      // when both no. procs and core id are unknown
-      // there is the possibility of race conditions and stuff being
-      // overwritten between multiple processes for this file
-      FILE *_defaultFile;
-      Lock _defaultLock;
-
       core_id_t _coreCount;
       UInt64 _startTime;
       std::set<String> _disabledModules;
