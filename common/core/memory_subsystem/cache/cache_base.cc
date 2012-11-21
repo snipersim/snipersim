@@ -13,7 +13,7 @@ CacheBase::CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt3
    m_num_sets = m_cache_size / (m_associativity * m_blocksize);
    m_log_blocksize = floorLog2(m_blocksize);
 
-   LOG_ASSERT_ERROR((m_num_sets == (1 << floorLog2(m_num_sets))) || (hash != CacheBase::HASH_MASK),
+   LOG_ASSERT_ERROR((m_num_sets == (1UL << floorLog2(m_num_sets))) || (hash != CacheBase::HASH_MASK),
       "Caches of non-power of 2 size need funky hash function");
 }
 
