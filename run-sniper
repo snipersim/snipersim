@@ -596,7 +596,7 @@ stats = dict(
   git_revision = config.get('git_revision', ''),
   pin_version = pin_version,
   cmdline = sys.argv,
-  graphitecmd = cmd,
+  snipercmd = cmd,
   vmem = memusage,
   rusage = usage and tuple(usage) or None,
   t_start = t_start,
@@ -605,7 +605,7 @@ stats = dict(
 if 'BENCHMARKS_ROOT' in os.environ:
   stats['benchmarks_root'] = os.getenv('BENCHMARKS_ROOT'),
   stats['benchmarks_revision'] = commands.getoutput('cd $BENCHMARKS_ROOT && (if [ -e .git ]; then git rev-parse HEAD; else cat .gitid; fi)'),
-file(os.path.join(outputdir, 'graphite.out'), 'w').write(pprint.pformat(stats))
+file(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats))
 
 if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpath(outputdir):
   os.system('cp pin.log %s' % outputdir)
