@@ -29,16 +29,8 @@ def addr2line(a):
 
 if __name__ == '__main__':
   if len(sys.argv) < 2:
-    print 'Usage: addr2line.py --gdb [<address-of-rdtsc>]'
     print 'Usage: addr2line.py <address-of-rdtsc> [<address-to-resolve> ]*'
     sys.exit(1)
-  if sys.argv[1] == '--gdb':
-    if len(sys.argv) < 3:
-      set_rdtsc(long(file('debug_offset.out').read()))
-    else:
-      set_rdtsc(long(sys.argv[2]))
-    print 'add-symbol-file %s 0x%x' % (bin, text + offset)
-  else:
-    set_rdtsc(long(sys.argv[1]))
-    for addr in sys.argv[2:]:
-      print ':'.join(addr2line(long(addr)))
+  set_rdtsc(long(sys.argv[1]))
+  for addr in sys.argv[2:]:
+    print ':'.join(addr2line(long(addr)))

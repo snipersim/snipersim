@@ -421,11 +421,6 @@ int main(int argc, char *argv[])
    Simulator::allocate();
    Sim()->start();
 
-   // Write out the current address of rdtsc(), so tools/addr2line.py can compute the mapping offset
-   FILE* fp = fopen(Sim()->getConfig()->formatOutputFileName("debug_offset.out").c_str(), "w");
-   fprintf(fp, "%lu\n", (unsigned long)rdtsc);
-   fclose(fp);
-
    // If -appdebug_enable is used, write out the port to connect GDB to
    if(PIN_GetDebugStatus() != DEBUG_STATUS_DISABLED) {
       DEBUG_CONNECTION_INFO info;
