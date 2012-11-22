@@ -1,19 +1,19 @@
-#include "scheduler_round_robin.h"
+#include "scheduler_pinned.h"
 #include "simulator.h"
 #include "core_manager.h"
 #include "performance_model.h"
 #include "config.hpp"
 #include "os_compat.h"
 
-// Round-robin scheduler.
+// Pinned scheduler.
 // Each thread has is pinned to a specific core (m_thread_affinity).
 // Cores are handed out to new threads in round-robin fashion.
 // If multiple threads share a core, they are time-shared with a configurable quantum
 
-SchedulerRoundRobin::SchedulerRoundRobin(ThreadManager *thread_manager)
+SchedulerPinned::SchedulerPinned(ThreadManager *thread_manager)
    : SchedulerDynamic(thread_manager)
-   , m_quantum(SubsecondTime::NS(Sim()->getCfg()->getInt("scheduler/round_robin/quantum")))
-   , m_core_domask(Sim()->getCfg()->hasKey("scheduler/round_robin/core_mask"))
+   , m_quantum(SubsecondTime::NS(Sim()->getCfg()->getInt("scheduler/pinned/quantum")))
+   , m_core_domask(Sim()->getCfg()->hasKey("scheduler/pinned/core_mask"))
    , m_next_core(Sim()->getConfig()->getApplicationCores()-1)
    , m_last_periodic(SubsecondTime::Zero())
    , m_core_thread_running(Sim()->getConfig()->getApplicationCores(), INVALID_THREAD_ID)
@@ -25,12 +25,12 @@ SchedulerRoundRobin::SchedulerRoundRobin(ThreadManager *thread_manager)
 
       for (core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); core_id++)
       {
-          m_core_mask[core_id] = Sim()->getCfg()->getBoolArray("scheduler/round_robin/core_mask", core_id);
+          m_core_mask[core_id] = Sim()->getCfg()->getBoolArray("scheduler/pinned/core_mask", core_id);
       }
    }
 }
 
-core_id_t SchedulerRoundRobin::threadCreate(thread_id_t thread_id)
+core_id_t SchedulerPinned::threadCreate(thread_id_t thread_id)
 {
    if (m_thread_info.size() <= (size_t)thread_id)
       m_thread_info.resize(m_thread_info.size() + 16);
@@ -57,7 +57,7 @@ core_id_t SchedulerRoundRobin::threadCreate(thread_id_t thread_id)
    }
 }
 
-void SchedulerRoundRobin::threadYield(thread_id_t thread_id)
+void SchedulerPinned::threadYield(thread_id_t thread_id)
 {
    core_id_t core_id = m_thread_info[thread_id].core_running;
 
@@ -78,7 +78,7 @@ void SchedulerRoundRobin::threadYield(thread_id_t thread_id)
    }
 }
 
-bool SchedulerRoundRobin::threadSetAffinity(thread_id_t calling_thread_id, thread_id_t thread_id, size_t cpusetsize, const cpu_set_t *mask)
+bool SchedulerPinned::threadSetAffinity(thread_id_t calling_thread_id, thread_id_t thread_id, size_t cpusetsize, const cpu_set_t *mask)
 {
    if (!mask)
    {
@@ -112,7 +112,7 @@ bool SchedulerRoundRobin::threadSetAffinity(thread_id_t calling_thread_id, threa
    return true;
 }
 
-bool SchedulerRoundRobin::threadGetAffinity(thread_id_t thread_id, size_t cpusetsize, cpu_set_t *mask)
+bool SchedulerPinned::threadGetAffinity(thread_id_t thread_id, size_t cpusetsize, cpu_set_t *mask)
 {
    if (cpusetsize*8 < Sim()->getConfig()->getApplicationCores())
    {
@@ -126,32 +126,32 @@ bool SchedulerRoundRobin::threadGetAffinity(thread_id_t thread_id, size_t cpuset
    return true;
 }
 
-void SchedulerRoundRobin::threadStart(thread_id_t thread_id, SubsecondTime time)
+void SchedulerPinned::threadStart(thread_id_t thread_id, SubsecondTime time)
 {
 }
 
-void SchedulerRoundRobin::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
+void SchedulerPinned::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
 {
    // If the running thread becomes unrunnable, schedule someone else
    if (m_thread_info[thread_id].core_running != INVALID_CORE_ID)
       reschedule(time, m_thread_info[thread_id].core_running, false);
 }
 
-void SchedulerRoundRobin::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
+void SchedulerPinned::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
 {
    // If our core is currently idle, schedule us now
    if (m_core_thread_running[m_thread_info[thread_id].core_affinity] == INVALID_THREAD_ID)
       reschedule(time, m_thread_info[thread_id].core_affinity, false);
 }
 
-void SchedulerRoundRobin::threadExit(thread_id_t thread_id, SubsecondTime time)
+void SchedulerPinned::threadExit(thread_id_t thread_id, SubsecondTime time)
 {
    // If the running thread becomes unrunnable, schedule someone else
    if (m_thread_info[thread_id].core_running != INVALID_CORE_ID)
       reschedule(time, m_thread_info[thread_id].core_running, false);
 }
 
-void SchedulerRoundRobin::periodic(SubsecondTime time)
+void SchedulerPinned::periodic(SubsecondTime time)
 {
    SubsecondTime delta = time - m_last_periodic;
 
@@ -170,7 +170,7 @@ void SchedulerRoundRobin::periodic(SubsecondTime time)
    m_last_periodic = time;
 }
 
-void SchedulerRoundRobin::reschedule(SubsecondTime time, core_id_t core_id, bool is_periodic)
+void SchedulerPinned::reschedule(SubsecondTime time, core_id_t core_id, bool is_periodic)
 {
    if (m_core_thread_running[core_id] != INVALID_THREAD_ID
        && Sim()->getThreadManager()->getThreadState(m_core_thread_running[core_id]) == Core::INITIALIZING)
@@ -226,7 +226,7 @@ void SchedulerRoundRobin::reschedule(SubsecondTime time, core_id_t core_id, bool
    m_quantum_left[core_id] = m_quantum;
 }
 
-void SchedulerRoundRobin::printState()
+void SchedulerPinned::printState()
 {
    printf("thread state:");
    for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)

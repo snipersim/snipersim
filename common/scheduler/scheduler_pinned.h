@@ -3,10 +3,10 @@
 
 #include "scheduler_dynamic.h"
 
-class SchedulerRoundRobin : public SchedulerDynamic
+class SchedulerPinned : public SchedulerDynamic
 {
    public:
-      SchedulerRoundRobin(ThreadManager *thread_manager);
+      SchedulerPinned(ThreadManager *thread_manager);
 
       virtual core_id_t threadCreate(thread_id_t);
       virtual void threadYield(thread_id_t thread_id);

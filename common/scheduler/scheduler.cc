@@ -1,6 +1,6 @@
 #include "scheduler.h"
 #include "scheduler_static.h"
-#include "scheduler_round_robin.h"
+#include "scheduler_pinned.h"
 #include "scheduler_rand.h"
 #include "scheduler_static_mask.h"
 #include "simulator.h"
@@ -15,8 +15,8 @@ Scheduler* Scheduler::create(ThreadManager *thread_manager)
 
    if (type == "static")
       return new SchedulerStatic(thread_manager);
-   else if (type == "round_robin")
-      return new SchedulerRoundRobin(thread_manager);
+   else if (type == "pinned")
+      return new SchedulerPinned(thread_manager);
    else if (type == "rand")
       return new SchedulerRand(thread_manager);
    else if (type == "static_mask")
