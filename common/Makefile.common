@@ -64,8 +64,10 @@ CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
           -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++0x $(OPT_CFLAGS) #-Werror
 
 %.h %.hh %.hpp:
-	@echo "\n\tUnable to find $@" >&2
-	@echo "\tYou may want to try running \`\`make empty_deps''\n" >&2
+	@echo >&2
+	@echo "        Unable to find $@" >&2
+	@echo "        You may want to try running 'make empty_deps'" >&2
+	@echo >&2
 	@false
 
 # Build rules for dependency generation
