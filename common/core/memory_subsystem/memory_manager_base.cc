@@ -45,7 +45,6 @@ void MemoryManagerNetworkCallback(void* obj, NetPacket packet)
    switch (packet.type)
    {
       case SHARED_MEM_1:
-      case SHARED_MEM_2:
          mm->handleMsgFromNetwork(packet);
          break;
 

@@ -166,13 +166,11 @@ MemoryManager::MemoryManager(Core* core,
 
    // Register Call-backs
    getNetwork()->registerCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
-   getNetwork()->registerCallback(SHARED_MEM_2, MemoryManagerNetworkCallback, this);
 }
 
 MemoryManager::~MemoryManager()
 {
    getNetwork()->unregisterCallback(SHARED_MEM_1);
-   getNetwork()->unregisterCallback(SHARED_MEM_2);
 
    // Delete the Models
    delete m_l1_icache_perf_model;

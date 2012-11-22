@@ -117,7 +117,7 @@ NetworkModelEMeshHopCounter::processReceivedPacket(NetPacket &pkt)
 
    core_id_t requester = INVALID_CORE_ID;
 
-   if ((pkt.type == SHARED_MEM_1) || (pkt.type == SHARED_MEM_2))
+   if (pkt.type == SHARED_MEM_1)
       requester = getNetwork()->getCore()->getMemoryManager()->getShmemRequester(pkt.data);
    else // Other Packet types
       requester = pkt.sender;

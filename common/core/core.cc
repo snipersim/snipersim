@@ -91,60 +91,6 @@ void Core::outputSummary(std::ostream &os)
    getMemoryManager()->outputSummary(os);
 }
 
-int Core::coreSendW(int sender, int receiver, char* buffer, int size, carbon_network_t net_type)
-{
-   PacketType pkt_type = getPktTypeFromUserNetType(net_type);
-
-   SInt32 sent;
-   if (receiver == CAPI_ENDPOINT_ALL)
-      sent = m_network->netBroadcast(pkt_type, buffer, size);
-   else
-      sent = m_network->netSend(receiver, pkt_type, buffer, size);
-
-   LOG_ASSERT_ERROR(sent == size, "Bytes Sent(%i), Message Size(%i)", sent, size);
-
-   return sent == size ? 0 : -1;
-}
-
-int Core::coreRecvW(int sender, int receiver, char* buffer, int size, carbon_network_t net_type)
-{
-   PacketType pkt_type = getPktTypeFromUserNetType(net_type);
-
-   NetPacket packet;
-   if (sender == CAPI_ENDPOINT_ANY)
-      packet = m_network->netRecvType(pkt_type);
-   else
-      packet = m_network->netRecv(sender, pkt_type);
-
-   LOG_PRINT("Got packet: from %i, to %i, type %i, len %i", packet.sender, packet.receiver, (SInt32)packet.type, packet.length);
-
-   LOG_ASSERT_ERROR((unsigned)size == packet.length, "Core: User thread requested packet of size: %d, got a packet from %d of size: %d", size, sender, packet.length);
-
-   memcpy(buffer, packet.data, size);
-
-   // De-allocate dynamic memory
-   // Is this the best place to de-allocate packet.data ??
-   delete [](Byte*)packet.data;
-
-   return (unsigned)size == packet.length ? 0 : -1;
-}
-
-PacketType Core::getPktTypeFromUserNetType(carbon_network_t net_type)
-{
-   switch(net_type)
-   {
-      case CARBON_NET_USER_1:
-         return USER_1;
-
-      case CARBON_NET_USER_2:
-         return USER_2;
-
-      default:
-         LOG_PRINT_ERROR("Unrecognized User Network(%u)", net_type);
-         return (PacketType) -1;
-   }
-}
-
 const ComponentPeriod* Core::getDvfsDomain() const
 {
    return Sim()->getDvfsManager()->getCoreDomain(this->getId());

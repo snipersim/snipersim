@@ -14,7 +14,6 @@ class PinMemoryManager;
 #include "mem_component.h"
 #include "fixed_types.h"
 #include "config.h"
-#include "capi.h"
 #include "lock.h"
 #include "packet_type.h"
 #include "dynamic_instruction_info.h"
@@ -83,9 +82,6 @@ class Core
 
       void outputSummary(std::ostream &os);
 
-      int coreSendW(int sender, int receiver, char *buffer, int size, carbon_network_t net_type);
-      int coreRecvW(int sender, int receiver, char *buffer, int size, carbon_network_t net_type);
-
       MemoryResult readInstructionMemory(IntPtr address,
             UInt32 instruction_size);
 
@@ -145,7 +141,6 @@ class Core
             IntPtr eip,
             SubsecondTime now);
 
-      PacketType getPktTypeFromUserNetType(carbon_network_t net_type);
       void hookPeriodicInsCheck();
       void hookPeriodicInsCall();
 
