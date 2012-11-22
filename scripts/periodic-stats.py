@@ -3,8 +3,7 @@ periodic-stats.py
 
 Periodically write out all statistics
 1st argument is the interval size in nanoseconds (default is 1e9 = 1 second of simulated time)
-2nd argument, if "ins" then interval is number of instructions rather than nanoseconds
-3rd argument, if present will limit the number of snapshots and dynamically remove itermediate data
+2rd argument, if present will limit the number of snapshots and dynamically remove itermediate data
 """
 
 import sim
@@ -12,16 +11,11 @@ import sim
 class PeriodicStats:
   def setup(self, args):
     args = dict(enumerate((args or '').split(':')))
-    interval = long(args.get(0, '') or 1e9)
-    by_ins = args.get(1, '')
-    self.max_snapshots = long(args.get(2, 0))
+    interval = long(args.get(0, '') or 1000000000)
+    self.max_snapshots = long(args.get(1, 0))
     self.num_snapshots = 0
-    if by_ins == 'ins':
-      self.interval = long(interval)
-      sim.util.EveryIns(self.interval, self.periodic, roi_only = True)
-    else:
-      self.interval = long(interval * sim.util.Time.NS)
-      sim.util.Every(self.interval, self.periodic, roi_only = True)
+    self.interval = long(interval * sim.util.Time.NS)
+    sim.util.Every(self.interval, self.periodic, roi_only = True)
 
   def periodic(self, time, time_delta):
     if self.max_snapshots and self.num_snapshots > self.max_snapshots:
