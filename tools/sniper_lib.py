@@ -127,13 +127,19 @@ def parse_results_from_dir(resultsdir, partial = None):
   results.append(('roi.ipstotal', -1, roi['ipstotal']))
   results.append(('roi.ipscore', -1, roi['ipscore']))
 
-  ## graphite.out
+  ## sim.info or graphite.out
+  siminfo = os.path.join(resultsdir, 'sim.info')
   graphiteout = os.path.join(resultsdir, 'graphite.out')
-  if os.path.exists(graphiteout):
-    # If we're called from inside run-graphite, graphite.out may not yet exist
-    graphiteout = eval(open(graphiteout).read())
-    results.append(('walltime', -1, graphiteout['t_elapsed']))
-    results.append(('vmem', -1, graphiteout['vmem']))
+  if os.path.exists(siminfo):
+    siminfo = eval(open(siminfo).read())
+  elif os.path.exists(graphiteout):
+    siminfo = eval(open(graphiteout).read())
+  else:
+    siminfo = None
+  if siminfo:
+    # If we're called from inside run-graphite, sim.info may not yet exist
+    results.append(('walltime', -1, siminfo['t_elapsed']))
+    results.append(('vmem', -1, siminfo['vmem']))
 
   ## sim.stats
   if partial:
