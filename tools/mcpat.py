@@ -75,7 +75,7 @@ all_names = buildstack.get_names('', all_items)
 
 
 
-def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, config = None, no_graph = False, partial = None):
+def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, config = None, no_graph = False, partial = None, print_stack = True, return_data = False):
   tempfile = outputfile + '.xml'
 
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
@@ -152,19 +152,23 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
   plot_labels = []
   plot_data = {}
   if powertype == 'area':
-    print '                         Area    Area %'
+    if print_stack:
+      print '                         Area    Area %'
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
       for name, value in res:
-        print '  %-12s    %6.2f mm^2   %6.2f%%' % (name, float(value), 100 * float(value) / total)
+        if print_stack:
+          print '  %-12s    %6.2f mm^2   %6.2f%%' % (name, float(value), 100 * float(value) / total)
         plot_labels.append(name)
         plot_data[core][name] = float(value)
   else:
-    print '                     Power     Energy   Energy %'
+    if print_stack:
+      print '                     Power     Energy   Energy %'
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
       for name, value in res:
-        print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % (name, float(value), float(value) * seconds, 100 * float(value) / total)
+        if print_stack:
+          print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % (name, float(value), float(value) * seconds, 100 * float(value) / total)
         plot_labels.append(name)
         plot_data[core][name] = float(value) * seconds
 
@@ -175,6 +179,9 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
     all_names_with_colors = zip(all_names, range(1,len(all_names)+1))
     plot_labels_with_color = [n for n in all_names_with_colors if n[0] in plot_labels]
     gnuplot.make_stacked_bargraph(outputfile, plot_labels_with_color, plot_data, 'Energy (J)')
+
+  if return_data:
+    return plot_labels, plot_data
 
 
 
