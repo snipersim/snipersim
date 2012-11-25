@@ -290,6 +290,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
     data = { 0: dict([ (key, sum([ data[core][key] for core in csv_threads ]) / len(csv_threads)) for key in data[threads[0]].keys() ]) }
     instrs = { 0: sum(instrs[core] for core in csv_threads) / len(csv_threads) }
     threads = [0]
+    csv_threads = [0]
 
   all_items, all_names = get_items(use_simple, use_simple_mem = use_simple_mem)
 
