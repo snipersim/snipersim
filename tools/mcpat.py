@@ -181,7 +181,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
     gnuplot.make_stacked_bargraph(outputfile, plot_labels_with_color, plot_data, 'Energy (J)')
 
   if return_data:
-    return plot_labels, plot_data
+    return {'labels': plot_labels, 'power_data': plot_data, 'ncores': ncores, 'time_s': seconds}
 
 
 
