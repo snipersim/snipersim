@@ -91,32 +91,13 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
       val = float(res['results'].get(cpName, [0]*ncores)[core]) / 1e6
       data[core]['Base'] -= val
       data[core][cpiName] = data[core].get(cpiName, 0) + val
-    # Functional unit contention
-    FU = 0
-    for key, values in res['results'].items():
-      if key.startswith('interval_timer.detailed-cpiBase-'):
-        if 'FunctionalUnit' in key:
-          if 'DispatchRate' not in key: # We already accounted for DispatchRate above, don't do it twice
-            data[core]['Base'] -= values[core]
-            FU += values[core]
-    FU_ = { 'FpAddSub': 0, 'FpMulDiv': 0, 'Load': 0, 'Store': 0, 'Generic': 0, 'Branch': 0 }
-    # Divide up FU according to per-port counts
-    for key, values in res['results'].items():
-      if key.startswith('interval_timer.detailed-cpiBaseFunctionalUnit-'):
-        ports = key.split('-')[-1].split('+')
-        for port in ports:
-          FU_[port] += values[core] / float(len(ports))
-    scale = FU / float(sum(FU_.values()) or 1)
-    for key, value in FU_.items():
-      data[core]['FU_%s' % key] = scale * value
     # Issue width
     for key, values in res['results'].items():
       if key.startswith('interval_timer.detailed-cpiBase-'):
         if 'DispatchWidth' in key:
           if 'DispatchRate' not in key: # We already accounted for DispatchRate above, don't do it twice
-            if 'FunctionalUnit' not in key: # We already accounted for FunctionalUnit above, don't do it twice
-              data[core]['Base'] -= values[core]
-              data[core]['Issue'] = data[core].get('Issue', 0) + values[core]
+            data[core]['Base'] -= values[core]
+            data[core]['Issue'] = data[core].get('Issue', 0) + values[core]
     # Fix up large cpiSync fractions that started before but ended inside our interval
     time0_me = stats['performance_model.elapsed_time_begin'][core]
     if time0_me < time0_begin:

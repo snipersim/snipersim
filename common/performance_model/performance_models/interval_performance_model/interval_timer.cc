@@ -621,8 +621,6 @@ String StopDispatchReasonStringHelper(StopDispatchReason r)
       return String("ICacheMiss");
    case STOP_DISPATCH_BRANCH_MISPREDICT:
       return String("BranchMispredict");
-   case STOP_DISPATCH_WIN_FUNCTIONAL_UNIT:
-      return String("FunctionalUnit");
    default:
       return String("UnknownStopDispatchReason");
    }

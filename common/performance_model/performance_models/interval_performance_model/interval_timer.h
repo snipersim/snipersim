@@ -23,8 +23,7 @@ enum StopDispatchReason {
    STOP_DISPATCH_DISPATCH_RATE = 4,
    STOP_DISPATCH_ICACHE_MISS = 8,
    STOP_DISPATCH_BRANCH_MISPREDICT = 16,
-   STOP_DISPATCH_WIN_FUNCTIONAL_UNIT = 32,
-   STOP_DISPATCH_SIZE = 64,
+   STOP_DISPATCH_SIZE = 32,
 };
 
 #define ADD_STOP_DISPATCH_REASON(_new_reason, _original_reasons) ((StopDispatchReason)(((int)_new_reason) | (int)(_original_reasons)))
