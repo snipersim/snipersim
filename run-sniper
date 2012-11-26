@@ -11,7 +11,7 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -185,6 +185,7 @@ for o, a in opts:
     use_mpi = True
   if o == '--mpi-ranks':
     mpi_ranks = long(a)
+
 
 
 if cmdline:
@@ -571,7 +572,7 @@ if use_mpi:
     os.rmdir(tracetempdir)
   except OSError:
     pass
-    
+
 
 if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
   os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
