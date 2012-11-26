@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, re, collections, gnuplot, buildstack, getopt, sniper_lib
+import os, sys, re, collections, gnuplot, buildstack, getopt, sniper_lib, sniper_config
 
 try:
   collections.defaultdict()
@@ -87,10 +87,15 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
       if k.startswith('interval_timer.cpContr_'):
         if k not in cpContrMap.keys():
           print 'Missing in cpContrMap: ', k
+    # Keep 1/width as base CPI component, break down the remainder according to critical path contributors
+    BaseBest = instrs[core] / float(sniper_config.get_config(res['config'], 'perf_model/core/interval_timer/dispatch_width', core))
+    BaseAct = data[core]['Base']
+    BaseCp = BaseAct - BaseBest
+    scale = BaseCp / BaseAct
     for cpName, cpiName in cpContrMap.items():
       val = float(res['results'].get(cpName, [0]*ncores)[core]) / 1e6
-      data[core]['Base'] -= val
-      data[core][cpiName] = data[core].get(cpiName, 0) + val
+      data[core]['Base'] -= val * scale
+      data[core][cpiName] = data[core].get(cpiName, 0) + val * scale
     # Issue width
     for key, values in res['results'].items():
       if key.startswith('interval_timer.detailed-cpiBase-'):
