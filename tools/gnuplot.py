@@ -4,7 +4,8 @@ def make_stacked_bargraph(outfile, titles, data, ylabel = 'Percent of Cycles', s
 
   gnuplot_cmd_list = []
 
-  header = '''set terminal png medium size %d,%d
+  header = '''\
+set terminal png font "FreeSans,10" size %d,%d
 set output "%s.png"
 set boxwidth 0.75 absolute
 set style fill solid 1.00 border -1
