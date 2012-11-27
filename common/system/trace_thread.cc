@@ -30,7 +30,8 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, 
    , m_app_id(app_id)
    , m_cleanup(cleanup)
 {
-   m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
+   if (Sim()->getCfg()->getBool("traceinput/mirror_output"))
+      m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
    m_trace.setHandleSyscallFunc(TraceThread::__handleSyscallFunc, this);
    m_trace.setHandleNewThreadFunc(TraceThread::__handleNewThreadFunc, this);
    m_trace.setHandleJoinFunc(TraceThread::__handleJoinFunc, this);
