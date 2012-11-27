@@ -17,7 +17,7 @@ SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
    if (m_debug_output)
       std::cout << "[SchedulerRand] created random scheduler" << std::endl;
 
-   uint64_t t = Sim()->getCfg()->getInt("scheduler/quantum");
+   uint64_t t = Sim()->getCfg()->getInt("scheduler/rand/quantum");
    m_quantum = SubsecondTime::US(t);
 
    m_nSmallCores = m_nBigCores = 0;
