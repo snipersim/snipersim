@@ -184,6 +184,10 @@ void TraceThread::run()
    ClockSkewMinimizationClient *client = m_thread->getClockSkewMinimizationClient();
    LOG_ASSERT_ERROR(client != NULL, "Tracing doesn't work without a clock skew minimization scheme"); // as we'd just overrun our basicblock queue
 
+   // Open the trace (be sure to do this before potentially blocking on reschedule() as this causes deadlock)
+   m_trace.initStream();
+   m_trace_has_pa = m_trace.getTraceHasPhysicalAddresses();
+
    if (m_thread->getCore() == NULL)
    {
       // We didn't get scheduled on startup, wait here
@@ -193,9 +197,6 @@ void TraceThread::run()
 
    Core *core = m_thread->getCore();
    PerformanceModel *prfmdl = core->getPerformanceModel();
-
-   m_trace.initStream();
-   m_trace_has_pa = m_trace.getTraceHasPhysicalAddresses();
 
    Sift::Instruction inst;
    while(m_trace.Read(inst))
