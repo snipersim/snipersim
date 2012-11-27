@@ -68,3 +68,12 @@ def get_names(prefix, items, add_prefixes = True):
       else:
         names.append(name)
   return names
+
+def get_contributors(items):
+  contributors = []
+  for name, threshold, key_or_items in items:
+    if type(key_or_items) is list:
+      contributors += get_contributors(key_or_items)
+    else:
+      contributors.append(key_or_items)
+  return contributors

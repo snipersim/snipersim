@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, re, collections, gnuplot, buildstack, getopt, sniper_lib, sniper_config
+import os, sys, re, collections, gnuplot, buildstack, getopt, sniper_lib, sniper_config, operator, colorsys
 
 try:
   collections.defaultdict()
@@ -119,6 +119,45 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
   return data, ncores, instrs, times, cycles_scale, fastforward_scale
 
 
+def color_tint_shade(base_color, num):
+  base_color = map(lambda x:float(x)/255, base_color)
+  base_color = colorsys.rgb_to_hsv(*base_color)
+  colors = []
+  delta = 0.6 / float((num/2) or 1)
+  shade = 1.0
+  for _ in range(num/2):
+    shade -= delta
+    colors.append((base_color[0],base_color[1],shade))
+  colors = colors[::-1] # Reverse
+  if num % 2 == 1:
+    colors.append(base_color)
+  tint = 1.0
+  for _ in range(num/2):
+    tint -= delta
+    colors.append((base_color[0],tint,base_color[2]))
+  colors = map(lambda x:colorsys.hsv_to_rgb(*x),colors)
+  colors = map(lambda x:tuple(map(lambda y:int(y*255),x)),colors)
+  return colors
+
+
+def nested_in(needle, haystack):
+  if type(needle) is tuple:
+    for n in needle:
+      if nested_in(n, haystack):
+        return True
+    else:
+      return False
+  for i in haystack:
+    if type(i) is tuple:
+      ret = nested_in(needle, haystack)
+      if ret:
+        return True
+    else:
+      if needle == i:
+        return True
+  return False
+
+
 def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True):
   # List of all CPI contributors: <title>, <threshold (%)>, <contributors>
   # <contributors> can be string: key name in sim.stats (sans "roi-end.*[<corenum>].cpi")
@@ -152,6 +191,7 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
     ] ],
     [ 'branch',   .01, 'BranchPredictor' ],
     [ 'serial',   .01, ('Serialization', 'LongLatency') ], # FIXME: can LongLatency be anything other than MFENCE?
+    [ 'smt',            .01,   'SMT' ],
     [ 'itlb',     .01, 'ITLBMiss' ],
     [ 'dtlb',     .01, 'DTLBMiss' ],
     [ 'ifetch',   .01, (
@@ -161,7 +201,6 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
           'InstructionCachedram-cache', 'InstructionCachedram',
           'InstructionCachedram-remote', 'InstructionCachecache-remote', 'InstructionCachedram-local',
           'InstructionCachepredicate-false', 'InstructionCacheunknown') ],
-    [ 'smt',            .01,   'SMT' ],
   ]
   if use_simple_mem:
     all_items += [
@@ -179,7 +218,7 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
     all_items += [
     [ 'mem',      .01, [
       [ 'l0d_neighbor', .01, 'DataCacheL1_S' ],
-      [ 'l1d',          .01, 'DataCacheL1', 'PathLoadX', 'PathStore' ],
+      [ 'l1d',          .01, ('DataCacheL1', 'PathLoadX', 'PathStore') ],
       [ 'l1_neighbor',  .01, 'DataCacheL2_S' ],
       [ 'l2',           .01, 'DataCacheL2' ],
       [ 'l2_neighbor',  .01, 'DataCacheL3_S' ],
@@ -218,29 +257,48 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
     ] ],
   ]
 
+  def _findall(items, keys = None):
+    res = []
+    for name, threshold, key_or_items in items:
+      if not keys or name in keys:
+	if type(key_or_items) is list:
+	  res += _findall(key_or_items)
+	elif type(key_or_items) is tuple:
+	  res += list(key_or_items)
+	else:
+	  res += [ key_or_items ]
+    return res
+  def findall(*keys): return tuple(_findall(all_items, keys))
+
+  simple_groups = (
+    ('compute', ('dispatch_width', 'base', 'issue', 'depend', 'contend',
+                'branch', 'serial', 'smt')),
+    ('communicate', ('itlb','dtlb','ifetch','mem',)),
+    ('synchronize', ('sync', 'recv', 'dvfs-transition', 'imbalance')),
+  )
+
   if use_simple:
-    def _findall(items, keys = None):
-      res = []
-      for name, threshold, key_or_items in items:
-        if not keys or name in keys:
-          if type(key_or_items) is list:
-            res += _findall(key_or_items)
-          elif type(key_or_items) is tuple:
-            res += list(key_or_items)
-          else:
-            res += [ key_or_items ]
-      return res
-    def findall(*keys): return tuple(_findall(all_items, keys))
-    all_items = [
-      [ 'compute', 0, findall('dispatch_width', 'base', 'issue', 'depend', 'contend',
-                              'branch', 'itlb', 'dtlb', 'ifetch', 'serial', 'dvfs-transition') ],
-      [ 'communicate', 0, findall('mem') ],
-      [ 'synchronize', 0, findall('sync', 'recv', 'imbalance') ],
-    ]
+    new_all_items = []
+    new_simple_groups = []
+    for k,v in simple_groups:
+      new_all_items.append([k, 0, findall(*v)])
+      new_simple_groups.append((k,(k,)))
+    all_items = new_all_items
+    simple_groups = new_simple_groups
 
   all_names = buildstack.get_names('', all_items)
+  all_contributors = buildstack.get_contributors(all_items)
 
-  return all_items, all_names
+  names_no_prefixes = buildstack.get_names('', all_items, False)
+  base_contribution = {}
+  for k,v in simple_groups:
+    grouplabels = findall(*v)
+    for i,con in enumerate(all_contributors):
+      if nested_in(con, grouplabels):
+        base_contribution[names_no_prefixes[i]] = k
+        continue
+
+  return all_items, all_names, base_contribution
 
 
 def get_compfrac(data, max_time):
@@ -278,9 +336,9 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
     threads = [0]
     csv_threads = [0]
 
-  all_items, all_names = get_items(use_simple, use_simple_mem = use_simple_mem)
+  items, all_names, names_to_contributions = get_items(use_simple, use_simple_mem = use_simple_mem)
 
-  results = buildstack.merge_items(data, all_items, nocollapse = no_collapse)
+  results = buildstack.merge_items(data, items, nocollapse = no_collapse)
 
 
   plot_labels = []
@@ -344,10 +402,24 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
 
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
   if gen_plot_stack:
+    base_colors = {'compute': (0xff,0,0), 'communicate': (0,0xff,0), 'synchronize': (0,0,0xff)}
     if 'other' in plot_labels_ordered:
       all_names.append('other')
-    all_names_with_colors = zip(all_names, range(1,len(all_names)+1))
-    plot_labels_with_color = [n for n in all_names_with_colors if n[0] in plot_labels_ordered]
+      names_to_contributions['other'] = 'other'
+      base_colors['other'] = (0,0,0)
+    contribution_counts = collections.defaultdict(int)
+    for i in plot_labels_ordered:
+      contribution_counts[names_to_contributions[i]] += 1
+    color_ranges = {}
+    next_color_index = {}
+    for b in base_colors.iterkeys():
+      color_ranges[b] = color_tint_shade(base_colors[b], contribution_counts[b])
+      next_color_index[b] = 0
+    def get_next_color(contr):
+      idx = next_color_index[contr]
+      next_color_index[contr] += 1
+      return color_ranges[contr][idx]
+    plot_labels_with_color = zip(plot_labels_ordered, map(lambda x:'rgb "#%02x%02x%02x"'%get_next_color(names_to_contributions[x]),plot_labels_ordered))
     gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
       ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Percent of time'))
 
