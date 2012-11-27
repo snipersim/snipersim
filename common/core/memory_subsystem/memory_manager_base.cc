@@ -96,12 +96,10 @@ MemoryManagerBase::getCoreListWithMemoryControllers()
       else
       {
          UInt32 l_models_memory_1 = 0;
-         UInt32 l_models_memory_2 = 0;
          try
          {
             config::Config *cfg = Sim()->getCfg();
             l_models_memory_1 = NetworkModel::parseNetworkType(cfg->getString("network/memory_model_1"));
-            l_models_memory_2 = NetworkModel::parseNetworkType(cfg->getString("network/memory_model_2"));
          }
          catch (...)
          {
@@ -109,17 +107,7 @@ MemoryManagerBase::getCoreListWithMemoryControllers()
          }
 
          std::pair<bool, std::vector<core_id_t> > core_list_with_memory_controllers_1 = NetworkModel::computeMemoryControllerPositions(l_models_memory_1, num_memory_controllers, core_count);
-         std::pair<bool, std::vector<core_id_t> > core_list_with_memory_controllers_2 = NetworkModel::computeMemoryControllerPositions(l_models_memory_2, num_memory_controllers, core_count);
-
-         if (core_list_with_memory_controllers_1.first)
-            return core_list_with_memory_controllers_1.second;
-         else if (core_list_with_memory_controllers_2.first)
-            return core_list_with_memory_controllers_2.second;
-         else
-         {
-            // Return Any of them - Both the network models do not have specific positions
-            return core_list_with_memory_controllers_1.second;
-         }
+         return core_list_with_memory_controllers_1.second;
       }
    }
    else
