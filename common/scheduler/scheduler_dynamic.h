@@ -36,6 +36,8 @@ class SchedulerDynamic : public Scheduler
             const Thread *m_thread;
             core_id_t m_core_id;
             ThreadStatsStruct m_counts;   // Running total of thread statistics
+            std::vector<SubsecondTime> time_by_core;
+            std::vector<UInt64> insn_by_core;
             SubsecondTime m_elapsed_time;
             SubsecondTime m_unscheduled_time;
 

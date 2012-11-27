@@ -107,6 +107,8 @@ void SchedulerDynamic::updateThreadStats()
 SchedulerDynamic::ThreadStats::ThreadStats(thread_id_t thread_id, SubsecondTime time)
    : m_thread(Sim()->getThreadManager()->getThreadFromID(thread_id))
    , m_core_id(INVALID_CORE_ID)
+   , time_by_core(Sim()->getConfig()->getApplicationCores())
+   , insn_by_core(Sim()->getConfig()->getApplicationCores())
    , m_time_last(time)
 {
    memset(&m_counts, 0, sizeof(ThreadStatsStruct));
@@ -117,6 +119,11 @@ SchedulerDynamic::ThreadStats::ThreadStats(thread_id_t thread_id, SubsecondTime 
    registerStatsMetric("thread", thread_id, "instruction_count", &m_counts.instructions);
    registerStatsMetric("thread", thread_id, "core_elapsed_time", &m_counts.elapsed_time);
    registerStatsMetric("thread", thread_id, "nonidle_elapsed_time", &m_counts.nonidle_elapsed_time);
+   for (core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); core_id++)
+   {
+      registerStatsMetric("thread", thread_id, "time_by_core[" + itostr(core_id) + "]", &time_by_core[core_id]);
+      registerStatsMetric("thread", thread_id, "instructions_by_core[" + itostr(core_id) + "]", &insn_by_core[core_id]);
+   }
 }
 
 void SchedulerDynamic::ThreadStats::update(SubsecondTime time)
@@ -135,6 +142,8 @@ void SchedulerDynamic::ThreadStats::update(SubsecondTime time)
       m_counts.instructions += core->getPerformanceModel()->getInstructionCount() - m_last.instructions;
       m_counts.elapsed_time += core->getPerformanceModel()->getElapsedTime() - m_last.elapsed_time;
       m_counts.nonidle_elapsed_time += core->getPerformanceModel()->getNonIdleElapsedTime() - m_last.nonidle_elapsed_time;
+      time_by_core[core->getId()] += core->getPerformanceModel()->getElapsedTime() - m_last.elapsed_time;
+      insn_by_core[core->getId()] += core->getPerformanceModel()->getInstructionCount() - m_last.instructions;
    }
    // Take a snapshot of our current core's statistics for later comparison
    Core *core = m_thread->getCore();
