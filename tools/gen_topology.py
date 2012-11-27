@@ -2,7 +2,8 @@
 
 import sys, os, collections, sqlite3, sniper_lib, sniper_config, getopt
 
-outputfilename = 'topo.svg'
+outputfilename = None
+formatdefaultoutputfile = {'svg': 'topo.svg', 'text': 'topo.txt'}
 validformats = ('svg', 'text')
 format = 'svg'
 
@@ -30,6 +31,9 @@ for o, a in opts:
   else:
     usage()
     sys.exit()
+
+if outputfilename == None:
+  outputfilename = formatdefaultoutputfile[format]
 
 if outputfilename == '-':
   output = sys.stdout
