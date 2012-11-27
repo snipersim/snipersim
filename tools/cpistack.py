@@ -25,8 +25,18 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
     # On error, assume that we are using the pre-DVFS version
     times = stats['performance_model.cycle_count']
     cycles_scale = [ 1. for idx in range(ncores) ]
-  time0_begin = max(stats['performance_model.elapsed_time_begin'])
-  time0_end = max(stats['performance_model.elapsed_time_end'])
+  # Figure out when the interval of time, represented by partial, actually begins/ends
+  # Since cores can account for time in chunks, per-core time can be
+  # both before (``wakeup at future time X'') or after (``sleep until woken up'')
+  # the current time.
+  if 'barrier.global_time_begin' in stats:
+    # Most accurate: ask the barrier
+    time0_begin = stats['barrier.global_time_begin'][0]
+    time0_end = stats['barrier.global_time_end'][0]
+  else:
+    # Guess based on core that has the latest time (future wakeup is less common than sleep on futex)
+    time0_begin = max(stats['performance_model.elapsed_time_begin'])
+    time0_end = max(stats['performance_model.elapsed_time_end'])
   times = [ stats['performance_model.elapsed_time_end'][core] - time0_begin for core in range(ncores) ]
 
   if stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:

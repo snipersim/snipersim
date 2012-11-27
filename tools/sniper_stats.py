@@ -16,6 +16,9 @@ class SniperStatsBase:
         if name == 'performance_model.elapsed_time' and idx < ncores:
           results.append(('performance_model.elapsed_time_begin', idx, val1))
           results.append(('performance_model.elapsed_time_end', idx, val2))
+        elif name == 'barrier.global_time':
+          results.append(('barrier.global_time_begin', idx, val1))
+          results.append(('barrier.global_time_end', idx, val2))
     return results
 
 

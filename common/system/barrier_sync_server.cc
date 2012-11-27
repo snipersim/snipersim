@@ -7,6 +7,7 @@
 #include "hooks_manager.h"
 #include "config.h"
 #include "log.h"
+#include "stats.h"
 #include "config.hpp"
 
 BarrierSyncServer::BarrierSyncServer()
@@ -25,6 +26,8 @@ BarrierSyncServer::BarrierSyncServer()
    }
 
    m_next_barrier_time = m_barrier_interval;
+
+   registerStatsMetric("barrier", 0, "global_time", &m_global_time);
 }
 
 BarrierSyncServer::~BarrierSyncServer()
