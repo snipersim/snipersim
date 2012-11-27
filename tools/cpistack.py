@@ -400,7 +400,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
       return color_ranges[contr][idx]
     plot_labels_with_color = zip(plot_labels_ordered, map(lambda x:'rgb "#%02x%02x%02x"'%get_next_color(names_to_contributions[x]),plot_labels_ordered))
     gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
-      ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Percent of time'))
+      ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Fraction of time'))
 
   # Return cpi data if requested
   if return_data and csv_threads:
