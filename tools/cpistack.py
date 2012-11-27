@@ -91,7 +91,7 @@ def getdata(jobid = '', resultsdir = '', data = None, partial = None):
     BaseBest = instrs[core] / float(sniper_config.get_config(res['config'], 'perf_model/core/interval_timer/dispatch_width', core))
     BaseAct = data[core]['Base']
     BaseCp = BaseAct - BaseBest
-    scale = BaseCp / BaseAct
+    scale = BaseCp / (BaseAct or 1)
     for cpName, cpiName in cpContrMap.items():
       val = float(res['results'].get(cpName, [0]*ncores)[core]) / 1e6
       data[core]['Base'] -= val * scale
