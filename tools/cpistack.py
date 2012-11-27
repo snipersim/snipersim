@@ -150,24 +150,6 @@ def color_tint_shade(base_color, num):
   return colors
 
 
-def nested_in(needle, haystack):
-  if type(needle) is tuple:
-    for n in needle:
-      if nested_in(n, haystack):
-        return True
-    else:
-      return False
-  for i in haystack:
-    if type(i) is tuple:
-      ret = nested_in(needle, haystack)
-      if ret:
-        return True
-    else:
-      if needle == i:
-        return True
-  return False
-
-
 def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True):
   # List of all CPI contributors: <title>, <threshold (%)>, <contributors>
   # <contributors> can be string: key name in sim.stats (sans "roi-end.*[<corenum>].cpi")
@@ -289,16 +271,11 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
     simple_groups = new_simple_groups
 
   all_names = buildstack.get_names('', all_items)
-  all_contributors = buildstack.get_contributors(all_items)
 
-  names_no_prefixes = buildstack.get_names('', all_items, False)
   base_contribution = {}
-  for k,v in simple_groups:
-    grouplabels = findall(*v)
-    for i,con in enumerate(all_contributors):
-      if nested_in(con, grouplabels):
-        base_contribution[names_no_prefixes[i]] = k
-        continue
+  for group, members in simple_groups:
+    for name in buildstack.get_names('', all_items, True, members):
+      base_contribution[name] = group
 
   return all_items, all_names, base_contribution
 
