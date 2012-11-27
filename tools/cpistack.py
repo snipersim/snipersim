@@ -181,14 +181,6 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
       [ 'port05',      .01,    'PathP05' ],
       [ 'port015',      .01,    'PathP015' ],
     ] ],
-    [ 'contend',  .01, [
-      [ 'fp_addsub',    .01,    'FU_FpAddSub' ],
-      [ 'fp_muldiv',    .01,    'FU_FpMulDiv' ],
-      [ 'load',         .01,    'FU_Load' ],
-      [ 'store',        .01,    'FU_Store' ],
-      [ 'branch',       .01,    'FU_Branch' ],
-      [ 'generic',      .01,    'FU_Generic' ],
-    ] ],
     [ 'branch',   .01, 'BranchPredictor' ],
     [ 'serial',   .01, ('Serialization', 'LongLatency') ], # FIXME: can LongLatency be anything other than MFENCE?
     [ 'smt',            .01,   'SMT' ],
@@ -261,17 +253,17 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
     res = []
     for name, threshold, key_or_items in items:
       if not keys or name in keys:
-	if type(key_or_items) is list:
-	  res += _findall(key_or_items)
-	elif type(key_or_items) is tuple:
-	  res += list(key_or_items)
-	else:
-	  res += [ key_or_items ]
+        if type(key_or_items) is list:
+          res += _findall(key_or_items)
+        elif type(key_or_items) is tuple:
+          res += list(key_or_items)
+        else:
+          res += [ key_or_items ]
     return res
   def findall(*keys): return tuple(_findall(all_items, keys))
 
   simple_groups = (
-    ('compute', ('dispatch_width', 'base', 'issue', 'depend', 'contend',
+    ('compute', ('dispatch_width', 'base', 'issue', 'depend',
                 'branch', 'serial', 'smt')),
     ('communicate', ('itlb','dtlb','ifetch','mem',)),
     ('synchronize', ('sync', 'recv', 'dvfs-transition', 'imbalance')),
