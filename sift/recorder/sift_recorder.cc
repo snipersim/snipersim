@@ -292,6 +292,9 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64"
    #endif
 
+   // Default: not emulated, override later when needed
+   thread_data[threadid].last_syscall_emulated = false;
+
    if (syscall_number == SYS_write)
    {
       int fd = (int)args[0];
@@ -300,34 +303,31 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 
       if (count > 0 && (fd == 1 || fd == 2))
          thread_data[threadid].output->Output(fd, buf, count);
-
-      thread_data[threadid].last_syscall_emulated = false;
    }
-   // Handle SYS_clone child tid capture for proper pthread_join emulation.
-   // When the CLONE_CHILD_CLEARTID option is enabled, remember its child_tidptr and
-   // then when the thread ends, write 0 to the tid mutex and futex_wake it
-   else if (syscall_number == SYS_clone)
+   else if (KnobEmulateSyscalls.Value())
    {
-      thread_data[threadid].output->NewThread();
-      // Store the thread's tid ptr for later use
-      #if defined(TARGET_IA32)
-         ADDRINT tidptr = args[2];
-      #elif defined(TARGET_INTEL64)
-         ADDRINT tidptr = args[3];
-      #endif
-      GetLock(&new_threadid_lock, threadid);
-      tidptrs.push_back(tidptr);
-      ReleaseLock(&new_threadid_lock);
-   }
-   else if (emulateSyscall[syscall_number])
-   {
-      thread_data[threadid].last_syscall_number = syscall_number;
-      thread_data[threadid].last_syscall_emulated = true;
-      thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
-   }
-   else
-   {
-      thread_data[threadid].last_syscall_emulated = false;
+      // Handle SYS_clone child tid capture for proper pthread_join emulation.
+      // When the CLONE_CHILD_CLEARTID option is enabled, remember its child_tidptr and
+      // then when the thread ends, write 0 to the tid mutex and futex_wake it
+      if (syscall_number == SYS_clone)
+      {
+         thread_data[threadid].output->NewThread();
+         // Store the thread's tid ptr for later use
+         #if defined(TARGET_IA32)
+            ADDRINT tidptr = args[2];
+         #elif defined(TARGET_INTEL64)
+            ADDRINT tidptr = args[3];
+         #endif
+         GetLock(&new_threadid_lock, threadid);
+         tidptrs.push_back(tidptr);
+         ReleaseLock(&new_threadid_lock);
+      }
+      else if (emulateSyscall[syscall_number])
+      {
+         thread_data[threadid].last_syscall_number = syscall_number;
+         thread_data[threadid].last_syscall_emulated = true;
+         thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+      }
    }
 }
 
@@ -371,20 +371,17 @@ VOID traceCallback(TRACE trace, void *v)
                insertCall(ins, IPOINT_BEFORE,       num_addresses, false /* is_branch */, false /* taken */);
 
             // Handle emulated syscalls
-            if (KnobEmulateSyscalls.Value())
+            if (INS_IsSyscall(ins))
             {
-               if (INS_IsSyscall(ins))
-               {
-                  INS_InsertPredicatedCall
-                  (
-                     ins,
-                     IPOINT_BEFORE,
-                     AFUNPTR(emulateSyscallFunc),
-                     IARG_THREAD_ID,
-                     IARG_CONST_CONTEXT,
-                     IARG_END
-                  );
-               }
+               INS_InsertPredicatedCall
+               (
+                  ins,
+                  IPOINT_BEFORE,
+                  AFUNPTR(emulateSyscallFunc),
+                  IARG_THREAD_ID,
+                  IARG_CONST_CONTEXT,
+                  IARG_END
+               );
             }
 
             if (ins == BBL_InsTail(bbl))
