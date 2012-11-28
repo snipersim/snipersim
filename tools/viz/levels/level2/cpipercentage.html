@@ -1,0 +1,366 @@
+<!doctype>
+<head>
+	<meta charset="UTF-8">
+	<title>CPI (%)</title>
+	<link type="text/css" rel="stylesheet" href="css/jquery-ui.css">
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/graph.css">
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/detail.css">
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/legend.css">
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/extensions.css">
+
+	<script src="../../rickshaw/vendor/d3.min.js"></script>
+	<script src="../../rickshaw/vendor/d3.layout.min.js"></script>
+
+	<script src="javascript/jquery.min.js"></script>
+	<script src="javascript/jquery-ui.min.js"></script>
+
+
+	<script src="../../rickshaw/src/js/Rickshaw.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Class.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Compat.ClassList.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Ajax.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.Area.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.Line.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.Bar.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.ScatterPlot.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.RangeSlider.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.HoverDetail.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Annotate.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Legend.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Axis.Time.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Toggle.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Order.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Highlight.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Smoother.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Unstacker.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Fixtures.Time.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Fixtures.Number.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Fixtures.RandomData.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Fixtures.Color.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Color.Palette.js"></script>
+	<script src="../../rickshaw/src/js/Rickshaw.Graph.Axis.Y.js"></script>
+
+
+	<script src="../../rickshaw/js/extensions.js"></script>
+
+	<script src="data/info.txt"></script>
+	<script src="data/markers.txt"></script>
+<style>
+
+h1.capitalize {text-transform:capitalize;}
+</style>
+
+<!--Load information stored in info.txt -->
+<script>
+var info = jQuery.parseJSON(infostr);
+var filename = "data/".concat(info.name.concat("-cpipercentage.json"));
+var ipcfilename = "data/".concat(info.name.concat("-ipc.json"));
+var name = info.name;
+var date = info.date;
+var intervalsize = info.intervalsize;
+</script>
+
+
+</head>
+<body>
+
+<div id="content">
+
+	<form id="side_panel">
+		<h1 class="capitalize"><script type="text/javascript">document.write(name);</script><br>CPI (%)</h1>
+		<section><div id="legend"></div></section>
+		<section>
+			<div id="renderer_form" class="toggler">
+				<input type="radio" name="renderer" id="area" value="area" checked>
+				<label for="area">area</label>
+				<input type="radio" name="renderer" id="bar" value="bar">
+				<label for="bar">bar</label>
+				<input type="radio" name="renderer" id="line" value="line">
+				<label for="line">line</label>
+				<input type="radio" name="renderer" id="scatter" value="scatterplot">
+				<label for="scatter">scatter</label>
+			</div>
+		</section>
+		<section>
+			<div id="offset_form">
+				<label for="stack">
+					<input type="radio" name="offset" id="stack" value="zero" checked>
+					<span>stack</span>
+				</label>
+				<label for="stream">
+					<input type="radio" name="offset" id="stream" value="wiggle">
+					<span>stream</span>
+				</label>
+				<label for="pct">
+					<input type="radio" name="offset" id="pct" value="expand">
+					<span>pct</span>
+				</label>
+				<label for="value">
+					<input type="radio" name="offset" id="value" value="value">
+					<span>value</span>
+				</label>
+			</div>
+			<div id="interpolation_form">
+				<label for="cardinal">
+					<input type="radio" name="interpolation" id="cardinal" value="cardinal" >
+					<span>cardinal</span>
+				</label>
+				<label for="linear">
+					<input type="radio" name="interpolation" id="linear" value="linear">
+					<span>linear</span>
+				</label>
+				<label for="step">
+					<input type="radio" name="interpolation" id="step" value="step-after" checked>
+					<span>step</span>
+				</label>
+			</div>
+		</section>
+		<section>
+			<h6>Smoothing</h6>
+			<div id="smoother"></div>
+		</section>
+		<section></section>
+	</form>
+
+	<div id="chart_container">
+		<div id="chart"></div>
+		<div id="timeline"></div>
+		<div id="slider"></div>
+	</div>
+
+</div>
+
+<div id="content">
+
+	<form id="side_panel">
+		<h1 class="capitalize"><script type="text/javascript">document.write(name);</script><br>IPC (Instructions/Cycle)</h1>
+		<section><div id="ipclegend"></div></section>
+		
+		<section>
+			<h6>Smoothing</h6>
+			<div id="ipcsmoother"></div>
+		</section>
+		<section></section>
+	</form>
+
+	<div id="chart_container">
+		<div id="ipcchart"></div>
+		<div id="ipctimeline"></div>
+		<br>
+		<div id="ipcslider"></div>
+		<br><br><br><br>
+	</div>
+
+</div>
+
+<a href="../../visualization.html">Visualization home</a><br>
+<script>
+
+
+var palette = new Rickshaw.Color.Palette( { scheme: 'munin' } );
+
+// instantiate our graph!
+
+var graph = new Rickshaw.Graph.Ajax( {
+	element: document.getElementById("chart"),
+	width: 900,
+	height: 500,
+	renderer: 'area',
+	defaultInterpolation: 'step-after',
+	stroke: true,
+	dataURL: filename,
+	onData: function(d) { return d },
+	onComplete: function(transport) {
+		var graph = transport.graph;
+		var legend = new Rickshaw.Graph.Legend( {
+			graph: graph,
+			element: document.getElementById('legend')
+		} );
+		var slider = new Rickshaw.Graph.RangeSlider( {
+			graph: graph,
+			element: $('#slider')
+		} );
+		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
+			graph: graph,
+			formatter: function(series, x, y) {
+				var content = series.name+": "+y+ "% CPI";
+				return content;
+			},
+			xFormatter: function(x) {
+				var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
+				return content;
+			}			
+		} );
+		var order = new Rickshaw.Graph.Behavior.Series.Order( {
+			graph: graph,
+			legend: legend
+		} );
+		var controls = new RenderControls( {
+			element: document.querySelector('form'),
+			graph: graph
+		} );
+		
+		
+		var shelving = new Rickshaw.Graph.Behavior.Series.Toggle( {
+			graph: graph,
+			legend: legend
+		} );
+		var highlighter = new Rickshaw.Graph.Behavior.Series.Highlight( {
+			graph: graph,
+			legend: legend
+		} );
+
+		var smoother = new Rickshaw.Graph.Smoother( {
+			graph: graph,
+			element: $('#smoother')
+		} );
+		var ticksTreatment = 'glow';
+		/*
+		var xAxis = new Rickshaw.Graph.Axis.Time( {
+			graph: graph,
+			ticksTreatment: ticksTreatment
+		} );
+
+		xAxis.render();
+		*/
+		var yAxis = new Rickshaw.Graph.Axis.Y( {
+			graph: graph,
+			//orientation: 'left',
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			element: document.getElementById('y_axis')
+		} );
+
+		yAxis.render();
+		var annotator = new Rickshaw.Graph.Annotate( {
+			graph: graph,
+			element: document.getElementById('timeline')
+		} );
+
+		var markerinfo = jQuery.parseJSON(markerstr);
+		var numberofmarkers = markerinfo.markers.length;
+
+		for (var i=0; i<numberofmarkers; i++)
+		  {
+			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
+					 markerinfo.markers[i].place+" of iteration "+
+					markerinfo.markers[i].iteration + " marker: "+
+					markerinfo.markers[i].marker);
+		  }
+		annotator.update();
+		
+	},
+	series: cpipercentagelabels 
+		
+	
+} );
+
+
+var graph = new Rickshaw.Graph.Ajax( {
+	element: document.getElementById("ipcchart"),
+	width: 900,
+	height: 250,
+	renderer: 'area',
+	defaultInterpolation: 'step-after',
+	stroke: true,
+	dataURL: ipcfilename,
+	onData: function(d) { return d },
+	onComplete: function(transport) {
+		var graph = transport.graph;
+		var legend = new Rickshaw.Graph.Legend( {
+			graph: graph,
+			element: document.getElementById('ipclegend')
+		} );
+		var slider = new Rickshaw.Graph.RangeSlider( {
+			graph: graph,
+			element: $('#ipcslider')
+		} );
+		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
+			graph: graph,
+			xFormatter: function(x) {
+					var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
+					return content;
+			},		
+			
+			yFormatter: function(y) {
+					var content = Math.round(y*100)/100 + " IPC";
+					return content;
+				},		
+			} );
+		var order = new Rickshaw.Graph.Behavior.Series.Order( {
+			graph: graph,
+			legend: legend
+		} );
+		var controls = new RenderControls( {
+			element: document.querySelector('form'),
+			graph: graph
+		} );
+		
+		var shelving = new Rickshaw.Graph.Behavior.Series.Toggle( {
+			graph: graph,
+			legend: legend
+		} );
+		var highlighter = new Rickshaw.Graph.Behavior.Series.Highlight( {
+			graph: graph,
+			legend: legend
+		} );
+
+		var smoother = new Rickshaw.Graph.Smoother( {
+			graph: graph,
+			element: $('#ipcsmoother')
+		} );
+		var ticksTreatment = 'glow';
+
+		//var time = new Rickshaw.Fixtures.Time();
+		//var seconds = time.unit('seconds'); 		
+		/*
+		var xAxis = new Rickshaw.Graph.Axis.Time( {
+			graph: graph,
+			ticksTreatment: ticksTreatment,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT
+			//timeUnit: seconds
+		} );
+		
+		xAxis.render();
+		*/
+		var yAxis = new Rickshaw.Graph.Axis.Y( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			element: document.getElementById('y_axis')
+		} );
+
+		yAxis.render();
+		var annotator = new Rickshaw.Graph.Annotate( {
+			graph: graph,
+			element: document.getElementById('ipctimeline')
+		} );
+
+		var markerinfo = jQuery.parseJSON(markerstr);
+		var numberofmarkers = markerinfo.markers.length;
+
+		for (var i=0; i<numberofmarkers; i++)
+		  {
+			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
+					 markerinfo.markers[i].place+" of iteration "+
+					markerinfo.markers[i].iteration + " marker: "+
+					markerinfo.markers[i].marker);
+		  }
+		annotator.update();
+
+	},
+	series: [
+		{
+			name: 'IPC',
+			color: palette.color()
+		}
+	]
+} );
+
+
+
+</script>
+
+</body>
