@@ -33,7 +33,7 @@ $(LIB_SIFT): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/sift
 
 ifneq ($(NO_PIN_CHECK),1)
-PIN_REV_MINIMUM=54730
+PIN_REV_MINIMUM=53271
 pin: $(PIN_HOME)/intel64/bin/pinbin package_deps
 	@g++ -o tools/pinversion -I$(PIN_HOME)/source/include tools/pinversion.cc
 	@if [ "$$(tools/pinversion | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo "\nFound Pin version $$(tools/pinversion) in $(PIN_HOME)\nbut at least revision $(PIN_REV_MINIMUM) is required."; false; fi
