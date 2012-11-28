@@ -1,3 +1,21 @@
+Version 4.0
+  * Thread migration and scheduler support
+  * Pinned (round-robin), static, random thread schedulers
+  * Heterogeneous configuration files with tags
+  * Configurable address2set hash functions for non-power of two sized caches
+  * Various prefetcher improvements
+  * DRAM cache model
+  * One-IPC fast-forward model
+  * Fault injection framework
+  * New SQLite3-based statistics format
+  * ROI support for SIFT
+  * Support for MPI applications (shared-memory backend)
+  * Limited support for Jikes/DaCapo benchmarks
+  * Use newest Pin 2.12.53271
+  * Add script for generating topology images
+  * Preserve history in Git repository
+  * Many cleanups and bugfixes
+
 Version 3.07
   * Prefetcher improvements, add global history buffer-based prefetcher
   * HOOK_PERIODIC_INS: Instruction-based periodic callback
