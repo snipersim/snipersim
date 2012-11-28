@@ -16,4 +16,4 @@ pi: pi_mpi.o Makefile
 
 
 run_$(TARGET):
-	../../run-sniper --mpi -n 4 -c gainestown -- mpirun -np 4 ./pi
+	../../run-sniper --mpi -n 4 -c gainestown -s periodic-stats:10000:1000 -- mpirun -np 4 ./pi

@@ -17,6 +17,7 @@ run: $(TARGET) run_$(TARGET)
 	@echo "Optional: Run '../../tools/mcpat.py' in this directory to generate power output for this run"
 	@echo "Optional: Run '../../tools/dumpstats.py' in this directory to view detailed statistics for this run"
 	@echo "Optional: Run '../../tools/gen_topology.py' in this directory to view the system topology for this run"
+	@echo "Optional: Run '../../tools/viz/viz.py -o viz' in this directory to create a visualization of this run"
 	@echo
 
 clean:
