@@ -20,4 +20,4 @@ run: $(TARGET) run_$(TARGET)
 	@echo
 
 clean:
-	rm -f $(TARGET) sim.* *.log *.out *.jpg *.svg *.o $(CLEAN_EXTRA)
+	rm -f $(TARGET) sim.* *.log *.out *.png *.o topo.* power.* $(CLEAN_EXTRA)
