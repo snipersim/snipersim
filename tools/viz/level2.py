@@ -44,7 +44,6 @@ def initialize():
   global listofmcpatcomponents
   listofmcpatcomponents = mcpat.get_all_names()
   listofmcpatcomponents.append('other')
-  print "list of mcpatcomponents", listofmcpatcomponents
 
   #list of used components
   global usedcpicomponents, usedsimplifiedcpicomponents, usedmcpatcomponents, usedcpificcomponents
@@ -596,7 +595,7 @@ if __name__ == '__main__':
   # Now copy all static files as well
   if outputdir != HOME:
     print "Copy files to output directory "+outputdir
-    os.system('tar c -C %s visualization.html rickshaw/ levels/level2/*html css/ | tar x -C %s' % (HOME, outputdir))
+    os.system('tar c -C %s visualization.html rickshaw/ levels/level2/*html css/ levels/level2/css levels/level2/javascript/ | tar x -C %s' % (HOME, outputdir))
   print "Visualizations can be viewed in "+os.path.join(outputdir,'visualization.html')
 
 
