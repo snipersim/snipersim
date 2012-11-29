@@ -73,7 +73,8 @@ all_items = [
 
 all_names = buildstack.get_names('', all_items)
 
-
+def get_all_names():
+  return all_names
 
 def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, config = None, no_graph = False, partial = None, print_stack = True, return_data = False):
   tempfile = outputfile + '.xml'
