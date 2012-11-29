@@ -288,6 +288,24 @@ def get_compfrac(data, max_time):
   ) for core in data.keys() ])
 
 
+def get_colors(plot_labels_ordered,
+               names_to_contributions,
+               base_colors = {'compute': (0xff,0,0), 'communicate': (0,0xff,0), 'synchronize': (0,0,0xff), 'other': (0,0,0)}):
+    contribution_counts = collections.defaultdict(int)
+    for i in plot_labels_ordered:
+      contribution_counts[names_to_contributions[i]] += 1
+    color_ranges = {}
+    next_color_index = {}
+    for b in base_colors.iterkeys():
+      color_ranges[b] = color_tint_shade(base_colors[b], contribution_counts[b])
+      next_color_index[b] = 0
+    def get_next_color(contr):
+      idx = next_color_index[contr]
+      next_color_index[contr] += 1
+      return color_ranges[contr][idx]
+    return map(lambda x:get_next_color(names_to_contributions[x]),plot_labels_ordered)
+
+
 def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
              use_cpi = False, use_abstime = False, use_roi = True,
              use_simple = False, use_simple_mem = True, no_collapse = False,
@@ -381,24 +399,10 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
 
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
   if gen_plot_stack:
-    base_colors = {'compute': (0xff,0,0), 'communicate': (0,0xff,0), 'synchronize': (0,0,0xff)}
     if 'other' in plot_labels_ordered:
       all_names.append('other')
       names_to_contributions['other'] = 'other'
-      base_colors['other'] = (0,0,0)
-    contribution_counts = collections.defaultdict(int)
-    for i in plot_labels_ordered:
-      contribution_counts[names_to_contributions[i]] += 1
-    color_ranges = {}
-    next_color_index = {}
-    for b in base_colors.iterkeys():
-      color_ranges[b] = color_tint_shade(base_colors[b], contribution_counts[b])
-      next_color_index[b] = 0
-    def get_next_color(contr):
-      idx = next_color_index[contr]
-      next_color_index[contr] += 1
-      return color_ranges[contr][idx]
-    plot_labels_with_color = zip(plot_labels_ordered, map(lambda x:'rgb "#%02x%02x%02x"'%get_next_color(names_to_contributions[x]),plot_labels_ordered))
+    plot_labels_with_color = zip(plot_labels_ordered, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(plot_labels_ordered,names_to_contributions)))
     gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
       ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Fraction of time'))
 
