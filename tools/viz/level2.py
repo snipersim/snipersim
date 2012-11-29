@@ -23,8 +23,10 @@ def mkdir_p(path):
 
 def initialize():
   #get the component names from cpistack.py
-  items, all_names, names_to_contributions = cpistack.get_items(False, use_simple_mem = True)
-  itemssimple, all_namessimple, names_to_contributionssimple = cpistack.get_items(True, use_simple_mem=True)
+  global listofcpicomponents, listofsimplifiedcpicomponents
+  global names_to_contributions, names_to_contributionssimple
+  items, listofcpicomponents, names_to_contributions = cpistack.get_items(False, use_simple_mem = True)
+  itemssimple, listofsimplifiedcpicomponents, names_to_contributionssimple = cpistack.get_items(True, use_simple_mem=True)
 
   #this list keeps the instruction count per interval, indexed by interval number
   global instructioncountlist 
@@ -39,9 +41,7 @@ def initialize():
   mcpatcomponents = {}
   cpificcomponents = {}
   #list of available components
-  global listofcpicomponents, listofsimplifiedcpicomponents, listofmcpatcomponents
-  listofcpicomponents = all_names
-  listofsimplifiedcpicomponents = all_namessimple
+  global listofmcpatcomponents
 
   listofmcpatcomponents = ["other", "l2", "dcache", "icache", "core-mem",
     "core-fp", "core-int", "core-alu", "core-ifetch",
@@ -87,6 +87,7 @@ def initialize():
 def collectCPIStackDataFIC(verbose=False):
   totalinstructioncount = 0
   groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/100, verbose)
+  usedcomponents = dict.fromkeys(listofcpicomponents,0)
   for key in cpificcomponents.keys():
     cpificcomponents[key] = [[0 for x in xrange(2)] for x in xrange(len(groupedintervals))]
   for i in range (1, len(groupedintervals)):
@@ -121,8 +122,8 @@ def collectCPIStackDataFIC(verbose=False):
 
       for key in data_to_return[0].keys():
         cpi = data_to_return[0][key]
-        if not key in usedcpificcomponents and cpi > 0.0:
-          usedcpificcomponents.append(key)
+        if cpi > 0.0:
+          usedcomponents[key]=1
         cpificcomponents[key][i][0]=cpi
         cpificcomponents[key][i][1]=totalinstructioncount
 
@@ -132,6 +133,11 @@ def collectCPIStackDataFIC(verbose=False):
       num_exceptions += 1
       totalinstructioncount+=instructioncount
       continue
+
+  for component in listofcpicomponents:
+    if usedcomponents[component]==1:
+      usedcpificcomponents.append(component)
+
 
   components = cpificcomponents
   usedcomponents = usedcpificcomponents
@@ -161,7 +167,10 @@ def collectCPIStackData(type, verbose = False):
   from StringIO import StringIO
   instructioncount=0
   num_exceptions=0
-
+  if type == "full":
+    usedcomponents = dict.fromkeys(listofcpicomponents,0)
+  elif type == "simple":
+    usedcomponents = dict.fromkeys(listofsimplifiedcpicomponents,0)
   for i in range(0,num_intervals):
     if verbose:
       print 'Collect '+type+' CPI stack info (interval '+str(i+1)+' / '+str(num_intervals)+' )'+"\r",
@@ -212,15 +221,15 @@ def collectCPIStackData(type, verbose = False):
         else:
           cpipercentage = 0
         if type == "full" :  
-          if (not key in usedcpicomponents) and cpi > 0:
-            usedcpicomponents.append(key)
+          if cpi > 0:
+            usedcomponents[key]=1
           cpicomponents[key][i][0]=i
           cpicomponents[key][i][1]=cpipercentage
           cpicomponents[key][i][2]=cpi
        
         elif type == "simple" :
-          if (not key in usedsimplifiedcpicomponents) and cpi > 0:
-            usedsimplifiedcpicomponents.append(key)
+          if cpi > 0:
+            usedcomponents[key]=1
           simplifiedcpicomponents[key][i][0]=i
           simplifiedcpicomponents[key][i][1]=cpipercentage
           simplifiedcpicomponents[key][i][2]=cpi
@@ -229,6 +238,16 @@ def collectCPIStackData(type, verbose = False):
       ipcvalues[0]["data"][i]=dict(x=i, y=0)
       num_exceptions += 1
       continue
+
+  if type=="full":
+    for component in listofcpicomponents:
+      if usedcomponents[component]==1:
+        usedcpicomponents.append(component)
+  elif type=="simple":
+     for component in listofsimplifiedcpicomponents:
+       if usedcomponents[component]==1:
+         usedsimplifiedcpicomponents.append(component)  
+
   if verbose:
     print
     if(num_exceptions>0):
@@ -401,19 +420,31 @@ def writelabels(outputdir, componentname, componenttype):
   labels.write("palette = new Rickshaw.Color.Palette( { scheme: 'munin' } );\n")
   if(componenttype == "cpi"):
     usedcomponents = usedcpicomponents
+    ntc = names_to_contributions
   elif(componenttype == "cpisimplified"):
     usedcomponents = usedsimplifiedcpicomponents
+    ntc = names_to_contributionssimple
   elif(componenttype == "mcpat"):
     usedcomponents = usedmcpatcomponents
   elif(componenttype == "cpific"):
     usedcomponents = usedcpificcomponents
+    ntc = names_to_contributions
 
   jsonoutput = []
-  
+  if not componenttype == "mcpat":
+    colors = cpistack.get_colors(usedcomponents, ntc)
+  index=0
+  output="should not happen"
   for key in usedcomponents:
-    jsonoutput.append(dict(name=key, color="palette.color()"))
-    jsondump = json.dumps(jsonoutput)
-    output = json.dumps(jsonoutput).replace("\"palette.color()\"",'palette.color()')
+    if componenttype == "mcpat":
+      jsonoutput.append(dict(name=key, color="palette.color()"))
+      jsondump = json.dumps(jsonoutput)
+      output = json.dumps(jsonoutput).replace("\"palette.color()\"",'palette.color()')
+    else:
+      jsonoutput.append(dict(name=key, color="rgb("+str(colors[index][0])+","+str(colors[index][1])+","+str(colors[index][2])+")"))
+      jsondump = json.dumps(jsonoutput)
+      output = json.dumps(jsonoutput).replace("\"palette.color()\"",'palette.color()')
+    index+=1
   labels.write(componentname+"labels = "+output+";\n")
   labels.close()
 
