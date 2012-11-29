@@ -29,7 +29,7 @@ def initialize():
   itemssimple, listofsimplifiedcpicomponents, names_to_contributionssimple = cpistack.get_items(True, use_simple_mem=True)
 
   #this list keeps the instruction count per interval, indexed by interval number
-  global instructioncountlist 
+  global instructioncountlist
   instructioncountlist = []
   #this list keeps the partial sum of the instruction count, indexed by interval number
   global instructioncountsumlist
@@ -50,7 +50,6 @@ def initialize():
   #list of used components
   global usedcpicomponents, usedsimplifiedcpicomponents, usedmcpatcomponents, usedcpificcomponents
   usedcpicomponents = []
-  usedsimplifiedcpicomponents = []
   usedmcpatcomponents = []
   usedcpificcomponents = [] #cpific == cpi with fixed instruction counts
 
@@ -65,20 +64,20 @@ def initialize():
   for component in listofcpicomponents:
     cpificcomponents[component]=[]
   #initialize data structures where the collected data will be stored
-	#first column = x values
+        #first column = x values
         #second column = cpipercentagevalues
         #third column = cpivalues
   for component in listofcpicomponents:
     cpicomponents[component] = [[0 for x in xrange(3)] for x in xrange(num_intervals)]
-	#first column = x values
+        #first column = x values
         #second column = cpipercentagevalues
         #third column = cpivalues
   for component in listofsimplifiedcpicomponents:
     simplifiedcpicomponents[component] = [[0 for x in xrange(3)] for x in xrange(num_intervals)]
-	#first column = x values
-	#second column = power values
-	#third column = energy values
-	#fourth column = energypercentage values
+        #first column = x values
+        #second column = power values
+        #third column = energy values
+        #fourth column = energypercentage values
   for component in listofmcpatcomponents:
     mcpatcomponents[component] = [[0 for x in xrange(4)] for x in xrange(num_intervals)]
 
@@ -92,7 +91,7 @@ def collectCPIStackDataFIC(verbose=False):
     cpificcomponents[key] = [[0 for x in xrange(2)] for x in xrange(len(groupedintervals))]
   for i in range (1, len(groupedintervals)):
     if verbose:
-      print 'Collect CPI stack info of intervals with a fixed instruction count (interval '+str(i+1)+' / '+str(len(groupedintervals))+' )'+"\r",
+      print 'Collect CPI stack info for intervals with a fixed instruction count (interval '+str(i+1)+' / '+str(len(groupedintervals))+')'+"\r",
     instructioncount = groupedintervals[i]["instructioncount"]
     cycleintervalstart = groupedintervals[i-1]["intervalnr"]
     cycleintervalstop = groupedintervals[i]["intervalnr"]
@@ -106,7 +105,6 @@ def collectCPIStackDataFIC(verbose=False):
         jobid = 0,
         resultsdir = resultsdir,
         partial = currentinterval,
-        outputfile = 'cpi-stack',
         title = '',
         use_cpi = True,
         use_abstime = False,
@@ -161,46 +159,36 @@ def collectCPIStackDataFIC(verbose=False):
     print
 
 
-#Collect data for the cpistack
-#type = full or simplified
-def collectCPIStackData(type, verbose = False):
+#Collect data with fixed cycle counts for the intervals
+def collectCPIStackDataFCC(verbose = False):
   from StringIO import StringIO
   instructioncount=0
   num_exceptions=0
-  if type == "full":
-    usedcomponents = dict.fromkeys(listofcpicomponents,0)
-  elif type == "simple":
-    usedcomponents = dict.fromkeys(listofsimplifiedcpicomponents,0)
+  usedcomponents = dict.fromkeys(listofcpicomponents,0)
   for i in range(0,num_intervals):
     if verbose:
-      print 'Collect '+type+' CPI stack info (interval '+str(i+1)+' / '+str(num_intervals)+' )'+"\r",
+      print 'Collect CPI stack info for intervals with a fixed time span (interval '+str(i+1)+' / '+str(num_intervals)+')'+"\r",
     currentinterval = ("periodic-"+str(i*interval)+":periodic-"+str((i+1)*interval)).split(":")
-    if(type=="full"):
-      newinstructioncount=getInstructionCount(currentinterval)
-      instructioncountlist.append(newinstructioncount)
-      instructioncount+=newinstructioncount
-      instructioncountsumlist.append(instructioncount)
 
-    if(type=="full"):
-      simple=False
-    elif(type=="simple"):
-      simple=True
-    
+    newinstructioncount=getInstructionCount(currentinterval)
+    instructioncountlist.append(newinstructioncount)
+    instructioncount+=newinstructioncount
+    instructioncountsumlist.append(instructioncount)
+
     try:
       _, _, data_to_return = cpistack.cpistack(
         jobid = 0,
         resultsdir = resultsdir,
         partial = currentinterval,
-        outputfile = 'cpi-stack',
         title = '',
         use_cpi = True,
         use_abstime = False,
         use_roi = True,
-        use_simple = simple,
+        use_simple = False,
         use_simple_mem = True,
         no_collapse = True,
         aggregate = True,
-	return_data = True,
+        return_data = True,
         gen_plot_stack = False,
         gen_text_stack = False
       )
@@ -211,42 +199,32 @@ def collectCPIStackData(type, verbose = False):
       else:
         ipc = 0
 
-      if type=="full" :
-        ipcvalues[0]["data"][i]=dict(x=i, y=ipc)
- 
+      ipcvalues[0]["data"][i]=dict(x=i, y=ipc)
+
       for key in data_to_return[0].keys():
         cpi = data_to_return[0][key]
         if totalcpi > 0:
           cpipercentage = 100*cpi/totalcpi
         else:
           cpipercentage = 0
-        if type == "full" :  
-          if cpi > 0:
-            usedcomponents[key]=1
-          cpicomponents[key][i][0]=i
-          cpicomponents[key][i][1]=cpipercentage
-          cpicomponents[key][i][2]=cpi
-       
-        elif type == "simple" :
-          if cpi > 0:
-            usedcomponents[key]=1
-          simplifiedcpicomponents[key][i][0]=i
-          simplifiedcpicomponents[key][i][1]=cpipercentage
-          simplifiedcpicomponents[key][i][2]=cpi
+
+        if cpi > 0:
+          usedcomponents[key]=1
+        cpicomponents[key][i][0]=i
+        cpicomponents[key][i][1]=cpipercentage
+        cpicomponents[key][i][2]=cpi
+        simplifiedcpicomponents[names_to_contributions[key]][i][0]=i
+        simplifiedcpicomponents[names_to_contributions[key]][i][1]+=cpipercentage
+        simplifiedcpicomponents[names_to_contributions[key]][i][2]+=cpi
 
     except ValueError:
       ipcvalues[0]["data"][i]=dict(x=i, y=0)
       num_exceptions += 1
       continue
 
-  if type=="full":
-    for component in listofcpicomponents:
-      if usedcomponents[component]==1:
-        usedcpicomponents.append(component)
-  elif type=="simple":
-     for component in listofsimplifiedcpicomponents:
-       if usedcomponents[component]==1:
-         usedsimplifiedcpicomponents.append(component)  
+  for component in listofcpicomponents:
+    if usedcomponents[component]==1:
+      usedcpicomponents.append(component)
 
   if verbose:
     print
@@ -262,7 +240,7 @@ def collectMcPATData(verbose = False):
   for i in range(0,num_intervals):
     if verbose:
       print 'Collect McPAT info (interval '+str(i+1)+' / '+str(num_intervals)+')'
-    
+
     data_to_return = mcpat.main(
       jobid = 0,
       resultsdir = resultsdir,
@@ -294,12 +272,12 @@ def collectMcPATData(verbose = False):
 
   if verbose:
     print
-     
+
 
 #write values into json
 #componentname = name of the component, e.g. power, energy, energypercentage, cpi...
 #componenttype = type of the component, e.g. mcpat, cpi or cpisimplified
-#componentindex = index of the y value 
+#componentindex = index of the y value
 def writetojson(outputdir, componentname, componenttype, componentindex, level2version=1, verbose = False):
   if level2version not in (1, 2):
     print 'Invalid level2 version', level2version
@@ -311,7 +289,7 @@ def writetojson(outputdir, componentname, componenttype, componentindex, level2v
     usedcomponents = usedcpicomponents
     components = cpicomponents
   elif(componenttype == "cpisimplified"):
-    usedcomponents = usedsimplifiedcpicomponents
+    usedcomponents = listofsimplifiedcpicomponents
     components = simplifiedcpicomponents
   elif(componenttype == "mcpat"):
     usedcomponents = usedmcpatcomponents
@@ -367,12 +345,11 @@ def writemarkers(outputdir, level2version, verbose = False):
     if verbose:
       print "Markersfile found: "+markersfilename+"."
     markersfound=True
-  
+
   if(markersfound):
-    #mkdir_p(os.path.join(resultsdir,markersfilename))
     markersfile = open(os.path.join(resultsdir,markersfilename),"r")
     markers = markersfile.read()
-    markersfile.close() 
+    markersfile.close()
 
   markersjson = {}
   markersjson["markers"]=[]
@@ -422,7 +399,7 @@ def writelabels(outputdir, componentname, componenttype):
     usedcomponents = usedcpicomponents
     ntc = names_to_contributions
   elif(componenttype == "cpisimplified"):
-    usedcomponents = usedsimplifiedcpicomponents
+    usedcomponents = listofsimplifiedcpicomponents
     ntc = names_to_contributionssimple
   elif(componenttype == "mcpat"):
     usedcomponents = usedmcpatcomponents
@@ -442,8 +419,7 @@ def writelabels(outputdir, componentname, componenttype):
       output = json.dumps(jsonoutput).replace("\"palette.color()\"",'palette.color()')
     else:
       jsonoutput.append(dict(name=key, color="rgb("+str(colors[index][0])+","+str(colors[index][1])+","+str(colors[index][2])+")"))
-      jsondump = json.dumps(jsonoutput)
-      output = json.dumps(jsonoutput).replace("\"palette.color()\"",'palette.color()')
+      output = json.dumps(jsonoutput)
     index+=1
   labels.write(componentname+"labels = "+output+";\n")
   labels.close()
@@ -462,7 +438,7 @@ def writeIPCvaluestoJSON(outputdir, verbose = False):
 def getInstructionCount(intervalstr):
   results = sniper_lib.get_results(0, resultsdir, partial = intervalstr)
   instructioncount = sum(results["results"]["performance_model.instruction_count"])
-  return instructioncount  
+  return instructioncount
 
 def getTotalInstructionCount():
   results = sniper_lib.get_results(0, resultsdir)
@@ -480,7 +456,7 @@ def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
   nrofintervals = 0
   while currentintervalnr < num_intervals:
     if verbose:
-      print "group interval", currentintervalnr, " in fixed instructioncounts\r",
+      print "Put fixed time interval", currentintervalnr, "in a fixed instruction count interval\r",
     instructioncount+=getInstructionCount(currentintervalstr)
     nrofintervals+=1
     if instructioncount > fixedinstructioncount:
@@ -494,7 +470,7 @@ def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
 
   if verbose:
     print
-  return intervalsequences 
+  return intervalsequences
 
 
 def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, mcpat, verbose = False):
@@ -503,7 +479,7 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
     print 'Generate JSON data for Level 2'
 
   global interval, num_intervals, resultsdir, outputdir, title, use_mcpat
-  interval = interval_	
+  interval = interval_
   num_intervals = num_intervals_
   resultsdir = resultsdir_
   outputdir = outputdir_
@@ -513,9 +489,7 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
   initialize()
 
   collectCPIStackDataFIC(verbose)
-
-  collectCPIStackData("full",verbose)
-  collectCPIStackData("simple",verbose)
+  collectCPIStackDataFCC(verbose)
 
   writetojson(outputdir,"cpipercentage","cpi",1,verbose=verbose)
   writetojson(outputdir,"cpipercentagesimplified","cpisimplified",1,verbose=verbose)
@@ -607,7 +581,7 @@ if __name__ == '__main__':
     num_intervals = defaultnum_intervals
 
   if(interval == 0 or interval < defaultinterval):
-    print 'No interval specified or interval is smaller than smallest interval.' 
+    print 'No interval specified or interval is smaller than smallest interval.'
     print 'Now using smallest interval ('+str(defaultinterval)+' femtoseconds).'
     interval = defaultinterval
 
@@ -619,7 +593,7 @@ if __name__ == '__main__':
 
 
   createJSONData(interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
-  
+
   # Now copy all static files as well
   if outputdir != HOME:
     print "Copy files to output directory "+outputdir
