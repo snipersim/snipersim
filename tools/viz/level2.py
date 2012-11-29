@@ -42,10 +42,9 @@ def initialize():
   cpificcomponents = {}
   #list of available components
   global listofmcpatcomponents
-
-  listofmcpatcomponents = ["other", "l2", "dcache", "icache", "core-mem",
-    "core-fp", "core-int", "core-alu", "core-ifetch",
-    "core-core", "dram", "noc"]
+  listofmcpatcomponents = mcpat.get_all_names()
+  listofmcpatcomponents.append('other')
+  print "list of mcpatcomponents", listofmcpatcomponents
 
   #list of used components
   global usedcpicomponents, usedsimplifiedcpicomponents, usedmcpatcomponents, usedcpificcomponents
@@ -411,7 +410,7 @@ def writelabels(outputdir, componentname, componenttype):
   if not componenttype == "mcpat":
     colors = cpistack.get_colors(usedcomponents, ntc)
   index=0
-  output="should not happen"
+  output=""
   for key in usedcomponents:
     if componenttype == "mcpat":
       jsonoutput.append(dict(name=key, color="palette.color()"))
