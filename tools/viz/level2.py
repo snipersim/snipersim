@@ -22,7 +22,9 @@ def mkdir_p(path):
 
 
 def initialize():
-
+  #get the component names from cpistack.py
+  items, all_names, names_to_contributions = cpistack.get_items(False, use_simple_mem = True)
+  itemssimple, all_namessimple, names_to_contributionssimple = cpistack.get_items(True, use_simple_mem=True)
 
   #this list keeps the instruction count per interval, indexed by interval number
   global instructioncountlist 
@@ -38,17 +40,8 @@ def initialize():
   cpificcomponents = {}
   #list of available components
   global listofcpicomponents, listofsimplifiedcpicomponents, listofmcpatcomponents
-  listofcpicomponents = ["dispatch_width", "base", "depend-int", "depend-fp", "depend-branch",
-    "issue-port0","issue-port1", "issue-port2", "issue-port34", "issue-port5",
-    "issue-port05", "issue-port015", "contend-fp_addsub", "contend-fp_muldiv",
-    "contend-load", "contend-store", "contend-branch", "contend-generic",
-    "branch", "serial", "itlb", "dtlb", "ifetch", "smt", "mem-l1d", "mem-l2",
-    "mem-l3", "mem-l4", "mem-remote", "mem-dram", "sync-futex", "sync-mutex",
-    "sync-cond", "sync-barrier", "sync-join", "sync-pause", "sync-sleep",
-    "sync-unscheduled", "sync-memaccess", "sync-recv", "dvfs-transition",
-    "imbalance-start", "imbalance-end", "mem-dram-cache", "other"]
-
-  listofsimplifiedcpicomponents = ["other","compute","synchronize","communicate"]
+  listofcpicomponents = all_names
+  listofsimplifiedcpicomponents = all_namessimple
 
   listofmcpatcomponents = ["other", "l2", "dcache", "icache", "core-mem",
     "core-fp", "core-int", "core-alu", "core-ifetch",
