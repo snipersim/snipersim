@@ -70,14 +70,14 @@ def cpistack_compute(jobid = 0, resultsdir = '.', data = None, partial = None,
 
 def output_cpistack_text(results):
   print '                        CPI       Time'
-  labels, cores, cpi = results.get_data('cpi')
-  labels, cores, time = results.get_data('time')
+  cpi = results.get_data('cpi')
+  time = results.get_data('time')
 
-  for core in cores:
-    if len(cores) > 1:
+  for core in results.cores:
+    if len(results.cores) > 1:
       print 'Core', core
     total = { 'cpi': 0, 'time': 0 }
-    for label in labels:
+    for label in results.labels:
       print '  %-15s    %6.2f    %6.2f%%' % (label, cpi[core][label], 100 * time[core][label])
       total['cpi'] += cpi[core][label]
       total['time'] += time[core][label]
@@ -86,9 +86,9 @@ def output_cpistack_text(results):
 
 
 def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480)):
-  plot_labels, plot_cores, plot_data = results.get_data(metric)
+  plot_data = results.get_data(metric)
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
-  plot_labels_with_color = zip(plot_labels, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(plot_labels, results.cpiitems)))
+  plot_labels_with_color = zip(results.labels, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(results.labels, results.cpiitems)))
   gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
     ylabel = metric == 'cpi' and 'Cycles per instruction' or (metric == 'abstime' and 'Time (seconds)' or 'Fraction of time'))
 

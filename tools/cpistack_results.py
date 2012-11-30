@@ -8,15 +8,21 @@ class CpiResults:
     self.max_cycles = cpidata.cycles_scale[0] * max(cpidata.times)
     if not self.max_cycles:
       raise ValueError('No cycles accounted during interval')
+    # Create an ordered list of all labels used
+    labels = set()
+    for core, (res, total, other, scale) in self.results.items():
+      for name, value in res:
+        labels.add(name)
+    self.labels = [ label for label in self.cpiitems.names if label in labels ]
+    # List of all cores used
+    self.cores = self.cpidata.cores
 
   def get_data(self, metric = 'cpi'):
-    labels = set()
     data = {}
 
     for core, (res, total, other, scale) in self.results.items():
       data[core] = {}
       for name, value in res:
-        labels.add(name)
         if metric == 'cpi':
           data[core][name] = float(value) / (self.cpidata.instrs[core] or 1)
         elif metric == 'abstime':
@@ -26,12 +32,9 @@ class CpiResults:
         else:
           raise ValueError('Invalid metric %s' % metric)
 
-    # Create an ordered list of labels that is the superset of all labels used from all cores
-    labels = [ label for label in self.cpiitems.names if label in labels ]
-
     # Make sure all labels exist in all data entries
-    for label in labels:
+    for label in self.labels:
       for core in self.cpidata.cores:
         data[core].setdefault(label, 0.0)
 
-    return labels, self.cpidata.cores, data
+    return data
