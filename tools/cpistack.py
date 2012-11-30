@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import os, sys, re, collections, gnuplot, buildstack, getopt, operator, colorsys
-import sniper_lib, sniper_config, cpistack_data, cpistack_items
+import os, sys, re, collections, gnuplot, getopt, operator, colorsys
+import sniper_lib, sniper_config, cpistack_data, cpistack_items, cpistack_results
 
 try:
   collections.defaultdict()
@@ -47,99 +47,75 @@ def get_colors(plot_labels_ordered, cpiitems):
     return map(lambda x:get_next_color(cpiitems.names_to_contributions[x]),plot_labels_ordered)
 
 
-def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
-             use_cpi = False, use_abstime = False, use_roi = True,
-             use_simple = False, use_simple_mem = True, no_collapse = False,
-             gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
-             job_name = '', title = '', threads = None, threads_mincomp = 0., return_data = False, aggregate = False,
-             size = (640, 480)):
+# New-style function returning CPI stack results
+def cpistack_compute(jobid = 0, resultsdir = '.', data = None, partial = None,
+                     cores_list = None, core_mincomp = 0., aggregate = False,
+                     items = None, groups = None, use_simple = False, use_simple_mem = True,
+                     no_collapse = False):
 
+  # Get the data
   cpidata = cpistack_data.CpiData(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
-  cpidata.filter(cores_list = threads, core_mincomp = threads_mincomp)
+  cpidata.filter(cores_list = cores_list, core_mincomp = core_mincomp)
   if aggregate:
     cpidata.aggregate()
 
-  cpiitems = cpistack_items.CpiItems(use_simple = use_simple, use_simple_mem = use_simple_mem)
+  # Build the structure descriptor
+  cpiitems = cpistack_items.CpiItems(items = items, groups = groups, use_simple = use_simple, use_simple_mem = use_simple_mem)
 
-  results = buildstack.merge_items(cpidata.data, cpiitems.items, nocollapse = no_collapse)
+  # Group data according to descriptor
+  results = cpistack_results.CpiResults(cpidata, cpiitems, no_collapse = no_collapse)
+
+  return results
 
 
-  plot_labels = []
-  plot_data = {}
-  max_cycles = cpidata.cycles_scale[0] * max(cpidata.times)
+def output_cpistack_text(results):
+  print '                        CPI       Time'
+  labels, cores, cpi = results.get_data('cpi')
+  labels, cores, time = results.get_data('time')
 
-  if not max_cycles:
-    raise ValueError("No cycles accounted during interval")
+  for core in cores:
+    if len(cores) > 1:
+      print 'Core', core
+    total = { 'cpi': 0, 'time': 0 }
+    for label in labels:
+      print '  %-15s    %6.2f    %6.2f%%' % (label, cpi[core][label], 100 * time[core][label])
+      total['cpi'] += cpi[core][label]
+      total['time'] += time[core][label]
+    print
+    print '  %-15s    %6.2f    %6.2f%%' % ('total', total['cpi'], total['time'])
 
-  if gen_text_stack: print '                     CPI      CPI %     Time %'
-  for core, (res, total, other, scale) in results.items():
-    if gen_text_stack and not aggregate: print 'Core', core
-    plot_data[core] = {}
-    total = 0
-    for name, value in res:
-      if gen_text_stack:
-        print '  %-15s    %6.2f    %6.2f%%    %6.2f%%' % (name, float(value) / (cpidata.instrs[core] or 1), 100 * float(value) / scale, 100 * float(value) / max_cycles)
-      total += value
-      if gen_plot_stack or return_data:
-        plot_labels.append(name)
-        if use_cpi:
-          plot_data[core][name] = float(value) / (cpidata.instrs[core] or 1)
-        elif use_abstime:
-          plot_data[core][name] = cpidata.fastforward_scale * (float(value) / cpidata.cycles_scale[0]) / 1e15 # cycles to femtoseconds to seconds
-        else:
-          plot_data[core][name] = float(value) / max_cycles
-    if gen_text_stack:
-      print
-      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (cpidata.instrs[core] or 1), 100 * float(total) / scale, cpidata.fastforward_scale * (float(total) / cpidata.cycles_scale[0]) / 1e15)
 
-  # First, create an ordered list of labels that is the superset of all labels used from all cores
-  # Then remove items that are not used, creating an ordered list with all currently used labels
-  plot_labels_ordered = cpiitems.names[:] + ['other']
-  for label in plot_labels_ordered[:]:
-    if label not in plot_labels:
-      plot_labels_ordered.remove(label)
-    else:
-      # If this is a valid label, make sure that it exists in all plot_data entries
-      for core in cpidata.cores:
-        plot_data[core].setdefault(label, 0.0)
-
-  # Create CSV data
-  # Take a snapshot of the data from the last core and create a CSV
-  if gen_csv_stack:
-    f = open(os.path.join(outputdir, 'cpi-stack.csv'), "a")
-    # Print the CSV header if requested
-    if csv_print_header:
-      f.write('name')
-      for label in plot_labels_ordered:
-        f.write(',' + label)
-      f.write('\n')
-    # Print a row of data
-    csv_first = True
-    if job_name:
-      f.write(job_name)
-    for label in plot_labels_ordered:
-      values = [ plot_data[core][label] for core in cpidata.data ]
-      f.write(',%f' % (sum(values) / float(len(values))))
-    f.write('\n')
-    f.close()
-
+def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', size = (640, 480)):
+  plot_labels, plot_cores, plot_data = results.get_data(metric)
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
-  if gen_plot_stack:
-    if 'other' in plot_labels_ordered:
-      cpiitems.add_other()
-    plot_labels_with_color = zip(plot_labels_ordered, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(plot_labels_ordered, cpiitems)))
-    gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
-      ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Fraction of time'))
+  plot_labels_with_color = zip(plot_labels, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(plot_labels, results.cpiitems)))
+  gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
+    ylabel = metric == 'cpi' and 'Cycles per instruction' or (metric == 'abstime' and 'Time (seconds)' or 'Fraction of time'))
 
-  # Return cpi data if requested
-  if return_data:
-    # Create a view of the data, removing threads that do not contribute
-    data_to_return = {}
-    for core in cpidata.cores:
-      data_to_return[core] = {}
-      for label in plot_labels_ordered:
-        data_to_return[core][label] = plot_data[core][label]
-    return plot_labels_ordered, cpidata.cores, data_to_return
+
+# Legacy function doing everything
+def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
+             metric = 'time', use_roi = True,
+             use_simple = False, use_simple_mem = True, no_collapse = False,
+             gen_text_stack = True, gen_plot_stack = True,
+             job_name = '', title = '', threads = None, threads_mincomp = 0., aggregate = False,
+             size = (640, 480)):
+
+  results = cpistack_compute(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial,
+                             cores_list = threads, core_mincomp = threads_mincomp, aggregate = aggregate,
+                             groups = use_simple and cpistack_items.build_grouplist(legacy = True) or None,
+                             use_simple = use_simple, use_simple_mem = use_simple_mem, no_collapse = no_collapse)
+
+  plot_labels, plot_cores, plot_data = results.get_data(metric)
+
+
+  if gen_text_stack:
+    output_cpistack_text(results)
+
+  if gen_plot_stack:
+    output_cpistack_gnuplot(results, metric, outputfile, outputdir, size)
+
+  return plot_labels, plot_cores, plot_data
 
 
 if __name__ == '__main__':
@@ -151,8 +127,7 @@ if __name__ == '__main__':
   partial = None
   outputfile = 'cpi-stack'
   title = ''
-  use_cpi = False
-  use_abstime = False
+  metric = 'time'
   use_roi = True
   use_simple = False
   use_simple_mem = True
@@ -188,9 +163,9 @@ if __name__ == '__main__':
     if o == '--time':
       pass
     if o == '--cpi':
-      use_cpi = True
+      metric = 'cpi'
     if o == '--abstime':
-      use_abstime = True
+      metric = 'abstime'
     if o == '--aggregate':
       aggregate = True
     if o == '--partial':
@@ -209,8 +184,7 @@ if __name__ == '__main__':
     partial = partial,
     outputfile = outputfile,
     title = title,
-    use_cpi = use_cpi,
-    use_abstime = use_abstime,
+    metric = metric,
     use_roi = use_roi,
     use_simple = use_simple,
     use_simple_mem = use_simple_mem,

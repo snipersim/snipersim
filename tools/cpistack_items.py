@@ -122,6 +122,7 @@ class CpiItems:
       self.compact_by_group()
     self.gen_contributions()
     self.names = buildstack.get_names(self.items)
+    self.add_other()
 
   def compact_by_group(self):
     def _findall(items, keys = None):
