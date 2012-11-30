@@ -163,14 +163,6 @@ def get_items(use_simple = False, use_simple_sync = False, use_simple_mem = True
   return all_items, all_names, base_contribution
 
 
-def get_compfrac(data, max_time):
-  return dict([ (
-    core,
-    1 - (data[core].get('StartTime', 0) + data[core].get('Imbalance', 0) + data[core].get('SyncPthreadCond', 0) + \
-         data[core].get('SyncPthreadBarrier', 0) + data[core].get('SyncJoin', 0) + data[core].get('Recv', 0)) / (float(max_time) or 1.)
-  ) for core in data.keys() ])
-
-
 def get_colors(plot_labels_ordered,
                names_to_contributions,
                base_colors = {'compute': (0xff,0,0), 'communicate': (0,0xff,0), 'synchronize': (0,0,0xff), 'other': (0,0,0)}):
@@ -193,36 +185,20 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
              use_cpi = False, use_abstime = False, use_roi = True,
              use_simple = False, use_simple_mem = True, no_collapse = False,
              gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
-             job_name = '', title = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
+             job_name = '', title = '', threads = None, threads_mincomp = 0., return_data = False, aggregate = False,
              size = (640, 480)):
 
   cpidata = cpistack_data.CpiData(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
 
-  if threads:
-    data   = dict([ (i, cpidata.data[i]) for i in threads ])
-    ncores = len(threads)
-  else:
-    data = cpidata.data
-    threads = range(cpidata.ncores)
-    ncores = cpidata.ncores
-
-  if threads_mincomp:
-    compfrac = get_compfrac(data, cpidata.cycles_scale[0] * max(cpidata.times))
-    csv_threads = [ core for core in threads if threads_mincomp < compfrac[core] ]
-  else:
-    csv_threads = threads
+  cpidata.filter(cores_list = threads, core_mincomp = threads_mincomp)
 
   if aggregate:
-    data = { 0: dict([ (key, sum([ data[core][key] for core in csv_threads ]) / len(csv_threads)) for key in data[threads[0]].keys() ]) }
-    instrs = { 0: sum(cpidata.instrs[core] for core in csv_threads) / len(csv_threads) }
-    threads = [0]
-    csv_threads = [0]
-  else:
-    instrs = cpidata.instrs
+    cpidata.aggregate()
+
 
   items, all_names, names_to_contributions = get_items(use_simple, use_simple_mem = use_simple_mem)
 
-  results = buildstack.merge_items(data, items, nocollapse = no_collapse)
+  results = buildstack.merge_items(cpidata.data, items, nocollapse = no_collapse)
 
 
   plot_labels = []
@@ -239,7 +215,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
     total = 0
     for name, value in res:
       if gen_text_stack:
-        print '  %-15s    %6.2f    %6.2f%%    %6.2f%%' % (name, float(value) / (instrs[core] or 1), 100 * float(value) / scale, 100 * float(value) / max_cycles)
+        print '  %-15s    %6.2f    %6.2f%%    %6.2f%%' % (name, float(value) / (cpidata.instrs[core] or 1), 100 * float(value) / scale, 100 * float(value) / max_cycles)
       total += value
       if gen_plot_stack or return_data:
         plot_labels.append(name)
@@ -251,7 +227,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
           plot_data[core][name] = float(value) / max_cycles
     if gen_text_stack:
       print
-      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, cpidata.fastforward_scale * (float(total) / cpidata.cycles_scale[0]) / 1e15)
+      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (cpidata.instrs[core] or 1), 100 * float(total) / scale, cpidata.fastforward_scale * (float(total) / cpidata.cycles_scale[0]) / 1e15)
 
   # First, create an ordered list of labels that is the superset of all labels used from all cores
   # Then remove items that are not used, creating an ordered list with all currently used labels
@@ -261,12 +237,12 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
       plot_labels_ordered.remove(label)
     else:
       # If this is a valid label, make sure that it exists in all plot_data entries
-      for core in threads:
+      for core in cpidata.data.keys():
         plot_data[core].setdefault(label, 0.0)
 
   # Create CSV data
   # Take a snapshot of the data from the last core and create a CSV
-  if gen_csv_stack and csv_threads:
+  if gen_csv_stack:
     f = open(os.path.join(outputdir, 'cpi-stack.csv'), "a")
     # Print the CSV header if requested
     if csv_print_header:
@@ -279,7 +255,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
     if job_name:
       f.write(job_name)
     for label in plot_labels_ordered:
-      values = [ plot_data[core][label] for core in csv_threads ]
+      values = [ plot_data[core][label] for core in cpidata.data ]
       f.write(',%f' % (sum(values) / float(len(values))))
     f.write('\n')
     f.close()

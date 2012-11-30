@@ -124,7 +124,39 @@ class CpiData:
 
     self.data = data
     self.ncores = ncores
+    self.cores = range(ncores)
     self.instrs = instrs
     self.times = times
     self.cycles_scale = cycles_scale
     self.fastforward_scale = fastforward_scale
+
+
+  def get_compfrac(self):
+    max_time = self.cycles_scale[0] * max(self.times)
+    return dict([ (
+      core,
+      1 - (self.data[core].get('StartTime', 0) + self.data[core].get('Imbalance', 0) + self.data[core].get('SyncPthreadCond', 0) + \
+           self.data[core].get('SyncPthreadBarrier', 0) + self.data[core].get('SyncJoin', 0) + self.data[core].get('Recv', 0)) / (float(max_time) or 1.)
+    ) for core in self.data.keys() ])
+
+
+  def filter(self, cores_list = None, core_mincomp = 0):
+    if not cores_list:
+      cores_list = self.cores
+
+    if core_mincomp:
+      compfrac = self.get_compfrac()
+      cores_list = [ core for core in cores_list if compfrac[core] >= core_mincomp ]
+
+    self.data = dict([ (core, self.data[core]) for core in cores_list ])
+    self.instrs = dict([ (core, self.instrs[core]) for core in cores_list ])
+    self.ncores = len(cores_list)
+    self.cores = cores_list
+
+
+  def aggregate(self):
+    allkeys = self.data[self.cores[0]].keys()
+    self.data = { 0: dict([ (key, sum([ self.data[core][key] for core in self.cores ]) / len(self.cores)) for key in allkeys ]) }
+    self.instrs = { 0: sum(self.instrs[core] for core in self.cores) / len(self.cores) }
+    self.ncores = 1
+    self.cores = [0]
