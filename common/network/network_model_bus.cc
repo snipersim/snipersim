@@ -12,18 +12,16 @@ NetworkModelBusGlobal* NetworkModelBus::_bus_global[NUM_STATIC_NETWORKS] = { NUL
 
 NetworkModelBusGlobal::NetworkModelBusGlobal(String name)
    : _bandwidth(8 * Sim()->getCfg()->getFloat("network/bus/bandwidth")) /* = 8 * GB/s / Gcycles/s = bits / cycle, round down (implicit: float to int conversion) */
-   #ifndef BUS_USE_QUEUE_MODEL
-   , _contention_model(name, 0)
-   #endif
    , _num_packets(0)
    , _num_packets_delayed(0)
    , _num_bytes(0)
    , _time_used(SubsecondTime::Zero())
    , _total_delay(SubsecondTime::Zero())
 {
-   #ifdef BUS_USE_QUEUE_MODEL
-   _queue_model = QueueModel::create(Sim()->getCfg()->getString("network/bus/queue_model/type", "history_list"), 10 * SubsecondTime::NS());
-   #endif
+   String model_type = Sim()->getCfg()->getString("network/bus/queue_model/type");
+   // Emulate the original code, with 10 cycles of latency for the history_list, and 0 outstanding transactions for the contention model
+   SubsecondTime proc_period = ComponentPeriod::fromFreqHz(Sim()->getCfg()->getFloatArray("perf_model/core/frequency", 0)*1000000000);
+   _queue_model = QueueModel::create("bus-queue", 0, model_type, 10 * proc_period, 0);
    /* 8 * GB/s / Gcycles/s = bits / cycle, round down (implicit: float to int conversion) */
    registerStatsMetric(name, 0, "num-packets", &_num_packets);
    registerStatsMetric(name, 0, "num-packets-delayed", &_num_packets_delayed);
@@ -34,9 +32,7 @@ NetworkModelBusGlobal::NetworkModelBusGlobal(String name)
 
 NetworkModelBusGlobal::~NetworkModelBusGlobal()
 {
-   #ifdef BUS_USE_QUEUE_MODEL
    delete _queue_model;
-   #endif
 }
 
 /* Model bus utilization. In: packet start time and size. Out: packet out time */
@@ -44,12 +40,7 @@ SubsecondTime
 NetworkModelBusGlobal::useBus(SubsecondTime t_start, UInt32 length)
 {
    SubsecondTime t_delay = _bandwidth.getLatency(length * 8);
-   #ifdef BUS_USE_QUEUE_MODEL
    SubsecondTime t_queue = _queue_model->computeQueueDelay(t_start, t_delay);
-   #else
-   SubsecondTime t_complete = _contention_model.getCompletionTime(t_start, t_delay);
-   SubsecondTime t_queue = t_complete - t_start - t_delay;
-   #endif
    _time_used += t_delay;
    _total_delay += t_queue;
    if (t_queue > SubsecondTime::Zero())
