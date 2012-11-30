@@ -10,8 +10,6 @@ except AttributeError, e:
   sys.exit()
 
 
-
-
 def color_tint_shade(base_color, num):
   base_color = map(lambda x:float(x)/255, base_color)
   base_color = colorsys.rgb_to_hsv(*base_color)
@@ -33,23 +31,20 @@ def color_tint_shade(base_color, num):
   return colors
 
 
-
-def get_colors(plot_labels_ordered,
-               names_to_contributions,
-               base_colors = {'compute': (0xff,0,0), 'communicate': (0,0xff,0), 'synchronize': (0,0,0xff), 'other': (0,0,0)}):
+def get_colors(plot_labels_ordered, cpiitems):
     contribution_counts = collections.defaultdict(int)
     for i in plot_labels_ordered:
-      contribution_counts[names_to_contributions[i]] += 1
+      contribution_counts[cpiitems.names_to_contributions[i]] += 1
     color_ranges = {}
     next_color_index = {}
-    for b in base_colors.iterkeys():
-      color_ranges[b] = color_tint_shade(base_colors[b], contribution_counts[b])
-      next_color_index[b] = 0
+    for name, color, _ in cpiitems.groups:
+      color_ranges[name] = color_tint_shade(color, contribution_counts[name])
+      next_color_index[name] = 0
     def get_next_color(contr):
       idx = next_color_index[contr]
       next_color_index[contr] += 1
       return color_ranges[contr][idx]
-    return map(lambda x:get_next_color(names_to_contributions[x]),plot_labels_ordered)
+    return map(lambda x:get_next_color(cpiitems.names_to_contributions[x]),plot_labels_ordered)
 
 
 def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
@@ -131,9 +126,8 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
   if gen_plot_stack:
     if 'other' in plot_labels_ordered:
-      cpiitems.names.append('other')
-      cpiitems.names_to_contributions['other'] = 'other'
-    plot_labels_with_color = zip(plot_labels_ordered, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(plot_labels_ordered,cpiitems.names_to_contributions)))
+      cpiitems.add_other()
+    plot_labels_with_color = zip(plot_labels_ordered, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(plot_labels_ordered, cpiitems)))
     gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
       ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Fraction of time'))
 

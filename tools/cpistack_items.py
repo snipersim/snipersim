@@ -95,12 +95,14 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
 
 
 def build_grouplist():
-  return (
-    ('compute', ('dispatch_width', 'base', 'issue', 'depend',
-                'branch', 'serial', 'smt')),
-    ('communicate', ('itlb','dtlb','ifetch','mem',)),
-    ('synchronize', ('sync', 'recv', 'dvfs-transition', 'imbalance')),
-  )
+  # List of <groupname>, <base color>, <list of items>
+  # Used to collaps items when use_simple is true, and for coloring
+  return [
+    ('compute',     (0xff,0,0), ('dispatch_width', 'base', 'issue', 'depend',
+                                 'branch', 'serial', 'smt')),
+    ('communicate', (0,0xff,0), ('itlb','dtlb','ifetch','mem',)),
+    ('synchronize', (0,0,0xff), ('sync', 'recv', 'dvfs-transition', 'imbalance')),
+  ]
 
 
 class CpiItems:
@@ -129,14 +131,19 @@ class CpiItems:
 
     new_all_items = []
     new_simple_groups = []
-    for k,v in self.groups:
-      new_all_items.append([k, 0, findall(*v)])
-      new_simple_groups.append((k,(k,)))
+    for name, color, items in self.groups:
+      new_all_items.append([name, 0, findall(*items)])
+      new_simple_groups.append((name, color, (name,)))
     self.items = new_all_items
     self.groups = new_simple_groups
 
   def gen_contributions(self):
     self.names_to_contributions = {}
-    for group, members in self.groups:
+    for group, color, members in self.groups:
       for name in buildstack.get_names(self.items, keys = members):
         self.names_to_contributions[name] = group
+
+  def add_other(self):
+    self.groups.append(('other', (0,0,0), ('other',)))
+    self.names.append('other')
+    self.names_to_contributions['other'] = 'other'
