@@ -85,37 +85,12 @@ def output_cpistack_text(results):
     print '  %-15s    %6.2f    %6.2f%%' % ('total', total['cpi'], total['time'])
 
 
-def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', size = (640, 480)):
+def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480)):
   plot_labels, plot_cores, plot_data = results.get_data(metric)
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
   plot_labels_with_color = zip(plot_labels, map(lambda x:'rgb "#%02x%02x%02x"'%x,get_colors(plot_labels, results.cpiitems)))
   gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
     ylabel = metric == 'cpi' and 'Cycles per instruction' or (metric == 'abstime' and 'Time (seconds)' or 'Fraction of time'))
-
-
-# Legacy function doing everything
-def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
-             metric = 'time',
-             use_simple = False, use_simple_mem = True, no_collapse = False,
-             gen_text_stack = True, gen_plot_stack = True,
-             job_name = '', title = '', threads = None, threads_mincomp = 0., aggregate = False,
-             size = (640, 480)):
-
-  results = cpistack_compute(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial,
-                             cores_list = threads, core_mincomp = threads_mincomp, aggregate = aggregate,
-                             groups = use_simple and cpistack_items.build_grouplist(legacy = True) or None,
-                             use_simple = use_simple, use_simple_mem = use_simple_mem, no_collapse = no_collapse)
-
-  plot_labels, plot_cores, plot_data = results.get_data(metric)
-
-
-  if gen_text_stack:
-    output_cpistack_text(results)
-
-  if gen_plot_stack:
-    output_cpistack_gnuplot(results, metric, outputfile, outputdir, size)
-
-  return plot_labels, plot_cores, plot_data
 
 
 if __name__ == '__main__':
@@ -177,14 +152,9 @@ if __name__ == '__main__':
     usage()
     sys.exit(-1)
 
-  cpistack(
-    jobid = jobid,
-    resultsdir = resultsdir,
-    partial = partial,
-    outputfile = outputfile,
-    title = title,
-    metric = metric,
-    use_simple = use_simple,
-    use_simple_mem = use_simple_mem,
-    no_collapse = no_collapse,
-    aggregate = aggregate)
+  results = cpistack_compute(jobid = jobid, resultsdir = resultsdir, partial = partial, aggregate = aggregate,
+                             groups = use_simple and cpistack_items.build_grouplist(legacy = True) or None,
+                             use_simple = use_simple, use_simple_mem = use_simple_mem, no_collapse = no_collapse)
+
+  output_cpistack_text(results)
+  output_cpistack_gnuplot(results = results, metric = metric, outputfile = outputfile, title = title)
