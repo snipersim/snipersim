@@ -7,8 +7,8 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
   #                       tuple : list of key names that are summed anonymously
 
   items = [
-    [ 'dispatch_width', .01,   'Issue' ],
     [ 'base',           .01,   'Base' ],
+    [ 'dispatch_width', .01,   'Issue' ],
     [ 'depend',   .01,   [
       [ 'int',      .01, 'PathInt' ],
       [ 'fp',       .01, 'PathFP' ],
@@ -23,9 +23,9 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'port05',      .01,    'PathP05' ],
       [ 'port015',      .01,    'PathP015' ],
     ] ],
-    [ 'branch',   .01, 'BranchPredictor' ],
     [ 'serial',   .01, ('Serialization', 'LongLatency') ], # FIXME: can LongLatency be anything other than MFENCE?
     [ 'smt',            .01,   'SMT' ],
+    [ 'branch',   .01, 'BranchPredictor' ],
     [ 'itlb',     .01, 'ITLBMiss' ],
     [ 'dtlb',     .01, 'DTLBMiss' ],
     [ 'ifetch',   .01, (
@@ -94,15 +94,23 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
   return items
 
 
-def build_grouplist():
+def build_grouplist(legacy = False):
   # List of <groupname>, <base color>, <list of items>
   # Used to collaps items when use_simple is true, and for coloring
-  return [
-    ('compute',     (0xff,0,0), ('dispatch_width', 'base', 'issue', 'depend',
-                                 'branch', 'serial', 'smt')),
-    ('communicate', (0,0xff,0), ('itlb','dtlb','ifetch','mem',)),
-    ('synchronize', (0,0,0xff), ('sync', 'recv', 'dvfs-transition', 'imbalance')),
-  ]
+  if legacy:
+    return [
+      ('compute',     (0xff,0,0), ('dispatch_width', 'base', 'issue', 'depend',
+                                   'branch', 'serial', 'smt')),
+      ('communicate', (0,0xff,0), ('itlb','dtlb','ifetch','mem',)),
+      ('synchronize', (0,0,0xff), ('sync', 'recv', 'dvfs-transition', 'imbalance')),
+    ]
+  else:
+    return [
+      ('compute',     (0xff,0,0),    ('dispatch_width', 'base', 'issue', 'depend', 'serial', 'smt')),
+      ('branch',      (0xff,0xff,0), ('branch',)),
+      ('memory',      (0,0xff,0),    ('itlb','dtlb','ifetch','mem',)),
+      ('synchronize', (0,0,0xff),    ('sync', 'recv', 'dvfs-transition', 'imbalance')),
+    ]
 
 
 class CpiItems:
