@@ -95,7 +95,7 @@ def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', 
 
 # Legacy function doing everything
 def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
-             metric = 'time', use_roi = True,
+             metric = 'time',
              use_simple = False, use_simple_mem = True, no_collapse = False,
              gen_text_stack = True, gen_plot_stack = True,
              job_name = '', title = '', threads = None, threads_mincomp = 0., aggregate = False,
@@ -128,14 +128,13 @@ if __name__ == '__main__':
   outputfile = 'cpi-stack'
   title = ''
   metric = 'time'
-  use_roi = True
   use_simple = False
   use_simple_mem = True
   no_collapse = False
   aggregate = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "title=", "without-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "title=", "no-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -152,8 +151,8 @@ if __name__ == '__main__':
       outputfile = a
     if o == '--title':
       title = a
-    if o == '--without-roi':
-      use_roi = False
+    if o == '--no-roi':
+      partial = ('start', 'stop')
     if o == '--simplified':
       use_simple = True
     if o == '--no-collapse':
@@ -185,7 +184,6 @@ if __name__ == '__main__':
     outputfile = outputfile,
     title = title,
     metric = metric,
-    use_roi = use_roi,
     use_simple = use_simple,
     use_simple_mem = use_simple_mem,
     no_collapse = no_collapse,
