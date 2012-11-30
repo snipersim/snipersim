@@ -103,25 +103,18 @@ def collectCPIStackDataFIC(verbose=False):
     simple=False
 
     try:
-      _, _, data_to_return = cpistack.cpistack(
-        jobid = 0,
+      results = cpistack.cpistack_compute(
         resultsdir = resultsdir,
         partial = currentinterval,
-        title = '',
-        use_cpi = True,
-        use_abstime = False,
-        use_roi = True,
         use_simple = simple,
         use_simple_mem = True,
         no_collapse = True,
-        aggregate = True,
-        return_data = True,
-        gen_plot_stack = False,
-        gen_text_stack = False
+        aggregate = True
       )
+      data = results.get_data('cpi')
 
-      for key in data_to_return[0].keys():
-        cpi = data_to_return[0][key]
+      for key in results.labels:
+        cpi = data[0][key]
         if cpi > 0.0:
           usedcomponents[key]=1
         cpificcomponents[key][i][0]=cpi
@@ -183,35 +176,28 @@ def collectCPIStackDataFCC(verbose = False):
     instructioncountsumlist.append(instructioncount)
 
     try:
-      _, _, data_to_return = cpistack.cpistack(
-        jobid = 0,
+      results = cpistack.cpistack_compute(
         resultsdir = resultsdir,
         partial = currentinterval,
-        title = '',
-        use_cpi = True,
-        use_abstime = False,
-        use_roi = True,
         use_simple = False,
         use_simple_mem = True,
         no_collapse = True,
-        aggregate = True,
-        return_data = True,
-        gen_plot_stack = False,
-        gen_text_stack = False
+        aggregate = True
       )
+      data = results.get_data('cpi')
 
-      totalcpi=sum(data_to_return[0].itervalues())
+      totalcpi=sum(data[0].itervalues())
       if totalcpi > 0:
-        ipc = 1/totalcpi
+        ipc = 1./totalcpi
       else:
         ipc = 0
 
       ipcvalues[0]["data"][i]=dict(x=i, y=ipc)
 
-      for key in data_to_return[0].keys():
-        cpi = data_to_return[0][key]
+      for key in results.labels:
+        cpi = data[0][key]
         if totalcpi > 0:
-          cpipercentage = 100*cpi/totalcpi
+          cpipercentage = 100.*cpi/totalcpi
         else:
           cpipercentage = 0
 
@@ -410,7 +396,7 @@ def writelabels(outputdir, componentname, componenttype):
 
   jsonoutput = []
   if not componenttype == "mcpat":
-    colors = cpistack.get_colors(usedcomponents, ntc)
+    colors = ntc.get_colors(usedcomponents)
   index=0
   output=""
   for key in usedcomponents:
@@ -419,7 +405,7 @@ def writelabels(outputdir, componentname, componenttype):
       jsondump = json.dumps(jsonoutput)
       output = json.dumps(jsonoutput).replace("\"palette.color()\"",'palette.color()')
     else:
-      jsonoutput.append(dict(name=key, color="rgb("+str(colors[index][0])+","+str(colors[index][1])+","+str(colors[index][2])+")"))
+      jsonoutput.append(dict(name=key, color="rgb(%d,%d,%d)" % colors[index][1]))
       output = json.dumps(jsonoutput)
     index+=1
   labels.write(componentname+"labels = "+output+";\n")

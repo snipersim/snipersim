@@ -36,25 +36,21 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbos
       print "Parsing interval "+str(i+1)+"/"+str(num_intervals)+"\r",
 
     try:
-      _, _, data_to_return = cpistack.cpistack(
+      results = cpistack.cpistack_compute(
         resultsdir = resultsdir,
         partial = ["periodic-"+str(i*interval),"periodic-"+str((i+1)*interval)],
-        use_cpi = True,
-        use_roi = True,
         use_simple = False,
         use_simple_mem = True,
         no_collapse = False,
-        aggregate = False,
-        return_data = True,
-        gen_plot_stack = False,
-        gen_text_stack = False,
+        aggregate = False
       )
+      data = results.get_data('cpi')
 
       intervaldata[i] = [0 for x in xrange(ncores)]
 
       for core in xrange(ncores):
-        if core in data_to_return.keys():
-          intervaldata[i][core] = {'time':(i*interval/1000000), 'ipc':1./sum(data_to_return[core].itervalues())}
+        if core in results.cores:
+          intervaldata[i][core] = {'time':(i*interval/1000000), 'ipc':1./sum(data[core].itervalues())}
         else:
           intervaldata[i][core] = {'time':(i*interval/1000000), 'ipc':0}
 
