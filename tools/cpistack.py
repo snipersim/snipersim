@@ -83,7 +83,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
       if gen_plot_stack or return_data:
         plot_labels.append(name)
         if use_cpi:
-          plot_data[core][name] = float(value) / (instrs[core] or 1)
+          plot_data[core][name] = float(value) / (cpidata.instrs[core] or 1)
         elif use_abstime:
           plot_data[core][name] = cpidata.fastforward_scale * (float(value) / cpidata.cycles_scale[0]) / 1e15 # cycles to femtoseconds to seconds
         else:
@@ -100,7 +100,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
       plot_labels_ordered.remove(label)
     else:
       # If this is a valid label, make sure that it exists in all plot_data entries
-      for core in cpidata.data.keys():
+      for core in cpidata.cores:
         plot_data[core].setdefault(label, 0.0)
 
   # Create CSV data
@@ -132,14 +132,14 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
       ylabel = use_cpi and 'Cycles per instruction' or (use_abstime and 'Time (seconds)' or 'Fraction of time'))
 
   # Return cpi data if requested
-  if return_data and csv_threads:
+  if return_data:
     # Create a view of the data, removing threads that do not contribute
     data_to_return = {}
-    for core in csv_threads:
+    for core in cpidata.cores:
       data_to_return[core] = {}
       for label in plot_labels_ordered:
         data_to_return[core][label] = plot_data[core][label]
-    return plot_labels_ordered, csv_threads, data_to_return
+    return plot_labels_ordered, cpidata.cores, data_to_return
 
 
 if __name__ == '__main__':
