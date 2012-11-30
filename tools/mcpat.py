@@ -71,7 +71,7 @@ all_items = [
   [ 'dram',     .01,    'dram' ],
 ]
 
-all_names = buildstack.get_names('', all_items)
+all_names = buildstack.get_names(all_items)
 
 def get_all_names():
   return all_names

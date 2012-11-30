@@ -121,11 +121,11 @@ class CpiItems:
       all_items = new_all_items
       simple_groups = new_simple_groups
 
-    all_names = buildstack.get_names('', all_items)
+    all_names = buildstack.get_names(all_items)
 
     base_contribution = {}
     for group, members in simple_groups:
-      for name in buildstack.get_names('', all_items, True, members):
+      for name in buildstack.get_names(all_items, keys = members):
         base_contribution[name] = group
 
     self.items = all_items

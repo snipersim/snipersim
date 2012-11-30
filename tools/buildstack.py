@@ -55,14 +55,14 @@ def merge_items(data, all_items, nocollapse = False, no_complain_others = False)
   return results
 
 
-def get_names(prefix, items, add_prefixes = True, keys = None):
+def get_names(items, prefix = '', add_prefixes = True, keys = None):
   names = []
   for name, threshold, key_or_items in items:
     if not keys or name in keys:
       if type(key_or_items) is list:
         if add_prefixes:
           names.append(name) # Add the top-level name if requested
-        names += get_names(name, key_or_items, add_prefixes)
+        names += get_names(key_or_items, name, add_prefixes)
       else:
         if prefix:
           names.append(prefix+'-'+name)
