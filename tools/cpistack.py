@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-import os, sys, re, collections, gnuplot, buildstack, getopt, sniper_lib, sniper_config, operator, colorsys
+import os, sys, re, collections, gnuplot, buildstack, getopt, operator, colorsys
+import sniper_lib, sniper_config, cpistack_data
 
 try:
   collections.defaultdict()
@@ -9,124 +10,6 @@ except AttributeError, e:
   sys.exit()
 
 
-def getdata(jobid = '', resultsdir = '', data = None, partial = None):
-  if data:
-    res = data
-  else:
-    res = sniper_lib.get_results(jobid, resultsdir, partial = partial)
-  stats = res['results']
-
-  ncores = int(res['config']['general/total_cores'])
-  instrs = stats['performance_model.instruction_count']
-  try:
-    times = stats['performance_model.elapsed_time']
-    cycles_scale = stats['fs_to_cycles_cores']
-  except KeyError:
-    # On error, assume that we are using the pre-DVFS version
-    times = stats['performance_model.cycle_count']
-    cycles_scale = [ 1. for idx in range(ncores) ]
-  # Figure out when the interval of time, represented by partial, actually begins/ends
-  # Since cores can account for time in chunks, per-core time can be
-  # both before (``wakeup at future time X'') or after (``sleep until woken up'')
-  # the current time.
-  if 'barrier.global_time_begin' in stats:
-    # Most accurate: ask the barrier
-    time0_begin = stats['barrier.global_time_begin'][0]
-    time0_end = stats['barrier.global_time_end'][0]
-  else:
-    # Guess based on core that has the latest time (future wakeup is less common than sleep on futex)
-    time0_begin = max(stats['performance_model.elapsed_time_begin'])
-    time0_end = max(stats['performance_model.elapsed_time_end'])
-  times = [ stats['performance_model.elapsed_time_end'][core] - time0_begin for core in range(ncores) ]
-
-  if stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:
-    fastforward_scale = times[0] / (times[0] - stats['fastforward_performance_model.fastforwarded_time'][0])
-    times = [ t-f for t, f in zip(times, stats['fastforward_performance_model.fastforwarded_time']) ]
-  else:
-    fastforward_scale = 1.
-  if 'performance_model.cpiFastforwardTime' in stats:
-    del stats['performance_model.cpiFastforwardTime']
-
-
-  data = collections.defaultdict(collections.defaultdict)
-  for key, values in stats.items():
-    if '.cpi' in key:
-      key = key.split('.cpi')[1]
-      for core in range(ncores):
-        data[core][key] = values[core] * cycles_scale[core]
-
-  if not data:
-    raise ValueError('No .cpi data found, simulation did not use the interval core model')
-
-  # Split up cpiBase into 1/issue and path dependencies
-  for core in range(ncores):
-    if data[core]['SyncMemAccess'] == data[core]['SyncPthreadBarrier']:
-      # Work around a bug in iGraphite where SyncMemAccess wrongly copied from SyncPthreadBarrier
-      # Since SyncMemAccess usually isn't very big anyway, setting it to zero should be accurate enough
-      # For simulations with a fixed version of iGraphite, the changes of SyncMemAccess being identical to
-      #   SyncPthreadBarrier, down to the last femtosecond, are slim, so this code shouldn't trigger
-      data[core]['SyncMemAccess'] = 0
-    if data[core].get('StartTime') == None:
-      # Fix a bug whereby the start time was not being reported in the CPI stacks correctly
-      data[core]['StartTime'] = cycles_scale * stats['performance_model.idle_elapsed_time'][core] - \
-                                data[core]['SyncFutex']       - data[core]['SyncPthreadMutex']    - \
-                                data[core]['SyncPthreadCond'] - data[core]['SyncPthreadBarrier']  - \
-                                data[core]['Recv']
-    # Critical path accounting
-    cpContrMap = {
-      # critical path components
-      'interval_timer.cpContr_generic': 'PathInt',
-      'interval_timer.cpContr_store': 'PathStore',
-      'interval_timer.cpContr_load_other': 'PathLoadX',
-      'interval_timer.cpContr_branch': 'PathBranch',
-      'interval_timer.cpContr_load_l1': 'DataCacheL1',
-      'interval_timer.cpContr_load_l2': 'DataCacheL2',
-      'interval_timer.cpContr_load_l3': 'DataCacheL3',
-      'interval_timer.cpContr_fp_addsub': 'PathFP',
-      'interval_timer.cpContr_fp_muldiv': 'PathFP',
-      # issue ports
-      'interval_timer.cpContr_port0': 'PathP0',
-      'interval_timer.cpContr_port1': 'PathP1',
-      'interval_timer.cpContr_port2': 'PathP2',
-      'interval_timer.cpContr_port34': 'PathP34',
-      'interval_timer.cpContr_port5': 'PathP5',
-      'interval_timer.cpContr_port05': 'PathP05',
-      'interval_timer.cpContr_port015': 'PathP015',
-    }
-    for k in res['results']:
-      if k.startswith('interval_timer.cpContr_'):
-        if k not in cpContrMap.keys():
-          print 'Missing in cpContrMap: ', k
-    # Keep 1/width as base CPI component, break down the remainder according to critical path contributors
-    BaseBest = instrs[core] / float(sniper_config.get_config(res['config'], 'perf_model/core/interval_timer/dispatch_width', core))
-    BaseAct = data[core]['Base']
-    BaseCp = BaseAct - BaseBest
-    scale = BaseCp / (BaseAct or 1)
-    for cpName, cpiName in cpContrMap.items():
-      val = float(res['results'].get(cpName, [0]*ncores)[core]) / 1e6
-      data[core]['Base'] -= val * scale
-      data[core][cpiName] = data[core].get(cpiName, 0) + val * scale
-    # Issue width
-    for key, values in res['results'].items():
-      if key.startswith('interval_timer.detailed-cpiBase-'):
-        if 'DispatchWidth' in key:
-          if 'DispatchRate' not in key: # We already accounted for DispatchRate above, don't do it twice
-            data[core]['Base'] -= values[core]
-            data[core]['Issue'] = data[core].get('Issue', 0) + values[core]
-    # Fix up large cpiSync fractions that started before but ended inside our interval
-    time0_me = stats['performance_model.elapsed_time_begin'][core]
-    if time0_me < time0_begin:
-      time0_extra = time0_begin - time0_me
-      #    Number of cycles that weren't accounted for when starting this interval
-      cycles_extra = time0_extra * cycles_scale[core]
-      #    Components that could be the cause of cycles_extra. It should be just one, but if there's many, we'll have to guess
-      sync_components = dict([ (key, value) for key, value in data[core].items() if (key.startswith('Sync') or key == 'StartTime') and value > cycles_extra ])
-      sync_total = sum(sync_components.values())
-      for key, value in sync_components.items():
-        data[core][key] -= cycles_extra*value/float(sync_total)
-    data[core]['Imbalance'] = cycles_scale[core] * max(times) - sum(data[core].values())
-
-  return data, ncores, instrs, times, cycles_scale, fastforward_scale
 
 
 def color_tint_shade(base_color, num):
@@ -313,25 +196,29 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
              job_name = '', title = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
              size = (640, 480)):
 
-  data, ncores, instrs, times, cycles_scale, fastforward_scale = getdata(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
+  cpidata = cpistack_data.CpiData(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
 
   if threads:
-    data   = dict([ (i, data[i]) for i in threads ])
+    data   = dict([ (i, cpidata.data[i]) for i in threads ])
     ncores = len(threads)
   else:
-    threads = range(ncores)
+    data = cpidata.data
+    threads = range(cpidata.ncores)
+    ncores = cpidata.ncores
 
   if threads_mincomp:
-    compfrac = get_compfrac(data, cycles_scale[0] * max(times))
+    compfrac = get_compfrac(data, cpidata.cycles_scale[0] * max(cpidata.times))
     csv_threads = [ core for core in threads if threads_mincomp < compfrac[core] ]
   else:
     csv_threads = threads
 
   if aggregate:
     data = { 0: dict([ (key, sum([ data[core][key] for core in csv_threads ]) / len(csv_threads)) for key in data[threads[0]].keys() ]) }
-    instrs = { 0: sum(instrs[core] for core in csv_threads) / len(csv_threads) }
+    instrs = { 0: sum(cpidata.instrs[core] for core in csv_threads) / len(csv_threads) }
     threads = [0]
     csv_threads = [0]
+  else:
+    instrs = cpidata.instrs
 
   items, all_names, names_to_contributions = get_items(use_simple, use_simple_mem = use_simple_mem)
 
@@ -340,7 +227,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
 
   plot_labels = []
   plot_data = {}
-  max_cycles = cycles_scale[0] * max(times)
+  max_cycles = cpidata.cycles_scale[0] * max(cpidata.times)
 
   if not max_cycles:
     raise ValueError("No cycles accounted during interval")
@@ -359,12 +246,12 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
         if use_cpi:
           plot_data[core][name] = float(value) / (instrs[core] or 1)
         elif use_abstime:
-          plot_data[core][name] = fastforward_scale * (float(value) / cycles_scale[0]) / 1e15 # cycles to femtoseconds to seconds
+          plot_data[core][name] = cpidata.fastforward_scale * (float(value) / cpidata.cycles_scale[0]) / 1e15 # cycles to femtoseconds to seconds
         else:
           plot_data[core][name] = float(value) / max_cycles
     if gen_text_stack:
       print
-      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, fastforward_scale * (float(total) / cycles_scale[0]) / 1e15)
+      print '  %-15s    %6.2f    %6.2f%%    %6.2fs' % ('total', float(total) / (instrs[core] or 1), 100 * float(total) / scale, cpidata.fastforward_scale * (float(total) / cpidata.cycles_scale[0]) / 1e15)
 
   # First, create an ordered list of labels that is the superset of all labels used from all cores
   # Then remove items that are not used, creating an ordered list with all currently used labels
