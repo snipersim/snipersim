@@ -1,14 +1,8 @@
 #!/usr/bin/env python
 import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
-SNIPER = os.path.abspath(os.environ.get('SNIPER_ROOT') or os.environ.get('GRAPHITE_ROOT'))
-sys.path.extend([ os.path.join(SNIPER, 'tools') ])
+sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
 import sniper_lib, sniper_stats, cpistack, json
-
-
-os.environ['VISUALIZATION_ROOT'] = HOME
-os.environ['GRAPHITE_ROOT'] = SNIPER
-os.environ['PATH'] = os.path.join(HOME, 'sniper-tools') + ':' + os.environ.get('PATH', '')
 
 
 # From http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
@@ -86,7 +80,7 @@ if __name__ == '__main__':
     sys.exit()
 
   resultsdir = '.'
-  outputdir = os.path.abspath(HOME)
+  outputdir = HOME
   title = None
   use_mcpat = False
   num_intervals = 0
