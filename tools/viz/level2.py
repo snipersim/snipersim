@@ -3,7 +3,7 @@ import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
 SNIPER = os.path.abspath(os.environ.get('SNIPER_ROOT') or os.environ.get('GRAPHITE_ROOT'))
 sys.path.extend( [os.path.join(SNIPER,'tools')] )
-import sniper_lib, sniper_stats, cpistack, mcpat, json
+import sniper_lib, sniper_stats, cpistack, cpistack_items, mcpat, json
 
 os.environ['VISUALIZATION_ROOT'] = HOME
 os.environ['GRAPHITE_ROOT'] = SNIPER
@@ -23,10 +23,9 @@ def mkdir_p(path):
 
 def initialize():
   #get the component names from cpistack.py
-  global listofcpicomponents, listofsimplifiedcpicomponents
-  global names_to_contributions, names_to_contributionssimple
-  items, listofcpicomponents, names_to_contributions = cpistack.get_items(False, use_simple_mem = True)
-  itemssimple, listofsimplifiedcpicomponents, names_to_contributionssimple = cpistack.get_items(True, use_simple_mem=True)
+  global cpiitems, cpiitemssimple
+  cpiitems = cpistack_items.CpiItems(use_simple_mem = True)
+  cpiitemssimple = cpistack_items.CpiItems(use_simple = True, use_simple_mem = True)
 
   #this list keeps the instruction count per interval, indexed by interval number
   global instructioncountlist
@@ -60,7 +59,7 @@ def initialize():
   ipcvalues[0]["data"]=[0 for x in xrange(num_intervals)]
 
 
-  for component in listofcpicomponents:
+  for component in cpiitems.names:
     cpificcomponents[component]=[]
   for component in listofsimplifiedcpicomponents:
     simplifiedcpificcomponents[component]=[]
@@ -68,12 +67,12 @@ def initialize():
         #first column = x values
         #second column = cpipercentagevalues
         #third column = cpivalues
-  for component in listofcpicomponents:
+  for component in cpiitems.names:
     cpicomponents[component] = [[0 for x in xrange(3)] for x in xrange(num_intervals)]
         #first column = x values
         #second column = cpipercentagevalues
         #third column = cpivalues
-  for component in listofsimplifiedcpicomponents:
+  for component in cpiitemssimple.names:
     simplifiedcpicomponents[component] = [[0 for x in xrange(3)] for x in xrange(num_intervals)]
         #first column = x values
         #second column = power values
@@ -87,7 +86,7 @@ def initialize():
 def collectCPIStackDataFIC(verbose=False):
   totalinstructioncount = 0
   groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/100, verbose)
-  usedcomponents = dict.fromkeys(listofcpicomponents,0)
+  usedcomponents = dict.fromkeys(cpiitems.names,0)
   for key in cpificcomponents.keys():
     cpificcomponents[key] = [[0 for x in xrange(2)] for x in xrange(len(groupedintervals))]
   for key in simplifiedcpificcomponents.keys():
@@ -137,10 +136,10 @@ def collectCPIStackDataFIC(verbose=False):
       totalinstructioncount+=instructioncount
       continue
 
-  for component in listofcpicomponents:
+  for component in cpiitems.names:
     if usedcomponents[component]==1:
       usedcpificcomponents.append(component)
-
+  
   def writeJSON(components, usedcomponents, name):
     jsonoutput = [0 for x in xrange(len(usedcomponents))]
     index=0
@@ -158,7 +157,7 @@ def collectCPIStackDataFIC(verbose=False):
     jsonfile = open(os.path.join(outputdir,'levels','level2','data',title+'-'+name+'.json'), "w")
     jsonfile.write(output)
     jsonfile.close()
-
+ 
   writeJSON(cpificcomponents,usedcpificcomponents,'cpific')
   writeJSON(simplifiedcpificcomponents,listofsimplifiedcpicomponents,'cpificsimple')
 
@@ -171,7 +170,8 @@ def collectCPIStackDataFCC(verbose = False):
   from StringIO import StringIO
   instructioncount=0
   num_exceptions=0
-  usedcomponents = dict.fromkeys(listofcpicomponents,0)
+  usedcomponents = dict.fromkeys(cpiitems.names,0)
+
   for i in range(0,num_intervals):
     if verbose:
       print 'Collect CPI stack info for intervals with a fixed time span (interval '+str(i+1)+' / '+str(num_intervals)+')'+"\r",
@@ -220,16 +220,16 @@ def collectCPIStackDataFCC(verbose = False):
         cpicomponents[key][i][0]=i
         cpicomponents[key][i][1]=cpipercentage
         cpicomponents[key][i][2]=cpi
-        simplifiedcpicomponents[names_to_contributions[key]][i][0]=i
-        simplifiedcpicomponents[names_to_contributions[key]][i][1]+=cpipercentage
-        simplifiedcpicomponents[names_to_contributions[key]][i][2]+=cpi
+        simplifiedcpicomponents[cpiitems.names_to_contributions[key]][i][0]=i
+        simplifiedcpicomponents[cpiitems.names_to_contributions[key]][i][1]+=cpipercentage
+        simplifiedcpicomponents[cpiitems.names_to_contributions[key]][i][2]+=cpi
 
     except ValueError:
       ipcvalues[0]["data"][i]=dict(x=i, y=0)
       num_exceptions += 1
       continue
 
-  for component in listofcpicomponents:
+  for component in cpiitems.names:
     if usedcomponents[component]==1:
       usedcpicomponents.append(component)
 
@@ -282,10 +282,10 @@ def collectMcPATData(verbose = False):
 
 
 #write values into json
+#componentname = name of the component, e.g. power, energy, energypercentage, cpi...
+#componenttype = type of the component, e.g. mcpat, cpi or cpisimplified
+#componentindex = index of the y value 
 def writetojson(outputdir, componentname, componenttype, componentindex, verbose = False):
-  if level2version not in (1, 2):
-    print 'Invalid level2 version', level2version
-    return None
   if verbose:
     print 'Writing '+title+'-'+componentname+'.json'
   index=0
@@ -293,7 +293,7 @@ def writetojson(outputdir, componentname, componenttype, componentindex, verbose
     usedcomponents = usedcpicomponents
     components = cpicomponents
   elif(componenttype == "cpisimplified"):
-    usedcomponents = listofsimplifiedcpicomponents
+    usedcomponents = cpiitemssimple.names
     components = simplifiedcpicomponents
   elif(componenttype == "cpificsimplified"):
     usedcomponents = listofsimplifiedcpicomponents
@@ -398,15 +398,15 @@ def writelabels(outputdir, componentname, componenttype):
   labels.write("palette = new Rickshaw.Color.Palette( { scheme: 'munin' } );\n")
   if(componenttype == "cpi"):
     usedcomponents = usedcpicomponents
-    ntc = names_to_contributions
+    ntc = cpiitems
   elif(componenttype == "cpisimplified"):
-    usedcomponents = listofsimplifiedcpicomponents
-    ntc = names_to_contributionssimple
+    usedcomponents = cpiitemssimple.names
+    ntc = cpiitemssimple
   elif(componenttype == "mcpat"):
     usedcomponents = usedmcpatcomponents
   elif(componenttype == "cpific"):
     usedcomponents = usedcpificcomponents
-    ntc = names_to_contributions
+    ntc = cpiitems
 
   jsonoutput = []
   if not componenttype == "mcpat":
