@@ -61,7 +61,7 @@ def initialize():
 
   for component in cpiitems.names:
     cpificcomponents[component]=[]
-  for component in listofsimplifiedcpicomponents:
+  for component in cpiitemssimple.names:
     simplifiedcpificcomponents[component]=[]
   #initialize data structures where the collected data will be stored
         #first column = x values
@@ -119,8 +119,8 @@ def collectCPIStackDataFIC(verbose=False):
           usedcomponents[key]=1
         cpificcomponents[key][i][0]=cpi
         cpificcomponents[key][i][1]=totalinstructioncount
-        simplifiedcpificcomponents[names_to_contributions[key]][i][0]+=cpi
-        simplifiedcpificcomponents[names_to_contributions[key]][i][1]=totalinstructioncount
+        simplifiedcpificcomponents[cpiitems.names_to_contributions[key]][i][0]+=cpi
+        simplifiedcpificcomponents[cpiitems.names_to_contributions[key]][i][1]=totalinstructioncount
 
       totalinstructioncount+=instructioncount
 
@@ -152,7 +152,7 @@ def collectCPIStackDataFIC(verbose=False):
     jsonfile.close()
  
   writeJSON(cpificcomponents,usedcpificcomponents,'cpific')
-  writeJSON(simplifiedcpificcomponents,listofsimplifiedcpicomponents,'cpificsimple')
+  writeJSON(simplifiedcpificcomponents,cpiitemssimple.names,'cpificsimple')
 
   if verbose:
     print
@@ -282,7 +282,7 @@ def writetojson(outputdir, componentname, componenttype, componentindex, verbose
     usedcomponents = cpiitemssimple.names
     components = simplifiedcpicomponents
   elif(componenttype == "cpificsimplified"):
-    usedcomponents = listofsimplifiedcpicomponents
+    usedcomponents = cpiitemssimple.names
     components = simplifiedcpificcomponents
   elif(componenttype == "mcpat"):
     usedcomponents = usedmcpatcomponents
