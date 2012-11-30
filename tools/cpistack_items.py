@@ -163,7 +163,7 @@ class CpiItems:
       labels = [ label for label in self.names if label in labels_used ]
     else:
       labels = self.names
-    return zip(labels, get_colors(labels, self.groups, self.names_to_contributions))
+    return get_colors(labels, self.groups, self.names_to_contributions)
 
 
 # Color helper functions
@@ -188,9 +188,9 @@ def color_tint_shade(base_color, num):
   colors = map(lambda x:tuple(map(lambda y:int(y*255),x)),colors)
   return colors
 
-def get_colors(plot_labels_ordered, groups, names_to_contributions):
+def get_colors(labels, groups, names_to_contributions):
     contribution_counts = collections.defaultdict(int)
-    for i in plot_labels_ordered:
+    for i in labels:
       contribution_counts[names_to_contributions[i]] += 1
     color_ranges = {}
     next_color_index = {}
@@ -201,4 +201,4 @@ def get_colors(plot_labels_ordered, groups, names_to_contributions):
       idx = next_color_index[contr]
       next_color_index[contr] += 1
       return color_ranges[contr][idx]
-    return map(lambda x:get_next_color(names_to_contributions[x]),plot_labels_ordered)
+    return dict([ (label, get_next_color(names_to_contributions[label])) for label in labels ])

@@ -51,7 +51,8 @@ def output_cpistack_text(results):
 def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480)):
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
   plot_data = results.get_data(metric)
-  plot_labels_with_color = [ (label, 'rgb "#%02x%02x%02x"' % color) for label, color in results.get_colors() ]
+  colors = results.get_colors()
+  plot_labels_with_color = [ (label, 'rgb "#%02x%02x%02x"' % colors[label]) for label in results.labels ]
   gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
     ylabel = metric == 'cpi' and 'Cycles per instruction' or (metric == 'abstime' and 'Time (seconds)' or 'Fraction of time'))
 

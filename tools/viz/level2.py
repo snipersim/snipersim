@@ -132,7 +132,7 @@ def collectCPIStackDataFIC(verbose=False):
   for component in cpiitems.names:
     if usedcomponents[component]==1:
       usedcpificcomponents.append(component)
-  
+
   def writeJSON(components, usedcomponents, name):
     jsonoutput = [0 for x in xrange(len(usedcomponents))]
     index=0
@@ -150,7 +150,7 @@ def collectCPIStackDataFIC(verbose=False):
     jsonfile = open(os.path.join(outputdir,'levels','level2','data',title+'-'+name+'.json'), "w")
     jsonfile.write(output)
     jsonfile.close()
- 
+
   writeJSON(cpificcomponents,usedcpificcomponents,'cpific')
   writeJSON(simplifiedcpificcomponents,cpiitemssimple.names,'cpificsimple')
 
@@ -270,7 +270,7 @@ def collectMcPATData(verbose = False):
 #write values into json
 #componentname = name of the component, e.g. power, energy, energypercentage, cpi...
 #componenttype = type of the component, e.g. mcpat, cpi or cpisimplified
-#componentindex = index of the y value 
+#componentindex = index of the y value
 def writetojson(outputdir, componentname, componenttype, componentindex, verbose = False):
   if verbose:
     print 'Writing '+title+'-'+componentname+'.json'
@@ -397,7 +397,6 @@ def writelabels(outputdir, componentname, componenttype):
   jsonoutput = []
   if not componenttype == "mcpat":
     colors = ntc.get_colors(usedcomponents)
-  index=0
   output=""
   for key in usedcomponents:
     if componenttype == "mcpat":
@@ -405,9 +404,9 @@ def writelabels(outputdir, componentname, componenttype):
       jsondump = json.dumps(jsonoutput)
       output = json.dumps(jsonoutput).replace("\"palette.color()\"",'palette.color()')
     else:
-      jsonoutput.append(dict(name=key, color="rgb(%d,%d,%d)" % colors[index][1]))
+      jsonoutput.append(dict(name=key, color="rgb(%d,%d,%d)" % colors[key]))
       output = json.dumps(jsonoutput)
-    index+=1
+
   labels.write(componentname+"labels = "+output+";\n")
   labels.close()
 
