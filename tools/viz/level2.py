@@ -273,10 +273,7 @@ def collectMcPATData(verbose = False):
 
 
 #write values into json
-#componentname = name of the component, e.g. power, energy, energypercentage, cpi...
-#componenttype = type of the component, e.g. mcpat, cpi or cpisimplified
-#componentindex = index of the y value
-def writetojson(outputdir, componentname, componenttype, componentindex, level2version=1, verbose = False):
+def writetojson(outputdir, componentname, componenttype, componentindex, verbose = False):
   if level2version not in (1, 2):
     print 'Invalid level2 version', level2version
     return None
@@ -300,13 +297,7 @@ def writetojson(outputdir, componentname, componenttype, componentindex, level2v
     jsonoutput[index]["name"]=key
     jsonoutput[index]["data"]=[0 for x in xrange(num_intervals)]
     for i in range(0,num_intervals):
-      if(level2version == 1):
-        xvalue = str(components[key][i][0])
-      elif(level2version == 2):
-        if(i==0):
-          xvalue = "0"
-        else:
-          xvalue = str(instructioncountsumlist[i-1])
+      xvalue = str(components[key][i][0])
       yvalue = str(components[key][i][componentindex])
       jsonoutput[index]["data"][i]=dict(x=xvalue, y=yvalue)
     index+=1
@@ -491,8 +482,6 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
 
   writetojson(outputdir,"cpipercentage","cpi",1,verbose=verbose)
   writetojson(outputdir,"cpipercentagesimplified","cpisimplified",1,verbose=verbose)
-  writetojson(outputdir,"cpi","cpi",2,2,verbose)
-  writetojson(outputdir,"cpisimplified","cpisimplified",2,2,verbose)
 
   writeinfo(outputdir,verbose)
   writemarkers(outputdir,"1",verbose)
