@@ -1,4 +1,4 @@
-import buildstack
+import collections, buildstack, colorsys
 
 def build_itemlist(use_simple_sync = False, use_simple_mem = True):
   # List of all CPI contributors: <title>, <threshold (%)>, <contributors>
@@ -156,3 +156,49 @@ class CpiItems:
     self.groups.append(('other', (0,0,0), ('other',)))
     self.names.append('other')
     self.names_to_contributions['other'] = 'other'
+
+  def get_colors(self, labels_used = None):
+    if labels_used:
+      # Make sure labels is a sorted list of valid labels
+      labels = [ label for label in self.names if label in labels_used ]
+    else:
+      labels = self.names
+    return zip(labels, get_colors(labels, self.groups, self.names_to_contributions))
+
+
+# Color helper functions
+
+def color_tint_shade(base_color, num):
+  base_color = map(lambda x:float(x)/255, base_color)
+  base_color = colorsys.rgb_to_hsv(*base_color)
+  colors = []
+  delta = 0.6 / float((num/2) or 1)
+  shade = 1.0
+  for _ in range(num/2):
+    shade -= delta
+    colors.append((base_color[0],base_color[1],shade))
+  colors = colors[::-1] # Reverse
+  if num % 2 == 1:
+    colors.append(base_color)
+  tint = 1.0
+  for _ in range(num/2):
+    tint -= delta
+    colors.append((base_color[0],tint,base_color[2]))
+  colors = map(lambda x:colorsys.hsv_to_rgb(*x),colors)
+  colors = map(lambda x:tuple(map(lambda y:int(y*255),x)),colors)
+  return colors
+
+def get_colors(plot_labels_ordered, groups, names_to_contributions):
+    contribution_counts = collections.defaultdict(int)
+    for i in plot_labels_ordered:
+      contribution_counts[names_to_contributions[i]] += 1
+    color_ranges = {}
+    next_color_index = {}
+    for name, color, _ in groups:
+      color_ranges[name] = color_tint_shade(color, contribution_counts[name])
+      next_color_index[name] = 0
+    def get_next_color(contr):
+      idx = next_color_index[contr]
+      next_color_index[contr] += 1
+      return color_ranges[contr][idx]
+    return map(lambda x:get_next_color(names_to_contributions[x]),plot_labels_ordered)
