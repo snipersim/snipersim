@@ -474,7 +474,6 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
 
   writetojson(outputdir,"cpipercentage","cpi",1,verbose=verbose)
   writetojson(outputdir,"cpipercentagesimplified","cpisimplified",1,verbose=verbose)
-  #writetojson(outputdir,"cpificsimplified","cpificsimplified",1,verbose=verbose)
 
   writeinfo(outputdir,verbose)
   writemarkers(outputdir,"1",verbose)
@@ -483,6 +482,7 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
   writelabels(outputdir,"cpipercentage","cpi")
   writelabels(outputdir,"cpipercentagesimplified","cpisimplified")
   writelabels(outputdir, "cpific","cpific")
+  writelabels(outputdir, "simple","cpisimplified")
 
   writeIPCvaluestoJSON(outputdir)
 
