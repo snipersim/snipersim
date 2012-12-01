@@ -2,7 +2,7 @@ div, span, p, td {
 	font-family: Arial, sans-serif;
 }
 #content {
-	width: 1200px;
+	width: 1350px;
 }
 #chart {
 	display: inline-block;
@@ -38,6 +38,11 @@ div, span, p, td {
 #chart {
 	border: 1px solid #f0f0f0;
 }
+
+#right_panel{
+	float:right
+}
+
 #side_panel {
 	padding: 0 20px 20px 0;
 	width: 240px;
@@ -83,6 +88,25 @@ div, span, p, td {
 #legend ul {
 	padding: 0;
 }
+
+#ipclegend {
+	background-color: white;
+	margin-left: 0;
+	padding: 0;
+	left: 0;
+}
+
+#ipclegend .label {
+	color: #404040;
+}
+#ipclegend .action {
+	color: black;
+	opacity: 0.5;
+}
+#ipclegend ul {
+	padding: 0;
+}
+
 h1 {
 	font-family: Franklin Gothic Medium, UnDotum, Helvetica, Arial;
 	font-weight: normal;
@@ -97,9 +121,31 @@ section {
 	margin: 5px 0 0 10px;
 	width: 90%;
 }
+
+#ipcsmoother {
+	margin: 5px 0 0 10px;
+	width: 90%;
+}
+
 label.disabled {
 	opacity: 0.4;
 }
+
+#detail_switcher {
+	display: inline-block;
+	padding: 0;
+	width: 39px;
+	padding-top: 27px;
+	text-align: center;
+	font-size: 10px;
+	color: #808080;
+	background-repeat: no-repeat;
+	position: relative;
+	margin: 0 7px;
+	cursor: pointer
+
+}
+
 #renderer_form.toggler {
 	display: block;
 	margin: 0;
@@ -128,6 +174,8 @@ label.disabled {
 	margin: 0 7px;
 	cursor: pointer;
 }
+
+
 #interpolation_form,
 #offset_form {
 	vertical-align: top;
