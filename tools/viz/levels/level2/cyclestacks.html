@@ -55,49 +55,49 @@
   var date = info.date
   var ipcfilename = "data/".concat(info.name.concat("-ipc.json"));
   var intervalsize = info.intervalsize;
-  document.title = name;
+  document.title = name+ ": cycle stacks over time";
   currentdetail = "simple";
   currentnormalized = true;
 </script>
 
 
 <div id="content">
-  <form id="right_panel">
+  <form id="right_panel" action="#">
       <div id="legend"></div>
   </form>
 
-  <form id="side_panel">
+  <form id="side_panel" action="#">
     <div id="renderer_form" class="toggler" style="display: none;">
-      <input type="radio" name="renderer" id="area" value="area" checked >
+      <input type="radio" name="renderer" id="area" value="area" checked="checked" />
       <label for="area">area</label>
     </div>
     <section>
       <div id="offset_form">
-        <script>document.write("<input type='radio' id='detailsimple' name='detailselect' value='simple' onchange='createGraph(this.value,currentnormalized);' checked='checked' /\>");</script>					
-        <span>Simple</span></br>
-        <script>document.write("<input type='radio' id='detailfull' name='detailselect' value='full' onchange='createGraph(this.value,currentnormalized);' /\>");</script>
+        <script type="text/javascript">document.write("<input type='radio' id='detailsimple' name='detailselect' value='simple' onchange='createGraph(this.value,currentnormalized);' checked='checked' /\>");</script>					
+        <span>Simple</span><br />
+        <script type="text/javascript">document.write("<input type='radio' id='detailfull' name='detailselect' value='full' onchange='createGraph(this.value,currentnormalized);' /\>");</script>
         <span>Detailed</span>
       </div>
       <div id="offset_form">
-        <script>document.write("<input type='radio' id='normalized' name='normalizeselect' value='true' onchange='createGraph(currentdetail,true);' checked='checked' /\>");</script>					
-        <span>Normalized</span></br>
-        <script>document.write("<input type='radio' id='notnormalized' name='normalizeselect' value='false' onchange='createGraph(currentdetail,false);' /\>");</script>
+        <script type="text/javascript">document.write("<input type='radio' id='normalized' name='normalizeselect' value='true' onchange='createGraph(currentdetail,true);' checked='checked' /\>");</script>					
+        <span>Normalized</span><br />
+        <script type="text/javascript">document.write("<input type='radio' id='notnormalized' name='normalizeselect' value='false' onchange='createGraph(currentdetail,false);' /\>");</script>
         <span>Not normalized</span>
       </div>
-      <script>
+      <script type="text/javascript">
         document.getElementById('detailsimple').checked = true;
         document.getElementById('normalized').checked = true;
       </script>
     </section>
     <div id="offset_form" style="display: none;">
       <label for="stack">
-      <input type="radio" name="offset" id="stack" value="zero" checked>
+      <input type="radio" name="offset" id="stack" value="zero" checked="checked" />
       <span>stack</span>
       </label>
     </div>
     <div id="interpolation_form" style="display: none;">
       <label for="step">
-      <input type="radio" name="interpolation" id="step" value="step-after" checked>
+      <input type="radio" name="interpolation" id="step" value="step-after" checked="checked" />
       <span>step</span>
       </label>
     </div>
@@ -105,11 +105,12 @@
 	<h6>Smoothing</h6>
 	<div id="smoother"></div>
     </section>
-    <section>
-      
-      <input type="checkbox" name="interpolation" id="ipcgraphshow" value="step-after">
-      <span>show IPC graph</span>
-    
+    <section> 
+      <input type="checkbox" name="interpolation" id="ipcgraphshow" value="step-after" />
+      <span>Show IPC graph</span>
+      <script type="text/javascript">
+        document.getElementById('ipcgraphshow').checked = false;
+      </script>
     </section>
 
   </form>
@@ -119,7 +120,7 @@
     <div id="slider"></div>
   </div>
 </div>
-
+<br />
 <!--IPC stack-->
 <div id ="ipcchartcontent">
   <div id="content">
@@ -134,9 +135,9 @@
     </form>
   <div id="chart_container">
     <div id="ipcchart"></div>
-    <div id="ipctimeline"></div><br>
+    <div id="ipctimeline"></div><br />
     <div id="ipcslider"></div>
-    <br><br><br><br>
+    <br /><br /><br /><br />
   </div>
 </div>
 
@@ -212,7 +213,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 		var markerinfo = jQuery.parseJSON(markerstr);
 		var numberofmarkers = markerinfo.markers.length;
-
+                numberofmarkers = numberofmarkers.prop || 0;
 		for (var i=0; i<numberofmarkers; i++)
 		  {
 			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
@@ -379,7 +380,7 @@ function createGraph(detail, normalized) {
 
 </script>
 
-<script>
+<script type="text/javascript">
 $('#ipcgraphshow').change(function() {
   $('#ipcchartcontent').slideToggle('slow', function() {
     

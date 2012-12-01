@@ -4,9 +4,27 @@
 	<link rel="stylesheet" href="css/visualization.css" type="text/css" media="screen" />
 	<!--<link rel="stylesheet" href="http://www.maxdesign.com.au/wp-content/themes/maxdesign/stylesheets/print.css" type="text/css">-->
         <script src="info.txt"></script>
+	<script src="levels/level2/info.txt"></script>
+	<script type="text/javascript" src="levels/level2/javascript/jquery.min.js"></script>
+	<script type="text/javascript" src="levels/level2/javascript/jquery-ui.min.js"></script>
 </head>
 <body>
 
+<script type="text/javascript">
+function UrlExists(url)
+{
+    var http = new XMLHttpRequest();
+    http.open('HEAD', url, false);
+    http.send();
+    return http.status!=404;
+}
+
+//check if level 2 data exists
+level2exists = false;
+level3exists = false;
+level3exists = UrlExists("./levels/level3/data/ipcvalues.txt");
+level2exists = UrlExists("./levels/level2/data/info.txt");
+</script>
 <div id="container">
 	<div id="header">
 		<h1>
@@ -23,7 +41,7 @@
 				
 			</div>
 			<div id="content">
-
+				
 				<h2>General Info</h2>
 				<ul>
 				<li>Application: <script type="text/javascript">document.write(title);</script></li>
@@ -31,51 +49,37 @@
 				<li>Interval size: <script type="text/javascript">document.write(interval/1000000);</script> nanoseconds</li>
 				<li>Used McPAT: <script type="text/javascript">document.write(use_mcpat);</script></li>
 				</ul>
-				<h2>
-					Level 2
-				</h2>
-				<ul>
-				<li><a href="levels/level2/cpific.html">Aggregate cycle stack over time</a></li>
-				<li><a href="levels/level2/cpificsimple.html">Simplified aggregate cycle stack over time</a></li>
-				<li><a href="levels/level2/cpipercentage.html">Normalized aggregate cycle stack over time</a></li>
-				<li><a href="levels/level2/cpipercentagesimple.html">Simplified normalized aggregate cycle stack over time</a></li>
-				</ul>
-                                <script type="text/javascript">
-                                if(use_mcpat == "True"){
-					document.write("McPAT has been run, so these visualizations are also available:")
-					document.write('<ul>' +
-							'<li><a href="levels/level2/energy.html">Energy (Joule)</a></li>' +
-							'<li><a href="levels/level2/energypercentage.html">Energy (%)</a></li>' +
-							'<li><a href="levels/level2/power.html">Power (Watt)</a></li>' +
-							'</ul>')
+				<script type="text/javascript">
+				if (level2exists)
+				{
+					document.write("<a href=\"levels/level2/cyclestacks.html\">Cycle stacks over time</a><br \/>");
 				}
-                                else{
-					document.write("McPAT did not run, so these visualizations are not available:")
-					document.write('<ul>' +
-							'<li>Energy (Joule)</li>' +
-							'<li>Energy (%)</li>' +
-							'<li>Power (Watt)</li>' +
-							'</ul>')
+				else
+				{
+					document.write("Cycle stacks over time (not available, level2.py did not run)<br \/>");
 				}
-                                </script>
-
-				<h2>
-					Level 3
-				</h2>
-				<ul>
-				<li><a href="levels/level3/level3.html">3D (time-cores-IPC) visualization</a></li>
-				</ul>
+				</script>
+				<script type="text/javascript">
+					document.write("<a href=\"levels/level2/mcpatviz.html\">McPAT visualizations over time</a><br \/>");
+				
+				</script>
+				<script type="text/javascript">
+				if (level3exists)
+				{
+					document.write("<a href=\"levels/level3/level3.html\">3D (time-cores-IPC) visualization</a>");
+				}
+				else
+				{
+					document.write("3D (time-cores-IPC) visualization (not available, level3.py did not run)<br \/>");
+				}
+				</script>
+				
+				
+				
 
 			</div>
 			<div id="aside">
-<!--
-				<h3>
-					Aside heading
-				</h3>
-				<p>
-					Duis autem vel eum iriure dolor in hendrerit in vulputate velit esse molestie consequat, vel illum dolore eu feugiat nulla facilisis at vero eros et accumsan.
-				</p>
--->
+
 			</div>
 			<div id="footer">
 		

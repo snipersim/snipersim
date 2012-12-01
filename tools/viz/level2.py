@@ -290,7 +290,10 @@ def writetojson(outputdir, componentname, componenttype, componentindex, verbose
     jsonoutput[index]["name"]=key
     jsonoutput[index]["data"]=[0 for x in xrange(num_intervals)]
     for i in range(0,num_intervals):
-      xvalue = str(components[key][i][0])
+      if componenttype != "mcpat":
+        xvalue = str(components[key][i][0])
+      else:
+        xvalue = str(i)
       yvalue = str(components[key][i][componentindex])
       jsonoutput[index]["data"][i]=dict(x=xvalue, y=yvalue)
     index+=1
@@ -392,7 +395,7 @@ def writelabels(outputdir, componentname, componenttype):
   jsonoutput = []
   if not componenttype == "mcpat":
     colors = ntc.get_colors(usedcomponents)
-  output=""
+  output="''"
   for key in usedcomponents:
     if componenttype == "mcpat":
       jsonoutput.append(dict(name=key, color="palette.color()"))
