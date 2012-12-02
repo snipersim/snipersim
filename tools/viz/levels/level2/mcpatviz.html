@@ -55,49 +55,46 @@
   var date = info.date
   var ipcfilename = "data/".concat(info.name.concat("-ipc.json"));
   var intervalsize = info.intervalsize;
-  document.title = name+ ": cycle stacks over time";
+  markerinfo = jQuery.parseJSON(markerstr);
+  document.title = name+": McPAT visualization";
   currentdetail = "simple";
   currentnormalized = true;
 </script>
 
 
 <div id="content">
-  <form id="right_panel" action="#">
+  <form id="right_panel">
       <div id="legend"></div>
   </form>
 
-  <form id="side_panel" action="#">
+  <form id="side_panel">
     <div id="renderer_form" class="toggler" style="display: none;">
-      <input type="radio" name="renderer" id="area" value="area" checked="checked" />
+      <input type="radio" name="renderer" id="area" value="area" checked >
       <label for="area">area</label>
     </div>
     <section>
       <div id="offset_form">
-        <script type="text/javascript">document.write("<input type='radio' id='detailsimple' name='detailselect' value='simple' onchange='createGraph(this.value,currentnormalized);' checked='checked' /\>");</script>					
-        <span>Simple</span><br />
-        <script type="text/javascript">document.write("<input type='radio' id='detailfull' name='detailselect' value='full' onchange='createGraph(this.value,currentnormalized);' /\>");</script>
-        <span>Detailed</span>
+         <input type='radio' id='powerselect' name='mcpatselect' value='power' onchange='createGraph(this.value);'/>
+         <span>Power (W)</span><br />
+         <input type='radio' id='energyselect' name='mcpatselect' value='energy' onchange='createGraph(this.value);'/>
+         <span>Energy (J)</span><br />
+	<input type='radio' id='energypercentageselect' name='mcpatselect' value='energypercentage' onchange='createGraph(this.value);'/>
+         <span>Energy (%)</span><br />
       </div>
-      <div id="offset_form">
-        <script type="text/javascript">document.write("<input type='radio' id='normalized' name='normalizeselect' value='true' onchange='createGraph(currentdetail,true);' checked='checked' /\>");</script>					
-        <span>Normalized</span><br />
-        <script type="text/javascript">document.write("<input type='radio' id='notnormalized' name='normalizeselect' value='false' onchange='createGraph(currentdetail,false);' /\>");</script>
-        <span>Not normalized</span>
-      </div>
+
       <script type="text/javascript">
-        document.getElementById('detailsimple').checked = true;
-        document.getElementById('normalized').checked = true;
+        document.getElementById('powerselect').checked = true;
       </script>
     </section>
     <div id="offset_form" style="display: none;">
       <label for="stack">
-      <input type="radio" name="offset" id="stack" value="zero" checked="checked" />
+      <input type="radio" name="offset" id="stack" value="zero" checked>
       <span>stack</span>
       </label>
     </div>
     <div id="interpolation_form" style="display: none;">
       <label for="step">
-      <input type="radio" name="interpolation" id="step" value="step-after" checked="checked" />
+      <input type="radio" name="interpolation" id="step" value="step-after" checked>
       <span>step</span>
       </label>
     </div>
@@ -106,7 +103,7 @@
 	<div id="smoother"></div>
     </section>
     <section> 
-      <input type="checkbox" name="interpolation" id="ipcgraphshow" value="step-after" />
+      <input type="checkbox" name="interpolation" id="ipcgraphshow" value="step-after">
       <span>Show IPC graph</span>
       <script type="text/javascript">
         document.getElementById('ipcgraphshow').checked = false;
@@ -213,7 +210,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 		var markerinfo = jQuery.parseJSON(markerstr);
 		var numberofmarkers = markerinfo.markers.length;
-                numberofmarkers = numberofmarkers.prop || 0;
+
 		for (var i=0; i<numberofmarkers; i++)
 		  {
 			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
@@ -239,60 +236,48 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 
 <script type="text/javascript">
-function createGraph(detail, normalized) {
-
-  currentdetail = detail;
-  currentnormalized = normalized;
+function createGraph(mcpatoption) {
   $('#chart').empty();
   $('#legend').empty();
   $('#timeline').empty();
 
-  if (normalized){
+  if (mcpatoption=="power"){
+    var filename = "data/".concat(info.name.concat("-power.json"));
+    labels = powerlabels;		
     xlabelfun = function(x) {
                   var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
 		  return content;
 		};
     yformatter = function(series, x, y) {
-				var content = series.name+": "+Math.round(y*100)/100+ " % CPI";
+				var content = series.name+": "+Math.round(y*100)/100+ " Watt";
 				return content;
 			};
   }
-  else{
+  else if (mcpatoption=="energy"){
+     var filename = "data/".concat(info.name.concat("-energy.json"));
+    labels = energylabels;		
     xlabelfun = function(x) {
-		  var content = "instructioncount: "+x;
+                  var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
 		  return content;
-	      };
+		};
     yformatter = function(series, x, y) {
-				var content = series.name+": "+Math.round(y*100)/100+ " CPI";
+				var content = series.name+": "+y+ " Joule";
+				return content;
+			};
+  }
+  else if (mcpatoption=="energypercentage"){
+     var filename = "data/".concat(info.name.concat("-energypercentage.json"));
+    labels = energypercentagelabels;		
+    xlabelfun = function(x) {
+                  var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
+		  return content;
+		};
+    yformatter = function(series, x, y) {
+				var content = series.name+": "+Math.round(y*100)/100+ " %";
 				return content;
 			};
   }
 
-  if (detail == "simple") {
-	   
-	   if (normalized) {
-	    	var filename = "data/".concat(info.name.concat("-cpipercentagesimplified.json"));
-	    	labels = cpipercentagesimplifiedlabels;
-		markerinfo = jQuery.parseJSON(markerstr);
-	   }
-	   else {
-		var filename = "data/".concat(info.name.concat("-cpificsimple.json"));
-	   	labels = simplelabels;
-		markerinfo = jQuery.parseJSON(markerstrv2)
-	    }
-  }
-  else if (detail == "full") {
-	   if (normalized) {
-	    	var filename = "data/".concat(info.name.concat("-cpipercentage.json"));
-	    	labels = cpipercentagelabels;
-		markerinfo = jQuery.parseJSON(markerstr);
-	   }
-	   else {
-		var filename = "data/".concat(info.name.concat("-cpific.json"));
-	   	labels = cpificlabels;
-		markerinfo = jQuery.parseJSON(markerstrv2);
-	    }
-  }
 
   var graph = new Rickshaw.Graph.Ajax( {
 	element: document.getElementById("chart"),
@@ -393,7 +378,7 @@ $('#ipcgraphshow').change(function() {
 
 <script type="text/javascript">
 $('#ipcchartcontent').hide();
-createGraph('simple',true);
+createGraph('power');
 </script>
 
 
