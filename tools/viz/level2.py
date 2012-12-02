@@ -41,8 +41,10 @@ def initialize():
   listofmcpatcomponents.append('other')
 
   #list of used components
-  global usedcpicomponents, usedsimplifiedcpicomponents, usedmcpatcomponents, usedcpificcomponents
+  global usedcpicomponents, usedsimplifiedcpicomponents
+  global usedmcpatcomponents, usedcpificcomponents
   usedcpicomponents = []
+  usedsimplifiedcpicomponents = []
   usedmcpatcomponents = []
   usedcpificcomponents = [] #cpific == cpi with fixed instruction counts
 
@@ -82,6 +84,7 @@ def collectCPIStackDataFIC(verbose=False):
   totalinstructioncount = 0
   groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/100, verbose)
   usedcomponents = dict.fromkeys(cpiitems.names,0)
+  usedsimplecomponents = []
   for key in cpificcomponents.keys():
     cpificcomponents[key] = [[0 for x in xrange(2)] for x in xrange(len(groupedintervals))]
   for key in simplifiedcpificcomponents.keys():
@@ -114,8 +117,11 @@ def collectCPIStackDataFIC(verbose=False):
           usedcomponents[key]=1
         cpificcomponents[key][i][0]=cpi
         cpificcomponents[key][i][1]=totalinstructioncount
-        simplifiedcpificcomponents[cpiitems.names_to_contributions[key]][i][0]+=cpi
-        simplifiedcpificcomponents[cpiitems.names_to_contributions[key]][i][1]=totalinstructioncount
+        simplecomponent = cpiitems.names_to_contributions[key]
+        simplifiedcpificcomponents[simplecomponent][i][0]+=cpi
+        simplifiedcpificcomponents[simplecomponent][i][1]=totalinstructioncount
+        if not simplecomponent in usedsimplecomponents:
+          usedsimplecomponents.append(simplecomponent)
 
       totalinstructioncount+=instructioncount
 
@@ -147,7 +153,7 @@ def collectCPIStackDataFIC(verbose=False):
     jsonfile.close()
 
   writeJSON(cpificcomponents,usedcpificcomponents,'cpific')
-  writeJSON(simplifiedcpificcomponents,cpiitemssimple.names,'cpificsimple')
+  writeJSON(simplifiedcpificcomponents,usedsimplecomponents,'cpificsimple')
 
   if verbose:
     print
@@ -201,9 +207,12 @@ def collectCPIStackDataFCC(verbose = False):
         cpicomponents[key][i][0]=i
         cpicomponents[key][i][1]=cpipercentage
         cpicomponents[key][i][2]=cpi
-        simplifiedcpicomponents[cpiitems.names_to_contributions[key]][i][0]=i
-        simplifiedcpicomponents[cpiitems.names_to_contributions[key]][i][1]+=cpipercentage
-        simplifiedcpicomponents[cpiitems.names_to_contributions[key]][i][2]+=cpi
+        simplecomponent = cpiitems.names_to_contributions[key]
+        simplifiedcpicomponents[simplecomponent][i][0]=i
+        simplifiedcpicomponents[simplecomponent][i][1]+=cpipercentage
+        simplifiedcpicomponents[simplecomponent][i][2]+=cpi
+        if not simplecomponent in usedsimplifiedcpicomponents:
+          usedsimplifiedcpicomponents.append(simplecomponent)
 
     except ValueError:
       ipcvalues[0]["data"][i]=dict(x=i, y=0)
@@ -274,11 +283,8 @@ def writetojson(outputdir, componentname, componenttype, componentindex, verbose
     usedcomponents = usedcpicomponents
     components = cpicomponents
   elif(componenttype == "cpisimplified"):
-    usedcomponents = cpiitemssimple.names
+    usedcomponents = usedsimplifiedcpicomponents
     components = simplifiedcpicomponents
-  elif(componenttype == "cpificsimplified"):
-    usedcomponents = cpiitemssimple.names
-    components = simplifiedcpificcomponents
   elif(componenttype == "mcpat"):
     usedcomponents = usedmcpatcomponents
     components = mcpatcomponents
@@ -384,7 +390,7 @@ def writelabels(outputdir, componentname, componenttype):
     usedcomponents = usedcpicomponents
     ntc = cpiitems
   elif(componenttype == "cpisimplified"):
-    usedcomponents = cpiitemssimple.names
+    usedcomponents = usedsimplifiedcpicomponents
     ntc = cpiitemssimple
   elif(componenttype == "mcpat"):
     usedcomponents = usedmcpatcomponents
@@ -500,7 +506,7 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
 
 if __name__ == '__main__':
   def usage():
-    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (./output-viz)>] [-t <title>] [-n <num-intervals (default: all_intervals)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose]')
+    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (default: .)>] [-t <title>] [-n <num-intervals (default: all_intervals)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose]')
     sys.exit()
 
   resultsdir = '.'
