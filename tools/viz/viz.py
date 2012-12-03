@@ -81,6 +81,9 @@ if __name__ == '__main__':
   elif num_intervals > defaultnum_intervals:
     print 'Number of intervals is too large (%s), using (%s) intervals instead.' % (num_intervals, defaultnum_intervals)
     num_intervals = defaultnum_intervals
+  elif num_intervals < defaultnum_intervals:
+    # Automatically determine interval to end up with (around) num_intervals in total
+    interval = defaultinterval * max(1, int(defaultnum_intervals / num_intervals))
 
   if interval == None:
     interval = defaultinterval
