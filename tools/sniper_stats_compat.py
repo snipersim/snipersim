@@ -4,7 +4,7 @@ class SniperStatsCompat:
   def __init__(self, resultsdir):
     self.resultsdir = resultsdir
 
-  def parse_stats(self, (k1, k2), ncores):
+  def parse_stats(self, (k1, k2), ncores, metrics = None):
     simstats = os.path.join(self.resultsdir, 'sim.stats')
     simstats = os.path.exists(simstats) and open(simstats) or None
 

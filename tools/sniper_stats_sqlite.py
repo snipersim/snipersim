@@ -21,15 +21,20 @@ class SniperStatsSqlite(sniper_stats.SniperStatsBase):
       names[nameid] = (objectname, metricname)
     return names
 
-  def read_snapshot(self, prefix):
+  def read_snapshot(self, prefix, metrics = None):
     c = self.db.cursor()
     c.execute('select prefixid from `prefixes` where prefixname = ?', (prefix,))
     prefixids = list(c)
     if prefixids:
       prefixid = prefixids[0][0]
+      if metrics:
+        nameids = [ str(nameid) for nameid, (objectname, metricname) in self.names.items() if '%s.%s' % (objectname, metricname) in metrics ]
+        namefilter = ' and nameid in (%s)' % ','.join(nameids)
+      else:
+        namefilter = ''
       values = collections.defaultdict(dict)
       c = self.db.cursor()
-      c.execute('select nameid, core, value from `values` where prefixid = ?', (prefixid,))
+      c.execute('select nameid, core, value from `values` where prefixid = ? %s' % namefilter, (prefixid,))
       for nameid, core, value in c:
         values[nameid][core] =  value
       return values

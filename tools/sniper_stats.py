@@ -1,9 +1,9 @@
 import sys, os
 
 class SniperStatsBase:
-  def parse_stats(self, (k1, k2), ncores):
-    v1 = self.read_snapshot(k1)
-    v2 = self.read_snapshot(k2)
+  def parse_stats(self, (k1, k2), ncores, metrics = None):
+    v1 = self.read_snapshot(k1, metrics = metrics)
+    v2 = self.read_snapshot(k2, metrics = metrics)
     results = []
     for metricid in self.names.keys():
       name = '%s.%s' % self.names[metricid]

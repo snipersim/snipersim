@@ -39,7 +39,7 @@ class SniperStatsDb(sniper_stats.SniperStatsBase):
       names[keyid] = (object, metric)
     return names
 
-  def read_snapshot(self, prefix):
+  def read_snapshot(self, prefix, metrics = None):
     values = {}
     data = SniperStatsDbObject(self.db['d%s' % prefix])
     num = data.read_int32()

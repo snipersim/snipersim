@@ -426,12 +426,12 @@ def writeIPCvaluestoJSON(outputdir, verbose = False):
 
 #return the total number of instructions processed in an interval
 def getInstructionCount(intervalstr):
-  results = sniper_lib.get_results(0, resultsdir, partial = intervalstr)
+  results = sniper_lib.get_results(0, resultsdir, partial = intervalstr, metrics = ("performance_model.instruction_count",))
   instructioncount = sum(results["results"]["performance_model.instruction_count"])
   return instructioncount
 
 def getTotalInstructionCount():
-  results = sniper_lib.get_results(0, resultsdir)
+  results = sniper_lib.get_results(0, resultsdir, metrics = ("performance_model.instruction_count",))
   instructioncount = sum(results["results"]["performance_model.instruction_count"])
   return instructioncount
 
