@@ -506,14 +506,14 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
 
 if __name__ == '__main__':
   def usage():
-    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (default: .)>] [-t <title>] [-n <num-intervals (default: all_intervals)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose]')
+    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose]')
     sys.exit()
 
   resultsdir = '.'
   outputdir = '.'
   title = None
   use_mcpat = False
-  num_intervals = 0
+  num_intervals = 1000
   interval = 0
   verbose = False
 
