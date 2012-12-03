@@ -446,7 +446,7 @@ def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
   nrofintervals = 0
   while currentintervalnr < num_intervals:
     if verbose:
-      print "Put fixed time interval", currentintervalnr, "in a fixed instruction count interval\r",
+      print "Put fixed time interval", currentintervalnr, "/", num_intervals, "in a fixed instruction count interval\r",
     instructioncount+=getInstructionCount(currentintervalstr)
     nrofintervals+=1
     if instructioncount > fixedinstructioncount:
