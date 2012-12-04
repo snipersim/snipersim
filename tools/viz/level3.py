@@ -160,6 +160,6 @@ if __name__ == '__main__':
   # Now copy all static files as well
   if outputdir != HOME:
     print "Copy files to output directory "+outputdir
-    os.system('cd "%s"; tar c visualization.html rickshaw/ levels/level3/*html levels/level3/javascript css/ | tar x -C %s' % (HOME, outputdir))
-  print "Visualizations can be viewed in "+os.path.join(outputdir,'visualization.html')
+    os.system('cd "%s"; tar c index.html rickshaw/ levels/level3/*html levels/level3/javascript css/ | tar x -C %s' % (HOME, outputdir))
+  print "Visualizations can be viewed in "+os.path.join(outputdir,'index.html')
 
