@@ -21,7 +21,7 @@ NetworkModelBusGlobal::NetworkModelBusGlobal(String name)
    String model_type = Sim()->getCfg()->getString("network/bus/queue_model/type");
    // Emulate the original code, with 10 cycles of latency for the history_list, and 0 outstanding transactions for the contention model
    SubsecondTime proc_period = ComponentPeriod::fromFreqHz(Sim()->getCfg()->getFloatArray("perf_model/core/frequency", 0)*1000000000);
-   _queue_model = QueueModel::create("bus-queue", 0, model_type, 10 * proc_period, 0);
+   _queue_model = QueueModel::create("bus-queue", 0, model_type, 10 * proc_period);
    /* 8 * GB/s / Gcycles/s = bits / cycle, round down (implicit: float to int conversion) */
    registerStatsMetric(name, 0, "num-packets", &_num_packets);
    registerStatsMetric(name, 0, "num-packets-delayed", &_num_packets_delayed);

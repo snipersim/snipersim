@@ -8,7 +8,7 @@
 #include "config.hpp"
 
 QueueModel*
-QueueModel::create(String name, UInt32 id, String model_type, SubsecondTime min_processing_time, UInt64 num_outstanding)
+QueueModel::create(String name, UInt32 id, String model_type, SubsecondTime min_processing_time)
 {
    if (model_type == "basic")
    {
@@ -23,7 +23,7 @@ QueueModel::create(String name, UInt32 id, String model_type, SubsecondTime min_
    }
    else if (model_type == "contention")
    {
-      return new QueueModelContention(name, id, num_outstanding);
+      return new QueueModelContention(name, id, 1);
    }
    else
    {
