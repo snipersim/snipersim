@@ -4,6 +4,7 @@
 #include "queue_model_basic.h"
 #include "queue_model_history_list.h"
 #include "queue_model_contention.h"
+#include "queue_model_windowed_mg1.h"
 #include "log.h"
 #include "config.hpp"
 
@@ -25,10 +26,13 @@ QueueModel::create(String name, UInt32 id, String model_type, SubsecondTime min_
    {
       return new QueueModelContention(name, id, 1);
    }
+   else if (model_type == "windowed_mg1")
+   {
+      return new QueueModelWindowedMG1(name, id);
+   }
    else
    {
       LOG_PRINT_ERROR("Unrecognized Queue Model Type(%s)", model_type.c_str());
       return (QueueModel*) NULL;
    }
 }
-
