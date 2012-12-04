@@ -109,10 +109,11 @@
         document.getElementById('ipcgraphshow').checked = false;
       </script>
     </section>
-
+	<div id="yaxislabel" class="vertical-text">Power (W)</div>
   </form>
   <div id="chart_container">
     <div id="chart"></div>
+    <div id="xaxislabel">Time (Interval)</div>
     <div id="timeline"></div>
     <div id="slider"></div>
   </div>
@@ -122,19 +123,24 @@
 <div id ="ipcchartcontent">
   <div id="content">
     <form id="side_panel">
+    
       <section>
         <div id="ipclegend"></div>
       </section>
       <section>
+        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
         <h6>Smoothing</h6>
         <div id="ipcsmoother"></div>
       </section>
+    
     </form>
+  
   <div id="chart_container">
     <div id="ipcchart"></div>
+    <div id="xaxislabel">Time (Interval)</div>
     <div id="ipctimeline"></div><br />
     <div id="ipcslider"></div>
-    <br /><br /><br /><br />
+    <br /><br />
   </div>
 </div>
 
@@ -242,6 +248,7 @@ function createGraph(mcpatoption) {
   $('#timeline').empty();
 
   if (mcpatoption=="power"){
+    document.getElementById('yaxislabel').innerHTML = "Power (W)"
     var filename = "data/".concat(info.name.concat("-power.json"));
     labels = powerlabels;		
     xlabelfun = function(x) {
@@ -254,6 +261,7 @@ function createGraph(mcpatoption) {
 			};
   }
   else if (mcpatoption=="energy"){
+    document.getElementById('yaxislabel').innerHTML = "Energy (J)"
      var filename = "data/".concat(info.name.concat("-energy.json"));
     labels = energylabels;		
     xlabelfun = function(x) {
@@ -266,6 +274,7 @@ function createGraph(mcpatoption) {
 			};
   }
   else if (mcpatoption=="energypercentage"){
+     document.getElementById('yaxislabel').innerHTML = "Energy (%)"
      var filename = "data/".concat(info.name.concat("-energypercentage.json"));
     labels = energypercentagelabels;		
     xlabelfun = function(x) {

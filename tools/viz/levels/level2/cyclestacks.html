@@ -117,14 +117,20 @@
         document.getElementById('ipcgraphshow').checked = false;
       </script>
     </section>
-
+	<div id="yaxislabel" class="vertical-text">CPI (%)</div>
   </form>
+  
   <div id="chart_container">
+    
     <div id="chart"></div>
+    <div id="xaxislabel">Time (Interval)</div>
     <div id="timeline"></div>
     <div id="slider"></div>
+    
   </div>
 </div>
+
+
 <br />
 <!--IPC stack-->
 <div id ="ipcchartcontent">
@@ -134,12 +140,14 @@
         <div id="ipclegend"></div>
       </section>
       <section>
+        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
         <h6>Smoothing</h6>
         <div id="ipcsmoother"></div>
       </section>
     </form>
   <div id="chart_container">
     <div id="ipcchart"></div>
+    <div id="xaxislabel">Time (Interval)</div>
     <div id="ipctimeline"></div><br />
     <div id="ipcslider"></div>
     <br /><br /><br /><br />
@@ -226,7 +234,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 		var markerinfo = jQuery.parseJSON(markerstr);
 		var numberofmarkers = markerinfo.markers.length;
-                numberofmarkers = numberofmarkers.prop || 0;
+
 		for (var i=0; i<numberofmarkers; i++)
 		  {
 			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
@@ -261,6 +269,7 @@ function createGraph(detail, normalized) {
   $('#timeline').empty();
 
   if (normalized){
+    document.getElementById('yaxislabel').innerHTML = "CPI (%)"
     xlabelfun = function(x) {
                   var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
 		  return content;
@@ -271,6 +280,7 @@ function createGraph(detail, normalized) {
 			};
   }
   else{
+    document.getElementById('yaxislabel').innerHTML = "CPI"
     xlabelfun = function(x) {
 		  var content = "instructioncount: "+x;
 		  return content;
