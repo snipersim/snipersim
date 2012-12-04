@@ -83,14 +83,6 @@ Core::~Core()
    delete m_network;
 }
 
-void Core::outputSummary(std::ostream &os)
-{
-   getPerformanceModel()->outputSummary(os);
-   getNetwork()->outputSummary(os);
-   getShmemPerfModel()->outputSummary(os);
-   getMemoryManager()->outputSummary(os);
-}
-
 const ComponentPeriod* Core::getDvfsDomain() const
 {
    return Sim()->getDvfsManager()->getCoreDomain(this->getId());

@@ -175,23 +175,3 @@ Cache::updateHits(Core::mem_op_t mem_op_type, UInt64 hits)
       m_num_hits += hits;
    }
 }
-
-
-void
-Cache::outputSummary(std::ostream& out)
-{
-   out << "  Cache " << m_name << ":\n";
-   out << "    num cache accesses: " << m_num_accesses << std::endl;
-   out << "    miss rate: " <<
-      ((float) (m_num_accesses - m_num_hits) / m_num_accesses) * 100 << std::endl;
-   out << "    num cache misses: " << m_num_accesses - m_num_hits << std::endl;
-}
-
-void
-Cache::dummyOutputSummary(std::ostream& out, String replacement)
-{
-  out << "  Cache " << m_name << ":\n";
-  out << "    num cache accesses: " << replacement << std::endl;
-  out << "    miss rate: " << replacement << std::endl;
-  out << "    num cache misses: " << replacement << std::endl;
-}

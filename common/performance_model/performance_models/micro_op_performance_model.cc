@@ -116,16 +116,6 @@ MicroOpPerformanceModel::~MicroOpPerformanceModel()
    delete m_allocator;
 }
 
-void MicroOpPerformanceModel::outputSummary(std::ostream &os) const
-{
-   os << "  Instructions: " << getInstructionCount() << std::endl
-      << "  Cycles: " << m_elapsed_time.getCycleCount() << std::endl
-      << "  Time: " << m_elapsed_time.getElapsedTime().getNS() << std::endl;
-
-   if (getConstBranchPredictor())
-      getConstBranchPredictor()->outputSummary(os);
-}
-
 bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
 {
    if (m_state_instruction == NULL)

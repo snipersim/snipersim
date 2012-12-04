@@ -78,8 +78,6 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 getModeledLength(const void* pkt_data)
          { return ((ShmemMsg*) pkt_data)->getModeledLength(); }
 
-         void outputSummary(std::ostream &os);
-
          void incrElapsedTime(MemComponent::component_t mem_component, CachePerfModel::CacheAccess_t access_type);
    };
 }

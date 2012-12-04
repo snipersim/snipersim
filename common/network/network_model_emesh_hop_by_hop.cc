@@ -415,52 +415,6 @@ NetworkModelEMeshHopByHop::getNextDest(SInt32 final_dest, OutputDirection& direc
 }
 
 void
-NetworkModelEMeshHopByHop::outputSummary(std::ostream &out)
-{
-   out << "    bytes received: " << m_total_bytes_received << std::endl;
-   out << "    packets received: " << m_total_packets_received << std::endl;
-   if (m_total_packets_received > 0)
-   {
-      out << "    average contention delay: " <<
-         (m_total_contention_delay / m_total_packets_received) << std::endl;
-      out << "    average packet latency: " <<
-         (m_total_packet_latency / m_total_packets_received) << std::endl;
-   }
-   else
-   {
-      out << "    average contention delay: " <<
-         "NA" << std::endl;
-      out << "    average packet latency: " <<
-         "NA" << std::endl;
-   }
-
-   if (m_queue_model_enabled && (m_queue_model_type == "history_list"))
-   {
-      out << "  Queue Models:" << std::endl;
-
-      float queue_utilization = 0.0;
-      float frac_requests_using_analytical_model = 0.0;
-      UInt32 num_queue_models = 0;
-
-      for (SInt32 i = 0; i < NUM_OUTPUT_DIRECTIONS; i++)
-      {
-         if (m_queue_models[i])
-         {
-            queue_utilization += ((QueueModelHistoryList*) m_queue_models[i])->getQueueUtilization();
-            frac_requests_using_analytical_model += ((QueueModelHistoryList*) m_queue_models[i])->getFracRequestsUsingAnalyticalModel();
-            num_queue_models ++;
-         }
-      }
-
-      queue_utilization /= num_queue_models;
-      frac_requests_using_analytical_model /= num_queue_models;
-
-      out << "    Queue Utilization(\%): " << queue_utilization * 100 << std::endl;
-      out << "    Analytical Model Used(\%): " << frac_requests_using_analytical_model * 100 << std::endl;
-   }
-}
-
-void
 NetworkModelEMeshHopByHop::enable()
 {
    m_enabled = true;

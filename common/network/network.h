@@ -77,8 +77,6 @@ class Network
 
       void unregisterCallback(PacketType type);
 
-      void outputSummary(std::ostream &out) const;
-
       void netPullFromTransport();
 
       // -- Main interface -- //

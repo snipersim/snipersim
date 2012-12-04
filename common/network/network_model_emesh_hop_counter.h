@@ -15,8 +15,6 @@ public:
                     std::vector<Hop> &nextHops);
    void processReceivedPacket(NetPacket &pkt);
 
-   void outputSummary(std::ostream &out);
-
    void enable() { _enabled = true; }
    void disable() { _enabled = false; }
 
@@ -29,14 +27,14 @@ private:
 
    ComponentLatency _hopLatency;
    ComponentBandwidthPerCycle _linkBandwidth;
-   
+
    SInt32 _meshWidth;
    SInt32 _meshHeight;
-   
+
    bool _enabled;
 
    Lock _lock;
-   
+
    // Performance Counters
    UInt64 _num_packets;
    UInt64 _num_bytes;

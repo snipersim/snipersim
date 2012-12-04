@@ -20,8 +20,6 @@ public:
 
    void update(bool predicted, bool actual, IntPtr ip, IntPtr target);
 
-   void outputSummary(std::ostream &os) const;
-
 private:
 
    void update_pir(bool actual, IntPtr ip, IntPtr target, BranchPredictorReturnValue::BranchType branch_type);

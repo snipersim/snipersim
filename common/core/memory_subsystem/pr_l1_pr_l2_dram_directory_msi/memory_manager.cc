@@ -396,18 +396,4 @@ MemoryManager::disableModels()
       m_dram_cntlr->getDramPerfModel()->disable();
 }
 
-void
-MemoryManager::outputSummary(std::ostream &os)
-{
-   os << "Cache Summary:\n";
-   m_l1_cache_cntlr->getL1ICache()->outputSummary(os);
-   m_l1_cache_cntlr->getL1DCache()->outputSummary(os);
-   m_l2_cache_cntlr->getL2Cache()->outputSummary(os);
-
-   if (m_dram_cntlr_present)
-      m_dram_cntlr->getDramPerfModel()->outputSummary(os);
-   else
-      DramPerfModel::dummyOutputSummary(os);
-}
-
 }

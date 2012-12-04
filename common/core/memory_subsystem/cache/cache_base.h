@@ -74,9 +74,6 @@ class CacheBase
       String getName(void) { return m_name; }
 
       static hash_t parseAddressHash(String hash_name);
-
-      // Output Summary
-      virtual void outputSummary(std::ostream& out) {}
 };
 
 #endif /* __CACHE_BASE_H__ */

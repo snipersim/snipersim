@@ -67,16 +67,6 @@ void Network::unregisterCallback(PacketType type)
    _callbacks[type] = NULL;
 }
 
-void Network::outputSummary(std::ostream &out) const
-{
-   out << "Network summary:\n";
-   for (UInt32 i = 0; i < NUM_STATIC_NETWORKS; i++)
-   {
-      out << "  Network model " << i << ":\n";
-      _models[i]->outputSummary(out);
-   }
-}
-
 // Polling function that performs background activities, such as
 // pulling from the physical transport layer and routing packets to
 // the appropriate queues.

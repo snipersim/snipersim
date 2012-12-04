@@ -47,8 +47,6 @@ class ShmemPerfModel
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
       bool isEnabled() { return m_enabled; }
-
-      void outputSummary(std::ostream& out);
 };
 
 #endif /* __SHMEM_PERF_MODEL_H__ */

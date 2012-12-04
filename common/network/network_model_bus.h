@@ -44,8 +44,6 @@ class NetworkModelBus : public NetworkModel
 
       void processReceivedPacket(NetPacket& pkt);
 
-      void outputSummary(std::ostream &out);
-
       void enable()
       { _enabled = true; }
 

@@ -16,16 +16,6 @@ SimplePerformanceModel::~SimplePerformanceModel()
 {
 }
 
-void SimplePerformanceModel::outputSummary(std::ostream &os) const
-{
-   os << "  Instructions: " << getInstructionCount() << endl
-      << "  Cycles: " << m_elapsed_time.getCycleCount() << endl
-      << "  Time: " << m_elapsed_time.getElapsedTime().getNS() << endl;
-
-   if (getConstBranchPredictor())
-      getConstBranchPredictor()->outputSummary(os);
-}
-
 bool SimplePerformanceModel::handleInstruction(Instruction const* instruction)
 {
    // compute cost

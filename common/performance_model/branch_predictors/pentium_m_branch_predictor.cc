@@ -54,12 +54,6 @@ void PentiumMBranchPredictor::update(bool predicted, bool actual, IntPtr ip, Int
    update_pir(actual, ip, target, BranchPredictorReturnValue::ConditionalBranch);
 }
 
-void PentiumMBranchPredictor::outputSummary(std::ostream &os) const
-{
-   BranchPredictor::outputSummary(os);
-   os << "    type: pentium_m" << std::endl;
-}
-
 void PentiumMBranchPredictor::update_pir(bool actual, IntPtr ip, IntPtr target, BranchPredictorReturnValue::BranchType branch_type)
 {
    IntPtr rhs;

@@ -529,19 +529,4 @@ MemoryManager::disableModels()
       m_dram_cntlr->getDramPerfModel()->disable();
 }
 
-void
-MemoryManager::outputSummary(std::ostream &os)
-{
-   os << "Cache Summary:\n";
-   for(UInt32 i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)
-   {
-      m_cache_cntlrs[(MemComponent::component_t)i]->outputSummary(os);
-   }
-
-   if (m_dram_cntlr_present)
-      m_dram_cntlr->getDramPerfModel()->outputSummary(os);
-   else
-      DramPerfModel::dummyOutputSummary(os);
-}
-
 }

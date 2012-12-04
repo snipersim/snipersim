@@ -45,9 +45,6 @@ class DramPerfModel
       void disable() { m_enabled = false; }
 
       UInt64 getTotalAccesses() { return m_num_accesses; }
-      void outputSummary(std::ostream& out);
-
-      static void dummyOutputSummary(std::ostream& out);
 };
 
 #endif /* __DRAM_PERF_MODEL_H__ */

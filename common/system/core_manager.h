@@ -47,8 +47,6 @@ class CoreManager
 
       Core *getCoreFromID(core_id_t core_id);
 
-      void outputSummary(std::ostream &os);
-
       bool amiUserThread();
       bool amiCoreThread();
       bool amiSimThread();

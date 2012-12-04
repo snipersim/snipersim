@@ -169,27 +169,6 @@ Simulator::~Simulator()
 
    m_transport->barrier();
 
-   #if 0
-   if (Config::getSingleton()->getCurrentProcessNum() == 0)
-   {
-      std::ofstream os(Config::getSingleton()->getOutputFileName().c_str());
-
-      os << "Simulation timers: " << std::endl
-         << "start time\t" << (m_start_time - m_boot_time) << std::endl
-         << "stop time\t" << (m_stop_time - m_boot_time) << std::endl
-         << "shutdown time\t" << (m_shutdown_time - m_boot_time) << std::endl;
-
-      m_core_manager->outputSummary(os);
-      os.close();
-   }
-   else
-   {
-      std::stringstream temp;
-      m_core_manager->outputSummary(temp);
-      assert(temp.str().length() == 0);
-   }
-   #endif
-
    delete m_trace_manager;
    if (m_faultinjection_manager)
       delete m_faultinjection_manager;

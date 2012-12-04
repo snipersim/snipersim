@@ -1792,13 +1792,4 @@ CacheCntlr::getNetworkThreadSemaphore()
    return m_network_thread_sem;
 }
 
-void
-CacheCntlr::outputSummary(std::ostream& out)
-{
-   if (isMasterCache())
-      getCache()->outputSummary(out);
-   else
-      getCache()->dummyOutputSummary(out, "<--");
-}
-
 }

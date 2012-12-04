@@ -99,12 +99,3 @@ ShmemPerfModel::incrTotalMemoryAccessLatency(SubsecondTime shmem_time)
       atomic_add_subsecondtime(m_total_memory_access_latency, shmem_time);
    }
 }
-
-void
-ShmemPerfModel::outputSummary(std::ostream& out)
-{
-   out << "Shmem Perf Model summary: " << std::endl;
-   out << "    num memory accesses: " << m_num_memory_accesses << std::endl;
-   out << "    average memory access latency: " << "INVALID " <<
-      (float) (m_total_memory_access_latency.getInternalDataForced()) / m_num_memory_accesses << std::endl;
-}

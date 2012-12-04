@@ -14,8 +14,6 @@ public:
    bool predict(IntPtr ip, IntPtr target);
    void update(bool predicted, bool actual, IntPtr ip, IntPtr target);
 
-   void outputSummary(std::ostream &os) const;
-
 private:
    std::vector<bool> m_bits;
 };

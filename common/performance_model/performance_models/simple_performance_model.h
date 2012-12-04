@@ -9,8 +9,6 @@ public:
    SimplePerformanceModel(Core *core);
    ~SimplePerformanceModel();
 
-   void outputSummary(std::ostream &os) const;
-
 private:
    bool handleInstruction(Instruction const* instruction);
 };

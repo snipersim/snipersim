@@ -145,10 +145,3 @@ NetworkModelEMeshHopCounter::computeSerializationLatency(UInt32 pkt_length)
    UInt32 num_bits = pkt_length * 8;
    return _linkBandwidth.getRoundedLatency(num_bits);
 }
-
-void NetworkModelEMeshHopCounter::outputSummary(std::ostream &out)
-{
-   out << "    num packets received: " << _num_packets << std::endl;
-   out << "    num bytes received: " << _num_bytes << std::endl;
-   out << "    average latency: " << ( _num_packets ? (_total_latency / _num_packets) : SubsecondTime::Zero() ) << std::endl;
-}

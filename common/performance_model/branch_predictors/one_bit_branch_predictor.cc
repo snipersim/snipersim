@@ -23,9 +23,3 @@ void OneBitBranchPredictor::update(bool predicted, bool actual, IntPtr ip, IntPt
    UInt32 index = ip % m_bits.size();
    m_bits[index] = actual;
 }
-
-void OneBitBranchPredictor::outputSummary(std::ostream &os) const
-{
-   BranchPredictor::outputSummary(os);
-   os << "    type: one-bit (" << m_bits.size() << ")" << std::endl;
-}

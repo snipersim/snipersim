@@ -15,13 +15,6 @@ MagicPerformanceModel::~MagicPerformanceModel()
 {
 }
 
-void MagicPerformanceModel::outputSummary(std::ostream &os) const
-{
-   os << "  Instructions: " << getInstructionCount() << endl
-      << "  Cycles: " << m_elapsed_time.getCycleCount() << endl
-      << "  Time: " << m_elapsed_time.getElapsedTime().getNS() << endl;
-}
-
 bool MagicPerformanceModel::handleInstruction(Instruction const* instruction)
 {
    // compute cost

@@ -31,8 +31,6 @@ public:
    void handleIdleInstruction(Instruction *instruction);
    void iterate();
 
-   virtual void outputSummary(std::ostream &os) const = 0;
-
    UInt64 getInstructionCount() const { return m_instruction_count; }
 
    SubsecondTime getElapsedTime() const { return m_elapsed_time.getElapsedTime(); }

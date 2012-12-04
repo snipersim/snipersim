@@ -39,8 +39,6 @@ class NetworkModel
                                std::vector<Hop> &nextHops) = 0;
       virtual void processReceivedPacket(NetPacket &pkt) = 0;
 
-      virtual void outputSummary(std::ostream &out) = 0;
-
       virtual void enable() = 0;
       virtual void disable() = 0;
 

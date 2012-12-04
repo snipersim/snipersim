@@ -126,19 +126,3 @@ NetworkModelBus::accountPacket(const NetPacket &pkt)
    else
       return true;
 }
-
-void NetworkModelBus::outputSummary(std::ostream &out)
-{
-   if (getNetwork()->getCore()->getId() == 0) {
-      out << "    num packets received: " << _bus->_num_packets << std::endl;
-      out << "    num bytes received: " << _bus->_num_bytes << std::endl;
-      if (_bus->_num_packets == 0)
-         out << "    average delay: inf" << std::endl;
-      else
-         out << "    average delay: " << (_bus->_total_delay / _bus->_num_packets) << std::endl;
-   } else {
-      out << "    num packets received: " << "<--" << std::endl;
-      out << "    num bytes received: " << "<--" << std::endl;
-      out << "    average delay: " << "<--" << std::endl;
-   }
-}

@@ -21,8 +21,6 @@ public:
    MicroOpPerformanceModel(Core *core, bool issue_memops);
    ~MicroOpPerformanceModel();
 
-   void outputSummary(std::ostream &os) const;
-
 protected:
    const CoreModel *m_core_model;
 

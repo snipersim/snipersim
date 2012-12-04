@@ -80,8 +80,6 @@ class Core
       Core(SInt32 id);
       ~Core();
 
-      void outputSummary(std::ostream &os);
-
       MemoryResult readInstructionMemory(IntPtr address,
             UInt32 instruction_size);
 

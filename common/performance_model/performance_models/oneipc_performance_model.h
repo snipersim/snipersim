@@ -9,8 +9,6 @@ public:
    OneIPCPerformanceModel(Core *core);
    ~OneIPCPerformanceModel();
 
-   void outputSummary(std::ostream &os) const;
-
 private:
    bool handleInstruction(Instruction const* instruction);
 

@@ -62,9 +62,6 @@ class Cache : public CacheBase
 
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
-
-      virtual void outputSummary(std::ostream& out);
-      virtual void dummyOutputSummary(std::ostream& out, String replacement = "-");
 };
 
 template <class T>

@@ -18,7 +18,6 @@ public:
    UInt64 getMispredictPenalty();
    static BranchPredictor* create(core_id_t core_id);
 
-   virtual void outputSummary(std::ostream &os) const;
    UInt64 getNumCorrectPredictions() { return m_correct_predictions; }
    UInt64 getNumIncorrectPredictions() { return m_incorrect_predictions; }
 

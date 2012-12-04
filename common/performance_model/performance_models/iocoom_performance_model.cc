@@ -33,16 +33,6 @@ IOCOOMPerformanceModel::~IOCOOMPerformanceModel()
    delete m_store_buffer;
 }
 
-void IOCOOMPerformanceModel::outputSummary(std::ostream &os) const
-{
-   os << "  Instructions: " << m_instruction_count << std::endl
-      << "  Cycles: " << m_elapsed_time.getCycleCount() << std::endl
-      << "  Time: " << m_elapsed_time.getElapsedTime().getNS() << std::endl;
-
-   if (getConstBranchPredictor())
-      getConstBranchPredictor()->outputSummary(os);
-}
-
 bool IOCOOMPerformanceModel::handleInstruction(Instruction const* instruction)
 {
    ComponentTime cost = m_elapsed_time.getLatencyGenerator();

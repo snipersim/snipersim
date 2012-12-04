@@ -20,7 +20,7 @@ NetworkModelMagic::routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops)
    if (pkt.receiver == NetPacket::BROADCAST)
    {
       UInt32 total_cores = Config::getSingleton()->getTotalCores();
-   
+
       for (SInt32 i = 0; i < (SInt32) total_cores; i++)
       {
          Hop h;
@@ -53,7 +53,7 @@ NetworkModelMagic::processReceivedPacket(NetPacket &pkt)
       requester = getNetwork()->getCore()->getMemoryManager()->getShmemRequester(pkt.data);
    else // Other Packet types
       requester = pkt.sender;
-   
+
    LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
          "requester(%i)", requester);
 
@@ -63,10 +63,4 @@ NetworkModelMagic::processReceivedPacket(NetPacket &pkt)
    UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
    _num_packets ++;
    _num_bytes += pkt_length;
-}
-
-void NetworkModelMagic::outputSummary(std::ostream &out)
-{
-   out << "    num packets received: " << _num_packets << std::endl;
-   out << "    num bytes received: " << _num_bytes << std::endl;
 }

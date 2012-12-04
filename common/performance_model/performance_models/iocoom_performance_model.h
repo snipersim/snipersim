@@ -19,8 +19,6 @@ public:
    IOCOOMPerformanceModel(Core* core);
    ~IOCOOMPerformanceModel();
 
-   void outputSummary(std::ostream &os) const;
-
 private:
 
    bool handleInstruction(Instruction const* instruction);
