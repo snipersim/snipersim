@@ -18,11 +18,11 @@ def mkdir_p(path):
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir>] [--mcpat] [-v|--verbose]'
+    print 'Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir (default: viz)>] [--mcpat] [-v|--verbose]'
     sys.exit()
 
   resultsdir = '.'
-  outputdir = '.'
+  outputdir = 'viz'
   title = None
   use_mcpat = False
   num_intervals = 1000
