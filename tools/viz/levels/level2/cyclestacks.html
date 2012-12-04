@@ -34,6 +34,7 @@
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Annotate.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Legend.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.Time.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.X.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Toggle.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Order.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Highlight.js"></script>
@@ -205,10 +206,18 @@ var graph = new Rickshaw.Graph.Ajax( {
 			graph: graph,
 			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
 			ticksTreatment: ticksTreatment,
-			element: document.getElementById('y_axis')
 		} );
 
 		yAxis.render();
+
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
 
 		var annotator = new Rickshaw.Graph.Annotate( {
 			graph: graph,
@@ -352,10 +361,18 @@ function createGraph(detail, normalized) {
 			graph: graph,
 			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
 			ticksTreatment: ticksTreatment,
-			element: document.getElementById('y_axis')
 		} );
 
 		yAxis.render();
+
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
 
 
 		var annotator = new Rickshaw.Graph.Annotate( {
