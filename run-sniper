@@ -598,7 +598,7 @@ if run_power:
   os.system('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals())
 
 if use_viz:
-  print '[SNIPER] Generating visualization to viz/'
+  print '[SNIPER] Generating visualization in viz/'
   os.system('%(sim_root)s/tools/viz/viz.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
 stats = dict(
