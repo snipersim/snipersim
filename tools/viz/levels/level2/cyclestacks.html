@@ -59,7 +59,9 @@
   var name = info.name
   var date = info.date
   var ipcfilename = "data/".concat(info.name.concat("-ipc.json"));
+  var ipcfilename2 = "data/".concat(info.name.concat("-ipcfic.json"));
   var intervalsize = info.intervalsize;
+  markerinfo = jQuery.parseJSON(markerstr);
   document.title = name+ ": cycle stacks over time";
   currentdetail = "simple";
   currentnormalized = true;
@@ -123,7 +125,7 @@
   <div id="chart_container">
     
     <div id="chart"></div>
-    <div id="xaxislabel">Time (Interval)</div>
+    <div id="xaxislabel">Time (µs)</div>
     <div id="timeline"></div>
     <div id="slider"></div>
     
@@ -132,12 +134,37 @@
 
 
 <br />
+
+<!--IPC stack 2 (with fixed instruction count intervals)-->
+<div id ="ipcchart2content">
+  <div id="content">
+    <form id="side_panel">
+      <section>
+        <div id="ipclegend2" class="ipclegend"></div>
+      </section>
+      <section>
+        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
+        <h6>Smoothing</h6>
+        <div id="ipcsmoother2"></div>
+      </section>
+    </form>
+  <div id="chart_container">
+    <div id="ipcchart2"></div>
+    <div id="xaxislabel">Time (µs)</div>
+    <div id="ipctimeline2"></div><br />
+    <div id="ipcslider2"></div>
+    <br /><br /><br /><br />
+  </div>
+</div>
+</div>
+
+
 <!--IPC stack-->
 <div id ="ipcchartcontent">
   <div id="content">
     <form id="side_panel">
       <section>
-        <div id="ipclegend"></div>
+        <div id="ipclegend" class="ipclegend"></div>
       </section>
       <section>
         <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
@@ -147,12 +174,15 @@
     </form>
   <div id="chart_container">
     <div id="ipcchart"></div>
-    <div id="xaxislabel">Time (Interval)</div>
+    <div id="xaxislabel">Time (µs)</div>
     <div id="ipctimeline"></div><br />
     <div id="ipcslider"></div>
     <br /><br /><br /><br />
   </div>
 </div>
+</div>
+
+
 
 <script type="text/javascript">
 var graph = new Rickshaw.Graph.Ajax( {
@@ -177,8 +207,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			xFormatter: function(x) {
-					var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
-					return content;
+					return x*intervalsize/1000000000+" µs";
 			},
 
 			yFormatter: function(y) {
@@ -237,7 +266,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 		for (var i=0; i<numberofmarkers; i++)
 		  {
-			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
+			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
 					 markerinfo.markers[i].place+" of iteration "+
 					markerinfo.markers[i].iteration + " marker: "+
 					markerinfo.markers[i].marker);
@@ -249,7 +278,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 	series: [
 		{
 			name: 'IPC',
-			color: palette.color()
+			color: 'green'
 		}
 	]
 } );
@@ -257,12 +286,122 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 </script>
 
+<script type="text/javascript">
+var graph = new Rickshaw.Graph.Ajax( {
+	element: document.getElementById("ipcchart2"),
+	width: 800,
+	height: 150,
+	renderer: 'area',
+	defaultInterpolation: 'step-after',
+	stroke: true,
+	dataURL: ipcfilename2,
+	onData: function(d) { return d },
+	onComplete: function(transport) {
+		var graph = transport.graph;
+		var legend = new Rickshaw.Graph.Legend( {
+			graph: graph,
+			element: document.getElementById('ipclegend2')
+		} );
+		var slider = new Rickshaw.Graph.RangeSlider( {
+			graph: graph,
+			element: $('#ipcslider2')
+		} );
+		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
+			graph: graph,
+			xFormatter: function(x) {
+					return x*intervalsize/1000000000+" µs";
+			},
 
+			yFormatter: function(y) {
+					var content = Math.round(y*100)/100 + " IPC";
+					return content;
+				},
+			} );
+		var order = new Rickshaw.Graph.Behavior.Series.Order( {
+			graph: graph,
+			legend: legend
+		} );
+		var controls = new RenderControls( {
+			element: document.querySelector('form'),
+			graph: graph
+		} );
+
+		var shelving = new Rickshaw.Graph.Behavior.Series.Toggle( {
+			graph: graph,
+			legend: legend
+		} );
+		var highlighter = new Rickshaw.Graph.Behavior.Series.Highlight( {
+			graph: graph,
+			legend: legend
+		} );
+
+		var smoother = new Rickshaw.Graph.Smoother( {
+			graph: graph,
+			element: $('#ipcsmoother2')
+		} );
+		var ticksTreatment = 'glow';
+
+		var yAxis = new Rickshaw.Graph.Axis.Y( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+		} );
+
+		yAxis.render();
+
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
+
+		var annotator = new Rickshaw.Graph.Annotate( {
+			graph: graph,
+			element: document.getElementById('ipctimeline2')
+		} );
+
+		var numberofmarkers = markerinfo.markers.length;
+
+		for (var i=0; i<numberofmarkers; i++)
+		  {
+			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
+					 markerinfo.markers[i].place+" of iteration "+
+					markerinfo.markers[i].iteration + " marker: "+
+					markerinfo.markers[i].marker);
+		  }
+		annotator.update();
+
+
+	},
+	series: [
+		{
+			name: 'IPC',
+			color: 'green'
+		}
+	]
+} );
+
+
+</script>
 
 <script type="text/javascript">
 function createGraph(detail, normalized) {
 
   currentdetail = detail;
+  if (currentnormalized != normalized && document.getElementById("ipcgraphshow").checked){
+    if(normalized){
+      $('#ipcchartcontent').show();
+      $('#ipcchart2content').hide();
+    }
+    else {
+      $('#ipcchartcontent').hide();
+      $('#ipcchart2content').show();
+    }
+    
+  }
   currentnormalized = normalized;
   $('#chart').empty();
   $('#legend').empty();
@@ -270,24 +409,14 @@ function createGraph(detail, normalized) {
 
   if (normalized){
     document.getElementById('yaxislabel').innerHTML = "CPI (%)"
-    xlabelfun = function(x) {
-                  var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
-		  return content;
-		};
     yformatter = function(series, x, y) {
-				var content = series.name+": "+Math.round(y*100)/100+ " % CPI";
-				return content;
+				return series.name+": "+Math.round(y*100)/100+ " % CPI";
 			};
   }
   else{
     document.getElementById('yaxislabel').innerHTML = "CPI"
-    xlabelfun = function(x) {
-		  var content = "instructioncount: "+x;
-		  return content;
-	      };
     yformatter = function(series, x, y) {
-				var content = series.name+": "+Math.round(y*100)/100+ " CPI";
-				return content;
+				return series.name+": "+Math.round(y*100)/100+ " CPI";
 			};
   }
 
@@ -296,24 +425,21 @@ function createGraph(detail, normalized) {
 	   if (normalized) {
 	    	var filename = "data/".concat(info.name.concat("-cpipercentagesimplified.json"));
 	    	labels = cpipercentagesimplifiedlabels;
-		markerinfo = jQuery.parseJSON(markerstr);
 	   }
 	   else {
 		var filename = "data/".concat(info.name.concat("-cpificsimple.json"));
 	   	labels = simplelabels;
-		markerinfo = jQuery.parseJSON(markerstrv2)
 	    }
   }
   else if (detail == "full") {
 	   if (normalized) {
 	    	var filename = "data/".concat(info.name.concat("-cpipercentage.json"));
 	    	labels = cpipercentagelabels;
-		markerinfo = jQuery.parseJSON(markerstr);
 	   }
 	   else {
 		var filename = "data/".concat(info.name.concat("-cpific.json"));
 	   	labels = cpificlabels;
-		markerinfo = jQuery.parseJSON(markerstrv2);
+                
 	    }
   }
 
@@ -340,7 +466,9 @@ function createGraph(detail, normalized) {
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			formatter: yformatter,
-                        xFormatter: xlabelfun
+                        xFormatter: function(x) {
+		  		return x*intervalsize/1000000000+" µs";
+				},
 		} );
 
 		var order = new Rickshaw.Graph.Behavior.Series.Order( {
@@ -395,7 +523,7 @@ function createGraph(detail, normalized) {
 
 		for (var i=0; i<numberofmarkers; i++)
 		  {
-			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
+			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
 					 markerinfo.markers[i].place+" of iteration "+
 					markerinfo.markers[i].iteration + " marker: "+
 					markerinfo.markers[i].marker);
@@ -413,9 +541,15 @@ function createGraph(detail, normalized) {
 
 <script type="text/javascript">
 $('#ipcgraphshow').change(function() {
-  $('#ipcchartcontent').slideToggle('slow', function() {
-
+  if(currentnormalized){
+    element = '#ipcchartcontent'
+  }
+  else {
+    element = '#ipcchart2content'
+  }
+  $(element).slideToggle('slow', function() {
   });
+
 });
 
 
@@ -424,8 +558,10 @@ $('#ipcgraphshow').change(function() {
 
 <script type="text/javascript">
 $('#ipcchartcontent').hide();
+$('#ipcchart2content').hide();
 createGraph('simple',true);
 </script>
 
 
 </body>
+

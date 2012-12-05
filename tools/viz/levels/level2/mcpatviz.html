@@ -30,6 +30,7 @@
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Annotate.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Legend.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.Time.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.X.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Toggle.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Order.js"></script>
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Highlight.js"></script>
@@ -113,7 +114,7 @@
   </form>
   <div id="chart_container">
     <div id="chart"></div>
-    <div id="xaxislabel">Time (Interval)</div>
+    <div id="xaxislabel">Time (µs)</div>
     <div id="timeline"></div>
     <div id="slider"></div>
   </div>
@@ -125,7 +126,7 @@
     <form id="side_panel">
     
       <section>
-        <div id="ipclegend"></div>
+        <div id="ipclegend" class="ipclegend"></div>
       </section>
       <section>
         <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
@@ -137,7 +138,7 @@
   
   <div id="chart_container">
     <div id="ipcchart"></div>
-    <div id="xaxislabel">Time (Interval)</div>
+    <div id="xaxislabel">Time (µs)</div>
     <div id="ipctimeline"></div><br />
     <div id="ipcslider"></div>
     <br /><br />
@@ -167,13 +168,11 @@ var graph = new Rickshaw.Graph.Ajax( {
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			xFormatter: function(x) {
-					var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
-					return content;
+					return x*intervalsize/1000000000+" µs";
 			},		
 			
 			yFormatter: function(y) {
-					var content = Math.round(y*100)/100 + " IPC";
-					return content;
+					return Math.round(y*100)/100 + " IPC";
 				},		
 			} );
 		var order = new Rickshaw.Graph.Behavior.Series.Order( {
@@ -209,6 +208,15 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 		yAxis.render();
 
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
+
 		var annotator = new Rickshaw.Graph.Annotate( {
 			graph: graph,
 			element: document.getElementById('ipctimeline')
@@ -219,7 +227,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 
 		for (var i=0; i<numberofmarkers; i++)
 		  {
-			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
+			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
 					 markerinfo.markers[i].place+" of iteration "+
 					markerinfo.markers[i].iteration + " marker: "+
 					markerinfo.markers[i].marker);
@@ -250,11 +258,7 @@ function createGraph(mcpatoption) {
   if (mcpatoption=="power"){
     document.getElementById('yaxislabel').innerHTML = "Power (W)"
     var filename = "data/".concat(info.name.concat("-power.json"));
-    labels = powerlabels;		
-    xlabelfun = function(x) {
-                  var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
-		  return content;
-		};
+    labels = powerlabels;
     yformatter = function(series, x, y) {
 				var content = series.name+": "+Math.round(y*100)/100+ " Watt";
 				return content;
@@ -263,11 +267,7 @@ function createGraph(mcpatoption) {
   else if (mcpatoption=="energy"){
     document.getElementById('yaxislabel').innerHTML = "Energy (J)"
      var filename = "data/".concat(info.name.concat("-energy.json"));
-    labels = energylabels;		
-    xlabelfun = function(x) {
-                  var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
-		  return content;
-		};
+    labels = energylabels;
     yformatter = function(series, x, y) {
 				var content = series.name+": "+y+ " Joule";
 				return content;
@@ -276,11 +276,7 @@ function createGraph(mcpatoption) {
   else if (mcpatoption=="energypercentage"){
      document.getElementById('yaxislabel').innerHTML = "Energy (%)"
      var filename = "data/".concat(info.name.concat("-energypercentage.json"));
-    labels = energypercentagelabels;		
-    xlabelfun = function(x) {
-                  var content = "Interval "+x+": ["+x*intervalsize/1000000000+" µs,"+(x+1)*intervalsize/1000000000+" µs]";
-		  return content;
-		};
+    labels = energypercentagelabels;
     yformatter = function(series, x, y) {
 				var content = series.name+": "+Math.round(y*100)/100+ " %";
 				return content;
@@ -311,7 +307,9 @@ function createGraph(mcpatoption) {
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			formatter: yformatter,
-                        xFormatter: xlabelfun		
+                        xFormatter: function(x) {
+		  		return x*intervalsize/1000000000+" µs";
+				}		
 		} );
 		
 		var order = new Rickshaw.Graph.Behavior.Series.Order( {
@@ -347,6 +345,14 @@ function createGraph(mcpatoption) {
 
 		yAxis.render();
 
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
 
 		var annotator = new Rickshaw.Graph.Annotate( {
 			graph: graph,
@@ -358,7 +364,7 @@ function createGraph(mcpatoption) {
 
 		for (var i=0; i<numberofmarkers; i++)
 		  {
-			annotator.add(markerinfo.markers[i].position, "Time:"+markerinfo.markers[i].time+"ns    "+
+			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
 					 markerinfo.markers[i].place+" of iteration "+
 					markerinfo.markers[i].iteration + " marker: "+
 					markerinfo.markers[i].marker);

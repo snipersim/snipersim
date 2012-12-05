@@ -89,21 +89,21 @@ div, span, p, td {
 	padding: 0;
 }
 
-#ipclegend {
+.ipclegend {
 	background-color: white;
 	margin-left: 0;
 	padding: 0;
 	left: 0;
 }
 
-#ipclegend .label {
+.ipclegend .label {
 	color: #404040;
 }
-#ipclegend .action {
+.ipclegend .action {
 	color: black;
 	opacity: 0.5;
 }
-#ipclegend ul {
+.ipclegend ul {
 	padding: 0;
 }
 

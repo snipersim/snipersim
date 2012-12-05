@@ -55,6 +55,12 @@ def initialize():
   ipcvalues[0]["name"]="IPC"
   ipcvalues[0]["data"]=[0 for x in xrange(num_intervals)]
 
+  #ipcvalues calculated with fixed instruction count intervals
+  global ipcvaluesfic
+  ipcvaluesfic = [1]
+  ipcvaluesfic[0] = {}
+  ipcvaluesfic[0]["name"]="IPC"
+
 
   for component in cpiitems.names:
     cpificcomponents[component]=[]
@@ -85,6 +91,7 @@ def collectCPIStackDataFIC(verbose=False):
   groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/100, verbose)
   usedcomponents = dict.fromkeys(cpiitems.names,0)
   usedsimplecomponents = []
+  ipcvaluesfic[0]["data"]=[dict(x=0,y=0) for x in xrange(len(groupedintervals))]
   for key in cpificcomponents.keys():
     cpificcomponents[key] = [[0 for x in xrange(2)] for x in xrange(len(groupedintervals))]
   for key in simplifiedcpificcomponents.keys():
@@ -111,15 +118,24 @@ def collectCPIStackDataFIC(verbose=False):
       )
       data = results.get_data('cpi')
 
+      totalcpi=sum(data[0].itervalues())
+      if totalcpi > 0:
+        ipc = 1./totalcpi
+      else:
+        ipc = 0
+      ipcvaluesfic[0]["data"][i]=dict(x=cycleintervalstart*interval/1e9, y=ipc)
+
+
       for key in results.labels:
         cpi = data[0][key]
+        ipc = 0
         if cpi > 0.0:
           usedcomponents[key]=1
         cpificcomponents[key][i][0]=cpi
-        cpificcomponents[key][i][1]=totalinstructioncount
+        cpificcomponents[key][i][1]=cycleintervalstart*interval/1e9 #now in microseconds
         simplecomponent = cpiitems.names_to_contributions[key]
         simplifiedcpificcomponents[simplecomponent][i][0]+=cpi
-        simplifiedcpificcomponents[simplecomponent][i][1]=totalinstructioncount
+        simplifiedcpificcomponents[simplecomponent][i][1]=cycleintervalstart*interval/1e9 #now in microseconds
         if not simplecomponent in usedsimplecomponents:
           usedsimplecomponents.append(simplecomponent)
 
@@ -193,7 +209,7 @@ def collectCPIStackDataFCC(verbose = False):
       else:
         ipc = 0
 
-      ipcvalues[0]["data"][i]=dict(x=i, y=ipc)
+      ipcvalues[0]["data"][i]=dict(x=i*interval/1e9, y=ipc)
 
       for key in results.labels:
         cpi = data[0][key]
@@ -297,9 +313,9 @@ def writetojson(outputdir, componentname, componenttype, componentindex, verbose
     jsonoutput[index]["data"]=[0 for x in xrange(num_intervals)]
     for i in range(0,num_intervals):
       if componenttype != "mcpat":
-        xvalue = str(components[key][i][0])
+        xvalue = str(components[key][i][0]*interval/1e9) #x-axis now in microseconds 
       else:
-        xvalue = str(i)
+        xvalue = str(i*interval/1e9)
       yvalue = str(components[key][i][componentindex])
       jsonoutput[index]["data"][i]=dict(x=xvalue, y=yvalue)
     index+=1
@@ -319,8 +335,7 @@ def calculateMarkerPosition(time):
 
 
 #write markers
-#level2version is the version of level 2. The difference lies in the x-position.
-def writemarkers(outputdir, level2version, verbose = False):
+def writemarkers(outputdir, verbose = False):
   if verbose:
     print 'Writing markers.txt'
   #find markers in file
@@ -354,21 +369,13 @@ def writemarkers(outputdir, level2version, verbose = False):
         iteration=items[1]
         place=items[2]
         marker=items[3].replace("\"","")
-        if(level2version=="1"):
-          position=int(timestamp)/(interval/1000000)
-        elif(level2version=="2"):
-          position=calculateMarkerPosition(int(timestamp))
+        position=int(timestamp)/(interval/1000000)
         index+=1
         markersjson["markers"].append(dict(position=position,time=timestamp, iteration=iteration, place=place, marker=marker))
 
-  if(level2version=="1"):
-    mkdir_p(os.path.join(outputdir,'levels','level2','data'))
-    markerstxt = open(os.path.join(outputdir,'levels','level2','data','markers.txt'), "w")
-    markerstxt.write("markerstr = '"+json.dumps(markersjson)+"';\n")
-  elif(level2version=="2"):
-    mkdir_p(os.path.join(outputdir,'levels','level2','data'))
-    markerstxt = open(os.path.join(outputdir,'levels','level2','data','markers.txt'), "a")
-    markerstxt.write("markerstrv2 = '"+json.dumps(markersjson)+"';\n")
+  mkdir_p(os.path.join(outputdir,'levels','level2','data'))
+  markerstxt = open(os.path.join(outputdir,'levels','level2','data','markers.txt'), "w")
+  markerstxt.write("markerstr = '"+json.dumps(markersjson)+"';\n")
 
   markerstxt.close()
 
@@ -378,7 +385,8 @@ def writeinfo(outputdir, verbose = False):
     print 'Writing info.txt'
   mkdir_p(os.path.join(outputdir,'levels','level2','data'))
   info = open(os.path.join(outputdir,'levels','level2','data','info.txt'), "w")
-  info.write("infostr ='{ \"name\":\""+title+"\", \"intervalsize\":\""+str(interval)+"\"}';\n")
+  #info.write("infostr ='{ \"name\":\""+title+"\", \"intervalsize\":\""+str(interval)+"\", \"num_intervals\":\""+str(num_intervals)+"\",\"use_mcpat\":\""+str(use_mcpat)+"}';\n")
+  info.write("infostr = '"+json.dumps(dict(name=title,intervalsize=interval,num_intervals=num_intervals,use_mcpat=use_mcpat))+"';\n")
   info.close()
 
 # Write used lables in the info.txt file
@@ -423,6 +431,10 @@ def writeIPCvaluestoJSON(outputdir, verbose = False):
   ipcjsonfile = open(os.path.join(outputdir,'levels','level2','data',title+'-ipc.json'), "w")
   ipcjsonfile.write(json.dumps(ipcvalues, indent=4))
   ipcjsonfile.close()
+  ipcjsonfile = open(os.path.join(outputdir,'levels','level2','data',title+'-ipcfic.json'), "w")
+  ipcjsonfile.write(json.dumps(ipcvaluesfic, indent=4))
+  ipcjsonfile.close()
+
 
 #return the total number of instructions processed in an interval
 def getInstructionCount(intervalstr):
@@ -446,7 +458,7 @@ def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
   nrofintervals = 0
   while currentintervalnr < num_intervals:
     if verbose:
-      print "Put fixed time interval", currentintervalnr, "/", num_intervals, "in a fixed instruction count interval\r",
+      print "Put fixed time interval", currentintervalnr+1, "/", num_intervals, "in a fixed instruction count interval\r",
     instructioncount+=getInstructionCount(currentintervalstr)
     nrofintervals+=1
     if instructioncount > fixedinstructioncount:
@@ -485,8 +497,7 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
   writetojson(outputdir,"cpipercentagesimplified","cpisimplified",1,verbose=verbose)
 
   writeinfo(outputdir,verbose)
-  writemarkers(outputdir,"1",verbose)
-  writemarkers(outputdir,"2",verbose)
+  writemarkers(outputdir,verbose)
 
   writelabels(outputdir,"cpipercentage","cpi")
   writelabels(outputdir,"cpipercentagesimplified","cpisimplified")
