@@ -116,21 +116,16 @@
                 vTextureCoord = aTextureCoord; 
             }
   </script>
+    <script type='text/javascript'>
+      $('document').ready(function() {
+        $('.fadeOutSlow').delay(10000).fadeOut("slow");
+      } );
+    </script>
 </head>
 
 <body style="background:#ffffff">
-  <div>
-    <a href="../../visualization.html">Visualization home</a><br>
-    <script type="text/javascript">
-    document.write("<span style=\"color: #000000\">Number of intervals: "+numberofintervals + 
-		"<br>Number of cores: "+numberofcores+
-		"<br>Interval size: "+intervalsize +" fs"+
-		"<br>Interval size: "+intervalsize/1000000000+" µs"+
-		"<br>Total time: "+numberofintervals*intervalsize/1000000000+" µs<\/span><br>");
-    </script> <span style="color: #000000">Drag to rotate.</span><br />
-    <br />
-    <span style="color: #000000">Press the shift key and drag the mouse to scale the
-    surface plot.</span>
+  <div style="height:20px">
+    <span class="fadeOutSlow" style="font-size: 16px; color: gray; position: absolute; left:0px; top:0px; background-color: #ffffff; color: #000000">Click and drag to rotate. Hold the shift key and drag to scale.</span>
   </div>
 
   <div>
