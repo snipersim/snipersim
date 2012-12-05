@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
   mkdir_p(outputdir)
 
-  level2.createJSONData(interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
+  level2.createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
   level3.createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbose = verbose)
 
   if verbose:

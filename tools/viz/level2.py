@@ -88,7 +88,7 @@ def initialize():
 #collect CPI stack data with fixed instruction counts
 def collectCPIStackDataFIC(verbose=False):
   totalinstructioncount = 0
-  groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/100, verbose)
+  groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/num_intervals, verbose)
   usedcomponents = dict.fromkeys(cpiitems.names,0)
   usedsimplecomponents = []
   ipcvaluesfic[0]["data"]=[dict(x=0,y=0) for x in xrange(len(groupedintervals))]
@@ -99,10 +99,11 @@ def collectCPIStackDataFIC(verbose=False):
   for i in range (1, len(groupedintervals)):
     if verbose:
       print 'Collect CPI stack info for intervals with a fixed instruction count (interval '+str(i+1)+' / '+str(len(groupedintervals))+')'+"\r",
+    cyclecountstart = groupedintervals[i-1]["cyclecount"]
     instructioncount = groupedintervals[i]["instructioncount"]
-    cycleintervalstart = groupedintervals[i-1]["intervalnr"]
-    cycleintervalstop = groupedintervals[i]["intervalnr"]
-    currentinterval = ("periodic-"+str(cycleintervalstart*interval)+":periodic-"+str(cycleintervalstop*interval)).split(":")
+    nameintervalstart = groupedintervals[i-1]["intervalname"]
+    nameintervalstop = groupedintervals[i]["intervalname"]
+    currentinterval = (nameintervalstart, nameintervalstop)
 
     num_exceptions = 0
     simple=False
@@ -124,7 +125,7 @@ def collectCPIStackDataFIC(verbose=False):
         ipc = 1./totalcpi
       else:
         ipc = 0
-      ipcvaluesfic[0]["data"][i]=dict(x=cycleintervalstart*interval/1e9, y=ipc)
+      ipcvaluesfic[0]["data"][i]=dict(x=cyclecountstart/1e9, y=ipc)
 
 
       for key in results.labels:
@@ -133,10 +134,10 @@ def collectCPIStackDataFIC(verbose=False):
         if cpi > 0.0:
           usedcomponents[key]=1
         cpificcomponents[key][i][0]=cpi
-        cpificcomponents[key][i][1]=cycleintervalstart*interval/1e9 #now in microseconds
+        cpificcomponents[key][i][1]=cyclecountstart/1e9 #now in microseconds
         simplecomponent = cpiitems.names_to_contributions[key]
         simplifiedcpificcomponents[simplecomponent][i][0]+=cpi
-        simplifiedcpificcomponents[simplecomponent][i][1]=cycleintervalstart*interval/1e9 #now in microseconds
+        simplifiedcpificcomponents[simplecomponent][i][1]=cyclecountstart/1e9 #now in microseconds
         if not simplecomponent in usedsimplecomponents:
           usedsimplecomponents.append(simplecomponent)
 
@@ -315,7 +316,7 @@ def writetojson(outputdir, componentname, componenttype, componentindex, verbose
     jsonoutput[index]["data"]=[0 for x in xrange(num_intervals)]
     for i in range(0,num_intervals):
       if componenttype != "mcpat":
-        xvalue = str(components[key][i][0]*interval/1e9) #x-axis now in microseconds 
+        xvalue = str(components[key][i][0]*interval/1e9) #x-axis now in microseconds
       else:
         xvalue = str(i*interval/1e9)
       yvalue = str(components[key][i][componentindex])
@@ -454,35 +455,45 @@ def getTotalInstructionCount():
 def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
   instructioncount = 0
   currentintervalnr=0
-  currentintervalstr = ("periodic-"+str(currentintervalnr*interval)+":periodic-"+str((currentintervalnr+1)*interval)).split(":")
+  if interval > 10 * native_interval:
+    # When there are way more intervals than we'll use, don't look at all of them
+    ratio = max(1, interval / native_interval / 10)
+    interval_to_use = native_interval * ratio
+    num_intervals_to_use = nativenum_intervals / ratio
+  else:
+    interval_to_use = native_interval
+    num_intervals_to_use = nativenum_intervals
+  currentintervalstr = ("periodic-"+str(currentintervalnr*interval_to_use), "periodic-"+str((currentintervalnr+1)*interval_to_use))
   intervalsequences = []
-  intervalsequences.append(dict(instructioncount=0, intervalnr=0))
+  intervalsequences.append(dict(cyclecount=0, instructioncount=0, intervalname=currentintervalstr[0]))
   nrofintervals = 0
-  while currentintervalnr < num_intervals:
+  while currentintervalnr < num_intervals_to_use:
     if verbose:
-      print "Put fixed time interval", currentintervalnr+1, "/", num_intervals, "in a fixed instruction count interval\r",
+      print "Put fixed time interval", currentintervalnr+1, "/", num_intervals_to_use, "in a fixed instruction count interval\r",
     instructioncount+=getInstructionCount(currentintervalstr)
     nrofintervals+=1
     if instructioncount > fixedinstructioncount:
-      intervalsequences.append(dict(instructioncount=instructioncount, intervalnr=currentintervalnr))
-      if nrofintervals < 4 :
-        print "WARNING: less than 4 time-intervals in 1 instruction-interval"
+      intervalsequences.append(dict(cyclecount=currentintervalnr*interval_to_use, instructioncount=instructioncount, intervalname=currentintervalstr[1]))
+      #if nrofintervals < 4 :
+      #  print "WARNING: less than 4 time-intervals in 1 instruction-interval"
       instructioncount=0
       nrofintervals=0
     currentintervalnr+=1
-    currentintervalstr = ("periodic-"+str(currentintervalnr*interval)+":periodic-"+str((currentintervalnr+1)*interval)).split(":")
+    currentintervalstr = ("periodic-"+str(currentintervalnr*interval_to_use), "periodic-"+str((currentintervalnr+1)*interval_to_use))
 
   if verbose:
     print
   return intervalsequences
 
 
-def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, mcpat, verbose = False):
+def createJSONData(native_interval_, nativenum_intervals_, interval_, num_intervals_, resultsdir_, outputdir_, title_, mcpat, verbose = False):
 
   if verbose:
     print 'Generate JSON data for Level 2'
 
-  global interval, num_intervals, resultsdir, outputdir, title, use_mcpat, stats, config
+  global native_interval, nativenum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, stats, config
+  native_interval = native_interval_
+  nativenum_intervals = nativenum_intervals_
   interval = interval_
   num_intervals = num_intervals_
   resultsdir = resultsdir_
@@ -596,7 +607,7 @@ if __name__ == '__main__':
     num_intervals = defaultnum_intervals
 
 
-  createJSONData(interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
+  createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
 
   # Now copy all static files as well
   if outputdir != HOME:
