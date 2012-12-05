@@ -140,12 +140,9 @@
   <div id="content">
     <form id="side_panel">
       <section>
-        <div id="ipclegend2" class="ipclegend"></div>
-      </section>
-      <section>
-        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
         <h6>Smoothing</h6>
         <div id="ipcsmoother2"></div>
+        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
       </section>
     </form>
   <div id="chart_container">
@@ -164,12 +161,9 @@
   <div id="content">
     <form id="side_panel">
       <section>
-        <div id="ipclegend" class="ipclegend"></div>
-      </section>
-      <section>
-        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
         <h6>Smoothing</h6>
         <div id="ipcsmoother"></div>
+        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
       </section>
     </form>
   <div id="chart_container">
@@ -196,10 +190,6 @@ var graph = new Rickshaw.Graph.Ajax( {
 	onData: function(d) { return d },
 	onComplete: function(transport) {
 		var graph = transport.graph;
-		var legend = new Rickshaw.Graph.Legend( {
-			graph: graph,
-			element: document.getElementById('ipclegend')
-		} );
 		var slider = new Rickshaw.Graph.RangeSlider( {
 			graph: graph,
 			element: $('#ipcslider')
@@ -215,22 +205,9 @@ var graph = new Rickshaw.Graph.Ajax( {
 					return content;
 				},
 			} );
-		var order = new Rickshaw.Graph.Behavior.Series.Order( {
-			graph: graph,
-			legend: legend
-		} );
 		var controls = new RenderControls( {
 			element: document.querySelector('form'),
 			graph: graph
-		} );
-
-		var shelving = new Rickshaw.Graph.Behavior.Series.Toggle( {
-			graph: graph,
-			legend: legend
-		} );
-		var highlighter = new Rickshaw.Graph.Behavior.Series.Highlight( {
-			graph: graph,
-			legend: legend
 		} );
 
 		var smoother = new Rickshaw.Graph.Smoother( {
@@ -298,10 +275,6 @@ var graph = new Rickshaw.Graph.Ajax( {
 	onData: function(d) { return d },
 	onComplete: function(transport) {
 		var graph = transport.graph;
-		var legend = new Rickshaw.Graph.Legend( {
-			graph: graph,
-			element: document.getElementById('ipclegend2')
-		} );
 		var slider = new Rickshaw.Graph.RangeSlider( {
 			graph: graph,
 			element: $('#ipcslider2')
@@ -317,22 +290,9 @@ var graph = new Rickshaw.Graph.Ajax( {
 					return content;
 				},
 			} );
-		var order = new Rickshaw.Graph.Behavior.Series.Order( {
-			graph: graph,
-			legend: legend
-		} );
 		var controls = new RenderControls( {
 			element: document.querySelector('form'),
 			graph: graph
-		} );
-
-		var shelving = new Rickshaw.Graph.Behavior.Series.Toggle( {
-			graph: graph,
-			legend: legend
-		} );
-		var highlighter = new Rickshaw.Graph.Behavior.Series.Highlight( {
-			graph: graph,
-			legend: legend
 		} );
 
 		var smoother = new Rickshaw.Graph.Smoother( {
