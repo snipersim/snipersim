@@ -2,11 +2,11 @@ import collections, sniper_lib, sniper_config
 
 class CpiData:
 
-  def __init__(self, jobid = '', resultsdir = '', data = None, partial = None):
+  def __init__(self, jobid = '', resultsdir = '', config = None, stats = None, data = None, partial = None):
     if data:
       data_raw = data
     else:
-      data_raw = sniper_lib.get_results(jobid, resultsdir, partial = partial)
+      data_raw = sniper_lib.get_results(jobid = jobid, resultsdir = resultsdir, config = config, stats = stats, partial = partial)
     self.stats = data_raw['results']
     self.config = data_raw['config']
     self.parse()

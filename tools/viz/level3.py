@@ -2,7 +2,7 @@
 import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
-import sniper_lib, sniper_stats, cpistack, json
+import sniper_lib, sniper_config, sniper_stats, cpistack, json
 
 
 # From http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
@@ -18,8 +18,11 @@ def mkdir_p(path):
 def createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbose = False):
   if verbose:
     print 'Generate JSON data for Level 3'
-  res = sniper_lib.get_results(0,resultsdir,None)
-  ncores = int(res['config']['general/total_cores'])
+
+  stats = sniper_stats.SniperStats(resultsdir)
+  config = sniper_config.parse_config(file(os.path.join(resultsdir, 'sim.cfg')).read())
+
+  ncores = int(config['general/total_cores'])
   if verbose:
     print ncores, "cores detected"
 
@@ -31,7 +34,8 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbos
 
     try:
       results = cpistack.cpistack_compute(
-        resultsdir = resultsdir,
+        config = config,
+        stats = stats,
         partial = ["periodic-"+str(i*interval),"periodic-"+str((i+1)*interval)],
         use_simple = False,
         use_simple_mem = True,

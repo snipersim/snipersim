@@ -11,13 +11,13 @@ except AttributeError, e:
 
 
 # New-style function returning CPI stack results
-def cpistack_compute(jobid = 0, resultsdir = '.', data = None, partial = None,
+def cpistack_compute(jobid = 0, resultsdir = None, config = None, stats = None, data = None, partial = None,
                      cores_list = None, core_mincomp = 0., aggregate = False,
                      items = None, groups = None, use_simple = False, use_simple_mem = True,
                      no_collapse = False):
 
   # Get the data
-  cpidata = cpistack_data.CpiData(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial)
+  cpidata = cpistack_data.CpiData(jobid = jobid, resultsdir = resultsdir, config = config, stats = stats, data = data, partial = partial)
   cpidata.filter(cores_list = cores_list, core_mincomp = core_mincomp)
   if aggregate:
     cpidata.aggregate()
@@ -69,7 +69,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
     # Not all functionality has been forward-ported, preferably use cpistack_compute instead
     raise NotImplementedError
 
-  results = cpistack_compute(jobid = jobid, resultsdir = resultsdir, partial = partial, aggregate = aggregate,
+  results = cpistack_compute(jobid = jobid, resultsdir = resultsdir, data = data, partial = partial, aggregate = aggregate,
                              cores_list = threads, core_mincomp = threads_mincomp,
                              groups = use_simple and cpistack_items.build_grouplist(legacy = True) or None,
                              use_simple = use_simple, use_simple_mem = use_simple_mem, no_collapse = no_collapse)

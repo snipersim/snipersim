@@ -18,19 +18,22 @@ except ImportError:
 class SniperResultsException(Exception): pass
 
 
-def get_results(jobid = None, resultsdir = None, partial = None, force = False, metrics = None):
+def get_results(jobid = None, resultsdir = None, config = None, stats = None, partial = None, force = False, metrics = None):
   if jobid:
     if ic_invalid:
       raise RuntimeError('Cannot fetch results from server, make sure BENCHMARKS_ROOT points to a valid copy of benchmarks+iqlib')
     results = ic.graphite_results(jobid, partial)
     simcfg = ic.job_output(jobid, 'sim.cfg', force)
+    config = sniper_config.parse_config(simcfg)
   elif resultsdir:
     results = parse_results_from_dir(resultsdir, partial = partial, metrics = metrics)
     simcfg = file(os.path.join(resultsdir, 'sim.cfg')).read()
+    config = sniper_config.parse_config(simcfg)
+  elif stats and config:
+    results = stats.parse_stats(partial or ('roi-begin', 'roi-end'), int(config['general/total_cores']), metrics = metrics)
   else:
     raise ValueError('Need either jobid or resultsdir')
 
-  config = sniper_config.parse_config(simcfg)
   return {
     'config': config,
     'results': stats_process(config, results),

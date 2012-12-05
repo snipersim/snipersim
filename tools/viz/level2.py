@@ -2,7 +2,7 @@
 import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend( [os.path.abspath(os.path.join(HOME, '..'))] )
-import sniper_lib, sniper_stats, cpistack, cpistack_items, mcpat, json
+import sniper_lib, sniper_config, sniper_stats, cpistack, cpistack_items, mcpat, json
 
 
 # From http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
@@ -109,7 +109,8 @@ def collectCPIStackDataFIC(verbose=False):
 
     try:
       results = cpistack.cpistack_compute(
-        resultsdir = resultsdir,
+        config = config,
+        stats = stats,
         partial = currentinterval,
         use_simple = simple,
         use_simple_mem = True,
@@ -194,7 +195,8 @@ def collectCPIStackDataFCC(verbose = False):
 
     try:
       results = cpistack.cpistack_compute(
-        resultsdir = resultsdir,
+        config = config,
+        stats = stats,
         partial = currentinterval,
         use_simple = False,
         use_simple_mem = True,
@@ -438,12 +440,12 @@ def writeIPCvaluestoJSON(outputdir, verbose = False):
 
 #return the total number of instructions processed in an interval
 def getInstructionCount(intervalstr):
-  results = sniper_lib.get_results(0, resultsdir, partial = intervalstr, metrics = ("performance_model.instruction_count",))
+  results = sniper_lib.get_results(config = config, stats = stats, partial = intervalstr, metrics = ("performance_model.instruction_count",))
   instructioncount = sum(results["results"]["performance_model.instruction_count"])
   return instructioncount
 
 def getTotalInstructionCount():
-  results = sniper_lib.get_results(0, resultsdir, metrics = ("performance_model.instruction_count",))
+  results = sniper_lib.get_results(config = config, stats = stats, metrics = ("performance_model.instruction_count",))
   instructioncount = sum(results["results"]["performance_model.instruction_count"])
   return instructioncount
 
@@ -480,13 +482,15 @@ def createJSONData(interval_, num_intervals_, resultsdir_, outputdir_, title_, m
   if verbose:
     print 'Generate JSON data for Level 2'
 
-  global interval, num_intervals, resultsdir, outputdir, title, use_mcpat
+  global interval, num_intervals, resultsdir, outputdir, title, use_mcpat, stats, config
   interval = interval_
   num_intervals = num_intervals_
   resultsdir = resultsdir_
   outputdir = outputdir_
   title = title_
   use_mcpat = mcpat
+  stats = sniper_stats.SniperStats(resultsdir_)
+  config = sniper_config.parse_config(file(os.path.join(resultsdir_, 'sim.cfg')).read())
 
   initialize()
 
