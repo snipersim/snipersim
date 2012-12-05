@@ -13,16 +13,15 @@ class SniperStatsBase:
       name = '%s.%s' % self.names[metricid]
       id_min = min(min(v2.get(metricid, {}).keys() or [0]), 0)
       id_max = max(max(v2.get(metricid, {}).keys() or [0])+1, ncores)
-      for idx in range(id_min, id_max):
-        val1 = v1.get(metricid, {}).get(idx, 0)
-        val2 = v2.get(metricid, {}).get(idx, 0)
-        results.append((name, idx, val2 - val1))
-        if name == 'performance_model.elapsed_time' and idx < ncores:
-          results.append(('performance_model.elapsed_time_begin', idx, val1))
-          results.append(('performance_model.elapsed_time_end', idx, val2))
-        elif name == 'barrier.global_time':
-          results.append(('barrier.global_time_begin', idx, val1))
-          results.append(('barrier.global_time_end', idx, val2))
+      vals1 = v1.get(metricid, {})
+      vals2 = v2.get(metricid, {})
+      results += [ (name, idx, vals2.get(idx, 0) - vals1.get(idx, 0)) for idx in range(id_min, id_max) ]
+      if name == 'performance_model.elapsed_time' and idx < ncores:
+        results += [ ('performance_model.elapsed_time_begin', idx, vals1.get(idx, 0)) for idx in range(ncores) ]
+        results += [ ('performance_model.elapsed_time_end', idx, vals2.get(idx, 0)) for idx in range(ncores) ]
+      elif name == 'barrier.global_time':
+        results += [ ('barrier.global_time_begin', idx, vals1.get(idx, 0)) for idx in range(ncores) ]
+        results += [ ('barrier.global_time_end', idx, vals2.get(idx, 0)) for idx in range(ncores) ]
     return results
 
 
