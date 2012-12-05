@@ -5,7 +5,11 @@ class SniperStatsBase:
     v1 = self.read_snapshot(k1, metrics = metrics)
     v2 = self.read_snapshot(k2, metrics = metrics)
     results = []
-    for metricid in self.names.keys():
+    if metrics:
+      keys_to_process = v2.keys()
+    else:
+      keys_to_process = self.names.keys()
+    for metricid in keys_to_process:
       name = '%s.%s' % self.names[metricid]
       id_min = min(min(v2.get(metricid, {}).keys() or [0]), 0)
       id_max = max(max(v2.get(metricid, {}).keys() or [0])+1, ncores)
