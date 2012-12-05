@@ -57,6 +57,30 @@ def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', 
     ylabel = metric == 'cpi' and 'Cycles per instruction' or (metric == 'abstime' and 'Time (seconds)' or 'Fraction of time'))
 
 
+# Legacy cpistack.cpistack() function, does most of the old one as not to break most of the scripts in papers/
+def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfile = 'cpi-stack', outputdir = '.',
+             use_cpi = False, use_abstime = False, use_roi = True,
+             use_simple = False, use_simple_mem = True, no_collapse = False,
+             gen_text_stack = True, gen_plot_stack = True, gen_csv_stack = False, csv_print_header = False,
+             job_name = '', title = '', threads = None, threads_mincomp = .5, return_data = False, aggregate = False,
+             size = (640, 480)):
+
+  if gen_csv_stack or csv_print_header or return_data:
+    # Not all functionality has been forward-ported, preferably use cpistack_compute instead
+    raise NotImplementedError
+
+  results = cpistack_compute(jobid = jobid, resultsdir = resultsdir, partial = partial, aggregate = aggregate,
+                             cores_list = threads, core_mincomp = threads_mincomp,
+                             groups = use_simple and cpistack_items.build_grouplist(legacy = True) or None,
+                             use_simple = use_simple, use_simple_mem = use_simple_mem, no_collapse = no_collapse)
+
+  if gen_text_stack:
+    output_cpistack_text(results)
+  if gen_plot_stack:
+    metric = 'cpi' if use_cpi else ('abstime' if use_abstime else 'time')
+    output_cpistack_gnuplot(results = results, metric = metric, outputfile = os.path.join(outputdir, outputfile), title = title, size = size)
+
+
 if __name__ == '__main__':
   def usage():
     print 'Usage:', sys.argv[0], '[-h|--help (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--title=""] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]'
