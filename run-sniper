@@ -11,7 +11,7 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -27,6 +27,7 @@ configfiles = []
 sniperoptions = []
 roi_only = False
 roi_script = False
+use_viz = False
 use_perf = False
 use_gdb = False
 gdb_wait = False
@@ -114,7 +115,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "mpi", "mpi-ranks=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "mpi", "mpi-ranks=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -145,6 +146,8 @@ for o, a in opts:
     roi_script = True
   if o == '-s':
     scripts.append(a)
+  if o == '--viz':
+    use_viz = True
   if o == '--perf':
     use_perf = True
   if o == '--gdb':
@@ -239,6 +242,9 @@ if roi_only:
   sniperoptions.append('-g --general/magic=true')
 if roi_script:
   sniperoptions.append('-g --general/roi_script=true')
+
+if use_viz:
+  scripts.append('periodic-stats:1000:2000')
 
 if scripts:
   sniperoptions.append('-g --hooks/numscripts=%u' % len(scripts))
@@ -590,6 +596,10 @@ if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
 if run_power:
   print '[SNIPER] Running McPAT'
   os.system('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals())
+
+if use_viz:
+  print '[SNIPER] Generating visualization to viz/'
+  os.system('%(sim_root)s/tools/viz/viz.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
 stats = dict(
   host = platform.node(),
