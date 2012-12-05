@@ -150,7 +150,10 @@ JSSurfacePlot = function(x, y, width, height, colourGradient, targetElement,
     var mouseDown = false;
     var lastMouseX = null;
     var lastMouseY = null;
+    var mouseDownMouseX = null;
+    var mouseDownMouseY = null;
     var rotationMatrix = mat4.create();
+    var mouseDownRotationMatrix = mat4.create();
 	var canvas_support_checked = false;
 	var canvas_supported = true;
 	
@@ -898,22 +901,31 @@ JSSurfacePlot = function(x, y, width, height, colourGradient, targetElement,
         var newX = event.clientX;
         var newY = event.clientY;
 
-        var deltaX = newX - lastMouseX;
-        var deltaY = newY - lastMouseY;
+        if (newX < 0) {
+          newX = lastMouseX;
+        }
+        if (newY < 0) {
+          newY = lastMouseY;
+        }
+
+        var deltaX = newX - mouseDownMouseX;
+        var deltaY = newY - mouseDownMouseY;
         var newRotationMatrix = mat4.create();
         mat4.identity(newRotationMatrix);
+        var replacementRotationMatrix = mat4.create();
+        mat4.set(mouseDownRotationMatrix, replacementRotationMatrix);
         
         if (shiftPressed) // scale
         {
-            var s = deltaY < 0 ? 1.05 : 0.95;
+            var s = (-deltaY/100)+1.0;
             mat4.scale(newRotationMatrix, [s, s, s]);
-            mat4.multiply(newRotationMatrix, rotationMatrix, rotationMatrix);
+            mat4.multiply(newRotationMatrix, replacementRotationMatrix, rotationMatrix);
         }
         else // rotate
         {
             mat4.rotate(newRotationMatrix, degToRad(deltaX / 2), [0, 1, 0]);
             mat4.rotate(newRotationMatrix, degToRad(deltaY / 2), [1, 0, 0]);
-            mat4.multiply(newRotationMatrix, rotationMatrix, rotationMatrix);
+            mat4.multiply(newRotationMatrix, replacementRotationMatrix, rotationMatrix);
 			
 			if (this.otherPlots) {
 				var numPlots = this.otherPlots.length;
@@ -925,6 +937,7 @@ JSSurfacePlot = function(x, y, width, height, colourGradient, targetElement,
 
         lastMouseX = newX;
         lastMouseY = newY;
+
     };
     
     this.initGL = function(canvas)
@@ -953,6 +966,12 @@ JSSurfacePlot = function(x, y, width, height, colourGradient, targetElement,
 		        mouseDown = true;
 		        lastMouseX = event.clientX;
 		        lastMouseY = event.clientY;
+
+		        mouseDownMouseX = event.clientX;
+		        mouseDownMouseY = event.clientY;
+
+		        mouseDownRotationMatrix = mat4.create();
+		        mat4.set(rotationMatrix, mouseDownRotationMatrix);
 		        
 	        	document.onmouseup = self.handleMouseUp;
 	        	document.onmousemove = function(event){ self.handleMouseMove(event, self) };//self.handleMouseMove;
