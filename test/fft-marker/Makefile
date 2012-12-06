@@ -15,7 +15,7 @@ fft: fft.c Makefile
 	$(CC) -o fft fft.c -lm -pthread $(SNIPER_LDFLAGS) $(SNIPER_CFLAGS)
 
 run: fft
-	../../run-sniper -n 2 -s markers --roi -- ./fft -p 2 -m 6
+	../../run-sniper -n 2 -s markers:verbose:markers --roi -- ./fft -p 2 -m 6
 
 run-iter2: fft
 	../../run-sniper -n 1 -s markers -s roi-iter::2:3 --roi-script --no-cache-warming -- ./fft -p 1 -m 6

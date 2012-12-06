@@ -183,6 +183,30 @@ registerStats(PyObject *self, PyObject *args)
    Py_RETURN_NONE;
 }
 
+
+//////////
+// marker(): record a marker
+//////////
+
+static PyObject *
+writeMarker(PyObject *self, PyObject *args)
+{
+   UInt64 core_id = INVALID_CORE_ID, thread_id = INVALID_THREAD_ID, arg0 = 0, arg1 = 0;
+   const char *description = NULL;
+
+   if (!PyArg_ParseTuple(args, "llll|s", &core_id, &thread_id, &arg0, &arg1, &description))
+      return NULL;
+
+   Sim()->getStatsManager()->logMarker(Sim()->getClockSkewMinimizationServer()->getGlobalTime(), core_id, thread_id, arg0, arg1, description);
+
+   Py_RETURN_NONE;
+}
+
+
+//////////
+// time(): Return current global time in femtoseconds
+//////////
+
 static PyObject *
 getTime(PyObject *self, PyObject *args)
 {
@@ -200,6 +224,7 @@ static PyMethodDef PyStatsMethods[] = {
    {"getter", getStatsGetter, METH_VARARGS, "Return object to retrieve statistics value."},
    {"write", writeStats, METH_VARARGS, "Write statistics (<prefix>, [<filename>])."},
    {"register", registerStats, METH_VARARGS, "Register callback that defines statistics value for (objectName, index, metricName)."},
+   {"marker", writeMarker, METH_VARARGS, "Record a marker (coreid, threadid, arg0, arg1, [description])."},
    {"time", getTime, METH_VARARGS, "Retrieve the current global time in femtoseconds (approximate, last barrier)."},
    {NULL, NULL, 0, NULL} /* Sentinel */
 };

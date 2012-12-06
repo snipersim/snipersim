@@ -3,13 +3,16 @@
 import sim
 class Marker:
   def setup(self, args):
-    args = (args or '').split(',')
-    if 'stats' in args:
-      self.write_stats = True
-    else:
-      self.write_stats = True
+    args = (args or '').split(':')
+    self.write_terminal = 'verbose' in args
+    self.write_markers = 'markers' in args
+    self.write_stats = 'stats' in args
   def hook_magic_marker(self, thread, core, a, b):
-    print '[SCRIPT] Magic marker from thread %d: a = %d, b = %d' % (thread, a, b)
+    if self.write_terminal:
+      print '[SCRIPT] Magic marker from thread %d: a = %d, b = %d' % (thread, a, b)
+
+    if self.write_markers:
+      sim.stats.marker(thread, core, a, b)
 
     # Pass in 'stats' as option to write out statistics at each magic marker
     # $ run-sniper -s markers:stats

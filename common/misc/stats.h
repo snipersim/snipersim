@@ -64,6 +64,7 @@ class StatsManager
       void registerMetric(StatsMetricBase *metric);
       StatsMetricBase *getMetricObject(String objectName, UInt32 index, String metricName);
       void logTopology(String component, core_id_t core_id, core_id_t master_id);
+      void logMarker(SubsecondTime time, core_id_t core_id, thread_id_t thread_id, UInt64 value0, UInt64 value1, const char * description);
 
    private:
       UInt64 m_keyid;
