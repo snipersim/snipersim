@@ -1,4 +1,4 @@
-# A copy of this file is distributed with the binaries of Graphite and Benchmarks
+# A copy of this file is distributed with the binaries of Sniper and Benchmarks
 
 import sys, os, re, sniper_stats, sniper_config
 try:
@@ -8,6 +8,11 @@ except ImportError:
 
 
 try:
+  try:
+    import env_setup
+    sys.path.append(os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler'))
+  except EnvironmentError, e:
+    pass
   import intelqueue, iqclient, packdir, app_constraints
   ic = iqclient.IntelClient()
   ic_invalid = False
