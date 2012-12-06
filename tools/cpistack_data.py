@@ -29,11 +29,16 @@ class CpiData:
       # Most accurate: ask the barrier
       time0_begin = self.stats['barrier.global_time_begin'][0]
       time0_end = self.stats['barrier.global_time_end'][0]
-    else:
+      times = [ self.stats['performance_model.elapsed_time_end'][core] - time0_begin for core in range(ncores) ]
+    elif 'performance_model.elapsed_time_end' in self.stats:
       # Guess based on core that has the latest time (future wakeup is less common than sleep on futex)
       time0_begin = max(self.stats['performance_model.elapsed_time_begin'])
       time0_end = max(self.stats['performance_model.elapsed_time_end'])
-    times = [ self.stats['performance_model.elapsed_time_end'][core] - time0_begin for core in range(ncores) ]
+      times = [ self.stats['performance_model.elapsed_time_end'][core] - time0_begin for core in range(ncores) ]
+    else:
+      # Compute the times (femtoseconds) manually using pre-subsecond-time statistics
+      time0_begin = 0
+      time0_end = [ long((1./float(self.config['perf_model/core/frequency']))*1e6 * self.stats['performance_model.cycle_count'][core]) for core in range(ncores) ]
 
     if self.stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:
       fastforward_scale = times[0] / (times[0] - self.stats['fastforward_performance_model.fastforwarded_time'][0])
@@ -62,7 +67,7 @@ class CpiData:
         # For simulations with a fixed version of iGraphite, the changes of SyncMemAccess being identical to
         #   SyncPthreadBarrier, down to the last femtosecond, are slim, so this code shouldn't trigger
         data[core]['SyncMemAccess'] = 0
-      if data[core].get('StartTime') == None:
+      if data[core].get('StartTime') == None and 'performance_model.idle_elapsed_time' in self.stats:
         # Fix a bug whereby the start time was not being reported in the CPI stacks correctly
         data[core]['StartTime'] = cycles_scale * self.stats['performance_model.idle_elapsed_time'][core] - \
                                   data[core]['SyncFutex']       - data[core]['SyncPthreadMutex']    - \
@@ -110,7 +115,7 @@ class CpiData:
               data[core]['Base'] -= values[core]
               data[core]['Issue'] = data[core].get('Issue', 0) + values[core]
       # Fix up large cpiSync fractions that started before but ended inside our interval
-      time0_me = self.stats['performance_model.elapsed_time_begin'][core]
+      time0_me = 'performance_model.elapsed_time_begin' in self.stats and self.stats['performance_model.elapsed_time_begin'][core] or 0
       if time0_me < time0_begin:
         time0_extra = time0_begin - time0_me
         #    Number of cycles that weren't accounted for when starting this interval
