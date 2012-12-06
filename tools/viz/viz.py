@@ -2,7 +2,7 @@
 import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
-import sniper_lib, sniper_stats, cpistack, level2, level3
+import sniper_lib, sniper_stats, cpistack, level1, level2, level3
 
 
 # From http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
@@ -105,6 +105,7 @@ if __name__ == '__main__':
 
   mkdir_p(outputdir)
 
+  level1.createJSONData(resultsdir, outputdir, verbose = verbose)
   level2.createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
   level3.createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbose = verbose)
 
