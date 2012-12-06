@@ -40,9 +40,20 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          return setPerformance(false);
       case SIM_CMD_MHZ_SET:
          return setFrequency(arg0 == UINT64_MAX ? core_id : arg0, arg1);
+      case SIM_CMD_NAMED_MARKER:
+      {
+         char str[256];
+         Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
+         core->accessMemory(Core::NONE, Core::READ, arg1, str, 256, Core::MEM_MODELED_NONE);
+         str[255] = '\0';
+
+         MagicMarkerType args = { thread_id: thread_id, core_id: core_id, arg0: arg0, arg1: 0, str: str };
+         Sim()->getHooksManager()->callHooks(HookType::HOOK_MAGIC_MARKER, (UInt64)&args);
+         return 0;
+      }
       case SIM_CMD_MARKER:
       {
-         MagicMarkerType args = { thread_id: thread_id, core_id: core_id, arg0: arg0, arg1: arg1 };
+         MagicMarkerType args = { thread_id: thread_id, core_id: core_id, arg0: arg0, arg1: arg1, str: NULL };
          Sim()->getHooksManager()->callHooks(HookType::HOOK_MAGIC_MARKER, (UInt64)&args);
          return 0;
       }

@@ -366,7 +366,7 @@ def writemarkers(outputdir, verbose = False):
       marker = description
     else:
       marker = 'a = %d, b = %d' % (value0, value1)
-    marker = 'T=%ld µs: %s' % (timestamp / 1e9, marker)
+    marker = 'T=%ld µs: %s' % (timestamp / 1e9, str(marker))
     markersjson["markers"].append(dict(position=position, marker=marker))
 
   if verbose:

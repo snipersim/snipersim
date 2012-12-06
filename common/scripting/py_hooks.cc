@@ -39,7 +39,7 @@ static SInt64 hookCallbackSubsecondTime(UInt64 pFunc, UInt64 argument)
 static SInt64 hookCallbackMagicMarkerType(UInt64 pFunc, UInt64 _argument)
 {
    MagicServer::MagicMarkerType* argument = (MagicServer::MagicMarkerType*)_argument;
-   PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiKK)", argument->thread_id, argument->core_id, argument->arg0, argument->arg1));
+   PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiKKs)", argument->thread_id, argument->core_id, argument->arg0, argument->arg1, argument->str));
    return hookCallbackResult(pResult);
 }
 

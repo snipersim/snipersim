@@ -11,6 +11,7 @@ class MagicServer
          thread_id_t thread_id;
          core_id_t core_id;
          UInt64 arg0, arg1;
+         const char* str;
       };
 
       MagicServer();

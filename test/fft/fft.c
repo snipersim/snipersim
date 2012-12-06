@@ -351,6 +351,7 @@ char *argv;
   InitU2(N,umain2,rootN);
 
   SimRoiStart();
+  SimNamedMarker(4, "begin");
 
   /* fire off P processes */
   for (i=1; i<P; i++) {
@@ -375,6 +376,7 @@ char *argv;
   }
 }
 
+  SimNamedMarker(5, "end");
   SimRoiEnd();
 
   if (doprint) {

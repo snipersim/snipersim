@@ -7,12 +7,16 @@ class Marker:
     self.write_terminal = 'verbose' in args
     self.write_markers = 'markers' in args
     self.write_stats = 'stats' in args
-  def hook_magic_marker(self, thread, core, a, b):
+  def hook_magic_marker(self, thread, core, a, b, s):
     if self.write_terminal:
-      print '[SCRIPT] Magic marker from thread %d: a = %d, b = %d' % (thread, a, b)
+      print '[SCRIPT] Magic marker from thread %d: a = %d,' % (thread, a),
+      if s:
+        print 'str = %s' % s
+      else:
+        print 'b = %d' % b
 
     if self.write_markers:
-      sim.stats.marker(thread, core, a, b)
+      sim.stats.marker(thread, core, a, b, s)
 
     # Pass in 'stats' as option to write out statistics at each magic marker
     # $ run-sniper -s markers:stats

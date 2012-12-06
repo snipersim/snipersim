@@ -21,7 +21,7 @@ class RoiIter:
     self.start_detailed = int(args.get(1, '') or -1)
     self.end_detailed = int(args.get(2, '') or -1)
     self.state = 'init'
-  def hook_magic_marker(self, core, thread, a, b):
+  def hook_magic_marker(self, core, thread, a, b, s):
     if self.state == 'done':
       # Only enable once, even if the benchmark has duplicate SimMarker()s
       return

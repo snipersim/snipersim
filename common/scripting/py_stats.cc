@@ -194,7 +194,7 @@ writeMarker(PyObject *self, PyObject *args)
    UInt64 core_id = INVALID_CORE_ID, thread_id = INVALID_THREAD_ID, arg0 = 0, arg1 = 0;
    const char *description = NULL;
 
-   if (!PyArg_ParseTuple(args, "llll|s", &core_id, &thread_id, &arg0, &arg1, &description))
+   if (!PyArg_ParseTuple(args, "llll|z", &core_id, &thread_id, &arg0, &arg1, &description))
       return NULL;
 
    Sim()->getStatsManager()->logMarker(Sim()->getClockSkewMinimizationServer()->getGlobalTime(), core_id, thread_id, arg0, arg1, description);
