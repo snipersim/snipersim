@@ -103,7 +103,7 @@
 	<h6>Smoothing</h6>
 	<div id="smoother"></div>
     </section>
-    <section> 
+    <section>
       <input type="checkbox" name="interpolation" id="ipcgraphshow" value="step-after">
       <span>Show IPC graph</span>
       <script type="text/javascript">
@@ -124,15 +124,15 @@
 <div id ="ipcchartcontent">
   <div id="content">
     <form id="side_panel">
-    
+
       <section>
         <h6>Smoothing</h6>
         <div id="ipcsmoother"></div>
         <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
       </section>
-    
+
     </form>
-  
+
   <div id="chart_container">
     <div id="ipcchart"></div>
     <div id="xaxislabel">Time (µs)</div>
@@ -157,11 +157,11 @@ var graph = new Rickshaw.Graph.Ajax( {
 			graph: graph,
 			xFormatter: function(x) {
 					return x*intervalsize/1000000000+" µs";
-			},		
-			
+			},
+
 			yFormatter: function(y) {
 					return Math.round(y*100)/100 + " IPC";
-				},		
+				},
 			} );
 		var controls = new RenderControls( {
 			element: document.querySelector('form'),
@@ -191,20 +191,6 @@ var graph = new Rickshaw.Graph.Ajax( {
 		} );
 
 		xAxis.render();
-
-		var markerinfo = jQuery.parseJSON(markerstr);
-		var numberofmarkers = markerinfo.markers.length;
-
-		for (var i=0; i<numberofmarkers; i++)
-		  {
-			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
-					 markerinfo.markers[i].place+" of iteration "+
-					markerinfo.markers[i].iteration + " marker: "+
-					markerinfo.markers[i].marker);
-		  }
-		annotator.update();
-
-
 	},
 	series: [
 		{
@@ -278,15 +264,15 @@ function createGraph(mcpatoption) {
 		ipcgraph.window.xMin = undefined;
 		ipcgraph.window.xMax = undefined;
 		ipcgraph.update();
-		
+
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			formatter: yformatter,
                         xFormatter: function(x) {
 		  		return x*intervalsize/1000000000+" µs";
-				}		
+				}
 		} );
-		
+
 		var order = new Rickshaw.Graph.Behavior.Series.Order( {
 			graph: graph,
 			legend: legend
@@ -295,7 +281,7 @@ function createGraph(mcpatoption) {
 			element: document.querySelector('form'),
 			graph: graph,
 		} );
-		
+
 		var shelving = new Rickshaw.Graph.Behavior.Series.Toggle( {
 			graph: graph,
 			legend: legend
@@ -334,7 +320,7 @@ function createGraph(mcpatoption) {
 			element: document.getElementById('timeline')
 		} );
 
-		
+
 		var numberofmarkers = markerinfo.markers.length;
 
 		for (var i=0; i<numberofmarkers; i++)
@@ -347,8 +333,8 @@ function createGraph(mcpatoption) {
 		annotator.update();
 	},
 	series: labels
-		
-	
+
+
 	} );
 
 }
@@ -358,7 +344,7 @@ function createGraph(mcpatoption) {
 <script type="text/javascript">
 $('#ipcgraphshow').change(function() {
   $('#ipcchartcontent').slideToggle('slow', function() {
-    
+
   });
 });
 

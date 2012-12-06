@@ -121,14 +121,14 @@
     </section>
 	<div id="yaxislabel" class="vertical-text">CPI (%)</div>
   </form>
-  
+
   <div id="chart_container">
-    
+
     <div id="chart"></div>
     <div id="xaxislabel">Time (µs)</div>
     <div id="timeline"></div>
     <div id="slider"></div>
-    
+
   </div>
 </div>
 
@@ -225,20 +225,6 @@ var graph = new Rickshaw.Graph.Ajax( {
 		} );
 
 		xAxis.render();
-
-		var markerinfo = jQuery.parseJSON(markerstr);
-		var numberofmarkers = markerinfo.markers.length;
-
-		for (var i=0; i<numberofmarkers; i++)
-		  {
-			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
-					 markerinfo.markers[i].place+" of iteration "+
-					markerinfo.markers[i].iteration + " marker: "+
-					markerinfo.markers[i].marker);
-		  }
-		annotator.update();
-
-
 	},
 	series: [
 		{
@@ -302,19 +288,6 @@ var graph = new Rickshaw.Graph.Ajax( {
 		} );
 
 		xAxis.render();
-
-		var numberofmarkers = markerinfo.markers.length;
-
-		for (var i=0; i<numberofmarkers; i++)
-		  {
-			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, "Time:"+markerinfo.markers[i].time+"ns    "+
-					 markerinfo.markers[i].place+" of iteration "+
-					markerinfo.markers[i].iteration + " marker: "+
-					markerinfo.markers[i].marker);
-		  }
-		annotator.update();
-
-
 	},
 	series: [
 		{
@@ -340,7 +313,7 @@ function createGraph(detail, normalized) {
       $('#ipcchartcontent').hide();
       $('#ipcchart2content').show();
     }
-    
+
   }
   currentnormalized = normalized;
   $('#chart').empty();
@@ -379,7 +352,7 @@ function createGraph(detail, normalized) {
 	   else {
 		var filename = "data/".concat(info.name.concat("-cpific.json"));
 	   	labels = cpificlabels;
-                
+
 	    }
   }
 
