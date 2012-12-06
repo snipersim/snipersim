@@ -136,13 +136,12 @@
   <div id="chart_container">
     <div id="ipcchart"></div>
     <div id="xaxislabel">Time (µs)</div>
-    <div id="ipctimeline"></div><br />
-    <div id="ipcslider"></div>
     <br /><br />
   </div>
 </div>
 
 <script type="text/javascript">
+var ipcgraph;
 var graph = new Rickshaw.Graph.Ajax( {
 	element: document.getElementById("ipcchart"),
 	width: 800,
@@ -153,11 +152,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 	dataURL: ipcfilename,
 	onData: function(d) { return d },
 	onComplete: function(transport) {
-		var graph = transport.graph;
-		var slider = new Rickshaw.Graph.RangeSlider( {
-			graph: graph,
-			element: $('#ipcslider')
-		} );
+		var graph = ipcgraph = transport.graph;
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			xFormatter: function(x) {
@@ -196,11 +191,6 @@ var graph = new Rickshaw.Graph.Ajax( {
 		} );
 
 		xAxis.render();
-
-		var annotator = new Rickshaw.Graph.Annotate( {
-			graph: graph,
-			element: document.getElementById('ipctimeline')
-		} );
 
 		var markerinfo = jQuery.parseJSON(markerstr);
 		var numberofmarkers = markerinfo.markers.length;
@@ -280,9 +270,14 @@ function createGraph(mcpatoption) {
 			element: document.getElementById('legend')
 		} );
 		var slider = new Rickshaw.Graph.RangeSlider( {
-			graph: graph,
+			graph: [graph, ipcgraph],
 			element: $('#slider')
 		} );
+
+		// Reset the IPC graphs when creating a new graph to sync up the RangeSlider
+		ipcgraph.window.xMin = undefined;
+		ipcgraph.window.xMax = undefined;
+		ipcgraph.update();
 		
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
