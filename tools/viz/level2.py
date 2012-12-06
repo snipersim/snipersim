@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# coding: utf-8
+
 import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend( [os.path.abspath(os.path.join(HOME, '..'))] )
@@ -341,45 +343,38 @@ def calculateMarkerPosition(time):
 def writemarkers(outputdir, verbose = False):
   if verbose:
     print 'Writing markers.txt'
-  #find markers in file
-  markersfilename=""
-  for filename in os.listdir(resultsdir):
-    if filename.endswith(".csv"):
-        markersfilename=filename
-  if(markersfilename == ""):
-    if verbose:
-      print 'No csv file found to construct markersfile.'
-    markersfound=False
-  else:
-    if verbose:
-      print "Markersfile found: "+markersfilename+"."
-    markersfound=True
 
-  if(markersfound):
-    markersfile = open(os.path.join(resultsdir,markersfilename),"r")
-    markers = markersfile.read()
-    markersfile.close()
+  dbfile = os.path.join(resultsdir, 'sim.stats.sqlite3')
+  if not os.path.exists(dbfile):
+    print 'No database found to construct markersfile.'
+    return
+
+  try:
+    import sqlite3
+    db = sqlite3.connect(dbfile)
+  except Exception, e:
+    print e
+    print 'No database found to construct markersfile.'
+    return
 
   markersjson = {}
   markersjson["markers"]=[]
 
-  if(markersfound):
-    index=0
-    for marker in markers.split("\n"):
-      if(marker!="" and index < num_intervals):
-        items=marker.split(",")
-        timestamp=items[0]
-        iteration=items[1]
-        place=items[2]
-        marker=items[3].replace("\"","")
-        position=int(timestamp)/(interval/1000000)
-        index+=1
-        markersjson["markers"].append(dict(position=position,time=timestamp, iteration=iteration, place=place, marker=marker))
+  for timestamp, core, thread, value0, value1, description in db.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall():
+    position = timestamp/interval
+    if description:
+      marker = description
+    else:
+      marker = 'a = %d, b = %d' % (value0, value1)
+    marker = 'T=%ld µs: %s' % (timestamp / 1e9, marker)
+    markersjson["markers"].append(dict(position=position, marker=marker))
+
+  if verbose:
+    print 'Found %d markers, writing markers.txt' % len(markersjson["markers"])
 
   mkdir_p(os.path.join(outputdir,'levels','level2','data'))
   markerstxt = open(os.path.join(outputdir,'levels','level2','data','markers.txt'), "w")
   markerstxt.write("markerstr = '"+json.dumps(markersjson)+"';\n")
-
   markerstxt.close()
 
 # Write general info about the visualization in info.txt
