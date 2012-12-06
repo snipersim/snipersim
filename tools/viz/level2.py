@@ -361,13 +361,12 @@ def writemarkers(outputdir, verbose = False):
   markersjson["markers"]=[]
 
   for timestamp, core, thread, value0, value1, description in db.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall():
-    position = timestamp/interval
     if description:
       marker = description
     else:
       marker = 'a = %d, b = %d' % (value0, value1)
     marker = 'T=%ld µs: %s' % (timestamp / 1e9, str(marker))
-    markersjson["markers"].append(dict(position=position, marker=marker))
+    markersjson["markers"].append(dict(timestamp=timestamp / 1e9, marker=marker))
 
   if verbose:
     print 'Found %d markers, writing markers.txt' % len(markersjson["markers"])

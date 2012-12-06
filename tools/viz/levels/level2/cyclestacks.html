@@ -190,7 +190,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			xFormatter: function(x) {
-					return x*intervalsize/1000000000+" µs";
+					return x+" µs";
 			},
 
 			yFormatter: function(y) {
@@ -253,7 +253,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
 			graph: graph,
 			xFormatter: function(x) {
-					return x*intervalsize/1000000000+" µs";
+					return x+" µs";
 			},
 
 			yFormatter: function(y) {
@@ -388,7 +388,7 @@ function createGraph(detail, normalized) {
 			graph: graph,
 			formatter: yformatter,
                         xFormatter: function(x) {
-		  		return x*intervalsize/1000000000+" µs";
+		  		return x+" µs";
 				},
 		} );
 
@@ -444,7 +444,7 @@ function createGraph(detail, normalized) {
 
 		for (var i=0; i<numberofmarkers; i++)
 		  {
-			annotator.add(markerinfo.markers[i].position*intervalsize/1000000000, markerinfo.markers[i].marker);
+			annotator.add(markerinfo.markers[i].timestamp, markerinfo.markers[i].marker);
 		  }
 		annotator.update();
 	},
