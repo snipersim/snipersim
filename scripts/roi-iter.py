@@ -18,8 +18,8 @@ class RoiIter:
     else:
       args = {}
     self.start_warmup = int(args.get(0, '') or -1)
-    self.start_detailed = int(args.get(1, 2))
-    self.end_detailed = int(args.get(2, 3))
+    self.start_detailed = int(args.get(1, '') or -1)
+    self.end_detailed = int(args.get(2, '') or -1)
     self.state = 'init'
   def hook_magic_marker(self, core, thread, a, b):
     if self.state == 'done':
@@ -29,7 +29,7 @@ class RoiIter:
       print '[SCRIPT] End of iteration %d: ending ROI' % b
       sim.control.set_roi(False)
       self.state = 'done'
-    elif a == 1 and b == self.start_detailed:
+    elif a == 1 and (b == self.start_detailed or (self.start_detailed == -1 and self.state != 'detailed')):
       print '[SCRIPT] Start of iteration %d: beginning ROI' % b
       sim.control.set_roi(True)
       self.state = 'detailed'

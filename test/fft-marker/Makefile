@@ -18,7 +18,7 @@ run: fft
 	../../run-sniper -n 2 -s markers --roi -- ./fft -p 2 -m 6
 
 run-iter2: fft
-	../../run-sniper -n 1 -s markers -s iter2.py --roi-script --no-cache-warming -- ./fft -p 1 -m 6
+	../../run-sniper -n 1 -s markers -s roi-iter::2:3 --roi-script --no-cache-warming -- ./fft -p 1 -m 6
 
 clean:
 	rm -f fft fft.c sim.cfg sim.stats* *.log *.out
