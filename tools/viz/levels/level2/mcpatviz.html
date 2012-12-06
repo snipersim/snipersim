@@ -7,6 +7,7 @@
 	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/detail.css" />
 	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/legend.css" />
 	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/extensions.css" />
+	<link rel="stylesheet" href="../../css/visualization.css" type="text/css" media="screen" />
 
 	<script type="text/javascript" src="../../rickshaw/vendor/d3.min.js"></script>
 	<script type="text/javascript" src="../../rickshaw/vendor/d3.layout.min.js"></script>
@@ -44,8 +45,11 @@
 	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.Y.js"></script>
 	<script type="text/javascript" src="../../rickshaw/js/extensions.js"></script>
 
+	<script type="text/javascript" src="../../scripts/header.js"></script>
+
 	<script type="text/javascript" src="data/info.txt"></script>
 	<script type="text/javascript" src="data/markers.txt"></script>
+	<script type="text/javascript" src="../../levels/level3/data/ipcvalues.txt"></script>
 
 </head>
 <body>
@@ -60,6 +64,8 @@
   document.title = name+": McPAT visualization";
   currentdetail = "simple";
   currentnormalized = true;
+
+  writeHeader('mcpat');
 </script>
 
 

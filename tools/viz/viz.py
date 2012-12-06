@@ -121,6 +121,6 @@ if __name__ == '__main__':
   if outputdir != HOME:
     if verbose:
       print "Copy files to output directory "+outputdir
-    os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html levels/level3/*html css/ images/ levels/level2/css levels/level2/javascript/ levels/level3/javascript | tar x -C %s' % (HOME, outputdir))
+    os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html levels/level3/*html css/ images/ scripts/ levels/level2/css levels/level2/javascript/ levels/level3/javascript | tar x -C %s' % (HOME, outputdir))
   if verbose:
     print "Visualizations can be viewed in "+os.path.join(outputdir,'index.html')
