@@ -389,6 +389,8 @@ def edit_XML(stats, cfg, vdd):
           elif template[i][1][0]=="NoC.total_accesses":
             if 'network.shmem-1.bus.num-requests' in stats:
               template[i][0] = template[i][0] % int(stats['network.shmem-1.bus.num-requests'][0])  #assumption
+            elif 'network.shmem-1.bus.num-packets' in stats:
+              template[i][0] = template[i][0] % int(stats['network.shmem-1.bus.num-packets'][0])  #assumption
             else:
               template[i][0] = template[i][0] % int(stats['bus.num-requests'][0])  #assumption
           elif template[i][1][0]=="NoC.duty_cycle":
