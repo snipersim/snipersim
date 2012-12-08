@@ -1,6 +1,7 @@
 #include "instruction_modeling.h"
 #include "inst_mode_macros.h"
 #include "local_storage.h"
+#include "spin_loop_detection.h"
 
 #include "simulator.h"
 #include "performance_model.h"
@@ -224,6 +225,11 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
    if (!basic_block)
       return true;
+
+
+   // Spin loop detection
+
+   addSpinLoopDetection(trace, ins);
 
 
    // Timing modeling
