@@ -13,7 +13,11 @@
    if (condition##_CONDITION)                                        \
       INS_Insert##predicated##Call(ins, point, func, __VA_ARGS__);   \
 
-#define INSTRUMENT(...)            __INSTRUMENT(, __VA_ARGS__)
-#define INSTRUMENT_PREDICATED(...) __INSTRUMENT(Predicated, __VA_ARGS__)
+#define INSTRUMENT(...)                   __INSTRUMENT(, __VA_ARGS__)
+#define INSTRUMENT_IF(...)                __INSTRUMENT(If, __VA_ARGS__)
+#define INSTRUMENT_THEN(...)              __INSTRUMENT(Then, __VA_ARGS__)
+#define INSTRUMENT_PREDICATED(...)        __INSTRUMENT(Predicated, __VA_ARGS__)
+#define INSTRUMENT_IF_PREDICATED(...)     __INSTRUMENT(IfPredicated, __VA_ARGS__)
+#define INSTRUMENT_THEN_PREDICATED(...)   __INSTRUMENT(ThenPredicated, __VA_ARGS__)
 
 #endif // __INST_MODE_MACROS_H
