@@ -1,0 +1,53 @@
+# object files
+*.d
+*.o
+*.pyc
+
+# emacs temp files
+*~
+
+# vi temp files
+*.swp
+
+# test output
+*.log
+sim.out
+sim.cfg
+sim.info
+sim.stats
+sim.stats.base
+sim.stats.delta
+sim.stats.db
+sim.stats.sqlite3
+appdebug_port.out
+debug_offset.out
+graphite.out
+cpi-stack.jpg
+output_files
+tools/cpistack-collect/cpistack-*
+
+# compiled libraries
+lib/libcarbon_sim.a
+lib/pin_sim.so
+lib/libgraphite_user.a
+lib/sniper
+config/buildconf.*
+config/graphite.py
+docs
+.build_os
+include/linux/perf_event.h
+sift/libsift.a
+sift/siftdump
+sift/recorder/sift_recorder
+tools/pinversion
+
+# result files
+results/
+!results/.DO_NOT_DELETE
+
+# dependencies
+boost_1_38_0
+pin_kit
+linux_2_6_32
+mcpat
+python_kit
