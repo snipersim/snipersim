@@ -7,4 +7,4 @@ $(TARGET): $(TARGET).o
 	$(CC) $(TARGET).o -pthread $(SNIPER_LDFLAGS) -o $(TARGET)
 
 run_$(TARGET):
-	../../run-sniper -n 2 -c gainestown --roi -- ./spinloop
+	../../run-sniper -n 2 -c gainestown --roi -gcore/spin_loop_detection=true -- ./spinloop

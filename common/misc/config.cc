@@ -27,6 +27,7 @@ bool Config::m_knob_enable_perbasicblock;
 ClockSkewMinimizationObject::Scheme Config::m_knob_clock_skew_minimization_scheme;
 UInt64 Config::m_knob_hpi_percore;
 UInt64 Config::m_knob_hpi_global;
+bool Config::m_knob_enable_spinloopdetection;
 
 Config *Config::m_singleton;
 
@@ -74,6 +75,8 @@ Config::Config(SimulationMode mode)
    // HOOK_PERIODIC_INS
    m_knob_hpi_percore = Sim()->getCfg()->getInt("core/hook_periodic_ins/ins_per_core");
    m_knob_hpi_global = Sim()->getCfg()->getInt("core/hook_periodic_ins/ins_global");
+
+   m_knob_enable_spinloopdetection = Sim()->getCfg()->getBool("core/spin_loop_detection");
 
    m_knob_clock_skew_minimization_scheme = ClockSkewMinimizationObject::parseScheme(Sim()->getCfg()->getString("clock_skew_minimization/scheme"));
 

@@ -229,7 +229,8 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
    // Spin loop detection
 
-   addSpinLoopDetection(trace, ins);
+   if (Sim()->getConfig()->getEnableSpinLoopDetection())
+      addSpinLoopDetection(trace, ins);
 
 
    // Timing modeling
