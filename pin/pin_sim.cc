@@ -366,7 +366,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
    localStore[threadIndex].thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
    localStore[threadIndex].thread->m_os_info.tid = syscall(__NR_gettid);
    if (Sim()->getConfig()->getEnableSpinLoopDetection())
-      localStore[threadIndex].sld = new SpinLoopDetectionState();
+      localStore[threadIndex].sld.sld = new SpinLoopDetector();
 }
 
 VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, VOID *v)

@@ -25,7 +25,7 @@ struct ThreadLocalStorage
       bool clear_tid;
    } pthread_create;
    // State used by spin loop detection
-   SpinLoopDetectionState *sld;
+   SpinLoopDetectionState sld;
 };
 // Keep track of THREADID to Thread* pointers (and some other stuff), way faster than a PinTLS lookup
 extern std::vector<ThreadLocalStorage> localStore;

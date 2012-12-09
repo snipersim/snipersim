@@ -1,7 +1,4 @@
-// Implements spin loop detection as described by
-// T. Li, A. R. Lebeck, and D. J. Sorin. "Spin detection hardware
-// for improved management of multithreaded systems."
-// IEEE Transactions on Parallel and Distributed Systems (TPDS), 17:508-521, June 2006.
+// Pin front-end for the spin loop detector implemented by the SpinLoopDetector class
 
 #include "spin_loop_detection.h"
 #include "inst_mode_macros.h"
@@ -15,127 +12,48 @@
 static ADDRINT spinloopIfInSpin(THREADID thread_id)
 {
    // Condition used for If/Then instrumentation, should be inlineable
-   return !localStore[thread_id].sld->sdt.empty();
+   return localStore[thread_id].sld.sld->inCandidateSpin();
 }
 
 static void spinloopHandleBranch(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
 {
    if (taken && target < eip)
    {
-      // We just executed a backward control transfer (BCT)
-      // ``A BCT can be a backward conditional taken branch, unconditional branch, or jump instruction.''
-
-      // Note: since we keep the SDT as a queue, a BCT's position is not constant so we use explicit ids
-      // We also have an unbounded RUB so there is no overflow bit
-
-      // Find BCT in the SDT
-      std::deque<std::pair<ADDRINT, uint8_t> >::iterator entry = localStore[thread_id].sld->sdt.begin();
-      for( ; entry != localStore[thread_id].sld->sdt.end(); ++entry)
-         if (entry->first == eip)
-            break;
-
-      if (entry == localStore[thread_id].sld->sdt.end())
-      {
-         // Unknown BCT: add to SDT, increment next SDT entry id, and update mask of valid ids
-         localStore[thread_id].sld->sdt.push_back(std::make_pair(eip, localStore[thread_id].sld->sdt_nextid));
-         localStore[thread_id].sld->sdt_nextid = (localStore[thread_id].sld->sdt_nextid + 1) % SDT_MAX_SIZE;
-
-         // Keep only top SDT_MAX_SIZE entries
-         if (localStore[thread_id].sld->sdt.size() > SDT_MAX_SIZE)
-            localStore[thread_id].sld->sdt.pop_front();
-
-         localStore[thread_id].sld->sdt_bitmask = 0;
-         for(std::deque<std::pair<ADDRINT, uint8_t> >::iterator it = localStore[thread_id].sld->sdt.begin(); it != localStore[thread_id].sld->sdt.end(); ++it)
-            localStore[thread_id].sld->sdt_bitmask |= (1 << it->second);
-      }
-      else
-      {
-         // Found! Check all RUB entries for our id to check if observable register state
-         // has changed since the end of last iteration (Spin Condition 1)
-         uint8_t id = entry->second;
-
-         bool spinning = true;
-         for(std::unordered_map<REG, std::pair<ADDRINT, uint16_t> >::iterator it = localStore[thread_id].sld->rub.begin(); it != localStore[thread_id].sld->rub.end(); ++it)
-         {
-            if (it->second.second & (1 << id))
-            {
-               // ``There exists at least one entry in the RUB that corresponds to this SDT entry.
-               //   This means that the observable register state of the thread differs and, thus,
-               //   the thread was not spinning.''
-               spinning = false;
-               break;
-            }
-         }
-
-         if (spinning)
-         {
-            // Spin loop detected !!
-            // TODO: do something interesting now...
-         }
-
-         // Next iteration should use a new id (RUB entries correspond to our previous iteration)
-         entry->second = localStore[thread_id].sld->sdt_nextid;
-         localStore[thread_id].sld->sdt_nextid = (localStore[thread_id].sld->sdt_nextid + 1) % SDT_MAX_SIZE;
-      }
+      localStore[thread_id].sld.sld->commitBCT(eip);
    }
 }
 
 static void spinloopHandleWriteBefore(THREADID thread_id, ADDRINT addr)
 {
    // Remember store address and old value
-   localStore[thread_id].sld->write_addr = addr;
-   localStore[thread_id].sld->write_value = *(uint64_t *)addr;
+   localStore[thread_id].sld.write_addr = addr;
+   localStore[thread_id].sld.write_value = *(uint64_t *)addr;
 }
 
 static void spinloopHandleWriteAfter(THREADID thread_id)
 {
-   intptr_t addr = localStore[thread_id].sld->write_addr;
-   uint64_t old_value = localStore[thread_id].sld->write_value;
+   intptr_t addr = localStore[thread_id].sld.write_addr;
+   uint64_t old_value = localStore[thread_id].sld.write_value;
    bool silent = *(uint64_t *)addr == old_value;
 
    if (silent == false)
    {
-      // ``Whenever the processor commits a non-silent store, it clears the SDT.''
-      localStore[thread_id].sld->sdt.clear();
-      localStore[thread_id].sld->rub.clear();
+      localStore[thread_id].sld.sld->commitNonSilentStore();
    }
 }
 
 static void spinloopHandleRegWriteBefore(THREADID thread_id, UINT32 reg, ADDRINT value)
 {
    // Remember old value for register that is about to be written
-   localStore[thread_id].sld->reg_value[reg] = value;
+   localStore[thread_id].sld.reg_value[reg] = value;
 }
 
 static void spinloopHandleRegWriteAfter(THREADID thread_id, UINT32 _reg, ADDRINT value)
 {
-   // Implements Register Update Buffer (RUB), see Section 3.2, 3rd paragraph
    REG reg = (REG)_reg;
+   ADDRINT old_value = localStore[thread_id].sld.reg_value[reg];
 
-   // ``For each instruction it then commits, the processor checks if the instruction's architectural
-   //   (i.e., logical) destination register is already in the RUB.''
-   if (localStore[thread_id].sld->rub.count(reg) == 0)
-   {
-      // ``If not, the processor has discovered a new register written by the thread
-      //   It then compares the new value of this register (i.e., the value being committed)
-      //   to its old value (i.e., the value before being overwritten by the commit).''
-      ADDRINT old_value = localStore[thread_id].sld->reg_value[reg];
-      if (value != old_value)
-      {
-         // ``If not equal, the processor adds the register number and its old value to the RUB.''
-         localStore[thread_id].sld->rub[reg] = std::make_pair(old_value, localStore[thread_id].sld->sdt_bitmask);
-      }
-   }
-   else
-   {
-      // ``If the register is already in the RUB, then the processor compares its new value to its current value in the RUB.''
-      if (value == localStore[thread_id].sld->rub[reg].first)
-      {
-         // ``If equal, it deletes this register from the RUB;''
-         localStore[thread_id].sld->rub.erase(reg);
-      }
-      // ``otherwise, no action is necessary.''
-   }
+   localStore[thread_id].sld.sld->commitRegisterWrite(reg, old_value, value);
 }
 
 void addSpinLoopDetection(TRACE trace, INS ins)
@@ -197,6 +115,9 @@ void addSpinLoopDetection(TRACE trace, INS ins)
       for (unsigned int i = 0; i < INS_MaxNumWRegs(ins); i++)
       {
          REG reg = INS_RegW(ins, i);
+         // Limit ourselves to those registers for which IARG_REG_VALUE is valid
+         // This excludes YMM registers, but hopefully a loop that updates YMM registers also updates an iteration counter
+         // in a general purpose register so we'll still recognize the loop as updating architecture state (and hence not a spin)
          if (reg < REG_MACHINE_LAST && (REG_is_gr(reg) || REG_is_gr8(reg) || REG_is_gr16(reg) || REG_is_gr32(reg) || REG_is_gr64(reg)))
          {
             INSTRUMENT_IF_PREDICATED(
