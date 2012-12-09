@@ -48,7 +48,8 @@ void SpinLoopDetector::commitBCT(uint64_t eip)
             //   This means that the observable register state of the thread differs and, thus,
             //   the thread was not spinning.''
             spinning = false;
-            break;
+            // Reset RUB entry for our loop id
+            it->second.second &= ~(1 << id);
          }
       }
 
@@ -57,10 +58,6 @@ void SpinLoopDetector::commitBCT(uint64_t eip)
          // Spin loop detected !!
          // TODO: do something interesting now...
       }
-
-      // Next iteration should use a new id (RUB entries correspond to our previous iteration)
-      entry->second = m_sdt_nextid;
-      m_sdt_nextid = (m_sdt_nextid + 1) % SDT_MAX_SIZE;
    }
 }
 
@@ -97,5 +94,12 @@ void SpinLoopDetector::commitRegisterWrite(reg_t reg, uint64_t old_value, uint64
          m_rub.erase(reg);
       }
       // ``otherwise, no action is necessary.''
+      else
+      {
+         // Actually, this happens when the register is already in the RUB for an older loop.
+         // Unless it's a silent write, update the bitmask to represent all current loop candidates.
+         if (value != old_value)
+            m_rub[reg].second |= m_sdt_bitmask;
+      }
    }
 }
