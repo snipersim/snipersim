@@ -112,6 +112,13 @@ class Core
       void enablePerformanceModels();
       void disablePerformanceModels();
 
+      void updateSpinCount(UInt64 instructions, SubsecondTime elapsed_time)
+      {
+         m_spin_loops++;
+         m_spin_instructions += instructions;
+         m_spin_elapsed_time += elapsed_time;
+      }
+
    private:
       core_id_t m_core_id;
       MemoryManagerBase *m_memory_manager;
@@ -144,6 +151,10 @@ class Core
 
       IntPtr m_icache_last_block;
       UInt64 m_icache_hits;
+
+      UInt64 m_spin_loops;
+      UInt64 m_spin_instructions;
+      SubsecondTime m_spin_elapsed_time;
 
    protected:
       // Optimized version of countInstruction has direct access to m_instructions and m_instructions_callback

@@ -4,6 +4,8 @@
 // IEEE Transactions on Parallel and Distributed Systems (TPDS), 17:508-521, June 2006.
 
 #include "spin_loop_detector.h"
+#include "core.h"
+#include "performance_model.h"
 
 void SpinLoopDetector::commitBCT(uint64_t eip)
 {
@@ -13,16 +15,18 @@ void SpinLoopDetector::commitBCT(uint64_t eip)
    // Note: since we keep the SDT as a queue, a BCT's position is not constant so we use explicit ids
    // We also have an unbounded RUB so there is no overflow bit
 
+   Core *core = m_thread->getCore();
+
    // Find BCT in the SDT
    Sdt::iterator entry = m_sdt.begin();
    for( ; entry != m_sdt.end(); ++entry)
-      if (entry->first == eip)
+      if (entry->eip == eip)
          break;
 
    if (entry == m_sdt.end())
    {
       // Unknown BCT: add to SDT, increment next SDT entry id, and update mask of valid ids
-      m_sdt.push_back(std::make_pair(eip, m_sdt_nextid));
+      m_sdt.push_back(SdtEntry(eip, m_sdt_nextid, core->getInstructionCount(), core->getPerformanceModel()->getElapsedTime()));
       m_sdt_nextid = (m_sdt_nextid + 1) % SDT_MAX_SIZE;
 
       // Keep only top SDT_MAX_SIZE entries
@@ -31,13 +35,13 @@ void SpinLoopDetector::commitBCT(uint64_t eip)
 
       m_sdt_bitmask = 0;
       for(Sdt::iterator it = m_sdt.begin(); it != m_sdt.end(); ++it)
-         m_sdt_bitmask |= (1 << it->second);
+         m_sdt_bitmask |= (1 << it->id);
    }
    else
    {
       // Found! Check all RUB entries for our id to check if observable register state
       // has changed since the end of last iteration (Spin Condition 1)
-      uint8_t id = entry->second;
+      uint8_t id = entry->id;
 
       bool spinning = true;
       for(Rub::iterator it = m_rub.begin(); it != m_rub.end(); ++it)
@@ -56,8 +60,17 @@ void SpinLoopDetector::commitBCT(uint64_t eip)
       if (spinning)
       {
          // Spin loop detected !!
-         // TODO: do something interesting now...
+         core->updateSpinCount(
+            core->getInstructionCount() - entry->icount,
+            // This time difference will have been caused by instructions earlier in the queue, not by the instructions
+            // in this exact spin loop. But, when spinning for a long time, the earlier instructions will be spin loops as well
+            // so if spin count is large (which is when we care) it should be reasonably accurate.
+            core->getPerformanceModel()->getElapsedTime() - entry->tcount
+         );
       }
+
+      entry->icount = core->getInstructionCount();
+      entry->tcount = core->getPerformanceModel()->getElapsedTime();
    }
 }
 
