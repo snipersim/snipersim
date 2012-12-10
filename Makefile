@@ -8,7 +8,7 @@ LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 SIM_TARGETS=$(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE)
 
-.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean manual manualclean
+.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
@@ -47,20 +47,37 @@ ifneq ($(NO_PYTHON_DOWNLOAD),1)
 PYTHON_DEP=python_kit/$(TARGET_ARCH)/lib/python2.7/lib-dynload/_sqlite3.so
 python: $(PYTHON_DEP)
 $(PYTHON_DEP):
+ifeq ($(SHOW_COMPILE),)
+	@echo '[DOWNLO] Python $(TARGET_ARCH)'
+	@mkdir -p python_kit/$(TARGET_ARCH)
+	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(TARGET_ARCH)
+else
 	mkdir -p python_kit/$(TARGET_ARCH)
-	wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(TARGET_ARCH)
+	wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(TARGET_ARCH)
+endif
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
 mcpat: mcpat/mcpatXeonCore
 mcpat/mcpatXeonCore:
+ifeq ($(SHOW_COMPILE),)
+	@echo '[DOWNLO] McPAT'
+	@mkdir -p mcpat
+	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat.tgz" | tar xz -C mcpat
+else
 	mkdir -p mcpat
-	wget -O - --no-verbose "http://snipersim.org/packages/mcpat.tgz" | tar xz -C mcpat
+	wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat.tgz" | tar xz -C mcpat
+endif
 endif
 
 linux: include/linux/perf_event.h
 include/linux/perf_event.h:
+ifeq ($(SHOW_COMPILE),)
+	@echo '[INSTAL] perf_event.h'
+	@if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
+else
 	if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
+endif
 
 builddir: lib
 lib:
@@ -79,12 +96,6 @@ configscripts: dependencies
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/graphite.py
 	@if [ -e .git ]; then echo "git_revision=\"$(git rev-parse HEAD)\"" >> config/graphite.py; fi
 	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(TARGET_ARCH)"
-
-manual:
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/doc/manual
-
-manualclean:
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/doc/manual clean
 
 empty_config:
 ifeq ($(SHOW_COMPILE),)
@@ -113,12 +124,18 @@ else
 	rm -f .build_os
 endif
 
-distclean: clean manualclean
+distclean: clean
 ifeq ($(SHOW_COMPILE),)
 	@echo '[DISTCL] python_kit'
 	@rm -rf python_kit
+	@echo '[DISTCL] McPAT'
+	@rm -rf mcpat
+	@echo '[DISTCL] perf_event.h'
+	@rm -f include/linux/perf_event.h
 else
 	rm -rf python_kit
+	rm -rf mcpat
+	rm -f include/linux/perf_event.h
 endif
 
 regress_quick: output_files regress_unit regress_apps
