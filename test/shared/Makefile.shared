@@ -1,3 +1,6 @@
+CLEAN=$(findstring clean,$(MAKECMDGOALS))
+ifneq ($(CLEAN),clean)
+
 include ../../config/buildconf.makefile
 
 ifeq ($(TARGET),)
@@ -19,5 +22,14 @@ run: $(TARGET) run_$(TARGET)
 	@echo "Optional: Run '../../tools/gen_topology.py' in this directory to view the system topology for this run"
 	@echo
 
+../../config/buildconf.makefile:
+	@echo
+	@echo
+	@echo 'Error: A compiled version of Sniper is required to run the test applications'
+	@echo
+	@false
+
+endif
+
 clean:
-	rm -f $(TARGET) sim.* *.log *.out *.png *.o topo.* power.* $(CLEAN_EXTRA)
+	rm -rf $(TARGET) sim.* *.log *.out *.png *.o topo.* power.* $(CLEAN_EXTRA)
