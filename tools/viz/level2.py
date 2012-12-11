@@ -154,6 +154,7 @@ def collectCPIStackDataFIC(verbose=False):
     if usedcomponents[component]==1:
       usedcpificcomponents.append(component)
 
+
   def writeJSON(components, usedcomponents, name):
     jsonoutput = [0 for x in xrange(len(usedcomponents))]
     index=0
