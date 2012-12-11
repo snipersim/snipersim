@@ -96,7 +96,7 @@ configscripts: dependencies
 	@echo '# This file is auto-generated, changes made to it will be lost. Please edit Makefile instead.' >> config/graphite.py
 	@echo "target=\"$(TARGET_ARCH)\"" >> config/graphite.py
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/graphite.py
-	@if [ -e .git ]; then echo "git_revision=\"$(git rev-parse HEAD)\"" >> config/graphite.py; fi
+	@if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$(shell git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/graphite.py; fi
 	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(TARGET_ARCH)"
 
 empty_config:
