@@ -36,10 +36,12 @@ ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=53271
 pin: $(PIN_HOME)/intel64/bin/pinbin package_deps
 	@g++ -o tools/pinversion -I$(PIN_HOME)/source/include tools/pinversion.cc
-	@if [ "$$(tools/pinversion | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo "\nFound Pin version $$(tools/pinversion) in $(PIN_HOME)\nbut at least revision $(PIN_REV_MINIMUM) is required."; false; fi
+	@if [ "$$(tools/pinversion | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo; echo "Found Pin version $$(tools/pinversion) in $(PIN_HOME)"; echo "but at least revision $(PIN_REV_MINIMUM) is required."; echo; false; fi
 $(PIN_HOME)/intel64/bin/pinbin:
-	@echo "\nCannot find Pin in $(PIN_HOME). Please download and extract Pin version $(PIN_NEED)"
-	@echo "from http://www.pintool.org/downloads.html into $(PIN_HOME), or set the PIN_HOME environment variable.\n"
+	@echo
+	@echo "Cannot find Pin in $(PIN_HOME). Please download and extract Pin version $(PIN_NEED)"
+	@echo "from http://www.pintool.org/downloads.html into $(PIN_HOME), or set the PIN_HOME environment variable."
+	@echo
 	@false
 endif
 
