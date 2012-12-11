@@ -54,6 +54,30 @@ def dram_power(results, config):
   )
 
 
+def mcpat_path():
+  return os.path.join(os.path.dirname(__file__), '../mcpat/')
+
+def mcpat_bin():
+  import platform
+  mcpatdir = mcpat_path()
+  if platform.architecture()[0] != '64bit':
+    suffix = '.32'
+  elif True: # Disable if you don't want the McPAT/CACTI cache
+    suffix = '.cache'
+  else:
+    suffix = ''
+  bin = os.path.join(mcpatdir, 'mcpatXeonCore%s' % suffix)
+  if os.path.exists(bin):
+    # Fancy McPAT versions haven't been downloaded yet, use the plain old one
+    return bin
+  else:
+    os.path.join(mcpatdir, 'mcpatXeonCore')
+
+def mcpat_run(inputfile, outputfile):
+  os.system("LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%s %s -print_level 5 -opt_for_clk 1 -infile %s > %s" % \
+    (mcpat_path(), mcpat_bin(), inputfile, outputfile))
+
+
 all_items = [
   [ 'core',     .01,    [
     [ 'core',     .01,    ('core', 'core-other') ],
@@ -87,8 +111,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
   file(tempfile, "w").write('\n'.join(power))
 
   # Run McPAT
-  mcpat_bin = os.path.join(os.path.dirname(__file__), '../mcpat/mcpatXeonCore')
-  os.system("%s -print_level 5 -opt_for_clk 1 -infile %s > %s" % (mcpat_bin, tempfile, outputfile + '.txt'))
+  mcpat_run(tempfile, outputfile + '.txt')
 
   # Parse output
   power_txt = file(outputfile + '.txt')

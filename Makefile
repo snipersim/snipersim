@@ -60,8 +60,8 @@ endif
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
-mcpat: mcpat/mcpatXeonCore
-mcpat/mcpatXeonCore:
+mcpat: mcpat/mcpatXeonCore.cache
+mcpat/mcpatXeonCore.cache:
 ifeq ($(SHOW_COMPILE),)
 	@echo '[DOWNLO] McPAT'
 	@mkdir -p mcpat
