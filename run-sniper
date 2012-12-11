@@ -333,7 +333,7 @@ elif use_mpi:
 
 sniperoptions = ' '.join(sniperoptions)
 
-configfile = os.path.join(HOME, 'config/graphite.py')
+configfile = os.path.join(HOME, 'config/sniper.py')
 config = {}
 execfile(configfile, {}, config)
 

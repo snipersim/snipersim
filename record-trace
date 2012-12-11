@@ -69,7 +69,7 @@ for o, a in opts:
   if o == '--pa':
     use_pa = True
 
-configfile = os.path.join(HOME, 'config/graphite.py')
+configfile = os.path.join(HOME, 'config/sniper.py')
 config = {}
 execfile(configfile, {}, config)
 
