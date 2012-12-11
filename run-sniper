@@ -228,8 +228,9 @@ if not os.path.exists(outputdir):
 
 if heteroconfig:
   hcfgfile = os.path.join(outputdir,'sim.hetero.cfg')
-  with open(hcfgfile, 'w') as fp:
-    fp.write(heteroconfig)
+  fp = open(hcfgfile, 'w')
+  fp.write(heteroconfig)
+  fp.close()
   configfiles.append(hcfgfile)
 
 if not configfiles:
@@ -502,7 +503,10 @@ def execute():
   log_memory(subproc.pid)
 
   try:
-    pid, rc, usage = os.wait4(subproc.pid, 0)
+    try:
+      pid, rc, usage = os.wait4(subproc.pid, 0)
+    except AttributeError:
+      pid, rc = os.waitpid(subproc.pid, 0)
   except KeyboardInterrupt:
     os.kill(subproc.pid, 9)
     return 9
