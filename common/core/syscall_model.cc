@@ -9,6 +9,7 @@
 #include "performance_model.h"
 #include "pthread_emu.h"
 #include "scheduler.h"
+#include "hooks_manager.h"
 #include "stats.h"
 
 #include <errno.h>
@@ -57,6 +58,18 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
    LOG_PRINT("Got Syscall: %i", syscall_number);
 
    m_syscall_number = syscall_number;
+
+   HookSyscallEnter hook_args = {
+      thread_id: m_thread->getId(),
+      core_id: core->getId(),
+      time: core->getPerformanceModel()->getElapsedTime(),
+      syscall_number: syscall_number,
+      args: args
+   };
+   {
+      ScopedLock sl(Sim()->getThreadManager()->getLock());
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_SYSCALL_ENTER, (UInt64)&hook_args);
+   }
 
    switch (syscall_number)
    {
@@ -244,15 +257,27 @@ IntPtr SyscallMdl::runExit(IntPtr old_return)
          break;
    }
 
-   if (m_emulated)
+   if (!m_emulated)
    {
-      m_emulated = false;
-      return m_ret_val;
+      m_ret_val = old_return;
    }
-   else
+
+   Core *core = m_thread->getCore();
+   HookSyscallExit hook_args = {
+      thread_id: m_thread->getId(),
+      core_id: core->getId(),
+      time: core->getPerformanceModel()->getElapsedTime(),
+      ret_val: m_ret_val,
+      emulated: m_emulated
+   };
    {
-      return old_return;
+      ScopedLock sl(Sim()->getThreadManager()->getLock());
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_SYSCALL_EXIT, (UInt64)&hook_args);
    }
+
+   m_emulated = false;
+
+   return m_ret_val;
 }
 
 void SyscallMdl::futexCount(uint32_t function, SubsecondTime delay)

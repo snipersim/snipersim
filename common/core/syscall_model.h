@@ -21,6 +21,24 @@ class SyscallMdl
           IntPtr arg5;
       };
 
+      struct HookSyscallEnter
+      {
+         thread_id_t thread_id;
+         core_id_t core_id;
+         SubsecondTime time;
+         IntPtr syscall_number;
+         syscall_args_t args;
+      };
+
+      struct HookSyscallExit
+      {
+         thread_id_t thread_id;
+         core_id_t core_id;
+         SubsecondTime time;
+         IntPtr ret_val;
+         bool emulated;
+      };
+
       SyscallMdl(Thread *thread);
       ~SyscallMdl();
 

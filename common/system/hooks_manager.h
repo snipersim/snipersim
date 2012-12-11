@@ -30,6 +30,8 @@ public:
       HOOK_THREAD_MIGRATE,      // HooksManager::ThreadMigrate       Thread was moved to a different core
       HOOK_INSTRUMENT_MODE,     // UInt64 Instrument Mode            Simulation mode change (ex. detailed, ffwd)
       HOOK_PRE_STAT_WRITE,      // none                              Before statistics are written (update generated stats now!)
+      HOOK_SYSCALL_ENTER,       // SyscallMdl::HookSyscallEnter      Thread enters a system call
+      HOOK_SYSCALL_EXIT,        // SyscallMdl::HookSyscallExit       Thread exist from system call
       HOOK_TYPES_MAX
    };
    static const char* hook_type_names[];
