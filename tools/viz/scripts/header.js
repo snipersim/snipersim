@@ -24,7 +24,7 @@ function writeHeader(currentView)
            title+
 '        </h1>'+
 '        </td>'+
-'        <td class="basicstats" width="80%" align="right">'+formatBasicStats()+'</td>'+
+'        <td class="basicstats" width="350px" align="right">'+formatBasicStats()+'</td>'+
 '        </tr></table>'+
 '    </div>'+
 '    <div id="navigation">'+
