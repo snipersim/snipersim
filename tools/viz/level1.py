@@ -51,7 +51,7 @@ def createJSONData(resultsdir, outputdir, verbose = False):
     'ninstrs': format_number(ninstrs),
     'time': format_number(time_end - time_begin, suffixes = ['fs', 'ps', 'ns', 'µs', 'ms', 's']),
     'cycles': format_number(cycles),
-    'ipc': '%.3f' % (ninstrs / float(cycles)),
+    'ipc': '%.3f' % (ninstrs / float(cycles) / ncores),
     'branchmis': format_mpki(sum(results['branch_predictor.num-incorrect'])),
     'dram': format_mpki(sum(results['dram.reads']) + sum(results['dram.writes'])),
   }
