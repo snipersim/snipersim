@@ -358,10 +358,17 @@ def writemarkers(outputdir, verbose = False):
     print 'No database found to construct markersfile.'
     return
 
+  try:
+    markersdb = db.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall()
+  except Exception, e:
+    print e
+    print 'Cannot get markers from database.'
+    return
+
   markersjson = {}
   markersjson["markers"]=[]
 
-  for timestamp, core, thread, value0, value1, description in db.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall():
+  for timestamp, core, thread, value0, value1, description in markersdb:
     if description:
       marker = description
     else:
