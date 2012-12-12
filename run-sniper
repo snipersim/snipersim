@@ -11,7 +11,7 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...] | -- <cmdline>}' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -28,6 +28,7 @@ sniperoptions = []
 roi_only = False
 roi_script = False
 use_viz = False
+use_viz_mcpat = ''
 use_perf = False
 use_gdb = False
 gdb_wait = False
@@ -169,6 +170,7 @@ for o, a in opts:
     appdebug_nowait = True
   if o == '--power':
     run_power = True
+    use_viz_mcpat = '--mcpat'
   if o == '--cache-only':
     sniperoptions.append('-g --general/inst_mode_roi=cache_only')
   if o == '--fast-forward':
@@ -603,7 +605,7 @@ if run_power:
 
 if use_viz:
   print '[SNIPER] Generating visualization in viz/'
-  os.system('%(sim_root)s/tools/viz/viz.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+  os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
 stats = dict(
   host = platform.node(),
