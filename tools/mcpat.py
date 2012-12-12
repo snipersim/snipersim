@@ -1063,7 +1063,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-v <Vdd>] [-c <override-config>] [-o <output-file (power{.jpg,.txt,.py})>]' % '|'.join(powertypes)
+    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-v <Vdd>] [-c <override-config>] [-o <output-file (power{.png,.txt,.py})>]' % '|'.join(powertypes)
     sys.exit(-1)
 
   jobid = 0
