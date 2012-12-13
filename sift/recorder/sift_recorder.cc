@@ -22,6 +22,9 @@
 #include <inttypes.h>
 
 #include "pin.H"
+#ifdef PINPLAY_SUPPORTED
+# include "pinplay.H"
+#endif
 
 #include "sift_writer.h"
 #include "bbv_count.h"
@@ -43,6 +46,15 @@ KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emul
 KNOB<BOOL>   KnobSendPhysicalAddresses(KNOB_MODE_WRITEONCE, "pintool", "pa", "0", "send logical to physical address mapping");
 KNOB<UINT64> KnobFlowControl(KNOB_MODE_WRITEONCE, "pintool", "flow", "1000", "number of instructions to send before syncing up");
 KNOB<UINT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift app id (default = 0)");
+
+# define KNOB_REPLAY_NAME "replay"
+# define KNOB_FAMILY "pintool:sift-recorder"
+KNOB_COMMENT pinplay_driver_knob_family(KNOB_FAMILY, "PinPlay SIFT Recorder Knobs");
+KNOB<BOOL>KnobReplayer(KNOB_MODE_WRITEONCE, KNOB_FAMILY,
+                       KNOB_REPLAY_NAME, "0", "Replay a pinball");
+#ifdef PINPLAY_SUPPORTED
+PINPLAY_ENGINE pinplay_engine;
+#endif /* PINPLAY_SUPPORTED */
 
 INT32 app_id;
 UINT64 blocksize;
@@ -708,6 +720,24 @@ int main(int argc, char **argv)
          any_thread_in_detail = true;
       }
    }
+
+#ifdef PINPLAY_SUPPORTED
+   if (KnobReplayer.Value())
+   {
+      if (KnobEmulateSyscalls.Value())
+      {
+         std::cerr << "Error, emulating syscalls is not compatible with PinPlay replaying." << std::endl;
+         exit(1);
+      }
+      pinplay_engine.Activate(argc, argv, false /*logger*/, KnobReplayer.Value() /*replayer*/);
+   }
+#else
+   if (KnobReplayer.Value())
+   {
+      std::cerr << "Error, PinPlay support not compiled in. Please use a compatible pin kit when compiling." << std::endl;
+      exit(1);
+   }
+#endif
 
    if (KnobEmulateSyscalls.Value())
    {

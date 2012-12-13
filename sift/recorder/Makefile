@@ -31,14 +31,20 @@ LINKER?=${CXX}
 CXXFLAGS += -std=c++0x -Wall -Wno-unknown-pragmas $(DBG) $(OPT_CFLAGS) $(PIN_CXXFLAGS) -I..
 LDFLAGS += -L.. -lsift -lz
 
+PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
+ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
+CXXFLAGS += -DPINPLAY_SUPPORTED -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_HOME)/include
+LDFLAGS += -L$(PINPLAY_HOME)/lib/$(TARGET_ARCH) -lsift -lpinplay -lbz2 -lz
+endif
+
 SOURCES=$(wildcard *.cc)
 OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
 sift_recorder: $(OBJECTS) ../libsift.a
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(PIN_LIBS) $(LDFLAGS)
+	@$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(PIN_LIBS)
 else
-	$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(PIN_LIBS) $(LDFLAGS)
+	$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(PIN_LIBS)
 endif
 
 include $(SIM_ROOT)/common/Makefile.common
