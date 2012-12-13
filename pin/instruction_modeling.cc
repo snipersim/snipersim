@@ -146,7 +146,7 @@ static void fillOperandList(OperandList *list, INS ins)
 
 std::unordered_map<ADDRINT, const std::vector<const MicroOp *> *> instruction_cache;
 
-BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBlock *basic_block)
+BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBlock *basic_block, InstMode::inst_mode_t inst_mode)
 {
    // For all LOCK-prefixed and atomic-update instructions, for timing purposes we add an MFENCE
    // instruction before and after the atomic instruction to force waiting for loads and stores
@@ -185,7 +185,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    {
       // In warming mode, warm up the branch predictors
       INSTRUMENT_PREDICATED(
-         INSTR_IF_CACHEONLY,
+         INSTR_IF_CACHEONLY(inst_mode),
          trace, ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)handleBranchWarming,
          IARG_THREAD_ID,
          IARG_ADDRINT, INS_Address(ins),
@@ -194,7 +194,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
          IARG_END);
 
       INSTRUMENT_PREDICATED(
-         INSTR_IF_CACHEONLY,
+         INSTR_IF_CACHEONLY(inst_mode),
          trace, ins, IPOINT_AFTER, (AFUNPTR)handleBranchWarming,
          IARG_THREAD_ID,
          IARG_ADDRINT, INS_Address(ins),
@@ -204,7 +204,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
       // In detailed mode, push a DynamicInstructionInfo
       INSTRUMENT_PREDICATED(
-         INSTR_IF_DETAILED,
+         INSTR_IF_DETAILED(inst_mode),
          trace, ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)handleBranch,
          IARG_THREAD_ID,
          IARG_ADDRINT, INS_Address(ins),
@@ -213,7 +213,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
          IARG_END);
 
       INSTRUMENT_PREDICATED(
-         INSTR_IF_DETAILED,
+         INSTR_IF_DETAILED(inst_mode),
          trace, ins, IPOINT_AFTER, (AFUNPTR)handleBranch,
          IARG_THREAD_ID,
          IARG_ADDRINT, INS_Address(ins),
@@ -230,7 +230,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    // Spin loop detection
 
    if (Sim()->getConfig()->getEnableSpinLoopDetection())
-      addSpinLoopDetection(trace, ins);
+      addSpinLoopDetection(trace, ins, inst_mode);
 
 
    // Timing modeling

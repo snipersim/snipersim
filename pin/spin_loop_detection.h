@@ -2,6 +2,7 @@
 #define __SPIN_LOOP_DETECTION_H
 
 #include "spin_loop_detector.h"
+#include "inst_mode.h"
 
 #include "pin.H"
 
@@ -22,6 +23,6 @@ struct SpinLoopDetectionState
    SpinLoopDetector* sld;
 };
 
-void addSpinLoopDetection(TRACE trace, INS ins);
+void addSpinLoopDetection(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode);
 
 #endif // __SPIN_LOOP_DETECTION_H

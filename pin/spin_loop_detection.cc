@@ -56,7 +56,7 @@ static void spinloopHandleRegWriteAfter(THREADID thread_id, UINT32 _reg, ADDRINT
    localStore[thread_id].sld.sld->commitRegisterWrite(reg, old_value, value);
 }
 
-void addSpinLoopDetection(TRACE trace, INS ins)
+void addSpinLoopDetection(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
 {
    if (INS_HasFallThrough(ins))
    {
@@ -65,7 +65,7 @@ void addSpinLoopDetection(TRACE trace, INS ins)
       if (INS_IsBranch(ins))
       {
          INSTRUMENT_PREDICATED(
-            INSTR_IF_DETAILED,
+            INSTR_IF_DETAILED(inst_mode),
             trace, ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)spinloopHandleBranch,
             IARG_THREAD_ID,
             IARG_ADDRINT, INS_Address(ins),
@@ -74,7 +74,7 @@ void addSpinLoopDetection(TRACE trace, INS ins)
             IARG_END);
 
          INSTRUMENT_PREDICATED(
-            INSTR_IF_DETAILED,
+            INSTR_IF_DETAILED(inst_mode),
             trace, ins, IPOINT_AFTER, (AFUNPTR)spinloopHandleBranch,
             IARG_THREAD_ID,
             IARG_ADDRINT, INS_Address(ins),
@@ -90,23 +90,23 @@ void addSpinLoopDetection(TRACE trace, INS ins)
       if (INS_IsMemoryWrite(ins))
       {
          INSTRUMENT_IF_PREDICATED(
-               INSTR_IF_DETAILED,
+               INSTR_IF_DETAILED(inst_mode),
                trace, ins, IPOINT_BEFORE, (AFUNPTR)spinloopIfInSpin,
                IARG_THREAD_ID,
                IARG_END);
          INSTRUMENT_THEN_PREDICATED(
-               INSTR_IF_DETAILED,
+               INSTR_IF_DETAILED(inst_mode),
                trace, ins, IPOINT_BEFORE, (AFUNPTR)spinloopHandleWriteBefore,
                IARG_THREAD_ID,
                IARG_MEMORYWRITE_EA,
                IARG_END);
          INSTRUMENT_IF_PREDICATED(
-               INSTR_IF_DETAILED,
+               INSTR_IF_DETAILED(inst_mode),
                trace, ins, IPOINT_BEFORE, (AFUNPTR)spinloopIfInSpin,
                IARG_THREAD_ID,
                IARG_END);
          INSTRUMENT_THEN_PREDICATED(
-               INSTR_IF_DETAILED,
+               INSTR_IF_DETAILED(inst_mode),
                trace, ins, IPOINT_AFTER, (AFUNPTR)spinloopHandleWriteAfter,
                IARG_THREAD_ID,
                IARG_END);
@@ -121,24 +121,24 @@ void addSpinLoopDetection(TRACE trace, INS ins)
          if (reg < REG_MACHINE_LAST && (REG_is_gr(reg) || REG_is_gr8(reg) || REG_is_gr16(reg) || REG_is_gr32(reg) || REG_is_gr64(reg)))
          {
             INSTRUMENT_IF_PREDICATED(
-                  INSTR_IF_DETAILED,
+                  INSTR_IF_DETAILED(inst_mode),
                   trace, ins, IPOINT_BEFORE, (AFUNPTR)spinloopIfInSpin,
                   IARG_THREAD_ID,
                   IARG_END);
             INSTRUMENT_THEN_PREDICATED(
-                  INSTR_IF_DETAILED,
+                  INSTR_IF_DETAILED(inst_mode),
                   trace, ins, IPOINT_BEFORE, (AFUNPTR)spinloopHandleRegWriteBefore,
                   IARG_THREAD_ID,
                   IARG_UINT32, (uint32_t)reg,
                   IARG_REG_VALUE, reg,
                   IARG_END);
             INSTRUMENT_IF_PREDICATED(
-                  INSTR_IF_DETAILED,
+                  INSTR_IF_DETAILED(inst_mode),
                   trace, ins, IPOINT_BEFORE, (AFUNPTR)spinloopIfInSpin,
                   IARG_THREAD_ID,
                   IARG_END);
             INSTRUMENT_THEN_PREDICATED(
-                  INSTR_IF_DETAILED,
+                  INSTR_IF_DETAILED(inst_mode),
                   trace, ins, IPOINT_AFTER, (AFUNPTR)spinloopHandleRegWriteAfter,
                   IARG_THREAD_ID,
                   IARG_UINT32, (uint32_t)reg,

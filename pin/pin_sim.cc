@@ -126,7 +126,7 @@ void showInstructionInfo(INS ins)
    printf("\n");
 }
 
-BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block)
+BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block, InstMode::inst_mode_t inst_mode)
 {
    // Debugging Functions
    // showInstructionInfo(ins);
@@ -140,7 +140,7 @@ BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block)
    }
 
    // Core Performance Modeling
-   bool ret = InstructionModeling::addInstructionModeling(trace, ins, basic_block);
+   bool ret = InstructionModeling::addInstructionModeling(trace, ins, basic_block, inst_mode);
    if (ret == false)
       return false;
 
@@ -155,7 +155,7 @@ BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block)
    else
    {
       // Instrument Memory Operations
-      lite::addMemoryModeling(trace, ins);
+      lite::addMemoryModeling(trace, ins, inst_mode);
    }
    return true;
 }
@@ -211,13 +211,15 @@ std::unordered_map<std::pair<ADDRINT, ADDRINT>, BasicBlock*> basicblock_cache;
 
 VOID traceCallback(TRACE trace, void *v)
 {
+   InstMode::inst_mode_t inst_mode = INSTR_GET_MODE(trace);
+
    BBL bbl_head = TRACE_BblHead(trace);
    INS ins_head = BBL_InsHead(bbl_head);
 
    addCheckScheduled(trace, ins_head);
 
    // Clock Skew Minimization
-   addPeriodicSync(trace, ins_head);
+   addPeriodicSync(trace, ins_head, inst_mode);
 
    // Routine replacement
    RTN rtn = TRACE_Rtn(trace);
@@ -237,7 +239,7 @@ VOID traceCallback(TRACE trace, void *v)
       // I-cache modeling during warmup
       if (Sim()->getConfig()->getEnableICacheModeling()) {
          INSTRUMENT(
-            INSTR_IF_CACHEONLY,
+            INSTR_IF_CACHEONLY(inst_mode),
             trace, BBL_InsHead(bbl), IPOINT_BEFORE,
             AFUNPTR(InstructionModeling::accessInstructionCacheWarmup),
             IARG_THREAD_ID,
@@ -269,7 +271,7 @@ VOID traceCallback(TRACE trace, void *v)
             basic_block_is_new = false;
          }
          // Insert the handleBasicBlock call, before possible rewrite* stuff. We'll fill in the basic_block later
-         INSTRUMENT(INSTR_IF_DETAILED, trace, BBL_InsHead(bbl), IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
+         INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, BBL_InsHead(bbl), IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
       }
 
       for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins)) {
@@ -294,10 +296,10 @@ VOID traceCallback(TRACE trace, void *v)
                basic_block = basicblock_cache[key];
                basic_block_is_new = false;
             }
-            INSTRUMENT(INSTR_IF_DETAILED, trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
+            INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
          }
 
-         bool res = instructionCallback(trace, ins, basic_block_is_new ? basic_block : NULL);
+         bool res = instructionCallback(trace, ins, basic_block_is_new ? basic_block : NULL, inst_mode);
          if (res == false)
             return; // MAGIC instruction aborts trace
 

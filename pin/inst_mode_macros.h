@@ -3,15 +3,18 @@
 
 #include "pin.H"
 
-#define INSTR_IF_DETAILED_CONDITION         (Sim()->getInstrumentationMode() == InstMode::DETAILED)
-#define INSTR_IF_NOT_DETAILED_CONDITION     (Sim()->getInstrumentationMode() != InstMode::DETAILED)
-#define INSTR_IF_CACHEONLY_CONDITION        (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
-#define INSTR_IF_FASTFORWARD_CONDITION      (Sim()->getInstrumentationMode() == InstMode::FAST_FORWARD)
-#define INSTR_IF_NOT_FASTFORWARD_CONDITION  (Sim()->getInstrumentationMode() != InstMode::FAST_FORWARD)
+#define INSTR_IF_DETAILED(__inst_mode)         ((__inst_mode) == InstMode::DETAILED)
+#define INSTR_IF_NOT_DETAILED(__inst_mode)     ((__inst_mode) != InstMode::DETAILED)
+#define INSTR_IF_CACHEONLY(__inst_mode)        ((__inst_mode) == InstMode::CACHE_ONLY)
+#define INSTR_IF_NOT_CACHEONLY(__inst_mode)    ((__inst_mode) != InstMode::CACHE_ONLY)
+#define INSTR_IF_FASTFORWARD(__inst_mode)      ((__inst_mode) == InstMode::FAST_FORWARD)
+#define INSTR_IF_NOT_FASTFORWARD(__inst_mode)  ((__inst_mode) != InstMode::FAST_FORWARD)
 
 #define __INSTRUMENT(predicated, condition, trace, ins, point, func, ...)      \
-   if (condition##_CONDITION)                                        \
+   if (condition)                                                              \
       INS_Insert##predicated##Call(ins, point, func, __VA_ARGS__);   \
+
+#define INSTR_GET_MODE(__trace)           (Sim()->getInstrumentationMode())
 
 #define INSTRUMENT(...)                   __INSTRUMENT(, __VA_ARGS__)
 #define INSTRUMENT_IF(...)                __INSTRUMENT(If, __VA_ARGS__)

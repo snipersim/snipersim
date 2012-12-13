@@ -17,7 +17,7 @@ namespace lite
 
 Lock g_atomic_lock;
 
-void addMemoryModeling(TRACE trace, INS ins)
+void addMemoryModeling(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
 {
    if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
    {
@@ -31,7 +31,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                LOG_ASSERT_ERROR(i < PinMemoryManager::NUM_ACCESS_TYPES, "Insufficient number of PinMemoryManager::NUM_ACCESS_TYPES available");
 
                INSTRUMENT(
-                     INSTR_IF_FASTFORWARD,
+                     INSTR_IF_FASTFORWARD(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryReadFaultinjectionNondetailed),
                      IARG_BOOL, INS_MemoryOperandIsWritten(ins, i) ? INS_IsAtomicUpdate(ins) : false,
@@ -41,7 +41,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                      IARG_END);
 
                INSTRUMENT(
-                     INSTR_IF_CACHEONLY,
+                     INSTR_IF_CACHEONLY(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryReadFaultinjection),
                      IARG_THREAD_ID,
@@ -56,7 +56,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                      IARG_END);
 
                INSTRUMENT(
-                     INSTR_IF_DETAILED,
+                     INSTR_IF_DETAILED(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryReadFaultinjection),
                      IARG_THREAD_ID,
@@ -85,7 +85,7 @@ void addMemoryModeling(TRACE trace, INS ins)
             else
             {
                INSTRUMENT(
-                     INSTR_IF_CACHEONLY,
+                     INSTR_IF_CACHEONLY(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryRead),
                      IARG_THREAD_ID,
@@ -98,7 +98,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                      IARG_END);
 
                INSTRUMENT(
-                     INSTR_IF_DETAILED,
+                     INSTR_IF_DETAILED(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryReadDetailed),
                      IARG_THREAD_ID,
@@ -120,7 +120,7 @@ void addMemoryModeling(TRACE trace, INS ins)
             if (Sim()->getFaultinjectionManager())
             {
                INSTRUMENT(
-                     INSTR_IF_CACHEONLY,
+                     INSTR_IF_CACHEONLY(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryWriteFaultinjection),
                      IARG_THREAD_ID,
@@ -132,7 +132,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                      IARG_END);
 
                INSTRUMENT(
-                     INSTR_IF_DETAILED,
+                     INSTR_IF_DETAILED(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryWriteFaultinjection),
                      IARG_THREAD_ID,
@@ -146,7 +146,7 @@ void addMemoryModeling(TRACE trace, INS ins)
             else
             {
                INSTRUMENT(
-                     INSTR_IF_CACHEONLY,
+                     INSTR_IF_CACHEONLY(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryWrite),
                      IARG_THREAD_ID,
@@ -159,7 +159,7 @@ void addMemoryModeling(TRACE trace, INS ins)
                      IARG_END);
 
                INSTRUMENT(
-                     INSTR_IF_DETAILED,
+                     INSTR_IF_DETAILED(inst_mode),
                      trace, ins, IPOINT_BEFORE,
                      AFUNPTR(lite::handleMemoryWriteDetailed),
                      IARG_THREAD_ID,

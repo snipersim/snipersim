@@ -129,12 +129,12 @@ void handlePeriodicSync(THREADID threadIndex)
       skew_record_all();
 }
 
-void addPeriodicSync(TRACE trace, INS ins)
+void addPeriodicSync(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
 {
    if (enabled() || skew_report_enable()) {
       // There is no concept of time except when in DETAILED mode (the core performance model keeps this)
       // so for other modes, avoid the overhead of this call
-      INSTRUMENT(INSTR_IF_DETAILED, trace, ins, IPOINT_BEFORE, AFUNPTR(handlePeriodicSync), IARG_THREAD_ID, IARG_END);
+      INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(handlePeriodicSync), IARG_THREAD_ID, IARG_END);
    }
 
    if (! skew_report_added) {

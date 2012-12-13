@@ -1,12 +1,13 @@
 #pragma once
 
 #include "fixed_types.h"
+#include "inst_mode.h"
 #include "pin.H"
 
 namespace lite
 {
 
-void addMemoryModeling(TRACE trace, INS ins);
+void addMemoryModeling(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode);
 void handleMemoryRead(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size);
 void handleMemoryReadDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size);
 ADDRINT handleMemoryReadFaultinjectionNondetailed(bool is_atomic_update, ADDRINT read_address, ADDRINT *save_ea);
