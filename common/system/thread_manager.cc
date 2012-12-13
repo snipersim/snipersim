@@ -105,6 +105,8 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
       core->setState(Core::RUNNING);
 
       PerformanceModel *pm = core->getPerformanceModel();
+      // If the core already has a later time, we have to wait
+      time = std::max(time, pm->getElapsedTime());
       pm->queueDynamicInstruction(new SpawnInstruction(time));
 
       LOG_PRINT("Setting status[%i] -> RUNNING", thread_id);
