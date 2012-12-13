@@ -542,7 +542,11 @@ def execute():
     except AttributeError:
       pid, rc = os.waitpid(subproc.pid, 0)
   except KeyboardInterrupt:
-    os.kill(subproc.pid, 9)
+    try:
+      os.kill(subproc.pid, 9)
+    except OSError:
+      # Already dead, never mind
+      pass
     return 9
 
   rc >>= 8
