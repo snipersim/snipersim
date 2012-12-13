@@ -15,10 +15,8 @@ void
 InstMode::SetInstrumentationMode(InstMode::inst_mode_t new_mode)
 {
    if (new_mode != InstMode::inst_mode) {
-      GetVmLock();
       InstMode::inst_mode = new_mode;
       printf("[SNIPER] Setting instrumentation mode to %s\n", inst_mode_names[new_mode]); fflush(stdout);
       PIN_RemoveInstrumentation();
-      ReleaseVmLock();
    }
 }
