@@ -14,13 +14,17 @@ class StopByIcount:
     else:
       self.ninstrs_start = long(start)
       self.inroi = False
+    self.done = False
     sim.util.EveryIns(long(1000000), self.periodic, roi_only = (start == None))
   def periodic(self, icount, icount_delta):
+    if self.done:
+      return
     print 'Periodic at', icount
     if self.inroi and icount > (self.ninstrs + self.ninstrs_start):
       print '[SCRIPT] Ending ROI after %d instructions' % icount
       sim.control.set_roi(False)
       self.inroi = False
+      self.done = True
     elif not self.inroi and icount > self.ninstrs_start:
       print '[SCRIPT] Starting ROI after %d instructions' % icount
       sim.control.set_roi(True)
