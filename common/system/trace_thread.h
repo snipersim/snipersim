@@ -62,7 +62,10 @@ class TraceThread : public Runnable
       int32_t handleNewThreadFunc();
       int32_t handleJoinFunc(int32_t thread);
       uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c);
+
       BasicBlock* decode(Sift::Instruction &inst);
+      void handleInstructionWarmup(Sift::Instruction &inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);
+      void handleInstructionDetailed(Sift::Instruction &inst, PerformanceModel *prfmdl);
 
    public:
       TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id, bool cleanup);

@@ -13,6 +13,7 @@
 #include "syscall_model.h"
 #include "core.h"
 #include "magic_client.h"
+#include "branch_predictor.h"
 
 #include <sys/syscall.h>
 
@@ -179,6 +180,128 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
    return basic_block;
 }
 
+void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)
+{
+   const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
+
+   // Warmup instruction caches
+
+   if (do_icache_warmup && Sim()->getConfig()->getEnableICacheModeling())
+   {
+      core->readInstructionMemory(va2pa(icache_warmup_addr), icache_warmup_size);
+   }
+
+   // Warmup branch predictor
+
+   if (inst.is_branch)
+   {
+      PerformanceModel *prfmdl = core->getPerformanceModel();
+      BranchPredictor *bp = prfmdl->getBranchPredictor();
+
+      if (bp)
+      {
+         bool prediction = bp->predict(va2pa(inst.sinst->addr), 0 /* TODO: target */);
+         bp->update(prediction, inst.taken, va2pa(inst.sinst->addr), 0 /* TODO: target */);
+      }
+   }
+
+   // Warmup data caches
+
+   if (inst.executed)
+   {
+      const bool is_atomic_update = xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst));
+      int address_idx = 0;
+
+      // Ignore memory-referencing operands in NOP instructions
+      if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
+      {
+         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+         {
+            if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+            {
+               core->accessMemory(
+                     /*(is_atomic_update) ? Core::LOCK :*/ Core::NONE,
+                     (is_atomic_update) ? Core::READ_EX : Core::READ,
+                     va2pa(inst.addresses[address_idx]),
+                     NULL,
+                     xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+                     Core::MEM_MODELED_COUNT,
+                     va2pa(inst.sinst->addr));
+               ++address_idx;
+            }
+         }
+
+         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+         {
+            if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+            {
+               if (is_atomic_update)
+                  core->logMemoryHit(false, Core::WRITE, va2pa(inst.addresses[address_idx]), Core::MEM_MODELED_COUNT, va2pa(inst.sinst->addr));
+               else
+                  core->accessMemory(
+                        /*(is_atomic_update) ? Core::UNLOCK :*/ Core::NONE,
+                        Core::WRITE,
+                        va2pa(inst.addresses[address_idx]),
+                        NULL,
+                        xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+                        Core::MEM_MODELED_COUNT,
+                        va2pa(inst.sinst->addr));
+               ++address_idx;
+            }
+         }
+      }
+   }
+}
+
+void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, PerformanceModel *prfmdl)
+{
+   const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
+
+   // Push basic block containing this instruction
+
+   if (m_icache.count(inst.sinst->addr) == 0)
+      m_icache[inst.sinst->addr] = decode(inst);
+   BasicBlock *basic_block = m_icache[inst.sinst->addr];
+
+   prfmdl->queueBasicBlock(basic_block);
+
+   // Push dynamic instruction info
+
+   if (inst.is_branch)
+   {
+      DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(va2pa(inst.sinst->addr), inst.taken, 0 /* TODO: target */);
+      prfmdl->pushDynamicInstructionInfo(info);
+   }
+
+   // Ignore memory-referencing operands in NOP instructions
+   if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
+   {
+      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+      {
+         if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+         {
+            assert(mem_idx < inst.num_addresses);
+            DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::READ, 0, HitWhere::UNKNOWN);
+            prfmdl->pushDynamicInstructionInfo(info);
+         }
+      }
+
+      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+      {
+         if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+         {
+            assert(mem_idx < inst.num_addresses);
+            DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::WRITE, 0, HitWhere::UNKNOWN);
+            prfmdl->pushDynamicInstructionInfo(info);
+         }
+      }
+   }
+
+   // simulate
+
+   prfmdl->iterate();
+}
+
 void TraceThread::run()
 {
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), SubsecondTime::Zero());
@@ -203,16 +326,8 @@ void TraceThread::run()
    Sift::Instruction inst;
    while(m_trace.Read(inst))
    {
-      const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
-
-      // Push basic block containing this instruction
-
-      if (m_icache.count(inst.sinst->addr) == 0)
-         m_icache[inst.sinst->addr] = decode(inst);
-      BasicBlock *basic_block = m_icache[inst.sinst->addr];
-
-      prfmdl->queueBasicBlock(basic_block);
-
+      bool do_icache_warmup = false;
+      UInt64 icache_warmup_addr = 0, icache_warmup_size = 0;
 
       // Reconstruct and count basic blocks
 
@@ -220,6 +335,11 @@ void TraceThread::run()
       {
          // We're the start of a new basic block
          core->countInstructions(m_bbv_base, m_bbv_count);
+         // In cache-only mode, we'll want to do I-cache warmup
+         do_icache_warmup = true;
+         icache_warmup_addr = m_bbv_base;
+         icache_warmup_size = m_bbv_last - m_bbv_base;
+         // Set up new basic block info
          m_bbv_base = inst.sinst->addr;
          m_bbv_count = 0;
       }
@@ -229,42 +349,21 @@ void TraceThread::run()
       m_bbv_end = inst.is_branch;
 
 
-      // Push dynamic instruction info
-
-      if (inst.is_branch)
+      switch(Sim()->getInstrumentationMode())
       {
-         DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(va2pa(inst.sinst->addr), inst.taken, 0 /* TODO: target */);
-         prfmdl->pushDynamicInstructionInfo(info);
+         case InstMode::BASE:
+         case InstMode::FAST_FORWARD:
+            break;
+
+         case InstMode::CACHE_ONLY:
+            handleInstructionWarmup(inst, core, do_icache_warmup, icache_warmup_addr, icache_warmup_size);
+            break;
+
+         case InstMode::DETAILED:
+            handleInstructionDetailed(inst, prfmdl);
+            break;
       }
 
-      // Ignore memory-referencing operands in NOP instructions
-      if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
-      {
-         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
-         {
-            if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
-            {
-               assert(mem_idx < inst.num_addresses);
-               DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::READ, 0, HitWhere::UNKNOWN);
-               prfmdl->pushDynamicInstructionInfo(info);
-            }
-         }
-
-         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
-         {
-            if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
-            {
-               assert(mem_idx < inst.num_addresses);
-               DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::WRITE, 0, HitWhere::UNKNOWN);
-               prfmdl->pushDynamicInstructionInfo(info);
-            }
-         }
-      }
-
-
-      // simulate
-
-      prfmdl->iterate();
 
       client->synchronize(SubsecondTime::Zero(), false);
 
