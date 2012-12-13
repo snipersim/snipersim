@@ -24,6 +24,8 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, 
    , m_stop(false)
    , m_bbv_base(0)
    , m_bbv_count(0)
+   , m_bbv_last(0)
+   , m_bbv_end(false)
    , m_output_leftover_size(0)
    , m_tracefile(tracefile)
    , m_responsefile(responsefile)
@@ -214,19 +216,17 @@ void TraceThread::run()
 
       // Reconstruct and count basic blocks
 
-      if (m_bbv_base == 0)
+      if (m_bbv_end || m_bbv_last != inst.sinst->addr)
       {
          // We're the start of a new basic block
-         m_bbv_base = inst.sinst->addr;
-      }
-      m_bbv_count++;
-      if (inst.is_branch)
-      {
-         // We're the end of a basic block
          core->countInstructions(m_bbv_base, m_bbv_count);
-         m_bbv_base = 0; // Next instruction will start a new basic block
+         m_bbv_base = inst.sinst->addr;
          m_bbv_count = 0;
       }
+      m_bbv_count++;
+      m_bbv_last = inst.sinst->addr + inst.sinst->size;
+      // Force BBV end on non-taken branches
+      m_bbv_end = inst.is_branch;
 
 
       // Push dynamic instruction info

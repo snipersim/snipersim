@@ -59,6 +59,8 @@ typedef struct {
    Bbv *bbv;
    ADDRINT bbv_base;
    UINT64 bbv_count;
+   ADDRINT bbv_last;
+   BOOL bbv_end;
    UINT64 blocknum;
    UINT64 icount;
    UINT64 icount_detailed;
@@ -70,9 +72,9 @@ typedef struct {
    BOOL last_syscall_emulated;
    BOOL running;
    #if defined(TARGET_IA32)
-      uint8_t __pad[57];
+      uint8_t __pad[52];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[37];
+      uint8_t __pad[28];
    #endif
 } __attribute__((packed)) thread_data_t;
 thread_data_t *thread_data;
@@ -176,17 +178,20 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
    ++thread_data[threadid].icount;
    ++thread_data[threadid].icount_detailed;
 
-   if (thread_data[threadid].bbv_base == 0)
+
+   // Reconstruct basic blocks (we could ask Pin, but do it the same way as TraceThread will do it)
+   if (thread_data[threadid].bbv_end || thread_data[threadid].bbv_last != addr)
    {
-      thread_data[threadid].bbv_base = addr; // We're the start of a new basic block
-   }
-   thread_data[threadid].bbv_count++;
-   if (is_branch)
-   {
+      // We're the start of a new basic block
       thread_data[threadid].bbv->count(thread_data[threadid].bbv_base, thread_data[threadid].bbv_count);
-      thread_data[threadid].bbv_base = 0; // Next instruction starts a new basic block
+      thread_data[threadid].bbv_base = addr;
       thread_data[threadid].bbv_count = 0;
    }
+   thread_data[threadid].bbv_count++;
+   thread_data[threadid].bbv_last = addr + size;
+   // Force BBV end on non-taken branches
+   thread_data[threadid].bbv_end = is_branch;
+
 
    uint64_t addresses[Sift::MAX_DYNAMIC_ADDRESSES] = { 0 };
    for(uint8_t i = 0; i < num_addresses; ++i)

@@ -34,8 +34,10 @@ class TraceThread : public Runnable
       bool m_stop;
       Barrier *m_barrier;
       std::unordered_map<IntPtr, BasicBlock *> m_icache;
-      IntPtr m_bbv_base;
+      UInt64 m_bbv_base;
       UInt64 m_bbv_count;
+      UInt64 m_bbv_last;
+      bool m_bbv_end;
       xed_syntax_enum_t m_syntax;
       uint8_t m_output_leftover[160];
       uint16_t m_output_leftover_size;
