@@ -48,12 +48,8 @@ int main(int argc, char* argv[])
    Sim()->hideCfg();
 
 
-   enablePerformanceGlobal();
-
    LOG_ASSERT_ERROR(Sim()->getTraceManager(), "In standalone mode but there is no TraceManager!");
    Sim()->getTraceManager()->run();
-
-   disablePerformanceGlobal();
 
 
    Simulator::release();

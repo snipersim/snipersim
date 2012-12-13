@@ -1,6 +1,10 @@
 #include "log.h"
 #include "inst_mode.h"
 
+const char * inst_mode_names[] = {
+   "INVALID", "DETAILED", "CACHE_ONLY", "FAST_FORWARD"
+};
+
 // Instrumentation modes
 InstMode::inst_mode_t InstMode::inst_mode_init = InstMode::CACHE_ONLY;   // Change this into FAST_FORWARD if you don't care about    warm caches
 InstMode::inst_mode_t InstMode::inst_mode_roi  = InstMode::DETAILED;
@@ -11,7 +15,7 @@ InstMode::inst_mode_t InstMode::inst_mode = InstMode::inst_mode_init;
 
 
 __attribute__((weak)) void
-InstMode::SetInstrumentationMode(InstMode::inst_mode_t new_mode)
+InstMode::updateInstrumentationMode()
 {
    LOG_PRINT_ERROR("%s: This version of this function should not be called", __FUNCTION__);
 }

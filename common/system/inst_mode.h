@@ -14,10 +14,12 @@ class InstMode
 
    private:
       static inst_mode_t inst_mode;
-      static void SetInstrumentationMode(InstMode::inst_mode_t new_mode);
+      static void updateInstrumentationMode();
 
       // Access through Sim()
       friend class Simulator;
 };
+
+extern const char * inst_mode_names[];
 
 #endif // INSTMODE_H

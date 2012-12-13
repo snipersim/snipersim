@@ -144,11 +144,9 @@ Simulator::~Simulator()
    // Done with all the Pin stuff, allow using Config::Config again
    m_config_file_allowed = true;
 
-   if (Sim()->getConfig()->getSimulationROI() == Config::ROI_FULL)
-   {
-      // roi-end
-      disablePerformanceGlobal();
-   }
+   // In case we're still in ROI (ROI is the full application, or someone forgot to turn it off), end ROI now
+   disablePerformanceGlobal();
+
    m_stats_manager->recordStats("stop");
    m_hooks_manager->callHooks(HookType::HOOK_SIM_END, 0);
 
@@ -212,13 +210,18 @@ void Simulator::disablePerformanceModels()
 
 void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode)
 {
-   if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
-      InstMode::SetInstrumentationMode(new_mode);
+   if (new_mode != InstMode::inst_mode) {
+      InstMode::inst_mode = new_mode;
+      printf("[SNIPER] Setting instrumentation mode to %s\n", inst_mode_names[new_mode]); fflush(stdout);
 
-   // If there is a fast-forward performance model, it needs to take care of barrier synchronization.
-   // Else, disable the barrier in fast-forward/cache-only
-   if (!Sim()->getFastForwardPerformanceManager())
-      getClockSkewMinimizationServer()->setDisable(new_mode != InstMode::DETAILED);
+      if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
+         InstMode::updateInstrumentationMode();
 
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
+      // If there is a fast-forward performance model, it needs to take care of barrier synchronization.
+      // Else, disable the barrier in fast-forward/cache-only
+      if (!Sim()->getFastForwardPerformanceManager())
+         getClockSkewMinimizationServer()->setDisable(new_mode != InstMode::DETAILED);
+
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
+   }
 }
