@@ -180,7 +180,7 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
    return basic_block;
 }
 
-void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)
+void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)
 {
    const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
 
@@ -200,8 +200,8 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Core *core, b
 
       if (bp)
       {
-         bool prediction = bp->predict(va2pa(inst.sinst->addr), 0 /* TODO: target */);
-         bp->update(prediction, inst.taken, va2pa(inst.sinst->addr), 0 /* TODO: target */);
+         bool prediction = bp->predict(va2pa(inst.sinst->addr), va2pa(next_inst.sinst->addr));
+         bp->update(prediction, inst.taken, va2pa(inst.sinst->addr), va2pa(next_inst.sinst->addr));
       }
    }
 
@@ -253,7 +253,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Core *core, b
    }
 }
 
-void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, PerformanceModel *prfmdl)
+void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl)
 {
    const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
 
@@ -269,7 +269,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Performance
 
    if (inst.is_branch)
    {
-      DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(va2pa(inst.sinst->addr), inst.taken, 0 /* TODO: target */);
+      DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(va2pa(inst.sinst->addr), inst.taken, va2pa(next_inst.sinst->addr));
       prfmdl->pushDynamicInstructionInfo(info);
    }
 
@@ -323,8 +323,10 @@ void TraceThread::run()
    Core *core = m_thread->getCore();
    PerformanceModel *prfmdl = core->getPerformanceModel();
 
-   Sift::Instruction inst;
-   while(m_trace.Read(inst))
+   Sift::Instruction inst, next_inst;
+
+   m_trace.Read(inst);
+   while(m_trace.Read(next_inst))
    {
       bool do_icache_warmup = false;
       UInt64 icache_warmup_addr = 0, icache_warmup_size = 0;
@@ -356,11 +358,11 @@ void TraceThread::run()
             break;
 
          case InstMode::CACHE_ONLY:
-            handleInstructionWarmup(inst, core, do_icache_warmup, icache_warmup_addr, icache_warmup_size);
+            handleInstructionWarmup(inst, next_inst, core, do_icache_warmup, icache_warmup_addr, icache_warmup_size);
             break;
 
          case InstMode::DETAILED:
-            handleInstructionDetailed(inst, prfmdl);
+            handleInstructionDetailed(inst, next_inst, prfmdl);
             break;
       }
 
@@ -373,6 +375,8 @@ void TraceThread::run()
 
       if (m_stop)
          break;
+
+      inst = next_inst;
    }
 
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
