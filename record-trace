@@ -101,6 +101,7 @@ if use_follow:
   pinoptions += ' -follow_execv'
 pinballoptions = ''
 if pinball:
+  pinoptions += ' -xyzzy -reserve_memory "%s.address"' % pinball
   pinballoptions += '-replay -replay:basename "%s"' % pinball
   # Replace the command line with the null app for use with PinPlay
   cmdline = ['%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()]
