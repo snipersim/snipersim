@@ -17,8 +17,11 @@ elif arch == 'ia32':
 else:
   raise ValueError('Unknown architecture %s' % arch)
 
-def determine_valid_flags():
+def determine_valid_flags(archname):
   possible_flags = ['-mno-sse4', '-mno-sse4.1', '-mno-sse4.2', '-mno-sse4a', '-mno-avx', '-mno-avx2']
+  # Add additional flags to enable sse on 32-bit machines
+  if archname == 'ia32':
+    possible_flags = ['-mfpmath=sse', '-msse', '-msse2'] + possible_flags
   valid_flags = []
   for flag in possible_flags:
     rc = subprocess.call([cc,'-x','c','-c','/dev/null','-o','/dev/null',flag], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
@@ -26,7 +29,7 @@ def determine_valid_flags():
       valid_flags.append(flag)
   return ' '.join(valid_flags)
 
-extra_cflags = determine_valid_flags()
+extra_cflags = determine_valid_flags(arch)
 
 flags = {}
 for f in ('SNIPER', 'GRAPHITE'):
