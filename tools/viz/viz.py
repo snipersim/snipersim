@@ -2,7 +2,7 @@
 import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
-import sniper_lib, sniper_stats, cpistack, level1, level2, level3
+import sniper_lib, sniper_stats, cpistack, level1, level2, level3, topology
 
 
 # From http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
@@ -16,9 +16,12 @@ def mkdir_p(path):
     else: raise
 
 
+levels_all = [ '1', '2', '3', 'topo' ]
+
+
 if __name__ == '__main__':
   def usage():
-    print 'Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir (default: viz)>] [--mcpat] [-v|--verbose]'
+    print 'Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir (default: viz)>] [--mcpat] [--level <levels (default: %s)>] [-v|--verbose]' % ','.join(levels_all)
     sys.exit()
 
   resultsdir = '.'
@@ -28,9 +31,10 @@ if __name__ == '__main__':
   num_intervals = 1000
   interval = None
   verbose = False
+  levels = levels_all
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:v", [ "help", "mcpat", "verbose" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:v", [ "help", "mcpat", "level=", "verbose" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -50,6 +54,12 @@ if __name__ == '__main__':
       num_intervals = long(a)
     if o == '-i':
       interval = long(a)
+    if o == '--level':
+      for l in a.split(','):
+        if l not in levels_all:
+          print 'Invalid level', l
+          sys.exit(1)
+      levels = a.split(',')
     if o == '-v' or o == '--verbose':
       verbose = True
 
@@ -105,9 +115,10 @@ if __name__ == '__main__':
 
   mkdir_p(outputdir)
 
-  level1.createJSONData(resultsdir, outputdir, verbose = verbose)
-  level2.createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
-  level3.createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbose = verbose)
+  if '1' in levels: level1.createJSONData(resultsdir, outputdir, verbose = verbose)
+  if '2' in levels: level2.createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
+  if '3' in levels: level3.createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbose = verbose)
+  if 'topo' in levels: topology.createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = verbose)
 
   if verbose:
     print "Write general info about the visualizations in info.txt"
@@ -122,6 +133,6 @@ if __name__ == '__main__':
   if outputdir != HOME:
     if verbose:
       print "Copy files to output directory "+outputdir
-    os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html levels/level3/*html css/ images/ scripts/ levels/level2/css levels/level2/javascript/ levels/level3/javascript | tar x -C %s' % (HOME, outputdir))
+    os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html levels/level3/*html levels/topology/*html css/ images/ scripts/ levels/level2/css levels/level2/javascript/ levels/level3/javascript | tar x -C %s' % (HOME, outputdir))
   if verbose:
     print "Visualizations can be viewed in "+os.path.join(outputdir,'index.html')
