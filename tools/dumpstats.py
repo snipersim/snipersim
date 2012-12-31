@@ -3,16 +3,18 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
-  print 'Usage:', sys.argv[0], '[-h (help)] [--list] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [<resultsdir (default: .)>]'
+  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -m|--markers] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [-d <resultsdir (default: .)>]'
 
 
 jobid = 0
 resultsdir = '.'
 partial = None
 do_list = False
+do_markers = False
+do_stats = True
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hj:d:", [ 'list', 'partial=' ])
+  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lm", [ 'list', 'markers', 'partial=' ])
 except getopt.GetoptError, e:
   print e
   usage()
@@ -30,8 +32,12 @@ for o, a in opts:
       sys.stderr.write('--partial=<from>:<to>\n')
       usage()
     partial = a.split(':')
-  if o == '--list':
+  if o in ('-l', '--list'):
     do_list = True
+    do_stats = False
+  if o in ('-m', '--markers'):
+    do_markers = True
+    do_stats = False
 
 if args:
   usage()
@@ -46,8 +52,34 @@ if do_list:
     import sniper_stats
     stats = sniper_stats.SniperStats(resultsdir)
     print ', '.join(stats.get_snapshots())
-    sys.exit(0)
 
+if do_markers:
+  if jobid:
+    print >> sys.stderr, "--markers not supported with jobid"
+    sys.exit(1)
+  else:
+    import sniper_stats
+    stats = sniper_stats.SniperStats(resultsdir)
+    if not hasattr(stats, 'db'):
+      print >> sys.stderr, "--markers not supported on non-SQLite stats format"
+      sys.exit(1)
+  try:
+    markers = stats.db.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall()
+  except Exception, e:
+    print >> sys.stderr, e
+    print >> sys.stderr, "--markers could not be fetched from database"
+    sys.exit(1)
+
+  for timestamp, core, thread, value0, value1, description in markers:
+    if description:
+      marker = 'a = %3d,  str = "%s"' % (value0, description)
+    else:
+      marker = 'a = %3d,  b = %3d' % (value0, value1)
+    print '%9ld ns: core(%2d) thread(%2d)  %s' % (timestamp / 1e6, core, thread, marker)
+
+
+if not do_stats:
+  sys.exit(0)
 
 results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
 
