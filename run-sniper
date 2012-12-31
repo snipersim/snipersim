@@ -270,6 +270,7 @@ if roi_script:
 
 if use_viz:
   scripts.append('periodic-stats:1000:2000')
+  scripts.append('markers:markers')
 
 if scripts:
   sniperoptions.append('-g --hooks/numscripts=%u' % len(scripts))
