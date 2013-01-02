@@ -10,12 +10,15 @@
 
 TraceManager::TraceManager()
    : m_threads(0)
+   , m_num_threads_running(0)
    , m_done(0)
    , m_stop_with_first_thread(Sim()->getCfg()->getBool("traceinput/stop_with_first_thread"))
+   , m_stop_with_first_app(Sim()->getCfg()->getBool("traceinput/stop_with_first_app"))
+   , m_app_restart(Sim()->getCfg()->getBool("traceinput/restart_apps"))
    , m_emulate_syscalls(Sim()->getCfg()->getBool("traceinput/emulate_syscalls"))
    , m_num_apps(Sim()->getCfg()->getInt("traceinput/num_apps"))
-   , m_app_thread_count(m_num_apps, 1)
-   , m_app_num_threads(m_num_apps, 1)
+   , m_num_apps_nonfinish(m_num_apps)
+   , m_app_info(m_num_apps)
 {
    if (m_emulate_syscalls)
    {
@@ -39,7 +42,7 @@ void TraceManager::init()
 {
    for (UInt32 i = 0 ; i < m_num_apps ; i++ )
    {
-      newThread(i /*app_id*/, true /*first*/);
+      newThread(i /*app_id*/, true /*first*/, false /*spawn*/);
    }
 }
 
@@ -51,33 +54,47 @@ String TraceManager::getFifoName(app_id_t app_id, UInt64 thread_num, bool respon
    return filename;
 }
 
-thread_id_t TraceManager::newThread(app_id_t app_id, bool first)
+thread_id_t TraceManager::createThread(app_id_t app_id)
 {
-   assert(static_cast<decltype(app_id)>(m_num_apps) > app_id);
+   // External version: acquire lock first
    ScopedLock sl(m_lock);
+
+   return newThread(app_id, false /*first*/, true /*spawn*/);
+}
+
+thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
+{
+   // Internal version: assume we're already holding the lock
+
+   assert(static_cast<decltype(app_id)>(m_num_apps) > app_id);
 
    String tracefile = "", responsefile = "";
    if (first)
    {
+      m_app_info[app_id].num_threads = 1;
+      m_app_info[app_id].thread_count = 1;
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_START, (UInt64)app_id);
+
       tracefile = m_tracefiles[app_id];
       if (m_emulate_syscalls)
          responsefile = m_responsefiles[app_id];
-      Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_START, (UInt64)app_id);
    }
    else
    {
-      m_app_num_threads[app_id]++;
-      int thread_num = m_app_thread_count[app_id]++;
+      m_app_info[app_id].num_threads++;
+      int thread_num = m_app_info[app_id].thread_count++;
+
       tracefile = getFifoName(app_id, thread_num, false /*response*/, true /*create*/);
       if (m_emulate_syscalls)
          responsefile = getFifoName(app_id, thread_num, true /*response*/, true /*create*/);
    }
 
+   m_num_threads_running++;
    Thread *thread = Sim()->getThreadManager()->createThread(app_id);
    TraceThread *tthread = new TraceThread(thread, tracefile, responsefile, app_id, first ? false : true /*cleaup*/);
    m_threads.push_back(tthread);
 
-   if (!first)
+   if (spawn)
    {
       /* First thread of each app spawns only when initialization is done,
          next threads are created once we're running so spawn them right away. */
@@ -92,12 +109,41 @@ void TraceManager::signalDone(Thread *thread)
    ScopedLock sl(m_lock);
 
    app_id_t app_id = thread->getAppId();
-   m_app_num_threads[app_id]--;
-   if (m_app_num_threads[app_id] == 0)
+   m_app_info[app_id].num_threads--;
+
+   if (m_stop_with_first_thread)
    {
+      stop();
+   }
+   else if (m_app_info[app_id].num_threads == 0)
+   {
+      m_app_info[app_id].num_runs++;
       Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_EXIT, (UInt64)app_id);
+
+      if (m_app_info[app_id].num_runs == 1)
+         m_num_apps_nonfinish--;
+
+      if (m_stop_with_first_app)
+      {
+         // First app has ended: stop
+         stop();
+      }
+      else if (m_num_apps_nonfinish == 0)
+      {
+         // All apps have completed at least once: stop
+         stop();
+      }
+      else
+      {
+         // Stop condition not met. Restart app?
+         if (m_app_restart)
+         {
+            newThread(app_id, true /*first*/, true /*spawn*/);
+         }
+      }
    }
 
+   m_num_threads_running--;
    m_done.signal();
 }
 
@@ -121,18 +167,9 @@ void TraceManager::stop()
 
 void TraceManager::wait()
 {
-   // Wait until one thread says it's done
-   m_done.wait();
-
-   // Signal all of the other thread contexts to end. This is the default behavior for multi-program workloads,
-   // but multi-threaded workloads should disable this.
-   if (m_stop_with_first_thread)
+   while(m_num_threads_running)
    {
-      stop();
-   }
-
-   for (size_t i = 1 ; i < m_threads.size() ; ++i)
-   {
+      // Wait until a thread says it's done
       m_done.wait();
    }
 }

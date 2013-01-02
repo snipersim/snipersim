@@ -127,7 +127,7 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 
 int32_t TraceThread::handleNewThreadFunc()
 {
-   return Sim()->getTraceManager()->newThread(m_app_id, false /*first*/);
+   return Sim()->getTraceManager()->createThread(m_app_id);
 }
 
 int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)

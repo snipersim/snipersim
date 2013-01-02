@@ -11,7 +11,7 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--response-traces=<resptrace0>,<resptrace1>,...]  |  --pinball=<binball-basename>  |  -- <cmdline> }' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinball=<binball-basename>  |  -- <cmdline> }' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -27,6 +27,8 @@ configfiles = []
 sniperoptions = []
 roi_only = False
 roi_script = False
+sim_end = None
+sim_end_valid = ('first', 'last', 'last-restart')
 use_viz = False
 use_viz_mcpat = ''
 use_perf = False
@@ -117,7 +119,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "mpi", "mpi-ranks=", "pinball=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinball=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -146,6 +148,11 @@ for o, a in opts:
     roi_only = True
   if o == '--roi-script':
     roi_script = True
+  if o == '--sim-end':
+    if a not in sim_end_valid:
+      print >> sys.stderr, '--sim-end value', a, 'invalid, need one of', sim_end_valid
+      sys.exit(1)
+    sim_end = a
   if o == '-s':
     scripts.append(a)
   if o == '--viz':
@@ -267,6 +274,19 @@ if roi_only:
   sniperoptions.append('-g --general/magic=true')
 if roi_script:
   sniperoptions.append('-g --general/roi_script=true')
+
+if sim_end == 'first':
+  sniperoptions.append('-g --traceinput/stop_with_first_thread=false')
+  sniperoptions.append('-g --traceinput/stop_with_first_app=true')
+  sniperoptions.append('-g --traceinput/restart_apps=false')
+elif sim_end == 'last':
+  sniperoptions.append('-g --traceinput/stop_with_first_thread=false')
+  sniperoptions.append('-g --traceinput/stop_with_first_app=false')
+  sniperoptions.append('-g --traceinput/restart_apps=false')
+elif sim_end == 'last-restart':
+  sniperoptions.append('-g --traceinput/stop_with_first_thread=false')
+  sniperoptions.append('-g --traceinput/stop_with_first_app=false')
+  sniperoptions.append('-g --traceinput/restart_apps=true')
 
 if use_viz:
   scripts.append('periodic-stats:1000:2000')
