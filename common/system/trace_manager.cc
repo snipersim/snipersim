@@ -2,6 +2,7 @@
 #include "trace_thread.h"
 #include "simulator.h"
 #include "thread_manager.h"
+#include "hooks_manager.h"
 #include "config.hpp"
 
 #include <sys/types.h>
@@ -14,6 +15,7 @@ TraceManager::TraceManager()
    , m_emulate_syscalls(Sim()->getCfg()->getBool("traceinput/emulate_syscalls"))
    , m_num_apps(Sim()->getCfg()->getInt("traceinput/num_apps"))
    , m_app_thread_count(m_num_apps, 1)
+   , m_app_num_threads(m_num_apps, 1)
 {
    if (m_emulate_syscalls)
    {
@@ -22,7 +24,6 @@ TraceManager::TraceManager()
       {
          m_tracefiles.push_back(getFifoName(i, 0, false /*response*/, false /*create*/));
          m_responsefiles.push_back(getFifoName(i, 0, true /*response*/, false /*create*/));
-         newThread(i /*app_id*/, true /*first*/);
       }
    }
    else
@@ -30,8 +31,15 @@ TraceManager::TraceManager()
       for (UInt32 i = 0 ; i < m_num_apps ; i++ )
       {
          m_tracefiles.push_back(Sim()->getCfg()->getString("traceinput/thread_" + itostr(i)));
-         newThread(i /*app_id*/, true /*first*/);
       }
+   }
+}
+
+void TraceManager::init()
+{
+   for (UInt32 i = 0 ; i < m_num_apps ; i++ )
+   {
+      newThread(i /*app_id*/, true /*first*/);
    }
 }
 
@@ -54,9 +62,11 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first)
       tracefile = m_tracefiles[app_id];
       if (m_emulate_syscalls)
          responsefile = m_responsefiles[app_id];
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_START, (UInt64)app_id);
    }
    else
    {
+      m_app_num_threads[app_id]++;
       int thread_num = m_app_thread_count[app_id]++;
       tracefile = getFifoName(app_id, thread_num, false /*response*/, true /*create*/);
       if (m_emulate_syscalls)
@@ -70,11 +80,25 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first)
    if (!first)
    {
       /* First thread of each app spawns only when initialization is done,
-         next threads are created once we're running so spanw them right away. */
+         next threads are created once we're running so spawn them right away. */
       tthread->spawn(NULL);
    }
 
    return thread->getId();
+}
+
+void TraceManager::signalDone(Thread *thread)
+{
+   ScopedLock sl(m_lock);
+
+   app_id_t app_id = thread->getAppId();
+   m_app_num_threads[app_id]--;
+   if (m_app_num_threads[app_id] == 0)
+   {
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_EXIT, (UInt64)app_id);
+   }
+
+   m_done.signal();
 }
 
 TraceManager::~TraceManager()

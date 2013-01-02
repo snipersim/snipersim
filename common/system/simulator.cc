@@ -108,6 +108,7 @@ void Simulator::start()
    PthreadEmu::init();
 
    m_hooks_manager->init();
+   m_trace_manager->init();
 
    m_sim_thread_manager->spawnSimThreads();
 

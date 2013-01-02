@@ -32,6 +32,8 @@ public:
       HOOK_PRE_STAT_WRITE,      // none                              Before statistics are written (update generated stats now!)
       HOOK_SYSCALL_ENTER,       // SyscallMdl::HookSyscallEnter      Thread enters a system call
       HOOK_SYSCALL_EXIT,        // SyscallMdl::HookSyscallExit       Thread exist from system call
+      HOOK_APPLICATION_START,   // app_id_t                          Application (re)start
+      HOOK_APPLICATION_EXIT,    // app_id_t                          Application exit
       HOOK_TYPES_MAX
    };
    static const char* hook_type_names[];

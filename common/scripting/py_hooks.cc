@@ -130,6 +130,8 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_CPUFREQ_CHANGE:
       case HookType::HOOK_INSTR_COUNT:
       case HookType::HOOK_INSTRUMENT_MODE:
+      case HookType::HOOK_APPLICATION_START:
+      case HookType::HOOK_APPLICATION_EXIT:
          Sim()->getHooksManager()->registerHook(type, hookCallbackInt, (UInt64)pFunc);
          break;
       case HookType::HOOK_MAGIC_MARKER:

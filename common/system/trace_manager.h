@@ -18,7 +18,8 @@ class TraceManager
       bool m_stop_with_first_thread;
       bool m_emulate_syscalls;
       UInt32 m_num_apps;
-      std::vector<UInt32> m_app_thread_count;
+      std::vector<UInt32> m_app_thread_count; //< Index counter for new thread's FIFO name
+      std::vector<UInt32> m_app_num_threads;  //< Number of active threads for this app (when zero, app is done)
       std::vector<String> m_tracefiles;
       std::vector<String> m_responsefiles;
       String m_trace_prefix;
@@ -29,12 +30,13 @@ class TraceManager
    public:
       TraceManager();
       ~TraceManager();
+      void init();
       void start();
       void stop();
       void wait();
       void run();
       thread_id_t newThread(app_id_t app_id, bool first);
-      void signalDone(thread_id_t thread_id) { m_done.signal(); }
+      void signalDone(Thread *thread);
       void accessMemory(int core_id, Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
 
       UInt64 getProgressExpect();
