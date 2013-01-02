@@ -64,6 +64,7 @@ PIN_LOCK access_memory_lock;
 PIN_LOCK new_threadid_lock;
 std::deque<ADDRINT> tidptrs;
 BOOL any_thread_in_detail = false;
+const bool verbose = false;
 
 typedef struct {
    Sift::Writer *output;
@@ -119,7 +120,8 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
          }
          else
          {
-            std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
+            if (verbose)
+               std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
          }
          any_thread_in_detail = true;
          for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
@@ -136,7 +138,8 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
          sprintf(filename, "%s.app%" PRId32 ".appid", KnobOutputFile.Value().c_str(), app_id);
          unlink(filename);
 
-         std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
+         if (verbose)
+            std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
          any_thread_in_detail = false;
          for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
          {
@@ -171,7 +174,8 @@ VOID countInsns(THREADID threadid, INT32 count)
 
    if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value())
    {
-      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
+      if (verbose)
+         std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       if (!thread_data[threadid].in_detail)
          openFile(threadid);
       thread_data[threadid].in_detail = true;
@@ -510,12 +514,14 @@ void openFile(THREADID threadid)
          sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
    }
 
-   std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
+   if (verbose)
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobEmulateSyscalls.Value())
    {
       sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
-      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Response = [" << response_filename << "]" << std::endl;
+      if (verbose)
+         std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Response = [" << response_filename << "]" << std::endl;
    }
 
 
@@ -540,10 +546,13 @@ void closeFile(THREADID threadid)
    if (thread_data[threadid].output)
       thread_data[threadid].output->End();
 
-   std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Recorded " << thread_data[threadid].icount_detailed;
-   if (thread_data[threadid].icount > thread_data[threadid].icount_detailed)
-      std::cerr << " (out of " << thread_data[threadid].icount << ")";
-   std::cerr << " instructions" << std::endl;
+   if (verbose)
+   {
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Recorded " << thread_data[threadid].icount_detailed;
+      if (thread_data[threadid].icount > thread_data[threadid].icount_detailed)
+         std::cerr << " (out of " << thread_data[threadid].icount << ")";
+      std::cerr << " instructions" << std::endl;
+   }
    delete thread_data[threadid].output;
    thread_data[threadid].output = NULL;
 
@@ -691,7 +700,8 @@ VOID forkBefore(THREADID threadid, const CONTEXT *ctxt, VOID *v)
 
 int main(int argc, char **argv)
 {
-   if (PIN_Init(argc,argv)) {
+   if (PIN_Init(argc,argv))
+   {
       std::cerr << "Error, invalid parameters" << std::endl;
       exit(1);
    }
