@@ -382,7 +382,7 @@ void TraceThread::run()
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
 
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
-   Sim()->getTraceManager()->signalDone(m_thread);
+   Sim()->getTraceManager()->signalDone(m_thread, m_stop /*aborted*/);
 }
 
 void TraceThread::spawn(Barrier *barrier)

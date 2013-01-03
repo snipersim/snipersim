@@ -104,41 +104,44 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
    return thread->getId();
 }
 
-void TraceManager::signalDone(Thread *thread)
+void TraceManager::signalDone(Thread *thread, bool aborted)
 {
    ScopedLock sl(m_lock);
 
    app_id_t app_id = thread->getAppId();
    m_app_info[app_id].num_threads--;
 
-   if (m_stop_with_first_thread)
+   if (!aborted)
    {
-      stop();
-   }
-   else if (m_app_info[app_id].num_threads == 0)
-   {
-      m_app_info[app_id].num_runs++;
-      Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_EXIT, (UInt64)app_id);
-
-      if (m_app_info[app_id].num_runs == 1)
-         m_num_apps_nonfinish--;
-
-      if (m_stop_with_first_app)
+      if (m_stop_with_first_thread)
       {
-         // First app has ended: stop
          stop();
       }
-      else if (m_num_apps_nonfinish == 0)
+      else if (m_app_info[app_id].num_threads == 0)
       {
-         // All apps have completed at least once: stop
-         stop();
-      }
-      else
-      {
-         // Stop condition not met. Restart app?
-         if (m_app_restart)
+         m_app_info[app_id].num_runs++;
+         Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_EXIT, (UInt64)app_id);
+
+         if (m_app_info[app_id].num_runs == 1)
+            m_num_apps_nonfinish--;
+
+         if (m_stop_with_first_app)
          {
-            newThread(app_id, true /*first*/, true /*spawn*/);
+            // First app has ended: stop
+            stop();
+         }
+         else if (m_num_apps_nonfinish == 0)
+         {
+            // All apps have completed at least once: stop
+            stop();
+         }
+         else
+         {
+            // Stop condition not met. Restart app?
+            if (m_app_restart)
+            {
+               newThread(app_id, true /*first*/, true /*spawn*/);
+            }
          }
       }
    }

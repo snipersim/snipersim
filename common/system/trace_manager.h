@@ -52,7 +52,7 @@ class TraceManager
       void wait();
       void run();
       thread_id_t createThread(app_id_t app_id);
-      void signalDone(Thread *thread);
+      void signalDone(Thread *thread, bool aborted);
       void accessMemory(int core_id, Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
 
       UInt64 getProgressExpect();
