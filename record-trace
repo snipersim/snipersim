@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [--gdb|--gdb-wait|--gdb-quit] [--follow] { --pinball=<pinball-basename> | -- <cmdline> }' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] { --pinball=<pinball-basename> | -- <cmdline> }' % sys.argv[0]
   sys.exit(2)
 
 
@@ -22,6 +22,7 @@ detailed = 0
 blocksize = 0
 syscallemulation = 0
 siftcountoffset = 0
+useresponsefiles = 0
 use_gdb = False
 gdb_wait = False
 gdb_quit = False
@@ -33,7 +34,7 @@ if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:", [ "roi", "gdb", "gdb-wait", "gdb-quit", "follow", "pa", "pinball=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:r:", [ "roi", "gdb", "gdb-wait", "gdb-quit", "follow", "pa", "pinball=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -56,6 +57,8 @@ for o, a in opts:
     syscallemulation = long(float(a))
   if o == '-s':
     siftcountoffset = long(float(a))
+  if o == '-r':
+    useresponsefiles = int(a) and 1 or 0
   if o == '--gdb':
     use_gdb = True
   if o == '--gdb-wait':
@@ -109,7 +112,7 @@ if pinball:
 envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/%(arch)s/runtime:$LD_LIBRARY_PATH"; ' % locals()
 value_roi = use_roi and 1 or 0
 value_pa = use_pa and 1 or 0
-cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -pa %(value_pa)d %(pinballoptions)s -- ' % locals() + ' '.join(cmdline)
+cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d %(pinballoptions)s -- ' % locals() + ' '.join(cmdline)
 
 print '[SIFT_RECORDER]', 'Running', cmd
 sys.stdout.flush()

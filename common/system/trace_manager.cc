@@ -20,9 +20,19 @@ TraceManager::TraceManager()
    , m_num_apps_nonfinish(m_num_apps)
    , m_app_info(m_num_apps)
 {
+   m_trace_prefix = Sim()->getCfg()->getString("traceinput/trace_prefix");
+
    if (m_emulate_syscalls)
    {
-      m_trace_prefix = Sim()->getCfg()->getString("traceinput/trace_prefix");
+      if (m_trace_prefix == "")
+      {
+         std::cerr << "Error: a trace prefix is required when emulating syscalls." << std::endl;
+         exit(1);
+      }
+   }
+
+   if (m_trace_prefix != "")
+   {
       for (UInt32 i = 0 ; i < m_num_apps ; i++ )
       {
          m_tracefiles.push_back(getFifoName(i, 0, false /*response*/, false /*create*/));
@@ -76,7 +86,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
       Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_START, (UInt64)app_id);
 
       tracefile = m_tracefiles[app_id];
-      if (m_emulate_syscalls)
+      if (m_responsefiles.size())
          responsefile = m_responsefiles[app_id];
    }
    else
@@ -85,7 +95,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
       int thread_num = m_app_info[app_id].thread_count++;
 
       tracefile = getFifoName(app_id, thread_num, false /*response*/, true /*create*/);
-      if (m_emulate_syscalls)
+      if (m_responsefiles.size())
          responsefile = getFifoName(app_id, thread_num, true /*response*/, true /*create*/);
    }
 

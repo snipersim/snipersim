@@ -42,6 +42,7 @@ KNOB<UINT64> KnobBlocksize(KNOB_MODE_WRITEONCE, "pintool", "b", "0", "blocksize"
 KNOB<UINT64> KnobUseROI(KNOB_MODE_WRITEONCE, "pintool", "roi", "0", "use ROI markers");
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
+KNOB<UINT64> KnobUseResponseFiles(KNOB_MODE_WRITEONCE, "pintool", "r", "0", "use response files (required for multithreaded applications or when emulating syscalls, default = 0)");
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
 KNOB<BOOL>   KnobSendPhysicalAddresses(KNOB_MODE_WRITEONCE, "pintool", "pa", "0", "send logical to physical address mapping");
 KNOB<UINT64> KnobFlowControl(KNOB_MODE_WRITEONCE, "pintool", "flow", "1000", "number of instructions to send before syncing up");
@@ -220,7 +221,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 
    thread_data[threadid].output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
 
-   if (KnobEmulateSyscalls.Value() && KnobFlowControl.Value() && thread_data[threadid].icount > thread_data[threadid].flowcontrol_target)
+   if (KnobUseResponseFiles.Value() && KnobFlowControl.Value() && thread_data[threadid].icount > thread_data[threadid].flowcontrol_target)
    {
       thread_data[threadid].output->Sync();
       thread_data[threadid].flowcontrol_target = thread_data[threadid].icount + KnobFlowControl.Value();
@@ -494,12 +495,12 @@ void openFile(THREADID threadid)
 
    if (threadid != 0)
    {
-      assert(KnobEmulateSyscalls.Value() != 0);
+      assert(KnobUseResponseFiles.Value() != 0);
    }
 
    char filename[1024] = {0};
    char response_filename[1024] = {0};
-   if (KnobEmulateSyscalls.Value() == 0)
+   if (KnobUseResponseFiles.Value() == 0)
    {
       if (blocksize)
          sprintf(filename, "%s.%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum);
@@ -517,7 +518,7 @@ void openFile(THREADID threadid)
    if (verbose)
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
 
-   if (KnobEmulateSyscalls.Value())
+   if (KnobUseResponseFiles.Value())
    {
       sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
       if (verbose)
@@ -751,6 +752,12 @@ int main(int argc, char **argv)
 
    if (KnobEmulateSyscalls.Value())
    {
+      if (!KnobUseResponseFiles.Value())
+      {
+         std::cerr << "Error, Response files are required when using syscall emulation." << std::endl;
+         exit(1);
+      }
+
       emulateSyscall[SYS_futex] = true;
       PIN_AddSyscallEntryFunction(syscallEntryCallback, 0);
       PIN_AddSyscallExitFunction(syscallExitCallback, 0);
