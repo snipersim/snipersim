@@ -1,19 +1,22 @@
 import sys, os, time, subprocess, threading, multiprocessing, sniper_lib
 
-def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
+def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
   out = file(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), 'w', 0) # Open unbuffered to maintain stdout/stderr interleaving
   os.dup2(out.fileno(), sys.stdout.fileno())
   os.dup2(out.fileno(), sys.stderr.fileno())
   program_func(program_arg)
+
+def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
+  proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id))
+  proc.start()
+  proc.join()
 
 def run_program_repeat(app_id, program_func, program_arg, outputdir):
   global running
   run_id = 0
   while running:
     print '[RUN-SNIPER] Starting application', app_id
-    proc = multiprocessing.Process(target = run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id))
-    proc.start()
-    proc.join()
+    run_program_redirect(app_id, program_func, program_arg, outputdir, run_id)
     print '[RUN-SNIPER] Application', app_id, 'done'
     time.sleep(1)
     run_id += 1
