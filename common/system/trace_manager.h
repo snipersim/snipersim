@@ -28,7 +28,6 @@ class TraceManager
       std::vector<TraceThread *> m_threads;
       UInt32 m_num_threads_running;
       Semaphore m_done;
-      const bool m_stop_with_first_thread;
       const bool m_stop_with_first_app;
       const bool m_app_restart;
       const bool m_emulate_syscalls;

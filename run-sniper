@@ -280,15 +280,12 @@ if roi_script:
   sniperoptions.append('-g --general/roi_script=true')
 
 if sim_end == 'first':
-  sniperoptions.append('-g --traceinput/stop_with_first_thread=false')
   sniperoptions.append('-g --traceinput/stop_with_first_app=true')
   sniperoptions.append('-g --traceinput/restart_apps=false')
 elif sim_end == 'last':
-  sniperoptions.append('-g --traceinput/stop_with_first_thread=false')
   sniperoptions.append('-g --traceinput/stop_with_first_app=false')
   sniperoptions.append('-g --traceinput/restart_apps=false')
 elif sim_end == 'last-restart':
-  sniperoptions.append('-g --traceinput/stop_with_first_thread=false')
   sniperoptions.append('-g --traceinput/stop_with_first_app=false')
   sniperoptions.append('-g --traceinput/restart_apps=true')
 
@@ -363,7 +360,6 @@ elif use_mpi:
     mpi_ranks = ncores
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'true'
-  tracegen['stop_with_first_thread'] = 'false' # Only stop once all MPI ranks have completed
   tracegen['stop_with_first_app'] = 'false' # Only stop once all MPI ranks have completed
   tracegen['num_apps'] = mpi_ranks
   # Set trace recorder options
@@ -372,7 +368,6 @@ elif pinball_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'false'
-  tracegen['stop_with_first_thread'] = 'false'
   tracegen['stop_with_first_app'] = 'false'
   tracegen['num_apps'] = 1
   # Set trace recorder options
@@ -383,7 +378,6 @@ if tracegen:
   tracegen['enabled'] = 'true'
   sniperoptions.append('-g --traceinput/enabled=%s' % tracegen['enabled'])
   sniperoptions.append('-g --traceinput/emulate_syscalls=%s' % tracegen['emulate_syscalls'])
-  sniperoptions.append('-g --traceinput/stop_with_first_thread=%s' % tracegen['stop_with_first_thread'])
   sniperoptions.append('-g --traceinput/stop_with_first_app=%s' % tracegen['stop_with_first_app'])
   sniperoptions.append('-g --traceinput/num_apps=%d' % tracegen['num_apps'])
   basefname = 'run_benchmarks'

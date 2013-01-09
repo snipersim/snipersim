@@ -12,7 +12,6 @@ TraceManager::TraceManager()
    : m_threads(0)
    , m_num_threads_running(0)
    , m_done(0)
-   , m_stop_with_first_thread(Sim()->getCfg()->getBool("traceinput/stop_with_first_thread"))
    , m_stop_with_first_app(Sim()->getCfg()->getBool("traceinput/stop_with_first_app"))
    , m_app_restart(Sim()->getCfg()->getBool("traceinput/restart_apps"))
    , m_emulate_syscalls(Sim()->getCfg()->getBool("traceinput/emulate_syscalls"))
@@ -123,11 +122,7 @@ void TraceManager::signalDone(Thread *thread, bool aborted)
 
    if (!aborted)
    {
-      if (m_stop_with_first_thread)
-      {
-         stop();
-      }
-      else if (m_app_info[app_id].num_threads == 0)
+      if (m_app_info[app_id].num_threads == 0)
       {
          m_app_info[app_id].num_runs++;
          Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_EXIT, (UInt64)app_id);
