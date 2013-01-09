@@ -2,7 +2,7 @@
 
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, Queue, socket, pipes, commands
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-import sniper_lib, sniper_config, gen_simout, debugpin, env_setup
+import sniper_lib, sniper_config, gen_simout, debugpin, env_setup, run_sniper
 
 
 HOME = env_setup.sim_root()
@@ -11,7 +11,7 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinball=<pinball-basename>  |  -- <cmdline> }' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinballs=<pinball-basename>,*  |  -- <cmdline> }' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -49,7 +49,7 @@ traces = []
 resptraces = []
 trace_manual = False
 heteroconfig = None
-pinball = None
+pinballs = None
 pinball_sift = True
 tracegen = None
 
@@ -121,7 +121,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinball=", "pinball-non-sift" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -204,8 +204,8 @@ for o, a in opts:
     use_mpi = True
   if o == '--mpi-ranks':
     mpi_ranks = long(a)
-  if o == '--pinball':
-    pinball = a
+  if o == '--pinballs':
+    pinballs = a.split(',')
   if o == '--pinball-non-sift':
     pinball_sift = False
 
@@ -219,17 +219,20 @@ if cmdline:
   if traces or trace_manual:
     print 'Cannot combine traces with running a benchmark'
     usage()
-  if pinball:
+  if pinballs:
     print 'Cannot combine pinball use with running a benchmark'
     usage()
-elif pinball:
+elif pinballs:
+  if len(pinballs) > 1 and not pinball_sift:
+    print 'Cannot run multiple non-SIFT pinballs'
   standalone = pinball_sift
   if traces or trace_manual:
     print 'Cannot combine a pinball with tracing (--traces= or --trace-manual)'
     usage()
-  if not os.path.exists('%s.address' % pinball):
-    print 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (pinball, pinball)
-    usage()
+  for pinball in pinballs:
+    if not os.path.exists('%s.address' % pinball):
+      print 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (pinball, pinball)
+      usage()
 else:
   standalone = True
   opt_count = 0
@@ -241,7 +244,7 @@ else:
     print 'Need either a set of traces (--traces= or --trace-manual), a pinball, or a benchmark command line'
     usage()
   if opt_count > 1:
-    print 'Can only use one of --traces=, --trace-manual or --pinball= when not using a command line argument'
+    print 'Can only use one of --traces=, --trace-manual or --pinballs= when not using a command line argument'
     usage()
 
 if roi_only and roi_script:
@@ -363,15 +366,19 @@ elif use_mpi:
   tracegen['stop_with_first_app'] = 'false' # Only stop once all MPI ranks have completed
   tracegen['num_apps'] = mpi_ranks
   # Set trace recorder options
-  tracegen['tracecmd'] = [ '--roi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--' ] + cmdline
-elif pinball and pinball_sift:
+  applications = [
+    [ '--roi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--' ] + cmdline
+  ]
+elif pinballs and pinball_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'false'
   tracegen['stop_with_first_app'] = 'false'
   tracegen['num_apps'] = 1
   # Set trace recorder options
-  tracegen['tracecmd'] = [ '-e', '0', '-s', '0', '-r', '1', '--pinball', pinball]
+  applications = []
+  for pinball in pinballs:
+    applications.append([ '-e', '0', '-s', '0', '-r', '1', '--pinball', pinball ])
 
 # Setup common generated trace files
 if tracegen:
@@ -391,10 +398,17 @@ if tracegen:
       filename = '%s%s.app%d.th%d.sift' % (traceprefix, f, r, 0)
       os.mkfifo(filename)
       tracegen['tracefiles_created'].append(filename)
-  # Start app with trace recorder in a thread
-  tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + tracegen['tracecmd']
-  print '[SNIPER] Running', tracecmd
-  threading.Thread(target = lambda: time.sleep(1) or subprocess.Popen(tracecmd).communicate()).start()
+  # Start app(s) with trace recorder in a thread
+  def run_sift_recorder((app_id, app_cmd)):
+    tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix, '-s', str(app_id) ] + app_cmd
+    print '[SNIPER] Running', tracecmd
+    time.sleep(1)
+    subprocess.Popen(tracecmd).communicate()
+  for app_id, app_cmd in enumerate(applications):
+    if True: # redirect output
+      threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, (app_id, app_cmd), outputdir)).start()
+    else:    # inline output
+      threading.Thread(target = run_sift_recorder, args = ((app_id, app_cmd),)).start()
 
 sniperoptions = ' '.join(sniperoptions)
 
@@ -499,9 +513,9 @@ if not standalone:
     else:
       pinoptions += ' -appdebug'
 
-if pinball and not pinball_sift:
-  pinoptions += ' -xyzzy -reserve_memory %s.address' % (pinball)
-  optcmd += ' -replay -replay:basename %s --general/enable_pinplay=true' % (pinball)
+if pinballs and not pinball_sift:
+  pinoptions += ' -xyzzy -reserve_memory %s.address' % (pinballs[0])
+  optcmd += ' -replay -replay:basename %s --general/enable_pinplay=true' % (pinballs[0])
   # Overwrite the cmdline with the nullapp, as the pinball will handle the appropriate processing
   nullapp_path = '%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()
   if not os.path.exists(nullapp_path):
