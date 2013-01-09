@@ -364,7 +364,7 @@ elif use_mpi:
   tracegen['num_apps'] = mpi_ranks
   # Set trace recorder options
   tracegen['tracecmd'] = [ '--roi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--' ] + cmdline
-elif pinball_sift:
+elif pinball and pinball_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'false'
