@@ -50,6 +50,12 @@ class DynamicMicroOp
 
       bool m_forceLongLatencyLoad;
 
+      /** These first/last flags are needed in case of squashing, as long as squashed uop doesn't go to rob
+          and we can't use first/last flags of m_uop in such a cases.*/
+      /** This microOp is the first microOp of the instruction. */
+      bool first;
+      /** This microOp is the last microOp of the instruction. */
+      bool last;
 
       // architecture-specific information to be defined in derived classes
 
@@ -83,6 +89,12 @@ class DynamicMicroOp
       uint64_t getDependency(uint32_t index) const;
       void addDependency(uint64_t sequenceNumber);
       void removeDependency(uint64_t sequenceNumber);
+
+      void setFirst(bool _first) { first = _first; }
+      bool isFirst() const { return first; }
+
+      void setLast(bool _last) { last = _last; }
+      bool isLast() const { return last; }
 
       bool isBranchTaken() const { LOG_ASSERT_ERROR(m_uop->isBranch(), "Expected a branch instruction."); return this->branchTaken; }
       void setBranchTaken(bool _branch_taken) { LOG_ASSERT_ERROR(m_uop->isBranch(), "Expected a branch instruction."); branchTaken = _branch_taken; }

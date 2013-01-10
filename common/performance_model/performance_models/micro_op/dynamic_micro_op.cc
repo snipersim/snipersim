@@ -29,6 +29,11 @@ DynamicMicroOp::DynamicMicroOp(const MicroOp *uop, const CoreModel *core_model, 
 
    for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_DEPENDENCIES; i++)
       this->dependencies[i] = -1;
+
+   LOG_ASSERT_ERROR(m_uop != NULL, "uop is NULL");
+
+   first = m_uop->isFirst();
+   last = m_uop->isLast();
 }
 
 DynamicMicroOp::~DynamicMicroOp()
