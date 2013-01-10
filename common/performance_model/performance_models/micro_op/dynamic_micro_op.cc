@@ -40,18 +40,25 @@ DynamicMicroOp::~DynamicMicroOp()
 {
 }
 
-void DynamicMicroOp::squash(std::vector<DynamicMicroOp*>* array, uint32_t index)
+void DynamicMicroOp::squash(std::vector<DynamicMicroOp*>* array)
 {
    squashed = true;
 
    if (array)
    {
-      // If we are the first uop in a list and we get squashed, the next one inherits isFirst
-      if (isFirst() && index+1 < array->size())
-         (*array)[index+1]->setFirst(true);
-      // If we are the last uop in a list and we get squashed, the previous one inherits isFirst
-      if (isLast() && index > 0)
-         (*array)[index-1]->setLast(true);
+      // Fix up isFirst/isLast after possibly squashing the first/last microop in a list
+      for(int index = 0; index < (int)array->size(); ++index)
+         if (!(*array)[index]->isSquashed())
+         {
+            (*array)[index]->setFirst(true);
+            break;
+         }
+      for(int index = array->size() - 1; index >= 0; --index)
+         if (!(*array)[index]->isSquashed())
+         {
+            (*array)[index]->setLast(true);
+            break;
+         }
    }
 }
 
