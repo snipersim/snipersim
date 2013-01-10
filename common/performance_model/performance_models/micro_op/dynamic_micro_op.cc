@@ -40,6 +40,21 @@ DynamicMicroOp::~DynamicMicroOp()
 {
 }
 
+void DynamicMicroOp::squash(std::vector<DynamicMicroOp*>* array, uint32_t index)
+{
+   squashed = true;
+
+   if (array)
+   {
+      // If we are the first uop in a list and we get squashed, the next one inherits isFirst
+      if (isFirst() && index+1 < array->size())
+         (*array)[index+1]->setFirst(true);
+      // If we are the last uop in a list and we get squashed, the previous one inherits isFirst
+      if (isLast() && index > 0)
+         (*array)[index-1]->setLast(true);
+   }
+}
+
 uint64_t DynamicMicroOp::getDependency(uint32_t index) const
 {
    if (index < this->intraInstructionDependencies) {

@@ -76,7 +76,7 @@ LoopTracer::issue(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycl
    IntPtr address = inst->getAddress();
 
    // Start of a new loop iteration?
-   if (address == m_address_base && uop->getMicroOp()->isFirst())
+   if (address == m_address_base && uop->isFirst())
    {
       ++m_iter_current;
       m_iter_instr = 0;

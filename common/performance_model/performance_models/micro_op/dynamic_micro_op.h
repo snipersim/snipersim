@@ -82,7 +82,7 @@ class DynamicMicroOp
       }
 
       // Mark this micro-op as squashed so it will be ignored in further pipeline stages
-      void squash() { squashed = true; }
+      void squash(std::vector<DynamicMicroOp*>* array = NULL, uint32_t index = 0);
       bool isSquashed() { return squashed; }
 
       uint32_t getDependenciesLength() const { return this->intraInstructionDependencies + this->dependenciesLength; }

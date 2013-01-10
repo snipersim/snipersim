@@ -216,7 +216,7 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
       m_windows->dispatchInstruction();
 
       micro_ops_executed++;
-      if (micro_op.getMicroOp()->isLast())
+      if (micro_op.getDynMicroOp()->isLast())
       {
          instructions_executed++;
       }
