@@ -205,7 +205,7 @@ for o, a in opts:
   if o == '--mpi-ranks':
     mpi_ranks = long(a)
   if o == '--pinballs':
-    pinballs = a.split(',')
+    pinballs = map(os.path.abspath, a.split(','))
   if o == '--pinball-non-sift':
     pinball_sift = False
 
@@ -374,11 +374,11 @@ elif pinballs and pinball_sift:
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'false'
   tracegen['stop_with_first_app'] = 'false'
-  tracegen['num_apps'] = 1
+  tracegen['num_apps'] = len(pinballs)
   # Set trace recorder options
   applications = []
   for pinball in pinballs:
-    applications.append([ '-e', '0', '-s', '0', '-r', '1', '--pinball', pinball ])
+    applications.append([ '-e', '0', '-s', '-1', '-r', '1', '--pinball', pinball ])
 
 # Setup common generated trace files
 if tracegen:
