@@ -152,7 +152,6 @@ void TraceManager::signalDone(Thread *thread, bool aborted)
    }
 
    m_num_threads_running--;
-   m_done.signal();
 }
 
 TraceManager::~TraceManager()
@@ -169,17 +168,18 @@ void TraceManager::start()
 
 void TraceManager::stop()
 {
+   // Signal threads to stop.
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
       (*it)->stop();
+   // Give threads some time to end.
+   sleep(1);
+   // Some threads may be blocked (barrier, SIFT reader, etc.). Don't wait for them or we'll deadlock.
+   m_done.signal();
 }
 
 void TraceManager::wait()
 {
-   while(m_num_threads_running)
-   {
-      // Wait until a thread says it's done
-      m_done.wait();
-   }
+   m_done.wait();
 }
 
 void TraceManager::run()
