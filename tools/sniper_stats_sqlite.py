@@ -41,6 +41,10 @@ class SniperStatsSqlite(sniper_stats.SniperStatsBase):
     else:
       raise ValueError('Invalid prefix %s' % prefix)
 
+  def get_topology(self):
+    c = self.db.cursor()
+    return c.execute('SELECT componentname, coreid, masterid FROM topology').fetchall()
+
 
 if __name__ == '__main__':
   stats = SniperStatsSqlite()
