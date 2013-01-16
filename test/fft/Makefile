@@ -6,3 +6,5 @@ $(TARGET): $(TARGET).o
 
 run_$(TARGET):
 	../../run-sniper -n 2 -c gainestown --roi --viz -- ./fft -p 2
+
+CLEAN_EXTRA=viz
