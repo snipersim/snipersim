@@ -1,4 +1,4 @@
-#include "scheduler_rand.h"
+#include "scheduler_big_small.h"
 #include "simulator.h"
 #include "config.hpp"
 #include "thread.h"
@@ -7,17 +7,17 @@
 #include "misc/tags.h"
 #include <list>
 
-SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
+SchedulerBigSmall::SchedulerBigSmall(ThreadManager *thread_manager)
    : SchedulerDynamic(thread_manager)
    , m_quantum(SubsecondTime::US(1000))
    , m_last_periodic(SubsecondTime::Zero())
 {
-   m_debug_output = Sim()->getCfg()->getBool("scheduler/rand/debug");
+   m_debug_output = Sim()->getCfg()->getBool("scheduler/big_small/debug");
 
    if (m_debug_output)
-      std::cout << "[SchedulerRand] created random scheduler" << std::endl;
+      std::cout << "[SchedulerBigSmall] created Big Small scheduler" << std::endl;
 
-   uint64_t t = Sim()->getCfg()->getInt("scheduler/rand/quantum");
+   uint64_t t = Sim()->getCfg()->getInt("scheduler/big_small/quantum");
    m_quantum = SubsecondTime::US(t);
 
    m_nSmallCores = m_nBigCores = 0;
@@ -32,51 +32,51 @@ SchedulerRand::SchedulerRand(ThreadManager *thread_manager)
 }
 
 
-core_id_t SchedulerRand::threadCreate(thread_id_t thread_id)
+core_id_t SchedulerBigSmall::threadCreate(thread_id_t thread_id)
 {
    // initially schedule threads on the next available core
    core_id_t freeCoreId = findFirstFreeCore();
-   LOG_ASSERT_ERROR(freeCoreId != INVALID_CORE_ID, "[SchedulerRand] No cores available for spawnThread request.");
+   LOG_ASSERT_ERROR(freeCoreId != INVALID_CORE_ID, "[SchedulerBigSmall] No cores available for spawnThread request.");
 
    if (m_debug_output)
-     std::cout << "[SchedulerRand] created thread " << thread_id << " on core " << freeCoreId << " in random scheduler" << std::endl;
+     std::cout << "[SchedulerBigSmall] created thread " << thread_id << " on core " << freeCoreId << " in Big Small scheduler" << std::endl;
 
    return freeCoreId;
 }
 
-void SchedulerRand::threadStart(thread_id_t thread_id, SubsecondTime time)
+void SchedulerBigSmall::threadStart(thread_id_t thread_id, SubsecondTime time)
 {
    if (m_debug_output)
-      std::cout << "[SchedulerRand] thread " << thread_id << " started" << std::endl;
+      std::cout << "[SchedulerBigSmall] thread " << thread_id << " started" << std::endl;
 
    // Nothing needs to be done
 }
 
-void SchedulerRand::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
+void SchedulerBigSmall::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
 {
    if (m_debug_output)
-      std::cout << "[SchedulerRand] thread " << thread_id << " stalled" << std::endl;
+      std::cout << "[SchedulerBigSmall] thread " << thread_id << " stalled" << std::endl;
 
    // thread will just waste a core
 }
 
-void SchedulerRand::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
+void SchedulerBigSmall::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
 {
    if (m_debug_output)
-      std::cout << "[SchedulerRand] thread " << thread_id << " resumed" << std::endl;
+      std::cout << "[SchedulerBigSmall] thread " << thread_id << " resumed" << std::endl;
 
    // Nothing needs to be done
 }
 
-void SchedulerRand::threadExit(thread_id_t thread_id, SubsecondTime time)
+void SchedulerBigSmall::threadExit(thread_id_t thread_id, SubsecondTime time)
 {
    if (m_debug_output)
-      std::cout << "[SchedulerRand] thread " << thread_id << " EXIT" << std::endl;
+      std::cout << "[SchedulerBigSmall] thread " << thread_id << " EXIT" << std::endl;
 
    // Nothing needs to be done
 }
 
-void SchedulerRand::periodic(SubsecondTime time)
+void SchedulerBigSmall::periodic(SubsecondTime time)
 {
    SubsecondTime delta = time - m_last_periodic;
 
@@ -92,7 +92,7 @@ void SchedulerRand::periodic(SubsecondTime time)
    m_last_periodic = time;
 }
 
-void SchedulerRand::reschedule(SubsecondTime time)
+void SchedulerBigSmall::reschedule(SubsecondTime time)
 {
    std::list<std::pair<uint64_t, core_id_t> > cid;
    for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
@@ -107,7 +107,7 @@ void SchedulerRand::reschedule(SubsecondTime time)
 
    if (m_debug_output)
    {
-      std::cout << "[SchedulerRand] mapping: ";
+      std::cout << "[SchedulerBigSmall] mapping: ";
       printMapping();
    }
 
@@ -115,7 +115,7 @@ void SchedulerRand::reschedule(SubsecondTime time)
 }
 
 
-void SchedulerRand::remap(std::list< std::pair< uint64_t, core_id_t> > &mapping, SubsecondTime time )
+void SchedulerBigSmall::remap(std::list< std::pair< uint64_t, core_id_t> > &mapping, SubsecondTime time )
 {
    // The threads with the lowest value get scheduled on the small cores, the remaining ones
    // end up on the big cores.
@@ -156,7 +156,7 @@ void SchedulerRand::remap(std::list< std::pair< uint64_t, core_id_t> > &mapping,
             if ((srcState == Core::INITIALIZING) || (destState == Core::INITIALIZING))
             {
                if (m_debug_output)
-                  std::cout << "[SchedulerRand] Will not move thread that is initializing" << std::endl;
+                  std::cout << "[SchedulerBigSmall] Will not move thread that is initializing" << std::endl;
             }
             else
             {

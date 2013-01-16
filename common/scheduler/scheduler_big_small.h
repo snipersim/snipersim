@@ -5,10 +5,10 @@
 
 #include <list>
 
-class SchedulerRand : public SchedulerDynamic
+class SchedulerBigSmall : public SchedulerDynamic
 {
    public:
-      SchedulerRand(ThreadManager *thread_manager);
+      SchedulerBigSmall(ThreadManager *thread_manager);
 
       virtual core_id_t threadCreate(thread_id_t);
       virtual void periodic(SubsecondTime time);
