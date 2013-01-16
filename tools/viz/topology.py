@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-
-import os, sys, json
+import os, sys, json, collections
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend( [os.path.abspath(os.path.join(HOME, '..'))] )
 import gen_topology, sniper_lib, sniper_config, sniper_stats
@@ -26,6 +24,10 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
   config = sniper_config.parse_config(file(os.path.join(resultsdir, 'sim.cfg')).read())
   ncores = int(config['general/total_cores'])
   stats = sniper_stats.SniperStats(resultsdir)
+
+  ids = collections.defaultdict(lambda: {})
+  for name, lid, mid in stats.get_topology():
+    ids[name][int(lid)] = int(mid)
 
   caches = [ 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'dram-cache' ]
   items = sum([ [ '%s-%d' % (name, core) for name in ['core','dram-cntlr']+caches ] for core in range(ncores) ], [])
@@ -56,9 +58,22 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
       data['core-%d' % core]['sparkdata'].append(ninstrs / cycles)
       data['core-%d' % core]['info'] = 'IPC (core-%d)' % core
       for cache in caches:
+        if cache not in ids:
+          # Cache level does not exist
+          continue
+        if ids[cache][core] != core:
+          # Non-master cache
+          continue
         if '%s.loads' % cache in results:
-          data['%s-%d' % (cache, core)]['sparkdata'].append(1000. * (results['%s.load-misses'%cache][core] + results['%s.store-misses-I'%cache][core]) / (ninstrs or 1.))
+          # Sum misses and instruction counts over all cores sharing this cache
+          misses = 0; ninstrs = 0
+          for _core in range(ncores):
+            if ids[cache][_core] == ids[cache][core]:
+              misses += results['%s.load-misses'%cache][_core] + results['%s.store-misses-I'%cache][_core]
+              ninstrs += results['performance_model.instruction_count'][_core]
+          data['%s-%d' % (cache, core)]['sparkdata'].append(1000. * misses / float(ninstrs or 1.))
           data['%s-%d' % (cache, core)]['info'] = 'MPKI (%s-%d)' % (cache, core)
+
     for dramcntlr in dramcntlrs:
       ninstrs = sum(results['performance_model.instruction_count'])
       if ninstrs == 0:
