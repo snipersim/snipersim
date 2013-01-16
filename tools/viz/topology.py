@@ -55,7 +55,7 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
         cycles_scale = 1.
       cycles = cycles_scale * (results['time_end'] - results['time_begin'])
       ninstrs = results['performance_model.instruction_count'][core]
-      data['core-%d' % core]['sparkdata'].append(ninstrs / cycles)
+      data['core-%d' % core]['sparkdata'].append('%.3f' % (ninstrs / cycles))
       data['core-%d' % core]['info'] = 'IPC (core-%d)' % core
       for cache in caches:
         if cache not in ids:
@@ -71,7 +71,7 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
             if ids[cache][_core] == ids[cache][core]:
               misses += results['%s.load-misses'%cache][_core] + results['%s.store-misses-I'%cache][_core]
               ninstrs += results['performance_model.instruction_count'][_core]
-          data['%s-%d' % (cache, core)]['sparkdata'].append(1000. * misses / float(ninstrs or 1.))
+          data['%s-%d' % (cache, core)]['sparkdata'].append('%.3f' % (1000. * misses / float(ninstrs or 1.)))
           data['%s-%d' % (cache, core)]['info'] = 'MPKI (%s-%d)' % (cache, core)
 
     for dramcntlr in dramcntlrs:
@@ -79,7 +79,7 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
       if ninstrs == 0:
         data['dram-cntlr-%d' % dramcntlr]['sparkdata'].append(0.); # FIXME ninstrs should not be zero while we are accessing dram
       else:
-        data['dram-cntlr-%d' % dramcntlr]['sparkdata'].append(1000. * (results['dram.reads'][dramcntlr] + results['dram.writes'][dramcntlr]) / (ninstrs or 1.) )
+        data['dram-cntlr-%d' % dramcntlr]['sparkdata'].append('%.3f' % (1000. * (results['dram.reads'][dramcntlr] + results['dram.writes'][dramcntlr]) / (ninstrs or 1.)))
       data['dram-cntlr-%d' % dramcntlr]['info'] = 'APKI (dram-cntlr-%d)' % dramcntlr
 
   jsonfile = open(os.path.join(topodir, 'topology.txt'), "w")
