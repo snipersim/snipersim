@@ -28,8 +28,9 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
   stats = sniper_stats.SniperStats(resultsdir)
 
   caches = [ 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'dram-cache' ]
-  items = sum([ [ '%s-%d' % (name, core) for name in ['core']+caches ] for core in range(ncores) ], [])
+  items = sum([ [ '%s-%d' % (name, core) for name in ['core','dram-cntlr']+caches ] for core in range(ncores) ], [])
   data = dict([ (item, {'info':'', 'sparkdata':[]}) for item in items ])
+  dramcntlrs = [ lid for (name, lid, mid) in stats.get_topology() if name == 'dram-cntlr' ]
 
 
   for i in range(num_intervals):
@@ -53,9 +54,18 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
       cycles = cycles_scale * (results['time_end'] - results['time_begin'])
       ninstrs = results['performance_model.instruction_count'][core]
       data['core-%d' % core]['sparkdata'].append(ninstrs / cycles)
+      data['core-%d' % core]['info'] = 'IPC (core-%d)' % core
       for cache in caches:
         if '%s.loads' % cache in results:
           data['%s-%d' % (cache, core)]['sparkdata'].append(1000. * (results['%s.load-misses'%cache][core] + results['%s.store-misses-I'%cache][core]) / (ninstrs or 1.))
+          data['%s-%d' % (cache, core)]['info'] = 'MPKI (%s-%d)' % (cache, core)
+    for dramcntlr in dramcntlrs:
+      ninstrs = sum(results['performance_model.instruction_count'])
+      if ninstrs == 0:
+        data['dram-cntlr-%d' % dramcntlr]['sparkdata'].append(0.); # FIXME ninstrs should not be zero while we are accessing dram
+      else:
+        data['dram-cntlr-%d' % dramcntlr]['sparkdata'].append(1000. * (results['dram.reads'][dramcntlr] + results['dram.writes'][dramcntlr]) / (ninstrs or 1.) )
+      data['dram-cntlr-%d' % dramcntlr]['info'] = 'APKI (dram-cntlr-%d)' % dramcntlr
 
   jsonfile = open(os.path.join(topodir, 'topology.txt'), "w")
   jsonfile.write('topology = %s' % json.dumps(data))
