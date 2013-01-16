@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 
-import sys, os, collections, sqlite3, sniper_lib, sniper_config, getopt
+import sys, os, collections, sniper_lib, sniper_stats, sniper_config, getopt
 
 
 def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format = 'svg', embedded = False):
   names = ('hwcontext', 'smt', 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'dram-cache', 'dram-dir', 'dram-cntlr')
   ids = dict([ (name, collections.defaultdict(lambda: None)) for name in names ])
 
+  stats = sniper_stats.SniperStats(resultsdir)
+  config = sniper_config.parse_config(open('sim.cfg').read())
+
   max_id = 0
-  db = sqlite3.connect('sim.stats.sqlite3')
-  for name, lid, mid in db.execute('SELECT componentname, coreid, masterid FROM topology').fetchall():
+  for name, lid, mid in stats.get_topology():
     if name not in names:
       print >> sys.stderr, 'Unknown component', name
       continue
     ids[name][int(lid)] = int(mid)
     max_id = max(max_id, int(lid))
-
-  config = sniper_config.parse_config(open('sim.cfg').read())
 
 
   def format_config(name, lid):
