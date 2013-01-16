@@ -1,6 +1,6 @@
-import os, re
+import os, re, sniper_stats
 
-class SniperStatsCompat:
+class SniperStatsCompat(sniper_stats.SniperStatsBase):
   def __init__(self, resultsdir):
     self.resultsdir = resultsdir
 

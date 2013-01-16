@@ -24,6 +24,9 @@ class SniperStatsBase:
         results += [ ('barrier.global_time_end', idx, vals2.get(idx, 0)) for idx in range(ncores) ]
     return results
 
+  def get_topology(self):
+    raise ValueError("Topology information not available from statistics of this type")
+
 
 def SniperStats(resultsdir):
   if os.path.exists(os.path.join(resultsdir, 'sim.stats.sqlite3')):
