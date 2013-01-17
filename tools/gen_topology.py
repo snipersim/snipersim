@@ -8,7 +8,7 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
   ids = dict([ (name, collections.defaultdict(lambda: None)) for name in names ])
 
   stats = sniper_stats.SniperStats(resultsdir)
-  config = sniper_config.parse_config(open('sim.cfg').read())
+  config = sniper_config.parse_config(open(os.path.join(resultsdir,'sim.cfg')).read())
 
   max_id = 0
   for name, lid, mid in stats.get_topology():
