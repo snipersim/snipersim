@@ -45,6 +45,10 @@ class SniperStatsSqlite(sniper_stats.SniperStatsBase):
     c = self.db.cursor()
     return c.execute('SELECT componentname, coreid, masterid FROM topology').fetchall()
 
+  def get_markers(self):
+    c = self.db.cursor()
+    return c.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall()
+
 
 if __name__ == '__main__':
   stats = SniperStatsSqlite()

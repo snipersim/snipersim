@@ -27,6 +27,9 @@ class SniperStatsBase:
   def get_topology(self):
     raise ValueError("Topology information not available from statistics of this type")
 
+  def get_markers(self):
+    raise ValueError("Marker information not available from statistics of this type")
+
 
 def SniperStats(resultsdir):
   if os.path.exists(os.path.join(resultsdir, 'sim.stats.sqlite3')):

@@ -3,18 +3,19 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
-  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -m|--markers] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [-d <resultsdir (default: .)>]'
+  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [-d <resultsdir (default: .)>]'
 
 
 jobid = 0
 resultsdir = '.'
 partial = None
 do_list = False
+do_topo = False
 do_markers = False
 do_stats = True
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lm", [ 'list', 'markers', 'partial=' ])
+  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmt", [ 'list', 'markers', 'topology', 'partial=' ])
 except getopt.GetoptError, e:
   print e
   usage()
@@ -35,6 +36,9 @@ for o, a in opts:
   if o in ('-l', '--list'):
     do_list = True
     do_stats = False
+  if o in ('-t', '--topology'):
+    do_topo = True
+    do_stats = False
   if o in ('-m', '--markers'):
     do_markers = True
     do_stats = False
@@ -53,6 +57,16 @@ if do_list:
     stats = sniper_stats.SniperStats(resultsdir)
     print ', '.join(stats.get_snapshots())
 
+if do_topo:
+  if jobid:
+    print >> sys.stderr, "--topology not supported with jobid"
+    sys.exit(1)
+  else:
+    import sniper_stats
+    stats = sniper_stats.SniperStats(resultsdir)
+    for t in stats.get_topology():
+      print ', '.join(map(str,t))
+
 if do_markers:
   if jobid:
     print >> sys.stderr, "--markers not supported with jobid"
@@ -64,7 +78,7 @@ if do_markers:
       print >> sys.stderr, "--markers not supported on non-SQLite stats format"
       sys.exit(1)
   try:
-    markers = stats.db.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall()
+    markers = stats.get_markers()
   except Exception, e:
     print >> sys.stderr, e
     print >> sys.stderr, "--markers could not be fetched from database"
