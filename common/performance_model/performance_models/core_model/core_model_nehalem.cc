@@ -73,6 +73,29 @@ CoreModelNehalem::CoreModelNehalem()
    instructionLatencies[XED_ICLASS_FLDENV] = 110; // As on X5660 (Westmere)
    instructionLatencies[XED_ICLASS_FNSTENV] = 75; // As on X5660 (Westmere)
 
+   instructionLatencies[XED_ICLASS_CVTPD2PS]  = 4; // (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTSD2SS]  = 4; // (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTPS2PD]  = 2; // (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTSS2SD]  = 1;
+   instructionLatencies[XED_ICLASS_CVTDQ2PS]  = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTPS2DQ]  = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTTPS2DQ] = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTDQ2PD]  = 6; // 4 + 2 bypass (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTPD2DQ]  = 6; // 4 + 2 bypass (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTTPD2DQ] = 6; // 4 + 2 bypass (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTPI2PS]  = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTPS2PI]  = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTTPS2PI] = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTPI2PD]  = 6; // (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTPD2PI]  = 6; // (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTTPD2PI] = 6;
+   instructionLatencies[XED_ICLASS_CVTSI2SS]  = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTSS2SI]  = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTTSS2SI] = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTSI2SD]  = 6; // 4 + 2 bypass (should be 2 uops)
+   instructionLatencies[XED_ICLASS_CVTSD2SI]  = 5; // 3 + 2 bypass
+   instructionLatencies[XED_ICLASS_CVTTSD2SI] = 5; // 3 + 2 bypass
+
 
    /* bypass latencies */
    /* http://www.agner.org/optimize/microarchitecture.pdf page 86-87 */

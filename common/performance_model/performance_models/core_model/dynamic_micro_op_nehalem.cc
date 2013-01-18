@@ -48,8 +48,24 @@ DynamicMicroOpNehalem::uop_port_t DynamicMicroOpNehalem::getPort(const MicroOp *
             case XED_ICLASS_UCOMISS:
             case XED_ICLASS_CVTPD2PS:
             case XED_ICLASS_CVTSD2SS:
+            case XED_ICLASS_CVTDQ2PS:
+            case XED_ICLASS_CVTPS2DQ:
+            case XED_ICLASS_CVTTPS2DQ:
+            case XED_ICLASS_CVTDQ2PD:
+            case XED_ICLASS_CVTPD2DQ:
+            case XED_ICLASS_CVTTPD2DQ:
+            case XED_ICLASS_CVTPI2PS:
+            case XED_ICLASS_CVTPS2PI:
+            case XED_ICLASS_CVTTPS2PI:
+            case XED_ICLASS_CVTPI2PD:
+            case XED_ICLASS_CVTPD2PI:
+            case XED_ICLASS_CVTTPD2PI:
+            case XED_ICLASS_CVTSI2SS:
             case XED_ICLASS_CVTSS2SI:
+            case XED_ICLASS_CVTTSS2SI:
+            case XED_ICLASS_CVTSI2SD:
             case XED_ICLASS_CVTSD2SI:
+            case XED_ICLASS_CVTTSD2SI:
                return DynamicMicroOpNehalem::UOP_PORT1;
             case XED_ICLASS_MOVAPD:
             case XED_ICLASS_MOVAPS:
