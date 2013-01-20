@@ -227,10 +227,73 @@ bool MicroOp::isFpLoadStore() const
    {
       switch(getInstructionOpcode())
       {
-         case XED_ICLASS_MOVSS:
-         case XED_ICLASS_MOVSD_XMM:
          case XED_ICLASS_MOVAPS:
          case XED_ICLASS_MOVAPD:
+         case XED_ICLASS_MOVUPS:
+         case XED_ICLASS_MOVUPD:
+         case XED_ICLASS_MOVSS:
+         case XED_ICLASS_MOVSD_XMM:
+         case XED_ICLASS_MOVHPS:
+         case XED_ICLASS_MOVHPD:
+         case XED_ICLASS_MOVLPS:
+         case XED_ICLASS_MOVLPD:
+         case XED_ICLASS_SHUFPS:
+         case XED_ICLASS_SHUFPD:
+         case XED_ICLASS_BLENDPS:
+         case XED_ICLASS_BLENDPD:
+         case XED_ICLASS_MOVDDUP:
+         case XED_ICLASS_MOVSHDUP:
+         case XED_ICLASS_MOVSLDUP:
+         case XED_ICLASS_UNPCKHPS:
+         case XED_ICLASS_UNPCKLPS:
+         case XED_ICLASS_UNPCKHPD:
+         case XED_ICLASS_UNPCKLPD:
+         case XED_ICLASS_EXTRACTPS:
+         case XED_ICLASS_INSERTPS:
+         case XED_ICLASS_CVTPD2PS:
+         case XED_ICLASS_CVTSD2SS:
+         case XED_ICLASS_CVTPS2PD:
+         case XED_ICLASS_CVTSS2SD:
+         case XED_ICLASS_CVTDQ2PS:
+         case XED_ICLASS_CVTPS2DQ:
+         case XED_ICLASS_CVTTPS2DQ:
+         case XED_ICLASS_CVTDQ2PD:
+         case XED_ICLASS_CVTPD2DQ:
+         case XED_ICLASS_CVTTPD2DQ:
+         case XED_ICLASS_CVTPI2PS:
+         case XED_ICLASS_CVTPS2PI:
+         case XED_ICLASS_CVTTPS2PI:
+         case XED_ICLASS_CVTPI2PD:
+         case XED_ICLASS_CVTPD2PI:
+         case XED_ICLASS_CVTTPD2PI:
+         case XED_ICLASS_CVTSI2SS:
+         case XED_ICLASS_CVTSS2SI:
+         case XED_ICLASS_CVTTSS2SI:
+         case XED_ICLASS_CVTSI2SD:
+         case XED_ICLASS_CVTSD2SI:
+         case XED_ICLASS_CVTTSD2SI:
+         case XED_ICLASS_COMISS:
+         case XED_ICLASS_UCOMISD:
+         case XED_ICLASS_MAXSS:
+         case XED_ICLASS_MAXSD:
+         case XED_ICLASS_MAXPS:
+         case XED_ICLASS_MAXPD:
+         case XED_ICLASS_MINSS:
+         case XED_ICLASS_MINSD:
+         case XED_ICLASS_MINPS:
+         case XED_ICLASS_MINPD:
+         case XED_ICLASS_ROUNDPS:
+         case XED_ICLASS_ROUNDPD:
+         case XED_ICLASS_DPPS:
+         case XED_ICLASS_DPPD:
+         case XED_ICLASS_ANDPS:
+         case XED_ICLASS_ANDPD:
+         case XED_ICLASS_ANDNPS:
+         case XED_ICLASS_ANDNPD:
+         case XED_ICLASS_ORPS:
+         case XED_ICLASS_ORPD:
+         case XED_ICLASS_XORPS:
+         case XED_ICLASS_XORPD:
             return true;
          default:
             ;
