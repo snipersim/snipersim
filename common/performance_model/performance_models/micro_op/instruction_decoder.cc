@@ -25,6 +25,52 @@ void InstructionDecoder::addDsts(std::set<xed_reg_enum_t> regs, MicroOp * curren
       }
 }
 
+unsigned int InstructionDecoder::getNumExecs(const xed_decoded_inst_t *ins, int numLoads, int numStores)
+{
+   if (xed_decoded_inst_get_category(ins) == XED_CATEGORY_DATAXFER || xed_decoded_inst_get_category(ins) == XED_CATEGORY_CMOV
+      || xed_decoded_inst_get_iclass(ins) == XED_ICLASS_PUSH || xed_decoded_inst_get_iclass(ins) == XED_ICLASS_POP)
+   {
+      unsigned int numExecs = 0;
+
+      // Move instructions with additional microops to process the load and store information
+      switch(xed_decoded_inst_get_iclass(ins))
+      {
+         case XED_ICLASS_MOVLPS:
+         case XED_ICLASS_MOVLPD:
+         case XED_ICLASS_MOVHPS:
+         case XED_ICLASS_MOVHPD:
+         case XED_ICLASS_SHUFPS:
+         case XED_ICLASS_SHUFPD:
+         case XED_ICLASS_BLENDPS:
+         case XED_ICLASS_BLENDPD:
+         case XED_ICLASS_EXTRACTPS:
+         case XED_ICLASS_ROUNDSS:
+         case XED_ICLASS_ROUNDPS:
+         case XED_ICLASS_ROUNDSD:
+         case XED_ICLASS_ROUNDPD:
+           numExecs += 1;
+           break;
+         case XED_ICLASS_INSERTPS:
+           numExecs += 2;
+           break;
+         default:
+           break;
+      }
+
+      // Explicit register moves. Normal loads and stores do not require this.
+      if ((numLoads + numStores) == 0)
+      {
+         numExecs += 1;
+      }
+
+      return numExecs;
+   }
+   else
+   {
+      return 1;
+   }
+}
+
 
   //////////////////////////////////////////
  ///// IMPLEMENTATION OF INSTRUCTIONS /////
@@ -97,19 +143,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
    }
    #endif
 
-   if (xed_decoded_inst_get_category(ins) == XED_CATEGORY_DATAXFER || xed_decoded_inst_get_category(ins) == XED_CATEGORY_CMOV
-      || xed_decoded_inst_get_iclass(ins) == XED_ICLASS_PUSH || xed_decoded_inst_get_iclass(ins) == XED_ICLASS_POP)
-   {
-      if ((numLoads + numStores) == 0)
-         numExecs = 1;
-      else
-         numExecs = 0;
-   }
-   else
-   {
-      numExecs = 1;
-   }
-
+   numExecs = getNumExecs(ins, numLoads, numStores);
 
    // Determine some extra instruction characteristics that will affect timing
 
