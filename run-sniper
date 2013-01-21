@@ -205,11 +205,22 @@ for o, a in opts:
   if o == '--mpi-ranks':
     mpi_ranks = long(a)
   if o == '--pinballs':
-    pinballs = map(os.path.abspath, a.split(','))
+    pinballs = a.split(',')
   if o == '--pinball-non-sift':
     pinball_sift = False
 
 
+
+def findtrace(trace, suffix = '.sift'):
+  for dirname in ('.', os.getenv('BENCHMARKS_TRACES', '.'), os.getenv('BENCHMARKS_ROOT', '.'), os.getenv('BENCHMARKS_ROOT_ORIG', '.')):
+    for subdir in ('.', 'traces'):
+      filename = os.path.realpath(os.path.join(dirname, subdir, trace))
+      if os.path.exists(filename):
+        return filename
+      filename += suffix
+      if os.path.exists(filename):
+        return filename
+  return False
 
 if cmdline:
   if use_mpi:
@@ -229,10 +240,14 @@ elif pinballs:
   if traces or trace_manual:
     print 'Cannot combine a pinball with tracing (--traces= or --trace-manual)'
     usage()
-  for pinball in pinballs:
-    if not os.path.exists('%s.address' % pinball):
+  for idx, pinball in enumerate(pinballs[:]):
+    pinball = findtrace(pinball, suffix='.address')
+    if not pinball:
+      pinball = pinball.rpartition('.')[0]
       print 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (pinball, pinball)
       usage()
+    else:
+      pinballs[idx] = pinball.rpartition('.')[0]
 else:
   standalone = True
   opt_count = 0
@@ -320,17 +335,6 @@ if scripts:
     sniperoptions.append('-g --hooks/script%uname=%s' % (i, scriptfile))
     sniperoptions.append('-g --hooks/script%uargs=%s' % (i, args or ''))
 
-def findtrace(trace):
-  for dirname in ('.', os.getenv('BENCHMARKS_TRACES', '.'), os.getenv('BENCHMARKS_ROOT', '.'), os.getenv('BENCHMARKS_ROOT_ORIG', '.')):
-    for subdir in ('.', 'traces'):
-      filename = os.path.realpath(os.path.join(dirname, subdir, trace))
-      if os.path.exists(filename):
-        return filename
-      filename += '.sift'
-      if os.path.exists(filename):
-        return filename
-  return False
-
 # If using traces via this front-end, support either multi-program workloads or a single multi-threaded application
 if traces:
   sniperoptions.append('-g --traceinput/enabled=true')
@@ -342,7 +346,7 @@ if traces:
     sniperoptions.append('-g --traceinput/mirror_output=true') # Stored traces: mirror output
     sniperoptions.append('-g --traceinput/num_apps=%u' % len(traces))
   for thread_id, trace in enumerate(traces):
-    filename = findtrace(trace)
+    filename = findtrace(trace, suffix='.sift')
     if filename:
       print '[SNIPER] (%u) Using trace file %s' % (thread_id, filename)
       sniperoptions.append('-g --traceinput/thread_%u=%s' % (thread_id, filename))
@@ -350,7 +354,7 @@ if traces:
       print 'Cannot find trace', trace
       sys.exit(-1)
   for thread_id, trace in enumerate(resptraces):
-    filename = findtrace(trace)
+    filename = findtrace(trace, suffix='.sift')
     if filename:
       print '[SNIPER] (%u) Using response-trace file %s' % (thread_id, filename)
       sniperoptions.append('-g --traceinput/thread_response_%u=%s' % (thread_id, filename))
