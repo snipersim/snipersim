@@ -653,10 +653,15 @@ if save_patch:
   os.system("git --work-tree='%(sniperrootdir)s' --git-dir='%(gitdir)s' log --max-count=1 --pretty=%%H > '%(patchfile)s'" % locals())
   os.system("git --work-tree='%(sniperrootdir)s' --git-dir='%(gitdir)s' diff >> '%(patchfile)s'" % locals())
 
-t_start = time.time()
 backtracefile = os.path.join(outputdir, 'debug_backtrace.out')
-try: os.unlink(backtracefile)
-except: pass
+for filetodelete in (backtracefile, 'sim.out', 'sim.cfg', 'sim.info', 'sim.stats.sqlite3', 'pin.log'):
+  filetodelete = os.path.join(outputdir, filetodelete)
+  try: os.unlink(filetodelete)
+  except OSError: pass
+# Pin creates a pin.log file in os.getcwd() when there is a crash. Delete the old version as to not copy it to the outputdir
+try: os.unlink('pin.log')
+except OSError: pass
+t_start = time.time()
 print '[SNIPER] Start'
 
 try:
