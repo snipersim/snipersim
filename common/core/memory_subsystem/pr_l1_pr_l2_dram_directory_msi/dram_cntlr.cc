@@ -14,11 +14,13 @@
 #  define MYLOG(...) {}
 #endif
 
+class TimeDistribution;
+
 namespace PrL1PrL2DramDirectoryMSI
 {
 
 DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
-      SubsecondTime dram_access_cost,
+      TimeDistribution *dram_access_cost,
       ComponentBandwidth dram_bandwidth,
       bool dram_queue_model_enabled,
       String dram_queue_model_type,

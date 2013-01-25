@@ -4,6 +4,7 @@
 #include "queue_model_history_list.h"
 #include "config.hpp"
 #include "stats.h"
+#include "distribution.h"
 
 #include <iostream>
 
@@ -17,7 +18,7 @@
 // the arrival times of adjacent packets are spread over a large
 // simulated time period
 DramPerfModel::DramPerfModel(core_id_t core_id,
-      SubsecondTime dram_access_cost,
+      TimeDistribution *dram_access_cost,
       ComponentBandwidth dram_bandwidth,
       bool queue_model_enabled,
       String queue_model_type,
@@ -67,7 +68,7 @@ DramPerfModel::getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id
       queue_delay = SubsecondTime::Zero();
    }
 
-   SubsecondTime access_latency = queue_delay + processing_time + m_dram_access_cost;
+   SubsecondTime access_latency = queue_delay + processing_time + m_dram_access_cost->next();
 
 
    // Update Memory Counters

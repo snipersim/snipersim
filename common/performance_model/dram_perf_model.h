@@ -6,6 +6,8 @@
 #include "moving_average.h"
 #include "subsecond_time.h"
 
+class TimeDistribution;
+
 // Note: Each Dram Controller owns a single DramModel object
 // Hence, m_dram_bandwidth is the bandwidth for a single DRAM controller
 // Total Bandwidth = m_dram_bandwidth * Number of DRAM controllers
@@ -21,7 +23,7 @@ class DramPerfModel
 {
    private:
       QueueModel* m_queue_model;
-      SubsecondTime m_dram_access_cost;
+      TimeDistribution* m_dram_access_cost;
       ComponentBandwidth m_dram_bandwidth;
 
       bool m_enabled;
@@ -32,7 +34,7 @@ class DramPerfModel
 
    public:
       DramPerfModel(core_id_t core_id,
-            SubsecondTime dram_access_cost,
+            TimeDistribution* dram_access_cost,
             ComponentBandwidth dram_bandwidth,
             bool queue_model_enabled,
             String queue_model_type,
