@@ -20,29 +20,21 @@ namespace PrL1PrL2DramDirectoryMSI
 {
 
 DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
-      TimeDistribution *dram_access_cost,
-      ComponentBandwidth dram_bandwidth,
-      bool dram_queue_model_enabled,
-      String dram_queue_model_type,
       UInt32 cache_block_size):
    m_memory_manager(memory_manager),
    m_cache_block_size(cache_block_size),
    m_reads(0),
    m_writes(0)
 {
-   m_dram_perf_model = new DramPerfModel(
+   m_dram_perf_model = DramPerfModel::createDramPerfModel(
          memory_manager->getCore()->getId(),
-         dram_access_cost,
-         dram_bandwidth,
-         dram_queue_model_enabled,
-         dram_queue_model_type,
          cache_block_size);
 
    m_fault_injector = Sim()->getFaultinjectionManager()
       ? Sim()->getFaultinjectionManager()->getFaultInjector(memory_manager->getCore()->getId(), MemComponent::DRAM)
       : NULL;
 
-   m_dram_access_count = new AccessCountMap[NUM_ACCESS_TYPES];
+   m_dram_access_count = new AccessCountMap[DramCntlrInterface::NUM_ACCESS_TYPES];
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "reads", &m_reads);
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "writes", &m_writes);
 }
@@ -73,7 +65,7 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
       memcpy((void*) data_buf, (void*) m_data_map[address], getCacheBlockSize());
    }
 
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now);
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ);
 
    ++m_reads;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
@@ -100,7 +92,7 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
          m_fault_injector->postWrite(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
    }
 
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now);
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE);
 
    ++m_writes;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
@@ -112,15 +104,15 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
 }
 
 SubsecondTime
-DramCntlr::runDramPerfModel(core_id_t requester, SubsecondTime time)
+DramCntlr::runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type)
 {
    UInt64 pkt_size = getCacheBlockSize();
-   SubsecondTime dram_access_latency = m_dram_perf_model->getAccessLatency(time, pkt_size, requester);
+   SubsecondTime dram_access_latency = m_dram_perf_model->getAccessLatency(time, pkt_size, requester, address, access_type);
    return dram_access_latency;
 }
 
 void
-DramCntlr::addToDramAccessCount(IntPtr address, access_t access_type)
+DramCntlr::addToDramAccessCount(IntPtr address, DramCntlrInterface::access_t access_type)
 {
    m_dram_access_count[access_type][address] = m_dram_access_count[access_type][address] + 1;
 }
@@ -128,7 +120,7 @@ DramCntlr::addToDramAccessCount(IntPtr address, access_t access_type)
 void
 DramCntlr::printDramAccessCount()
 {
-   for (UInt32 k = 0; k < NUM_ACCESS_TYPES; k++)
+   for (UInt32 k = 0; k < DramCntlrInterface::NUM_ACCESS_TYPES; k++)
    {
       for (AccessCountMap::iterator i = m_dram_access_count[k].begin(); i != m_dram_access_count[k].end(); i++)
       {

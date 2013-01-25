@@ -19,14 +19,6 @@ namespace PrL1PrL2DramDirectoryMSI
 {
    class DramCntlr : public DramCntlrInterface
    {
-      public:
-         typedef enum
-         {
-            READ = 0,
-            WRITE,
-            NUM_ACCESS_TYPES
-         } access_t;
-
       private:
          MemoryManagerBase* m_memory_manager;
          std::unordered_map<IntPtr, Byte*> m_data_map;
@@ -40,17 +32,13 @@ namespace PrL1PrL2DramDirectoryMSI
 
          UInt32 getCacheBlockSize() { return m_cache_block_size; }
          MemoryManagerBase* getMemoryManager() { return m_memory_manager; }
-         SubsecondTime runDramPerfModel(core_id_t requester, SubsecondTime time);
+         SubsecondTime runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type);
 
          void addToDramAccessCount(IntPtr address, access_t access_type);
          void printDramAccessCount(void);
 
       public:
          DramCntlr(MemoryManagerBase* memory_manager,
-               TimeDistribution* dram_access_cost,
-               ComponentBandwidth dram_bandwidth,
-               bool dram_queue_model_enabled,
-               String dram_queue_model_type,
                UInt32 cache_block_size);
 
          ~DramCntlr();

@@ -5,6 +5,7 @@
 #include "fixed_types.h"
 #include "moving_average.h"
 #include "subsecond_time.h"
+#include "dram_cntlr_interface.h"
 
 class TimeDistribution;
 
@@ -33,16 +34,15 @@ class DramPerfModel
       SubsecondTime m_total_queueing_delay;
 
    public:
+      static DramPerfModel* createDramPerfModel(core_id_t core_id,
+            UInt32 cache_block_size) { return new DramPerfModel(core_id, cache_block_size); }
+
       DramPerfModel(core_id_t core_id,
-            TimeDistribution* dram_access_cost,
-            ComponentBandwidth dram_bandwidth,
-            bool queue_model_enabled,
-            String queue_model_type,
             UInt32 cache_block_size);
 
       ~DramPerfModel();
 
-      SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester);
+      SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type);
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
 

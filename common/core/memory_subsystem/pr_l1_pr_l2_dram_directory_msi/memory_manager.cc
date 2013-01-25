@@ -46,12 +46,6 @@ MemoryManager::MemoryManager(Core* core,
    UInt32 dram_directory_home_lookup_param = 0;
    SubsecondTime dram_directory_cache_access_time(SubsecondTime::Zero());
 
-   SubsecondTime dram_latency(SubsecondTime::Zero());
-   TimeDistribution *dram_latency_distribution = NULL;
-   ComponentBandwidth per_dram_controller_bandwidth(0);
-   bool dram_queue_model_enabled = false;
-   String dram_queue_model_type;
-
    try
    {
       m_cache_block_size = Sim()->getCfg()->getInt("perf_model/l1_icache/cache_block_size");
@@ -88,25 +82,6 @@ MemoryManager::MemoryManager(Core* core,
       dram_directory_type_str = Sim()->getCfg()->getString("perf_model/dram_directory/directory_type");
       dram_directory_home_lookup_param = Sim()->getCfg()->getInt("perf_model/dram_directory/home_lookup_param");
       dram_directory_cache_access_time = SubsecondTime::NS() * Sim()->getCfg()->getInt("perf_model/dram_directory/directory_cache_access_time");
-
-      // Dram Cntlr
-      dram_latency = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/latency"))); // Operate in fs for higher precision before converting to uint64_t/SubsecondTime
-      if (Sim()->getCfg()->getString("perf_model/dram/distribution") == "constant")
-      {
-         dram_latency_distribution = new ConstantTimeDistribution(dram_latency);
-      }
-      else if (Sim()->getCfg()->getString("perf_model/dram/distribution") == "normal")
-      {
-         SubsecondTime dram_latency_stddev = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/standard_deviation")));
-         dram_latency_distribution = new NormalTimeDistribution(dram_latency, dram_latency_stddev);
-      }
-      else
-      {
-         LOG_PRINT_ERROR("Invalid distribution type");
-      }
-      per_dram_controller_bandwidth = ComponentBandwidth(8 * Sim()->getCfg()->getFloat("perf_model/dram/per_controller_bandwidth")); // Convert bytes to bits
-      dram_queue_model_enabled = Sim()->getCfg()->getBool("perf_model/dram/queue_model/enabled");
-      dram_queue_model_type = Sim()->getCfg()->getString("perf_model/dram/queue_model/type");
    }
    catch(...)
    {
@@ -126,10 +101,6 @@ MemoryManager::MemoryManager(Core* core,
       m_dram_cntlr_present = true;
 
       m_dram_cntlr = new DramCntlr(this,
-            dram_latency_distribution,
-            per_dram_controller_bandwidth,
-            dram_queue_model_enabled,
-            dram_queue_model_type,
             getCacheBlockSize());
 
       m_dram_directory_cntlr = new DramDirectoryCntlr(getCore()->getId(),

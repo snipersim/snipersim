@@ -18,24 +18,36 @@
 // the arrival times of adjacent packets are spread over a large
 // simulated time period
 DramPerfModel::DramPerfModel(core_id_t core_id,
-      TimeDistribution *dram_access_cost,
-      ComponentBandwidth dram_bandwidth,
-      bool queue_model_enabled,
-      String queue_model_type,
       UInt32 cache_block_size):
    m_queue_model(NULL),
-   m_dram_access_cost(dram_access_cost),
-   m_dram_bandwidth(dram_bandwidth),
+   m_dram_bandwidth(8 * Sim()->getCfg()->getFloat("perf_model/dram/per_controller_bandwidth")), // Convert bytes to bits
    m_enabled(false),
    m_num_accesses(0),
    m_total_access_latency(SubsecondTime::Zero()),
    m_total_queueing_delay(SubsecondTime::Zero())
 {
-   LOG_ASSERT_ERROR(m_dram_access_cost, "DRAM access cost must be valid");
-   if (queue_model_enabled)
+   SubsecondTime dram_latency = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/latency"))); // Operate in fs for higher precision before converting to uint64_t/SubsecondTime
+
+   if (Sim()->getCfg()->getString("perf_model/dram/distribution") == "constant")
    {
-      m_queue_model = QueueModel::create("dram-queue", core_id, queue_model_type, m_dram_bandwidth.getRoundedLatency(8 * cache_block_size)); // bytes to bits
+      m_dram_access_cost = new ConstantTimeDistribution(dram_latency);
    }
+   else if (Sim()->getCfg()->getString("perf_model/dram/distribution") == "normal")
+   {
+      SubsecondTime dram_latency_stddev = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/standard_deviation")));
+      m_dram_access_cost = new NormalTimeDistribution(dram_latency, dram_latency_stddev);
+   }
+   else
+   {
+      LOG_PRINT_ERROR("Invalid distribution type");
+   }
+
+   if (Sim()->getCfg()->getBool("perf_model/dram/queue_model/enabled"))
+   {
+      m_queue_model = QueueModel::create("dram-queue", core_id, Sim()->getCfg()->getString("perf_model/dram/queue_model/type"),
+                                         m_dram_bandwidth.getRoundedLatency(8 * cache_block_size)); // bytes to bits
+   }
+
    registerStatsMetric("dram", core_id, "total-access-latency", &m_total_access_latency);
    registerStatsMetric("dram", core_id, "total-queueing-delay", &m_total_queueing_delay);
 }
@@ -51,7 +63,7 @@ DramPerfModel::~DramPerfModel()
 }
 
 SubsecondTime
-DramPerfModel::getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester)
+DramPerfModel::getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type)
 {
    // pkt_size is in 'Bytes'
    // m_dram_bandwidth is in 'Bits per clock cycle'

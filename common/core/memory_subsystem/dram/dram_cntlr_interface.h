@@ -10,6 +10,13 @@
 class DramCntlrInterface
 {
    public:
+      typedef enum
+      {
+         READ = 0,
+         WRITE,
+         NUM_ACCESS_TYPES
+      } access_t;
+
       virtual ~DramCntlrInterface() {}
 
       virtual boost::tuple<SubsecondTime, HitWhere::where_t> getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now) = 0;
