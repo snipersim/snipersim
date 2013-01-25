@@ -69,6 +69,21 @@ CoreModelNehalem::CoreModelNehalem()
    instructionLatencies[XED_ICLASS_VDIVSD] = 17;
    instructionLatencies[XED_ICLASS_VDIVPD] = 17;
 
+   instructionLatencies[XED_ICLASS_SQRTSS] = 18;   // 7-18 (data dependent) according to agner.org
+   instructionLatencies[XED_ICLASS_SQRTPS] = 18;
+   instructionLatencies[XED_ICLASS_VSQRTSS] = 18;
+   instructionLatencies[XED_ICLASS_VSQRTPS] = 18;
+
+   instructionLatencies[XED_ICLASS_SQRTSD] = 32;   // 7-32 (data dependent) according to agner.org
+   instructionLatencies[XED_ICLASS_SQRTPD] = 32;
+   instructionLatencies[XED_ICLASS_VSQRTSD] = 32;
+   instructionLatencies[XED_ICLASS_VSQRTPD] = 32;
+
+   instructionLatencies[XED_ICLASS_RSQRTSS] = 3;
+   instructionLatencies[XED_ICLASS_RSQRTPS] = 3;
+   instructionLatencies[XED_ICLASS_VRSQRTSS] = 3;
+   instructionLatencies[XED_ICLASS_VRSQRTPS] = 3;
+
 
    instructionLatencies[XED_ICLASS_FLDENV] = 110; // As on X5660 (Westmere)
    instructionLatencies[XED_ICLASS_FNSTENV] = 75; // As on X5660 (Westmere)

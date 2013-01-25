@@ -41,6 +41,14 @@ DynamicMicroOpNehalem::uop_port_t DynamicMicroOpNehalem::getPort(const MicroOp *
                return DynamicMicroOpNehalem::UOP_PORT1; // 0 on Core2, 1 on Nehalem, 0 (simple) or 1 (complex) on Sandy Bridge
             case XED_ICLASS_CVTPS2PD:
             case XED_ICLASS_CVTSS2SD:
+            case XED_ICLASS_SQRTSS:
+            case XED_ICLASS_SQRTPS:
+            case XED_ICLASS_SQRTSD:
+            case XED_ICLASS_SQRTPD:
+            case XED_ICLASS_VSQRTSS:
+            case XED_ICLASS_VSQRTPS:
+            case XED_ICLASS_VSQRTSD:
+            case XED_ICLASS_VSQRTPD:
                return DynamicMicroOpNehalem::UOP_PORT0;
             case XED_ICLASS_COMISD:
             case XED_ICLASS_COMISS:
@@ -66,6 +74,10 @@ DynamicMicroOpNehalem::uop_port_t DynamicMicroOpNehalem::getPort(const MicroOp *
             case XED_ICLASS_CVTSI2SD:
             case XED_ICLASS_CVTSD2SI:
             case XED_ICLASS_CVTTSD2SI:
+            case XED_ICLASS_RSQRTSS:
+            case XED_ICLASS_RSQRTPS:
+            case XED_ICLASS_VRSQRTSS:
+            case XED_ICLASS_VRSQRTPS:
                return DynamicMicroOpNehalem::UOP_PORT1;
             case XED_ICLASS_MOVAPD:
             case XED_ICLASS_MOVAPS:
@@ -158,6 +170,18 @@ DynamicMicroOpNehalem::uop_alu_t DynamicMicroOpNehalem::getAlu(const MicroOp *uo
             case XED_ICLASS_VDIVPS:
             case XED_ICLASS_VDIVSD:
             case XED_ICLASS_VDIVPD:
+            case XED_ICLASS_SQRTSS:
+            case XED_ICLASS_SQRTPS:
+            case XED_ICLASS_SQRTSD:
+            case XED_ICLASS_SQRTPD:
+            case XED_ICLASS_VSQRTSS:
+            case XED_ICLASS_VSQRTPS:
+            case XED_ICLASS_VSQRTSD:
+            case XED_ICLASS_VSQRTPD:
+            case XED_ICLASS_RSQRTSS:
+            case XED_ICLASS_RSQRTPS:
+            case XED_ICLASS_VRSQRTSS:
+            case XED_ICLASS_VRSQRTPS:
                return UOP_ALU_TRIG;
             default:
                return UOP_ALU_NONE;
