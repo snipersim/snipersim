@@ -31,6 +31,7 @@ DramPerfModel::DramPerfModel(core_id_t core_id,
    m_total_access_latency(SubsecondTime::Zero()),
    m_total_queueing_delay(SubsecondTime::Zero())
 {
+   LOG_ASSERT_ERROR(m_dram_access_cost, "DRAM access cost must be valid");
    if (queue_model_enabled)
    {
       m_queue_model = QueueModel::create("dram-queue", core_id, queue_model_type, m_dram_bandwidth.getRoundedLatency(8 * cache_block_size)); // bytes to bits
@@ -41,7 +42,12 @@ DramPerfModel::DramPerfModel(core_id_t core_id,
 
 DramPerfModel::~DramPerfModel()
 {
-   delete m_queue_model;
+   if (m_queue_model)
+   {
+     delete m_queue_model;
+      m_queue_model = NULL;
+   }
+   delete m_dram_access_cost;
 }
 
 SubsecondTime
