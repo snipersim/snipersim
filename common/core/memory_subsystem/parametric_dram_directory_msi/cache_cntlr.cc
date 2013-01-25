@@ -133,6 +133,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       /* Master cache */
       m_master = new CacheMasterCntlr(name, core_id, cache_params.outstanding_misses);
       m_master->m_cache = new Cache(name,
+            "perf_model/" + cache_params.configName,
+            m_core_id,
             cache_params.size,
             cache_params.associativity,
             m_cache_block_size,

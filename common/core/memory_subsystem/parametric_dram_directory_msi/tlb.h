@@ -19,7 +19,7 @@ namespace ParametricDramDirectoryMSI
 
          UInt64 m_access, m_miss;
       public:
-         TLB(String name, core_id_t core_id, UInt32 size, UInt32 associativity);
+         TLB(String name, String cfgname, core_id_t core_id, UInt32 size, UInt32 associativity);
          bool lookup(IntPtr address, SubsecondTime now);
    };
 }

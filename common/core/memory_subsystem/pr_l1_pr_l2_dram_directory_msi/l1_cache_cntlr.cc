@@ -24,12 +24,16 @@ L1CacheCntlr::L1CacheCntlr(core_id_t core_id,
    m_shmem_perf_model(shmem_perf_model)
 {
    m_l1_icache = new Cache("L1-I",
+         "perf_model/l1_icache",
+         core_id,
          l1_icache_size,
          l1_icache_associativity,
          m_cache_block_size,
          l1_icache_replacement_policy,
          CacheBase::PR_L1_CACHE);
    m_l1_dcache = new Cache("L1-D",
+         "perf_model/l1_dcache",
+         core_id,
          l1_dcache_size,
          l1_dcache_associativity,
          m_cache_block_size,

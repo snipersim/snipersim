@@ -26,6 +26,8 @@ L2CacheCntlr::L2CacheCntlr(core_id_t core_id,
    m_shmem_perf_model(shmem_perf_model)
 {
    m_l2_cache = new Cache("L2",
+         "perf_model/l2_cache",
+         core_id,
          l2_cache_size,
          l2_cache_associativity,
          m_cache_block_size,

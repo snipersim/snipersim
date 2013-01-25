@@ -64,10 +64,10 @@ MemoryManager::MemoryManager(Core* core,
 
       UInt32 itlb_size = Sim()->getCfg()->getInt("perf_model/itlb/size");
       if (itlb_size)
-         m_itlb = new TLB("itlb", getCore()->getId(), itlb_size, Sim()->getCfg()->getInt("perf_model/itlb/associativity"));
+         m_itlb = new TLB("itlb", "perf_model/itlb", getCore()->getId(), itlb_size, Sim()->getCfg()->getInt("perf_model/itlb/associativity"));
       UInt32 dtlb_size = Sim()->getCfg()->getInt("perf_model/dtlb/size");
       if (dtlb_size)
-         m_dtlb = new TLB("dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"));
+         m_dtlb = new TLB("dtlb", "perf_model/dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"));
       m_tlb_miss_penalty = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/tlb/penalty"));
 
       UInt32 smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");

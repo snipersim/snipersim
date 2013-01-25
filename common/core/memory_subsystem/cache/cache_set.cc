@@ -121,7 +121,8 @@ CacheSet::getDataPtr(UInt32 line_index, UInt32 offset)
 }
 
 CacheSet*
-CacheSet::createCacheSet (String replacement_policy,
+CacheSet::createCacheSet(String cfgname, core_id_t core_id,
+      String replacement_policy,
       CacheBase::cache_t cache_type,
       UInt32 associativity, UInt32 blocksize)
 {

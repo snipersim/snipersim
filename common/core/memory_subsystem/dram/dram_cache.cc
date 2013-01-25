@@ -18,6 +18,8 @@ DramCache::DramCache(core_id_t core_id, UInt32 cache_block_size, DramCntlrInterf
    , m_write_misses(0)
 {
    m_cache = new Cache("dram-cache",
+      "perf_model/dram/cache",
+      core_id,
       Sim()->getCfg()->getIntArray("perf_model/dram/cache/cache_size", core_id),
       Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", core_id),
       m_cache_block_size,

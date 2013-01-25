@@ -14,7 +14,7 @@ class CacheSet
 {
    public:
 
-      static CacheSet* createCacheSet(String replacement_policy, CacheBase::cache_t cache_type, UInt32 associativity, UInt32 blocksize);
+      static CacheSet* createCacheSet(String cfgname, core_id_t core_id, String replacement_policy, CacheBase::cache_t cache_type, UInt32 associativity, UInt32 blocksize);
       static CacheBase::ReplacementPolicy parsePolicyType(String policy);
 
    protected:

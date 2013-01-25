@@ -4,10 +4,10 @@
 namespace ParametricDramDirectoryMSI
 {
 
-TLB::TLB(String name, core_id_t core_id, UInt32 size, UInt32 associativity)
+TLB::TLB(String name, String cfgname, core_id_t core_id, UInt32 size, UInt32 associativity)
    : m_size(size)
    , m_associativity(associativity)
-   , m_cache(name + "_cache", size, associativity, SIM_PAGE_SIZE, "lru", CacheBase::PR_L1_CACHE)
+   , m_cache(name + "_cache", cfgname, core_id, size, associativity, SIM_PAGE_SIZE, "lru", CacheBase::PR_L1_CACHE)
    , m_access(0)
    , m_miss(0)
 {

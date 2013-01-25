@@ -5,6 +5,8 @@
 // Cache class
 // constructors/destructors
 Cache::Cache(String name,
+      String cfgname,
+      core_id_t core_id,
       UInt32 cache_size,
       UInt32 associativity, UInt32 cache_block_size,
       String replacement_policy,
@@ -22,7 +24,7 @@ Cache::Cache(String name,
    m_sets = new CacheSet*[m_num_sets];
    for (UInt32 i = 0; i < m_num_sets; i++)
    {
-      m_sets[i] = CacheSet::createCacheSet(replacement_policy, m_cache_type, m_associativity, m_blocksize);
+      m_sets[i] = CacheSet::createCacheSet(cfgname, core_id, replacement_policy, m_cache_type, m_associativity, m_blocksize);
    }
 
    #ifdef ENABLE_SET_USAGE_HIST
