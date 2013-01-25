@@ -3,11 +3,8 @@
 
 #include "queue_model.h"
 #include "fixed_types.h"
-#include "moving_average.h"
 #include "subsecond_time.h"
 #include "dram_cntlr_interface.h"
-
-class TimeDistribution;
 
 // Note: Each Dram Controller owns a single DramModel object
 // Hence, m_dram_bandwidth is the bandwidth for a single DRAM controller
@@ -22,27 +19,15 @@ class TimeDistribution;
 // simulated time period
 class DramPerfModel
 {
-   private:
-      QueueModel* m_queue_model;
-      TimeDistribution* m_dram_access_cost;
-      ComponentBandwidth m_dram_bandwidth;
-
+   protected:
       bool m_enabled;
-
       UInt64 m_num_accesses;
-      SubsecondTime m_total_access_latency;
-      SubsecondTime m_total_queueing_delay;
 
    public:
-      static DramPerfModel* createDramPerfModel(core_id_t core_id,
-            UInt32 cache_block_size) { return new DramPerfModel(core_id, cache_block_size); }
+      static DramPerfModel* createDramPerfModel(core_id_t core_id, UInt32 cache_block_size);
 
-      DramPerfModel(core_id_t core_id,
-            UInt32 cache_block_size);
-
-      ~DramPerfModel();
-
-      SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type);
+      DramPerfModel(core_id_t core_id, UInt64 cache_block_size) : m_enabled(false), m_num_accesses(0) {}
+      virtual SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type) = 0;
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
 
