@@ -273,6 +273,8 @@ bool MicroOp::isFpLoadStore() const
          case XED_ICLASS_CVTSD2SI:
          case XED_ICLASS_CVTTSD2SI:
          case XED_ICLASS_COMISS:
+         case XED_ICLASS_COMISD:
+         case XED_ICLASS_UCOMISS:
          case XED_ICLASS_UCOMISD:
          case XED_ICLASS_MAXSS:
          case XED_ICLASS_MAXSD:

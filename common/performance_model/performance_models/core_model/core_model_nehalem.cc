@@ -111,6 +111,11 @@ CoreModelNehalem::CoreModelNehalem()
    instructionLatencies[XED_ICLASS_CVTSD2SI]  = 5; // 3 + 2 bypass
    instructionLatencies[XED_ICLASS_CVTTSD2SI] = 5; // 3 + 2 bypass
 
+   instructionLatencies[XED_ICLASS_COMISS] = 3; // 1 + 2 eflags bypass
+   instructionLatencies[XED_ICLASS_COMISD] = 3; // 1 + 2 eflags bypass
+   instructionLatencies[XED_ICLASS_UCOMISS] = 3; // 1 + 2 eflags bypass
+   instructionLatencies[XED_ICLASS_UCOMISD] = 3; // 1 + 2 eflags bypass
+
 
    /* bypass latencies */
    /* http://www.agner.org/optimize/microarchitecture.pdf page 86-87 */
