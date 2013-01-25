@@ -134,6 +134,25 @@ class CacheSetPLRU : public CacheSet
       UInt8 b[8];
 };
 
+class CacheSetSRRIP : public CacheSet
+{
+   public:
+      CacheSetSRRIP(String cfgname, core_id_t core_id,
+            CacheBase::cache_t cache_type,
+            UInt32 associativity, UInt32 blocksize);
+      ~CacheSetSRRIP();
+
+      UInt32 getReplacementIndex();
+      void updateReplacementIndex(UInt32 accessed_index);
+
+   private:
+      const UInt8 m_rrip_numbits;
+      const UInt8 m_rrip_max;
+      const UInt8 m_rrip_insert;
+      UInt8* m_rrip_bits;
+      UInt8  m_replacement_pointer;
+};
+
 class CacheSetRandom : public CacheSet
 {
    public:

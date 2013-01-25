@@ -147,6 +147,9 @@ CacheSet::createCacheSet(String cfgname, core_id_t core_id,
       case CacheBase::PLRU:
          return new CacheSetPLRU(cache_type, associativity, blocksize);
 
+      case CacheBase::SRRIP:
+         return new CacheSetSRRIP(cfgname, core_id, cache_type, associativity, blocksize);
+
       case CacheBase::RANDOM:
          return new CacheSetRandom(cache_type, associativity, blocksize);
 
@@ -174,6 +177,8 @@ CacheSet::parsePolicyType(String policy)
       return CacheBase::NMRU;
    if (policy == "plru")
       return CacheBase::PLRU;
+   if (policy == "srrip")
+      return CacheBase::SRRIP;
    if (policy == "random")
       return CacheBase::RANDOM;
 
