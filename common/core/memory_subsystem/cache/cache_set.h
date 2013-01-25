@@ -7,6 +7,7 @@
 #include "cache_block_info.h"
 #include "cache_base.h"
 #include "lock.h"
+#include "random.h"
 
 // Everything related to cache sets
 class CacheSet
@@ -74,5 +75,77 @@ class CacheSetLRU : public CacheSet
       UInt8* m_lru_bits;
 };
 
+class CacheSetNRU : public CacheSet
+{
+   public:
+      CacheSetNRU(CacheBase::cache_t cache_type,
+            UInt32 associativity, UInt32 blocksize);
+      ~CacheSetNRU();
+
+      UInt32 getReplacementIndex();
+      void updateReplacementIndex(UInt32 accessed_index);
+
+   private:
+      UInt8* m_lru_bits;
+      UInt8  m_num_bits_set;
+      UInt8  m_replacement_pointer;
+};
+
+class CacheSetMRU : public CacheSet
+{
+   public:
+      CacheSetMRU(CacheBase::cache_t cache_type,
+            UInt32 associativity, UInt32 blocksize);
+      ~CacheSetMRU();
+
+      UInt32 getReplacementIndex();
+      void updateReplacementIndex(UInt32 accessed_index);
+
+   private:
+      UInt8* m_lru_bits;
+};
+
+class CacheSetNMRU : public CacheSet
+{
+   public:
+      CacheSetNMRU(CacheBase::cache_t cache_type,
+            UInt32 associativity, UInt32 blocksize);
+      ~CacheSetNMRU();
+
+      UInt32 getReplacementIndex();
+      void updateReplacementIndex(UInt32 accessed_index);
+
+   private:
+      UInt8* m_lru_bits;
+      UInt8  m_replacement_pointer;
+};
+
+class CacheSetPLRU : public CacheSet
+{
+   public:
+      CacheSetPLRU(CacheBase::cache_t cache_type,
+            UInt32 associativity, UInt32 blocksize);
+      ~CacheSetPLRU();
+
+      UInt32 getReplacementIndex();
+      void updateReplacementIndex(UInt32 accessed_index);
+
+   private:
+      UInt8 b[8];
+};
+
+class CacheSetRandom : public CacheSet
+{
+   public:
+      CacheSetRandom(CacheBase::cache_t cache_type,
+            UInt32 associativity, UInt32 blocksize);
+      ~CacheSetRandom();
+
+      UInt32 getReplacementIndex();
+      void updateReplacementIndex(UInt32 accessed_index);
+
+   private:
+      Random m_rand;
+};
 
 #endif /* CACHE_SET_H */

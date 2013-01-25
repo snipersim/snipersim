@@ -134,6 +134,21 @@ CacheSet::createCacheSet (String replacement_policy,
       case CacheBase::LRU:
          return new CacheSetLRU(cache_type, associativity, blocksize);
 
+      case CacheBase::NRU:
+         return new CacheSetNRU(cache_type, associativity, blocksize);
+
+      case CacheBase::MRU:
+         return new CacheSetMRU(cache_type, associativity, blocksize);
+
+      case CacheBase::NMRU:
+         return new CacheSetNMRU(cache_type, associativity, blocksize);
+
+      case CacheBase::PLRU:
+         return new CacheSetPLRU(cache_type, associativity, blocksize);
+
+      case CacheBase::RANDOM:
+         return new CacheSetRandom(cache_type, associativity, blocksize);
+
       default:
          LOG_PRINT_ERROR("Unrecognized Cache Replacement Policy: %i",
                policy);
@@ -150,6 +165,17 @@ CacheSet::parsePolicyType(String policy)
       return CacheBase::ROUND_ROBIN;
    if (policy == "lru")
       return CacheBase::LRU;
+   if (policy == "nru")
+      return CacheBase::NRU;
+   if (policy == "mru")
+      return CacheBase::MRU;
+   if (policy == "nmru")
+      return CacheBase::NMRU;
+   if (policy == "plru")
+      return CacheBase::PLRU;
+   if (policy == "random")
+      return CacheBase::RANDOM;
+
    else
       return (CacheBase::ReplacementPolicy) -1;
 }

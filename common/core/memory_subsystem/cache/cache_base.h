@@ -47,6 +47,11 @@ class CacheBase
       {
          ROUND_ROBIN = 0,
          LRU,
+         NRU,
+         MRU,
+         NMRU,
+         PLRU,
+         RANDOM,
          NUM_REPLACEMENT_POLICIES
       };
 
