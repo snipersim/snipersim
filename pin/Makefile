@@ -33,6 +33,13 @@ endif
 CXXFLAGS += $(PIN_CXXFLAGS)
 CFLAGS += $(CXXFLAGS)
 
+PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
+ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
+CXXFLAGS += -DPINPLAY_SUPPORTED -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_HOME)/include
+LD_LIBS += -lpinplay -lbz2 -lz
+LD_FLAGS += -L$(PINPLAY_HOME)/lib/$(TARGET_ARCH)
+endif
+
 # Sources must come before the Makefile.common include to allow for
 #  the dependency file generation
 SOURCES = $(wildcard $(SIM_ROOT)/pin/*.cc $(SIM_ROOT)/pin/lite/*.cc)
@@ -51,9 +58,9 @@ $(TARGET): $(PIN_LIBNAMES) $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libs
 $(TARGET): $(OBJECTS)
 ifeq ($(SHOW_COMPILE),)
 	@echo '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(PIN_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(PIN_LIBS) $(LD_LIBS) $(OPT_CFLAGS) -std=c++0x
+	@$(CXX) $(PIN_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(PIN_LIBS) $(OPT_CFLAGS) -std=c++0x
 else
-	$(CXX) $(PIN_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(PIN_LIBS) $(LD_LIBS) $(OPT_CFLAGS) -std=c++0x
+	$(CXX) $(PIN_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(PIN_LIBS) $(OPT_CFLAGS) -std=c++0x
 endif
 
 # This include must be here

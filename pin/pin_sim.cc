@@ -50,6 +50,9 @@
 
 #include "pin.H"
 #include "inst_mode_macros.h"
+#ifdef PINPLAY_SUPPORTED
+# include "pinplay.H"
+#endif
 
 #include <iostream>
 #include <assert.h>
@@ -79,6 +82,10 @@ extern int *child_tidptr;
 
 map <ADDRINT, string> rtn_map;
 PIN_LOCK rtn_map_lock;
+
+#ifdef PINPLAY_SUPPORTED
+PINPLAY_ENGINE pinplay_engine;
+#endif
 
 void printRtn (ADDRINT rtn_addr, bool enter)
 {
@@ -492,6 +499,19 @@ int main(int argc, char *argv[])
    // config::Config shouldn't be called outside of init/fini
    // With Sim()->hideCfg(), we let Simulator know to complain when someone does call Sim()->getCfg()
    Sim()->hideCfg();
+
+   bool pinplay_enabled = cfg->getBool("general/enable_pinplay");
+#ifdef PINPLAY_SUPPORTED
+   if (pinplay_enabled)
+   {
+      pinplay_engine.Activate(argc, argv, false /*logger*/, true /*replayer*/);
+   }
+#else
+   if (pinplay_enabled)
+   {
+      LOG_PRINT_ERROR("PinPlay support not compiled in. Please use a compatible pin kit when compiling.");
+   }
+#endif
 
    // Never returns
    LOG_PRINT("Running program...");
