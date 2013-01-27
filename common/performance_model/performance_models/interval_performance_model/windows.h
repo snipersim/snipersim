@@ -1,3 +1,7 @@
+/*
+ * This file is covered under the Interval Academic License, see LICENCE.interval
+ */
+
 #ifndef WINDOWS_HPP_
 #define WINDOWS_HPP_
 

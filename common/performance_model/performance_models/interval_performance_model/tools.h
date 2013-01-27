@@ -1,3 +1,7 @@
+/*
+ * This file is covered under the Interval Academic License, see LICENCE.interval
+ */
+
 #ifndef TOOLS_HPP_
 #define TOOLS_HPP_
 

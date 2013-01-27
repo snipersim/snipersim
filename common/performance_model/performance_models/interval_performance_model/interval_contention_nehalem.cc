@@ -1,3 +1,7 @@
+/*
+ * This file is covered under the Interval Academic License, see LICENCE.interval
+ */
+
 #include "interval_contention_nehalem.h"
 #include "core.h"
 #include "stats.h"

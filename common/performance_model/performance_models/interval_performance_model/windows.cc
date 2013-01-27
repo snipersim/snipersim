@@ -1,3 +1,7 @@
+/*
+ * This file is covered under the Interval Academic License, see LICENCE.interval
+ */
+
 #include "windows.h"
 #include "log.h"
 #include "instruction.h"

@@ -1,3 +1,7 @@
+/*
+ * This file is covered under the Interval Academic License, see LICENCE.interval
+ */
+
 #ifndef __INTERVAL_CONTENTION_NEHALEM_H
 #define __INTERVAL_CONTENTION_NEHALEM_H
 
