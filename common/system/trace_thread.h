@@ -66,6 +66,8 @@ class TraceThread : public Runnable
       void handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl);
 
    public:
+      bool m_stopped;
+
       TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id, bool cleanup);
       ~TraceThread();
 

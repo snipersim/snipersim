@@ -32,6 +32,7 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, 
    , m_responsefile(responsefile)
    , m_app_id(app_id)
    , m_cleanup(cleanup)
+   , m_stopped(false)
 {
    if (Sim()->getCfg()->getBool("traceinput/mirror_output"))
       m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
@@ -114,7 +115,7 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
    switch(syscall_number)
    {
       case SYS_exit:
-         Sim()->getTraceManager()->endApplication(m_thread);
+         Sim()->getTraceManager()->endApplication(this);
          break;
 
       case SYS_futex:
@@ -389,7 +390,7 @@ void TraceThread::run()
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
 
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
-   Sim()->getTraceManager()->signalDone(m_thread, m_stop /*aborted*/);
+   Sim()->getTraceManager()->signalDone(this, m_stop /*aborted*/);
 }
 
 void TraceThread::spawn()

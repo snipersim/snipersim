@@ -113,11 +113,19 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
    return thread->getId();
 }
 
-void TraceManager::signalDone(Thread *thread, bool aborted)
+void TraceManager::signalDone(TraceThread *thread, bool aborted)
 {
    ScopedLock sl(m_lock);
 
-   app_id_t app_id = thread->getAppId();
+   // Make sure threads don't call signalDone twice (once through endApplication,
+   //   and once the regular way), as this would throw off our counts
+   if (thread->m_stopped)
+   {
+      return;
+   }
+   thread->m_stopped = true;
+
+   app_id_t app_id = thread->getThread()->getAppId();
    m_app_info[app_id].num_threads--;
 
    if (!aborted)
@@ -154,13 +162,18 @@ void TraceManager::signalDone(Thread *thread, bool aborted)
    m_num_threads_running--;
 }
 
-void TraceManager::endApplication(Thread *thread)
+void TraceManager::endApplication(TraceThread *thread)
 {
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
    {
       // Abort all threads in this application, except ourselves (we should end normally soon)
-      if ((*it)->getThread()->getAppId() == thread->getAppId() && (*it)->getThread() != thread)
-         signalDone((*it)->getThread(), true /* aborted */);
+      if ((*it)->getThread()->getAppId() == thread->getThread()->getAppId() && *it != thread)
+      {
+         // Ask thread to stop
+         (*it)->stop();
+         // Usually the application's other threads are blocked on a futex, so call signalDone in their place
+         signalDone(*it, true /* aborted */);
+      }
    }
 }
 
