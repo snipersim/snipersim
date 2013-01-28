@@ -1,5 +1,7 @@
 #include "pinboost_debug.h"
 
+#include <sys/types.h>
+#include <unistd.h>
 #include <iostream>
 
 bool pinboost_do_debug = false;
