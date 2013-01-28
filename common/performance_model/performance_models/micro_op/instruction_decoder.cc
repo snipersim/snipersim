@@ -271,6 +271,19 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
             || xed_decoded_inst_get_iclass(ins) == XED_ICLASS_SFENCE
          )
             currentMicroOp->setMemBarrier(true);
+
+         // Special cases
+         if ((xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVHPD)
+            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVHPS)
+            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVLPD)
+            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVLPS))
+         {
+            if ((numExecs == 1) && (numLoads == 1) && (numStores == 0))
+            {
+               // In this case, we have a memory to XMM load, where the result merges the source and destination
+               addSrcs(regs_dst, currentMicroOp);
+            }
+         }
       }
 
       else /* STORE */
