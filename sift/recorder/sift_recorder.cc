@@ -29,6 +29,7 @@
 #include "sift_writer.h"
 #include "bbv_count.h"
 #include "../../include/sim_api.h"
+#include "pinboost_debug.h"
 
 //#define DEBUG_OUTPUT 1
 #define DEBUG_OUTPUT 0
@@ -792,6 +793,8 @@ int main(int argc, char **argv)
 
    PIN_AddFollowChildProcessFunction(followChild, 0);
    PIN_AddForkFunction(FPOINT_BEFORE, forkBefore, 0);
+
+   pinboost_register("SIFT_RECORDER");
 
    PIN_StartProgram();
 
