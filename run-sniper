@@ -533,7 +533,7 @@ if standalone:
     fh, fn = tempfile.mkstemp()
     f = open(fn, 'w')
     # When using GDB in standalone mode, do not set the LD_LIBRARY_PATH for GDB, but instead set the shared library path inside GDB for debugging Sniper-standalone
-    f.write("set solib-search-path '%s'\n" % env['LD_LIBRARY_PATH'])
+    f.write("set environment LD_LIBRARY_PATH = '%s'\n" % env['LD_LIBRARY_PATH'])
     del env['LD_LIBRARY_PATH']
     # Create a GDB command file to handle --gdb, --gdb-wait and --gdb-quit for standalone mode
     if not gdb_wait:
