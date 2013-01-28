@@ -188,6 +188,9 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
          registerStatsMetric(name, core_id, String("stores-where-")+where_str, &stats.stores_where[hit_where]);
       }
    }
+   registerStatsMetric(name, core_id, "coherency-downgrades", &stats.coherency_downgrades);
+   registerStatsMetric(name, core_id, "coherency-writebacks", &stats.coherency_writebacks);
+   registerStatsMetric(name, core_id, "coherency-invalidates", &stats.coherency_invalidates);
 #ifdef ENABLE_TRANSITIONS
    for(CacheState::cstate_t old_state = CacheState::CSTATE_FIRST; old_state < CacheState::NUM_CSTATE_STATES; old_state = CacheState::cstate_t(int(old_state)+1))
       for(CacheState::cstate_t new_state = CacheState::CSTATE_FIRST; new_state < CacheState::NUM_CSTATE_STATES; new_state = CacheState::cstate_t(int(new_state)+1))
@@ -1252,6 +1255,15 @@ MYLOG("@%lx  %c > %c", address, CStateString(cache_block_info ? cache_block_info
             getCacheState(address),
             new_cstate
          );
+         if (reason == Transition::COHERENCY)
+         {
+            if (new_cstate == CacheState::SHARED)
+               ++stats.coherency_downgrades;
+            else if (cache_block_info->getCState() == CacheState::MODIFIED)
+               ++stats.coherency_writebacks;
+            else
+               ++stats.coherency_invalidates;
+         }
       }
 
       if (cache_block_info->getCState() == CacheState::MODIFIED) {
