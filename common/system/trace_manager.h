@@ -2,7 +2,6 @@
 #define __TRACE_MANAGER_H
 
 #include "fixed_types.h"
-#include "barrier.h"
 #include "semaphore.h"
 #include "core.h" // for lock_signal_t and mem_op_t
 

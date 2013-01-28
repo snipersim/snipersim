@@ -2,7 +2,6 @@
 #define __TRACE_THREAD_H
 
 #include "fixed_types.h"
-#include "barrier.h"
 #include "_thread.h"
 #include "thread.h"
 #include "core.h"
@@ -32,7 +31,6 @@ class TraceThread : public Runnable
       Sift::Reader m_trace;
       bool m_trace_has_pa;
       bool m_stop;
-      Barrier *m_barrier;
       std::unordered_map<IntPtr, BasicBlock *> m_icache;
       UInt64 m_bbv_base;
       UInt64 m_bbv_count;
@@ -71,7 +69,7 @@ class TraceThread : public Runnable
       TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id, bool cleanup);
       ~TraceThread();
 
-      void spawn(Barrier *barrier);
+      void spawn();
       void stop() { m_stop = true; }
       UInt64 getProgressExpect();
       UInt64 getProgressValue();

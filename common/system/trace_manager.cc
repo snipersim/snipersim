@@ -107,7 +107,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
    {
       /* First thread of each app spawns only when initialization is done,
          next threads are created once we're running so spawn them right away. */
-      tthread->spawn(NULL);
+      tthread->spawn();
    }
 
    return thread->getId();
@@ -173,7 +173,7 @@ TraceManager::~TraceManager()
 void TraceManager::start()
 {
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
-      (*it)->spawn(NULL);
+      (*it)->spawn();
 }
 
 void TraceManager::stop()
@@ -183,7 +183,7 @@ void TraceManager::stop()
       (*it)->stop();
    // Give threads some time to end.
    sleep(1);
-   // Some threads may be blocked (barrier, SIFT reader, etc.). Don't wait for them or we'll deadlock.
+   // Some threads may be blocked (SIFT reader, syscall, etc.). Don't wait for them or we'll deadlock.
    m_done.signal();
 }
 

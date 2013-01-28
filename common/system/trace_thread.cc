@@ -392,9 +392,8 @@ void TraceThread::run()
    Sim()->getTraceManager()->signalDone(m_thread, m_stop /*aborted*/);
 }
 
-void TraceThread::spawn(Barrier *barrier)
+void TraceThread::spawn()
 {
-   m_barrier = barrier;
    m__thread = _Thread::create(this);
    m__thread->run();
 }
