@@ -382,7 +382,7 @@ elif pinballs and pinball_sift:
   # Set trace recorder options
   applications = []
   for app_id, pinball in enumerate(pinballs):
-    applications.append([ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball ])
+    applications.append([ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball, '--outputdir', outputdir ])
 
 # Setup common generated trace files
 if tracegen:
@@ -518,8 +518,8 @@ if not standalone:
       pinoptions += ' -appdebug'
 
 if pinballs and not pinball_sift:
-  pinoptions += ' -xyzzy -reserve_memory %s.address' % (pinballs[0])
-  optcmd += ' -replay -replay:basename %s --general/enable_pinplay=true' % (pinballs[0])
+  pinoptions += ' -xyzzy -reserve_memory "%s.address"' % (pinballs[0])
+  optcmd += ' -replay -replay:basename "%s" -pinplay:msgfile "%s" -replay:resultfile "%s" --general/enable_pinplay=true' % (pinballs[0], os.path.join(outputdir,'pinball_replay'), os.path.join(outputdir,'pinball_result'))
   # Overwrite the cmdline with the nullapp, as the pinball will handle the appropriate processing
   nullapp_path = '%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()
   if not os.path.exists(nullapp_path):

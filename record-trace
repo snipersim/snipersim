@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] { --pinball=<pinball-basename> | -- <cmdline> }' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--outputdir <outputdir (.)>] { --pinball=<pinball-basename> | -- <cmdline> }' % sys.argv[0]
   sys.exit(2)
 
 
@@ -30,12 +30,13 @@ gdb_screen = False
 use_follow = False
 use_pa = False
 pinball = None
+outputdir = '.'
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:r:", [ "roi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "pinball=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:r:", [ "roi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "pinball=", "outputdir=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -80,6 +81,16 @@ for o, a in opts:
       print >> sys.stderr, 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (a, a)
       sys.exit(1)
     pinball = a
+  if o == '--outputdir':
+    outputdir = a
+
+outputdir = os.path.realpath(outputdir)
+if not os.path.exists(outputdir):
+  try:
+    os.makedirs(outputdir)
+  except OSError:
+    print >> sys.stderr, 'Failed to create output directory', outputdir
+    sys.exit(-1)
 
 configfile = os.path.join(HOME, 'config/sniper.py')
 config = {}
@@ -108,7 +119,7 @@ if use_follow:
 pinballoptions = ''
 if pinball:
   pinoptions += ' -xyzzy -reserve_memory "%s.address"' % pinball
-  pinballoptions += '-replay -replay:basename "%s"' % pinball
+  pinballoptions += '-replay -replay:basename "%s" -pinplay:msgfile "%s" -replay:resultfile "%s"' % (pinball, os.path.join(outputdir,'pinball_replay.app%d' % siftcountoffset), os.path.join(outputdir,'pinball_result.app%d' % siftcountoffset))
   # Replace the command line with the null app for use with PinPlay
   cmdline = ['%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()]
 
