@@ -171,7 +171,7 @@ void TraceManager::endApplication(TraceThread *thread)
       {
          // Ask thread to stop
          (*it)->stop();
-         // Usually the application's other threads are blocked on a futex, so call signalDone in their place
+         // Threads are often blocked on a futex in this case, so call signalDone in their place
          signalDone(*it, true /* aborted */);
       }
    }
@@ -235,6 +235,11 @@ void TraceManager::accessMemory(int core_id, Core::lock_signal_t lock_signal, Co
    {
       TraceThread *tthread = *it;
       assert(tthread != NULL);
+      if (tthread->m_stopped)
+      {
+         LOG_PRINT_WARNING("accessMemory() called but thread already killed since application ended");
+         return;
+      }
       if (tthread->getThread() && tthread->getThread()->getCore() && core_id == tthread->getThread()->getCore()->getId())
       {
          tthread->handleAccessMemory(lock_signal, mem_op_type, d_addr, data_buffer, data_size);
