@@ -113,6 +113,18 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
    {
       if (gax == SIM_CMD_ROI_START)
       {
+         int numthreads = 0;
+         for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+         {
+            if (thread_data[i].running)
+               ++numthreads;
+         }
+         if (numthreads > 1)
+         {
+            std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: Threads have been spawned before ROI begin. This behavior is not supported." << std::endl;
+            exit(-1);
+         }
+
          if (app_id < 0)
             findMyAppId();
 
