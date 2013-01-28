@@ -10,11 +10,11 @@
 #define INSTR_IF_FASTFORWARD(__inst_mode)      ((__inst_mode) == InstMode::FAST_FORWARD)
 #define INSTR_IF_NOT_FASTFORWARD(__inst_mode)  ((__inst_mode) != InstMode::FAST_FORWARD)
 
-#define __INSTRUMENT(predicated, condition, trace, ins, point, func, ...)      \
-   if (condition)                                                              \
-      INS_Insert##predicated##Call(ins, point, func, __VA_ARGS__);   \
+#define __INSTRUMENT(predicated, condition, trace, ins, point, func, ...) \
+   if (condition)                                                         \
+      INS_Insert##predicated##Call(ins, point, func, __VA_ARGS__);        \
 
-#define INSTR_GET_MODE(__trace)           (Sim()->getInstrumentationMode())
+#define INSTR_GET_MODE(__trace) ((InstMode::inst_mode_t)TRACE_Version(__trace))
 
 #define INSTRUMENT(...)                   __INSTRUMENT(, __VA_ARGS__)
 #define INSTRUMENT_IF(...)                __INSTRUMENT(If, __VA_ARGS__)

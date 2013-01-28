@@ -5,5 +5,5 @@
 void
 InstMode::updateInstrumentationMode()
 {
-   PIN_RemoveInstrumentation();
+   // With TraceVersion, nothing to do here
 }

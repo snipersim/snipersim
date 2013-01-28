@@ -209,12 +209,31 @@ namespace std
 // key on both the start and the end address of the basic block.
 std::unordered_map<std::pair<ADDRINT, ADDRINT>, BasicBlock*> basicblock_cache;
 
+static int getInstMode()
+{
+   return Sim()->getInstrumentationMode();
+}
+
 VOID traceCallback(TRACE trace, void *v)
 {
    InstMode::inst_mode_t inst_mode = INSTR_GET_MODE(trace);
 
    BBL bbl_head = TRACE_BblHead(trace);
    INS ins_head = BBL_InsHead(bbl_head);
+
+   // Write the resulting mode to REG_INST_Gx for use by INS_InsertVersionCase
+   INS_InsertCall(ins_head, IPOINT_BEFORE, (AFUNPTR)getInstMode, IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP], IARG_END);
+
+   if (INSTR_IF_NOT_DETAILED(inst_mode))
+      INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], InstMode::DETAILED, InstMode::DETAILED, IARG_END);
+   if (INSTR_IF_NOT_CACHEONLY(inst_mode))
+      INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], InstMode::CACHE_ONLY, InstMode::CACHE_ONLY, IARG_END);
+   if (INSTR_IF_NOT_FASTFORWARD(inst_mode))
+      INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], InstMode::FAST_FORWARD, InstMode::FAST_FORWARD, IARG_END);
+
+   // Version 0 is only for startup / amnesia, don't do anything else there
+   if (TRACE_Version(trace) == 0)
+      return;
 
    addCheckScheduled(trace, ins_head);
 
