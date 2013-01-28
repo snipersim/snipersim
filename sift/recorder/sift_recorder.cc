@@ -48,6 +48,7 @@ KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emul
 KNOB<BOOL>   KnobSendPhysicalAddresses(KNOB_MODE_WRITEONCE, "pintool", "pa", "0", "send logical to physical address mapping");
 KNOB<UINT64> KnobFlowControl(KNOB_MODE_WRITEONCE, "pintool", "flow", "1000", "number of instructions to send before syncing up");
 KNOB<INT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift app id (default = 0)");
+KNOB<BOOL> KnobDebug(KNOB_MODE_WRITEONCE, "pintool", "debug", "0", "start debugger on internal exception");
 
 # define KNOB_REPLAY_NAME "replay"
 # define KNOB_FAMILY "pintool:sift-recorder"
@@ -794,7 +795,8 @@ int main(int argc, char **argv)
    PIN_AddFollowChildProcessFunction(followChild, 0);
    PIN_AddForkFunction(FPOINT_BEFORE, forkBefore, 0);
 
-   pinboost_register("SIFT_RECORDER");
+   if (KnobDebug.Value())
+      pinboost_register("SIFT_RECORDER");
 
    PIN_StartProgram();
 
