@@ -3,7 +3,7 @@ import sys, os, time, subprocess, threading, multiprocessing, sniper_lib
 def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
   out = file(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), 'w', 0) # Open unbuffered to maintain stdout/stderr interleaving
   os.dup2(out.fileno(), sys.stdout.fileno())
-  os.dup2(out.fileno(), sys.stderr.fileno())
+  #os.dup2(out.fileno(), sys.stderr.fileno())
   program_func(program_arg)
 
 def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
