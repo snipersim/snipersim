@@ -97,7 +97,7 @@ sim_root = HOME
 # convert to absolute path
 outputfile = os.path.realpath(os.path.join(outputfile))
 
-pinoptions = '-mt -injection child'
+pinoptions = '-mt -injection child -xyzzy -enable_vsm 0'
 if use_gdb:
   pinoptions += ' -pause_tool 1'
 if use_follow:
