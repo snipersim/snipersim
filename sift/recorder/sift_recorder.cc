@@ -95,7 +95,6 @@ thread_data_t *thread_data;
 
 static_assert((sizeof(thread_data_t) % LINE_SIZE_BYTES) == 0, "Error: Thread data should be a multiple of the line size to prevent false sharing");
 
-bool emulateSyscall[MAX_NUM_SYSCALLS] = {0};
 #if defined(TARGET_IA32)
    typedef uint32_t syscall_args_t[6];
 #elif defined(TARGET_INTEL64)
@@ -328,27 +327,37 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    }
    else if (KnobEmulateSyscalls.Value())
    {
-      // Handle SYS_clone child tid capture for proper pthread_join emulation.
-      // When the CLONE_CHILD_CLEARTID option is enabled, remember its child_tidptr and
-      // then when the thread ends, write 0 to the tid mutex and futex_wake it
-      if (syscall_number == SYS_clone)
+      switch(syscall_number)
       {
-         thread_data[threadid].output->NewThread();
-         // Store the thread's tid ptr for later use
-         #if defined(TARGET_IA32)
-            ADDRINT tidptr = args[2];
-         #elif defined(TARGET_INTEL64)
-            ADDRINT tidptr = args[3];
-         #endif
-         GetLock(&new_threadid_lock, threadid);
-         tidptrs.push_back(tidptr);
-         ReleaseLock(&new_threadid_lock);
-      }
-      else if (emulateSyscall[syscall_number])
-      {
-         thread_data[threadid].last_syscall_number = syscall_number;
-         thread_data[threadid].last_syscall_emulated = true;
-         thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+         // Handle SYS_clone child tid capture for proper pthread_join emulation.
+         // When the CLONE_CHILD_CLEARTID option is enabled, remember its child_tidptr and
+         // then when the thread ends, write 0 to the tid mutex and futex_wake it
+         case SYS_clone:
+         {
+            thread_data[threadid].output->NewThread();
+            // Store the thread's tid ptr for later use
+            #if defined(TARGET_IA32)
+               ADDRINT tidptr = args[2];
+            #elif defined(TARGET_INTEL64)
+               ADDRINT tidptr = args[3];
+            #endif
+            GetLock(&new_threadid_lock, threadid);
+            tidptrs.push_back(tidptr);
+            ReleaseLock(&new_threadid_lock);
+            break;
+         }
+
+         // System calls emulated (not passed through to OS)
+         case SYS_futex:
+            thread_data[threadid].last_syscall_number = syscall_number;
+            thread_data[threadid].last_syscall_emulated = true;
+            thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            break;
+
+         // System calls sent to Sniper, but also passed through to OS
+         case SYS_exit:
+            thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            break;
       }
    }
 }
@@ -641,6 +650,14 @@ VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
    std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Finish Thread" << std::endl;
 #endif
 
+   if (threadid == 0)
+   {
+      // Send SYS_exit to the simulator to end the application
+      syscall_args_t args = {0};
+      args[0] = flags;
+      thread_data[threadid].output->Syscall(SYS_exit, (char*)args, sizeof(args));
+   }
+
    thread_data[threadid].running = false;
 
    // To prevent deadlocks during simulation, start a new thread to handle this thread's
@@ -763,7 +780,6 @@ int main(int argc, char **argv)
          exit(1);
       }
 
-      emulateSyscall[SYS_futex] = true;
       PIN_AddSyscallEntryFunction(syscallEntryCallback, 0);
       PIN_AddSyscallExitFunction(syscallExitCallback, 0);
    }

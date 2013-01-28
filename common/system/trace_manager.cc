@@ -154,6 +154,16 @@ void TraceManager::signalDone(Thread *thread, bool aborted)
    m_num_threads_running--;
 }
 
+void TraceManager::endApplication(Thread *thread)
+{
+   for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
+   {
+      // Abort all threads in this application, except ourselves (we should end normally soon)
+      if ((*it)->getThread()->getAppId() == thread->getAppId() && (*it)->getThread() != thread)
+         signalDone((*it)->getThread(), true /* aborted */);
+   }
+}
+
 TraceManager::~TraceManager()
 {
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)

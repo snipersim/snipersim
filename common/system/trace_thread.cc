@@ -110,17 +110,24 @@ void TraceThread::handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t siz
 uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size)
 {
    uint64_t ret = 0;
-   if (syscall_number != SYS_futex)
+
+   switch(syscall_number)
    {
-      return ret;
+      case SYS_exit:
+         Sim()->getTraceManager()->endApplication(m_thread);
+         break;
+
+      case SYS_futex:
+      {
+         LOG_ASSERT_ERROR(size == sizeof(SyscallMdl::syscall_args_t), "Syscall arguments not the correct size");
+
+         SyscallMdl::syscall_args_t *args = (SyscallMdl::syscall_args_t *) data;
+
+         m_thread->getSyscallMdl()->runEnter(syscall_number, *args);
+         ret = m_thread->getSyscallMdl()->runExit(ret);
+         break;
+      }
    }
-
-   LOG_ASSERT_ERROR(size == sizeof(SyscallMdl::syscall_args_t), "Syscall arguments not the correct size");
-
-   SyscallMdl::syscall_args_t *args = (SyscallMdl::syscall_args_t *) data;
-
-   m_thread->getSyscallMdl()->runEnter(syscall_number, *args);
-   ret = m_thread->getSyscallMdl()->runExit(ret);
 
    return ret;
 }
