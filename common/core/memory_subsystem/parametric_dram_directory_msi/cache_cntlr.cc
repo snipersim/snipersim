@@ -1295,20 +1295,21 @@ MYLOG("@%lx  %c > %c", address, CStateString(cache_block_info ? cache_block_info
          cache_block_info->setCState(CacheState::SHARED);
       }
 
-      if (new_cstate == CacheState::INVALID && m_coherent) {
-         invalidateCacheBlock(address);
+      if (new_cstate == CacheState::INVALID) {
+         if (m_coherent)
+            invalidateCacheBlock(address);
 
       } else if (new_cstate == CacheState::SHARED) {
          cache_block_info->setCState(new_cstate);
 
       } else {
-         LOG_ASSERT_ERROR(false, "Cannot upgrade block status to %d", new_cstate);
+         LOG_ASSERT_ERROR(false, "Cannot upgrade block status to %c", CStateString(new_cstate));
 
       }
    }
 //MYLOG("@%lx  now %c", address, CStateString(getCacheState(address)));
 
-   LOG_ASSERT_ERROR((getCacheState(address) == CacheState::INVALID) || (getCacheState(address) == new_cstate), "state didn't change as we wanted");
+   LOG_ASSERT_ERROR((getCacheState(address) == CacheState::INVALID) || (getCacheState(address) == new_cstate) || !m_coherent, "state didn't change as we wanted");
    LOG_ASSERT_ERROR(out_buf ? buf_written : true, "out_buf passed in but never written to");
 
    /* Assume tag access caused by snooping is already accounted for in lower level cache access time,
