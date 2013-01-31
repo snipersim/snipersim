@@ -45,7 +45,7 @@ bool IOCOOMPerformanceModel::handleInstruction(Instruction const* instruction)
 
    // icache modeling
    if (instruction->getAddress())
-      modelIcache(instruction->getAddress());
+      modelIcache(instruction->getAddress(), instruction->getSize());
 
    /*
       model instruction in the following steps:
@@ -206,9 +206,9 @@ SubsecondTime IOCOOMPerformanceModel::executeStore(SubsecondTime time, const Dyn
    return m_store_buffer->executeStore(time, latency, info.memory_info.addr);
 }
 
-void IOCOOMPerformanceModel::modelIcache(IntPtr addr)
+void IOCOOMPerformanceModel::modelIcache(IntPtr addr, UInt32 size)
 {
-   SubsecondTime access_time = getCore()->readInstructionMemory(addr, sizeof(IntPtr)).latency;
+   SubsecondTime access_time = getCore()->readInstructionMemory(addr, size).latency;
    m_elapsed_time.addLatency(access_time);
 }
 

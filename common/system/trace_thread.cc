@@ -174,6 +174,7 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
       instruction = new GenericInstruction(list);
 
    instruction->setAddress(va2pa(inst.sinst->addr));
+   instruction->setSize(inst.sinst->size);
    instruction->setAtomic(xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst)));
    char disassembly[40];
    xed_format(m_syntax, &xed_inst, disassembly, sizeof(disassembly), inst.sinst->addr);

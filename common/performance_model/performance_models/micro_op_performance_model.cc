@@ -181,7 +181,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       // Sometimes, these aren't real instructions (INST_SPAWN, etc), and therefore, we need to skip these
       if (instruction->getAddress() && !instruction->isDynamic() && m_current_uops.size() > 0 )
       {
-         MemoryResult memres = getCore()->readInstructionMemory(instruction->getAddress(), sizeof(IntPtr));
+         MemoryResult memres = getCore()->readInstructionMemory(instruction->getAddress(), instruction->getSize());
 
          // For the interval model, for now, use integers for the cycle latencies
          UInt64 memory_cycle_latency = SubsecondTime::divideRounded(memres.latency, m_state_insn_period);

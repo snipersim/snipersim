@@ -62,6 +62,8 @@ public:
 
    void setAddress(IntPtr addr) { m_addr = addr; }
    IntPtr getAddress() const { return m_addr; }
+   void setSize(UInt32 size) { m_size = size; }
+   UInt32 getSize() const { return m_size; }
 
    void setAtomic(bool atomic) { m_atomic = atomic; }
    bool isAtomic() const { return m_atomic; }
@@ -85,6 +87,7 @@ private:
    const std::vector<const MicroOp *> *m_uops;
 
    IntPtr m_addr;
+   UInt32 m_size;
    bool m_atomic;
 
 protected:

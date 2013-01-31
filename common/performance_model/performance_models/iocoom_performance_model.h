@@ -23,7 +23,7 @@ private:
 
    bool handleInstruction(Instruction const* instruction);
 
-   void modelIcache(IntPtr address);
+   void modelIcache(IntPtr address, UInt32 size);
    std::pair<const SubsecondTime,const SubsecondTime> executeLoad(SubsecondTime time, const DynamicInstructionInfo &);
    SubsecondTime executeStore(SubsecondTime time, const DynamicInstructionInfo &);
 

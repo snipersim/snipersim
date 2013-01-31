@@ -273,6 +273,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    ADDRINT addr = INS_Address(ins);
 
    basic_block->back()->setAddress(addr);
+   basic_block->back()->setSize(INS_Size(ins));
    basic_block->back()->setAtomic(INS_IsAtomicUpdate(ins));
    basic_block->back()->setDisassembly(INS_Disassemble(ins).c_str());
 
