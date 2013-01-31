@@ -231,23 +231,22 @@ def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
     'l3':               getpower(power_dat['Processor'], 'Total L3s'),
     'noc':              getpower(power_dat['Processor'], 'Total NoCs'),
     'dram':             getpower(power_dat['DRAM']),
-    'core':             sum([ getpower(core, 'Execution Unit/Instruction Scheduler')
-                         + getpower(core, 'Execution Unit/Register Files')
-                         + getpower(core, 'Execution Unit/Results Broadcast Bus')
-                         + getpower(core, 'Renaming Unit') for core in power_dat['Core'] ]),
-    'core-ifetch':      sum([ getpower(core, 'Instruction Fetch Unit/Branch Predictor')
-                         + getpower(core, 'Instruction Fetch Unit/Branch Target Buffer')
-                         + getpower(core, 'Instruction Fetch Unit/Instruction Buffer')
-                         + getpower(core, 'Instruction Fetch Unit/Instruction Decoder') for core in power_dat['Core'] ]),
+    'core':             sum([ getpower(core, 'Execution Unit/Instruction Scheduler') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Execution Unit/Register Files') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Execution Unit/Results Broadcast Bus') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Renaming Unit') for core in power_dat['Core'] ]),
+    'core-ifetch':      sum([ getpower(core, 'Instruction Fetch Unit/Branch Predictor') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Instruction Fetch Unit/Branch Target Buffer') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Instruction Fetch Unit/Instruction Buffer') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Instruction Fetch Unit/Instruction Decoder') for core in power_dat['Core'] ]),
     'icache':           sum([ getpower(core, 'Instruction Fetch Unit/Instruction Cache') for core in power_dat['Core'] ]),
     'dcache':           sum([ getpower(core, 'Load Store Unit/Data Cache') for core in power_dat['Core'] ]),
     'core-alu-complex': sum([ getpower(core, 'Execution Unit/Complex ALUs') for core in power_dat['Core'] ]),
     'core-alu-fp':      sum([ getpower(core, 'Execution Unit/Floating Point Units') for core in power_dat['Core'] ]),
     'core-alu-int':     sum([ getpower(core, 'Execution Unit/Integer ALUs') for core in power_dat['Core'] ]),
-    'core-mem':         sum([ getpower(core, 'Execution Unit/Integer ALUs')
-                         + getpower(core, 'Load Store Unit/LoadQ')
-                         + getpower(core, 'Load Store Unit/StoreQ')
-                         + getpower(core, 'Memory Management Unit') for core in power_dat['Core'] ]),
+    'core-mem':         sum([ getpower(core, 'Load Store Unit/LoadQ') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Load Store Unit/StoreQ') for core in power_dat['Core'] ])
+                         + sum([ getpower(core, 'Memory Management Unit') for core in power_dat['Core'] ]),
   }
   data['core-other'] = getpower(power_dat['Processor'], 'Total Cores') \
                      - sum(data.values()) + sum([ data[key] for key in ('l2', 'l3', 'noc', 'dram') ])
