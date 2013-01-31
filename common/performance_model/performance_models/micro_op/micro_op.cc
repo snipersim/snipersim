@@ -20,7 +20,13 @@ extern "C" {
 # define VERIFY_MICROOP() do {} while (0)
 #endif
 
-MicroOp::MicroOp() {
+MicroOp::MicroOp()
+#ifdef ENABLE_MICROOP_STRINGS
+   : sourceRegisterNames(MAXIMUM_NUMBER_OF_SOURCE_REGISTERS)
+   , addressRegisterNames(MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS)
+   , destinationRegisterNames(MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS)
+#endif
+{
    this->uop_type = UOP_INVALID;
    this->instructionOpcode = XED_ICLASS_INVALID;
    this->instruction = NULL;
@@ -346,6 +352,36 @@ void MicroOp::addSourceRegister(uint32_t registerId, const String& registerName)
    sourceRegistersLength++;
 }
 
+uint32_t MicroOp::getAddressRegistersLength() const {
+   VERIFY_MICROOP();
+   return this->addressRegistersLength;
+}
+
+uint8_t MicroOp::getAddressRegister(uint32_t index) const {
+   VERIFY_MICROOP();
+   assert(index < this->addressRegistersLength);
+   return this->addressRegisters[index];
+}
+
+#ifdef ENABLE_MICROOP_STRINGS
+const String& MicroOp::getAddressRegisterName(uint32_t index) const {
+   VERIFY_MICROOP();
+   assert(index < this->addressRegistersLength);
+   return this->addressRegisterNames[index];
+}
+#endif
+
+void MicroOp::addAddressRegister(uint32_t registerId, const String& registerName) {
+   VERIFY_MICROOP();
+   assert(addressRegistersLength < MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS);
+// assert(registerId >= 0 && registerId < TOTAL_NUM_REGISTERS);
+   addressRegisters[addressRegistersLength] = registerId;
+#ifdef ENABLE_MICROOP_STRINGS
+   addressRegisterNames[addressRegistersLength] = registerName;
+#endif
+   addressRegistersLength++;
+}
+
 uint32_t MicroOp::getDestinationRegistersLength() const {
    VERIFY_MICROOP();
    return this->destinationRegistersLength;
@@ -360,7 +396,7 @@ uint8_t MicroOp::getDestinationRegister(uint32_t index) const {
 #ifdef ENABLE_MICROOP_STRINGS
 const String& MicroOp::getDestinationRegisterName(uint32_t index) const {
    VERIFY_MICROOP();
-   assert(index >= 0 && index < this->destinationRegistersLength);
+   assert(index < this->destinationRegistersLength);
    return this->destinationRegisterNames[index];
 }
 #endif

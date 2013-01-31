@@ -16,6 +16,7 @@ class MicroOp;
 class InstructionDecoder {
 private:
    static void addSrcs(std::set<xed_reg_enum_t> regs, MicroOp *uop);
+   static void addAddrs(std::set<xed_reg_enum_t> regs, MicroOp *uop);
    static void addDsts(std::set<xed_reg_enum_t> regs, MicroOp *uop);
    static unsigned int getNumExecs(const xed_decoded_inst_t *ins, int numLoads, int numStores);
 public:

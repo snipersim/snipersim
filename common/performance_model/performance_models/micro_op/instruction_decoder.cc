@@ -16,6 +16,15 @@ void InstructionDecoder::addSrcs(std::set<xed_reg_enum_t> regs, MicroOp * curren
       }
 }
 
+void InstructionDecoder::addAddrs(std::set<xed_reg_enum_t> regs, MicroOp * currentMicroOp) {
+   for(std::set<xed_reg_enum_t>::iterator it = regs.begin(); it != regs.end(); ++it)
+      if (*it != XED_REG_INVALID) {
+         xed_reg_enum_t reg = xed_get_largest_enclosing_register(*it);
+         if (reg == XED_REG_EIP || reg == XED_REG_RIP) continue; // eip/rip is known at decode time, shouldn't be a dependency
+         currentMicroOp->addAddressRegister((uint32_t)reg, String(xed_reg_enum_t2str(reg)));
+      }
+}
+
 void InstructionDecoder::addDsts(std::set<xed_reg_enum_t> regs, MicroOp * currentMicroOp) {
    for(std::set<xed_reg_enum_t>::iterator it = regs.begin(); it != regs.end(); ++it)
       if (*it != XED_REG_INVALID) {
@@ -251,6 +260,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
       {
          size_t loadIndex = index;
          addSrcs(regs_loads[loadIndex], currentMicroOp);
+         addAddrs(regs_loads[loadIndex], currentMicroOp);
 
          if (numExecs == 0) {
             // No execute microop: we inherit its read operands
@@ -290,6 +300,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
       {
          size_t storeIndex = index - numLoads - numExecs;
          addSrcs(regs_stores[storeIndex], currentMicroOp);
+         addAddrs(regs_stores[storeIndex], currentMicroOp);
 
          if (numExecs == 0) {
             // No execute microop: we inherit its write operands

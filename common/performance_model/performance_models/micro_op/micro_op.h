@@ -8,6 +8,7 @@
 #include "log.h"
 
 #include <xed-iclass-enum.h>
+#include <vector>
 
 class Instruction;
 
@@ -18,6 +19,7 @@ class Instruction;
 #define MAX_CF_REGS 11
 
 #define MAXIMUM_NUMBER_OF_SOURCE_REGISTERS (MAX_SRC_REGS + MAX_CF_REGS)
+#define MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS MAX_MEM_SRC_REGS
 #define MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS (MAX_DEST_REGS + MAX_CF_REGS)
 #define MAXIMUM_NUMBER_OF_DEPENDENCIES MAXIMUM_NUMBER_OF_SOURCE_REGISTERS
 
@@ -48,15 +50,9 @@ const uint64_t INVALID_SEQNR UINT64_MAX;
 // Define to store debug strings inside the MicroOp for MicroOp::toString
 //#define ENABLE_MICROOP_STRINGS
 
-struct MicroOp {
-
-#ifdef ENABLE_MICROOP_STRINGS
-   MicroOp()
-      : sourceRegisterNames(MAXIMUM_NUMBER_OF_SOURCE_REGISTERS)
-      , destinationRegisterNames(MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS) {}
-#else
+struct MicroOp
+{
    MicroOp();
-#endif
 
    enum uop_type_t { UOP_INVALID = 0, UOP_LOAD, UOP_EXECUTE, UOP_STORE };
    /** The microOperation type. */
@@ -96,12 +92,15 @@ struct MicroOp {
    /** This array contains the registers read by this MicroOperation, the integer is an id given by libdisasm64. Only valid for UOP_LOAD and UOP_EXECUTE. */
    uint32_t sourceRegisters[MAXIMUM_NUMBER_OF_SOURCE_REGISTERS];
    /** This field contains the length of the destinationRegisters array. */
+   uint32_t addressRegistersLength;
+   uint32_t addressRegisters[MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS];
    uint32_t destinationRegistersLength;
    /** This array contains the registers written by this MicroOperation, the integer is an id given by libdisasm64. Only valid for UOP_EXECUTE. */
    uint32_t destinationRegisters[MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS];
 
 #ifdef ENABLE_MICROOP_STRINGS
    std::vector<String> sourceRegisterNames;
+   std::vector<String> addressRegisterNames;
    std::vector<String> destinationRegisterNames;
 #endif
 
@@ -160,12 +159,17 @@ struct MicroOp {
    uint8_t getSourceRegister(uint32_t index) const;
    void addSourceRegister(uint32_t registerId, const String& registerName);
 
+   uint32_t getAddressRegistersLength() const;
+   uint8_t getAddressRegister(uint32_t index) const;
+   void addAddressRegister(uint32_t registerId, const String& registerName);
+
    uint32_t getDestinationRegistersLength() const;
    uint8_t getDestinationRegister(uint32_t index) const;
    void addDestinationRegister(uint32_t registerId, const String& registerName);
 
 #ifdef ENABLE_MICROOP_STRINGS
    const String& getSourceRegisterName(uint32_t index) const;
+   const String& getAddressRegisterName(uint32_t index) const;
    const String& getDestinationRegisterName(uint32_t index) const;
 #endif
 
