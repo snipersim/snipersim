@@ -8,7 +8,6 @@
 #include "dvfs_manager.h"
 #include "subsecond_time.h"
 #include "micro_op.h"
-#include "utils.h"
 #include "allocator.h"
 #include "config.hpp"
 
@@ -56,11 +55,6 @@ MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
    cycle_filename = Sim()->getConfig()->formatOutputFileName(cycle_filename);
    m_cycle_log = std::fopen(cycle_filename.c_str(), "w");
 #endif
-
-   // Granularity of memory dependencies, in bytes
-   UInt64 mem_gran = Sim()->getCfg()->getIntArray("perf_model/core/interval_timer/memory_dependency_granularity", core->getId());
-   LOG_ASSERT_ERROR(isPower2(mem_gran), "memory_dependency_granularity needs to be a power of 2. [%u]", mem_gran);
-   m_mem_dep_mask = ~(mem_gran - 1);
 
    m_cpiITLBMiss = SubsecondTime::Zero();
    m_cpiDTLBMiss = SubsecondTime::Zero();
@@ -245,7 +239,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
                UInt64 bypass_latency = m_core_model->getBypassLatency(m_current_uops[load_index]);
                m_current_uops[load_index]->setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
-               addr.set(info->memory_info.addr & m_mem_dep_mask); // Enforce memory dependency granularity
+               addr.set(info->memory_info.addr);
                m_current_uops[load_index]->setAddress(addr);
                m_current_uops[load_index]->setDCacheHitWhere(info->memory_info.hit_where);
                ++m_state_num_reads_done;
@@ -280,7 +274,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
                UInt64 bypass_latency = m_core_model->getBypassLatency(m_current_uops[store_index]);
                m_current_uops[store_index]->setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
-               addr.set(info->memory_info.addr & m_mem_dep_mask); // Enforce memory dependency granularity
+               addr.set(info->memory_info.addr);
                m_current_uops[store_index]->setAddress(addr);
                m_current_uops[store_index]->setDCacheHitWhere(info->memory_info.hit_where);
                ++m_state_num_writes_done;
@@ -478,7 +472,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       }
 
       Memory::Access data_address;
-      data_address.set(mem_dyn_insn->getDataAddress() & m_mem_dep_mask); // Enforce memory dependency granularity
+      data_address.set(mem_dyn_insn->getDataAddress());
       uop->setExecLatency(cost_add_latency_interval);
       uop->setForceLongLatencyLoad(force_lll);
 

@@ -14,6 +14,7 @@
 #endif
 #include "loop_tracer.h"
 #include "config.hpp"
+#include "utils.h"
 
 #include <algorithm>
 #include <iostream>
@@ -38,6 +39,11 @@ IntervalTimer::IntervalTimer(
       , m_frequency_domain(core->getDvfsDomain())
       , m_loop_tracer(LoopTracer::createLoopTracer(core))
 {
+
+   // Granularity of memory dependencies, in bytes
+   UInt64 mem_gran = Sim()->getCfg()->getIntArray("perf_model/core/interval_timer/memory_dependency_granularity", core->getId());
+   LOG_ASSERT_ERROR(isPower2(mem_gran), "memory_dependency_granularity needs to be a power of 2. [%u]", mem_gran);
+   m_mem_dep_mask = ~(mem_gran - 1);
 
    for(int i = 0; i < MicroOp::UOP_SUBTYPE_SIZE; ++i)
    {
@@ -167,6 +173,14 @@ boost::tuple<uint64_t,uint64_t> IntervalTimer::simulate(const std::vector<Dynami
       {
          delete *i;
          continue;
+      }
+
+      // Enforce memory dependency granularity
+      if ((*i)->getMicroOp()->isLoad() || (*i)->getMicroOp()->isStore())
+      {
+         Memory::Access addr = (*i)->getAddress();
+         addr.address &= m_mem_dep_mask;
+         (*i)->setAddress(addr);
       }
 
       m_windows->add(*i);

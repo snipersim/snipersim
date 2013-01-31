@@ -68,6 +68,7 @@ private:
    // Interval model parameters
    const uint32_t m_dispatch_width;
    const uint32_t m_branch_misprediction_penalty;
+   UInt64 m_mem_dep_mask; // Memory access dependency granularity
 
    // State of previous cycle
    FixedPoint m_remaining_dispatch_bandwidth;

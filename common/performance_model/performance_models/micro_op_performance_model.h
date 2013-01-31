@@ -56,8 +56,6 @@ private:
    UInt64 m_dyninsn_cost;
    UInt64 m_dyninsn_zero_count;
 
-   UInt64 m_mem_dep_mask; // Memory access dependency granularity
-
 #if DEBUG_DYN_INSN_LOG
    FILE *m_dyninsn_log;
 #endif
