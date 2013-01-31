@@ -49,7 +49,6 @@ Core::Core(SInt32 id)
    , m_bbv(id)
    , m_core_state(Core::IDLE)
    , m_icache_last_block(-1)
-   , m_icache_hits(0)
    , m_spin_loops(0)
    , m_spin_instructions(0)
    , m_spin_elapsed_time(SubsecondTime::Zero())
@@ -190,32 +189,31 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
    UInt32 blockmask = ~(getMemoryManager()->getCacheBlockSize() - 1);
    bool single_cache_line = ((address & blockmask) == ((address + instruction_size - 1) & blockmask));
 
-   // TODO: Nehalem gets 16 bytes at once from the L1I, so if an access is in the same 16-byte block
-   //   as the previous one we shouldn't even count it as a hit
+   // Assume the core reads full instruction cache lines and caches them internally for subsequent instructions.
+   // This reduces L1-I accesses and power to more realistic levels.
+   // For Nehalem, it's in fact only 16 bytes, other architectures (Sandy Bridge) have a micro-op cache,
+   // so this is just an approximation.
 
-   // If we in the same cache line as the last icache access, report a hit
-   if (single_cache_line && ((address & blockmask) == m_icache_last_block))
+   // When accessing the same cache line as last time, don't access the L1-I
+   if ((address & blockmask) == m_icache_last_block)
    {
-      m_icache_hits++;
-      return makeMemoryResult(HitWhere::L1I, getMemoryManager()->getL1HitLatency());
-   }
-
-   // Update cache counters if needed
-   if (m_icache_hits)
-   {
-      getMemoryManager()->addL1Hits(true, Core::READ, m_icache_hits);
-      m_icache_hits = 0;
+      if (single_cache_line)
+      {
+         return makeMemoryResult(HitWhere::L1I, getMemoryManager()->getL1HitLatency());
+      }
+      else
+      {
+         // Instruction spanning cache lines: drop the first line, do access the second one
+         address = (address & blockmask) + getMemoryManager()->getCacheBlockSize();
+      }
    }
 
    // Update the most recent cache line accessed
-   if (single_cache_line)
-   {
-      m_icache_last_block = address & blockmask;
-   }
+   m_icache_last_block = address & blockmask;
 
    // Cases with multiple cache lines or when we are not sure that it will be a hit call into the caches
    return initiateMemoryAccess(MemComponent::L1_ICACHE,
-             Core::NONE, Core::READ, address, NULL, instruction_size, MEM_MODELED_COUNT_TLBTIME, 0, SubsecondTime::MaxTime());
+             Core::NONE, Core::READ, address & blockmask, NULL, getMemoryManager()->getCacheBlockSize(), MEM_MODELED_COUNT_TLBTIME, 0, SubsecondTime::MaxTime());
 }
 
 MemoryResult

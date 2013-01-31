@@ -150,7 +150,6 @@ class Core
       void hookPeriodicInsCall();
 
       IntPtr m_icache_last_block;
-      UInt64 m_icache_hits;
 
       UInt64 m_spin_loops;
       UInt64 m_spin_instructions;
