@@ -38,6 +38,7 @@ MicroOp::MicroOp()
    this->intraInstructionDependencies = 0;
 
    this->sourceRegistersLength = 0;
+   this->addressRegistersLength = 0;
    this->destinationRegistersLength = 0;
 
    this->interrupt = false;
