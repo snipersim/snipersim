@@ -287,27 +287,17 @@ def edit_XML(stats, cfg, vdd):
   instrs = stats['performance_model.instruction_count']
   times = stats['performance_model.elapsed_time']
   cycles = map(lambda c, t: c * t, cycles_scale[:ncores], times[:ncores])
+  max_system_cycles = float(max(cycles)) or 1 # avoid division by zero
   data = [ {} for core in range(ncores) ]
   for core in range(ncores):
     data[core]['idle_cycles'] = cycles_scale[core] * stats['performance_model.idle_elapsed_time'][core]
     data[core]['FP_instructions'] = (stats['interval_timer.uop_fp_addsub'][core] + stats['interval_timer.uop_fp_muldiv'][core])
     data[core]['Branch_instructions'] = (stats['interval_timer.uop_branch'][core])
     data[core]['ialu_accesses'] = (stats['interval_timer.uop_load'][core]) + (stats['interval_timer.uop_store'][core]) + (stats['interval_timer.uop_generic'][core])
-  total_system_instructions = instrs[0]
-  total_system_cycles = 0
-  committed_instructions = 0
+  total_system_instructions = sum(instrs)
   DRAM_reads = int(stats['dram.reads'][0])
   DRAM_writes = int(stats['dram.writes'][0])
-  total_system_idle_cycles = int(data[0]['idle_cycles'])
   #branch_misprediction = stats['branch_predictor.num-incorrect'][1]
-  max_system_cycles = float(max(cycles)) or 1 # avoid division by zero
-  #print max_system_cycles
-  for i in range(ncores):
-    total_system_instructions = total_system_instructions + instrs[i]
-    committed_instructions = committed_instructions + instrs[i]     #assumption: all the instructions are committed
-    total_system_cycles = total_system_cycles + cycles[i]
-    total_system_idle_cycles = total_system_idle_cycles + data[i]['idle_cycles']
-  #print total_system_instructions, total_system_idle_cycles
 
   template=readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node)
   #for j in range(ncores):
@@ -375,11 +365,11 @@ def edit_XML(stats, cfg, vdd):
           elif template[i][1][0]=="idle_cycles":
             template[i][0] = template[i][0] % data[core]['idle_cycles']
           elif template[i][1][0]=="total_system_cycles":
-            template[i][0] = template[i][0] % int(total_system_cycles)
+            template[i][0] = template[i][0] % int(max_system_cycles)
           elif template[i][1][0]=="total_system_idle_cycles":
-            template[i][0] = template[i][0] % int(total_system_idle_cycles)
+            template[i][0] = template[i][0] % int(0)
           elif template[i][1][0]=="total_system_busy_cycles":
-            template[i][0] = template[i][0] % (total_system_cycles - total_system_idle_cycles)
+            template[i][0] = template[i][0] % int(max_system_cycles)
           elif template[i][1][0]=="function_calls":
             template[i][0] = template[i][0] % int(instrs[core] * 0.05)
           elif template[i][1][0]=="IFU.duty_cycle":
@@ -423,9 +413,9 @@ def edit_XML(stats, cfg, vdd):
               template[i][0] = template[i][0] % int(stats['bus.num-requests'][0])  #assumption
           elif template[i][1][0]=="NoC.duty_cycle":
             if 'network.shmem-1.bus.time-used' in stats:
-              template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['network.shmem-1.bus.time-used'][0])/total_system_cycles)
+              template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['network.shmem-1.bus.time-used'][0])/max_system_cycles)
             else:
-              template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['bus.time-used'][0])/total_system_cycles)
+              template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['bus.time-used'][0])/max_system_cycles)
           elif template[i][1][0]=="loads":
             template[i][0] = template[i][0] % long(stats['L1-D.loads'][core])
           elif template[i][1][0]=="stores":
