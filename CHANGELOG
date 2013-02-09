@@ -1,3 +1,14 @@
+Version 4.2
+  * Various accuracy fixes for Nehalem core model
+  * Add cache replacement policies: NRU, MRU, NMRU, PLRU, S-RRIP, Random
+  * Add statistical DRAM performance model
+  * Add syscall enter/exit hooks
+  * Add topology view to visualization
+  * Speed up McPAT by caching architecture-specific CACTI results
+  * Fixes to running multiple multi-threaded workloads
+  * Multi-programmed mode: end simulation at first/last program end, optional trace/application restart
+  * PinPlay support
+
 Version 4.1
   * Visualization support (--viz)
   * Minor cleanups and bug fixes
