@@ -60,6 +60,7 @@ PINPLAY_ENGINE pinplay_engine;
 #endif /* PINPLAY_SUPPORTED */
 
 INT32 app_id;
+INT32 num_threads = 0;
 UINT64 blocksize;
 UINT64 fast_forward_target = 0;
 UINT64 detailed_target = 0;
@@ -73,6 +74,7 @@ typedef struct {
    Sift::Writer *output;
    std::deque<ADDRINT> *dyn_address_queue;
    Bbv *bbv;
+   UINT64 thread_num;
    ADDRINT bbv_base;
    UINT64 bbv_count;
    ADDRINT bbv_last;
@@ -88,9 +90,9 @@ typedef struct {
    BOOL last_syscall_emulated;
    BOOL running;
    #if defined(TARGET_IA32)
-      uint8_t __pad[52];
+      uint8_t __pad[44];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[28];
+      uint8_t __pad[20];
    #endif
 } __attribute__((packed)) thread_data_t;
 thread_data_t *thread_data;
@@ -189,7 +191,7 @@ VOID countInsns(THREADID threadid, INT32 count)
    if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value())
    {
       if (verbose)
-         std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
+         std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       if (!thread_data[threadid].in_detail)
          openFile(threadid);
       thread_data[threadid].in_detail = true;
@@ -516,7 +518,7 @@ void openFile(THREADID threadid)
       ++thread_data[threadid].blocknum;
    }
 
-   if (threadid != 0)
+   if (thread_data[threadid].thread_num != 0)
    {
       assert(KnobUseResponseFiles.Value() != 0);
    }
@@ -533,19 +535,19 @@ void openFile(THREADID threadid)
    else
    {
       if (blocksize)
-         sprintf(filename, "%s.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, app_id, (UINT64)threadid);
+         sprintf(filename, "%s.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), thread_data[threadid].blocknum, app_id, thread_data[threadid].thread_num);
       else
-         sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
+         sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, thread_data[threadid].thread_num);
    }
 
    if (verbose)
-      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Output = [" << filename << "]" << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobUseResponseFiles.Value())
    {
-      sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, (UINT64)threadid);
+      sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, thread_data[threadid].thread_num);
       if (verbose)
-         std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Response = [" << response_filename << "]" << std::endl;
+         std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Response = [" << response_filename << "]" << std::endl;
    }
 
 
@@ -558,7 +560,7 @@ void openFile(THREADID threadid)
       #endif
       thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid, arch32, false, KnobSendPhysicalAddresses.Value());
    } catch (...) {
-      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Error: Unable to open the output file " << filename << std::endl;
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);
    }
 
@@ -572,7 +574,7 @@ void closeFile(THREADID threadid)
 
    if (verbose)
    {
-      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Recorded " << thread_data[threadid].icount_detailed;
+      std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Recorded " << thread_data[threadid].icount_detailed;
       if (thread_data[threadid].icount > thread_data[threadid].icount_detailed)
          std::cerr << " (out of " << thread_data[threadid].icount << ")";
       std::cerr << " instructions" << std::endl;
@@ -617,6 +619,7 @@ VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    }
    ReleaseLock(&new_threadid_lock);
 
+   thread_data[threadid].thread_num = num_threads++;
    thread_data[threadid].bbv = new Bbv();
    thread_data[threadid].dyn_address_queue = new std::deque<ADDRINT>();
 
@@ -661,10 +664,10 @@ VOID threadFinishHelper(VOID *arg)
 VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
 {
 #if DEBUG_OUTPUT
-   std::cerr << "[SIFT_RECORDER:" << app_id << ":" << threadid << "] Finish Thread" << std::endl;
+   std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Finish Thread" << std::endl;
 #endif
 
-   if (threadid == 0 && KnobEmulateSyscalls.Value())
+   if (thread_data[threadid].thread_num == 0 && KnobEmulateSyscalls.Value())
    {
       // Send SYS_exit_group to the simulator to end the application
       syscall_args_t args = {0};
