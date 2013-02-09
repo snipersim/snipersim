@@ -369,7 +369,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
             break;
 
          // System calls sent to Sniper, but also passed through to OS
-         case SYS_exit:
+         case SYS_exit_group:
             thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
             break;
       }
@@ -666,10 +666,10 @@ VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
 
    if (threadid == 0 && KnobEmulateSyscalls.Value())
    {
-      // Send SYS_exit to the simulator to end the application
+      // Send SYS_exit_group to the simulator to end the application
       syscall_args_t args = {0};
       args[0] = flags;
-      thread_data[threadid].output->Syscall(SYS_exit, (char*)args, sizeof(args));
+      thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
    }
 
    thread_data[threadid].running = false;

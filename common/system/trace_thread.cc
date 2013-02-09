@@ -114,7 +114,7 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 
    switch(syscall_number)
    {
-      case SYS_exit:
+      case SYS_exit_group:
          Sim()->getTraceManager()->endApplication(this);
          break;
 
