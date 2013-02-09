@@ -235,13 +235,14 @@ void TraceManager::accessMemory(int core_id, Core::lock_signal_t lock_signal, Co
    {
       TraceThread *tthread = *it;
       assert(tthread != NULL);
-      if (tthread->m_stopped)
-      {
-         LOG_PRINT_WARNING("accessMemory() called but thread already killed since application ended");
-         return;
-      }
       if (tthread->getThread() && tthread->getThread()->getCore() && core_id == tthread->getThread()->getCore()->getId())
       {
+         if (tthread->m_stopped)
+         {
+            // FIXME: should we try doing the memory access through another thread in the same application?
+            LOG_PRINT_WARNING_ONCE("accessMemory() called but thread already killed since application ended");
+            return;
+         }
          tthread->handleAccessMemory(lock_signal, mem_op_type, d_addr, data_buffer, data_size);
          return;
       }
