@@ -667,7 +667,7 @@ VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
    std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Finish Thread" << std::endl;
 #endif
 
-   if (thread_data[threadid].thread_num == 0 && KnobEmulateSyscalls.Value())
+   if (thread_data[threadid].thread_num == 0 && thread_data[threadid].in_detail && KnobEmulateSyscalls.Value())
    {
       // Send SYS_exit_group to the simulator to end the application
       syscall_args_t args = {0};
