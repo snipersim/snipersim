@@ -168,6 +168,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "stores-prefetch", &stats.stores_prefetch);
    registerStatsMetric(name, core_id, "hits-prefetch", &stats.hits_prefetch);
    registerStatsMetric(name, core_id, "evict-prefetch", &stats.evict_prefetch);
+   registerStatsMetric(name, core_id, "invalidate-prefetch", &stats.invalidate_prefetch);
    registerStatsMetric(name, core_id, "evict-shared", &stats.evict_shared);
    registerStatsMetric(name, core_id, "evict-modified", &stats.evict_modified);
    registerStatsMetric(name, core_id, "total-latency", &stats.total_latency);
@@ -1263,6 +1264,8 @@ MYLOG("@%lx  %c > %c", address, CStateString(cache_block_info ? cache_block_info
                ++stats.coherency_writebacks;
             else
                ++stats.coherency_invalidates;
+            if (cache_block_info->hasOption(CacheBlockInfo::PREFETCH) && new_cstate == CacheState::INVALID)
+               ++stats.invalidate_prefetch;
          }
       }
 

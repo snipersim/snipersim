@@ -199,9 +199,10 @@ namespace ParametricDramDirectoryMSI
            UInt64 load_misses_state[CacheState::NUM_CSTATE_STATES], store_misses_state[CacheState::NUM_CSTATE_STATES];
            UInt64 loads_prefetch, stores_prefetch;
            UInt64 hits_prefetch, // lines which were prefetched and subsequently used by a non-prefetch access
-                  evict_prefetch; // lines which were prefetched and evicted before being used
-                  // Note: hits_prefetch and evict_prefetch will not account for all prefetched lines,
-                  // some may still be in the cache, or have been removed for other reasons (invalidate)
+                  evict_prefetch, // lines which were prefetched and evicted before being used
+                  invalidate_prefetch; // lines which were prefetched and invalidated before being used
+                  // Note: hits_prefetch+evict_prefetch+invalidate_prefetch will not account for all prefetched lines,
+                  // some may still be in the cache, or could have been removed for some other reason.
                   // Also, in a shared cache, the prefetch may have been triggered by another core than the one
                   // accessing/evicting the line so *_prefetch statistics should be summed across the shared cache
            UInt64 evict_shared, evict_modified;
