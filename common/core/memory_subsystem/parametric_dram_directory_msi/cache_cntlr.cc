@@ -169,6 +169,9 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "hits-prefetch", &stats.hits_prefetch);
    registerStatsMetric(name, core_id, "evict-prefetch", &stats.evict_prefetch);
    registerStatsMetric(name, core_id, "invalidate-prefetch", &stats.invalidate_prefetch);
+   registerStatsMetric(name, core_id, "hits-warmup", &stats.hits_warmup);
+   registerStatsMetric(name, core_id, "evict-warmup", &stats.evict_warmup);
+   registerStatsMetric(name, core_id, "invalidate-warmup", &stats.invalidate_warmup);
    registerStatsMetric(name, core_id, "evict-shared", &stats.evict_shared);
    registerStatsMetric(name, core_id, "evict-modified", &stats.evict_modified);
    registerStatsMetric(name, core_id, "total-latency", &stats.total_latency);
@@ -303,6 +306,13 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
 MYLOG("L1 hit");
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       hit_where = (HitWhere::where_t)m_mem_component;
+
+      SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(ca_address);
+      if (cache_block_info->hasOption(CacheBlockInfo::WARMUP) && Sim()->getInstrumentationMode() != InstMode::CACHE_ONLY)
+      {
+         stats.hits_warmup++;
+         cache_block_info->clearOption(CacheBlockInfo::WARMUP);
+      }
 
       if (modeled && m_l1_mshr)
       {
@@ -626,6 +636,11 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          stats.hits_prefetch++;
          prefetch_hit = true;
          cache_block_info->clearOption(CacheBlockInfo::PREFETCH);
+      }
+      if (cache_block_info->hasOption(CacheBlockInfo::WARMUP) && Sim()->getInstrumentationMode() != InstMode::CACHE_ONLY)
+      {
+         stats.hits_warmup++;
+         cache_block_info->clearOption(CacheBlockInfo::WARMUP);
       }
 
       // Increment Shared Mem Perf model cycle counts
@@ -1098,6 +1113,9 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
          getShmemPerfModel()->getElapsedTime(thread_num));
    SharedCacheBlockInfo* cache_block_info = setCacheState(address, cstate);
 
+   if (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
+      cache_block_info->setOption(CacheBlockInfo::WARMUP);
+
    if (m_next_cache_cntlr && !m_perfect)
       m_next_cache_cntlr->notifyPrevLevelInsert(m_core_id_master, m_mem_component, address);
 MYLOG("insertCacheBlock l%d local done", m_mem_component);
@@ -1119,6 +1137,8 @@ MYLOG("evicting @%lx", evict_address);
          // Line was prefetched, but is evicted without ever being used
          if (evict_block_info.hasOption(CacheBlockInfo::PREFETCH))
             ++stats.evict_prefetch;
+         if (evict_block_info.hasOption(CacheBlockInfo::WARMUP))
+            ++stats.evict_warmup;
 
          if (old_state == CacheState::MODIFIED)
             ++stats.evict_modified;
@@ -1266,6 +1286,8 @@ MYLOG("@%lx  %c > %c", address, CStateString(cache_block_info ? cache_block_info
                ++stats.coherency_invalidates;
             if (cache_block_info->hasOption(CacheBlockInfo::PREFETCH) && new_cstate == CacheState::INVALID)
                ++stats.invalidate_prefetch;
+            if (cache_block_info->hasOption(CacheBlockInfo::WARMUP) && new_cstate == CacheState::INVALID)
+               ++stats.invalidate_warmup;
          }
       }
 

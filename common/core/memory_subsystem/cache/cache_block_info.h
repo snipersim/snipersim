@@ -20,6 +20,7 @@ class CacheBlockInfo
       enum option_t
       {
          PREFETCH,
+         WARMUP,
          NUM_OPTIONS
       };
 
