@@ -38,13 +38,13 @@ public:
    {
       if (prediction)
       {
-         // Make this counter favor taken slightly
-         m_counter = 0;
+         // Make this counter favor taken
+         m_counter = Pow2<n-1>::pow - 1;
       }
       else
       {
-         // Make this counter favor not-taken slightly
-         m_counter = -1;
+         // Make this counter favor not-taken
+         m_counter = -Pow2<n-1>::pow;
       }
    }
 
