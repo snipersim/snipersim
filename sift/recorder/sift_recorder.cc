@@ -738,6 +738,7 @@ int main(int argc, char **argv)
    if (PIN_Init(argc,argv))
    {
       std::cerr << "Error, invalid parameters" << std::endl;
+      std::cerr << KNOB_BASE::StringKnobSummary() << std::endl;
       exit(1);
    }
    PIN_InitSymbols();
