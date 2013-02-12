@@ -1,4 +1,4 @@
-import sys, os, time, subprocess, threading, multiprocessing, sniper_lib
+import sys, os, time, subprocess, threading, sniper_lib
 
 def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
   out = file(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), 'w', 0) # Open unbuffered to maintain stdout/stderr interleaving
@@ -7,6 +7,7 @@ def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id 
   program_func(program_arg)
 
 def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
+  import multiprocessing # module does not exist in Python <= 2.5, import only when needed
   proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id))
   proc.start()
   proc.join()
