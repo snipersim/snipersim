@@ -367,8 +367,8 @@ elif use_mpi:
     mpi_ranks = ncores
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'true'
-  tracegen['stop_with_first_app'] = 'false' # Only stop once all MPI ranks have completed
   tracegen['num_apps'] = mpi_ranks
+  sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all MPI ranks have completed
   # Set trace recorder options
   applications = [
     [ '--roi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--' ] + cmdline
@@ -377,7 +377,6 @@ elif pinballs and pinball_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'false'
-  tracegen['stop_with_first_app'] = 'false'
   tracegen['num_apps'] = len(pinballs)
   # Set trace recorder options
   applications = []
@@ -389,7 +388,6 @@ if tracegen:
   tracegen['enabled'] = 'true'
   sniperoptions.append('-g --traceinput/enabled=%s' % tracegen['enabled'])
   sniperoptions.append('-g --traceinput/emulate_syscalls=%s' % tracegen['emulate_syscalls'])
-  sniperoptions.append('-g --traceinput/stop_with_first_app=%s' % tracegen['stop_with_first_app'])
   sniperoptions.append('-g --traceinput/num_apps=%d' % tracegen['num_apps'])
   basefname = 'run_benchmarks'
   tracegen['tracetempdir'] = tempfile.mkdtemp()
