@@ -459,15 +459,18 @@ def get_cxx_version(path):
   else:
     return 0
 
-# Find which libstdc++.so is newer: either the system default one, or the Pin one
-cxx_inuse = get_cxx_inuse()
-cxx_inuse_version = get_cxx_version(cxx_inuse)
-cxx_pin_version = get_cxx_version('%(pin_home)s/%(arch)s/runtime/cpplibs' % locals())
-if cxx_inuse_version > cxx_pin_version:
-  # Prepend current libstdc++.so path to LD_LIBRARY_PATH so it overrides %(pin_home)s/%(arch)s/runtime/cpplibs
-  cxx_touse = cxx_inuse
+if not standalone:
+  # Find which libstdc++.so is newer: either the system default one, or the Pin one
+  cxx_inuse = get_cxx_inuse()
+  cxx_inuse_version = get_cxx_version(cxx_inuse)
+  cxx_pin_version = get_cxx_version('%(pin_home)s/%(arch)s/runtime/cpplibs' % locals())
+  if cxx_inuse_version > cxx_pin_version:
+    # Prepend current libstdc++.so path to LD_LIBRARY_PATH so it overrides %(pin_home)s/%(arch)s/runtime/cpplibs
+    cxx_touse = cxx_inuse
+  else:
+    # Use %(pin_home)s/%(arch)s/runtime/cpplibs as normal
+    cxx_touse = ''
 else:
-  # Use %(pin_home)s/%(arch)s/runtime/cpplibs as normal
   cxx_touse = ''
 
 env = dict(os.environ)
