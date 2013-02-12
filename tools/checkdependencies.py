@@ -6,6 +6,7 @@ import sys, os
 
 DEPENDENCIES = [
   ('zlib1g-dev / zlib-devel', '/usr/include/zlib.h'),
+  ('libbz2-dev / bzip2-devel', '/usr/include/bzlib.h'),
   ('g++ / gcc-c++', '/usr/bin/g++'),
   ('wget', '/usr/bin/wget'),
   ('libsqlite3-dev / sqlite-devel', '/usr/include/sqlite3.h'),
