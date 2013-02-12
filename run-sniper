@@ -236,6 +236,10 @@ if cmdline:
 elif pinballs:
   if len(pinballs) > 1 and not pinball_sift:
     print 'Cannot run multiple non-SIFT pinballs'
+    usage()
+  if sim_end.endswith('-restart'):
+    print 'Restart not supported in PinPlay mode'
+    usage()
   standalone = pinball_sift
   if traces or trace_manual:
     print 'Cannot combine a pinball with tracing (--traces= or --trace-manual)'
