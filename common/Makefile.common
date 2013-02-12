@@ -61,7 +61,7 @@ export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 # Include paths
 CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
           -I$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/include/python2.7 \
-          -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++0x $(OPT_CFLAGS) #-Werror
+          -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++0x -fno-strict-aliasing $(OPT_CFLAGS) #-Werror
 
 %.h %.hh %.hpp:
 	@echo >&2
