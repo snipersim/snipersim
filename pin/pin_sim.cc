@@ -400,7 +400,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
    if (Sim()->getConfig()->getEnableSpinLoopDetection())
       localStore[threadIndex].sld.sld = new SpinLoopDetector(localStore[threadIndex].thread);
    if (routine_tracer)
-      localStore[threadIndex].rtn_tracer = routine_tracer->getThreadHandler();
+      localStore[threadIndex].rtn_tracer = routine_tracer->getThreadHandler(localStore[threadIndex].thread);
 }
 
 VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, VOID *v)

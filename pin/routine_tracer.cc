@@ -1,9 +1,16 @@
 #include "routine_tracer.h"
+#include "simulator.h"
+#include "thread.h"
+#include "core.h"
+#include "performance_model.h"
+#include "log.h"
+#include "stats.h"
 
 RoutineTracer *routine_tracer = NULL;
 
-RoutineTracerThreadHandler::RoutineTracerThreadHandler(RoutineTracer *master)
+RoutineTracerThreadHandler::RoutineTracerThreadHandler(RoutineTracer *master, Thread *thread)
    : m_master(master)
+   , m_thread(thread)
 {
 }
 
@@ -14,7 +21,7 @@ RoutineTracerThreadHandler::~RoutineTracerThreadHandler()
 void RoutineTracerThreadHandler::routineEnter(IntPtr eip)
 {
    if (m_stack.size())
-      functionChildEnter(m_stack.back());
+      functionChildEnter(m_stack.back(), eip);
 
    m_stack.push_back(eip);
    functionEnter(eip);
@@ -39,6 +46,7 @@ void RoutineTracerThreadHandler::routineExit(IntPtr eip)
             {
                functionExit(m_stack.back());
                m_stack.pop_back();
+               functionChildExit(m_stack.back(), eip);
             }
             found = true;
             break;
@@ -51,23 +59,41 @@ void RoutineTracerThreadHandler::routineExit(IntPtr eip)
    }
 
    if (m_stack.size())
-      functionChildExit(m_stack.back());
+      functionChildExit(m_stack.back(), eip);
 }
 
-void RoutineTracerThreadHandler::functionEnter(IntPtr eip)
+void RTNRoofline::functionEnter(IntPtr eip)
 {
+   m_eip = eip;
+   m_instruction_count = m_thread->getCore()->getPerformanceModel()->getInstructionCount();
+   m_elapsed_time = m_thread->getCore()->getPerformanceModel()->getElapsedTime();
+   m_fp_instructions = Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_addsub")->recordMetric()
+                     + Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_muldiv")->recordMetric();
+   m_l2_misses = Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "load-misses")->recordMetric();
 }
 
-void RoutineTracerThreadHandler::functionExit(IntPtr eip)
+void RTNRoofline::functionExit(IntPtr eip)
 {
+   assert(eip == m_eip);
+   m_master->updateRoutine(
+      eip, 1,
+      m_thread->getCore()->getPerformanceModel()->getInstructionCount() - m_instruction_count,
+      m_thread->getCore()->getPerformanceModel()->getElapsedTime() - m_elapsed_time,
+      Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_addsub")->recordMetric()
+                     + Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_muldiv")->recordMetric()
+                     - m_fp_instructions,
+      Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "load-misses")->recordMetric() - m_l2_misses
+   );
 }
 
-void RoutineTracerThreadHandler::functionChildEnter(IntPtr eip)
+void RTNRoofline::functionChildEnter(IntPtr eip, IntPtr eip_parent)
 {
+   functionExit(eip);
 }
 
-void RoutineTracerThreadHandler::functionChildExit(IntPtr eip)
+void RTNRoofline::functionChildExit(IntPtr eip, IntPtr eip_parent)
 {
+   functionEnter(eip);
 }
 
 
@@ -93,11 +119,24 @@ void RoutineTracer::addRoutine(IntPtr eip, const char *name, int column, int lin
    }
 }
 
-RoutineTracerThreadHandler* RoutineTracer::getThreadHandler()
+void RoutineTracer::updateRoutine(IntPtr eip, UInt64 calls, UInt64 instruction_count, SubsecondTime elapsed_time, UInt64 fp_instructions, UInt64 l2_misses)
 {
    ScopedLock sl(m_lock);
 
-   RoutineTracerThreadHandler *rtn_thread = new RoutineTracerThreadHandler(this);
+   LOG_ASSERT_ERROR(m_routines.count(eip), "Routine %lx not found", eip);
+
+   m_routines[eip]->m_calls += calls;
+   m_routines[eip]->m_instruction_count += instruction_count;
+   m_routines[eip]->m_elapsed_time += elapsed_time;
+   m_routines[eip]->m_fp_instructions += fp_instructions;
+   m_routines[eip]->m_l2_misses += l2_misses;
+}
+
+RoutineTracerThreadHandler* RoutineTracer::getThreadHandler(Thread *thread)
+{
+   ScopedLock sl(m_lock);
+
+   RoutineTracerThreadHandler *rtn_thread = new RTNRoofline(this, thread);
    m_threads.push_back(rtn_thread);
    return rtn_thread;
 }
@@ -105,9 +144,16 @@ RoutineTracerThreadHandler* RoutineTracer::getThreadHandler()
 void RoutineTracer::writeResults(const char *filename)
 {
    FILE *fp = fopen(filename, "w");
+   fprintf(fp, "eip\tname\tsource\tcalls\ticount\ttime\tfpinst\tl2miss\n");
    for(auto it = m_routines.begin(); it != m_routines.end(); ++it)
    {
-      fprintf(fp, "RTN %lx %s %s\n", it->second->m_eip, it->second->m_name, it->second->m_location);
+      fprintf(
+         fp,
+         "%lx\t%s\t%s\t%ld\t%ld\t%ld\t%ld\t%ld\n",
+         it->second->m_eip, it->second->m_name, it->second->m_location,
+         it->second->m_calls, it->second->m_instruction_count, it->second->m_elapsed_time.getNS(),
+         it->second->m_fp_instructions, it->second->m_l2_misses
+      );
    }
    fclose(fp);
 }
