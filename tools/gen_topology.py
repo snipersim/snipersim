@@ -59,29 +59,29 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
     def paint_init(w, h):
       if not embedded:
         print >> outputobj, '''\
-  <?xml version="1.0" standalone="no"?>
-  <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 '''
       print >> outputobj, '''\
-  <svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">
-  <g style="stroke-width:.025in; fill:none">
+<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">
+<g style="stroke-width:.025in; fill:none">
   ''' % (2*margin_x + w * step_x, 2*margin_y + h * step_y)
     def paint_box((x, y), (w, h), name = '', label = 0, color = '#ffffff', zorder = 0):
       svg = '''\
-  <rect id="%s" x="%d" y="%d" width="%d" height="%d" rx="0"
-     style="stroke:#000000;stroke-width:1;stroke-linejoin:miter; stroke-linecap:butt;fill:%s;"/>
+<rect id="%s" x="%d" y="%d" width="%d" height="%d" rx="0"
+   style="stroke:#000000;stroke-width:1;stroke-linejoin:miter; stroke-linecap:butt;fill:%s;"/>
   ''' % (name, margin_x + x * step_x, margin_y + y * step_y, (w - .2) * step_x, (h - .2) * step_y, color)
       if label:
         svg += '''\
-  <text xml:space="preserve" x="%d" y="%d" fill="#000000"  font-family="Times" font-style="normal" font-weight="normal" font-size="12" text-anchor="start">%s</text>
+<text xml:space="preserve" x="%d" y="%d" fill="#000000"  font-family="Times" font-style="normal" font-weight="normal" font-size="12" text-anchor="start">%s</text>
   ''' % (margin_x + (x + .1) * step_x, margin_y + (y + .3) * step_y, label)
       items.append((zorder, svg))
     def paint_fini():
       for order, svg in sorted(items, reverse = True):
         print >> outputobj, svg
       print >> outputobj, '''\
-  </g>
-  </svg>
+</g>
+</svg>
   '''
 
     paint_init(max_id+3, len(names)+1)
