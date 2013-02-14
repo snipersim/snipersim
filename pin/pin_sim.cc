@@ -42,6 +42,7 @@
 #include "local_storage.h"
 #include "toolreg.h"
 #include "pin_exceptions.h"
+#include "routine_tracer.h"
 
 // lite directories
 #include "lite/routine_replace.h"
@@ -353,6 +354,9 @@ void ApplicationExit(int, void*)
 
    LOG_PRINT("Application exit.");
    Simulator::release();
+
+   routine_tracer->writeResults(Sim()->getConfig()->formatOutputFileName("rtntrace.out").c_str());
+
    delete cfg;
 }
 
@@ -395,6 +399,8 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
    localStore[threadIndex].thread->m_os_info.tid = syscall(__NR_gettid);
    if (Sim()->getConfig()->getEnableSpinLoopDetection())
       localStore[threadIndex].sld.sld = new SpinLoopDetector(localStore[threadIndex].thread);
+   if (routine_tracer)
+      localStore[threadIndex].rtn_tracer = routine_tracer->getThreadHandler();
 }
 
 VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, VOID *v)
@@ -447,6 +453,8 @@ int main(int argc, char *argv[])
    handle_args(args, *cfg);
 
    Simulator::setConfig(cfg, Config::PINTOOL);
+
+   routine_tracer = new RoutineTracer();
 
    Simulator::allocate();
    Sim()->start();
