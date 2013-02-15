@@ -29,14 +29,6 @@ config::Config *Simulator::m_config_file;
 bool Simulator::m_config_file_allowed = true;
 Config::SimulationMode Simulator::m_mode;
 
-static UInt64 getTime()
-{
-   timeval t;
-   gettimeofday(&t, NULL);
-   UInt64 time = (((UInt64)t.tv_sec) * 1000000 + t.tv_usec);
-   return time;
-}
-
 void Simulator::allocate()
 {
    assert(m_singleton == NULL);
@@ -73,10 +65,6 @@ Simulator::Simulator()
    , m_hooks_manager(NULL)
    , m_faultinjection_manager(NULL)
    , m_running(false)
-   , m_boot_time(getTime())
-   , m_start_time(0)
-   , m_stop_time(0)
-   , m_shutdown_time(0)
 {
 }
 
@@ -154,8 +142,6 @@ Simulator::~Simulator()
 
    TotalTimer::reports();
 
-   m_shutdown_time = getTime();
-
    LOG_PRINT("Simulator dtor starting...");
 
    m_hooks_manager->fini();
@@ -182,19 +168,8 @@ Simulator::~Simulator()
    delete m_stats_manager;
 }
 
-void Simulator::startTimer()
-{
-   m_start_time = getTime();
-}
-
-void Simulator::stopTimer()
-{
-   m_stop_time = getTime();
-}
-
 void Simulator::enablePerformanceModels()
 {
-   Sim()->startTimer();
    if (Sim()->getFastForwardPerformanceManager())
       Sim()->getFastForwardPerformanceManager()->disable();
    for (UInt32 i = 0; i < Sim()->getConfig()->getTotalCores(); i++)
@@ -203,7 +178,6 @@ void Simulator::enablePerformanceModels()
 
 void Simulator::disablePerformanceModels()
 {
-   Sim()->stopTimer();
    for (UInt32 i = 0; i < Sim()->getConfig()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->disablePerformanceModels();
    if (Sim()->getFastForwardPerformanceManager())

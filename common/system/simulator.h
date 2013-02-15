@@ -69,10 +69,6 @@ public:
    void setInstrumentationMode(InstMode::inst_mode_t new_mode);
    InstMode::inst_mode_t getInstrumentationMode() { return InstMode::inst_mode; }
 
-   void startTimer();
-   void stopTimer();
-   bool finished();
-
 private:
    Config m_config;
    Log m_log;
@@ -96,14 +92,6 @@ private:
    bool m_running;
 
    static Simulator *m_singleton;
-
-   std::map<IntPtr, Byte> m_memory;
-   Lock m_memory_lock;
-
-   UInt64 m_boot_time;
-   UInt64 m_start_time;
-   UInt64 m_stop_time;
-   UInt64 m_shutdown_time;
 
    static config::Config *m_config_file;
    static bool m_config_file_allowed;
