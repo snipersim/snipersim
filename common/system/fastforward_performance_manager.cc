@@ -79,6 +79,15 @@ FastForwardPerformanceManager::instr_count(core_id_t core_id)
    if (m_enabled)
    {
        Sim()->getCoreManager()->getCoreFromID(core_id)->getThread()->getClockSkewMinimizationClient()->synchronize(SubsecondTime::Zero(), true);
+
+      if (!Sim()->isRunning())
+      {
+         // Main thread has exited, but we still seem to be running.
+         // Don't touch any more simulator structure as they're being deallocated right now.
+         // Just wait here until the whole application terminates us.
+         while(1)
+            sched_yield();
+      }
    }
 }
 
