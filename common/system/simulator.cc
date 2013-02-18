@@ -12,6 +12,7 @@
 #include "fxsupport.h"
 #include "timer.h"
 #include "stats.h"
+#include "thread_stats_manager.h"
 #include "pthread_emu.h"
 #include "trace_manager.h"
 #include "dvfs_manager.h"
@@ -57,6 +58,7 @@ Simulator::Simulator()
    , m_transport(NULL)
    , m_core_manager(NULL)
    , m_thread_manager(NULL)
+   , m_thread_stats_manager(NULL)
    , m_sim_thread_manager(NULL)
    , m_clock_skew_minimization_manager(NULL)
    , m_fastforward_performance_manager(NULL)
@@ -80,6 +82,7 @@ void Simulator::start()
    m_dvfs_manager = new DvfsManager();
    m_faultinjection_manager = FaultinjectionManager::create();
    m_thread_manager = new ThreadManager();
+   m_thread_stats_manager = new ThreadStatsManager();
    m_core_manager = new CoreManager();
    m_sim_thread_manager = new SimThreadManager();
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();

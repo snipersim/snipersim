@@ -16,6 +16,7 @@ class Transport;
 class CoreManager;
 class Thread;
 class ThreadManager;
+class ThreadStatsManager;
 class SimThreadManager;
 class HooksManager;
 class ClockSkewMinimizationManager;
@@ -56,6 +57,7 @@ public:
    }
    void hideCfg() { m_config_file_allowed = false; }
    StatsManager *getStatsManager() { return m_stats_manager; }
+   ThreadStatsManager *getThreadStatsManager() { return m_thread_stats_manager; }
    DvfsManager *getDvfsManager() { return m_dvfs_manager; }
    HooksManager *getHooksManager() { return m_hooks_manager; }
    FaultinjectionManager *getFaultinjectionManager() { return m_faultinjection_manager; }
@@ -81,6 +83,7 @@ private:
    Transport *m_transport;
    CoreManager *m_core_manager;
    ThreadManager *m_thread_manager;
+   ThreadStatsManager *m_thread_stats_manager;
    SimThreadManager *m_sim_thread_manager;
    ClockSkewMinimizationManager *m_clock_skew_minimization_manager;
    FastForwardPerformanceManager *m_fastforward_performance_manager;
