@@ -8,19 +8,19 @@
 class ThreadStatsManager
 {
    public:
-      struct ThreadStatsStruct
+      enum ThreadStatType
       {
-         UInt64 instructions;
-         SubsecondTime elapsed_time;
-         SubsecondTime nonidle_elapsed_time;
+         INSTRUCTIONS,
+         ELAPSED_TIME,
+         ELAPSED_NONIDLE_TIME,
+         NUM_THREAD_STAT_TYPES
       };
       class ThreadStats
       {
          public:
             const Thread *m_thread;
             core_id_t m_core_id;
-            ThreadStatsStruct m_counts;   // Running total of thread statistics
-            std::vector<SubsecondTime> time_by_core;
+            std::vector<UInt64> time_by_core;
             std::vector<UInt64> insn_by_core;
             SubsecondTime m_elapsed_time;
             SubsecondTime m_unscheduled_time;
@@ -30,8 +30,10 @@ class ThreadStatsManager
 
          private:
             SubsecondTime m_time_last;    // Time of last snapshot
-            ThreadStatsStruct m_last;     // Snapshot of core's statistics when we last updated m_current
+            std::vector<UInt64> m_counts; // Running total of thread statistics
+            std::vector<UInt64> m_last;   // Snapshot of core's statistics when we last updated m_current
       };
+      typedef UInt64 (*ThreadStatCallback)(ThreadStatType type, thread_id_t thread_id, Core *core);
 
       ThreadStatsManager();
       ~ThreadStatsManager();
@@ -39,10 +41,18 @@ class ThreadStatsManager
       // Thread statistics are updated lazily (on thread move and before statistics writing),
       // call this function to force an update before reading
       void update(thread_id_t thread_id = INVALID_THREAD_ID, SubsecondTime time = SubsecondTime::MaxTime());
+      const char* getThreadStatName(ThreadStatType type) { return m_thread_stat_names[type]; }
+      ThreadStatCallback getThreadStatCallback(ThreadStatType type) { return m_thread_stat_callbacks[type]; }
       const std::unordered_map<thread_id_t, ThreadStats*>& getThreadStats() { return m_threads_stats; }
+
+      void registerThreadStatMetric(ThreadStatType type, const char* name, ThreadStatCallback func);
 
 private:
       std::unordered_map<thread_id_t, ThreadStats*> m_threads_stats;
+      std::vector<const char*> m_thread_stat_names;
+      std::vector<ThreadStatCallback> m_thread_stat_callbacks;
+
+      static UInt64 metricCallback(ThreadStatType type, thread_id_t thread_id, Core *core);
 
       void pre_stat_write();
       core_id_t threadCreate(thread_id_t);

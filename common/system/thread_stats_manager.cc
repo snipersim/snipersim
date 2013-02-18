@@ -8,18 +8,30 @@
 #include <cstring>
 
 ThreadStatsManager::ThreadStatsManager()
+   : m_thread_stat_names(NUM_THREAD_STAT_TYPES, NULL)
+   , m_thread_stat_callbacks(NUM_THREAD_STAT_TYPES, NULL)
 {
    Sim()->getHooksManager()->registerHook(HookType::HOOK_PRE_STAT_WRITE, hook_pre_stat_write, (UInt64)this);
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_START, hook_thread_start, (UInt64)this);
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_STALL, hook_thread_stall, (UInt64)this);
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_RESUME, hook_thread_resume, (UInt64)this);
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_EXIT, hook_thread_exit, (UInt64)this);
+
+   registerThreadStatMetric(INSTRUCTIONS, "instruction_count", metricCallback);
+   registerThreadStatMetric(ELAPSED_TIME, "core_elapsed_time", metricCallback);
+   registerThreadStatMetric(ELAPSED_NONIDLE_TIME, "nonidle_elapsed_time", metricCallback);
 }
 
 ThreadStatsManager::~ThreadStatsManager()
 {
    for(std::unordered_map<thread_id_t, ThreadStats*>::iterator it = m_threads_stats.begin(); it != m_threads_stats.end(); ++it)
       delete it->second;
+}
+
+void ThreadStatsManager::registerThreadStatMetric(ThreadStatType type, const char* name, ThreadStatCallback func)
+{
+   m_thread_stat_names[type] = name;
+   m_thread_stat_callbacks[type] = func;
 }
 
 void ThreadStatsManager::update(thread_id_t thread_id, SubsecondTime time)
@@ -35,6 +47,21 @@ void ThreadStatsManager::update(thread_id_t thread_id, SubsecondTime time)
    else
    {
       m_threads_stats[thread_id]->update(time);
+   }
+}
+
+UInt64 ThreadStatsManager::metricCallback(ThreadStatType type, thread_id_t thread_id, Core *core)
+{
+   switch(type)
+   {
+      case INSTRUCTIONS:
+         return core->getPerformanceModel()->getInstructionCount();
+      case ELAPSED_TIME:
+         return core->getPerformanceModel()->getElapsedTime().getFS();
+      case ELAPSED_NONIDLE_TIME:
+         return core->getPerformanceModel()->getNonIdleElapsedTime().getFS();
+      default:
+         LOG_PRINT_ERROR("Invalid ThreadStatType(%d) for this callback", type);
    }
 }
 
@@ -70,19 +97,19 @@ ThreadStatsManager::ThreadStats::ThreadStats(thread_id_t thread_id, SubsecondTim
    , time_by_core(Sim()->getConfig()->getApplicationCores())
    , insn_by_core(Sim()->getConfig()->getApplicationCores())
    , m_time_last(time)
+   , m_counts(NUM_THREAD_STAT_TYPES, 0)
+   , m_last(NUM_THREAD_STAT_TYPES, 0)
 {
-   memset(&m_counts, 0, sizeof(ThreadStatsStruct));
-   memset(&m_last, 0, sizeof(ThreadStatsStruct));
-
    registerStatsMetric("thread", thread_id, "elapsed_time", &m_elapsed_time);
    registerStatsMetric("thread", thread_id, "unscheduled_time", &m_unscheduled_time);
-   registerStatsMetric("thread", thread_id, "instruction_count", &m_counts.instructions);
-   registerStatsMetric("thread", thread_id, "core_elapsed_time", &m_counts.elapsed_time);
-   registerStatsMetric("thread", thread_id, "nonidle_elapsed_time", &m_counts.nonidle_elapsed_time);
    for (core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); core_id++)
    {
       registerStatsMetric("thread", thread_id, "time_by_core[" + itostr(core_id) + "]", &time_by_core[core_id]);
       registerStatsMetric("thread", thread_id, "instructions_by_core[" + itostr(core_id) + "]", &insn_by_core[core_id]);
+   }
+   for(unsigned int type = 0; type < NUM_THREAD_STAT_TYPES; ++type)
+   {
+      registerStatsMetric("thread", thread_id, Sim()->getThreadStatsManager()->getThreadStatName((ThreadStatType)type), &m_counts[type]);
    }
 }
 
@@ -99,20 +126,22 @@ void ThreadStatsManager::ThreadStats::update(SubsecondTime time)
    {
       Core *core = Sim()->getCoreManager()->getCoreFromID(m_core_id);
       m_elapsed_time += time_delta;
-      m_counts.instructions += core->getPerformanceModel()->getInstructionCount() - m_last.instructions;
-      m_counts.elapsed_time += core->getPerformanceModel()->getElapsedTime() - m_last.elapsed_time;
-      m_counts.nonidle_elapsed_time += core->getPerformanceModel()->getNonIdleElapsedTime() - m_last.nonidle_elapsed_time;
-      time_by_core[core->getId()] += core->getPerformanceModel()->getElapsedTime() - m_last.elapsed_time;
-      insn_by_core[core->getId()] += core->getPerformanceModel()->getInstructionCount() - m_last.instructions;
+      time_by_core[core->getId()] += core->getPerformanceModel()->getElapsedTime().getFS() - m_last[ELAPSED_TIME];
+      insn_by_core[core->getId()] += core->getPerformanceModel()->getInstructionCount() - m_last[INSTRUCTIONS];
+      for(unsigned int type = 0; type < NUM_THREAD_STAT_TYPES; ++type)
+      {
+         m_counts[type] += Sim()->getThreadStatsManager()->getThreadStatCallback((ThreadStatType)type)((ThreadStatType)type, m_thread->getId(), core) - m_last[type];
+      }
    }
    // Take a snapshot of our current core's statistics for later comparison
    Core *core = m_thread->getCore();
    if (core)
    {
       m_core_id = core->getId();
-      m_last.instructions = core->getPerformanceModel()->getInstructionCount();
-      m_last.elapsed_time = core->getPerformanceModel()->getElapsedTime();
-      m_last.nonidle_elapsed_time = core->getPerformanceModel()->getNonIdleElapsedTime();
+      for(unsigned int type = 0; type < NUM_THREAD_STAT_TYPES; ++type)
+      {
+         m_last[type] = Sim()->getThreadStatsManager()->getThreadStatCallback((ThreadStatType)type)((ThreadStatType)type, m_thread->getId(), core);
+      }
    }
    else
       m_core_id = INVALID_CORE_ID;
