@@ -29,6 +29,9 @@ void RoutineTracerThreadHandler::routineEnter(IntPtr eip)
 
 void RoutineTracerThreadHandler::routineExit(IntPtr eip)
 {
+   if (m_stack.size() == 0)
+      return;
+
    if (m_stack.back() == eip)
    {
       functionExit(eip);
@@ -62,14 +65,22 @@ void RoutineTracerThreadHandler::routineExit(IntPtr eip)
       functionChildExit(m_stack.back(), eip);
 }
 
+RTNRoofline::RTNRoofline(RoutineTracer *master, Thread *thread)
+   : RoutineTracerThreadHandler(master, thread)
+{
+   m_stat_fp_addsub = Sim()->getStatsManager()->getMetricObject("interval_timer", thread->getId(), "uop_fp_addsub");
+   m_stat_fp_muldiv = Sim()->getStatsManager()->getMetricObject("interval_timer", thread->getId(), "uop_fp_muldiv");
+   m_stat_l3miss = Sim()->getStatsManager()->getMetricObject("L3", thread->getId(), "load-misses");
+}
+
+
 void RTNRoofline::functionEnter(IntPtr eip)
 {
    m_eip = eip;
    m_instruction_count = m_thread->getCore()->getPerformanceModel()->getInstructionCount();
    m_elapsed_time = m_thread->getCore()->getPerformanceModel()->getElapsedTime();
-   m_fp_instructions = Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_addsub")->recordMetric()
-                     + Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_muldiv")->recordMetric();
-   m_l2_misses = Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "load-misses")->recordMetric();
+   m_fp_instructions = m_stat_fp_addsub->recordMetric() + m_stat_fp_muldiv->recordMetric();
+   m_l3_misses = m_stat_l3miss->recordMetric();
 }
 
 void RTNRoofline::functionExit(IntPtr eip)
@@ -79,10 +90,8 @@ void RTNRoofline::functionExit(IntPtr eip)
       eip, 1,
       m_thread->getCore()->getPerformanceModel()->getInstructionCount() - m_instruction_count,
       m_thread->getCore()->getPerformanceModel()->getElapsedTime() - m_elapsed_time,
-      Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_addsub")->recordMetric()
-                     + Sim()->getStatsManager()->getMetricObject("interval_timer", m_thread->getCore()->getId(), "uop_fp_muldiv")->recordMetric()
-                     - m_fp_instructions,
-      Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "load-misses")->recordMetric() - m_l2_misses
+      m_stat_fp_addsub->recordMetric() + m_stat_fp_muldiv->recordMetric() - m_fp_instructions,
+      m_stat_l3miss->recordMetric() - m_l3_misses
    );
 }
 
@@ -119,7 +128,7 @@ void RoutineTracer::addRoutine(IntPtr eip, const char *name, int column, int lin
    }
 }
 
-void RoutineTracer::updateRoutine(IntPtr eip, UInt64 calls, UInt64 instruction_count, SubsecondTime elapsed_time, UInt64 fp_instructions, UInt64 l2_misses)
+void RoutineTracer::updateRoutine(IntPtr eip, UInt64 calls, UInt64 instruction_count, SubsecondTime elapsed_time, UInt64 fp_instructions, UInt64 l3_misses)
 {
    ScopedLock sl(m_lock);
 
@@ -129,22 +138,29 @@ void RoutineTracer::updateRoutine(IntPtr eip, UInt64 calls, UInt64 instruction_c
    m_routines[eip]->m_instruction_count += instruction_count;
    m_routines[eip]->m_elapsed_time += elapsed_time;
    m_routines[eip]->m_fp_instructions += fp_instructions;
-   m_routines[eip]->m_l2_misses += l2_misses;
+   m_routines[eip]->m_l3_misses += l3_misses;
 }
 
 RoutineTracerThreadHandler* RoutineTracer::getThreadHandler(Thread *thread)
 {
    ScopedLock sl(m_lock);
 
-   RoutineTracerThreadHandler *rtn_thread = new RTNRoofline(this, thread);
-   m_threads.push_back(rtn_thread);
-   return rtn_thread;
+   if (thread->getId() < (thread_id_t)Sim()->getConfig()->getApplicationCores())
+   {
+      RoutineTracerThreadHandler *rtn_thread = new RTNRoofline(this, thread);
+      m_threads.push_back(rtn_thread);
+      return rtn_thread;
+   }
+   else
+   {
+      return NULL;
+   }
 }
 
 void RoutineTracer::writeResults(const char *filename)
 {
    FILE *fp = fopen(filename, "w");
-   fprintf(fp, "eip\tname\tsource\tcalls\ticount\ttime\tfpinst\tl2miss\n");
+   fprintf(fp, "eip\tname\tsource\tcalls\ticount\ttime\tfpinst\tl3miss\n");
    for(auto it = m_routines.begin(); it != m_routines.end(); ++it)
    {
       fprintf(
@@ -152,7 +168,7 @@ void RoutineTracer::writeResults(const char *filename)
          "%lx\t%s\t%s\t%ld\t%ld\t%ld\t%ld\t%ld\n",
          it->second->m_eip, it->second->m_name, it->second->m_location,
          it->second->m_calls, it->second->m_instruction_count, it->second->m_elapsed_time.getNS(),
-         it->second->m_fp_instructions, it->second->m_l2_misses
+         it->second->m_fp_instructions, it->second->m_l3_misses
       );
    }
    fclose(fp);

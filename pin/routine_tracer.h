@@ -12,6 +12,7 @@
 
 class RoutineTracer;
 class Thread;
+class StatsMetricBase;
 
 class RoutineTracerThreadHandler
 {
@@ -38,14 +39,16 @@ class RoutineTracerThreadHandler
 class RTNRoofline : public RoutineTracerThreadHandler
 {
    public:
-      RTNRoofline(RoutineTracer *master, Thread *thread) : RoutineTracerThreadHandler(master, thread) {}
+      RTNRoofline(RoutineTracer *master, Thread *thread);
 
    private:
+      StatsMetricBase *m_stat_fp_addsub, *m_stat_fp_muldiv, *m_stat_l3miss;
+
       IntPtr m_eip;
       UInt64 m_instruction_count;
       SubsecondTime m_elapsed_time;
       UInt64 m_fp_instructions;
-      UInt64 m_l2_misses;
+      UInt64 m_l3_misses;
 
    protected:
       virtual void functionEnter(IntPtr eip);
@@ -68,12 +71,12 @@ class RoutineTracer
             UInt64 m_instruction_count;
             SubsecondTime m_elapsed_time;
             UInt64 m_fp_instructions;
-            UInt64 m_l2_misses;
+            UInt64 m_l3_misses;
 
             Routine(IntPtr eip, const char *name, const char *location)
             : m_eip(eip), m_name(strdup(name)), m_location(strdup(location))
             , m_calls(0), m_instruction_count(0), m_elapsed_time(SubsecondTime::Zero())
-            , m_fp_instructions(0), m_l2_misses(0)
+            , m_fp_instructions(0), m_l3_misses(0)
             {}
       };
 

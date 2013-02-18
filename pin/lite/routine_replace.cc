@@ -71,13 +71,13 @@ void routineStartCallback(RTN rtn, INS ins)
 
 void routineEnter(THREADID threadIndex, IntPtr eip)
 {
-   if (Sim()->getInstrumentationMode() == InstMode::DETAILED)
+   if (Sim()->getInstrumentationMode() == InstMode::DETAILED && localStore[threadIndex].rtn_tracer)
       localStore[threadIndex].rtn_tracer->routineEnter(eip);
 }
 
 void routineExit(THREADID threadIndex, IntPtr eip)
 {
-   if (Sim()->getInstrumentationMode() == InstMode::DETAILED)
+   if (Sim()->getInstrumentationMode() == InstMode::DETAILED && localStore[threadIndex].rtn_tracer)
       localStore[threadIndex].rtn_tracer->routineExit(eip);
 }
 
