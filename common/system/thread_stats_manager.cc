@@ -11,11 +11,12 @@ ThreadStatsManager::ThreadStatsManager()
    : m_thread_stat_names(NUM_THREAD_STAT_TYPES, NULL)
    , m_thread_stat_callbacks(NUM_THREAD_STAT_TYPES, NULL)
 {
-   Sim()->getHooksManager()->registerHook(HookType::HOOK_PRE_STAT_WRITE, hook_pre_stat_write, (UInt64)this);
-   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_START, hook_thread_start, (UInt64)this);
-   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_STALL, hook_thread_stall, (UInt64)this);
-   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_RESUME, hook_thread_resume, (UInt64)this);
-   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_EXIT, hook_thread_exit, (UInt64)this);
+   // Order our hooks to occur before possible reschedulings (which are done with ORDER_ACTION), so the scheduler can use up-to-date information
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_PRE_STAT_WRITE, hook_pre_stat_write, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_START, hook_thread_start, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_STALL, hook_thread_stall, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_RESUME, hook_thread_resume, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_EXIT, hook_thread_exit, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
 
    registerThreadStatMetric(INSTRUCTIONS, "instruction_count", metricCallback);
    registerThreadStatMetric(ELAPSED_TIME, "core_elapsed_time", metricCallback);
