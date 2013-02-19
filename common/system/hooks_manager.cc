@@ -31,18 +31,24 @@ HooksManager::HooksManager()
 {
 }
 
-void HooksManager::registerHook(HookType::hook_type_t type, HookCallbackFunc func, UInt64 argument)
+void HooksManager::registerHook(HookType::hook_type_t type, HookCallbackFunc func, UInt64 argument, HookCallbackOrder order)
 {
-   m_registry[type].push_back(std::pair<HookCallbackFunc, UInt64>(func, argument));
+   m_registry[type].push_back(HookCallback(func, argument, order));
 }
 
 SInt64 HooksManager::callHooks(HookType::hook_type_t type, UInt64 arg, bool expect_return)
 {
-   for(std::vector<HookCallback>::iterator it = m_registry[type].begin(); it != m_registry[type].end(); ++it)
+   for(unsigned int order = 0; order < NUM_HOOK_ORDER; ++order)
    {
-      SInt64 result = (it->first)(it->second, arg);
-      if (expect_return && result != -1)
-         return result;
+      for(std::vector<HookCallback>::iterator it = m_registry[type].begin(); it != m_registry[type].end(); ++it)
+      {
+         if (it->order == (HookCallbackOrder)order)
+         {
+            SInt64 result = it->func(it->arg, arg);
+            if (expect_return && result != -1)
+               return result;
+         }
+      }
    }
 
    return -1;

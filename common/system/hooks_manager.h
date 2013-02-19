@@ -52,9 +52,20 @@ namespace std
 class HooksManager
 {
 public:
-   typedef SInt64 (*HookCallbackFunc)(UInt64, UInt64);
-   typedef std::pair<HookCallbackFunc, UInt64> HookCallback;
+   enum HookCallbackOrder {
+      ORDER_NOTIFY_PRE,       // For callbacks that want to inspect state before any actions
+      ORDER_ACTION,           // For callbacks that want to change simulator state based on the event
+      ORDER_NOTIFY_POST,      // For callbacks that want to inspect state after any actions
+      NUM_HOOK_ORDER,
+   };
 
+   typedef SInt64 (*HookCallbackFunc)(UInt64, UInt64);
+   struct HookCallback {
+      HookCallbackFunc func;
+      UInt64 arg;
+      HookCallbackOrder order;
+      HookCallback(HookCallbackFunc _func, UInt64 _arg, HookCallbackOrder _order) : func(_func), arg(_arg), order(_order) {}
+   };
    typedef struct {
       thread_id_t thread_id;
       subsecond_time_t time;
@@ -78,7 +89,7 @@ public:
    HooksManager();
    void init();
    void fini();
-   void registerHook(HookType::hook_type_t type, HookCallbackFunc func, UInt64 argument);
+   void registerHook(HookType::hook_type_t type, HookCallbackFunc func, UInt64 argument, HookCallbackOrder order = ORDER_NOTIFY_PRE);
    SInt64 callHooks(HookType::hook_type_t type, UInt64 argument, bool expect_return = false);
 
 private:
