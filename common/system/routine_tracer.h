@@ -14,11 +14,11 @@ class RoutineTracer;
 class Thread;
 class StatsMetricBase;
 
-class RoutineTracerThreadHandler
+class RoutineTracerThread
 {
    public:
-      RoutineTracerThreadHandler(RoutineTracer *master, Thread *thread);
-      ~RoutineTracerThreadHandler();
+      RoutineTracerThread(RoutineTracer *master, Thread *thread);
+      ~RoutineTracerThread();
 
       void routineEnter(IntPtr eip);
       void routineExit(IntPtr eip);
@@ -36,7 +36,7 @@ class RoutineTracerThreadHandler
       virtual void functionChildExit(IntPtr eip, IntPtr eip_child) {}
 };
 
-class RTNRoofline : public RoutineTracerThreadHandler
+class RTNRoofline : public RoutineTracerThread
 {
    public:
       RTNRoofline(RoutineTracer *master, Thread *thread);
@@ -80,20 +80,20 @@ class RoutineTracer
             {}
       };
 
+      static RoutineTracer* create();
+
       RoutineTracer();
       ~RoutineTracer();
 
       void addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename);
       void updateRoutine(IntPtr eip, UInt64 calls, UInt64 instruction_count, SubsecondTime elapsed_time, UInt64 fp_instructions, UInt64 m_misses);
-      RoutineTracerThreadHandler* getThreadHandler(Thread *thread);
+      RoutineTracerThread* getThreadHandler(Thread *thread);
       void writeResults(const char *filename);
 
    private:
       Lock m_lock;
-      std::vector<RoutineTracerThreadHandler*> m_threads;
+      std::vector<RoutineTracerThread*> m_threads;
       std::unordered_map<IntPtr, Routine*> m_routines;
 };
-
-extern RoutineTracer *routine_tracer;
 
 #endif // __ROUTINE_TRACER_H

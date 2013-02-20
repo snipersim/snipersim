@@ -6,19 +6,22 @@
 #include "log.h"
 #include "stats.h"
 
-RoutineTracer *routine_tracer = NULL;
+RoutineTracer* RoutineTracer::create()
+{
+   return new RoutineTracer();
+}
 
-RoutineTracerThreadHandler::RoutineTracerThreadHandler(RoutineTracer *master, Thread *thread)
+RoutineTracerThread::RoutineTracerThread(RoutineTracer *master, Thread *thread)
    : m_master(master)
    , m_thread(thread)
 {
 }
 
-RoutineTracerThreadHandler::~RoutineTracerThreadHandler()
+RoutineTracerThread::~RoutineTracerThread()
 {
 }
 
-void RoutineTracerThreadHandler::routineEnter(IntPtr eip)
+void RoutineTracerThread::routineEnter(IntPtr eip)
 {
    if (m_stack.size())
       functionChildEnter(m_stack.back(), eip);
@@ -27,7 +30,7 @@ void RoutineTracerThreadHandler::routineEnter(IntPtr eip)
    functionEnter(eip);
 }
 
-void RoutineTracerThreadHandler::routineExit(IntPtr eip)
+void RoutineTracerThread::routineExit(IntPtr eip)
 {
    if (m_stack.size() == 0)
       return;
@@ -66,7 +69,7 @@ void RoutineTracerThreadHandler::routineExit(IntPtr eip)
 }
 
 RTNRoofline::RTNRoofline(RoutineTracer *master, Thread *thread)
-   : RoutineTracerThreadHandler(master, thread)
+   : RoutineTracerThread(master, thread)
 {
    m_stat_fp_addsub = Sim()->getStatsManager()->getMetricObject("interval_timer", thread->getId(), "uop_fp_addsub");
    m_stat_fp_muldiv = Sim()->getStatsManager()->getMetricObject("interval_timer", thread->getId(), "uop_fp_muldiv");
@@ -112,6 +115,7 @@ RoutineTracer::RoutineTracer()
 
 RoutineTracer::~RoutineTracer()
 {
+   writeResults(Sim()->getConfig()->formatOutputFileName("rtntrace.out").c_str());
 }
 
 void RoutineTracer::addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename)
@@ -141,13 +145,13 @@ void RoutineTracer::updateRoutine(IntPtr eip, UInt64 calls, UInt64 instruction_c
    m_routines[eip]->m_l3_misses += l3_misses;
 }
 
-RoutineTracerThreadHandler* RoutineTracer::getThreadHandler(Thread *thread)
+RoutineTracerThread* RoutineTracer::getThreadHandler(Thread *thread)
 {
    ScopedLock sl(m_lock);
 
    if (thread->getId() < (thread_id_t)Sim()->getConfig()->getApplicationCores())
    {
-      RoutineTracerThreadHandler *rtn_thread = new RTNRoofline(this, thread);
+      RoutineTracerThread *rtn_thread = new RTNRoofline(this, thread);
       m_threads.push_back(rtn_thread);
       return rtn_thread;
    }

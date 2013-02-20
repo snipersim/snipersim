@@ -25,6 +25,7 @@ class TraceManager;
 class DvfsManager;
 class FaultinjectionManager;
 class TagsManager;
+class RoutineTracer;
 namespace config { class Config; }
 
 class Simulator
@@ -63,6 +64,7 @@ public:
    FaultinjectionManager *getFaultinjectionManager() { return m_faultinjection_manager; }
    TraceManager *getTraceManager() { return m_trace_manager; }
    TagsManager *getTagsManager() { return m_tags_manager; }
+   RoutineTracer *getRoutineTracer() { return m_rtn_tracer; }
 
    bool isRunning() { return m_running; }
    static void enablePerformanceModels();
@@ -91,6 +93,7 @@ private:
    DvfsManager *m_dvfs_manager;
    HooksManager *m_hooks_manager;
    FaultinjectionManager *m_faultinjection_manager;
+   RoutineTracer *m_rtn_tracer;
 
    bool m_running;
 

@@ -13,7 +13,7 @@
 #include "packet_type.h"
 #include "magic_client.h"
 #include "local_storage.h"
-#include "routine_tracer.h"
+#include "trace_rtn.h"
 
 #include <map>
 #include <cerrno>
@@ -69,21 +69,11 @@ void routineStartCallback(RTN rtn, INS ins)
    }
 }
 
-void routineEnter(THREADID threadIndex, IntPtr eip)
-{
-   if (Sim()->getInstrumentationMode() == InstMode::DETAILED && localStore[threadIndex].rtn_tracer)
-      localStore[threadIndex].rtn_tracer->routineEnter(eip);
-}
-
-void routineExit(THREADID threadIndex, IntPtr eip)
-{
-   if (Sim()->getInstrumentationMode() == InstMode::DETAILED && localStore[threadIndex].rtn_tracer)
-      localStore[threadIndex].rtn_tracer->routineExit(eip);
-}
-
 void routineCallback(RTN rtn, void* v)
 {
    String rtn_name = RTN_Name(rtn).c_str();
+
+   addRtnTracer(rtn);
 
    if (0)
    {
@@ -93,22 +83,6 @@ void routineCallback(RTN rtn, void* v)
       RTN_InsertCall (rtn, IPOINT_AFTER,  AFUNPTR (printStackTrace), IARG_THREAD_ID, IARG_ADDRINT, name, IARG_BOOL, false, IARG_END);
       RTN_Close (rtn);
    }
-
-   if (routine_tracer)
-   {
-      RTN_Open (rtn);
-
-      RTN_InsertCall (rtn, IPOINT_BEFORE, AFUNPTR (routineEnter), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
-      RTN_InsertCall (rtn, IPOINT_AFTER,  AFUNPTR (routineExit), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
-
-      INT32 column = 0, line = 0;
-      std::string filename = "??";
-      PIN_GetSourceLocation(RTN_Address(rtn), &column, &line, &filename);
-      routine_tracer->addRoutine(RTN_Address(rtn), rtn_name.c_str(), column, line, filename.c_str());
-
-      RTN_Close (rtn);
-   }
-
 
    // CarbonStartSim() and CarbonStopSim()
    if (rtn_name == "CarbonStartSim")

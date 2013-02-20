@@ -18,6 +18,7 @@
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
 #include "fault_injection.h"
+#include "routine_tracer.h"
 #include "instruction.h"
 #include "config.hpp"
 #include "magic_client.h"
@@ -66,6 +67,7 @@ Simulator::Simulator()
    , m_dvfs_manager(NULL)
    , m_hooks_manager(NULL)
    , m_faultinjection_manager(NULL)
+   , m_rtn_tracer(NULL)
    , m_running(false)
 {
 }
@@ -88,6 +90,7 @@ void Simulator::start()
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();
    m_clock_skew_minimization_server = ClockSkewMinimizationServer::create();
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
+   m_rtn_tracer = RoutineTracer::create();
 
    if (Sim()->getCfg()->getBool("traceinput/enabled"))
       m_trace_manager = new TraceManager();
@@ -158,6 +161,8 @@ Simulator::~Simulator()
 
    m_transport->barrier();
 
+   if (m_rtn_tracer)
+      delete m_rtn_tracer;
    delete m_trace_manager;
    if (m_faultinjection_manager)
       delete m_faultinjection_manager;

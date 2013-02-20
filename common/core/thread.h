@@ -8,6 +8,7 @@ class Core;
 class SyscallMdl;
 class SyncClient;
 class ClockSkewMinimizationClient;
+class RoutineTracerThread;
 
 class Thread
 {
@@ -21,6 +22,7 @@ class Thread
       SyscallMdl *m_syscall_model;
       SyncClient *m_sync_client;
       ClockSkewMinimizationClient *m_clock_skew_minimization_client;
+      RoutineTracerThread *m_rtn_tracer;
 
    public:
       Thread(thread_id_t thread_id, app_id_t app_id);
@@ -36,6 +38,7 @@ class Thread
       app_id_t getAppId() const { return m_app_id; }
       SyncClient *getSyncClient() const { return m_sync_client; }
       ClockSkewMinimizationClient* getClockSkewMinimizationClient() const { return m_clock_skew_minimization_client; }
+      RoutineTracerThread* getRoutineTracer() const { return m_rtn_tracer; }
 
       SubsecondTime wait(Lock &lock)
       {

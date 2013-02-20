@@ -6,16 +6,20 @@
 #include "sync_client.h"
 #include "performance_model.h"
 #include "clock_skew_minimization_object.h"
+#include "routine_tracer.h"
 #include "config.hpp"
 
 Thread::Thread(thread_id_t thread_id, app_id_t app_id)
    : m_thread_id(thread_id)
    , m_app_id(app_id)
    , m_core(NULL)
+   , m_rtn_tracer(NULL)
 {
    m_syscall_model = new SyscallMdl(this);
    m_sync_client = new SyncClient(this);
    m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(this);
+   if (Sim()->getRoutineTracer())
+      m_rtn_tracer = Sim()->getRoutineTracer()->getThreadHandler(this);
    memset(&m_os_info, 0, sizeof(m_os_info));
 }
 
@@ -25,7 +29,8 @@ Thread::~Thread()
    delete m_sync_client;
    if (m_clock_skew_minimization_client)
       delete m_clock_skew_minimization_client;
-
+   if (m_rtn_tracer)
+      delete m_rtn_tracer;
 }
 
 void Thread::setCore(Core* core)
