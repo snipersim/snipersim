@@ -475,14 +475,17 @@ else:
 
 env = dict(os.environ)
 ld_library_path_orig = env.get('LD_LIBRARY_PATH', '')
-env['LD_LIBRARY_PATH'] = ':'.join([
-  cxx_touse,
-  'BENCHMARKS_ROOT' in os.environ and '%s/libs:' % os.environ['BENCHMARKS_ROOT'] or '',
-  '%(pin_home)s/%(arch)s/runtime/cpplibs' % locals(),
-  '%(pin_home)s/%(arch)s/runtime' % locals(),
-  '%(HOME)s/python_kit/%(arch)s/lib' % locals(),
-  ld_library_path_orig,
-])
+ld_library_path = []
+if cxx_touse:
+  ld_library_path.append(cxx_touse)
+if 'BENCHMARKS_ROOT' in os.environ:
+  ld_library_path.append('%s/libs:' % os.environ['BENCHMARKS_ROOT'])
+if not standalone:
+  ld_library_path.append('%(pin_home)s/%(arch)s/runtime/cpplibs' % locals())
+  ld_library_path.append('%(pin_home)s/%(arch)s/runtime' % locals())
+ld_library_path.append('%(HOME)s/python_kit/%(arch)s/lib' % locals())
+ld_library_path.append(ld_library_path_orig)
+env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)
 env['PIN_LD_RESTORE_REQUIRED'] = '1'
 env['PIN_VM_LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH'] # Pin VM and Pintool (Sniper) use LD_LIBRARY_PATH as modified above
 env['PIN_APP_LD_LIBRARY_PATH'] = ld_library_path_orig  # Application uses original LD_LIBRARY_PATH
