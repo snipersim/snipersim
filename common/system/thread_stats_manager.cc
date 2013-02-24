@@ -164,3 +164,20 @@ void ThreadStatsManager::ThreadStats::update(SubsecondTime time)
 
    m_time_last = time;
 }
+
+ThreadStatsManager::ThreadStatType ThreadStatNamedStat::registerStat(const char* name, String objectName, String metricName)
+{
+   ThreadStatNamedStat *tsns = new ThreadStatNamedStat(objectName, metricName);
+   return Sim()->getThreadStatsManager()->registerThreadStatMetric(ThreadStatsManager::DYNAMIC, name, callback, (UInt64)tsns);
+}
+
+ThreadStatNamedStat::ThreadStatNamedStat(String objectName, String metricName)
+{
+   for(unsigned int core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
+      m_stats.push_back(Sim()->getStatsManager()->getMetricObject(objectName, core_id, metricName));
+}
+
+UInt64 ThreadStatNamedStat::callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user)
+{
+   return ((ThreadStatNamedStat*)user)->m_stats[core->getId()]->recordMetric();
+}

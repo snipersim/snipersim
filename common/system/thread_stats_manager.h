@@ -5,6 +5,8 @@
 #include "subsecond_time.h"
 #include "hooks_manager.h"
 
+class StatsMetricBase;
+
 class ThreadStatsManager
 {
    public:
@@ -104,6 +106,18 @@ private:
          ((ThreadStatsManager*)ptr)->threadExit(args->thread_id, args->time);
          return 0;
       }
+};
+
+// Helper class to register named statistics objects as per-thread statistics.
+// Caches the StatsMetricBase objects to avoid the string lookups on every access.
+class ThreadStatNamedStat
+{
+   public:
+      static ThreadStatsManager::ThreadStatType registerStat(const char* name, String objectName, String metricName);
+   private:
+      std::vector<StatsMetricBase*> m_stats;
+      ThreadStatNamedStat(String objectName, String metricName);
+      static UInt64 callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user);
 };
 
 #endif // __THREAD_STATS_MANAGER_H
