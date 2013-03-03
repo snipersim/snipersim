@@ -9,7 +9,8 @@ class Time:
   PS = 1e3
   NS = 1e6
   US = 1e9
-  S = 1e12
+  MS = 1e12
+  S  = 1e15
 
 
 
