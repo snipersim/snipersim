@@ -20,7 +20,7 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
 
 
   def format_config(name, lid):
-    caches = {'L1-I': 'l1_icache', 'L1-D': 'l1_icache', 'L2': 'l2_cache', 'L3': 'l3_cache', 'L4': 'l4_cache'}
+    caches = {'L1-I': 'l1_icache', 'L1-D': 'l1_dcache', 'L2': 'l2_cache', 'L3': 'l3_cache', 'L4': 'l4_cache'}
     if name in caches:
       value = sniper_config.get_config(config, 'perf_model/%s/cache_size' % caches[name], lid)
       return sniper_lib.format_size(1024 * long(value), digits = 0)
