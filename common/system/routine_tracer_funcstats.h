@@ -11,32 +11,29 @@ class StatsMetricBase;
 class RoutineTracerFunctionStats
 {
    public:
+      typedef std::unordered_map<ThreadStatsManager::ThreadStatType, UInt64> RtnValues;
       class Routine : public RoutineTracer::Routine
       {
          public:
             UInt64 m_calls;
-            UInt64 m_instruction_count;
-            UInt64 m_elapsed_time;
-            UInt64 m_fp_instructions;
-            UInt64 m_l3_misses;
+            RtnValues m_values;
 
             Routine(IntPtr eip, const char *name, int column, int line, const char *filename)
             : RoutineTracer::Routine(eip, name, column, line, filename)
-            , m_calls(0), m_instruction_count(0), m_elapsed_time(0)
-            , m_fp_instructions(0), m_l3_misses(0)
+            , m_calls(0), m_values()
             {}
       };
 
       class RtnMaster : public RoutineTracer
       {
          public:
-            ThreadStatsManager::ThreadStatType m_ts_fp_addsub, m_ts_fp_muldiv, m_ts_l3miss;
+            //std::vector<ThreadStatsManager::ThreadStatType> m_threadstats;
             RtnMaster();
             virtual ~RtnMaster();
 
             virtual RoutineTracerThread* getThreadHandler(Thread *thread);
             virtual void addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename);
-            void updateRoutine(IntPtr eip, UInt64 calls, UInt64 instruction_count, UInt64 elapsed_time, UInt64 fp_instructions, UInt64 m_misses);
+            void updateRoutine(IntPtr eip, UInt64 calls, RtnValues values);
 
          private:
             Lock m_lock;
@@ -53,11 +50,7 @@ class RoutineTracerFunctionStats
          private:
             RtnMaster *m_master;
 
-            UInt64 m_calls;
-            UInt64 m_instruction_count;
-            UInt64 m_elapsed_time;
-            UInt64 m_fp_instructions;
-            UInt64 m_l3_misses;
+            RtnValues m_values_start;
 
             UInt64 getThreadStat(ThreadStatsManager::ThreadStatType type);
 
