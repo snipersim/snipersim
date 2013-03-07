@@ -165,6 +165,8 @@ namespace ParametricDramDirectoryMSI
             , m_dram_cntlr(NULL)
             , m_l1_mshr(name + ".mshr", core_id, outstanding_misses)
             , m_next_level_read_bandwidth(name + ".next_read", core_id)
+            , m_evicting_address(0)
+            , m_evicting_buf(NULL)
             , m_prefetch_list()
             , m_prefetch_next(SubsecondTime::Zero())
          {}
