@@ -173,7 +173,7 @@ ThreadStatsManager::ThreadStatType ThreadStatNamedStat::registerStat(const char*
 
 ThreadStatNamedStat::ThreadStatNamedStat(String objectName, String metricName)
 {
-   for(unsigned int core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
+   for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
    {
       StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject(objectName, core_id, metricName);
       LOG_ASSERT_ERROR(m != NULL, "Invalid statistic %s.%d.%s", objectName.c_str(), core_id, metricName.c_str());

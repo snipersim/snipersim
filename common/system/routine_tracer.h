@@ -12,7 +12,7 @@ class RoutineTracerThread
 {
    public:
       RoutineTracerThread(Thread *thread);
-      ~RoutineTracerThread();
+      virtual ~RoutineTracerThread();
 
       void routineEnter(IntPtr eip);
       void routineExit(IntPtr eip);
