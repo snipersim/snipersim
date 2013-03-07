@@ -32,6 +32,7 @@ sim_end_valid = ('first', 'last', 'last-restart')
 use_viz = False
 use_viz_mcpat = ''
 use_perf = False
+use_valgrind = False
 use_gdb = False
 gdb_wait = False
 gdb_quit = False
@@ -121,7 +122,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -161,6 +162,8 @@ for o, a in opts:
     use_viz = True
   if o == '--perf':
     use_perf = True
+  if o == '--valgrind':
+    use_valgrind = True
   if o == '--gdb':
     use_gdb = True
   if o == '--gdb-wait':
@@ -273,6 +276,13 @@ if roi_only and roi_script:
 if standalone:
   if use_appdebug:
     print '--appdebug not supported in standalone mode'
+    sys.exit(-1)
+  if use_valgrind and use_gdb:
+    print 'Cannot use both --valgrind and --gdb at the same time'
+    sys.exit(-1)
+else:
+  if use_valgrind:
+    print '--valgrind only supported in standalone mode'
     sys.exit(-1)
 
 outputdir = os.path.realpath(outputdir)
@@ -554,6 +564,8 @@ if standalone:
       f.write('end\n')
     f.close()
     gdbcmd = 'gdb -quiet --command=%(fn)s %(HOME)s/lib/sniper --args ' % locals()
+  elif use_valgrind:
+    gdbcmd = 'valgrind '
   else:
     gdbcmd = ''
   cmd = gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
