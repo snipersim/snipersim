@@ -18,9 +18,9 @@ namespace PrL1PrL2DramDirectoryMSI
       private:
          // Functional Models
          MemoryManagerBase* m_memory_manager;
+         AddressHomeLookup* m_dram_controller_home_lookup;
          DramDirectoryCache* m_dram_directory_cache;
          ReqQueueList* m_dram_directory_req_queue_list;
-         DramCntlrInterface* m_dram_cntlr;
 
          core_id_t m_core_id;
          UInt32 m_cache_block_size;
@@ -42,6 +42,7 @@ namespace PrL1PrL2DramDirectoryMSI
          void processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_data_buf = NULL);
          void processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_data_buf = NULL);
          void retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type, core_id_t receiver, IntPtr address, Byte* cached_data_buf);
+         void processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg);
 
          void processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
@@ -51,7 +52,7 @@ namespace PrL1PrL2DramDirectoryMSI
       public:
          DramDirectoryCntlr(core_id_t core_id,
                MemoryManagerBase* memory_manager,
-               DramCntlrInterface* dram_cntlr,
+               AddressHomeLookup* dram_controller_home_lookup,
                UInt32 dram_directory_total_entries,
                UInt32 dram_directory_associativity,
                UInt32 cache_block_size,
@@ -63,6 +64,7 @@ namespace PrL1PrL2DramDirectoryMSI
          ~DramDirectoryCntlr();
 
          void handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
+         void handleMsgFromDRAM(core_id_t sender, ShmemMsg* shmem_msg);
 
          DramDirectoryCache* getDramDirectoryCache() { return m_dram_directory_cache; }
    };

@@ -90,14 +90,17 @@ namespace PrL1PrL2DramDirectoryMSI
          case WB_REQ:
          case UPGRADE_REP:
          case INV_REP:
+         case DRAM_READ_REQ:
             // msg_type + address
             // msg_type - 1 byte
             return (1 + sizeof(IntPtr));
-            
+
          case EX_REP:
          case SH_REP:
          case FLUSH_REP:
          case WB_REP:
+         case DRAM_WRITE_REQ:
+         case DRAM_READ_REP:
             // msg_type + address + cache_block
             return (1 + sizeof(IntPtr) + m_data_length);
 

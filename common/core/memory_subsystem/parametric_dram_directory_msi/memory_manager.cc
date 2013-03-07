@@ -34,6 +34,7 @@ MemoryManager::MemoryManager(Core* core,
    m_dram_cntlr(NULL),
    m_itlb(NULL), m_dtlb(NULL),
    m_tlb_miss_penalty(NULL,0),
+   m_tag_directory_present(false),
    m_dram_cntlr_present(false),
    m_enabled(false)
 {
@@ -41,6 +42,7 @@ MemoryManager::MemoryManager(Core* core,
    std::map<MemComponent::component_t, CacheParameters> cache_parameters;
    std::map<MemComponent::component_t, String> cache_names;
 
+   UInt32 smt_cores;
    bool dram_direct_access = false;
    UInt32 dram_directory_total_entries = 0;
    UInt32 dram_directory_associativity = 0;
@@ -64,9 +66,10 @@ MemoryManager::MemoryManager(Core* core,
          m_dtlb = new TLB("dtlb", "perf_model/dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"));
       m_tlb_miss_penalty = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/tlb/penalty"));
 
-      UInt32 smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
+      smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
 
-      for(UInt32 i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i) {
+      for(UInt32 i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)
+      {
          String configName, objectName;
          switch((MemComponent::component_t)i) {
             case MemComponent::L1_ICACHE:
@@ -150,6 +153,40 @@ MemoryManager::MemoryManager(Core* core,
    m_network_thread_sem = new Semaphore(0);
 
    std::vector<core_id_t> core_list_with_dram_controllers = getCoreListWithMemoryControllers();
+   std::vector<core_id_t> core_list_with_tag_directories;
+   String tag_directory_locations = Sim()->getCfg()->getString("perf_model/dram_directory/locations");
+
+   if (tag_directory_locations == "dram")
+   {
+      // Place tag directories only at DRAM controllers
+      core_list_with_tag_directories = core_list_with_dram_controllers;
+   }
+   else
+   {
+      SInt32 tag_directory_interleaving;
+
+      // Place tag directores at each (master) cache
+      if (tag_directory_locations == "llc")
+      {
+         tag_directory_interleaving = cache_parameters[m_last_level_cache].shared_cores;
+      }
+      else if (tag_directory_locations == "interleaved")
+      {
+         tag_directory_interleaving = Sim()->getCfg()->getInt("perf_model/dram_directory/interleaving") * smt_cores;
+      }
+      else
+      {
+         LOG_PRINT_ERROR("Invalid perf_model/dram_directory/locations value %s", tag_directory_locations.c_str());
+      }
+
+      for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); core_id += tag_directory_interleaving)
+      {
+         core_list_with_tag_directories.push_back(core_id);
+      }
+   }
+
+   m_tag_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_tag_directories, getCacheBlockSize());
+   m_dram_controller_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
 
    // if (m_core->getId() == 0)
    //   printCoreListWithMemoryControllers(core_list_with_dram_controllers);
@@ -159,20 +196,26 @@ MemoryManager::MemoryManager(Core* core,
       m_dram_cntlr_present = true;
 
       m_dram_cntlr = new PrL1PrL2DramDirectoryMSI::DramCntlr(this,
+            getShmemPerfModel(),
             getCacheBlockSize());
       Sim()->getStatsManager()->logTopology("dram-cntlr", core->getId(), core->getId());
 
       if (Sim()->getCfg()->getBoolArray("perf_model/dram/cache/enabled", core->getId()))
       {
-         m_dram_cache = new DramCache(core->getId(), getCacheBlockSize(), m_dram_cntlr);
+         m_dram_cache = new DramCache(this, getShmemPerfModel(), getCacheBlockSize(), m_dram_cntlr);
          Sim()->getStatsManager()->logTopology("dram-cache", core->getId(), core->getId());
       }
+   }
+
+   if (find(core_list_with_tag_directories.begin(), core_list_with_tag_directories.end(), getCore()->getId()) != core_list_with_tag_directories.end())
+   {
+      m_tag_directory_present = true;
 
       if (!dram_direct_access)
       {
          m_dram_directory_cntlr = new PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr(getCore()->getId(),
                this,
-               m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr,
+               m_dram_controller_home_lookup,
                dram_directory_total_entries,
                dram_directory_associativity,
                getCacheBlockSize(),
@@ -181,11 +224,9 @@ MemoryManager::MemoryManager(Core* core,
                dram_directory_type_str,
                dram_directory_cache_access_time,
                getShmemPerfModel());
-         Sim()->getStatsManager()->logTopology("dram-dir", core->getId(), core->getId());
+         Sim()->getStatsManager()->logTopology("tag-dir", core->getId(), core->getId());
       }
    }
-
-   m_dram_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
 
    for(UInt32 i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i) {
       CacheCntlr* cache_cntlr = new CacheCntlr(
@@ -193,7 +234,7 @@ MemoryManager::MemoryManager(Core* core,
          cache_names[(MemComponent::component_t)i],
          getCore()->getId(),
          this,
-         m_dram_directory_home_lookup,
+         m_tag_directory_home_lookup,
          m_user_thread_sem,
          m_network_thread_sem,
          getCacheBlockSize(),
@@ -229,6 +270,13 @@ MemoryManager::MemoryManager(Core* core,
       );
 
 
+   if (m_tag_directory_present)
+      LOG_ASSERT_ERROR(m_cache_cntlrs[m_last_level_cache]->isMasterCache() == true,
+                       "Tag directories may only be at 'master' node of shared caches\n"
+                       "\n"
+                       "Make sure perf_model/dram_directory/interleaving is a multiple of perf_model/l%d_cache/shared_cores\n",
+                       Sim()->getCfg()->getInt("perf_model/cache/levels")
+                      );
    if (m_dram_cntlr_present)
       LOG_ASSERT_ERROR(m_cache_cntlrs[m_last_level_cache]->isMasterCache() == true,
                        "DRAM controllers may only be at 'master' node of shared caches\n"
@@ -294,7 +342,8 @@ MemoryManager::~MemoryManager()
 
    delete m_user_thread_sem;
    delete m_network_thread_sem;
-   delete m_dram_directory_home_lookup;
+   delete m_tag_directory_home_lookup;
+   delete m_dram_controller_home_lookup;
 
    for(i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)
    {
@@ -360,7 +409,7 @@ MYLOG("begin");
       case MemComponent::LAST_LEVEL_CACHE:
          switch(sender_mem_component)
          {
-            case MemComponent::DRAM_DIR:
+            case MemComponent::TAG_DIR:
                m_cache_cntlrs[m_last_level_cache]->handleMsgFromDramDirectory(sender, shmem_msg);
                break;
 
@@ -371,14 +420,37 @@ MYLOG("begin");
          }
          break;
 
-      case MemComponent::DRAM_DIR:
+      case MemComponent::TAG_DIR:
          switch(sender_mem_component)
          {
-            LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
+            LOG_ASSERT_ERROR(m_tag_directory_present, "Tag directory NOT present");
 
             case MemComponent::LAST_LEVEL_CACHE:
                m_dram_directory_cntlr->handleMsgFromL2Cache(sender, shmem_msg);
                break;
+
+            case MemComponent::DRAM:
+               m_dram_directory_cntlr->handleMsgFromDRAM(sender, shmem_msg);
+               break;
+
+            default:
+               LOG_PRINT_ERROR("Unrecognized sender component(%u)",
+                     sender_mem_component);
+               break;
+         }
+         break;
+
+      case MemComponent::DRAM:
+         switch(sender_mem_component)
+         {
+            LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
+
+            case MemComponent::TAG_DIR:
+            {
+               DramCntlrInterface* dram_interface = m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr;
+               dram_interface->handleMsgFromTagDirectory(sender, shmem_msg);
+               break;
+            }
 
             default:
                LOG_PRINT_ERROR("Unrecognized sender component(%u)",

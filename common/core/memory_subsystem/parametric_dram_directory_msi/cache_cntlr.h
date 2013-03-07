@@ -185,7 +185,7 @@ namespace ParametricDramDirectoryMSI
          CacheMasterCntlr* m_master;
          CacheCntlr* m_next_cache_cntlr;
          CacheCntlr* m_last_level;
-         AddressHomeLookup* m_dram_directory_home_lookup;
+         AddressHomeLookup* m_tag_directory_home_lookup;
          std::unordered_map<IntPtr, MemComponent::component_t> m_shmem_req_source_map;
          bool m_perfect;
          bool m_coherent;
@@ -304,7 +304,7 @@ namespace ParametricDramDirectoryMSI
          Semaphore* getNetworkThreadSemaphore(void);
 
          // Dram Directory Home Lookup
-         core_id_t getHome(IntPtr address) { return m_dram_directory_home_lookup->getHome(address); }
+         core_id_t getHome(IntPtr address) { return m_tag_directory_home_lookup->getHome(address); }
 
          CacheCntlr* lastLevelCache(void);
 
@@ -314,7 +314,7 @@ namespace ParametricDramDirectoryMSI
                String name,
                core_id_t core_id,
                MemoryManager* memory_manager,
-               AddressHomeLookup* dram_directory_home_lookup,
+               AddressHomeLookup* tag_directory_home_lookup,
                Semaphore* user_thread_sem,
                Semaphore* network_thread_sem,
                UInt32 cache_block_size,

@@ -19,7 +19,7 @@ class MemComponent
             make sure that MAX_MEM_COMPONENT < 32 as pr_l2_cache_block_info.h contains a 32-bit bitfield of these things
          */
          LAST_LEVEL_CACHE = 20,
-         DRAM_DIR,
+         TAG_DIR,
          DRAM_CACHE,
          DRAM,
          MAX_MEM_COMPONENT = DRAM,

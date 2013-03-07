@@ -95,7 +95,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       String name,
       core_id_t core_id,
       MemoryManager* memory_manager,
-      AddressHomeLookup* dram_directory_home_lookup,
+      AddressHomeLookup* tag_directory_home_lookup,
       Semaphore* user_thread_sem,
       Semaphore* network_thread_sem,
       UInt32 cache_block_size,
@@ -106,7 +106,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_memory_manager(memory_manager),
    m_next_cache_cntlr(NULL),
    m_last_level(NULL),
-   m_dram_directory_home_lookup(dram_directory_home_lookup),
+   m_tag_directory_home_lookup(tag_directory_home_lookup),
    m_perfect(cache_params.perfect),
    m_coherent(cache_params.coherent),
    m_prefetch_on_prefetch_hit(false),
@@ -944,7 +944,7 @@ MYLOG("EX REQ @ %lx", address);
       // This will clear the 'Present' bit also
       invalidateCacheBlock(address);
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::INV_REP,
-            MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
             m_core_id_master /* requester */,
             getHome(address) /* receiver */,
             address,
@@ -953,7 +953,7 @@ MYLOG("EX REQ @ %lx", address);
    }
 
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::EX_REQ,
-         MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+         MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
          getHome(address) /* receiver */,
          address,
@@ -966,7 +966,7 @@ CacheCntlr::processShReqToDirectory(IntPtr address)
 {
 MYLOG("SH REQ @ %lx", address);
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ,
-         MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+         MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
          getHome(address) /* receiver */,
          address,
@@ -1206,7 +1206,7 @@ MYLOG("evicting @%lx", evict_address);
             // Send back the data also
 MYLOG("evict FLUSH %lx", evict_address);
             getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::FLUSH_REP,
-                  MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+                  MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
                   m_core_id /* requester */,
                   home_node_id /* receiver */,
                   evict_address,
@@ -1220,7 +1220,7 @@ MYLOG("evict INV %lx", evict_address);
                   "evict_address(0x%x), evict_state(%u)",
                   evict_address, evict_block_info.getCState());
             getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::INV_REP,
-                  MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+                  MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
                   m_core_id /* requester */,
                   home_node_id /* receiver */,
                   evict_address,
@@ -1529,7 +1529,7 @@ MYLOG("processInvReqFromDramDirectory l%d", m_mem_component);
       updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_SIM_THREAD);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::INV_REP,
-            MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
             shmem_msg->getRequester() /* requester */,
             sender /* receiver */,
             address,
@@ -1563,7 +1563,7 @@ MYLOG("processFlushReqFromDramDirectory l%d", m_mem_component);
       updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, data_buf, ShmemPerfModel::_SIM_THREAD);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::FLUSH_REP,
-            MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
             shmem_msg->getRequester() /* requester */,
             sender /* receiver */,
             address,
@@ -1598,7 +1598,7 @@ MYLOG("processWbReqFromDramDirectory l%d", m_mem_component);
       updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, data_buf, ShmemPerfModel::_SIM_THREAD);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::WB_REP,
-            MemComponent::LAST_LEVEL_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
             shmem_msg->getRequester() /* requester */,
             sender /* receiver */,
             address,

@@ -6,7 +6,6 @@
 #include <unordered_map>
 
 #include "dram_perf_model.h"
-#include "shmem_perf_model.h"
 #include "shmem_msg.h"
 #include "fixed_types.h"
 #include "memory_manager_base.h"
@@ -20,18 +19,14 @@ namespace PrL1PrL2DramDirectoryMSI
    class DramCntlr : public DramCntlrInterface
    {
       private:
-         MemoryManagerBase* m_memory_manager;
          std::unordered_map<IntPtr, Byte*> m_data_map;
          DramPerfModel* m_dram_perf_model;
-         UInt32 m_cache_block_size;
          FaultInjector* m_fault_injector;
 
          typedef std::unordered_map<IntPtr,UInt64> AccessCountMap;
          AccessCountMap* m_dram_access_count;
          UInt64 m_reads, m_writes;
 
-         UInt32 getCacheBlockSize() { return m_cache_block_size; }
-         MemoryManagerBase* getMemoryManager() { return m_memory_manager; }
          SubsecondTime runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type);
 
          void addToDramAccessCount(IntPtr address, access_t access_type);
@@ -39,6 +34,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
       public:
          DramCntlr(MemoryManagerBase* memory_manager,
+               ShmemPerfModel* shmem_perf_model,
                UInt32 cache_block_size);
 
          ~DramCntlr();

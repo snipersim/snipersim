@@ -103,7 +103,7 @@ L2CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte
       {
          // Send back the data also
          getMemoryManager()->sendMsg(ShmemMsg::FLUSH_REP,
-               MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+               MemComponent::L2_CACHE, MemComponent::TAG_DIR,
                m_core_id /* requester */,
                home_node_id /* receiver */,
                evict_address,
@@ -115,7 +115,7 @@ L2CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte
                "evict_address(0x%x), evict_state(%u), cached_loc(%u)",
                evict_address, evict_block_info.getCState(), evict_block_info.getCachedLoc());
          getMemoryManager()->sendMsg(ShmemMsg::INV_REP,
-               MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+               MemComponent::L2_CACHE, MemComponent::TAG_DIR,
                m_core_id /* requester */,
                home_node_id /* receiver */,
                evict_address);
@@ -225,14 +225,14 @@ L2CacheCntlr::processExReqFromL1Cache(ShmemMsg* shmem_msg)
       // This will clear the 'Present' bit also
       invalidateCacheBlock(address);
       getMemoryManager()->sendMsg(ShmemMsg::INV_REP,
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::L2_CACHE, MemComponent::TAG_DIR,
             m_core_id /* requester */,
             getHome(address) /* receiver */,
             address);
    }
 
    getMemoryManager()->sendMsg(ShmemMsg::EX_REQ,
-         MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+         MemComponent::L2_CACHE, MemComponent::TAG_DIR,
          m_core_id /* requester */,
          getHome(address) /* receiver */,
          address);
@@ -244,7 +244,7 @@ L2CacheCntlr::processShReqFromL1Cache(ShmemMsg* shmem_msg)
    IntPtr address = shmem_msg->getAddress();
 
    getMemoryManager()->sendMsg(ShmemMsg::SH_REQ,
-         MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+         MemComponent::L2_CACHE, MemComponent::TAG_DIR,
          m_core_id /* requester */,
          getHome(address) /* receiver */,
          address);
@@ -363,7 +363,7 @@ L2CacheCntlr::processInvReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_m
       invalidateCacheBlock(address);
 
       getMemoryManager()->sendMsg(ShmemMsg::INV_REP,
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::L2_CACHE, MemComponent::TAG_DIR,
             shmem_msg->getRequester() /* requester */,
             sender /* receiver */,
             address);
@@ -400,7 +400,7 @@ L2CacheCntlr::processFlushReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem
       invalidateCacheBlock(address);
 
       getMemoryManager()->sendMsg(ShmemMsg::FLUSH_REP,
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::L2_CACHE, MemComponent::TAG_DIR,
             shmem_msg->getRequester() /* requester */,
             sender /* receiver */,
             address,
@@ -438,7 +438,7 @@ L2CacheCntlr::processWbReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
       setCacheState(l2_cache_block_info, CacheState::SHARED);
 
       getMemoryManager()->sendMsg(ShmemMsg::WB_REP,
-            MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
+            MemComponent::L2_CACHE, MemComponent::TAG_DIR,
             shmem_msg->getRequester() /* requester */,
             sender /* receiver */,
             address,

@@ -3,12 +3,14 @@
 #include "config.hpp"
 #include "cache.h"
 #include "stats.h"
+#include "memory_manager_base.h"
 #include "pr_l1_cache_block_info.h"
 
-DramCache::DramCache(core_id_t core_id, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr)
-   : m_cache_block_size(cache_block_size)
-   , m_data_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/tags_access_time", core_id)))
-   , m_tags_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/data_access_time", core_id)))
+DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr)
+   : DramCntlrInterface(memory_manager, shmem_perf_model, cache_block_size)
+   , m_core_id(memory_manager->getCore()->getId())
+   , m_data_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/tags_access_time", m_core_id)))
+   , m_tags_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/data_access_time", m_core_id)))
    , m_data_array_bandwidth(8 * Sim()->getCfg()->getFloat("perf_model/dram/cache/bandwidth"))
    , m_dram_cntlr(dram_cntlr)
    , m_queue_model(NULL)
@@ -19,26 +21,26 @@ DramCache::DramCache(core_id_t core_id, UInt32 cache_block_size, DramCntlrInterf
 {
    m_cache = new Cache("dram-cache",
       "perf_model/dram/cache",
-      core_id,
-      Sim()->getCfg()->getIntArray("perf_model/dram/cache/cache_size", core_id),
-      Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", core_id),
+      m_core_id,
+      Sim()->getCfg()->getIntArray("perf_model/dram/cache/cache_size", m_core_id),
+      Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", m_core_id),
       m_cache_block_size,
-      Sim()->getCfg()->getStringArray("perf_model/dram/cache/replacement_policy", core_id),
+      Sim()->getCfg()->getStringArray("perf_model/dram/cache/replacement_policy", m_core_id),
       CacheBase::PR_L1_CACHE,
-      CacheBase::parseAddressHash(Sim()->getCfg()->getStringArray("perf_model/dram/cache/address_hash", core_id)),
+      CacheBase::parseAddressHash(Sim()->getCfg()->getStringArray("perf_model/dram/cache/address_hash", m_core_id)),
       NULL /* FaultinjectionManager */
    );
 
    if (Sim()->getCfg()->getBool("perf_model/dram/cache/queue_model/enabled"))
    {
       String queue_model_type = Sim()->getCfg()->getString("perf_model/dram/queue_model/type");
-      m_queue_model = QueueModel::create("dram-cache-queue", core_id, queue_model_type, m_data_array_bandwidth.getRoundedLatency(8 * m_cache_block_size)); // bytes to bits
+      m_queue_model = QueueModel::create("dram-cache-queue", m_core_id, queue_model_type, m_data_array_bandwidth.getRoundedLatency(8 * m_cache_block_size)); // bytes to bits
    }
 
-   registerStatsMetric("dram-cache", core_id, "reads", &m_reads);
-   registerStatsMetric("dram-cache", core_id, "writes", &m_writes);
-   registerStatsMetric("dram-cache", core_id, "read-misses", &m_read_misses);
-   registerStatsMetric("dram-cache", core_id, "write-misses", &m_write_misses);
+   registerStatsMetric("dram-cache", m_core_id, "reads", &m_reads);
+   registerStatsMetric("dram-cache", m_core_id, "writes", &m_writes);
+   registerStatsMetric("dram-cache", m_core_id, "read-misses", &m_read_misses);
+   registerStatsMetric("dram-cache", m_core_id, "write-misses", &m_write_misses);
 }
 
 DramCache::~DramCache()

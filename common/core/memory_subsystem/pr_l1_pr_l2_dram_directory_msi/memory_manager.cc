@@ -92,6 +92,7 @@ MemoryManager::MemoryManager(Core* core,
    m_network_thread_sem = new Semaphore(0);
 
    std::vector<core_id_t> core_list_with_dram_controllers = getCoreListWithMemoryControllers();
+   m_dram_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
 
    // if (m_core->getId() == 0)
    //   printCoreListWithMemoryControllers(core_list_with_dram_controllers);
@@ -101,11 +102,12 @@ MemoryManager::MemoryManager(Core* core,
       m_dram_cntlr_present = true;
 
       m_dram_cntlr = new DramCntlr(this,
+            getShmemPerfModel(),
             getCacheBlockSize());
 
       m_dram_directory_cntlr = new DramDirectoryCntlr(getCore()->getId(),
             this,
-            m_dram_cntlr,
+            m_dram_directory_home_lookup,
             dram_directory_total_entries,
             dram_directory_associativity,
             getCacheBlockSize(),
@@ -115,8 +117,6 @@ MemoryManager::MemoryManager(Core* core,
             dram_directory_cache_access_time,
             getShmemPerfModel());
    }
-
-   m_dram_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
 
    m_l1_cache_cntlr = new L1CacheCntlr(getCore()->getId(),
          this,
@@ -228,7 +228,7 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
                m_l2_cache_cntlr->handleMsgFromL1Cache(shmem_msg);
                break;
 
-            case MemComponent::DRAM_DIR:
+            case MemComponent::TAG_DIR:
                m_l2_cache_cntlr->handleMsgFromDramDirectory(sender, shmem_msg);
                break;
 
@@ -239,13 +239,33 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
          }
          break;
 
-      case MemComponent::DRAM_DIR:
+      case MemComponent::TAG_DIR:
+         switch(sender_mem_component)
+         {
+            LOG_ASSERT_ERROR(m_dram_cntlr_present, "Tag directory NOT present");
+
+            case MemComponent::LAST_LEVEL_CACHE:
+               m_dram_directory_cntlr->handleMsgFromL2Cache(sender, shmem_msg);
+               break;
+
+            case MemComponent::DRAM:
+               m_dram_directory_cntlr->handleMsgFromDRAM(sender, shmem_msg);
+               break;
+
+            default:
+               LOG_PRINT_ERROR("Unrecognized sender component(%u)",
+                     sender_mem_component);
+               break;
+         }
+         break;
+
+      case MemComponent::DRAM:
          switch(sender_mem_component)
          {
             LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
 
-            case MemComponent::L2_CACHE:
-               m_dram_directory_cntlr->handleMsgFromL2Cache(sender, shmem_msg);
+            case MemComponent::TAG_DIR:
+               m_dram_cntlr->handleMsgFromTagDirectory(sender, shmem_msg);
                break;
 
             default:

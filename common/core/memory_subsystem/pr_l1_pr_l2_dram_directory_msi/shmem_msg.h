@@ -13,11 +13,13 @@ namespace PrL1PrL2DramDirectoryMSI
          {
             INVALID_MSG_TYPE = 0,
             MIN_MSG_TYPE,
+            // Cache > tag directory
             EX_REQ = MIN_MSG_TYPE,
             SH_REQ,
             INV_REQ,
             FLUSH_REQ,
             WB_REQ,
+            // Tag directory > cache
             EX_REP,
             SH_REP,
             UPGRADE_REP,
@@ -25,6 +27,12 @@ namespace PrL1PrL2DramDirectoryMSI
             FLUSH_REP,
             WB_REP,
             NULLIFY_REQ,
+            // Tag directory > DRAM
+            DRAM_READ_REQ,
+            DRAM_WRITE_REQ,
+            // DRAM > tag directory
+            DRAM_READ_REP,
+
             MAX_MSG_TYPE = NULLIFY_REQ,
             NUM_MSG_TYPES = MAX_MSG_TYPE - MIN_MSG_TYPE + 1
          };

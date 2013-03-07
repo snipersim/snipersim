@@ -31,12 +31,14 @@ namespace ParametricDramDirectoryMSI
          DramCache* m_dram_cache;
          PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr* m_dram_directory_cntlr;
          PrL1PrL2DramDirectoryMSI::DramCntlr* m_dram_cntlr;
-         AddressHomeLookup* m_dram_directory_home_lookup;
+         AddressHomeLookup* m_tag_directory_home_lookup;
+         AddressHomeLookup* m_dram_controller_home_lookup;
          TLB *m_itlb, *m_dtlb;
          ComponentLatency m_tlb_miss_penalty;
 
          core_id_t m_core_id_master;
 
+         bool m_tag_directory_present;
          bool m_dram_cntlr_present;
 
          Semaphore* m_user_thread_sem;
@@ -68,7 +70,8 @@ namespace ParametricDramDirectoryMSI
          Cache* getLastLevelCache() { return getCache(MemComponent::LAST_LEVEL_CACHE); }
          PrL1PrL2DramDirectoryMSI::DramDirectoryCache* getDramDirectoryCache() { return m_dram_directory_cntlr->getDramDirectoryCache(); }
          PrL1PrL2DramDirectoryMSI::DramCntlr* getDramCntlr() { return m_dram_cntlr; }
-         AddressHomeLookup* getDramDirectoryHomeLookup() { return m_dram_directory_home_lookup; }
+         AddressHomeLookup* getTagDirectoryHomeLookup() { return m_tag_directory_home_lookup; }
+         AddressHomeLookup* getDramControllerHomeLookup() { return m_dram_controller_home_lookup; }
 
          CacheCntlr* getCacheCntlrAt(core_id_t core_id, MemComponent::component_t mem_component) { return m_all_cache_cntlrs[CoreComponentType(core_id, mem_component)]; }
          void setCacheCntlrAt(core_id_t core_id, MemComponent::component_t mem_component, CacheCntlr* cache_cntlr) { m_all_cache_cntlrs[CoreComponentType(core_id, mem_component)] = cache_cntlr; }

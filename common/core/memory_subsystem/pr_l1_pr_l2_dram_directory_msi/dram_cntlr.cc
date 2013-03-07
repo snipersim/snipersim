@@ -20,11 +20,11 @@ namespace PrL1PrL2DramDirectoryMSI
 {
 
 DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
-      UInt32 cache_block_size):
-   m_memory_manager(memory_manager),
-   m_cache_block_size(cache_block_size),
-   m_reads(0),
-   m_writes(0)
+      ShmemPerfModel* shmem_perf_model,
+      UInt32 cache_block_size)
+   : DramCntlrInterface(memory_manager, shmem_perf_model, cache_block_size)
+   , m_reads(0)
+   , m_writes(0)
 {
    m_dram_perf_model = DramPerfModel::createDramPerfModel(
          memory_manager->getCore()->getId(),
