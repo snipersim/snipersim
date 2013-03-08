@@ -71,7 +71,7 @@ def add_config_file(filename, extension = '.cfg'):
   config_files = []
   configfile = findconfig(filename, extension)
   if not configfile:
-    print 'Cannot find config file', filename
+    print >> sys.stderr, 'Cannot find config file', filename
     sys.exit(1)
   # Handle #include
   for line in file(configfile):
@@ -125,7 +125,7 @@ try:
   opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
 except getopt.GetoptError, e:
   # print help information and exit:
-  print e
+  print >> sys.stderr, e
   usage()
 for o, a in opts:
   if o == '-h':
@@ -231,27 +231,27 @@ if cmdline:
   else:
     standalone = False
   if traces or trace_manual:
-    print 'Cannot combine traces with running a benchmark'
+    print >> sys.stderr, 'Cannot combine traces with running a benchmark'
     usage()
   if pinballs:
-    print 'Cannot combine pinball use with running a benchmark'
+    print >> sys.stderr, 'Cannot combine pinball use with running a benchmark'
     usage()
 elif pinballs:
   if len(pinballs) > 1 and not pinball_sift:
-    print 'Cannot run multiple non-SIFT pinballs'
+    print >> sys.stderr, 'Cannot run multiple non-SIFT pinballs'
     usage()
   if sim_end.endswith('-restart'):
-    print 'Restart not supported in PinPlay mode'
+    print >> sys.stderr, 'Restart not supported in PinPlay mode'
     usage()
   standalone = pinball_sift
   if traces or trace_manual:
-    print 'Cannot combine a pinball with tracing (--traces= or --trace-manual)'
+    print >> sys.stderr, 'Cannot combine a pinball with tracing (--traces= or --trace-manual)'
     usage()
   for idx, pinball in enumerate(pinballs[:]):
     pinball = findtrace(pinball, suffix='.address')
     if not pinball:
       pinball = pinball.rpartition('.')[0]
-      print 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (pinball, pinball)
+      print >> sys.stderr, 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (pinball, pinball)
       usage()
     else:
       pinballs[idx] = pinball.rpartition('.')[0]
@@ -263,26 +263,26 @@ else:
   if trace_manual:
     opt_count+=1
   if opt_count == 0:
-    print 'Need either a set of traces (--traces= or --trace-manual), a pinball, or a benchmark command line'
+    print >> sys.stderr, 'Need either a set of traces (--traces= or --trace-manual), a pinball, or a benchmark command line'
     usage()
   if opt_count > 1:
-    print 'Can only use one of --traces=, --trace-manual or --pinballs= when not using a command line argument'
+    print >> sys.stderr, 'Can only use one of --traces=, --trace-manual or --pinballs= when not using a command line argument'
     usage()
 
 if roi_only and roi_script:
-  print 'Use either --roi or --roi-script but not both'
+  print >> sys.stderr, 'Use either --roi or --roi-script but not both'
   sys.exit(-1)
 
 if standalone:
   if use_appdebug:
-    print '--appdebug not supported in standalone mode'
+    print >> sys.stderr, '--appdebug not supported in standalone mode'
     sys.exit(-1)
   if use_valgrind and use_gdb:
-    print 'Cannot use both --valgrind and --gdb at the same time'
+    print >> sys.stderr, 'Cannot use both --valgrind and --gdb at the same time'
     sys.exit(-1)
 else:
   if use_valgrind:
-    print '--valgrind only supported in standalone mode'
+    print >> sys.stderr, '--valgrind only supported in standalone mode'
     sys.exit(-1)
 
 outputdir = os.path.realpath(outputdir)
@@ -344,7 +344,7 @@ if scripts:
         # Predefined script?
         scriptfile = os.path.join(HOME, 'scripts', filename + '.py')
         if not os.path.isfile(scriptfile):
-          print 'Cannot find script file', scriptfile
+          print >> sys.stderr, 'Cannot find script file', scriptfile
           sys.exit(-1)
     sniperoptions.append('-g --hooks/script%uname=%s' % (i, scriptfile))
     sniperoptions.append('-g --hooks/script%uargs=%s' % (i, args or ''))
@@ -365,7 +365,7 @@ if traces:
       print '[SNIPER] (%u) Using trace file %s' % (thread_id, filename)
       sniperoptions.append('-g --traceinput/thread_%u=%s' % (thread_id, filename))
     else:
-      print 'Cannot find trace', trace
+      print >> sys.stderr, 'Cannot find trace', trace
       sys.exit(-1)
   for thread_id, trace in enumerate(resptraces):
     filename = findtrace(trace, suffix='.sift')
@@ -373,7 +373,7 @@ if traces:
       print '[SNIPER] (%u) Using response-trace file %s' % (thread_id, filename)
       sniperoptions.append('-g --traceinput/thread_response_%u=%s' % (thread_id, filename))
     else:
-      print 'Cannot find trace', trace
+      print >> sys.stderr, 'Cannot find trace', trace
       sys.exit(-1)
 elif use_mpi:
   tracegen = {}
@@ -451,7 +451,7 @@ def get_cxx_inuse():
     ldd_out = subprocess.Popen(['ldd', pin_sim], stdout = subprocess.PIPE, stderr = open('/dev/null','w')).communicate()[0]
     libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
   except Exception, e:
-    print `e`
+    print >> sys.stderr, `e`
     return None
   return libcxx_path
 
@@ -464,7 +464,7 @@ def get_cxx_version(path):
       version = int(realname.split('.')[-1])
       return version
     except Exception, e:
-      print `e`
+      print >> sys.stderr, `e`
       return 0
   else:
     return 0
@@ -541,7 +541,7 @@ if pinballs and not pinball_sift:
   # Overwrite the cmdline with the nullapp, as the pinball will handle the appropriate processing
   nullapp_path = '%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()
   if not os.path.exists(nullapp_path):
-    print "Error: Unable to locate PinPlay's nullapp to play back a pinball"
+    print >> sys.stderr, "Error: Unable to locate PinPlay's nullapp to play back a pinball"
     sys.exit(1)
   cmdline = [nullapp_path]
 
