@@ -9,6 +9,8 @@
 #include "cache_efficiency_tracker.h"
 #include "utils.h"
 
+#include <sstream>
+
 RoutineTracerFunctionStats::RtnThread::RtnThread(RoutineTracerFunctionStats::RtnMaster *master, Thread *thread)
    : RoutineTracerThread(thread)
    , m_master(master)
@@ -36,30 +38,53 @@ void RoutineTracerFunctionStats::RtnThread::functionChildExit(IntPtr eip, IntPtr
    functionBegin(eip);
 }
 
-void RoutineTracerFunctionStats::RtnThread::functionBegin(IntPtr eip)
+void RoutineTracerFunctionStats::RtnThread::functionBeginHelper(IntPtr eip, RtnValues& values_start)
 {
-   Sim()->getThreadStatsManager()->update(m_thread->getId());
-
    m_current_eip = eip;
    const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
    for(ThreadStatsManager::ThreadStatTypeList::const_iterator it = types.begin(); it != types.end(); ++it)
    {
-      m_values_start[*it] = getThreadStat(*it);
+      values_start[*it] = getThreadStat(*it);
    }
 }
 
-void RoutineTracerFunctionStats::RtnThread::functionEnd(IntPtr eip, bool is_function_start)
+void RoutineTracerFunctionStats::RtnThread::functionEndHelper(IntPtr eip, UInt64 count)
 {
-   Sim()->getThreadStatsManager()->update(m_thread->getId());
-
    RtnValues values;
    const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
    for(ThreadStatsManager::ThreadStatTypeList::const_iterator it = types.begin(); it != types.end(); ++it)
    {
       values[*it] = getThreadStat(*it) - m_values_start[*it];
    }
+   m_master->updateRoutine(eip, count, values);
+}
 
-   m_master->updateRoutine(eip, is_function_start ? 1 : 0, values);
+void RoutineTracerFunctionStats::RtnThread::functionEndFullHelper(const std::deque<IntPtr> &stack, UInt64 count)
+{
+   RtnValues values;
+   const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
+   for(auto it = types.begin(); it != types.end(); ++it)
+   {
+      values[*it] = getThreadStat(*it) - m_values_start_full[stack][*it];
+   }
+   m_master->updateRoutineFull(stack, count, values);
+}
+
+void RoutineTracerFunctionStats::RtnThread::functionBegin(IntPtr eip)
+{
+   Sim()->getThreadStatsManager()->update(m_thread->getId());
+
+   functionBeginHelper(eip, m_values_start);
+   functionBeginHelper(eip, m_values_start_full[m_stack]);
+
+}
+
+void RoutineTracerFunctionStats::RtnThread::functionEnd(IntPtr eip, bool is_function_start)
+{
+   Sim()->getThreadStatsManager()->update(m_thread->getId());
+
+   functionEndHelper(eip, is_function_start ? 1 : 0);
+   functionEndFullHelper(m_stack, is_function_start ? 1 : 0);
 }
 
 UInt64 RoutineTracerFunctionStats::RtnThread::getThreadStat(ThreadStatsManager::ThreadStatType type)
@@ -87,6 +112,7 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
 RoutineTracerFunctionStats::RtnMaster::~RtnMaster()
 {
    writeResults(Sim()->getConfig()->formatOutputFileName("sim.rtntrace").c_str());
+   writeResultsFull(Sim()->getConfig()->formatOutputFileName("sim.rtntracefull").c_str());
 }
 
 UInt64 RoutineTracerFunctionStats::RtnMaster::ce_get_owner(core_id_t core_id)
@@ -147,6 +173,24 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
    }
 }
 
+void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const std::deque<UInt64>& stack, UInt64 calls, RtnValues values)
+{
+   ScopedLock sl(m_lock);
+
+   LOG_ASSERT_ERROR(m_routines.count(stack.back()), "Routine %lx not found", stack.back());
+
+   if (m_callstack_routines.count(stack) == 0)
+   {
+      m_callstack_routines[stack] = new RoutineTracerFunctionStats::Routine(*m_routines[stack.back()]);
+   }
+
+   m_callstack_routines[stack]->m_calls += calls;
+   for(auto it = values.begin(); it != values.end(); ++it)
+   {
+      m_callstack_routines[stack]->m_values[it->first] += it->second;
+   }
+}
+
 void RoutineTracerFunctionStats::RtnMaster::writeResults(const char *filename)
 {
    FILE *fp = fopen(filename, "w");
@@ -165,6 +209,33 @@ void RoutineTracerFunctionStats::RtnMaster::writeResults(const char *filename)
          it->second->m_calls, it->second->m_bits_used, it->second->m_bits_total);
       for(ThreadStatsManager::ThreadStatTypeList::const_iterator jt = types.begin(); jt != types.end(); ++jt)
          fprintf(fp, "\t%" PRId64, it->second->m_values[*jt]);
+      fprintf(fp, "\n");
+   }
+   fclose(fp);
+}
+
+void RoutineTracerFunctionStats::RtnMaster::writeResultsFull(const char *filename)
+{
+   FILE *fp = fopen(filename, "w");
+
+   const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
+
+   fprintf(fp, "eip\tname\tsource\tcalls");
+   for(ThreadStatsManager::ThreadStatTypeList::const_iterator it = types.begin(); it != types.end(); ++it)
+      fprintf(fp, "\t%s", Sim()->getThreadStatsManager()->getThreadStatName(*it));
+   fprintf(fp, "\n");
+
+   for(auto it = m_callstack_routines.begin(); it != m_callstack_routines.end(); ++it)
+   {
+      std::ostringstream s;
+      s << it->first.front();
+      for (auto kt = ++it->first.begin(); kt != it->first.end(); ++kt)
+      {
+         s << ":" << std::hex << *kt << std::dec;
+      }
+      fprintf(fp, "%s\t%s\t%s\t%ld", s.str().c_str(), it->second->m_name, it->second->m_location, it->second->m_calls);
+      for(auto jt = types.begin(); jt != types.end(); ++jt)
+         fprintf(fp, "\t%ld", it->second->m_values[*jt]);
       fprintf(fp, "\n");
    }
    fclose(fp);
