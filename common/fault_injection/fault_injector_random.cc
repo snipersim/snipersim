@@ -23,7 +23,7 @@ FaultInjectorRandom::preRead(IntPtr addr, IntPtr location, UInt32 data_size, Byt
    {
       UInt32 bit_location = rng_next(m_rng) % data_size;
 
-      printf("Inserting bit %d flip at address %" PRIx64 " on read access by core %d to component %s\n",
+      printf("Inserting bit %d flip at address %" PRIxPTR " on read access by core %d to component %s\n",
          bit_location, addr, m_core_id, MemComponentString(m_mem_component));
 
       fault[bit_location / 8] |= 1 << (bit_location % 8);

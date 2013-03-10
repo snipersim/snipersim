@@ -12,7 +12,7 @@ void RoutineTracerPrint::RtnThread::functionEnter(IntPtr eip)
    printf("[%2d] ", m_thread->getId());
    for(unsigned int i = 0; i < m_stack.size(); ++i)
      printf("  ");
-   printf("(%8lx) %s\n", eip, m_master->getRoutine(eip)->m_name);
+   printf("(%8" PRIxPTR ") %s\n", eip, m_master->getRoutine(eip)->m_name);
 }
 
 void RoutineTracerPrint::RtnThread::functionExit(IntPtr eip)

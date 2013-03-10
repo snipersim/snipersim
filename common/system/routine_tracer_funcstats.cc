@@ -105,9 +105,9 @@ void RoutineTracerFunctionStats::RtnMaster::writeResults(const char *filename)
 
    for(auto it = m_routines.begin(); it != m_routines.end(); ++it)
    {
-      fprintf(fp, "%lx\t%s\t%s\t%ld", it->second->m_eip, it->second->m_name, it->second->m_location, it->second->m_calls);
+      fprintf(fp, "%" PRIxPTR "\t%s\t%s\t%" PRId64, it->second->m_eip, it->second->m_name, it->second->m_location, it->second->m_calls);
       for(auto jt = types.begin(); jt != types.end(); ++jt)
-         fprintf(fp, "\t%ld", it->second->m_values[*jt]);
+         fprintf(fp, "\t%" PRId64, it->second->m_values[*jt]);
       fprintf(fp, "\n");
    }
    fclose(fp);

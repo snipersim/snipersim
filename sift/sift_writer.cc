@@ -551,7 +551,7 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
 {
    // Ignore vsyscall range
-   if (vp >= 0xffffffffff600 && vp < 0xfffffffffffff)
+   if (vp >= 0xffffffffff600ULL && vp < 0xfffffffffffffULL)
       return vp;
 
    if (fd_va == -1)
