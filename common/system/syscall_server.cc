@@ -23,6 +23,14 @@ SyscallServer::~SyscallServer()
 {
 }
 
+void SyscallServer::handleSleepCall(thread_id_t thread_id, SubsecondTime wake_time, SubsecondTime curr_time, SubsecondTime &end_time)
+{
+   ScopedLock sl(Sim()->getThreadManager()->getLock());
+
+   m_sleeping.push_back(SimFutex::Waiter(thread_id, 0, wake_time));
+   end_time = Sim()->getThreadManager()->stallThread(thread_id, ThreadManager::STALL_SLEEP, curr_time);
+}
+
 IntPtr SyscallServer::handleFutexCall(thread_id_t thread_id, futex_args_t &args, SubsecondTime curr_time, SubsecondTime &end_time)
 {
    ScopedLock sl(Sim()->getThreadManager()->getLock());
@@ -271,6 +279,21 @@ IntPtr SyscallServer::futexCmpRequeue(thread_id_t thread_id, int *uaddr, int val
 
 void SyscallServer::futexPeriodic(SubsecondTime time)
 {
+   // Wake sleeping threads
+   for(SimFutex::ThreadQueue::iterator it = m_sleeping.begin(); it != m_sleeping.end(); ++it)
+   {
+      if (it->timeout <= time)
+      {
+         thread_id_t waiter = it->thread_id;
+         m_sleeping.erase(it);
+
+         Sim()->getThreadManager()->resumeThread(waiter, waiter, time, (void*)false);
+
+         // Iterator will be invalid, wake up potential others in the next barrier synchronization which should only be 100ns away
+         break;
+      }
+   }
+   // Wake timeout futexes
    for(FutexMap::iterator it = m_futexes.begin(); it != m_futexes.end(); ++it)
    {
       it->second.wakeTimedOut(time);

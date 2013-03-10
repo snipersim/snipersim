@@ -18,7 +18,7 @@ class Core;
 // -- Special Class to Handle Futexes
 class SimFutex
 {
-   private:
+   public:
       struct Waiter
       {
          Waiter(thread_id_t _thread_id, int _mask, SubsecondTime _timeout)
@@ -29,6 +29,8 @@ class SimFutex
          SubsecondTime timeout;
       };
       typedef std::list<Waiter> ThreadQueue;
+
+   private:
       ThreadQueue m_waiting;
 
    public:
@@ -56,6 +58,7 @@ class SyscallServer
       SyscallServer();
       ~SyscallServer();
 
+      void handleSleepCall(thread_id_t thread_id, SubsecondTime wake_time, SubsecondTime curr_time, SubsecondTime &end_time);
       IntPtr handleFutexCall(thread_id_t thread_id, futex_args_t &args, SubsecondTime curr_time, SubsecondTime &end_time);
 
    private:
@@ -77,6 +80,9 @@ class SyscallServer
       }
 
       SubsecondTime m_reschedule_cost;
+
+      // Sleeping threads
+      SimFutex::ThreadQueue m_sleeping;
 
       // Handling Futexes
       typedef std::unordered_map<IntPtr, SimFutex> FutexMap;

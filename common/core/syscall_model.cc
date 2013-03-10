@@ -108,15 +108,17 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          const struct timespec *req = (struct timespec *)args.arg0;
          struct timespec *rem = (struct timespec *)args.arg1;
          Core *core = m_thread->getCore();
-         SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
+         SubsecondTime start_time = core->getPerformanceModel()->getElapsedTime();
 
-         // Implemented by just incrementing local time by the requested amount
-         // this way the barrier will keep us asleep until everyone else catches up.
-         // In non-detailed mode, there is no barrier, so we resume right away
-         // FIXME: the thread manager doesn't know we're asleep, so there is no HOOK_THREAD_{STALL,RESUME},
-         //        nor can we be rescheduled / scheduled out
-         SubsecondTime time_wake = time + SubsecondTime::SEC(req->tv_sec) + SubsecondTime::NS(req->tv_nsec);
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time_wake, SyncInstruction::SLEEP));
+         SubsecondTime time_wake = start_time + SubsecondTime::SEC(req->tv_sec) + SubsecondTime::NS(req->tv_nsec);
+         SubsecondTime end_time;
+
+         Sim()->getSyscallServer()->handleSleepCall(m_thread->getId(), time_wake, start_time, end_time);
+
+         if (m_thread->reschedule(end_time, core))
+            core = m_thread->getCore();
+
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SLEEP));
 
          if (rem)
          {
