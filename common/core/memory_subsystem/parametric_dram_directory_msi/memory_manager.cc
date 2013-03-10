@@ -202,7 +202,7 @@ MemoryManager::MemoryManager(Core* core,
 
       if (Sim()->getCfg()->getBoolArray("perf_model/dram/cache/enabled", core->getId()))
       {
-         m_dram_cache = new DramCache(this, getShmemPerfModel(), getCacheBlockSize(), m_dram_cntlr);
+         m_dram_cache = new DramCache(this, getShmemPerfModel(), m_dram_controller_home_lookup, getCacheBlockSize(), m_dram_cntlr);
          Sim()->getStatsManager()->logTopology("dram-cache", core->getId(), core->getId());
       }
    }

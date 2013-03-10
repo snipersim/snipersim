@@ -12,9 +12,10 @@ Cache::Cache(String name,
       String replacement_policy,
       cache_t cache_type,
       hash_t hash,
-      FaultInjector *fault_injector) :
+      FaultInjector *fault_injector,
+      AddressHomeLookup *ahl) :
 
-   CacheBase(name, cache_size, associativity, cache_block_size, hash),
+   CacheBase(name, cache_size, associativity, cache_block_size, hash, ahl),
    m_enabled(false),
    m_num_accesses(0),
    m_num_hits(0),

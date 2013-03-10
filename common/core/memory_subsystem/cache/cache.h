@@ -45,7 +45,8 @@ class Cache : public CacheBase
             String replacement_policy,
             cache_t cache_type,
             hash_t hash = CacheBase::HASH_MASK,
-            FaultInjector *fault_injector = NULL);
+            FaultInjector *fault_injector = NULL,
+            AddressHomeLookup *ahl = NULL);
       ~Cache();
 
       Lock& getSetLock(IntPtr addr);

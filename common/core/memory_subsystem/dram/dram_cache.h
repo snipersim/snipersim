@@ -9,7 +9,7 @@
 class DramCache : public DramCntlrInterface
 {
    public:
-      DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr);
+      DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, AddressHomeLookup* home_lookup, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr);
       ~DramCache();
 
       virtual boost::tuple<SubsecondTime, HitWhere::where_t> getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
@@ -21,6 +21,7 @@ class DramCache : public DramCntlrInterface
       SubsecondTime m_tags_access_time;
       ComponentBandwidth m_data_array_bandwidth;
 
+      AddressHomeLookup* m_home_lookup;
       DramCntlrInterface* m_dram_cntlr;
       Cache* m_cache;
       QueueModel* m_queue_model;

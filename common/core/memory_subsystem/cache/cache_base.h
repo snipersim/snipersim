@@ -3,6 +3,8 @@
 
 #include "fixed_types.h"
 
+class AddressHomeLookup;
+
 #define k_KILO 1024
 #define k_MEGA (k_KILO*k_KILO)
 #define k_GIGA (k_KILO*k_MEGA)
@@ -64,13 +66,14 @@ class CacheBase
       UInt32 m_blocksize;
       CacheBase::hash_t m_hash;
       UInt32 m_num_sets;
+      AddressHomeLookup *m_ahl;
 
       // computed params
       UInt32 m_log_blocksize;
 
    public:
       // constructors/destructors
-      CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash);
+      CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash, AddressHomeLookup *ahl = NULL);
       virtual ~CacheBase();
 
       // utilities

@@ -2,13 +2,15 @@
 #include "utils.h"
 #include "log.h"
 #include "rng.h"
+#include "address_home_lookup.h"
 
-CacheBase::CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash):
+CacheBase::CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash, AddressHomeLookup *ahl):
    m_name(name),
    m_cache_size(k_KILO * UInt64(cache_size)),
    m_associativity(associativity),
    m_blocksize(cache_block_size),
-   m_hash(hash)
+   m_hash(hash),
+   m_ahl(ahl)
 {
    m_num_sets = m_cache_size / (m_associativity * m_blocksize);
    m_log_blocksize = floorLog2(m_blocksize);
@@ -40,23 +42,30 @@ void
 CacheBase::splitAddress(const IntPtr addr, IntPtr& tag, UInt32& set_index) const
 {
    tag = addr >> m_log_blocksize;
+
+   IntPtr block_num;
+   if (m_ahl)
+      block_num = m_ahl->getTag(addr);
+   else
+      block_num = tag;
+
    switch(m_hash)
    {
       case CacheBase::HASH_MASK:
-         set_index = tag & (m_num_sets-1);
+         set_index = block_num & (m_num_sets-1);
          break;
       case CacheBase::HASH_MOD:
-         set_index = tag % m_num_sets;
+         set_index = block_num % m_num_sets;
          break;
       case CacheBase::HASH_RNG1_MOD:
       {
-         UInt64 state = rng_seed(tag);
+         UInt64 state = rng_seed(block_num);
          set_index = rng_next(state) % m_num_sets;
          break;
       }
       case CacheBase::HASH_RNG2_MOD:
       {
-         UInt64 state = rng_seed(tag);
+         UInt64 state = rng_seed(block_num);
          rng_next(state);
          set_index = rng_next(state) % m_num_sets;
          break;

@@ -6,12 +6,13 @@
 #include "memory_manager_base.h"
 #include "pr_l1_cache_block_info.h"
 
-DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr)
+DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, AddressHomeLookup* home_lookup, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr)
    : DramCntlrInterface(memory_manager, shmem_perf_model, cache_block_size)
    , m_core_id(memory_manager->getCore()->getId())
    , m_data_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/tags_access_time", m_core_id)))
    , m_tags_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/data_access_time", m_core_id)))
    , m_data_array_bandwidth(8 * Sim()->getCfg()->getFloat("perf_model/dram/cache/bandwidth"))
+   , m_home_lookup(home_lookup)
    , m_dram_cntlr(dram_cntlr)
    , m_queue_model(NULL)
    , m_reads(0)
@@ -28,7 +29,8 @@ DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
       Sim()->getCfg()->getStringArray("perf_model/dram/cache/replacement_policy", m_core_id),
       CacheBase::PR_L1_CACHE,
       CacheBase::parseAddressHash(Sim()->getCfg()->getStringArray("perf_model/dram/cache/address_hash", m_core_id)),
-      NULL /* FaultinjectionManager */
+      NULL, /* FaultinjectionManager */
+      home_lookup
    );
 
    if (Sim()->getCfg()->getBool("perf_model/dram/cache/queue_model/enabled"))

@@ -33,3 +33,8 @@ core_id_t AddressHomeLookup::getHome(IntPtr address) const
    LOG_PRINT("address(0x%x), module_num(%i)", address, module_num);
    return (m_core_list[module_num]);
 }
+
+IntPtr AddressHomeLookup::getTag(IntPtr address) const
+{
+   return (address >> m_ahl_param) / m_total_modules;
+}
