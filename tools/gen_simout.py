@@ -69,6 +69,21 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
       ('    mpki', '%s.mpki'%c, lambda v: '%.2f' % v),
     ])
 
+  allcaches = [ 'nuca-cache', 'dram-cache' ]
+  existcaches = [ c for c in allcaches if '%s.reads'%c in results ]
+  for c in existcaches:
+    results['%s.accesses'%c] = map(sum, zip(results['%s.reads'%c], results['%s.writes'%c]))
+    results['%s.misses'%c] = map(sum, zip(results['%s.read-misses'%c], results['%s.write-misses'%c]))
+    results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b or 1), zip(results['%s.misses'%c], results['%s.accesses'%c]))
+    results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b or 1), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
+    template.extend([
+      ('  %s cache'% c.split('-')[0].upper(), '', ''),
+      ('    num cache accesses', '%s.accesses'%c, str),
+      ('    num cache misses', '%s.misses'%c, str),
+      ('    miss rate', '%s.missrate'%c, lambda v: '%.2f%%' % v),
+      ('    mpki', '%s.mpki'%c, lambda v: '%.2f' % v),
+    ])
+
   results['dram.accesses'] = map(sum, zip(results['dram.reads'], results['dram.writes']))
   results['dram.avglatency'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-access-latency'], results['dram.accesses']))
   results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-queueing-delay'], results['dram.accesses']))
