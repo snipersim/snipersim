@@ -2,6 +2,7 @@
 #include "log.h"
 #include "memory_manager.h"
 #include "stats.h"
+#include "nuca_cache.h"
 
 #if 0
    extern Lock iolock;
@@ -18,6 +19,7 @@ namespace PrL1PrL2DramDirectoryMSI
 DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
       MemoryManagerBase* memory_manager,
       AddressHomeLookup* dram_controller_home_lookup,
+      NucaCache* nuca_cache,
       UInt32 dram_directory_total_entries,
       UInt32 dram_directory_associativity,
       UInt32 cache_block_size,
@@ -28,6 +30,7 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
       ShmemPerfModel* shmem_perf_model):
    m_memory_manager(memory_manager),
    m_dram_controller_home_lookup(dram_controller_home_lookup),
+   m_nuca_cache(nuca_cache),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
    m_max_hw_sharers(dram_directory_max_hw_sharers),
@@ -455,6 +458,33 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
    }
    else
    {
+      if (m_nuca_cache)
+      {
+         SubsecondTime nuca_latency;
+         HitWhere::where_t hit_where;
+         Byte nuca_data_buf[getCacheBlockSize()];
+         boost::tie(nuca_latency, hit_where) = m_nuca_cache->read(address, nuca_data_buf, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD));
+
+         getShmemPerfModel()->incrElapsedTime(nuca_latency, ShmemPerfModel::_SIM_THREAD);
+
+         if (hit_where != HitWhere::MISS)
+         {
+            getMemoryManager()->sendMsg(reply_msg_type,
+                  MemComponent::TAG_DIR, MemComponent::L2_CACHE,
+                  receiver /* requester */,
+                  receiver /* receiver */,
+                  address,
+                  nuca_data_buf, getCacheBlockSize(),
+                  HitWhere::NUCA_CACHE,
+                  ShmemPerfModel::_SIM_THREAD);
+
+            // Process Next Request
+            processNextReqFromL2Cache(address);
+
+            return;
+         }
+      }
+
       // Get the data from DRAM
       // This could be directly forwarded to the cache or passed
       // through the Dram Directory Controller
@@ -527,6 +557,9 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
          shmem_msg->getDataBuf(), getCacheBlockSize(),
          hit_where,
          ShmemPerfModel::_SIM_THREAD);
+
+   // Keep a copy in NUCA
+   sendDataToNUCA(address, shmem_req->getShmemMsg()->getRequester(), shmem_msg->getDataBuf(), getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD));
 
    // Process Next Request
    processNextReqFromL2Cache(address);
@@ -678,21 +711,62 @@ DramDirectoryCntlr::processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_ms
 }
 
 void
+DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
+{
+   if (m_nuca_cache)
+   {
+      bool eviction;
+      IntPtr evict_address;
+      Byte evict_buf[getCacheBlockSize()];
+
+      m_nuca_cache->write(
+         address, data_buf,
+         eviction, evict_address, evict_buf,
+         getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD)
+      );
+
+      if (eviction)
+      {
+         // Write data to Dram
+         core_id_t dram_node = m_dram_controller_home_lookup->getHome(evict_address);
+
+         getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
+               MemComponent::TAG_DIR, MemComponent::DRAM,
+               m_core_id /* requester */,
+               dram_node /* receiver */,
+               evict_address,
+               evict_buf, getCacheBlockSize(),
+               HitWhere::UNKNOWN,
+               ShmemPerfModel::_SIM_THREAD);
+      }
+   }
+}
+
+void
 DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
-   // Write data to Dram
-   core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
+   if (m_nuca_cache)
+   {
+      // If we have a NUCA cache: write it there, it will be written to DRAM on eviction
 
-   getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
-         MemComponent::TAG_DIR, MemComponent::DRAM,
-         requester /* requester */,
-         dram_node /* receiver */,
-         address,
-         data_buf, getCacheBlockSize(),
-         HitWhere::UNKNOWN,
-         ShmemPerfModel::_SIM_THREAD);
+      sendDataToNUCA(address, requester, data_buf, now);
+   }
+   else
+   {
+      // Write data to Dram
+      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
 
-   // DRAM latency is ignored on write
+      getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
+            MemComponent::TAG_DIR, MemComponent::DRAM,
+            requester /* requester */,
+            dram_node /* receiver */,
+            address,
+            data_buf, getCacheBlockSize(),
+            HitWhere::UNKNOWN,
+            ShmemPerfModel::_SIM_THREAD);
+
+      // DRAM latency is ignored on write
+   }
 }
 
 }

@@ -4,7 +4,7 @@ import sys, os, collections, sniper_lib, sniper_stats, sniper_config, getopt
 
 
 def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format = 'svg', embedded = False):
-  names = ('hwcontext', 'smt', 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'tag-dir', 'dram-cache', 'dram-cntlr')
+  names = ('hwcontext', 'smt', 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'tag-dir', 'nuca-cache', 'dram-cache', 'dram-cntlr')
   ids = dict([ (name, collections.defaultdict(lambda: None)) for name in names ])
 
   stats = sniper_stats.SniperStats(resultsdir)

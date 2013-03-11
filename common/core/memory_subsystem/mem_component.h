@@ -20,6 +20,7 @@ class MemComponent
          */
          LAST_LEVEL_CACHE = 20,
          TAG_DIR,
+         NUCA_CACHE,
          DRAM_CACHE,
          DRAM,
          MAX_MEM_COMPONENT = DRAM,

@@ -15,6 +15,7 @@ class HitWhere
          L3_OWN = MemComponent::L3_CACHE,
          L4_OWN = MemComponent::L4_CACHE,
          MISS,
+         NUCA_CACHE,
          DRAM_CACHE,
          DRAM,
          DRAM_LOCAL,

@@ -5,6 +5,7 @@
 #include "stats.h"
 #include "memory_manager_base.h"
 #include "pr_l1_cache_block_info.h"
+#include "queue_model.h"
 
 DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, AddressHomeLookup* home_lookup, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr)
    : DramCntlrInterface(memory_manager, shmem_perf_model, cache_block_size)

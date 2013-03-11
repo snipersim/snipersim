@@ -1,6 +1,7 @@
 #include "core_manager.h"
 #include "memory_manager.h"
 #include "cache_base.h"
+#include "nuca_cache.h"
 #include "dram_cache.h"
 #include "simulator.h"
 #include "log.h"
@@ -29,6 +30,7 @@ std::map<CoreComponentType, CacheCntlr*> MemoryManager::m_all_cache_cntlrs;
 MemoryManager::MemoryManager(Core* core,
       Network* network, ShmemPerfModel* shmem_perf_model):
    MemoryManagerBase(core, network, shmem_perf_model),
+   m_nuca_cache(NULL),
    m_dram_cache(NULL),
    m_dram_directory_cntlr(NULL),
    m_dram_cntlr(NULL),
@@ -42,6 +44,9 @@ MemoryManager::MemoryManager(Core* core,
    std::map<MemComponent::component_t, CacheParameters> cache_parameters;
    std::map<MemComponent::component_t, String> cache_names;
 
+   bool nuca_enable = false;
+   CacheParameters nuca_parameters;
+
    UInt32 smt_cores;
    bool dram_direct_access = false;
    UInt32 dram_directory_total_entries = 0;
@@ -51,6 +56,8 @@ MemoryManager::MemoryManager(Core* core,
    String dram_directory_type_str;
    UInt32 dram_directory_home_lookup_param = 0;
    SubsecondTime dram_directory_cache_access_time = SubsecondTime::Zero();
+
+   const ComponentPeriod *global_domain = Sim()->getDvfsManager()->getGlobalDomain();
 
    try
    {
@@ -92,7 +99,7 @@ MemoryManager::MemoryManager(Core* core,
          if (domain_name == "core")
             clock_domain = core->getDvfsDomain();
          else if (domain_name == "global")
-            clock_domain = Sim()->getDvfsManager()->getGlobalDomain();
+            clock_domain = global_domain;
          else
             LOG_PRINT_ERROR("dvfs_domain %s is invalid", domain_name.c_str());
 
@@ -130,6 +137,18 @@ MemoryManager::MemoryManager(Core* core,
             Make them non-shared so we don't create process-spanning shared caches. */
          if (getCore()->getId() >= (core_id_t) Sim()->getConfig()->getApplicationCores())
             cache_parameters[(MemComponent::component_t)i].shared_cores = 1;
+      }
+
+      nuca_enable = Sim()->getCfg()->getBoolArray(  "perf_model/nuca/enabled", core->getId());
+      if (nuca_enable)
+      {
+         nuca_parameters.configName = "nuca";
+         nuca_parameters.size                = Sim()->getCfg()->getIntArray(   "perf_model/nuca/cache_size", core->getId());
+         nuca_parameters.associativity       = Sim()->getCfg()->getIntArray(   "perf_model/nuca/associativity", core->getId());
+         nuca_parameters.hash_function       = Sim()->getCfg()->getStringArray("perf_model/nuca/address_hash", core->getId());
+         nuca_parameters.replacement_policy  = Sim()->getCfg()->getStringArray("perf_model/nuca/replacement_policy", core->getId());
+         nuca_parameters.data_access_time    = ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/data_access_time", core->getId()));
+         nuca_parameters.tags_access_time    = ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/tags_access_time", core->getId()));
       }
 
       // Dram Directory Cache
@@ -213,9 +232,21 @@ MemoryManager::MemoryManager(Core* core,
 
       if (!dram_direct_access)
       {
+         if (nuca_enable)
+         {
+            m_nuca_cache = new NucaCache(
+               this,
+               getShmemPerfModel(),
+               m_tag_directory_home_lookup,
+               getCacheBlockSize(),
+               nuca_parameters);
+            Sim()->getStatsManager()->logTopology("nuca-cache", core->getId(), core->getId());
+         }
+
          m_dram_directory_cntlr = new PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr(getCore()->getId(),
                this,
                m_dram_controller_home_lookup,
+               m_nuca_cache,
                dram_directory_total_entries,
                dram_directory_associativity,
                getCacheBlockSize(),
@@ -351,6 +382,8 @@ MemoryManager::~MemoryManager()
       m_cache_cntlrs[(MemComponent::component_t)i] = NULL;
    }
 
+   if (m_nuca_cache)
+      delete m_nuca_cache;
    if (m_dram_cache)
       delete m_dram_cache;
    if (m_dram_cntlr)

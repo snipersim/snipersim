@@ -4,7 +4,8 @@
 #include "dram_cntlr_interface.h"
 #include "subsecond_time.h"
 #include "cache.h"
-#include "queue_model.h"
+
+class QueueModel;
 
 class DramCache : public DramCntlrInterface
 {

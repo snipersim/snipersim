@@ -11,6 +11,7 @@ const char * MemComponentString(MemComponent::component_t mem_component)
       case MemComponent::L3_CACHE:     return "l3";
       case MemComponent::L4_CACHE:     return "l4";
       case MemComponent::TAG_DIR:      return "directory";
+      case MemComponent::NUCA_CACHE:   return "nuca-cache";
       case MemComponent::DRAM_CACHE:   return "dram-cache";
       case MemComponent::DRAM:         return "dram";
       default:                         return "????";

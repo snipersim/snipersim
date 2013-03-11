@@ -9,7 +9,7 @@
 #include "mem_component.h"
 #include "memory_manager_base.h"
 
-class DramCntlrInterface;
+class NucaCache;
 
 namespace PrL1PrL2DramDirectoryMSI
 {
@@ -21,6 +21,8 @@ namespace PrL1PrL2DramDirectoryMSI
          AddressHomeLookup* m_dram_controller_home_lookup;
          DramDirectoryCache* m_dram_directory_cache;
          ReqQueueList* m_dram_directory_req_queue_list;
+
+         NucaCache* m_nuca_cache;
 
          core_id_t m_core_id;
          UInt32 m_cache_block_size;
@@ -47,12 +49,14 @@ namespace PrL1PrL2DramDirectoryMSI
          void processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
+         void sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
          void sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
 
       public:
          DramDirectoryCntlr(core_id_t core_id,
                MemoryManagerBase* memory_manager,
                AddressHomeLookup* dram_controller_home_lookup,
+               NucaCache* nuca_cache,
                UInt32 dram_directory_total_entries,
                UInt32 dram_directory_associativity,
                UInt32 cache_block_size,

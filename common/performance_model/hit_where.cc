@@ -13,6 +13,7 @@ const char * HitWhereString(HitWhere::where_t where) {
       case HitWhere::L3_SIBLING:      return "L3_S";
       case HitWhere::L4_SIBLING:      return "L4_S";
       case HitWhere::MISS:            return "miss";
+      case HitWhere::NUCA_CACHE:      return "nuca-cache";
       case HitWhere::DRAM_CACHE:      return "dram-cache";
       case HitWhere::DRAM:            return "dram";
       case HitWhere::DRAM_LOCAL:      return "dram-local";
