@@ -29,25 +29,8 @@ void setInstrumentationMode(UInt64 opt)
    handleMagic(INVALID_THREAD_ID, SIM_CMD_INSTRUMENT_MODE, opt);
 }
 
-bool ignoreMagicType(UInt64 cmd)
-{
-   // Magic instruction commands to ignore when --no-roi is used
-   switch(cmd) {
-      case SIM_CMD_ROI_TOGGLE:
-      case SIM_CMD_ROI_START:
-      case SIM_CMD_ROI_END:
-         return true;
-      default:
-         return false;
-   }
-}
-
 UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
 {
-   // when --general/magic=false, ignore ROI begin/end magic instructions
-   if (Sim()->getConfig()->getSimulationROI() != Config::ROI_MAGIC && ignoreMagicType(cmd))
-      return -1;
-
    switch(cmd)
    {
    case SIM_CMD_ROI_TOGGLE:

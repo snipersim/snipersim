@@ -31,15 +31,38 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
    switch(cmd)
    {
       case SIM_CMD_ROI_TOGGLE:
-         return setPerformance(! m_performance_enabled);
+         if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
+         {
+            return setPerformance(! m_performance_enabled);
+         }
+         else
+         {
+            return 0;
+         }
       case SIM_CMD_ROI_START:
-         if (! m_performance_enabled)
-            Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_BEGIN, 0);
-         return setPerformance(true);
+         Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_ROI_BEGIN, 0);
+         if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
+         {
+            if (! m_performance_enabled)
+               Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_BEGIN, 0);
+            return setPerformance(true);
+         }
+         else
+         {
+            return 0;
+         }
       case SIM_CMD_ROI_END:
-         if (m_performance_enabled)
-            Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_END, 0);
-         return setPerformance(false);
+         Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_ROI_END, 0);
+         if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
+         {
+            if (m_performance_enabled)
+               Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_END, 0);
+            return setPerformance(false);
+         }
+         else
+         {
+            return 0;
+         }
       case SIM_CMD_MHZ_SET:
          return setFrequency(arg0 == UINT64_MAX ? core_id : arg0, arg1);
       case SIM_CMD_NAMED_MARKER:
