@@ -9,6 +9,7 @@
 DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, AddressHomeLookup* home_lookup, UInt32 cache_block_size, DramCntlrInterface *dram_cntlr)
    : DramCntlrInterface(memory_manager, shmem_perf_model, cache_block_size)
    , m_core_id(memory_manager->getCore()->getId())
+   , m_cache_block_size(cache_block_size)
    , m_data_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/tags_access_time", m_core_id)))
    , m_tags_access_time(SubsecondTime::NS(Sim()->getCfg()->getIntArray("perf_model/dram/cache/data_access_time", m_core_id)))
    , m_data_array_bandwidth(8 * Sim()->getCfg()->getFloat("perf_model/dram/cache/bandwidth"))
@@ -84,6 +85,8 @@ DramCache::doAccess(Cache::access_t access, IntPtr address, core_id_t requester,
 
    if (block_info)
    {
+      m_cache->accessSingleLine(address, access, data_buf, m_cache_block_size, now + latency);
+
       latency += accessDataArray(access, requester, now);
       if (access == Cache::STORE)
          block_info->setCState(CacheState::MODIFIED);

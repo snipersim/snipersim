@@ -17,6 +17,7 @@ class DramCache : public DramCntlrInterface
 
    private:
       core_id_t m_core_id;
+      UInt32 m_cache_block_size;
       SubsecondTime m_data_access_time;
       SubsecondTime m_tags_access_time;
       ComponentBandwidth m_data_array_bandwidth;
