@@ -19,7 +19,7 @@ void Progress::init(void)
       progress_enabled = true;
       Progress::record(true, 0);
 
-      Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, Progress::record, (UInt64)false);
+      Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC_INS, Progress::record, (UInt64)false);
    }
 }
 
