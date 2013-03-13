@@ -414,6 +414,7 @@ MemoryManager::coreInitiateMemoryAccess(
          mem_op_type,
          address, offset,
          data_buf, data_length,
+         modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT ? false : true,
          modeled == Core::MEM_MODELED_NONE ? false : true);
 }
 
