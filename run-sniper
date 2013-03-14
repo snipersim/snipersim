@@ -54,20 +54,35 @@ pinballs = None
 pinball_sift = True
 tracegen = None
 
+
 if not sys.argv[1:]:
   usage()
 
-def findconfig(filename, extension = '.cfg'):
-  for dirname in ('.', os.path.join(HOME, 'config')):
-    configfile = os.path.realpath(os.path.join(dirname, filename))
-    if os.path.isfile(configfile):
-      return configfile
-    configfile += extension
-    if os.path.isfile(configfile):
-      return configfile
+
+def findfile(filename, extension, paths, subpaths = ('.')):
+  for dirname in paths:
+    for subpath in subpaths:
+      for ext in ('', extension):
+        fullname = os.path.realpath(os.path.join(dirname, subpath, filename + ext))
+        if os.path.isfile(fullname):
+          return fullname
   return False
 
-def add_config_file(filename, extension = '.cfg'):
+def findconfig(filename, extension = '.cfg'):
+  global curdir
+  return findfile(filename, extension, (curdir, os.path.join(HOME, 'config')))
+
+def findtrace(trace, suffix = '.sift'):
+  global curdir
+  dirnames = (curdir, os.getenv('BENCHMARKS_TRACES', '.'), os.getenv('BENCHMARKS_ROOT', '.'), os.getenv('BENCHMARKS_ROOT_ORIG', '.'))
+  return findfile(trace, suffix, dirnames, ('.', 'traces'))
+
+def findscript(script):
+  global curdir
+  return findfile(script, '.py', (curdir, os.path.join(HOME, 'scripts')))
+
+
+def add_config_file(filename, extension='.cfg'):
   config_files = []
   configfile = findconfig(filename, extension)
   if not configfile:
@@ -81,7 +96,7 @@ def add_config_file(filename, extension = '.cfg'):
   return config_files
 
 def make_hetero_config(confignames, objname='core', extension='.cfg'):
-  configfiles = map(lambda x:findconfig(x,extension), confignames)
+  configfiles = map(lambda x: findconfig(x), confignames)
   if not all(configfiles):
     notfound = [ name for name, found in zip(confignames, configfiles) if not found ]
     print >> sys.stderr, 'Config file not found:', ', '.join(notfound)
@@ -214,17 +229,6 @@ for o, a in opts:
 
 
 
-def findtrace(trace, suffix = '.sift'):
-  for dirname in ('.', os.getenv('BENCHMARKS_TRACES', '.'), os.getenv('BENCHMARKS_ROOT', '.'), os.getenv('BENCHMARKS_ROOT_ORIG', '.')):
-    for subdir in ('.', 'traces'):
-      filename = os.path.realpath(os.path.join(dirname, subdir, trace))
-      if os.path.exists(filename):
-        return filename
-      filename += suffix
-      if os.path.exists(filename):
-        return filename
-  return False
-
 if cmdline:
   if use_mpi:
     standalone = True
@@ -332,20 +336,10 @@ if scripts:
       filename, args = script.split(':', 1)
     else:
       filename, args = script, None
-    if os.path.isfile(filename):
-      # Absolute filename?
-      scriptfile = os.path.abspath(os.path.join(filename))
-    else:
-      # Relative filename?
-      #   splashrun or a similar script may have changed the working directory since we started running.
-      #   --curdir will tell us what the original directory was, use this to try and find the script
-      scriptfile = os.path.abspath(os.path.join(curdir, filename))
-      if not os.path.isfile(scriptfile):
-        # Predefined script?
-        scriptfile = os.path.join(HOME, 'scripts', filename + '.py')
-        if not os.path.isfile(scriptfile):
-          print >> sys.stderr, 'Cannot find script file', scriptfile
-          sys.exit(-1)
+    scriptfile = findscript(filename)
+    if not scriptfile:
+      print >> sys.stderr, 'Cannot find script file', filename
+      sys.exit(-1)
     sniperoptions.append('-g --hooks/script%uname=%s' % (i, scriptfile))
     sniperoptions.append('-g --hooks/script%uargs=%s' % (i, args or ''))
 
