@@ -53,11 +53,11 @@ recorder : $(TARGET)
 
 clean :
 ifeq ($(SHOW_COMPILE),)
-	@rm -f *.o $(TARGET) siftdump
+	@rm -f *.o *.d $(TARGET) siftdump
 	@echo '[CLEAN ] sift/recorder'
 	@$(MAKE) $(MAKE_QUIET) -C recorder clean
 else
-	rm -f *.o $(TARGET) siftdump
+	rm -f *.o *.d $(TARGET) siftdump
 	$(MAKE) $(MAKE_QUIET) -C recorder clean
 endif
 

@@ -51,9 +51,9 @@ include $(SIM_ROOT)/common/Makefile.common
 
 clean:
 ifeq ($(SHOW_COMPILE),)
-	@rm -f *.o sift_recorder
+	@rm -f *.o *.d sift_recorder
 else
-	rm -f *.o sift_recorder
+	rm -f *.o *.d sift_recorder
 endif
 
 ifneq ($(CLEAN),clean)
