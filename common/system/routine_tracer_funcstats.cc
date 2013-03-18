@@ -69,6 +69,7 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
    ThreadStatNamedStat::registerStat("l3miss", "L3", "load-misses");
    ThreadStatAggregates::registerStats();
    ThreadStatNamedStat::registerStat("cpiBase", "interval_timer", "cpiBase");
+   ThreadStatNamedStat::registerStat("cpiBranchPredictor", "interval_timer", "cpiBranchPredictor");
    ThreadStatCpiMem::registerStat();
    Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, __ce_notify, (UInt64)this);
 }
