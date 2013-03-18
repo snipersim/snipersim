@@ -72,6 +72,16 @@ class RoutineTracerFunctionStats
             };
             static UInt64 callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user);
       };
+
+      class ThreadStatCpiMem
+      {
+         public:
+            static ThreadStatsManager::ThreadStatType registerStat();
+         private:
+            std::vector<std::vector<StatsMetricBase*> > m_stats;
+            ThreadStatCpiMem();
+            static UInt64 callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user);
+      };
 };
 
 #endif // __ROUTINE_TRACER_FUNCSTATS_H

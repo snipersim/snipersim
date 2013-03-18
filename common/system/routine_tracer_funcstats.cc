@@ -59,6 +59,8 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
    ThreadStatNamedStat::registerStat("fp_muldiv", "interval_timer", "uop_fp_muldiv");
    ThreadStatNamedStat::registerStat("l3miss", "L3", "load-misses");
    ThreadStatAggregates::registerStats();
+   ThreadStatNamedStat::registerStat("cpiBase", "interval_timer", "cpiBase");
+   ThreadStatCpiMem::registerStat();
 }
 
 RoutineTracerFunctionStats::RtnMaster::~RtnMaster()
@@ -116,7 +118,7 @@ void RoutineTracerFunctionStats::RtnMaster::writeResults(const char *filename)
 }
 
 
-// Helper function to provide global icount/time statistics
+// Helper class to provide global icount/time statistics
 
 class ThreadStatAggregates
 {
@@ -151,4 +153,39 @@ UInt64 RoutineTracerFunctionStats::ThreadStatAggregates::callback(ThreadStatsMan
       default:
          LOG_PRINT_ERROR("Unexpected user value %d", user);
    }
+}
+
+
+// Helper class to provide simplified cpiMem component
+
+ThreadStatsManager::ThreadStatType RoutineTracerFunctionStats::ThreadStatCpiMem::registerStat()
+{
+   ThreadStatCpiMem *tsns = new ThreadStatCpiMem();
+   return Sim()->getThreadStatsManager()->registerThreadStatMetric(ThreadStatsManager::DYNAMIC, "cpiMem", callback, (UInt64)tsns);
+}
+
+RoutineTracerFunctionStats::ThreadStatCpiMem::ThreadStatCpiMem()
+   : m_stats(Sim()->getConfig()->getApplicationCores())
+{
+   for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
+   {
+      for (int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
+      {
+         String metricName = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
+         StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject("interval_timer", core_id, metricName);
+         LOG_ASSERT_ERROR(m != NULL, "Invalid statistic %s.%d.%s", "interval_timer", core_id, metricName.c_str());
+         m_stats[core_id].push_back(m);
+      }
+   }
+}
+
+UInt64 RoutineTracerFunctionStats::ThreadStatCpiMem::callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user)
+{
+   ThreadStatCpiMem* tsns = (ThreadStatCpiMem*)user;
+   std::vector<StatsMetricBase*>& stats = tsns->m_stats[core->getId()];
+
+   UInt64 result = 0;
+   for(std::vector<StatsMetricBase*>::iterator it = stats.begin(); it != stats.end(); ++it)
+      result += (*it)->recordMetric();
+   return result;
 }
