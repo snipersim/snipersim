@@ -40,6 +40,8 @@ class CacheSet
       bool invalidate(IntPtr& tag);
       void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff);
 
+      CacheBlockInfo* peekBlock(UInt32 way) const { return m_cache_block_info_array[way]; }
+
       char* getDataPtr(UInt32 line_index, UInt32 offset = 0);
       UInt32 getBlockSize(void) const { return m_blocksize; }
 

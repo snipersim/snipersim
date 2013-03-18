@@ -82,6 +82,9 @@ class CacheBase
       IntPtr tagToAddress(const IntPtr tag);
       String getName(void) { return m_name; }
 
+      UInt32 getNumSets() const { return m_num_sets; }
+      UInt32 getAssociativity() const { return m_associativity; }
+
       static hash_t parseAddressHash(String hash_name);
 };
 
