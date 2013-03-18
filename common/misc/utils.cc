@@ -37,3 +37,18 @@ SInt32 floorLog2(UInt32 n)
 
 SInt32 ceilLog2(UInt32 n)
 { return floorLog2(n - 1) + 1; }
+
+
+// http://stackoverflow.com/a/6998789/199554
+
+UInt64 countBits(UInt64 n)
+{
+   UInt64 result = 0;
+
+   if(n == 0)
+      return 0;
+
+   for(result = 1; n &= n - 1; ++result);
+
+   return result;
+}

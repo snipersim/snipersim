@@ -46,3 +46,5 @@ T getMax(T v1, T v2)
 }
 
 #endif
+
+UInt64 countBits(UInt64 n);
