@@ -14,6 +14,7 @@
 
 #include "fixed_types.h"
 #include "clock_skew_minimization_object.h"
+#include "cache_efficiency_tracker.h"
 
 #include <vector>
 #include <set>
@@ -88,6 +89,10 @@ public:
    bool getBBVsEnabled() const { return m_knob_bbvs; }
    void setBBVsEnabled(bool enable) { m_knob_bbvs = enable; }
 
+   const CacheEfficiencyTracker::Callbacks& getCacheEfficiencyCallbacks() const { return m_cache_efficiency_callbacks; }
+   bool hasCacheEfficiencyCallbacks() const { return m_cache_efficiency_callbacks.notify_func != NULL; }
+   void setCacheEfficiencyCallbacks(CacheEfficiencyTracker::CallbackGetOwner get_owner_func, CacheEfficiencyTracker::CallbackNotify notify_func, UInt64 user_arg);
+
    // Logging
    String getOutputDirectory() const;
    String formatOutputFileName(String filename) const;
@@ -124,6 +129,8 @@ private:
    static UInt64 m_knob_hpi_percore;
    static UInt64 m_knob_hpi_global;
    static bool m_knob_enable_spinloopdetection;
+
+   static CacheEfficiencyTracker::Callbacks m_cache_efficiency_callbacks;
 
    static SimulationMode parseSimulationMode(String mode);
    static UInt32 computeCoreIDLength(UInt32 core_count);

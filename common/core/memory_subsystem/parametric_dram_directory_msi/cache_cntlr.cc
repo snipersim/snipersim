@@ -6,6 +6,7 @@
 #include "subsecond_time.h"
 #include "config.hpp"
 #include "fault_injection.h"
+#include "hooks_manager.h"
 
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
@@ -145,6 +146,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
                ? Sim()->getFaultinjectionManager()->getFaultInjector(m_core_id_master, mem_component)
                : NULL);
       m_master->m_prefetcher = Prefetcher::createPrefetcher(cache_params.prefetcher, cache_params.configName, m_core_id);
+
+      Sim()->getHooksManager()->registerHook(HookType::HOOK_ROI_END, __walkUsageBits, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
    }
    else
    {
@@ -431,7 +434,9 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
       SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(ca_address);
       bool new_bits = cache_block_info->updateUsage(offset, data_length);
       if (new_bits)
+      {
          m_next_cache_cntlr->updateUsageBits(ca_address, cache_block_info->getUsage());
+      }
    }
 
 
@@ -883,6 +888,25 @@ CacheCntlr::updateUsageBits(IntPtr address, CacheBlockInfo::BitsUsedType used)
    }
 }
 
+void
+CacheCntlr::walkUsageBits()
+{
+   if (!m_next_cache_cntlr && Sim()->getConfig()->hasCacheEfficiencyCallbacks())
+   {
+      for(UInt32 set_index = 0; set_index < m_master->m_cache->getNumSets(); ++set_index)
+      {
+         for(UInt32 way = 0; way < m_master->m_cache->getAssociativity(); ++way)
+         {
+            CacheBlockInfo *block_info = m_master->m_cache->peekBlock(set_index, way);
+            if (block_info->isValid() && !block_info->hasOption(CacheBlockInfo::WARMUP))
+            {
+               Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify(true, block_info->getOwner(), block_info->getUsage(), getCacheBlockSize() >> CacheBlockInfo::BitsUsedOffset);
+            }
+         }
+      }
+   }
+}
+
 HitWhere::where_t
 CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf)
 {
@@ -1141,13 +1165,26 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
    if (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
       cache_block_info->setOption(CacheBlockInfo::WARMUP);
 
+   if (Sim()->getConfig()->hasCacheEfficiencyCallbacks())
+      cache_block_info->setOwner(Sim()->getConfig()->getCacheEfficiencyCallbacks().call_get_owner(m_core_id));
+
    if (m_next_cache_cntlr && !m_perfect)
       m_next_cache_cntlr->notifyPrevLevelInsert(m_core_id_master, m_mem_component, address);
 MYLOG("insertCacheBlock l%d local done", m_mem_component);
 
 
-   if (eviction) {
+   if (eviction)
+   {
 MYLOG("evicting @%lx", evict_address);
+
+      if (
+         !m_next_cache_cntlr // Track at LLC
+         && !evict_block_info.hasOption(CacheBlockInfo::WARMUP) // Ignore blocks allocated during warmup (we don't track usage then)
+         && Sim()->getConfig()->hasCacheEfficiencyCallbacks()
+      )
+      {
+         Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify(false, evict_block_info.getOwner(), evict_block_info.getUsage(), getCacheBlockSize() >> CacheBlockInfo::BitsUsedOffset);
+      }
 
       CacheState::cstate_t old_state = evict_block_info.getCState();
       {

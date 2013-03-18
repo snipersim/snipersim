@@ -24,6 +24,7 @@ const char* CacheBlockInfo::getOptionName(option_t option)
 CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, UInt64 options):
    m_tag(tag),
    m_cstate(cstate),
+   m_owner(0),
    m_used(0),
    m_options(options)
 {}
@@ -63,6 +64,7 @@ CacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
 {
    m_tag = cache_block_info->getTag();
    m_cstate = cache_block_info->getCState();
+   m_owner = cache_block_info->m_owner;
    m_used = cache_block_info->m_used;
    m_options = cache_block_info->m_options;
 }

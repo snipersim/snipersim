@@ -28,6 +28,7 @@ ClockSkewMinimizationObject::Scheme Config::m_knob_clock_skew_minimization_schem
 UInt64 Config::m_knob_hpi_percore;
 UInt64 Config::m_knob_hpi_global;
 bool Config::m_knob_enable_spinloopdetection;
+CacheEfficiencyTracker::Callbacks Config::m_cache_efficiency_callbacks;
 
 Config *Config::m_singleton;
 
@@ -205,4 +206,14 @@ UInt32 Config::getNearestAcceptableCoreCount(UInt32 core_count)
       nearest_acceptable_core_count = core_count;
 
    return nearest_acceptable_core_count;
+}
+
+void Config::setCacheEfficiencyCallbacks(CacheEfficiencyTracker::CallbackGetOwner get_owner_func, CacheEfficiencyTracker::CallbackNotify notify_func, UInt64 user_arg)
+{
+   if (m_cache_efficiency_callbacks.notify_func != NULL)
+      config::Error("Cannot register more than one CacheEfficiencyTracker user");
+
+   m_cache_efficiency_callbacks.get_owner_func = get_owner_func;
+   m_cache_efficiency_callbacks.notify_func = notify_func;
+   m_cache_efficiency_callbacks.user_arg = user_arg;
 }

@@ -23,6 +23,7 @@ class CacheBlockInfo
    private:
       IntPtr m_tag;
       CacheState::cstate_t m_cstate;
+      UInt64 m_owner;
       BitsUsedType m_used;
       UInt8 m_options;  // large enough to hold a bitfield for all available option_t's
 
@@ -46,6 +47,9 @@ class CacheBlockInfo
 
       void setTag(IntPtr tag) { m_tag = tag; }
       void setCState(CacheState::cstate_t cstate) { m_cstate = cstate; }
+
+      UInt64 getOwner() const { return m_owner; }
+      void setOwner(UInt64 owner) { m_owner = owner; }
 
       bool hasOption(option_t option) { return m_options & (1 << option); }
       void setOption(option_t option) { m_options |= (1 << option); }

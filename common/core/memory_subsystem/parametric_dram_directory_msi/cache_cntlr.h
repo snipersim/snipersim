@@ -290,6 +290,10 @@ namespace ParametricDramDirectoryMSI
          MemoryManager* getMemoryManager() { return m_memory_manager; }
          ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
+         void updateUsageBits(IntPtr address, CacheBlockInfo::BitsUsedType used);
+         void walkUsageBits();
+         static SInt64 __walkUsageBits(UInt64 arg0, UInt64 arg1) { ((CacheCntlr*)arg0)->walkUsageBits(); return 0; }
+
          // Wake up User Thread
          void wakeUpUserThread(Semaphore* user_thread_sem = NULL);
          // Wait for User Thread
@@ -343,7 +347,6 @@ namespace ParametricDramDirectoryMSI
          // Notify next level cache of so it can update its sharing set
          void notifyPrevLevelInsert(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address);
          void notifyPrevLevelEvict(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address);
-         void updateUsageBits(IntPtr address, CacheBlockInfo::BitsUsedType used);
 
          // Handle message from Dram Dir
          void handleMsgFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
