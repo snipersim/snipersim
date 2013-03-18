@@ -343,6 +343,7 @@ namespace ParametricDramDirectoryMSI
          // Notify next level cache of so it can update its sharing set
          void notifyPrevLevelInsert(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address);
          void notifyPrevLevelEvict(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address);
+         void updateUsageBits(IntPtr address, CacheBlockInfo::BitsUsedType used);
 
          // Handle message from Dram Dir
          void handleMsgFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);

@@ -24,6 +24,7 @@ const char* CacheBlockInfo::getOptionName(option_t option)
 CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, UInt64 options):
    m_tag(tag),
    m_cstate(cstate),
+   m_used(0),
    m_options(options)
 {}
 
@@ -62,5 +63,26 @@ CacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
 {
    m_tag = cache_block_info->getTag();
    m_cstate = cache_block_info->getCState();
+   m_used = cache_block_info->m_used;
    m_options = cache_block_info->m_options;
+}
+
+bool
+CacheBlockInfo::updateUsage(UInt32 offset, UInt32 size)
+{
+   UInt64 first = offset >> BitsUsedOffset,
+          last  = (offset + size - 1) >> BitsUsedOffset,
+          first_mask = (1ull << first) - 1,
+          last_mask = (1ull << (last + 1)) - 1,
+          usage_mask = last_mask & ~first_mask;
+
+   return updateUsage(usage_mask);
+}
+
+bool
+CacheBlockInfo::updateUsage(BitsUsedType used)
+{
+   bool new_bits_set = used & ~m_used; // Are we setting any bits that were previously unset?
+   m_used |= used;                     // Update usage mask
+   return new_bits_set;
 }

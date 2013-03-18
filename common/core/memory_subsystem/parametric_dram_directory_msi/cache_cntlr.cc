@@ -426,6 +426,15 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
    }
 
 
+   if (modeled)
+   {
+      SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(ca_address);
+      bool new_bits = cache_block_info->updateUsage(offset, data_length);
+      if (new_bits)
+         m_next_cache_cntlr->updateUsageBits(ca_address, cache_block_info->getUsage());
+   }
+
+
    accessCache(mem_op_type, ca_address, offset, data_buf, data_length);
 MYLOG("access done");
 
@@ -856,6 +865,21 @@ MYLOG("here in state %c", CStateString(getCacheState(address)));
       PrevCacheIndex idx = m_master->m_prev_cache_cntlrs.find(core_id, mem_component);
       cache_block_info->clearCachedLoc(idx);
       #endif
+   }
+}
+
+void
+CacheCntlr::updateUsageBits(IntPtr address, CacheBlockInfo::BitsUsedType used)
+{
+   bool new_bits;
+   {
+      ScopedLock sl(getLock());
+      SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
+      new_bits = cache_block_info->updateUsage(used);
+   }
+   if (new_bits && m_next_cache_cntlr)
+   {
+      m_next_cache_cntlr->updateUsageBits(address, used);
    }
 }
 

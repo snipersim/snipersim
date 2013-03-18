@@ -7,15 +7,6 @@
 
 class CacheBlockInfo
 {
-   // This can be extended later to include other information
-   // for different cache coherence protocols
-   private:
-      IntPtr m_tag;
-      CacheState::cstate_t m_cstate;
-      UInt8 m_options;  // large enough to hold a bitfield for all available option_t's
-
-      static const char* option_names[];
-
    public:
       enum option_t
       {
@@ -24,6 +15,20 @@ class CacheBlockInfo
          NUM_OPTIONS
       };
 
+      static const UInt8 BitsUsedOffset = 3;  // Track usage on 1<<BitsUsedOffset granularity (per 64-bit / 8-byte)
+      typedef UInt8 BitsUsedType;      // Enough to store one bit per 1<<BitsUsedOffset byte element per cache line (8 8-byte elements for 64-byte cache lines)
+
+   // This can be extended later to include other information
+   // for different cache coherence protocols
+   private:
+      IntPtr m_tag;
+      CacheState::cstate_t m_cstate;
+      BitsUsedType m_used;
+      UInt8 m_options;  // large enough to hold a bitfield for all available option_t's
+
+      static const char* option_names[];
+
+   public:
       CacheBlockInfo(IntPtr tag = ~0,
             CacheState::cstate_t cstate = CacheState::INVALID,
             UInt64 options = 0);
@@ -45,6 +50,10 @@ class CacheBlockInfo
       bool hasOption(option_t option) { return m_options & (1 << option); }
       void setOption(option_t option) { m_options |= (1 << option); }
       void clearOption(option_t option) { m_options &= ~(UInt64(1) << option); }
+
+      BitsUsedType getUsage() const { return m_used; };
+      bool updateUsage(UInt32 offset, UInt32 size);
+      bool updateUsage(BitsUsedType used);
 
       static const char* getOptionName(option_t option);
 };
