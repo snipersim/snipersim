@@ -60,6 +60,18 @@ class RoutineTracerFunctionStats
             virtual void functionChildEnter(IntPtr eip, IntPtr eip_child);
             virtual void functionChildExit(IntPtr eip, IntPtr eip_child);
       };
+
+      class ThreadStatAggregates
+      {
+         public:
+            static void registerStats();
+         private:
+            enum StatType {
+               GLOBAL_INSTRUCTIONS,
+               GLOBAL_NONIDLE_ELAPSED_TIME,
+            };
+            static UInt64 callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user);
+      };
 };
 
 #endif // __ROUTINE_TRACER_FUNCSTATS_H

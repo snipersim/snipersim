@@ -1,5 +1,6 @@
 #include "routine_tracer_funcstats.h"
 #include "simulator.h"
+#include "core_manager.h"
 #include "thread.h"
 #include "core.h"
 #include "performance_model.h"
@@ -57,6 +58,7 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
    ThreadStatNamedStat::registerStat("fp_addsub", "interval_timer", "uop_fp_addsub");
    ThreadStatNamedStat::registerStat("fp_muldiv", "interval_timer", "uop_fp_muldiv");
    ThreadStatNamedStat::registerStat("l3miss", "L3", "load-misses");
+   ThreadStatAggregates::registerStats();
 }
 
 RoutineTracerFunctionStats::RtnMaster::~RtnMaster()
@@ -111,4 +113,42 @@ void RoutineTracerFunctionStats::RtnMaster::writeResults(const char *filename)
       fprintf(fp, "\n");
    }
    fclose(fp);
+}
+
+
+// Helper function to provide global icount/time statistics
+
+class ThreadStatAggregates
+{
+   public:
+      static void registerStats();
+   private:
+      static UInt64 callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user);
+};
+
+void RoutineTracerFunctionStats::ThreadStatAggregates::registerStats()
+{
+   Sim()->getThreadStatsManager()->registerThreadStatMetric(ThreadStatsManager::DYNAMIC, "global_instructions", callback, (UInt64)GLOBAL_INSTRUCTIONS);
+   Sim()->getThreadStatsManager()->registerThreadStatMetric(ThreadStatsManager::DYNAMIC, "global_nonidle_elapsed_time", callback, (UInt64)GLOBAL_NONIDLE_ELAPSED_TIME);
+}
+
+UInt64 RoutineTracerFunctionStats::ThreadStatAggregates::callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user)
+{
+   UInt64 result = 0;
+
+   switch(user)
+   {
+      case GLOBAL_INSTRUCTIONS:
+         for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
+            result += Sim()->getCoreManager()->getCoreFromID(core_id)->getPerformanceModel()->getInstructionCount();
+         return result;
+
+      case GLOBAL_NONIDLE_ELAPSED_TIME:
+         for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
+            result += Sim()->getCoreManager()->getCoreFromID(core_id)->getPerformanceModel()->getNonIdleElapsedTime().getFS();
+         return result;
+
+      default:
+         LOG_PRINT_ERROR("Unexpected user value %d", user);
+   }
 }
