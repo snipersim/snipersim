@@ -14,6 +14,15 @@ QueueModelHistoryList::QueueModelHistoryList(String name, UInt32 id, SubsecondTi
    m_total_requests(0),
    m_total_requests_using_analytical_model(0)
 {
+   // history_list queuing model does not play nice with the interval core model:
+   // The interval model issues memory operations in big batches, even when it later decides to serialize those,
+   // The history_list queue model will in this case return large, increasing latencies which are then also serialized.
+   // Also, this queuing model does not work very well with threads that are out-of-order.
+   // In general, in a simulation environment with loose time synchronization (or fluffy time), you don't want
+   // to look at exact times (such as this model does) since those are wrong, but use averages only (which are fine)
+   // -- this is exactly what the Windowed M/G/1 queue model is supposed to do.
+   LOG_PRINT_WARNING_ONCE("history_list queuing model is deprecated. Please consider using windowed_mg1 instead.");
+
    // Some Hard-Coded values here
    // Assumptions
    // 1) Simulation Time will not exceed 2^63.
