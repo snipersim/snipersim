@@ -21,7 +21,7 @@ double process_slab(int snum)
   int i, j;
   double x;
 
-  for (i = 0; i < 10000; i++)
+  for (i = 0; i < 20; i++)
     for (j = 0; j < 100; j++)
       x += sqrt((i-j)*(i-j) / (sqrt((i*i) + (j*j)) + 1));
 
@@ -60,14 +60,13 @@ int main(int argc, char **argv)
   me = 0;
 #endif /* USE_MPI */
 
+  SimRoiStart();
+
 #ifdef _OPENMP
-  np = omp_get_num_procs();
-  omp_set_num_threads(np);
   num_threads = omp_get_max_threads();
 #else /* _OPENMP */
   num_threads = 1;
 #endif /* _OPENMP */
-  //SimRoiStart();
   printf("Process %d of %d", me, nprocs);
 #ifdef USE_MPI
   printf(" running on %s", processor_name);
@@ -143,7 +142,9 @@ int main(int argc, char **argv)
 #endif /* USE_MPI */
 
   if (!me) printf("Sum is %lg\n", sum);
-  //SimRoiEnd();
+
+  SimRoiEnd();
+
 #ifdef USE_MPI
   printf("%d: Calling MPI_Finalize()\n", me);
   MPI_Finalize();

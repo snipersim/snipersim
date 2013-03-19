@@ -16,4 +16,4 @@ hybrid: hybrid.o Makefile
 
 
 run_$(TARGET):
-	../../run-sniper --mpi -n 2 -c gainestown --cache-only -- mpirun -np 2 ./hybrid
+	OMP_NUM_THREADS=2 OMP_WAIT_POLICY=passive ../../run-sniper -c gainestown -n 4 --mpi --mpi-ranks=2 -- mpirun -np 2 ./hybrid
