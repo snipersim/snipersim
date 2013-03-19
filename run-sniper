@@ -412,6 +412,8 @@ if tracegen:
   def run_sift_recorder(app_cmd):
     tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + app_cmd
     print '[SNIPER] Running', tracecmd
+    sys.stdout.flush()
+    sys.stderr.flush()
     time.sleep(1)
     subprocess.Popen(tracecmd).communicate()
   for app_id, app_cmd in enumerate(applications):
