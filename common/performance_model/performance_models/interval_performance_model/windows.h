@@ -65,6 +65,7 @@ public:
       uint32_t getWindowIndex() const { return this->windowIndex; }
       void setWindowIndex(uint32_t index) { this->windowIndex = index; }
 
+      DynamicMicroOp* getDynMicroOp() { return this->uop; }
       const DynamicMicroOp* getDynMicroOp() const { return this->uop; }
       /* Some proxy functions */
       const MicroOp* getMicroOp() const { return this->getDynMicroOp()->getMicroOp(); }

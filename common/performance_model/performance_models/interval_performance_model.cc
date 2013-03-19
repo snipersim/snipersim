@@ -4,7 +4,7 @@
 #include <cstdio>
 
 IntervalPerformanceModel::IntervalPerformanceModel(Core *core, int misprediction_penalty)
-    : MicroOpPerformanceModel(core, true)
+    : MicroOpPerformanceModel(core, !Sim()->getCfg()->getBoolArray("perf_model/core/interval_timer/issue_memops_at_dispatch", core->getId()))
     , interval_timer(core,
        this,
        m_core_model,

@@ -12,6 +12,7 @@
 # include "performance_model.h"
 # include "micro_op.h"
 #endif
+#include "instruction.h"
 #include "loop_tracer.h"
 #include "config.hpp"
 #include "utils.h"
@@ -26,7 +27,8 @@ IntervalTimer::IntervalTimer(
          int dispatch_width,
          int window_size,
          bool do_functional_unit_contention)
-      : m_core_model(core_model)
+      : m_core(core)
+      , m_core_model(core_model)
       , m_dispatch_width(dispatch_width)
       , m_branch_misprediction_penalty(misprediction_penalty)
       , m_remaining_dispatch_bandwidth(0)
@@ -317,7 +319,35 @@ uint32_t IntervalTimer::calculateCurrentDispatchRate() {
    return dispatch_rate;
 }
 
-uint64_t IntervalTimer::dispatchInstruction(Windows::WindowEntry& micro_op, StopDispatchReason& continue_dispatching) {
+void IntervalTimer::issueMemOp(Windows::WindowEntry& micro_op)
+{
+   // Issue memory operations to the memory hierarchy.
+   // This function is called:
+   // - not at all if all memory operations are issued at fetch (perf_model/core/interval_timer/issue_memops_at_dispatch == false)
+   // - from blockWindow for overlapping accesses
+   // - from dispatchInstruction otherwise
+   if ((micro_op.getMicroOp()->isLoad() || micro_op.getMicroOp()->isStore())
+      && micro_op.getDynMicroOp()->getDCacheHitWhere() == HitWhere::UNKNOWN)
+   {
+      MemoryResult res = m_core->accessMemory(
+         Core::NONE,
+         micro_op.getMicroOp()->isLoad() ? Core::READ : Core::WRITE,
+         micro_op.getDynMicroOp()->getAddress().address,
+         NULL,
+         micro_op.getMicroOp()->getMemoryAccessSize(),
+         Core::MEM_MODELED_RETURN,
+         micro_op.getMicroOp()->getInstruction() ? micro_op.getMicroOp()->getInstruction()->getAddress() : static_cast<uint64_t>(NULL)
+      );
+      uint64_t latency = SubsecondTime::divideRounded(res.latency, m_core->getDvfsDomain()->getPeriod());
+      micro_op.getDynMicroOp()->setExecLatency(micro_op.getDynMicroOp()->getExecLatency() + latency); // execlatency already contains bypass latency
+      micro_op.getDynMicroOp()->setDCacheHitWhere(res.hit_where);
+   }
+}
+
+uint64_t IntervalTimer::dispatchInstruction(Windows::WindowEntry& micro_op, StopDispatchReason& continue_dispatching)
+{
+   // If it's not already done, issue the memory operation
+   issueMemOp(micro_op);
 
    uint64_t latency = 0;
 
@@ -581,6 +611,9 @@ void IntervalTimer::blockWindow()
 
                micro_op.addOverlapFlag(Windows::WindowEntry::DCACHE_OVERLAP);
                m_numDCacheOverlapped++;
+
+               // Issue the memory operation now
+               issueMemOp(micro_op);
 
                micro_op.setIndependentMiss();
                micro_op.setExecTime(m_windows->getCriticalPathHead());

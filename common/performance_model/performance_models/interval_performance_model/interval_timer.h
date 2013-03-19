@@ -54,7 +54,7 @@ protected:
    // dispatchWindow() returns (instructions_executed, latency)
    boost::tuple<uint64_t,uint64_t> dispatchWindow();
    uint32_t calculateCurrentDispatchRate();
-   void fetchInstruction(Windows::WindowEntry& instruction);
+   void issueMemOp(Windows::WindowEntry& micro_op);
    // dispatchInstruction() returns instruction_latency
    uint64_t dispatchInstruction(Windows::WindowEntry& instruction, StopDispatchReason& continueDispatching);
    void updateCriticalPath(Windows::WindowEntry& microOp, uint64_t& latency);
@@ -63,6 +63,7 @@ protected:
 
 private:
 
+   Core *m_core;
    const CoreModel *m_core_model;
 
    // Interval model parameters
