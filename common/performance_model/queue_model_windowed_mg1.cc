@@ -19,24 +19,20 @@ QueueModelWindowedMG1::computeQueueDelay(SubsecondTime pkt_time, SubsecondTime p
 
    if (m_num_arrivals > 1)
    {
-      SubsecondTime timespan = pkt_time - m_window.begin()->first;
-      if (timespan > m_window_size / 10)
-      {
-         double utilization = (double)m_service_time_sum / timespan.getPS();
-         double arrival_rate = (double)m_num_arrivals / timespan.getPS();
+      double utilization = (double)m_service_time_sum / m_window_size.getPS();
+      double arrival_rate = (double)m_num_arrivals / m_window_size.getPS();
 
-         double service_time_Es2 = m_service_time_sum2 / m_num_arrivals;
+      double service_time_Es2 = m_service_time_sum2 / m_num_arrivals;
 
-         // If requesters do not throttle based on returned latency, it's their problem, not ours
-         if (utilization > .99)
-            utilization = .99;
+      // If requesters do not throttle based on returned latency, it's their problem, not ours
+      if (utilization > .99)
+         utilization = .99;
 
-         t_queue = SubsecondTime::PS(arrival_rate * service_time_Es2 / (2 * (1. - utilization)));
+      t_queue = SubsecondTime::PS(arrival_rate * service_time_Es2 / (2 * (1. - utilization)));
 
-         // Our memory is limited in time to m_window_size. It would be strange to return more latency than that.
-         if (t_queue > m_window_size)
-            t_queue = m_window_size;
-      }
+      // Our memory is limited in time to m_window_size. It would be strange to return more latency than that.
+      if (t_queue > m_window_size)
+         t_queue = m_window_size;
    }
 
    addItem(pkt_time, processing_time);
