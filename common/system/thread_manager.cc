@@ -116,7 +116,10 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
       Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_MIGRATE, (UInt64)&args);
    }
    else
+   {
       m_thread_state[thread_id].status = Core::STALLED;
+      m_thread_state[thread_id].stalled_reason = STALL_UNSCHEDULED;
+   }
 
    if (m_thread_state[thread_id].waiter != INVALID_THREAD_ID)
    {
