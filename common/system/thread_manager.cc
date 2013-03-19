@@ -132,11 +132,13 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
 {
    ScopedLock sl(m_thread_lock);
 
-   Thread *thread = getThreadFromID(thread_id);
-   CoreManager *core_manager = Sim()->getCoreManager();
-   SubsecondTime time = core_manager->getCurrentCore()->getPerformanceModel()->getElapsedTime();
-
    LOG_ASSERT_ERROR((UInt32)thread_id < m_thread_state.size(), "Thread id out of range: %d", thread_id);
+
+   Thread *thread = getThreadFromID(thread_id);
+   Core *core = thread->getCore();
+   LOG_ASSERT_ERROR(core != NULL, "Thread ended while not running on a core?");
+
+   SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
 
    assert(m_thread_state[thread_id].status == Core::RUNNING);
    m_thread_state[thread_id].status = Core::IDLE;
@@ -148,7 +150,7 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    if (thread->m_os_info.clear_tid)
    {
       uint32_t zero = 0;
-      thread->getCore()->accessMemory(Core::NONE, Core::WRITE, thread->m_os_info.tid_ptr, (char*)&zero, sizeof(zero));
+      core->accessMemory(Core::NONE, Core::WRITE, thread->m_os_info.tid_ptr, (char*)&zero, sizeof(zero));
 
       SubsecondTime end_time; // ignored
       Sim()->getSyscallServer()->futexWake(thread_id, (int*)thread->m_os_info.tid_ptr, 1, FUTEX_BITSET_MATCH_ANY, time, end_time);
@@ -160,7 +162,7 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
       Sim()->getClockSkewMinimizationServer()->signal();
 
    // Set the CoreState to 'IDLE'
-   core_manager->getCurrentCore()->setState(Core::IDLE);
+   core->setState(Core::IDLE);
 
    m_thread_tls->set(NULL);
    thread->setCore(NULL);
