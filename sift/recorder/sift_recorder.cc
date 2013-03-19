@@ -149,6 +149,14 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
       }
       else if (gax == SIM_CMD_ROI_END)
       {
+         if (KnobEmulateSyscalls.Value())
+         {
+            // Send SYS_exit_group to the simulator to end the application
+            syscall_args_t args = {0};
+            args[0] = 0; // Assume success
+            thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
+         }
+
          // Delete our .appid file
          char filename[1024] = {0};
          sprintf(filename, "%s.app%" PRId32 ".appid", KnobOutputFile.Value().c_str(), app_id);
