@@ -214,10 +214,21 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
    }
 }
 
-TraceManager::~TraceManager()
+void TraceManager::cleanup()
 {
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
       delete *it;
+   m_threads.clear();
+
+   m_num_threads_running = 0;
+   m_app_info.clear();
+   m_app_info.resize(m_num_apps);
+   m_num_apps_nonfinish = m_num_apps;
+}
+
+TraceManager::~TraceManager()
+{
+   cleanup();
 }
 
 void TraceManager::start()
