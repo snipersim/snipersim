@@ -52,6 +52,7 @@ int main(int argc, char* argv[])
    for (int i = 1 ; i < Sim()->getCfg()->getInt("traceinput/num_runs") ; i++)
    {
      Sim()->getTraceManager()->cleanup();
+     Sim()->getTraceManager()->setupTraceFiles(i);
      Sim()->getTraceManager()->init();
      Sim()->getTraceManager()->run();
    }

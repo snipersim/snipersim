@@ -23,8 +23,15 @@ TraceManager::TraceManager()
    , m_num_apps(Sim()->getCfg()->getInt("traceinput/num_apps"))
    , m_num_apps_nonfinish(m_num_apps)
    , m_app_info(m_num_apps)
+   , m_tracefiles(m_num_apps)
+   , m_responsefiles(m_num_apps)
 {
-   m_trace_prefix = Sim()->getCfg()->getString("traceinput/trace_prefix");
+   setupTraceFiles(0);
+}
+
+void TraceManager::setupTraceFiles(int index)
+{
+   m_trace_prefix = Sim()->getCfg()->getStringArray("traceinput/trace_prefix", index);
 
    if (m_emulate_syscalls)
    {
@@ -39,15 +46,15 @@ TraceManager::TraceManager()
    {
       for (UInt32 i = 0 ; i < m_num_apps ; i++ )
       {
-         m_tracefiles.push_back(getFifoName(i, 0, false /*response*/, false /*create*/));
-         m_responsefiles.push_back(getFifoName(i, 0, true /*response*/, false /*create*/));
+         m_tracefiles[i] = getFifoName(i, 0, false /*response*/, false /*create*/);
+         m_responsefiles[i] = getFifoName(i, 0, true /*response*/, false /*create*/);
       }
    }
    else
    {
       for (UInt32 i = 0 ; i < m_num_apps ; i++ )
       {
-         m_tracefiles.push_back(Sim()->getCfg()->getString("traceinput/thread_" + itostr(i)));
+         m_tracefiles[i] = Sim()->getCfg()->getStringArray("traceinput/thread_" + itostr(i), index);
       }
    }
 }

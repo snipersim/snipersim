@@ -68,6 +68,7 @@ class TraceManager
       void wait();
       void run();
       void cleanup();
+      void setupTraceFiles(int index);
       thread_id_t createThread(app_id_t app_id, SubsecondTime time, thread_id_t creator_thread_id);
       app_id_t createApplication(SubsecondTime time, thread_id_t creator_thread_id);
       void signalStarted();
