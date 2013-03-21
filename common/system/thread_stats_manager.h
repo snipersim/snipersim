@@ -11,6 +11,7 @@ class ThreadStatsManager
 {
    public:
       typedef UInt32 ThreadStatType;
+      typedef std::vector<ThreadStatType> ThreadStatTypeList;
       enum ThreadStatTypeEnum
       {
          INSTRUCTIONS,
@@ -48,7 +49,7 @@ class ThreadStatsManager
       // call this function to force an update before reading
       void update(thread_id_t thread_id = INVALID_THREAD_ID, SubsecondTime time = SubsecondTime::MaxTime());
 
-      const std::vector<ThreadStatType>& getThreadStatTypes() { return m_thread_stat_types; }
+      const ThreadStatTypeList& getThreadStatTypes() { return m_thread_stat_types; }
       const char* getThreadStatName(ThreadStatType type) { return m_thread_stat_callbacks[type].m_name; }
       UInt64 getThreadStatistic(thread_id_t thread_id, ThreadStatType type) { return m_threads_stats[thread_id]->m_counts[type]; }
 
@@ -65,7 +66,7 @@ private:
          UInt64 call(ThreadStatType type, thread_id_t thread_id, Core *core) { return m_func(type, thread_id, core, m_user); }
       };
       std::unordered_map<thread_id_t, ThreadStats*> m_threads_stats;
-      std::vector<ThreadStatType> m_thread_stat_types;
+      ThreadStatTypeList m_thread_stat_types;
       std::unordered_map<ThreadStatType, StatCallback> m_thread_stat_callbacks;
       ThreadStatType m_next_dynamic_type;
 

@@ -144,7 +144,7 @@ void ThreadStatsManager::ThreadStats::update(SubsecondTime time)
       m_elapsed_time += time_delta;
       time_by_core[core->getId()] += core->getPerformanceModel()->getElapsedTime().getFS() - m_last[ELAPSED_TIME];
       insn_by_core[core->getId()] += core->getPerformanceModel()->getInstructionCount() - m_last[INSTRUCTIONS];
-      for(auto it = m_counts.begin(); it != m_counts.end(); ++it)
+      for(std::unordered_map<ThreadStatType, UInt64>::iterator it = m_counts.begin(); it != m_counts.end(); ++it)
       {
          m_counts[it->first] += Sim()->getThreadStatsManager()->callThreadStatCallback(it->first, m_thread->getId(), core) - m_last[it->first];
       }
@@ -154,7 +154,7 @@ void ThreadStatsManager::ThreadStats::update(SubsecondTime time)
    if (core)
    {
       m_core_id = core->getId();
-      for(auto it = m_counts.begin(); it != m_counts.end(); ++it)
+      for(std::unordered_map<ThreadStatType, UInt64>::iterator it = m_counts.begin(); it != m_counts.end(); ++it)
       {
          m_last[it->first] = Sim()->getThreadStatsManager()->callThreadStatCallback(it->first, m_thread->getId(), core);
       }

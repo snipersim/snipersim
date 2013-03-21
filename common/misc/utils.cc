@@ -48,7 +48,8 @@ UInt64 countBits(UInt64 n)
    if(n == 0)
       return 0;
 
-   for(result = 1; n &= n - 1; ++result);
+   for(result = 1; n &= n - 1; ++result)
+      ;
 
    return result;
 }

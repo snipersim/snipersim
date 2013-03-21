@@ -20,13 +20,13 @@ TagsManager::TagsManager(config::Config *config)
    const config::Section &section = config->getSection("tags");
    const config::SectionList &objs = section.getSubsections();
 
-   for (auto obj = objs.begin() ; obj != objs.end() ; ++obj)
+   for (config::SectionList::const_iterator obj = objs.begin() ; obj != objs.end() ; ++obj)
    {
       String objname = (*obj).first;
 
       // Default configuration values are not supported, only array lists
       const config::KeyArrayList &tags_keys = (*obj).second->getArrayKeys();
-      for (auto tag_keys = tags_keys.begin() ; tag_keys != tags_keys.end() ; ++tag_keys)
+      for (config::KeyArrayList::const_iterator tag_keys = tags_keys.begin() ; tag_keys != tags_keys.end() ; ++tag_keys)
       {
          const String &tag = (*tag_keys).first;
          const std::vector<boost::shared_ptr<config::Key> > ids = (*tag_keys).second;

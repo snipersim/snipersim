@@ -4,6 +4,7 @@
 #include "zfstream.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <sys/types.h>

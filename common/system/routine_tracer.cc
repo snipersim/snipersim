@@ -37,7 +37,7 @@ void RoutineTracerThread::routineExit(IntPtr eip)
    else
    {
       bool found = false;
-      for(auto it = m_stack.rbegin(); it != m_stack.rend(); ++it)
+      for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
       {
          if (*it == eip)
          {

@@ -40,7 +40,8 @@ class RoutineTracerFunctionStats
 
          private:
             Lock m_lock;
-            std::unordered_map<IntPtr, RoutineTracerFunctionStats::Routine*> m_routines;
+            typedef std::unordered_map<IntPtr, RoutineTracerFunctionStats::Routine*> RoutineMap;
+            RoutineMap m_routines;
 
             UInt64 ce_get_owner(core_id_t core_id);
             void ce_notify(bool on_roi_end, UInt64 owner, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total);

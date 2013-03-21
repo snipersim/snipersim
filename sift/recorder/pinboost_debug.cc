@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <iostream>
+#include <cstdlib>
 
 bool pinboost_do_debug = false;
 static std::string pinboost_name = "PINBOOST";

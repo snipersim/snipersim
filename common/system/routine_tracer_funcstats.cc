@@ -26,8 +26,8 @@ void RoutineTracerFunctionStats::RtnThread::functionEnter(IntPtr eip)
    Sim()->getThreadStatsManager()->update(m_thread->getId());
 
    m_current_eip = eip;
-   auto& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
-   for(auto it = types.begin(); it != types.end(); ++it)
+   const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
+   for(ThreadStatsManager::ThreadStatTypeList::const_iterator it = types.begin(); it != types.end(); ++it)
    {
       m_values_start[*it] = getThreadStat(*it);
    }
@@ -38,8 +38,8 @@ void RoutineTracerFunctionStats::RtnThread::functionExit(IntPtr eip)
    Sim()->getThreadStatsManager()->update(m_thread->getId());
 
    RtnValues values;
-   auto& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
-   for(auto it = types.begin(); it != types.end(); ++it)
+   const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
+   for(ThreadStatsManager::ThreadStatTypeList::const_iterator it = types.begin(); it != types.end(); ++it)
    {
       values[*it] = getThreadStat(*it) - m_values_start[*it];
    }
@@ -124,7 +124,7 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
    LOG_ASSERT_ERROR(m_routines.count(eip), "Routine %lx not found", eip);
 
    m_routines[eip]->m_calls += calls;
-   for(auto it = values.begin(); it != values.end(); ++it)
+   for(RtnValues::iterator it = values.begin(); it != values.end(); ++it)
    {
       m_routines[eip]->m_values[it->first] += it->second;
    }
@@ -134,19 +134,19 @@ void RoutineTracerFunctionStats::RtnMaster::writeResults(const char *filename)
 {
    FILE *fp = fopen(filename, "w");
 
-   auto& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
+   const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
 
    fprintf(fp, "eip\tname\tsource\tcalls\tbits_used\tbits_total");
-   for(auto it = types.begin(); it != types.end(); ++it)
+   for(ThreadStatsManager::ThreadStatTypeList::const_iterator it = types.begin(); it != types.end(); ++it)
       fprintf(fp, "\t%s", Sim()->getThreadStatsManager()->getThreadStatName(*it));
    fprintf(fp, "\n");
 
-   for(auto it = m_routines.begin(); it != m_routines.end(); ++it)
+   for(RoutineMap::iterator it = m_routines.begin(); it != m_routines.end(); ++it)
    {
       fprintf(fp, "%" PRIxPTR "\t%s\t%s\t%" PRId64 "\t%" PRId64 "\t%" PRId64,
          it->second->m_eip, it->second->m_name, it->second->m_location,
          it->second->m_calls, it->second->m_bits_used, it->second->m_bits_total);
-      for(auto jt = types.begin(); jt != types.end(); ++jt)
+      for(ThreadStatsManager::ThreadStatTypeList::const_iterator jt = types.begin(); jt != types.end(); ++jt)
          fprintf(fp, "\t%" PRId64, it->second->m_values[*jt]);
       fprintf(fp, "\n");
    }
