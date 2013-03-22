@@ -96,7 +96,7 @@ configscripts: dependencies
 	@echo '# This file is auto-generated, changes made to it will be lost. Please edit Makefile instead.' >> config/sniper.py
 	@echo "target=\"$(TARGET_ARCH)\"" >> config/sniper.py
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
-	@if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"`git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD`\"" >> config/sniper.py; fi
+	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
 	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(TARGET_ARCH)"
 
 empty_config:
