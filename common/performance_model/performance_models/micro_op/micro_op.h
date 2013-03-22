@@ -7,7 +7,10 @@
 #include "subsecond_time.h"
 #include "log.h"
 
+extern "C" {
 #include <xed-iclass-enum.h>
+}
+
 #include <vector>
 
 class Instruction;

@@ -3,7 +3,9 @@
 
 #include "fixed_types.h"
 
+extern "C" {
 #include <xed-reg-enum.h>
+}
 
 class DynamicMicroOp;
 
