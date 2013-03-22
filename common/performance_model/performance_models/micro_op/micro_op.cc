@@ -69,9 +69,10 @@ MicroOp::MicroOp()
 #endif
 }
 
-void MicroOp::makeLoad(uint32_t offset, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName) {
+void MicroOp::makeLoad(uint32_t offset, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size) {
    this->uop_type = UOP_LOAD;
    this->microOpTypeOffset = offset;
+   this->memoryAccessSize = mem_size;
 #ifdef ENABLE_MICROOP_STRINGS
    this->instructionOpcodeName = instructionOpcodeName;
 #endif
@@ -92,9 +93,10 @@ void MicroOp::makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t
    this->setTypes();
 }
 
-void MicroOp::makeStore(uint32_t offset, uint32_t num_execute, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName) {
+void MicroOp::makeStore(uint32_t offset, uint32_t num_execute, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size) {
    this->uop_type = UOP_STORE;
    this->microOpTypeOffset = offset;
+   this->memoryAccessSize = mem_size;
 #ifdef ENABLE_MICROOP_STRINGS
    this->instructionOpcodeName = instructionOpcodeName;
 #endif

@@ -87,6 +87,7 @@ MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
            0 // uop offset of 0 (first uop)
          , XED_ICLASS_INVALID // opcode
          , "invalid"  // instructionName
+         , 8
       );
       m_memaccess_uop->setMemBarrier(true);
       m_memaccess_uop->setFirst(true);

@@ -122,11 +122,12 @@ struct MicroOp
 
    bool m_membar;
    bool is_x87;
-   UInt16 operand_size;
+   uint16_t operand_size;
+   uint16_t memoryAccessSize;
 
-   void makeLoad(uint32_t offset, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName);
+   void makeLoad(uint32_t offset, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size);
    void makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, bool isBranch);
-   void makeStore(uint32_t offset, uint32_t num_execute, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName);
+   void makeStore(uint32_t offset, uint32_t num_execute, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size);
    void makeDynamic(const String& instructionOpcodeName, uint32_t execLatency);
 
    static uop_subtype_t getSubtype_Exec(const MicroOp& uop);
@@ -140,7 +141,8 @@ struct MicroOp
    void setIsX87(bool _is_x87) { is_x87 = _is_x87; }
    bool isX87(void) const { return is_x87; }
    void setOperandSize(int size) { operand_size = size; }
-   UInt16 getOperandSize(void) const { return operand_size; }
+   uint16_t getOperandSize(void) const { return operand_size; }
+   uint16_t getMemoryAccessSize(void) const { return memoryAccessSize; }
 
    void setInstruction(Instruction* instr) { instruction = instr; }
    Instruction* getInstruction(void) const { return instruction; }

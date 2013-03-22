@@ -91,6 +91,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
 
    std::vector<std::set<xed_reg_enum_t> > regs_loads, regs_stores;
    std::set<xed_reg_enum_t> regs_mem, regs_src, regs_dst;
+   std::vector<uint16_t> memop_load_size, memop_store_size;
 
    int numLoads = 0;
    int numExecs = 0;
@@ -107,11 +108,13 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
 
          if (xed_decoded_inst_mem_read(ins, mem_idx)) {
             regs_loads.push_back(regs);
+            memop_load_size.push_back(xed_decoded_inst_get_memory_operand_length(ins, mem_idx));
             numLoads++;
          }
 
          if (xed_decoded_inst_mem_written(ins, mem_idx)) {
             regs_stores.push_back(regs);
+            memop_store_size.push_back(xed_decoded_inst_get_memory_operand_length(ins, mem_idx));
             numStores++;
          }
 
@@ -231,6 +234,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
                  loadIndex
                , xed_decoded_inst_get_iclass(ins)
                , xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(ins))
+               , memop_load_size[loadIndex]
                );
       }
       else if (index < numLoads + numExecs) /* EXEC */
@@ -250,6 +254,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
                , numExecs
                , xed_decoded_inst_get_iclass(ins)
                , xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(ins))
+               , memop_store_size[storeIndex]
                );
       }
 
