@@ -46,7 +46,8 @@ template <class T> class CircularQueue
       UInt32 size(void) const;
       iterator begin(void) const { return iterator(*this, 0); }
       iterator end(void) const { return iterator(*this, size()); }
-      T& at(UInt32 idx) const { assert(idx < size()); return m_queue[(m_last + idx) % m_size]; }
+      T& operator[](UInt32 idx) const { return m_queue[(m_last + idx) % m_size]; }
+      T& at(UInt32 idx) const { assert(idx < size()); return (*this)[idx]; }
 };
 
 template <class T>
