@@ -30,6 +30,7 @@ class RoutineTracerPrint
 
          private:
             RtnMaster *m_master;
+            UInt64 m_depth;
 
          protected:
             virtual void functionEnter(IntPtr eip);

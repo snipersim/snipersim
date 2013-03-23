@@ -5,14 +5,12 @@
 
 void routineEnter(THREADID threadIndex, IntPtr eip)
 {
-   if (Sim()->getInstrumentationMode() == InstMode::DETAILED)
-      localStore[threadIndex].thread->getRoutineTracer()->routineEnter(eip);
+   localStore[threadIndex].thread->getRoutineTracer()->routineEnter(eip);
 }
 
 void routineExit(THREADID threadIndex, IntPtr eip)
 {
-   if (Sim()->getInstrumentationMode() == InstMode::DETAILED)
-      localStore[threadIndex].thread->getRoutineTracer()->routineExit(eip);
+   localStore[threadIndex].thread->getRoutineTracer()->routineExit(eip);
 }
 
 void addRtnTracer(RTN rtn)

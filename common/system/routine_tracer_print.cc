@@ -4,19 +4,22 @@
 RoutineTracerPrint::RtnThread::RtnThread(RoutineTracerPrint::RtnMaster *master, Thread *thread)
    : RoutineTracerThread(thread)
    , m_master(master)
+   , m_depth(0)
 {
 }
 
 void RoutineTracerPrint::RtnThread::functionEnter(IntPtr eip)
 {
    printf("[%2d] ", m_thread->getId());
-   for(unsigned int i = 0; i < m_stack.size(); ++i)
+   for(unsigned int i = 0; i < m_depth; ++i)
      printf("  ");
    printf("(%8" PRIxPTR ") %s\n", eip, m_master->getRoutine(eip)->m_name);
+   ++m_depth;
 }
 
 void RoutineTracerPrint::RtnThread::functionExit(IntPtr eip)
 {
+   --m_depth;
 }
 
 RoutineTracerThread* RoutineTracerPrint::RtnMaster::getThreadHandler(Thread *thread)

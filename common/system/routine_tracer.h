@@ -26,6 +26,11 @@ class RoutineTracerThread
       virtual void functionExit(IntPtr eip) {}
       virtual void functionChildEnter(IntPtr eip, IntPtr eip_child) {}
       virtual void functionChildExit(IntPtr eip, IntPtr eip_child) {}
+
+      void hookRoiBegin();
+      void hookRoiEnd();
+      static SInt64 __hook_roi_begin(UInt64 user, UInt64 arg) { ((RoutineTracerThread*)user)->hookRoiBegin(); return 0; }
+      static SInt64 __hook_roi_end(UInt64 user, UInt64 arg) { ((RoutineTracerThread*)user)->hookRoiEnd(); return 0; }
 };
 
 class RoutineTracer

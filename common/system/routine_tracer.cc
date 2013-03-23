@@ -1,5 +1,6 @@
 #include "routine_tracer.h"
 #include "simulator.h"
+#include "magic_server.h"
 #include "config.hpp"
 #include "routine_tracer_print.h"
 #include "routine_tracer_funcstats.h"
@@ -9,6 +10,8 @@
 RoutineTracerThread::RoutineTracerThread(Thread *thread)
    : m_thread(thread)
 {
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_ROI_BEGIN, __hook_roi_begin, (UInt64)this);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_ROI_END, __hook_roi_end, (UInt64)this);
 }
 
 RoutineTracerThread::~RoutineTracerThread()
@@ -18,10 +21,13 @@ RoutineTracerThread::~RoutineTracerThread()
 void RoutineTracerThread::routineEnter(IntPtr eip)
 {
    if (m_stack.size())
-      functionChildEnter(m_stack.back(), eip);
+      if (Sim()->getMagicServer()->inROI())
+         functionChildEnter(m_stack.back(), eip);
 
    m_stack.push_back(eip);
-   functionEnter(eip);
+
+   if (Sim()->getMagicServer()->inROI())
+      functionEnter(eip);
 }
 
 void RoutineTracerThread::routineExit(IntPtr eip)
@@ -43,9 +49,11 @@ void RoutineTracerThread::routineExit(IntPtr eip)
             // We found this eip further down the stack: unwind
             while(m_stack.back() != eip)
             {
-               functionExit(m_stack.back());
+               if (Sim()->getMagicServer()->inROI())
+                  functionExit(m_stack.back());
                m_stack.pop_back();
-               functionChildExit(m_stack.back(), eip);
+               if (Sim()->getMagicServer()->inROI())
+                  functionChildExit(m_stack.back(), eip);
             }
             found = true;
             break;
@@ -59,12 +67,26 @@ void RoutineTracerThread::routineExit(IntPtr eip)
    else
    {
       // Unwound into eip, now exit it
-      functionExit(eip);
+      if (Sim()->getMagicServer()->inROI())
+         functionExit(eip);
       m_stack.pop_back();
    }
 
    if (m_stack.size())
-      functionChildExit(m_stack.back(), eip);
+      if (Sim()->getMagicServer()->inROI())
+         functionChildExit(m_stack.back(), eip);
+}
+
+void RoutineTracerThread::hookRoiBegin()
+{
+   for(auto it = m_stack.begin(); it != m_stack.end(); ++it)
+      functionEnter(*it);
+}
+
+void RoutineTracerThread::hookRoiEnd()
+{
+   for(auto it = m_stack.rbegin(); it != m_stack.rend(); ++it)
+      functionExit(*it);
 }
 
 RoutineTracer::Routine::Routine(IntPtr eip, const char *name, int column, int line, const char *filename)
