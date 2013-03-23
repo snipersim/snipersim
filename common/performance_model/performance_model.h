@@ -17,6 +17,7 @@
 class Core;
 class BranchPredictor;
 class FastforwardPerformanceModel;
+class InstructionTracer;
 
 class PerformanceModel
 {
@@ -129,6 +130,8 @@ private:
    UInt32 m_current_ins_index;
 
    BranchPredictor *m_bp;
+
+   InstructionTracer *m_instruction_tracer;
 };
 
 #endif

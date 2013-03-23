@@ -12,6 +12,7 @@
 #include "config.hpp"
 #include "stats.h"
 #include "dvfs_manager.h"
+#include "instruction_tracer.h"
 
 PerformanceModel* PerformanceModel::create(Core* core)
 {
@@ -63,6 +64,8 @@ PerformanceModel::PerformanceModel(Core *core)
    , m_current_ins_index(0)
 {
    m_bp = BranchPredictor::create(core->getId());
+
+   m_instruction_tracer = InstructionTracer::create(core->getId());
 
    registerStatsMetric("performance_model", core->getId(), "instruction_count", &m_instruction_count);
 
@@ -264,6 +267,8 @@ void PerformanceModel::iterate()
          Instruction *ins = current_bb->at(m_current_ins_index);
          LOG_ASSERT_ERROR(!ins->isIdle(), "Idle instructions should not make it here!");
 
+         if (m_instruction_tracer)
+            m_instruction_tracer->handleInstruction(ins);
          bool res = handleInstruction(ins);
          if (!res)
             // DynamicInstructionInfo not available
