@@ -9,6 +9,7 @@ class InstructionTracerPrint : public InstructionTracer
       InstructionTracerPrint(int core_id)
          : m_id(core_id)
       {}
+      static void init() {}
       virtual void handleInstruction(Instruction const* instruction);
 
    private:

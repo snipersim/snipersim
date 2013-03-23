@@ -27,12 +27,15 @@ InstructionTracerFPStats::InstructionTracerFPStats(int core_id)
    for (std::unordered_map<int, uint64_t>::iterator iclass = m_iclasses.begin() ; iclass != m_iclasses.end() ; ++iclass)
    {
       registerStatsMetric("instruction_tracer", core_id, fp_iclasses[iclass2index[iclass->first]], &(iclass->second));
-      if (core_id == 0)
-      {
-         // registerStat requires static const names
-         const char* const insn_name = fp_iclasses[iclass2index[iclass->first]];
-         ThreadStatNamedStat::registerStat(insn_name, "instruction_tracer", insn_name);
-      }
+   }
+}
+
+void InstructionTracerFPStats::init()
+{
+   for (unsigned int i = 0 ; i < (sizeof(fp_iclasses) / sizeof(fp_iclasses[0])); i++)
+   {
+      // registerStat requires static const names
+      ThreadStatNamedStat::registerStat(fp_iclasses[i], "instruction_tracer", fp_iclasses[i]);
    }
 }
 

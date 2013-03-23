@@ -23,6 +23,7 @@
 #include "config.hpp"
 #include "magic_client.h"
 #include "tags.h"
+#include "instruction_tracer.h"
 
 #include <sstream>
 
@@ -96,6 +97,8 @@ void Simulator::start()
       m_trace_manager = new TraceManager();
    else
       m_trace_manager = NULL;
+
+   InstructionTracer::init();
 
    Fxsupport::init();
 

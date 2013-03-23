@@ -13,6 +13,7 @@ class InstructionTracerFPStats : public InstructionTracer
 {
    public:
       InstructionTracerFPStats(int core_id);
+      static void init();
       virtual void handleInstruction(Instruction const* instruction);
 
    private:

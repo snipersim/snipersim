@@ -6,6 +6,7 @@ class Instruction;
 class InstructionTracer
 {
    public:
+      static void init();
       static InstructionTracer* create(int core_id);
 
       InstructionTracer() {}
