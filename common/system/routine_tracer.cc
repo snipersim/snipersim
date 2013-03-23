@@ -29,14 +29,13 @@ void RoutineTracerThread::routineExit(IntPtr eip)
    if (m_stack.size() == 0)
       return;
 
+   bool found = false;
    if (m_stack.back() == eip)
    {
-      functionExit(eip);
-      m_stack.pop_back();
+      found = true;
    }
    else
    {
-      bool found = false;
       for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
       {
          if (*it == eip)
@@ -52,10 +51,16 @@ void RoutineTracerThread::routineExit(IntPtr eip)
             break;
          }
       }
-      if (!found)
-      {
-         // Mismatch, ignore
-      }
+   }
+   if (!found)
+   {
+      // Mismatch, ignore
+   }
+   else
+   {
+      // Unwound into eip, now exit it
+      functionExit(eip);
+      m_stack.pop_back();
    }
 
    if (m_stack.size())
