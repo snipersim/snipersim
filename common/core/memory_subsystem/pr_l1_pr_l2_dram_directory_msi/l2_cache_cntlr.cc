@@ -68,14 +68,14 @@ L2CacheCntlr::invalidateCacheBlock(IntPtr address)
 void
 L2CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf)
 {
-   __attribute(__unused__) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address, Cache::LOAD, data_buf, getCacheBlockSize(), getShmemPerfModel()->getElapsedTime());
+   __attribute__((__unused__)) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address, Cache::LOAD, data_buf, getCacheBlockSize(), getShmemPerfModel()->getElapsedTime());
    assert(l2_cache_block_info);
 }
 
 void
 L2CacheCntlr::writeCacheBlock(IntPtr address, UInt32 offset, Byte* data_buf, UInt32 data_length)
 {
-   __attribute(__unused__) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime());
+   __attribute__((__unused__)) PrL2CacheBlockInfo* l2_cache_block_info = (PrL2CacheBlockInfo*) m_l2_cache->accessSingleLine(address + offset, Cache::STORE, data_buf, data_length, getShmemPerfModel()->getElapsedTime());
    assert(l2_cache_block_info);
 }
 
