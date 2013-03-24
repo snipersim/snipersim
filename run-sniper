@@ -482,6 +482,8 @@ else:
 env = dict(os.environ)
 ld_library_path_orig = env.get('LD_LIBRARY_PATH', '')
 ld_library_path = []
+# Make sure that our version of Python is used, not the system version normally found in cxx_touse
+ld_library_path.append('%(HOME)s/python_kit/%(arch)s/lib' % locals())
 if cxx_touse:
   ld_library_path.append(cxx_touse)
 if 'BENCHMARKS_ROOT' in os.environ:
@@ -489,7 +491,6 @@ if 'BENCHMARKS_ROOT' in os.environ:
 if not standalone:
   ld_library_path.append('%(pin_home)s/%(arch)s/runtime/cpplibs' % locals())
   ld_library_path.append('%(pin_home)s/%(arch)s/runtime' % locals())
-ld_library_path.append('%(HOME)s/python_kit/%(arch)s/lib' % locals())
 ld_library_path.append(ld_library_path_orig)
 env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)
 env['PIN_LD_RESTORE_REQUIRED'] = '1'
