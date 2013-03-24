@@ -6,5 +6,6 @@
 #include "pin.H"
 
 void addRtnTracer(RTN rtn);
+void addRtnTracer(TRACE trace);
 
 #endif // __TRACE_RTN_H

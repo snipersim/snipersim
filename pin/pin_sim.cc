@@ -42,6 +42,7 @@
 #include "local_storage.h"
 #include "toolreg.h"
 #include "pin_exceptions.h"
+#include "trace_rtn.h"
 
 // lite directories
 #include "lite/routine_replace.h"
@@ -236,6 +237,8 @@ VOID traceCallback(TRACE trace, void *v)
       return;
 
    addCheckScheduled(trace, ins_head);
+
+   addRtnTracer(trace);
 
    // Clock Skew Minimization
    addPeriodicSync(trace, ins_head, inst_mode);

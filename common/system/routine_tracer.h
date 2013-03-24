@@ -16,12 +16,15 @@ class RoutineTracerThread
 
       void routineEnter(IntPtr eip);
       void routineExit(IntPtr eip);
+      void routineAssert(IntPtr eip);
 
    protected:
       Thread *m_thread;
       std::deque<IntPtr> m_stack;
 
    private:
+      bool unwindTo(IntPtr eip);
+
       virtual void functionEnter(IntPtr eip) {}
       virtual void functionExit(IntPtr eip) {}
       virtual void functionChildEnter(IntPtr eip, IntPtr eip_child) {}

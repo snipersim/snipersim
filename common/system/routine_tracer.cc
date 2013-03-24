@@ -35,31 +35,13 @@ void RoutineTracerThread::routineExit(IntPtr eip)
    if (m_stack.size() == 0)
       return;
 
-   bool found = false;
-   if (m_stack.back() == eip)
+   bool found = true;
+   if (m_stack.back() != eip)
    {
-      found = true;
+      // If we are returning from a function that's not at the top of the stack, search for it further down
+      found = unwindTo(eip);
    }
-   else
-   {
-      for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
-      {
-         if (*it == eip)
-         {
-            // We found this eip further down the stack: unwind
-            while(m_stack.back() != eip)
-            {
-               if (Sim()->getMagicServer()->inROI())
-                  functionExit(m_stack.back());
-               m_stack.pop_back();
-               if (Sim()->getMagicServer()->inROI())
-                  functionChildExit(m_stack.back(), eip);
-            }
-            found = true;
-            break;
-         }
-      }
-   }
+
    if (!found)
    {
       // Mismatch, ignore
@@ -75,6 +57,48 @@ void RoutineTracerThread::routineExit(IntPtr eip)
    if (m_stack.size())
       if (Sim()->getMagicServer()->inROI())
          functionChildExit(m_stack.back(), eip);
+}
+
+void RoutineTracerThread::routineAssert(IntPtr eip)
+{
+   if (m_stack.back() != eip)
+   {
+      bool found = unwindTo(eip);
+
+      if (!found)
+      {
+         // We now seem to be in a function we haven't been before, enter it (tail call elimination?)
+         routineEnter(eip);
+      }
+      else
+      {
+         // Jumped back into a function further down the stack (longjmp?)
+      }
+
+      // After all this, the current function should be at the top of the stack
+      LOG_ASSERT_ERROR(m_stack.back() == eip, "Expected to be in function %lx but now in %lx", eip, m_stack.back());
+   }
+}
+
+bool RoutineTracerThread::unwindTo(IntPtr eip)
+{
+   for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
+   {
+      if (*it == eip)
+      {
+         // We found this eip further down the stack: unwind
+         while(m_stack.back() != eip)
+         {
+            if (Sim()->getMagicServer()->inROI())
+               functionExit(m_stack.back());
+            m_stack.pop_back();
+            if (Sim()->getMagicServer()->inROI())
+               functionChildExit(m_stack.back(), eip);
+         }
+         return true;
+      }
+   }
+   return false;
 }
 
 void RoutineTracerThread::hookRoiBegin()
