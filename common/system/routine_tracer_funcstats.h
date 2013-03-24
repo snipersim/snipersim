@@ -66,6 +66,8 @@ class RoutineTracerFunctionStats
             IntPtr m_current_eip;
             RtnValues m_values_start;
 
+            void functionBegin(IntPtr eip);
+            void functionEnd(IntPtr eip, bool is_function_start);
             UInt64 getThreadStat(ThreadStatsManager::ThreadStatType type);
 
          protected:

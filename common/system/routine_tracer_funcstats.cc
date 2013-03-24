@@ -16,12 +16,27 @@ RoutineTracerFunctionStats::RtnThread::RtnThread(RoutineTracerFunctionStats::Rtn
 {
 }
 
-UInt64 RoutineTracerFunctionStats::RtnThread::getThreadStat(ThreadStatsManager::ThreadStatType type)
+void RoutineTracerFunctionStats::RtnThread::functionEnter(IntPtr eip)
 {
-   return Sim()->getThreadStatsManager()->getThreadStatistic(m_thread->getId(), type);
+   functionBegin(eip);
 }
 
-void RoutineTracerFunctionStats::RtnThread::functionEnter(IntPtr eip)
+void RoutineTracerFunctionStats::RtnThread::functionExit(IntPtr eip)
+{
+   functionEnd(eip, true);
+}
+
+void RoutineTracerFunctionStats::RtnThread::functionChildEnter(IntPtr eip, IntPtr eip_child)
+{
+   functionEnd(eip, false);
+}
+
+void RoutineTracerFunctionStats::RtnThread::functionChildExit(IntPtr eip, IntPtr eip_child)
+{
+   functionBegin(eip);
+}
+
+void RoutineTracerFunctionStats::RtnThread::functionBegin(IntPtr eip)
 {
    Sim()->getThreadStatsManager()->update(m_thread->getId());
 
@@ -33,7 +48,7 @@ void RoutineTracerFunctionStats::RtnThread::functionEnter(IntPtr eip)
    }
 }
 
-void RoutineTracerFunctionStats::RtnThread::functionExit(IntPtr eip)
+void RoutineTracerFunctionStats::RtnThread::functionEnd(IntPtr eip, bool is_function_start)
 {
    Sim()->getThreadStatsManager()->update(m_thread->getId());
 
@@ -44,17 +59,12 @@ void RoutineTracerFunctionStats::RtnThread::functionExit(IntPtr eip)
       values[*it] = getThreadStat(*it) - m_values_start[*it];
    }
 
-   m_master->updateRoutine(eip, 1, values);
+   m_master->updateRoutine(eip, is_function_start ? 1 : 0, values);
 }
 
-void RoutineTracerFunctionStats::RtnThread::functionChildEnter(IntPtr eip, IntPtr eip_parent)
+UInt64 RoutineTracerFunctionStats::RtnThread::getThreadStat(ThreadStatsManager::ThreadStatType type)
 {
-   functionExit(eip);
-}
-
-void RoutineTracerFunctionStats::RtnThread::functionChildExit(IntPtr eip, IntPtr eip_parent)
-{
-   functionEnter(eip);
+   return Sim()->getThreadStatsManager()->getThreadStatistic(m_thread->getId(), type);
 }
 
 UInt64 RoutineTracerFunctionStats::RtnThread::getCurrentRoutineId()
