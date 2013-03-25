@@ -102,7 +102,6 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       UInt32 cache_block_size,
       CacheParameters & cache_params,
       ShmemPerfModel* shmem_perf_model):
-   m_enabled(false),
    m_mem_component(mem_component),
    m_memory_manager(memory_manager),
    m_next_cache_cntlr(NULL),
@@ -297,7 +296,7 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
          insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, ShmemPerfModel::_USER_THREAD);
    }
 
-   if (count && m_enabled)
+   if (count)
    {
       ScopedLock sl(getLock());
       // Update the Cache Counters
@@ -456,7 +455,7 @@ MYLOG("access done");
       }
 
       #ifdef TRACK_LATENCY_BY_HITWHERE
-      if (count && m_enabled)
+      if (count)
          lat_by_where[hit_where].update(total_latency);
       #endif
 
@@ -635,7 +634,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          cache_block_info = insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, ShmemPerfModel::_USER_THREAD);
    }
 
-   if (count && m_enabled)
+   if (count)
    {
       ScopedLock sl(getLock());
       if (isPrefetch == Prefetch::NONE)
@@ -800,7 +799,7 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
       Byte data_buf[getCacheBlockSize()];
       retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD);
       /* Store completion time so we can detect overlapping accesses */
-      if (modeled && m_enabled && !first_hit)
+      if (modeled && !first_hit)
       {
          ScopedLock sl(getLock());
          m_master->mshr[address] = make_mshr(t_issue, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
@@ -1754,18 +1753,16 @@ void
 CacheCntlr::transition(IntPtr address, Transition::reason_t reason, CacheState::cstate_t old_state, CacheState::cstate_t new_state)
 {
 #ifdef ENABLE_TRANSITIONS
-   if (m_enabled) {
-      stats.transitions[old_state][new_state]++;
-      if (old_state == CacheState::INVALID) {
-         if (seen.count(address) == 0)
-            old_state = CacheState::INVALID_COLD;
-         else if (seen[address] == Transition::EVICT || seen[address] == Transition::EVICT_LOWER)
-            old_state = CacheState::INVALID_EVICT;
-         else if (seen[address] == Transition::COHERENCY)
-            old_state = CacheState::INVALID_COHERENCY;
-      }
-      stats.transition_reasons[reason][old_state][new_state]++;
+   stats.transitions[old_state][new_state]++;
+   if (old_state == CacheState::INVALID) {
+      if (seen.count(address) == 0)
+	 old_state = CacheState::INVALID_COLD;
+      else if (seen[address] == Transition::EVICT || seen[address] == Transition::EVICT_LOWER)
+	 old_state = CacheState::INVALID_EVICT;
+      else if (seen[address] == Transition::COHERENCY)
+	 old_state = CacheState::INVALID_COHERENCY;
    }
+   stats.transition_reasons[reason][old_state][new_state]++;
    seen[address] = reason;
 #endif
 }

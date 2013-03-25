@@ -179,7 +179,6 @@ namespace ParametricDramDirectoryMSI
    {
       private:
          // Data Members
-         bool m_enabled;
          MemComponent::component_t m_mem_component;
          MemoryManager* m_memory_manager;
          CacheMasterCntlr* m_master;
@@ -361,8 +360,8 @@ namespace ParametricDramDirectoryMSI
          bool isLastLevel(void) { return ! m_next_cache_cntlr; }
          bool isShared(core_id_t core_id); //< Return true if core shares this cache
 
-         void enable() { m_enabled = true; m_master->m_cache->enable(); }
-         void disable() { m_enabled = false; m_master->m_cache->disable(); }
+         void enable() { m_master->m_cache->enable(); }
+         void disable() { m_master->m_cache->disable(); }
 
          friend class CacheCntlrList;
          friend class MemoryManager;
