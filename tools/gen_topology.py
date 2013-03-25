@@ -66,11 +66,11 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
 <svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">
 <g style="stroke-width:.025in; fill:none">
   ''' % (2*margin_x + w * step_x, 2*margin_y + h * step_y)
-    def paint_box((x, y), (w, h), name = '', label = 0, color = '#ffffff', zorder = 0):
+    def paint_box((x, y), (w, h), name = '', label = 0, color = '#ffffff', zorder = 0, margin = (.2, .2)):
       svg = '''\
 <rect id="%s" x="%d" y="%d" width="%d" height="%d" rx="0"
    style="stroke:#000000;stroke-width:1;stroke-linejoin:miter; stroke-linecap:butt;fill:%s;"/>
-  ''' % (name, margin_x + x * step_x, margin_y + y * step_y, (w - .2) * step_x, (h - .2) * step_y, color)
+  ''' % (name, margin_x + x * step_x, margin_y + y * step_y, (w - margin[0]) * step_x, (h - margin[1]) * step_y, color)
       if label:
         svg += '''\
 <text xml:space="preserve" x="%d" y="%d" fill="#000000"  font-family="Times" font-style="normal" font-weight="normal" font-size="12" text-anchor="start">%s</text>
@@ -123,6 +123,54 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
               paint_box((xpos[lid]-.075, -.2), (size+.15, y+1+.4), color = '#dddddd', zorder = 2)
             size = 0
         y += 1
+
+
+    if sniper_config.get_config(config, 'network/memory_model_1') == 'emesh_hop_by_hop':
+
+      results = sniper_lib.get_results(resultsdir = resultsdir)['results']
+      if 'dram-queue.total-time-used' in results \
+         and 'network.shmem-1.mesh.link-up.num-requests' in results:
+        import gridcolors
+
+        dimensions = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/dimensions'))
+        if dimensions == 1:
+          width, height = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/size')), 1
+        else:
+          width, height = map(int, sniper_config.get_config(config, 'network/emesh_hop_by_hop/size').split(':'))
+        concentration = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/concentration'))
+
+        time0 = max(results['performance_model.elapsed_time'])
+
+        def util2color(utilization):
+          return '#%02x%02x%02x' % gridcolors.colorscale(utilization)
+
+        OFFSET_Y = y
+        SCALE_X = .6
+        BOXSIZE = .2
+        for y in range(height):
+          for x in range(width):
+            for c in range(concentration):
+              if c > 0:
+                continue
+              core = (y * width + x) * concentration + c
+              paint_box((x*SCALE_X, y+OFFSET_Y), (SCALE_X*.8, 1*.8), 'node-%d-%d' % (x, y), margin = (0, 0))
+              for link, _x, _y in (
+                ('down', 0, -.5), ('up', 0, .5),
+                ('left', -.5, 0), ('right', .5, 0),
+                ('out', -.15, -.2), ('in', .15, -.2),
+              ):
+                res = results['network.shmem-1.mesh.link-%s.num-requests' % link]
+                if core < len(res) and res[core] > 0:
+                  utilization = results['network.shmem-1.mesh.link-%s.total-time-used' % link][core] / float(time0)
+                  color = util2color(utilization)
+                  paint_box(((x + (.5 + _x)*.8 - BOXSIZE/2.)*SCALE_X, y + (.5 + _y)*.8 - BOXSIZE/2. + OFFSET_Y), (BOXSIZE*SCALE_X, BOXSIZE), 'link-%d-%d-%s' % (x, y, link), color = color, zorder = -1, margin = (0, 0))
+              if results['dram-queue.num-requests'][core] > 0:
+                utilization = results['dram-queue.total-time-used'][core] / float(time0)
+                color = util2color(utilization)
+                _x, _y = 0, .15
+                paint_box(((x + (.5 + _x)*.8 - 1.5*BOXSIZE/2.)*SCALE_X, y + (.5 + _y)*.8 - BOXSIZE/2. + OFFSET_Y), (1.5*BOXSIZE*SCALE_X, BOXSIZE), 'link-%d-%d-%s' % (x, y, link), color = color, zorder = -1, margin = (0, 0))
+
+
     paint_fini()
 
 
