@@ -61,7 +61,12 @@ void RoutineTracerThread::routineExit(IntPtr eip)
 
 void RoutineTracerThread::routineAssert(IntPtr eip)
 {
-   if (m_stack.back() != eip)
+   if (m_stack.size() == 0)
+   {
+      // Newly created thread just jumps into the first routine
+      routineEnter(eip);
+   }
+   else if (m_stack.back() != eip)
    {
       bool found = unwindTo(eip);
 
