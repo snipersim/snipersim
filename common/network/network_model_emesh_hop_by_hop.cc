@@ -13,6 +13,18 @@
 #include <math.h>
 #include <stdlib.h>
 
+const char* output_direction_names[] = {
+   "up", "down", "left", "right", "---", "self", "peer", "destination"
+};
+static_assert(NetworkModelEMeshHopByHop::MAX_OUTPUT_DIRECTIONS == sizeof(output_direction_names) / sizeof(output_direction_names[0]),
+              "Not enough values in output_direction_names");
+
+const char* OutputDirectionString(NetworkModelEMeshHopByHop::OutputDirection direction)
+{
+   LOG_ASSERT_ERROR(direction < NetworkModelEMeshHopByHop::MAX_OUTPUT_DIRECTIONS, "Invalid output direction %d", direction);
+   return output_direction_names[direction];
+}
+
 NetworkModelEMeshHopByHop::NetworkModelEMeshHopByHop(Network* net, EStaticNetwork net_type):
    NetworkModel(net),
    m_enabled(false),

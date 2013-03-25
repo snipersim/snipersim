@@ -21,7 +21,8 @@ class NetworkModelEMeshHopByHop : public NetworkModel
          // Directions below are fake and do not have a corresponding queue
          SELF,
          PEER,
-         DESTINATION
+         DESTINATION,
+         MAX_OUTPUT_DIRECTIONS
       } OutputDirection;
 
    private:
