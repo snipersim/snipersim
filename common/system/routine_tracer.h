@@ -55,6 +55,7 @@ class RoutineTracer
       virtual ~RoutineTracer();
 
       virtual void addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename) = 0;
+      virtual bool hasRoutine(IntPtr eip) = 0;
       virtual RoutineTracerThread* getThreadHandler(Thread *thread) = 0;
 };
 

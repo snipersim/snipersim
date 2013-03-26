@@ -16,6 +16,7 @@ class RoutineTracerPrint
 
             virtual RoutineTracerThread* getThreadHandler(Thread *thread);
             virtual void addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename);
+            virtual bool hasRoutine(IntPtr eip);
             RoutineTracer::Routine* getRoutine(IntPtr eip);
 
          private:

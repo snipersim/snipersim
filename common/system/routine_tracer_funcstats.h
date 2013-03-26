@@ -36,6 +36,7 @@ class RoutineTracerFunctionStats
 
             virtual RoutineTracerThread* getThreadHandler(Thread *thread);
             virtual void addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename);
+            virtual bool hasRoutine(IntPtr eip);
             void updateRoutine(IntPtr eip, UInt64 calls, RtnValues values);
 
          private:

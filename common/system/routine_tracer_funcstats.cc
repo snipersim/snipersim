@@ -127,6 +127,13 @@ void RoutineTracerFunctionStats::RtnMaster::addRoutine(IntPtr eip, const char *n
    }
 }
 
+bool RoutineTracerFunctionStats::RtnMaster::hasRoutine(IntPtr eip)
+{
+   ScopedLock sl(m_lock);
+
+   return m_routines.count(eip) > 0;
+}
+
 void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 calls, RtnValues values)
 {
    ScopedLock sl(m_lock);

@@ -37,6 +37,13 @@ void RoutineTracerPrint::RtnMaster::addRoutine(IntPtr eip, const char *name, int
    }
 }
 
+bool RoutineTracerPrint::RtnMaster::hasRoutine(IntPtr eip)
+{
+   ScopedLock sl(m_lock);
+
+   return m_routines.count(eip) > 0;
+}
+
 RoutineTracer::Routine* RoutineTracerPrint::RtnMaster::getRoutine(IntPtr eip)
 {
    ScopedLock sl(m_lock);
