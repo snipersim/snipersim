@@ -19,6 +19,7 @@ class ThreadStatsManager
          ELAPSED_NONIDLE_TIME,
          NUM_THREAD_STAT_FIXED_TYPES,  // Number of fixed thread statistics
          DYNAMIC,                      // User-defined thread statistics
+         INVALID
       };
       class ThreadStats
       {

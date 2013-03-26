@@ -167,8 +167,15 @@ void ThreadStatsManager::ThreadStats::update(SubsecondTime time)
 
 ThreadStatsManager::ThreadStatType ThreadStatNamedStat::registerStat(const char* name, String objectName, String metricName)
 {
-   ThreadStatNamedStat *tsns = new ThreadStatNamedStat(objectName, metricName);
-   return Sim()->getThreadStatsManager()->registerThreadStatMetric(ThreadStatsManager::DYNAMIC, name, callback, (UInt64)tsns);
+   if (Sim()->getStatsManager()->getMetricObject(objectName, 0, metricName))
+   {
+      ThreadStatNamedStat *tsns = new ThreadStatNamedStat(objectName, metricName);
+      return Sim()->getThreadStatsManager()->registerThreadStatMetric(ThreadStatsManager::DYNAMIC, name, callback, (UInt64)tsns);
+   }
+   else
+   {
+      return ThreadStatsManager::INVALID;
+   }
 }
 
 ThreadStatNamedStat::ThreadStatNamedStat(String objectName, String metricName)
