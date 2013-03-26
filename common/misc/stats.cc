@@ -11,6 +11,7 @@
 #include <string>
 #include <cstring>
 #include <zlib.h>
+#include <sys/time.h>
 
 template <> UInt64 makeStatsValue<UInt64>(UInt64 t) { return t; }
 template <> UInt64 makeStatsValue<SubsecondTime>(SubsecondTime t) { return t.getFS(); }
@@ -31,12 +32,22 @@ const char db_insert_stmt_name[] = "INSERT INTO `names` (nameid, objectname, met
 const char db_insert_stmt_prefix[] = "INSERT INTO `prefixes` (prefixid, prefixname) VALUES (?, ?);";
 const char db_insert_stmt_value[] = "INSERT INTO `values` (prefixid, nameid, core, value) VALUES (?, ?, ?, ?);";
 
+UInt64 getWallclockTimeCallback(String objectName, UInt32 index, String metricName, void *arg)
+{
+   struct timeval tv = {0,0};
+   gettimeofday(&tv, NULL);
+   UInt64 usec = (tv.tv_sec * 1000000) + tv.tv_usec;
+   return usec;
+}
+
 StatsManager::StatsManager()
    : m_keyid(0)
    , m_prefixnum(0)
    , m_db(NULL)
 {
    init();
+
+   registerMetric(new StatsMetricCallback("time", 0, "walltime", getWallclockTimeCallback, (void*)NULL));
 }
 
 StatsManager::~StatsManager()
