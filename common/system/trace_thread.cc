@@ -15,6 +15,7 @@
 #include "magic_client.h"
 #include "branch_predictor.h"
 
+#include <unistd.h>
 #include <sys/syscall.h>
 
 TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id, bool cleanup)

@@ -5,6 +5,7 @@
 #include "hooks_manager.h"
 #include "config.hpp"
 
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 

@@ -63,15 +63,14 @@ void
 DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
 {
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
-   SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 MYLOG("begin");
 
    switch (shmem_msg_type)
    {
       case ShmemMsg::EX_REQ:
       case ShmemMsg::SH_REQ:
-
          {
+            SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
             IntPtr address = shmem_msg->getAddress();
 MYLOG("%c REQ<%u @ %lx", shmem_msg_type == ShmemMsg::EX_REQ ? 'E' : 'S', sender, address);
 
@@ -116,7 +115,6 @@ void
 DramDirectoryCntlr::handleMsgFromDRAM(core_id_t sender, ShmemMsg* shmem_msg)
 {
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
-   SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
    switch (shmem_msg_type)
    {
