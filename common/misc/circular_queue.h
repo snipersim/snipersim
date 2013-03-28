@@ -13,19 +13,18 @@ template <class T> class CircularQueue
       volatile UInt32 m_last;  // last element is here
       UInt8 padding2[60];
       T* const m_queue;
-      UInt32 next(UInt32) const;
 
    public:
       typedef T value_type;
       class iterator : public std::iterator<std::forward_iterator_tag, T, std::ptrdiff_t, const T*, const T&>
       {
          private:
-            const CircularQueue &_queue;
+            CircularQueue &_queue;
             UInt32 _idx;
          public:
-            iterator(const CircularQueue &queue, UInt32 idx) : _queue(queue), _idx(idx) {}
-            const T& operator*() const { return _queue.at(_idx); }
-            const T* operator->() const { return &_queue.at(_idx); }
+            iterator(CircularQueue &queue, UInt32 idx) : _queue(queue), _idx(idx) {}
+            T& operator*() const { return _queue.at(_idx); }
+            T* operator->() const { return &_queue.at(_idx); }
             iterator& operator++() { _idx++; return *this; }
             bool operator==(iterator const& rhs) const { return &_queue == &rhs._queue && _idx == rhs._idx; }
             bool operator!=(iterator const& rhs) const { return ! (*this == rhs); }
@@ -36,6 +35,7 @@ template <class T> class CircularQueue
       ~CircularQueue();
       void push(const T& t);
       void pushCircular(const T& t);
+      T& next(void);
       T pop(void);
       T& front(void);
       const T& front(void) const;
@@ -44,8 +44,8 @@ template <class T> class CircularQueue
       bool full(void) const;
       bool empty(void) const;
       UInt32 size(void) const;
-      iterator begin(void) const { return iterator(*this, 0); }
-      iterator end(void) const { return iterator(*this, size()); }
+      iterator begin(void) { return iterator(*this, 0); }
+      iterator end(void) { return iterator(*this, size()); }
       T& operator[](UInt32 idx) const { return m_queue[(m_last + idx) % m_size]; }
       T& at(UInt32 idx) const { assert(idx < size()); return (*this)[idx]; }
 };
@@ -93,6 +93,16 @@ CircularQueue<T>::pushCircular(const T& t)
   if (full())
     pop();
   push(t);
+}
+
+template <class T>
+T&
+CircularQueue<T>::next(void)
+{
+   assert(!full());
+   T& t = m_queue[m_first];
+   m_first = (m_first + 1) % m_size;
+   return t;
 }
 
 template <class T>
@@ -158,11 +168,5 @@ CircularQueue<T>::size() const
    return (m_first + m_size - m_last) % m_size;
 }
 
-template <class T>
-UInt32
-CircularQueue<T>::next(UInt32 idx) const
-{
-   return (idx + 1) % m_size;
-}
 
 #endif // CIRCULAR_QUEUE_H
