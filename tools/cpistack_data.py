@@ -52,6 +52,9 @@ class CpiData:
     data = collections.defaultdict(collections.defaultdict)
     for key, values in self.stats.items():
       if '.cpi' in key:
+        if key.startswith('thread.'):
+          # Ignore per-thread statistics
+          continue
         key = key.split('.cpi')[1]
         for core in range(ncores):
           data[core][key] = values[core] * cycles_scale[core]
