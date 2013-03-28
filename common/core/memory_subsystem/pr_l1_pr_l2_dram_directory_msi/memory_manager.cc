@@ -6,6 +6,8 @@
 #include "config.hpp"
 #include "distribution.h"
 
+#include <algorithm>
+
 namespace PrL1PrL2DramDirectoryMSI
 {
 

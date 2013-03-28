@@ -29,7 +29,7 @@ TagsManager::TagsManager(config::Config *config)
       for (config::KeyArrayList::const_iterator tag_keys = tags_keys.begin() ; tag_keys != tags_keys.end() ; ++tag_keys)
       {
          const String &tag = (*tag_keys).first;
-         const std::vector<boost::shared_ptr<config::Key> > ids = (*tag_keys).second;
+         const std::vector<config::Key*> ids = (*tag_keys).second;
 
          for (unsigned int id = 0 ; id < ids.size() ; id++)
          {

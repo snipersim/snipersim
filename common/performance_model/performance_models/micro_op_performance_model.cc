@@ -12,6 +12,7 @@
 #include "config.hpp"
 
 #include <cstdio>
+#include <algorithm>
 
 MicroOp* MicroOpPerformanceModel::m_serialize_uop = NULL;
 MicroOp* MicroOpPerformanceModel::m_mfence_uop = NULL;

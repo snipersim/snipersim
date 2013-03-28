@@ -383,9 +383,9 @@ namespace config
             for (uint64_t index = 0; index < i->second.size(); ++index)
             {
                 // Find a non-default configuration value where we can get the name from
-                if (i->second[index].get())
+                if (i->second[index])
                 {
-                    const String & name = i->second[index].get()->getName();
+                    const String & name = i->second[index]->getName();
                     //Quote the name if it has spaces in it
                     if(boost::find_first(name, " ") || boost::find_first(name, "\""))
                     {
@@ -406,15 +406,15 @@ namespace config
                 if (index > 0)
                     out << ",";
 
-                if (i->second[index].get())
+                if (i->second[index])
                 {
                     //Quote the value if it is a string
-                    if(i->second[index].get()->getFloatValid() || i->second[index].get()->getIntValid())
-                        out << i->second[index].get()->getString();
+                    if(i->second[index]->getFloatValid() || i->second[index]->getIntValid())
+                        out << i->second[index]->getString();
                     else
                     {
                         String escaped_value;
-                        escapeText(i->second[index].get()->getString(), escaped_value);
+                        escapeText(i->second[index]->getString(), escaped_value);
                         out << "\"" << escaped_value << "\"";
                     }
                 }
@@ -429,7 +429,7 @@ namespace config
         SectionList const & subsections = current.getSubsections();
         for(SectionList::const_iterator i = subsections.begin(); i != subsections.end(); i++)
         {
-            Section const & subsection = *(i->second.get());
+            Section const & subsection = *(i->second);
             SaveTreeAs(out, subsection);
         }
 

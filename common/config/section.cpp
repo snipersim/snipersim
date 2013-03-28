@@ -49,8 +49,8 @@ namespace config
         if(!m_case_sensitive)
             boost::to_lower(iname);
 
-        m_subSections.insert(std::pair< String, boost::shared_ptr<Section> >(iname, boost::shared_ptr<Section>(new Section(*this, name_, m_case_sensitive))));
-        return *(m_subSections[iname].get());
+        m_subSections.insert(std::pair< String, Section* >(iname, new Section(*this, name_, m_case_sensitive)));
+        return *(m_subSections[iname]);
     }
 
     template <class V>
@@ -70,8 +70,8 @@ namespace config
             //Remove overrides
             m_array_keys.erase(iname);
 
-            m_keys.insert(std::pair< String, boost::shared_ptr<Key> >(iname, boost::shared_ptr<Key>(new Key(this->getFullPath(),name_,value))));
-            return *(m_keys[iname].get());
+            m_keys.insert(std::pair< String, Key* >(iname, new Key(this->getFullPath(),name_,value)));
+            return *(m_keys[iname]);
         }
         else
         {
@@ -81,24 +81,24 @@ namespace config
             KeyArrayList::iterator found = m_array_keys.find(iname);
             if(found != m_array_keys.end())
             {
-                std::vector<boost::shared_ptr<Key> > & arr = (*found).second;
+                std::vector<Key*> & arr = (*found).second;
                 if (arr.size() < needed_size)
                 {
                     arr.resize(needed_size);
                 }
                 else
                 {
-                    arr[index] = boost::shared_ptr<Key>();
+                    arr[index] = NULL;
                 }
             }
             else
             {
-                m_array_keys[iname] = std::vector<boost::shared_ptr<Key> >(needed_size);
+                m_array_keys[iname] = std::vector<Key*>(needed_size);
             }
 
-            m_array_keys[iname][index] = boost::shared_ptr<Key>(new Key(this->getFullPath(),name_,value));
+            m_array_keys[iname][index] = new Key(this->getFullPath(),name_,value);
 
-            return *(m_array_keys[iname][index].get());
+            return *(m_array_keys[iname][index]);
         }
     }
 
@@ -117,21 +117,21 @@ namespace config
         if (index == UINT64_MAX)
         {
             // Default to using non-index version
-            return *(m_keys[iname].get());
+            return *(m_keys[iname]);
         }
         else
         {
             if ( (m_array_keys.find(iname) != m_array_keys.end()) &&
                  (m_array_keys[iname].size() >= (index+1))        &&
-                 (m_array_keys[iname][index].get() != NULL)          )
+                 (m_array_keys[iname][index] != NULL)          )
             {
                 // If we have the key as an override, use it
-                return *(m_array_keys[iname][index].get());
+                return *(m_array_keys[iname][index]);
             }
             else
             {
                 // Otherwise, return the value requested from the non-indexed version
-                return *(m_keys[iname].get());
+                return *(m_keys[iname]);
             }
         }
     }
@@ -148,7 +148,7 @@ namespace config
         String iname(name);
         if(!m_case_sensitive)
             boost::to_lower(iname);
-        return *(m_subSections[iname].get());
+        return *(m_subSections[iname]);
     }
 
     bool Section::hasSection(const String & name) const
@@ -179,7 +179,7 @@ namespace config
         {
             return ( ( (m_array_keys.find(iname) != m_array_keys.end()) &&
                        (m_array_keys.find(iname)->second.size() >= (index+1))        &&
-                       (m_array_keys.find(iname)->second[index].get() != NULL)        )
+                       (m_array_keys.find(iname)->second[index] != NULL)        )
                      ||
                        (m_keys.find(iname) != m_keys.end()) );
         }

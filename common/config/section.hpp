@@ -6,22 +6,19 @@
 // Config Class
 // Author: Charles Gruenwald III
 #include "fixed_types.h"
+#include "key.hpp"
 
 #include <vector>
 #include <map>
-
-#include "boost/shared_ptr.hpp"
-
-#include "key.hpp"
 
 namespace config
 {
 
     //
     class Section;
-    typedef std::map < String, boost::shared_ptr<Section> > SectionList;
-    typedef std::map < String, boost::shared_ptr<Key> > KeyList;                           // default value
-    typedef std::map < String, std::vector<boost::shared_ptr<Key> > > KeyArrayList;        // overriding values
+    typedef std::map < String, Section* > SectionList;
+    typedef std::map < String, Key* > KeyList;                           // default value
+    typedef std::map < String, std::vector<Key* > > KeyArrayList;        // overriding values
 
 
     /*! \brief Section: A configuration section entry

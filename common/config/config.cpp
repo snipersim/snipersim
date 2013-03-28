@@ -189,7 +189,7 @@ namespace config
         SectionList const & subsections = current.getSubsections();
         for(SectionList::const_iterator i = subsections.begin(); i != subsections.end(); i++)
         {
-            Section const & subsection = *(i->second.get());
+            Section const & subsection = *(i->second);
             result += tabs + "Section: " + i->second->getName() + "\n";
             //recurse
             result += showTree(subsection, depth+1);

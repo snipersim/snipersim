@@ -12,6 +12,8 @@
 #include "config.hpp"
 #include "distribution.h"
 
+#include <algorithm>
+
 #if 0
    extern Lock iolock;
 #  include "core_manager.h"
