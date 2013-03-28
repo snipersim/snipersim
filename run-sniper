@@ -480,6 +480,9 @@ if not standalone:
   ld_library_path.append('%(pin_home)s/%(arch)s/runtime/cpplibs' % locals())
   ld_library_path.append('%(pin_home)s/%(arch)s/runtime' % locals())
 ld_library_path.append(ld_library_path_orig)
+# Also add $BENCHMARKS_ROOT/libs (possibly again) as there can be other libraries in there besides the C++ libraries
+if 'BENCHMARKS_ROOT' in os.environ:
+  ld_library_path.append('%s/libs:' % os.environ['BENCHMARKS_ROOT'])
 env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)
 env['PIN_LD_RESTORE_REQUIRED'] = '1'
 env['PIN_VM_LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH'] # Pin VM and Pintool (Sniper) use LD_LIBRARY_PATH as modified above
