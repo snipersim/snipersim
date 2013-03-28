@@ -108,13 +108,13 @@ bool RoutineTracerThread::unwindTo(IntPtr eip)
 
 void RoutineTracerThread::hookRoiBegin()
 {
-   for(auto it = m_stack.begin(); it != m_stack.end(); ++it)
+   for(std::deque<IntPtr>::iterator it = m_stack.begin(); it != m_stack.end(); ++it)
       functionEnter(*it);
 }
 
 void RoutineTracerThread::hookRoiEnd()
 {
-   for(auto it = m_stack.rbegin(); it != m_stack.rend(); ++it)
+   for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
       functionExit(*it);
 }
 
