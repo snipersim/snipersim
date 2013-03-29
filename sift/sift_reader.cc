@@ -36,6 +36,7 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , icache()
    , m_id(id)
    , m_trace_has_pa(false)
+   , m_seen_end(false)
 {
    if (!xed_initialized)
    {
@@ -133,7 +134,7 @@ bool Sift::Reader::Read(Instruction &inst)
       initStream();
    }
 
-   while(true)
+   while(!m_seen_end)
    {
       Record rec;
       uint8_t byte = input->peek();
@@ -145,7 +146,9 @@ bool Sift::Reader::Read(Instruction &inst)
          switch(rec.Other.type)
          {
             case RecOtherEnd:
+               std::cerr << "[SIFT_READER:" << m_id << "]: End()" << std::endl;
                assert(rec.Other.size == 0);
+               m_seen_end = true;
                // disable EndResponse as it causes lockups with sift_recorder
                //sendSimpleResponse(RecOtherEndResponse);
                return false;

@@ -75,6 +75,7 @@ namespace Sift
          uint32_t m_id;
 
          bool m_trace_has_pa;
+         bool m_seen_end;
 
          const Sift::StaticInstruction* getStaticInstruction(uint64_t addr, uint8_t size);
          void sendSyscallResponse(uint64_t return_code);
