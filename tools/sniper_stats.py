@@ -31,7 +31,10 @@ class SniperStatsBase:
     raise ValueError("Marker information not available from statistics of this type")
 
 
-def SniperStats(resultsdir):
+def SniperStats(resultsdir = '.', jobid = None):
+  if jobid:
+    import sniper_stats_jobid
+    return sniper_stats_jobid.SniperStatsJobid(jobid)
   if os.path.exists(os.path.join(resultsdir, 'sim.stats.sqlite3')):
     import sniper_stats_sqlite
     return sniper_stats_sqlite.SniperStatsSqlite(os.path.join(resultsdir, 'sim.stats.sqlite3'))
