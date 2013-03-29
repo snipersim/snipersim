@@ -7,8 +7,8 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
   names = ('hwcontext', 'smt', 'L1-I', 'L1-D', 'L2', 'L3', 'L4', 'tag-dir', 'nuca-cache', 'dram-cache', 'dram-cntlr')
   ids = dict([ (name, collections.defaultdict(lambda: None)) for name in names ])
 
-  stats = sniper_stats.SniperStats(resultsdir)
-  config = sniper_config.parse_config(open(os.path.join(resultsdir,'sim.cfg')).read())
+  stats = sniper_stats.SniperStats(resultsdir, jobid)
+  config = sniper_lib.get_config(resultsdir = resultsdir, jobid = jobid)
 
   max_id = 0
   for name, lid, mid in stats.get_topology():
@@ -175,16 +175,18 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
 
 
 if __name__ == '__main__':
+  resultsdir = '.'
+  jobid = None
   outputfilename = None
   formatdefaultoutputfile = {'svg': 'topo.svg', 'text': 'topo.txt'}
   validformats = ('svg', 'text')
   format = 'svg'
 
   def usage():
-    print 'Usage: %s [-h|--help (help)]  [-o|--output (output filename/"-" for stdout)]  [-f|--format (options: %s)]' % (sys.argv[0], validformats)
+    print 'Usage: %s [-h|--help (help)]  [-d <resultsdir (.)> | -j <jobid>]  [-o|--output (output filename/"-" for stdout)]  [-f|--format (options: %s)]' % (sys.argv[0], validformats)
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "ho:f:", [ "help", "output=", "format=" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hd:j:o:f:", [ "help", "output=", "format=" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -193,6 +195,10 @@ if __name__ == '__main__':
     if o == '-h' or o == '--help':
       usage()
       sys.exit()
+    elif o == '-d':
+      resultsdir = a
+    elif o == '-j':
+      jobid = long(a)
     elif o == '-o' or o == '--output':
       outputfilename = a
     elif o == '-f' or o == '--format':
@@ -213,4 +219,4 @@ if __name__ == '__main__':
   else:
     output = open(outputfilename, 'w')
 
-  gen_topology(resultsdir = '.', outputobj = output, format = format)
+  gen_topology(resultsdir = resultsdir, jobid = jobid, outputobj = output, format = format)
