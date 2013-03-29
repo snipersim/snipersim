@@ -146,7 +146,6 @@ bool Sift::Reader::Read(Instruction &inst)
          switch(rec.Other.type)
          {
             case RecOtherEnd:
-               std::cerr << "[SIFT_READER:" << m_id << "]: End()" << std::endl;
                assert(rec.Other.size == 0);
                m_seen_end = true;
                // disable EndResponse as it causes lockups with sift_recorder
