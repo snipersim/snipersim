@@ -23,13 +23,20 @@ class TraceThread : public Runnable
       static const UInt64 pa_core_shift = 48;
       static const UInt64 pa_core_size = 16;
       static const UInt64 pa_va_mask = ~(((UInt64(1) << pa_core_size) - 1) << pa_core_shift);
+      // Optionally we can also do address randomization on a per-page basis.
+      // This can avoid artificial set contention when replaying multiple copies of the same trace.
+      static const UInt64 va_page_shift = 12;
+      static const UInt64 va_page_mask = (UInt64(1) << va_page_shift) - 1;
 
       UInt64 va2pa(UInt64 va);
+      UInt64 remapAddress(UInt64 va_page);
 
       _Thread *m__thread;
       Thread *m_thread;
       Sift::Reader m_trace;
       bool m_trace_has_pa;
+      bool m_address_randomization;
+      uint8_t m_address_randomization_table[256];
       bool m_stop;
       std::unordered_map<IntPtr, BasicBlock *> m_icache;
       UInt64 m_bbv_base;
