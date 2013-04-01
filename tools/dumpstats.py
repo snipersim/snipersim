@@ -49,39 +49,24 @@ if args:
 
 
 if do_list:
-  if jobid:
-    print >> sys.stderr, "--list not supported with jobid"
-    sys.exit(1)
-  else:
-    import sniper_stats
-    stats = sniper_stats.SniperStats(resultsdir)
-    print ', '.join(stats.get_snapshots())
+  import sniper_stats
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+  print ', '.join(stats.get_snapshots())
 
 if do_topo:
-  if jobid:
-    print >> sys.stderr, "--topology not supported with jobid"
-    sys.exit(1)
-  else:
-    import sniper_stats
-    stats = sniper_stats.SniperStats(resultsdir)
-    for t in stats.get_topology():
-      print ', '.join(map(str,t))
+  import sniper_stats
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+  for t in stats.get_topology():
+    print ', '.join(map(str,t))
 
 if do_markers:
-  if jobid:
-    print >> sys.stderr, "--markers not supported with jobid"
-    sys.exit(1)
-  else:
-    import sniper_stats
-    stats = sniper_stats.SniperStats(resultsdir)
-    if not hasattr(stats, 'db'):
-      print >> sys.stderr, "--markers not supported on non-SQLite stats format"
-      sys.exit(1)
+  import sniper_stats
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
   try:
     markers = stats.get_markers()
   except Exception, e:
     print >> sys.stderr, e
-    print >> sys.stderr, "--markers could not be fetched from database"
+    print >> sys.stderr, "--markers could not be fetched"
     sys.exit(1)
 
   for timestamp, core, thread, value0, value1, description in markers:
