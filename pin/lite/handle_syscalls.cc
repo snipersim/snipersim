@@ -75,10 +75,10 @@ void syscallExitRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD sy
 {
    Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
    LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
+   IntPtr old_return_val = PIN_GetSyscallReturn(ctx, syscall_standard);
 
    if (thread->getSyscallMdl()->isEmulated())
    {
-      IntPtr old_return_val = PIN_GetSyscallReturn (ctx, syscall_standard);
       IntPtr syscall_return = thread->getSyscallMdl()->runExit(old_return_val);
       PIN_SetContextReg(ctx, REG_GAX, syscall_return);
 
@@ -86,7 +86,7 @@ void syscallExitRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD sy
    }
    else
    {
-      thread->getSyscallMdl()->runExit(0);
+      thread->getSyscallMdl()->runExit(old_return_val);
    }
 }
 
