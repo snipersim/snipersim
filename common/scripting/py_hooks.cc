@@ -80,7 +80,7 @@ static SInt64 hookCallbackSyscallEnter(UInt64 pFunc, UInt64 _argument)
 {
    SyscallMdl::HookSyscallEnter* argument = (SyscallMdl::HookSyscallEnter*)_argument;
    SubsecondTime time(argument->time);
-   PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiLi(iiiiii))", argument->thread_id, argument->core_id, time.getFS(),
+   PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiLi(llllll))", argument->thread_id, argument->core_id, time.getFS(),
       argument->syscall_number, argument->args.arg0, argument->args.arg1, argument->args.arg2, argument->args.arg3, argument->args.arg4, argument->args.arg5));
    return hookCallbackResult(pResult);
 }
