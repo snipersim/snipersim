@@ -181,7 +181,7 @@ DramDirectoryCntlr::processDirectoryEntryAllocationReq(ShmemReq* shmem_req)
    }
 
    LOG_ASSERT_ERROR(replacement_candidate != replacement_candidate_list.end(),
-         "Cant find a directory entry to be replaced with a non-zero request list");
+         "Cannot find a directory entry to be replaced with a non-zero request list (see Redmine #175)");
 
    switch(DirectoryState::dstate_t curr_dstate = (*replacement_candidate)->getDirectoryBlockInfo()->getDState()) {
       case DirectoryState::MODIFIED:
