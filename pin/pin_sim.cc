@@ -88,6 +88,11 @@ PIN_LOCK rtn_map_lock;
 PINPLAY_ENGINE pinplay_engine;
 #endif
 
+void applicationMemCopy(void *dest, const void *src, size_t n)
+{
+   PIN_SafeCopy(dest, src, n);
+}
+
 void printRtn (ADDRINT rtn_addr, bool enter)
 {
    GetLock (&rtn_map_lock, 1);

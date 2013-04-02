@@ -26,6 +26,7 @@ struct MemoryResult {
 };
 
 MemoryResult makeMemoryResult(HitWhere::where_t _hit_where, SubsecondTime _latency);
+void applicationMemCopy(void *dest, const void *src, size_t n);
 
 class Core
 {

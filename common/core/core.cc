@@ -454,11 +454,11 @@ Core::nativeMemOp(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr
 
    if ( (mem_op_type == READ) || (mem_op_type == READ_EX) )
    {
-      memcpy ((void*) data_buffer, (void*) d_addr, (size_t) data_size);
+      applicationMemCopy ((void*) data_buffer, (void*) d_addr, (size_t) data_size);
    }
    else if (mem_op_type == WRITE)
    {
-      memcpy ((void*) d_addr, (void*) data_buffer, (size_t) data_size);
+      applicationMemCopy ((void*) d_addr, (void*) data_buffer, (size_t) data_size);
    }
 
    if (lock_signal == UNLOCK)
@@ -468,4 +468,10 @@ Core::nativeMemOp(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr
    }
 
    return makeMemoryResult(HitWhere::UNKNOWN,SubsecondTime::Zero());
+}
+
+__attribute__((weak)) void
+applicationMemCopy(void *dest, const void *src, size_t n)
+{
+   memcpy(dest, src, n);
 }
