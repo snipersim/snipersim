@@ -42,6 +42,10 @@ class HooksPy {
          public:
             static void setup(void);
       };
+      class PyMem {
+          public:
+              static void setup(void);
+      };
 };
 
 #endif // HOOKS_PY_H

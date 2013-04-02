@@ -58,6 +58,7 @@ void HooksPy::setup()
    PyDvfs::setup();
    PyControl::setup();
    PyBbv::setup();
+   PyMem::setup();
 }
 
 void HooksPy::fini()
