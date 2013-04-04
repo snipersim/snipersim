@@ -15,7 +15,18 @@ class PeriodicStats:
     self.max_snapshots = long(args.get(1, 0))
     self.num_snapshots = 0
     self.interval = long(interval * sim.util.Time.NS)
+    self.next_interval = float('inf')
+    self.in_roi = False
     sim.util.Every(self.interval, self.periodic, roi_only = True)
+
+  def hook_roi_begin(self):
+    self.in_roi = True
+    self.next_interval = sim.stats.time() + self.interval
+    sim.stats.write('periodic-0')
+
+  def hook_roi_end(self):
+    self.next_interval = float('inf')
+    self.in_roi = False
 
   def periodic(self, time, time_delta):
     if self.max_snapshots and self.num_snapshots > self.max_snapshots:
@@ -29,8 +40,9 @@ class PeriodicStats:
       sim.stats.db.commit()
       self.interval *= 2
 
-    if time % self.interval == 0:
+    if time >= self.next_interval:
       self.num_snapshots += 1
-      sim.stats.write('periodic-%d' % time)
+      sim.stats.write('periodic-%d' % (self.num_snapshots * self.interval))
+      self.next_interval += self.interval
 
 sim.util.register(PeriodicStats())
