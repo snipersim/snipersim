@@ -13,7 +13,8 @@
 SchedulerPinned::SchedulerPinned(ThreadManager *thread_manager)
    : SchedulerDynamic(thread_manager)
    , m_quantum(SubsecondTime::NS(Sim()->getCfg()->getInt("scheduler/pinned/quantum")))
-   , m_next_core(Sim()->getConfig()->getApplicationCores()-1)
+   , m_interleaving(Sim()->getCfg()->getInt("scheduler/pinned/interleaving"))
+   , m_next_core(0)
    , m_last_periodic(SubsecondTime::Zero())
    , m_core_thread_running(Sim()->getConfig()->getApplicationCores(), INVALID_THREAD_ID)
    , m_quantum_left(Sim()->getConfig()->getApplicationCores(), SubsecondTime::Zero())
@@ -26,17 +27,30 @@ SchedulerPinned::SchedulerPinned(ThreadManager *thread_manager)
    }
 }
 
+core_id_t SchedulerPinned::getNextCore(core_id_t core_id)
+{
+   core_id += m_interleaving;
+   if (core_id > (core_id_t)Sim()->getConfig()->getApplicationCores())
+   {
+      core_id %= Sim()->getConfig()->getApplicationCores();
+      core_id += 1;
+      core_id %= m_interleaving;
+   }
+   return core_id;
+}
+
 core_id_t SchedulerPinned::threadCreate(thread_id_t thread_id)
 {
    if (m_thread_info.size() <= (size_t)thread_id)
       m_thread_info.resize(m_thread_info.size() + 16);
 
-   m_next_core = (m_next_core + 1) % (core_id_t)Sim()->getConfig()->getApplicationCores();
    while(!m_core_mask[m_next_core])
-      m_next_core = (m_next_core + 1) % (core_id_t)Sim()->getConfig()->getApplicationCores();
+      m_next_core = getNextCore(m_next_core);
 
    core_id_t core_id = m_next_core;
    m_thread_info[thread_id].core_affinity = core_id;
+
+   m_next_core = getNextCore(m_next_core);
 
    // The first thread scheduled on this core can start immediately, the others have to wait
    if (m_core_thread_running[core_id] == INVALID_THREAD_ID)

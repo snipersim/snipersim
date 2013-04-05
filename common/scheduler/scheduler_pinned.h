@@ -29,6 +29,7 @@ class SchedulerPinned : public SchedulerDynamic
 
       // Configuration
       const SubsecondTime m_quantum;
+      const int m_interleaving;
       std::vector<bool> m_core_mask;
       // Global state
       core_id_t m_next_core;
@@ -39,6 +40,7 @@ class SchedulerPinned : public SchedulerDynamic
       std::vector<thread_id_t> m_core_thread_running;
       std::vector<SubsecondTime> m_quantum_left;
 
+      core_id_t getNextCore(core_id_t core_id);
       void reschedule(SubsecondTime time, core_id_t core_id, bool is_periodic);
       void printState();
 };
