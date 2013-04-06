@@ -117,7 +117,18 @@ bool SchedulerPinned::threadSetAffinity(thread_id_t calling_thread_id, thread_id
    m_thread_info[thread_id].core_affinity = core_id;
 
    if (thread_id == calling_thread_id)
+   {
       threadYield(thread_id);
+   }
+   else if (m_threads_runnable[thread_id]                                  // Thread is runnable
+            && m_thread_info[thread_id].core_running == INVALID_CORE_ID    // Thread is not running (we can't preempt it outside of the barrier)
+            && m_core_thread_running[core_id] == INVALID_THREAD_ID)        // Thread's new core is free
+   {
+      // We have just been moved to a different core, and that core is free. Schedule us there now.
+      Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
+      SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
+      reschedule(time, m_thread_info[thread_id].core_affinity, false);
+   }
 
    return true;
 }
@@ -276,7 +287,7 @@ void SchedulerPinned::printState()
       }
       else
       {
-         printf(" %c_%d", state, m_thread_info[thread_id].core_affinity);
+         printf(" %c%c%d", state, m_threads_runnable[thread_id] ? '+' : '_', m_thread_info[thread_id].core_affinity);
       }
    }
    printf("  --  core state:");
