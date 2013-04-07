@@ -24,7 +24,7 @@ getStatsValue(PyObject *self, PyObject *args)
       return NULL;
    }
 
-   return PyInt_FromLong(metric->recordMetric());
+   return PyLong_FromUnsignedLongLong(metric->recordMetric());
 }
 
 
@@ -42,7 +42,7 @@ statsGetterGet(PyObject *self, PyObject *args, PyObject *kw)
 {
    statsGetterObject *getter = (statsGetterObject *)self;
    StatsMetricBase *metric = getter->metric;
-   return PyInt_FromLong(metric->recordMetric());
+   return PyLong_FromUnsignedLongLong(metric->recordMetric());
 }
 
 static PyTypeObject statsGetterType = {
