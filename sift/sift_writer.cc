@@ -569,7 +569,12 @@ uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
    assert(offset == index);
    intptr_t pp;
    ssize_t size = read(fd_va, &pp, sizeof(intptr_t));
-   assert(size == sizeof(intptr_t));
+
+   if (size != sizeof(intptr_t))
+   {
+      // Lookup failed. This happens for [vdso] sections.
+      return vp;
+   }
 
    return pp;
 }
