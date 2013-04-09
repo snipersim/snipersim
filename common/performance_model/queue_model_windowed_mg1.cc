@@ -6,6 +6,9 @@
 
 QueueModelWindowedMG1::QueueModelWindowedMG1(String name, UInt32 id)
    : m_window_size(SubsecondTime::NS(Sim()->getCfg()->getInt("queue_model/windowed_mg1/window_size")))
+   , m_total_requests(0)
+   , m_total_utilized_time(SubsecondTime::Zero())
+   , m_total_queue_delay(SubsecondTime::Zero())
    , m_num_arrivals(0)
    , m_service_time_sum(0)
    , m_service_time_sum2(0)
