@@ -88,7 +88,7 @@ def initialize():
 
 
 #collect CPI stack data with fixed instruction counts
-def collectCPIStackDataFIC(verbose=False):
+def collectCPIStackDataFIC(verbose=False, requested_cores_list = []):
   totalinstructioncount = 0
   groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/num_intervals, verbose)
   usedcomponents = dict.fromkeys(cpiitems.names,0)
@@ -118,7 +118,8 @@ def collectCPIStackDataFIC(verbose=False):
         use_simple = simple,
         use_simple_mem = True,
         no_collapse = True,
-        aggregate = True
+        aggregate = True,
+        cores_list = requested_cores_list,
       )
       data = results.get_data('cpi')
 
@@ -181,7 +182,7 @@ def collectCPIStackDataFIC(verbose=False):
 
 
 #Collect data with fixed cycle counts for the intervals
-def collectCPIStackDataFCC(verbose = False):
+def collectCPIStackDataFCC(verbose = False, requested_cores_list = []):
   from StringIO import StringIO
   instructioncount=0
   num_exceptions=0
@@ -205,7 +206,8 @@ def collectCPIStackDataFCC(verbose = False):
         use_simple = False,
         use_simple_mem = True,
         no_collapse = True,
-        aggregate = True
+        aggregate = True,
+        cores_list = requested_cores_list,
       )
       data = results.get_data('cpi')
 
@@ -488,7 +490,7 @@ def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
   return intervalsequences
 
 
-def createJSONData(native_interval_, nativenum_intervals_, interval_, num_intervals_, resultsdir_, outputdir_, title_, mcpat, verbose = False):
+def createJSONData(native_interval_, nativenum_intervals_, interval_, num_intervals_, resultsdir_, outputdir_, title_, mcpat, verbose = False, requested_cores_list = []):
 
   if verbose:
     print 'Generate JSON data for Level 2'
@@ -507,8 +509,8 @@ def createJSONData(native_interval_, nativenum_intervals_, interval_, num_interv
 
   initialize()
 
-  collectCPIStackDataFIC(verbose)
-  collectCPIStackDataFCC(verbose)
+  collectCPIStackDataFIC(verbose = verbose, requested_cores_list = requested_cores_list)
+  collectCPIStackDataFCC(verbose = verbose, requested_cores_list = requested_cores_list)
 
   writetojson(outputdir,"cpipercentage","cpi",1,verbose=verbose)
   writetojson(outputdir,"cpipercentagesimplified","cpisimplified",1,verbose=verbose)
@@ -534,7 +536,7 @@ def createJSONData(native_interval_, nativenum_intervals_, interval_, num_interv
 
 if __name__ == '__main__':
   def usage():
-    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose]')
+    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose] [-N <colon-separated-core-list>]')
     sys.exit()
 
   resultsdir = '.'
@@ -544,10 +546,11 @@ if __name__ == '__main__':
   num_intervals = 1000
   interval = 0
   verbose = False
+  requested_cores_list = []
 
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:v", [ "help", "mcpat", "verbose" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:vN:", [ "help", "mcpat", "verbose" ])
   except getopt.GetoptError, e:
     print(e)
     usage()
@@ -569,6 +572,8 @@ if __name__ == '__main__':
       interval = long(a)
     if o == '-v' or o == '--verbose':
       verbose = True
+    if o == '-N':
+      requested_cores_list += map(int,a.split(':'))
 
 
   if verbose:
@@ -609,7 +614,7 @@ if __name__ == '__main__':
     num_intervals = defaultnum_intervals
 
 
-  createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
+  createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose, requested_cores_list = requested_cores_list)
 
   # Now copy all static files as well
   if outputdir != HOME:
