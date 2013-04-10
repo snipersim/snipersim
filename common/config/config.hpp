@@ -104,6 +104,16 @@ namespace config
              */
             bool getBool(const String & path) { return getBoolArray(path, UINT64_MAX); }
             bool getBoolArray(const String & path, UInt64 index);
+            // For bools, let's make an exception to the no defaults rule.
+            // This enables us to model optional components that may live at different places (e.g. perf_model/*_cache),
+            // but relieve the user from disabling all of them manually
+            bool getBoolDefault(const String & path, bool defaultValue)
+            {
+               if (hasKey(path))
+                  return getBool(path);
+               else
+                  return defaultValue;
+            }
 
             /*! \brief Look up the key at the given path, and return the value of that key as a bool.
              * \param path - Path for key to look up
