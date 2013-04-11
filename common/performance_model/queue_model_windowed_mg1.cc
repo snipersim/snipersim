@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "log.h"
 #include "stats.h"
+#include "hooks_manager.h"
 
 QueueModelWindowedMG1::QueueModelWindowedMG1(String name, UInt32 id)
    : m_window_size(SubsecondTime::NS(Sim()->getCfg()->getInt("queue_model/windowed_mg1/window_size")))
@@ -16,6 +17,8 @@ QueueModelWindowedMG1::QueueModelWindowedMG1(String name, UInt32 id)
    registerStatsMetric(name, id, "num-requests", &m_total_requests);
    registerStatsMetric(name, id, "total-time-used", &m_total_utilized_time);
    registerStatsMetric(name, id, "total-queue-delay", &m_total_queue_delay);
+
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC, (HooksManager::HookCallbackFunc)hook_periodic, (UInt64)this);
 }
 
 QueueModelWindowedMG1::~QueueModelWindowedMG1()
@@ -25,8 +28,6 @@ SubsecondTime
 QueueModelWindowedMG1::computeQueueDelay(SubsecondTime pkt_time, SubsecondTime processing_time, core_id_t requester)
 {
    SubsecondTime t_queue = SubsecondTime::Zero();
-
-   removeItems(pkt_time - m_window_size);
 
    if (m_num_arrivals > 1)
    {
@@ -75,4 +76,10 @@ QueueModelWindowedMG1::removeItems(SubsecondTime earliest_time)
       m_service_time_sum2 -= entry->second.getPS() * entry->second.getPS();
       m_window.erase(entry);
    }
+}
+
+void
+QueueModelWindowedMG1::periodic(SubsecondTime time)
+{
+   removeItems(time - m_window_size);
 }

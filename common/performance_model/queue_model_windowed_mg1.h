@@ -29,6 +29,9 @@ private:
 
    void addItem(SubsecondTime pkt_time, SubsecondTime service_time);
    void removeItems(SubsecondTime earliest_time);
+
+   void periodic(SubsecondTime time);
+   static void hook_periodic(QueueModelWindowedMG1 *self, subsecond_time_t time) { self->periodic(time); }
 };
 
 #endif /* __QUEUE_MODEL_WINDOWED_MG1_H__ */
