@@ -347,21 +347,8 @@ def writemarkers(outputdir, verbose = False):
   if verbose:
     print 'Writing markers.txt'
 
-  dbfile = os.path.join(resultsdir, 'sim.stats.sqlite3')
-  if not os.path.exists(dbfile):
-    print 'No database found to construct markersfile.'
-    return
-
   try:
-    import sqlite3
-    db = sqlite3.connect(dbfile)
-  except Exception, e:
-    print e
-    print 'No database found to construct markersfile.'
-    return
-
-  try:
-    markersdb = db.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall()
+    markersdb = stats.get_markers()
   except Exception, e:
     print e
     print 'Cannot get markers from database.'
@@ -505,7 +492,7 @@ def createJSONData(native_interval_, nativenum_intervals_, interval_, num_interv
   title = title_
   use_mcpat = mcpat
   stats = sniper_stats.SniperStats(resultsdir_)
-  config = sniper_config.parse_config(file(os.path.join(resultsdir_, 'sim.cfg')).read())
+  config = sniper_lib.get_config(resultsdir = resultsdir_)
 
   initialize()
 
