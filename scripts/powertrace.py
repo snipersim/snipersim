@@ -16,7 +16,7 @@ class PowerTrace:
     if time <= 100:
       # ignore first callback which is at 100ns
       return
-    sim.stats.write(str(time), '') # write to sim.stats with prefix 'time'
+    sim.stats.write(str(time)) # write to sim.stats with prefix 'time'
     self.do_power(self.t_last, time)
     self.t_last = time
 
