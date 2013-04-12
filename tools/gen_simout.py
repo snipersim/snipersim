@@ -22,6 +22,12 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
 
   time0_begin = max(results['performance_model.elapsed_time_begin'])
   time0_end = max(results['performance_model.elapsed_time_end'])
+
+  if 'barrier.global_time' in results:
+    time0 = results['barrier.global_time'][0]
+  else:
+    time0 = time0_begin - time0_end
+
   results['performance_model.elapsed_time_fixed'] = [
     results['performance_model.elapsed_time_end'][c] - time0_begin
     for c in range(ncores)
@@ -87,11 +93,14 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   results['dram.accesses'] = map(sum, zip(results['dram.reads'], results['dram.writes']))
   results['dram.avglatency'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-access-latency'], results['dram.accesses']))
   results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-queueing-delay'], results['dram.accesses']))
+  if 'dram-queue.total-time-used' in results:
+    results['dram.bandwidth'] = map(lambda a: 100*a/time0, results['dram-queue.total-time-used'])
   template += [
     ('DRAM summary', '', ''),
     ('  num dram accesses', 'dram.accesses', str),
     ('  average dram access latency', 'dram.avglatency', format_ns(2)),
     ('  average dram queueing delay', 'dram.avgqueue', format_ns(2)),
+    ('  average dram bandwidth utilization', 'dram.bandwidth', lambda v: '%.2f%%' % v),
   ]
 
 
