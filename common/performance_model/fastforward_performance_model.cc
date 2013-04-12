@@ -2,6 +2,7 @@
 #include "fastforward_performance_manager.h"
 #include "simulator.h"
 #include "core.h"
+#include "sampling_manager.h"
 #include "stats.h"
 
 FastforwardPerformanceModel::FastforwardPerformanceModel(Core *core, PerformanceModel *perf)
@@ -25,6 +26,7 @@ void
 FastforwardPerformanceModel::notifyElapsedTimeUpdate()
 {
    // After skipping ahead possibly millions of cycles, recalibrate our aim point
+   Sim()->getSamplingManager()->recalibrateInstructionsCallback(m_core->getId());
    if (Sim()->getFastForwardPerformanceManager())
       Sim()->getFastForwardPerformanceManager()->recalibrateInstructionsCallback(m_core->getId());
 }
@@ -38,7 +40,7 @@ FastforwardPerformanceModel::countInstructions(IntPtr address, UInt32 count)
 void
 FastforwardPerformanceModel::queueDynamicInstruction(Instruction *instr)
 {
-   LOG_ASSERT_ERROR((instr->getType() == INST_SYNC || instr->getType() == INST_RECV), "Expected non-idle instructions");
+   LOG_ASSERT_ERROR(!instr->isIdle(), "Expected non-idle instruction, got %s", INSTRUCTION_NAMES[instr->getType()]);
 
    SubsecondTime ffwdTime = instr->getCost(m_core);
    incrementElapsedTime(ffwdTime);

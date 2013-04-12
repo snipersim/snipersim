@@ -51,6 +51,7 @@ PerformanceModel::PerformanceModel(Core *core)
    , m_enabled(false)
    , m_fastforward(false)
    , m_fastforward_model(new FastforwardPerformanceModel(core, this))
+   , m_detailed_sync(true)
    , m_hold(false)
    , m_instruction_count(0)
    , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
@@ -163,6 +164,11 @@ void PerformanceModel::queueBasicBlock(BasicBlock *basic_block)
 
 void PerformanceModel::handleIdleInstruction(Instruction *instruction)
 {
+   // If fast-forwarding without detailed synchronization, our fast-forwarding IPC
+   // already contains idle periods so we can ignore these now
+   if (m_fastforward && !m_detailed_sync)
+      return;
+
    if (instruction->getType() == INST_SYNC)
    {
       // Keep track of the type of Sync instruction and it's latency to calculate CPI numbers
@@ -238,6 +244,10 @@ void PerformanceModel::handleIdleInstruction(Instruction *instruction)
    {
       LOG_PRINT_ERROR("Unexpectedly received something other than a Sync or Recv Instruction");
    }
+
+   // Notify the fast-forward performance model
+   if (m_fastforward)
+      m_fastforward_model->notifyElapsedTimeUpdate();
 }
 
 void PerformanceModel::iterate()

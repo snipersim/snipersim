@@ -16,6 +16,7 @@ DIRECTORIES = $(SIM_ROOT)/common/core \
 	$(SIM_ROOT)/common/system \
 	$(SIM_ROOT)/common/scheduler \
 	$(SIM_ROOT)/common/scripting \
+	$(SIM_ROOT)/common/sampling \
 	$(SIM_ROOT)/common/fault_injection \
 	$(SIM_ROOT)/common/performance_model \
 	$(SIM_ROOT)/common/performance_model/branch_predictors \

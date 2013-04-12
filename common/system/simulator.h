@@ -23,6 +23,7 @@ class ClockSkewMinimizationManager;
 class FastForwardPerformanceManager;
 class TraceManager;
 class DvfsManager;
+class SamplingManager;
 class FaultinjectionManager;
 class TagsManager;
 class RoutineTracer;
@@ -61,6 +62,7 @@ public:
    ThreadStatsManager *getThreadStatsManager() { return m_thread_stats_manager; }
    DvfsManager *getDvfsManager() { return m_dvfs_manager; }
    HooksManager *getHooksManager() { return m_hooks_manager; }
+   SamplingManager *getSamplingManager() { return m_sampling_manager; }
    FaultinjectionManager *getFaultinjectionManager() { return m_faultinjection_manager; }
    TraceManager *getTraceManager() { return m_trace_manager; }
    TagsManager *getTagsManager() { return m_tags_manager; }
@@ -70,7 +72,7 @@ public:
    static void enablePerformanceModels();
    static void disablePerformanceModels();
 
-   void setInstrumentationMode(InstMode::inst_mode_t new_mode);
+   void setInstrumentationMode(InstMode::inst_mode_t new_mode, bool update_barrier);
    InstMode::inst_mode_t getInstrumentationMode() { return InstMode::inst_mode; }
 
 private:
@@ -92,10 +94,12 @@ private:
    TraceManager *m_trace_manager;
    DvfsManager *m_dvfs_manager;
    HooksManager *m_hooks_manager;
+   SamplingManager *m_sampling_manager;
    FaultinjectionManager *m_faultinjection_manager;
    RoutineTracer *m_rtn_tracer;
 
    bool m_running;
+   bool m_inst_mode_output;
 
    static Simulator *m_singleton;
 

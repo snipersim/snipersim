@@ -24,6 +24,8 @@ class FastforwardPerformanceModel
       void countInstructions(IntPtr address, UInt32 count);
       void queueDynamicInstruction(Instruction *i);
       void queueBasicBlock(BasicBlock *basic_block);
+
+      SubsecondTime getFastforwardedTime(void) const { return m_fastforwarded_time; }
 };
 
 #endif // FASTFORWARD_PERFORMANCE_MODEL_H

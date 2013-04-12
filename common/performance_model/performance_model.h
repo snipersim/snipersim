@@ -59,8 +59,10 @@ public:
    void setHold(bool hold) { m_hold = hold; }
 
    bool isFastForward() { return m_fastforward; }
-   void setFastForward(bool fastforward) {
+   void setFastForward(bool fastforward, bool detailed_sync = true)
+   {
       m_fastforward = fastforward;
+      m_detailed_sync = detailed_sync;
       // Fastforward performance model has controlled time for a while, now let the detailed model know time has advanced
       if (fastforward == false)
          notifyElapsedTimeUpdate();
@@ -101,6 +103,7 @@ private:
 
    bool m_fastforward;
    FastforwardPerformanceModel* m_fastforward_model;
+   bool m_detailed_sync;
 
    bool m_hold;
 

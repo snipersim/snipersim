@@ -34,6 +34,8 @@
 #include "instruction_modeling.h"
 #include "clock_skew_minimization.h"
 #include "magic_client.h"
+#include "sampling_manager.h"
+#include "sampling_provider.h"
 #include "performance_model.h"
 #include "timer.h"
 #include "logmem.h"
@@ -256,9 +258,34 @@ VOID traceCallback(TRACE trace, void *v)
       lite::routineStartCallback(rtn, ins_head);
    }
 
+   // Select per-basicblock instrumentation level.
+   // In fast-forward mode, this is the only instrumentation (except for some rare stuff like magic, syscall),
+   //   so using a lighter version here significantly speeds up simulation
+
+   InstrumentLevel::Level instr_level;
+   if (Sim()->getConfig()->getBBVsEnabled()) {
+      // Someone (a Python script) has requested BBVs to be enabled.
+      instr_level = InstrumentLevel::INSTR_WITH_BBVS;
+   } else if (Sim()->getSamplingManager()->getSamplingProvider()) {
+      // Ask the sampling provider what mode they need
+      instr_level = Sim()->getSamplingManager()->getSamplingProvider()->requestedInstrumentation();
+   } else {
+      instr_level = InstrumentLevel::INSTR;
+   }
+
    for (BBL bbl = bbl_head; BBL_Valid(bbl); bbl = BBL_Next(bbl))
    {
-      BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)InstructionModeling::countInstructions, IARG_THREAD_ID, IARG_ADDRINT, BBL_Address(bbl), IARG_UINT32, BBL_NumIns(bbl), IARG_END);
+      switch (instr_level) {
+         case (InstrumentLevel::INSTR):
+         case (InstrumentLevel::INSTR_WITH_BBVS):
+            BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)InstructionModeling::countInstructions, IARG_THREAD_ID, IARG_ADDRINT, BBL_Address(bbl), IARG_UINT32, BBL_NumIns(bbl), IARG_END);
+            break;
+         case (InstrumentLevel::NONE):
+            break;
+         default:
+            LOG_PRINT_ERROR("Unexpected enum value '%d'", instr_level);
+            break;
+      }
 
       BasicBlock *basic_block = NULL;
       bool basic_block_is_new = true;

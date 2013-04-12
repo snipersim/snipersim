@@ -3,6 +3,8 @@
 #include "simulator.h"
 #include "thread_manager.h"
 #include "logmem.h"
+#include "performance_model.h"
+#include "fastforward_performance_model.h"
 #include "core_manager.h"
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
@@ -91,7 +93,7 @@ void MagicServer::enablePerformance()
    t_start.start();
 
    Simulator::enablePerformanceModels();
-   Sim()->setInstrumentationMode(InstMode::inst_mode_roi);
+   Sim()->setInstrumentationMode(InstMode::inst_mode_roi, true /* update_barrier */);
 }
 
 void MagicServer::disablePerformance()
@@ -105,9 +107,20 @@ void MagicServer::disablePerformance()
       ninstrs / 1e6, ninstrs / seconds / 1e3,
       ninstrs / seconds / 1e3 / Sim()->getConfig()->getApplicationCores(),
       seconds * 1e9 / (float(ninstrs ? ninstrs : 1.) / Sim()->getConfig()->getApplicationCores()));
+
+   PerformanceModel *perf = Sim()->getCoreManager()->getCoreFromID(0)->getPerformanceModel();
+   if (perf->getFastforwardPerformanceModel()->getFastforwardedTime() > SubsecondTime::Zero())
+   {
+      // NOTE: Prints out the non-idle ratio for core 0 only, but it's just indicative anyway
+      double ff_ratio = double(perf->getFastforwardPerformanceModel()->getFastforwardedTime().getNS())
+                      / double(perf->getNonIdleElapsedTime().getNS());
+      double percent_detailed = 100. * (1. - ff_ratio);
+      printf("[SNIPER] Sampling: executed %.2f%% of simulated time in detailed mode\n", percent_detailed);
+   }
+
    fflush(NULL);
 
-   Sim()->setInstrumentationMode(InstMode::inst_mode_end);
+   Sim()->setInstrumentationMode(InstMode::inst_mode_end, true /* update_barrier */);
    PinDetach();
 }
 
@@ -196,7 +209,7 @@ UInt64 MagicServer::setInstrumentationMode(UInt64 sim_api_opt)
    default:
       LOG_PRINT_ERROR("Unexpected magic instrument opt type: %lx.", sim_api_opt);
    }
-   Sim()->setInstrumentationMode(inst_mode);
+   Sim()->setInstrumentationMode(inst_mode, true /* update_barrier */);
 
    return 0;
 }

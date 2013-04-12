@@ -17,6 +17,7 @@
 #include "trace_manager.h"
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
+#include "sampling_manager.h"
 #include "fault_injection.h"
 #include "routine_tracer.h"
 #include "instruction.h"
@@ -67,9 +68,11 @@ Simulator::Simulator()
    , m_trace_manager(NULL)
    , m_dvfs_manager(NULL)
    , m_hooks_manager(NULL)
+   , m_sampling_manager(NULL)
    , m_faultinjection_manager(NULL)
    , m_rtn_tracer(NULL)
    , m_running(false)
+   , m_inst_mode_output(true)
 {
 }
 
@@ -90,6 +93,7 @@ void Simulator::start()
    m_sim_thread_manager = new SimThreadManager();
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();
    m_clock_skew_minimization_server = ClockSkewMinimizationServer::create();
+   m_sampling_manager = new SamplingManager();
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
    m_rtn_tracer = RoutineTracer::create();
 
@@ -115,7 +119,8 @@ void Simulator::start()
    InstMode::inst_mode_init = InstMode::fromString(getCfg()->getString("general/inst_mode_init"));
    InstMode::inst_mode_roi  = InstMode::fromString(getCfg()->getString("general/inst_mode_roi"));
    InstMode::inst_mode_end  = InstMode::fromString(getCfg()->getString("general/inst_mode_end"));
-   setInstrumentationMode(InstMode::inst_mode_init);
+   m_inst_mode_output = getCfg()->getBool("general/inst_mode_output");
+   setInstrumentationMode(InstMode::inst_mode_init, true /* update_barrier */);
 
    /* Save a copy of the configuration for reference */
    m_config_file->saveAs(m_config.formatOutputFileName("sim.cfg"));
@@ -167,6 +172,7 @@ Simulator::~Simulator()
    if (m_rtn_tracer)
       delete m_rtn_tracer;
    delete m_trace_manager;
+   delete m_sampling_manager;
    if (m_faultinjection_manager)
       delete m_faultinjection_manager;
    delete m_sim_thread_manager;
@@ -195,18 +201,20 @@ void Simulator::disablePerformanceModels()
       Sim()->getFastForwardPerformanceManager()->enable();
 }
 
-void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode)
+void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode, bool update_barrier)
 {
    if (new_mode != InstMode::inst_mode) {
       InstMode::inst_mode = new_mode;
-      printf("[SNIPER] Setting instrumentation mode to %s\n", inst_mode_names[new_mode]); fflush(stdout);
+      if (m_inst_mode_output)
+         printf("[SNIPER] Setting instrumentation mode to %s\n", inst_mode_names[new_mode]); fflush(stdout);
 
       if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
          InstMode::updateInstrumentationMode();
 
       // If there is a fast-forward performance model, it needs to take care of barrier synchronization.
+      // If we're called with update_barrier == false, the caller (SamplingManager) manages the barrier.
       // Else, disable the barrier in fast-forward/cache-only
-      if (!Sim()->getFastForwardPerformanceManager())
+      if (update_barrier && !Sim()->getFastForwardPerformanceManager())
          getClockSkewMinimizationServer()->setDisable(new_mode != InstMode::DETAILED);
 
       Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
