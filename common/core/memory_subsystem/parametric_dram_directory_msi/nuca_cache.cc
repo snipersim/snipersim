@@ -13,7 +13,7 @@ NucaCache::NucaCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
    , m_cache_block_size(cache_block_size)
    , m_data_access_time(parameters.data_access_time)
    , m_tags_access_time(parameters.tags_access_time)
-   , m_data_array_bandwidth(8 * Sim()->getCfg()->getFloat("perf_model/nuca/queue_model/bandwidth"))
+   , m_data_array_bandwidth(8 * Sim()->getCfg()->getFloat("perf_model/nuca/bandwidth"))
    , m_queue_model(NULL)
    , m_reads(0)
    , m_writes(0)
