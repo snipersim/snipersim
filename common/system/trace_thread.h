@@ -28,6 +28,7 @@ class TraceThread : public Runnable
       static const UInt64 va_page_shift = 12;
       static const UInt64 va_page_mask = (UInt64(1) << va_page_shift) - 1;
 
+      static UInt64 _va2pa(UInt64 self, UInt64 va) { return ((TraceThread*)self)->va2pa(va); }
       UInt64 va2pa(UInt64 va);
       UInt64 remapAddress(UInt64 va_page);
 

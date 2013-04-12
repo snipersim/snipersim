@@ -12,6 +12,9 @@ class RoutineTracerThread;
 
 class Thread
 {
+   public:
+      typedef UInt64 (*va2pa_func_t)(UInt64 arg, UInt64 va);
+
    private:
       thread_id_t m_thread_id;
       app_id_t m_app_id;
@@ -23,6 +26,8 @@ class Thread
       SyncClient *m_sync_client;
       ClockSkewMinimizationClient *m_clock_skew_minimization_client;
       RoutineTracerThread *m_rtn_tracer;
+      va2pa_func_t m_va2pa_func;
+      UInt64 m_va2pa_arg;
 
    public:
       Thread(thread_id_t thread_id, app_id_t app_id);
@@ -39,6 +44,15 @@ class Thread
       SyncClient *getSyncClient() const { return m_sync_client; }
       ClockSkewMinimizationClient* getClockSkewMinimizationClient() const { return m_clock_skew_minimization_client; }
       RoutineTracerThread* getRoutineTracer() const { return m_rtn_tracer; }
+
+      void setVa2paFunc(va2pa_func_t va2pa_func, UInt64 m_va2pa_arg);
+      UInt64 va2pa(UInt64 logical_address) const
+      {
+         if (m_va2pa_func)
+            return m_va2pa_func(m_va2pa_arg, logical_address);
+         else
+            return logical_address;
+      }
 
       SubsecondTime wait(Lock &lock)
       {

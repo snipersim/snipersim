@@ -59,6 +59,8 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, 
       }
    }
 
+   thread->setVa2paFunc(_va2pa, (UInt64)this);
+
    String syntax = Sim()->getCfg()->getString("general/syntax");
    if (syntax == "intel")
       m_syntax = XED_SYNTAX_INTEL;

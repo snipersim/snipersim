@@ -14,6 +14,8 @@ Thread::Thread(thread_id_t thread_id, app_id_t app_id)
    , m_app_id(app_id)
    , m_core(NULL)
    , m_rtn_tracer(NULL)
+   , m_va2pa_func(NULL)
+   , m_va2pa_arg(0)
 {
    m_syscall_model = new SyscallMdl(this);
    m_sync_client = new SyncClient(this);
@@ -45,6 +47,12 @@ void Thread::setCore(Core* core)
       LOG_ASSERT_ERROR(core->getThread() == NULL, "Cannot move thread %d to core %d as it is already running thread %d", getId(), core->getId(), core->getThread()->getId());
       m_core->setThread(this);
    }
+}
+
+void Thread::setVa2paFunc(va2pa_func_t va2pa_func, UInt64 va2pa_arg)
+{
+   m_va2pa_func = va2pa_func;
+   m_va2pa_arg = va2pa_arg;
 }
 
 bool Thread::reschedule(SubsecondTime &time, Core *current_core)

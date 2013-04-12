@@ -94,10 +94,18 @@ IntPtr SyscallServer::handleFutexCall(thread_id_t thread_id, futex_args_t &args,
 
 
 // -- Futex related functions --
+SimFutex* SyscallServer::findFutexByUaddr(int *uaddr, thread_id_t thread_id)
+{
+   // Assumes that for multi-programmed and private futexes, va2pa() still returns unique addresses for each thread
+   IntPtr address = Sim()->getThreadManager()->getThreadFromID(thread_id)->va2pa((IntPtr)uaddr);
+   SimFutex *sim_futex = &m_futexes[address];
+   return sim_futex;
+}
+
 IntPtr SyscallServer::futexWait(thread_id_t thread_id, int *uaddr, int val, int act_val, int mask, SubsecondTime curr_time, SubsecondTime timeout_time, SubsecondTime &end_time)
 {
    LOG_PRINT("Futex Wait");
-   SimFutex *sim_futex = &m_futexes[(IntPtr) uaddr];
+   SimFutex *sim_futex = findFutexByUaddr(uaddr, thread_id);
 
    if (val != act_val)
    {
@@ -123,7 +131,7 @@ thread_id_t SyscallServer::wakeFutexOne(SimFutex *sim_futex, thread_id_t thread_
 IntPtr SyscallServer::futexWake(thread_id_t thread_id, int *uaddr, int nr_wake, int mask, SubsecondTime curr_time, SubsecondTime &end_time)
 {
    LOG_PRINT("Futex Wake");
-   SimFutex *sim_futex = &m_futexes[(IntPtr) uaddr];
+   SimFutex *sim_futex = findFutexByUaddr(uaddr, thread_id);
    int num_procs_woken_up = 0;
 
    for (int i = 0; i < nr_wake; i++)
@@ -204,8 +212,8 @@ int SyscallServer::futexDoOp(Core *core, int encoded_op, int *uaddr)
 IntPtr SyscallServer::futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int val, int *uaddr2, int nr_wake, int nr_wake2, SubsecondTime curr_time, SubsecondTime &end_time)
 {
    LOG_PRINT("Futex WakeOp");
-   SimFutex *sim_futex = &m_futexes[(IntPtr) uaddr];
-   SimFutex *sim_futex2 = &m_futexes[(IntPtr) uaddr2];
+   SimFutex *sim_futex = findFutexByUaddr(uaddr, thread_id);
+   SimFutex *sim_futex2 = findFutexByUaddr(uaddr2, thread_id);
    int num_procs_woken_up = 0;
 
    Thread *thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
@@ -240,7 +248,7 @@ IntPtr SyscallServer::futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int
 IntPtr SyscallServer::futexCmpRequeue(thread_id_t thread_id, int *uaddr, int val, int *uaddr2, int val3, int act_val, SubsecondTime curr_time, SubsecondTime &end_time)
 {
    LOG_PRINT("Futex CMP_REQUEUE");
-   SimFutex *sim_futex = &m_futexes[(IntPtr) uaddr];
+   SimFutex *sim_futex = findFutexByUaddr(uaddr, thread_id);
    int num_procs_woken_up = 0;
 
    if(val3 != act_val)
@@ -259,7 +267,7 @@ IntPtr SyscallServer::futexCmpRequeue(thread_id_t thread_id, int *uaddr, int val
          num_procs_woken_up++;
       }
 
-      SimFutex *requeue_futex = &m_futexes[(IntPtr) uaddr2];
+      SimFutex *requeue_futex = findFutexByUaddr(uaddr2, thread_id);
 
       while(true)
       {
