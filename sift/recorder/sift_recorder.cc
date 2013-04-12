@@ -499,12 +499,12 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
    if (mem_op == Sift::MemRead)
    {
       // The simulator is requesting data from us
-      memcpy(data_buffer, reinterpret_cast<void*>(d_addr), data_size);
+      PIN_SafeCopy(data_buffer, reinterpret_cast<void*>(d_addr), data_size);
    }
    else if (mem_op == Sift::MemWrite)
    {
       // The simulator is requesting that we write data back to memory
-      memcpy(reinterpret_cast<void*>(d_addr), data_buffer, data_size);
+      PIN_SafeCopy(reinterpret_cast<void*>(d_addr), data_buffer, data_size);
    }
    else
    {
