@@ -120,6 +120,12 @@ bool SchedulerPinned::threadSetAffinity(thread_id_t calling_thread_id, thread_id
    {
       threadYield(thread_id);
    }
+   else if (m_thread_info[thread_id].core_running != INVALID_CORE_ID       // Thread is running
+            && m_thread_info[thread_id].core_running != core_id)           // but not where we want it to
+   {
+      // Reschedule the thread as soon as possible
+      m_quantum_left[m_thread_info[thread_id].core_running] = SubsecondTime::Zero();
+   }
    else if (m_threads_runnable[thread_id]                                  // Thread is runnable
             && m_thread_info[thread_id].core_running == INVALID_CORE_ID    // Thread is not running (we can't preempt it outside of the barrier)
             && m_core_thread_running[core_id] == INVALID_THREAD_ID)        // Thread's new core is free
