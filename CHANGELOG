@@ -1,3 +1,12 @@
+Version 5.0
+  * Periodic sampling infrastructure
+  * Extensible per-thread statistics infrastructure
+  * Routine tracing infrastructure and per-function statistics
+  * NUCA cache model
+  * Distributed tag directories
+  * sim.mem Python module for reading application memory
+  * Various other improvements and bugfixes
+
 Version 4.2
   * Various accuracy fixes for Nehalem core model
   * Add cache replacement policies: NRU, MRU, NMRU, PLRU, S-RRIP, Random
