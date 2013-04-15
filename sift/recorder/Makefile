@@ -1,9 +1,10 @@
 # this gives us default build rules and dependency handling
 SIM_ROOT ?= $(CURDIR)/../..
 PIN_HOME ?= $(SIM_ROOT)/pin_kit
-PIN_KIT=$(PIN_HOME)
 
-all: sift_recorder
+# Note: Pin's makefile.config adds stuff to the `all' target which we don't want,
+#       so just use a different name here
+default: sift_recorder
 
 include $(SIM_ROOT)/common/Makefile.common
 
@@ -24,11 +25,13 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 # If this is the first fun of a fresh install, this will fail because clean
 #  is called, but pin has not been installed yet
 ifeq ($(CLEAN),)
-include $(PIN_HOME)/source/tools/makefile.gnu.config
+override PIN_ROOT := $(PIN_HOME)
+CONFIG_ROOT := $(PIN_HOME)/source/tools/Config
+include $(CONFIG_ROOT)/makefile.config
 endif
 
 LINKER?=${CXX}
-CXXFLAGS += -std=c++0x -Wall -Wno-unknown-pragmas $(DBG) $(OPT_CFLAGS) $(PIN_CXXFLAGS) -I..
+CXXFLAGS += -std=c++0x -Wall -Wno-unknown-pragmas $(DBG) $(OPT_CFLAGS) $(TOOL_CXXFLAGS) -I..
 LDFLAGS += -L.. -lsift -lz
 
 PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
@@ -42,9 +45,9 @@ OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
 sift_recorder: $(OBJECTS) ../libsift.a
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(PIN_LIBS)
+	@$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS)
 else
-	$(CXX) $(PIN_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(PIN_LIBS)
+	$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS)
 endif
 
 include $(SIM_ROOT)/common/Makefile.common

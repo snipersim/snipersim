@@ -1,6 +1,10 @@
 # this gives us default build rules and dependency handling
 SIM_ROOT ?= $(CURDIR)/..
 
+# Note: Pin's makefile.config adds stuff to the `all' target which we don't want,
+#       so just use a different name here
+default: $(TARGET)
+
 LD_LIBS += -lcarbon_sim
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
@@ -26,11 +30,12 @@ endif
 # If this is the first fun of a fresh install, this will fail because clean
 #  is called, but pin has not been installed yet
 ifeq ($(CLEAN),)
-PIN_KIT = $(PIN_HOME)
-include $(PIN_HOME)/source/tools/makefile.gnu.config
+override PIN_ROOT := $(PIN_HOME)
+CONFIG_ROOT := $(PIN_HOME)/source/tools/Config
+include $(CONFIG_ROOT)/makefile.config
 endif
 
-CXXFLAGS += $(PIN_CXXFLAGS)
+CXXFLAGS += $(TOOL_CXXFLAGS)
 CFLAGS += $(CXXFLAGS)
 
 PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
@@ -49,18 +54,16 @@ OBJECTS = $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(SOURCES)))
 ## build rules
 TARGET = $(SIM_ROOT)/lib/pin_sim.so
 
-all: $(TARGET)
-
 $(SIM_ROOT)/lib/libcarbon_sim.a:
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
 
-$(TARGET): $(PIN_LIBNAMES) $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
+$(TARGET): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
 $(TARGET): $(OBJECTS)
 ifeq ($(SHOW_COMPILE),)
 	@echo '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(PIN_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(PIN_LIBS) $(OPT_CFLAGS) -std=c++0x
+	@$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
 else
-	$(CXX) $(PIN_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(PIN_LIBS) $(OPT_CFLAGS) -std=c++0x
+	$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
 endif
 
 # This include must be here
