@@ -21,7 +21,7 @@ QueueModelHistoryList::QueueModelHistoryList(String name, UInt32 id, SubsecondTi
    // In general, in a simulation environment with loose time synchronization (or fluffy time), you don't want
    // to look at exact times (such as this model does) since those are wrong, but use averages only (which are fine)
    // -- this is exactly what the Windowed M/G/1 queue model is supposed to do.
-   LOG_PRINT_WARNING_ONCE("history_list queuing model is deprecated. Please consider using windowed_mg1 instead.");
+   //LOG_PRINT_WARNING_ONCE("history_list queuing model is deprecated. Please consider using windowed_mg1 instead.");
 
    // Some Hard-Coded values here
    // Assumptions
