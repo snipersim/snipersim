@@ -1,12 +1,7 @@
-import sim, syscall_strings, sys
-
-if sys.maxsize == 2**31-1:
-  __syscall_strings = syscall_strings.syscall_strings_32
-else:
-  __syscall_strings = syscall_strings.syscall_strings_64
+import sim, syscall_strings
 
 def syscall_name(syscall_number):
-  return '%s[%d]' % (__syscall_strings.get(syscall_number, 'unknown'), syscall_number)
+  return '%s[%d]' % (syscall_strings.syscall_strings.get(syscall_number, 'unknown'), syscall_number)
 
 class LogSyscalls:
   def hook_syscall_enter(self, threadid, coreid, time, syscall_number, args):

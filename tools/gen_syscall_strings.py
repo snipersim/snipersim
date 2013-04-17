@@ -54,7 +54,16 @@ print >> out_py, '}'
 print >> out_py, 'syscall_strings_64 = {'
 make(64)
 print >> out_cc, '#endif'
-print >> out_py, '}'
+print >> out_py, '''
+}
+
+# Determine whether we're in 32-bit or 64-bit mode
+import sys
+if sys.maxsize == 2**31-1:
+  syscall_strings = syscall_strings_32
+else:
+  syscall_strings = syscall_strings_64
+'''
 
 print >> out_cc, '''\
       default: return "(unknown)";
