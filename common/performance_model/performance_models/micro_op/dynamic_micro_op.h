@@ -43,6 +43,8 @@ class DynamicMicroOp
       bool branchTaken;
       /** Is branch mispredicted ? Only for UOP_EXECUTE and branches. */
       bool branchMispredicted;
+      /** Branch target address */
+      IntPtr branchTargetAddress;
 
       HitWhere::where_t dCacheHitWhere;
       HitWhere::where_t iCacheHitWhere;
@@ -100,6 +102,8 @@ class DynamicMicroOp
       void setBranchTaken(bool _branch_taken) { LOG_ASSERT_ERROR(m_uop->isBranch(), "Expected a branch instruction."); branchTaken = _branch_taken; }
       bool isBranchMispredicted() const { LOG_ASSERT_ERROR(m_uop->isBranch(), "Expected a branch instruction."); return this->branchMispredicted; }
       void setBranchMispredicted(bool mispredicted) { this->branchMispredicted = mispredicted; }
+      IntPtr getBranchTarget() const { LOG_ASSERT_ERROR(m_uop->isBranch(), "Expected a branch instruction."); return this->branchTargetAddress; }
+      void setBranchTarget(IntPtr address) { this->branchTargetAddress = address; }
 
       const Memory::Access& getLoadAccess() const;
       bool isLongLatencyLoad() const;

@@ -191,10 +191,17 @@ private:
 // conditional branches
 class BranchInstruction : public Instruction
 {
+private:
+   bool m_is_mispredict;
+   bool m_is_taken;
+   IntPtr m_target_address;
 public:
    BranchInstruction(OperandList &l);
 
    SubsecondTime getCost(Core *core) const;
+   bool getIsMispredict() const { return m_is_mispredict; }
+   bool getIsTaken() const { return m_is_taken; }
+   IntPtr getTargetAddress() const { return m_target_address; }
 };
 
 // TLB misses

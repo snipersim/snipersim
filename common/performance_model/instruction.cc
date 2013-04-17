@@ -152,6 +152,9 @@ SubsecondTime SpawnInstruction::getTime() const
 
 BranchInstruction::BranchInstruction(OperandList &l)
    : Instruction(INST_BRANCH, l)
+   , m_is_mispredict(false)
+   , m_is_taken(false)
+   , m_target_address(-1)
 { }
 
 SubsecondTime BranchInstruction::getCost(Core *core) const
@@ -166,18 +169,29 @@ SubsecondTime BranchInstruction::getCost(Core *core) const
 
    LOG_ASSERT_ERROR(i->type == DynamicInstructionInfo::BRANCH, "Expected branch DynInstrInfo, got %d", i->type);
 
+   bool is_mispredict;
+
    // branch prediction not modeled
    if (bp == NULL)
    {
-      perf->popDynamicInstructionInfo();
-      return static_cast<SubsecondTime>(*period) * 1;
+      is_mispredict = false;
+   }
+   else
+   {
+      bool prediction = bp->predict(getAddress(), i->branch_info.target);
+      bp->update(prediction, i->branch_info.taken, getAddress(), i->branch_info.target);
+
+      is_mispredict = (prediction != i->branch_info.taken);
    }
 
-   bool prediction = bp->predict(getAddress(), i->branch_info.target);
-   bool correct = (prediction == i->branch_info.taken);
+   UInt64 cost = is_mispredict ? bp->getMispredictPenalty() : 1;
 
-   bp->update(prediction, i->branch_info.taken, getAddress(), i->branch_info.target);
-   UInt64 cost = correct ? 1 : bp->getMispredictPenalty();
+   // TODO: Move everything that changes state (including global state through the DynamicInstructionInfo queue)
+   //       into something that doesn't look like a const accessor function so we don't need this dirty hack.
+
+   const_cast<BranchInstruction*>(this)->m_is_mispredict = is_mispredict;
+   const_cast<BranchInstruction*>(this)->m_is_taken = i->branch_info.taken;
+   const_cast<BranchInstruction*>(this)->m_target_address = i->branch_info.target;
 
    perf->popDynamicInstructionInfo();
    return static_cast<SubsecondTime>(*period) * cost;

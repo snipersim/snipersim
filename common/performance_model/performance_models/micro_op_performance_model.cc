@@ -332,24 +332,17 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
    }
 #endif
 
-   // Determine branch miss/hit status for the interval model
-   bool branch_mispredict;
-   bool is_branch = (instruction->getType() == INST_BRANCH);
 
-   if ( is_branch & (insn_cost != 1 * static_cast<SubsecondTime>(m_state_insn_period)) )
+   if (instruction->getType() == INST_BRANCH)
    {
-      branch_mispredict = 1;
-   }
-   else
-   {
-      branch_mispredict = 0;
-   }
+      const BranchInstruction *branch_instruction = dynamic_cast<const BranchInstruction*>(instruction);
+      LOG_ASSERT_ERROR(branch_instruction != NULL, "Expected a BranchInstruction, but did not get one.");
 
-   // Set whether the branch was mispredicted or not
-   if (is_branch)
-   {
+      // Set whether the branch was mispredicted or not
       LOG_ASSERT_ERROR(m_current_uops[exec_base_index]->getMicroOp()->isBranch(), "Expected to find a branch here.");
-      m_current_uops[exec_base_index]->setBranchMispredicted(branch_mispredict);
+      m_current_uops[exec_base_index]->setBranchMispredicted(branch_instruction->getIsMispredict());
+      m_current_uops[exec_base_index]->setBranchTaken(branch_instruction->getIsTaken());
+      m_current_uops[exec_base_index]->setBranchTarget(branch_instruction->getTargetAddress());
       // Do not update the execution latency of a branch instruction
       // The interval model will calculate the branch latency
    }
