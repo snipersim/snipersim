@@ -449,7 +449,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       uint32_t cutoff = m_core_model->getLongLatencyCutoff();
       bool force_lll = false;
       // if we are a long latency load (0 == disable)
-      if ((cutoff > 0) & (insn_cost > cutoff * m_state_insn_period.getPeriod()))
+      if ((cutoff > 0) && (insn_cost > cutoff * m_state_insn_period.getPeriod()))
       {
          // Long latency load
          cost_add_latency_now = insn_cost;

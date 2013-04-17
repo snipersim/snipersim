@@ -132,5 +132,5 @@ bool DynamicMicroOp::isLongLatencyLoad() const
    // If we are enabled, indicate that this is a long latency load if the latency
    // is above a certain cutoff value
    // Also, honor the forceLLL request if indicated
-   return (m_forceLongLatencyLoad | ((cutoff > 0) & (this->execLatency > cutoff)));
+   return (m_forceLongLatencyLoad || ((cutoff > 0) && (this->execLatency > cutoff)));
 }
