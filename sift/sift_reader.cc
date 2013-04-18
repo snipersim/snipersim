@@ -578,10 +578,19 @@ uint64_t Sift::Reader::va2pa(uint64_t va)
    {
       intptr_t vp = va / PAGE_SIZE;
       intptr_t vo = va & (PAGE_SIZE-1);
-      assert(vcache.count(vp));
-      intptr_t pp = vcache[vp];
-      return (pp * PAGE_SIZE) | vo;
+
+      if (vcache.count(vp) == 0)
+      {
+         return 0;
+      }
+      else
+      {
+         intptr_t pp = vcache[vp];
+         return (pp * PAGE_SIZE) | vo;
+      }
    }
    else
+   {
       return va;
+   }
 }

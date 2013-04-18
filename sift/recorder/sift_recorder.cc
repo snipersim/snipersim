@@ -423,7 +423,11 @@ VOID traceCallback(TRACE trace, void *v)
                insertCall(ins, IPOINT_TAKEN_BRANCH, num_addresses, true  /* is_branch */, true  /* taken */);
             }
             else
-               insertCall(ins, IPOINT_BEFORE,       num_addresses, false /* is_branch */, false /* taken */);
+            {
+               // Whenever possible, use IPOINT_AFTER as this allows us to process addresses after the application has used them.
+               // This ensures that their logical to physical mapping has been set up.
+               insertCall(ins, INS_HasFallThrough(ins) ? IPOINT_AFTER : IPOINT_BEFORE, num_addresses, false /* is_branch */, false /* taken */);
+            }
 
             // Handle emulated syscalls
             if (INS_IsSyscall(ins))

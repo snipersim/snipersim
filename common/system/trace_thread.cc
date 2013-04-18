@@ -85,13 +85,28 @@ TraceThread::~TraceThread()
 UInt64 TraceThread::va2pa(UInt64 va)
 {
    if (m_trace_has_pa)
-      return m_trace.va2pa(va);
+   {
+      UInt64 pa = m_trace.va2pa(va);
+      if (pa != 0)
+      {
+         return pa;
+      }
+      else
+      {
+         LOG_PRINT_WARNING("No mapping found for logical address %lx", va);
+         return va;
+      }
+   }
    else if (m_address_randomization)
+   {
       // Set 16 bits to app_id | remap middle 36 bits using app_id-specific mapping | keep lower 12 bits (page offset)
       return (UInt64(m_thread->getAppId()) << pa_core_shift) | (remapAddress(va >> va_page_shift) << va_page_shift) | (va & va_page_mask);
+   }
    else
+   {
       // Set 16 bits to app_id | keep lower 48 bits
       return (UInt64(m_thread->getAppId()) << pa_core_shift) | (va & pa_va_mask);
+   }
 }
 
 UInt64 TraceThread::remapAddress(UInt64 va_page)

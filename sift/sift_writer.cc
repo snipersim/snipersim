@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -324,6 +325,15 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    std::cerr << "[DEBUG:" << m_id << "] Write Syscall" << std::endl;
    #endif
 
+   if (syscall_number == SYS_futex)
+   {
+      intptr_t *args = (intptr_t*)data;
+      // Try reading from the futex address to ensure it has a physical address mapping
+      int value = *(int *)args[0]; // Access to force mapping
+      // Make the futex's physical address available through SIFT
+      send_va2pa(args[0]);
+   }
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherSyscallRequest;
@@ -586,17 +596,23 @@ void Sift::Writer::send_va2pa(uint64_t va)
       intptr_t vp = va / PAGE_SIZE;
       if (m_va2pa.count(vp) == 0)
       {
-         Record rec;
-         rec.Other.zero = 0;
-         rec.Other.type = RecOtherLogical2Physical;
-         rec.Other.size = 2 * sizeof(uint64_t);
-         output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
-
          uint64_t pp = va2pa_lookup(vp);
-         output->write(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
-         output->write(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
+         if (pp == 0)
+         {
+            // Page is not mapped into physical memory, do not send a mapping now.
+         }
+         else
+         {
+            Record rec;
+            rec.Other.zero = 0;
+            rec.Other.type = RecOtherLogical2Physical;
+            rec.Other.size = 2 * sizeof(uint64_t);
+            output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+            output->write(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
+            output->write(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
 
-         m_va2pa[vp] = true;
+            m_va2pa[vp] = true;
+         }
       }
    }
 }
