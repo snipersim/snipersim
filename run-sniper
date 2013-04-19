@@ -330,18 +330,26 @@ if use_viz:
   scripts.append('markers:markers')
 
 if scripts:
-  sniperoptions.append('-g --hooks/numscripts=%u' % len(scripts))
+  scriptname = os.path.join(outputdir, 'scripts.py')
+  scriptfileobj = open(scriptname, 'w')
+  # Generate a Python script that executes all user scripts with their arguments
+  scriptfileobj.write('import sys\n')
   for i, script in enumerate(scripts):
     if ':' in script:
       filename, args = script.split(':', 1)
     else:
-      filename, args = script, None
+      filename, args = script, ''
     scriptfile = findscript(filename)
     if not scriptfile:
       print >> sys.stderr, 'Cannot find script file', filename
       sys.exit(-1)
-    sniperoptions.append('-g --hooks/script%uname=%s' % (i, scriptfile))
-    sniperoptions.append('-g --hooks/script%uargs=%s' % (i, args or ''))
+    scriptfileobj.write('sys.argv = [ "%s", "%s" ]\n' % (scriptfile, args.replace('"', r'\"')))
+    scriptfileobj.write('execfile("%s")\n' % scriptfile)
+  scriptfileobj.close()
+  # Pass our generated script as a single, argument-less script
+  sniperoptions.append('-g --hooks/numscripts=1')
+  sniperoptions.append('-g --hooks/script0name=%s' % scriptname)
+  sniperoptions.append('-g --hooks/script0args=')
 
 # If using traces via this front-end, support either multi-program workloads or a single multi-threaded application
 if traces:
