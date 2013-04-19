@@ -325,13 +325,25 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    std::cerr << "[DEBUG:" << m_id << "] Write Syscall" << std::endl;
    #endif
 
-   if (syscall_number == SYS_futex)
+   // Try to send some extra logical2physical address mappings for data referenced by system call arguments.
+   // Also try to read from the address first, if the mapping wasn't set up yet (never accessed before, or swapped out),
+   // then this will cause a page fault that brings in the data.
+   intptr_t *args = (intptr_t*)data;
+   switch(syscall_number)
    {
-      intptr_t *args = (intptr_t*)data;
-      // Try reading from the futex address to ensure it has a physical address mapping
-      int value = *(int *)args[0]; // Access to force mapping
-      // Make the futex's physical address available through SIFT
-      send_va2pa(args[0]);
+      case SYS_futex:
+      {
+         int value = *(int *)args[0];
+         send_va2pa(args[0]);
+         break;
+      }
+
+      case SYS_write:
+      {
+         int value = *(int *)args[1];
+         send_va2pa(args[1]);
+         break;
+      }
    }
 
    Record rec;

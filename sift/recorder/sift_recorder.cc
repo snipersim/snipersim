@@ -349,7 +349,8 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       if (count > 0 && (fd == 1 || fd == 2))
          thread_data[threadid].output->Output(fd, buf, count);
    }
-   else if (KnobEmulateSyscalls.Value())
+
+   if (KnobEmulateSyscalls.Value())
    {
       switch(syscall_number)
       {
@@ -370,6 +371,13 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
             ReleaseLock(&new_threadid_lock);
             break;
          }
+
+         // System calls not emulated (passed through to OS)
+         case SYS_write:
+            thread_data[threadid].last_syscall_number = syscall_number;
+            thread_data[threadid].last_syscall_emulated = false;
+            thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            break;
 
          // System calls emulated (not passed through to OS)
          case SYS_futex:
