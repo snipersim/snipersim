@@ -49,7 +49,7 @@ def dram_power(results, config):
   return compute_dram_power(
     sum(results['dram.reads']),
     sum(results['dram.writes']),
-    max(results['performance_model.elapsed_time']) * 1e-15,
+    results['global.time'] * 1e-15,
     config
   )
 
@@ -168,8 +168,8 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
 
   # Build stack
   ncores = int(results['config']['general/total_cores'])
-  time0_begin = max(results['results']['performance_model.elapsed_time_begin'])
-  time0_end = max(results['results']['performance_model.elapsed_time_end'])
+  time0_begin = results['results']['global.time_begin']
+  time0_end = results['results']['global.time_end']
   seconds = (time0_end - time0_begin)/1e15
   results = power_stack(power_dat, powertype)
   # Plot stack
