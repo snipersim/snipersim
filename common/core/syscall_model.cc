@@ -59,13 +59,12 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
    m_syscall_number = syscall_number;
 
-   HookSyscallEnter hook_args = {
-      thread_id: m_thread->getId(),
-      core_id: core->getId(),
-      time: core->getPerformanceModel()->getElapsedTime(),
-      syscall_number: syscall_number,
-      args: args
-   };
+   HookSyscallEnter hook_args;
+   hook_args.thread_id = m_thread->getId();
+   hook_args.core_id =core->getId();
+   hook_args.time = core->getPerformanceModel()->getElapsedTime();
+   hook_args.syscall_number = syscall_number;
+   hook_args.args = args;
    {
       ScopedLock sl(Sim()->getThreadManager()->getLock());
       Sim()->getHooksManager()->callHooks(HookType::HOOK_SYSCALL_ENTER, (UInt64)&hook_args);
@@ -265,13 +264,12 @@ IntPtr SyscallMdl::runExit(IntPtr old_return)
    }
 
    Core *core = m_thread->getCore();
-   HookSyscallExit hook_args = {
-      thread_id: m_thread->getId(),
-      core_id: core->getId(),
-      time: core->getPerformanceModel()->getElapsedTime(),
-      ret_val: m_ret_val,
-      emulated: m_emulated
-   };
+   HookSyscallExit hook_args;
+   hook_args.thread_id = m_thread->getId();
+   hook_args.core_id = core->getId();
+   hook_args.time = core->getPerformanceModel()->getElapsedTime();
+   hook_args.ret_val = m_ret_val;
+   hook_args.emulated = m_emulated;
    {
       ScopedLock sl(Sim()->getThreadManager()->getLock());
       Sim()->getHooksManager()->callHooks(HookType::HOOK_SYSCALL_EXIT, (UInt64)&hook_args);
