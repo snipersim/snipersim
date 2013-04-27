@@ -96,11 +96,12 @@ def stats_process(config, results):
     # Most accurate: ask the barrier
     time0_begin = stats['barrier.global_time_begin'][0]
     time0_end = stats['barrier.global_time_end'][0]
-  else:
+    stats.update({'global.time_begin': time0_begin, 'global.time_end': time0_end, 'global.time': time0_end - time0_begin})
+  elif 'performance_model.elapsed_time_begin' in stats:
     # Guess based on core that has the latest time (future wakeup is less common than sleep on futex)
     time0_begin = max(stats['performance_model.elapsed_time_begin'])
     time0_end = max(stats['performance_model.elapsed_time_end'])
-  stats.update({'global.time_begin': time0_begin, 'global.time_end': time0_end, 'global.time': time0_end - time0_begin})
+    stats.update({'global.time_begin': time0_begin, 'global.time_end': time0_end, 'global.time': time0_end - time0_begin})
   # add computed stats
   try:
     l1access = sum(stats['L1-D.load-misses']) + sum(stats['L1-D.store-misses'])
