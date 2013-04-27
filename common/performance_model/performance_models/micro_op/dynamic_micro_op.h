@@ -31,6 +31,10 @@ class DynamicMicroOp
 
       /** Initially copied from MicroOp, but can be changed by removeDependency */
       uint32_t intraInstructionDependencies;
+      /** Initially copied from MicroOp, but can be changed in case of squashing */
+      uint32_t microOpTypeOffset;
+      /** Used in doSquashing. Contains number of squashed preceding uops of the instruction*/
+      uint32_t squashedCount;
       /** This field contains the length of the dependencies array. */
       uint32_t dependenciesLength;
       /** This array contains the dependencies. The uint64_t stored in the array is the sequenceNumber of the dependency. */
@@ -91,6 +95,15 @@ class DynamicMicroOp
       uint64_t getDependency(uint32_t index) const;
       void addDependency(uint64_t sequenceNumber);
       void removeDependency(uint64_t sequenceNumber);
+
+      uint32_t getIntraInstrDependenciesLength() const { return this->intraInstructionDependencies; }
+      void setIntraInstrDependenciesLength(uint32_t deps) { intraInstructionDependencies = deps;}
+
+      uint32_t getMicroOpTypeOffset() const { return microOpTypeOffset; }
+      void setMicroOpTypeOffset(uint32_t offset) { microOpTypeOffset = offset; }
+
+      uint32_t getSquashedCount() const { return squashedCount; }
+      void setSquashedCount(uint32_t count) { squashedCount = count; }
 
       void setFirst(bool _first) { first = _first; }
       bool isFirst() const { return first; }

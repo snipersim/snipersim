@@ -239,8 +239,10 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
       }
       else if (index < numLoads + numExecs) /* EXEC */
       {
+         size_t execIndex = index - numLoads;
+         LOG_ASSERT_ERROR(numExecs <= 1, "More than 1 exec uop");
          currentMicroOp->makeExecute(
-                 0
+                 execIndex
                , numLoads
                , xed_decoded_inst_get_iclass(ins)
                , xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(ins))

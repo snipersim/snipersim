@@ -112,6 +112,50 @@ MicroOpPerformanceModel::~MicroOpPerformanceModel()
    delete m_allocator;
 }
 
+void MicroOpPerformanceModel::doSquashing(uint32_t first_squashed)
+{
+   MicroOp::uop_type_t uop_type = MicroOp::UOP_INVALID;
+   uint32_t i, size, squashedCount = 0, microOpTypeOffset = 0;
+
+   // recalculate microOpTypeOffsets for dynamic uops and
+   // collect squashing info
+   for(i = 0, size = m_current_uops.size(); i < size; i++)
+   {
+      DynamicMicroOp* uop = m_current_uops[i];
+      if(uop->isSquashed())
+      {
+         squashedCount++;
+      }
+      else
+      {
+         if(uop->getMicroOp()->getType() != uop_type)
+         {
+            uop_type = uop->getMicroOp()->getType();
+            microOpTypeOffset = 0;
+         }
+         uop->setMicroOpTypeOffset(microOpTypeOffset++);
+      }
+      uop->setSquashedCount(squashedCount);
+   }
+
+   // recalculate intraInstructionDependancies
+   for(i = first_squashed; i < size; i++)
+   {
+      DynamicMicroOp* uop = m_current_uops[i];
+      if(!uop->isSquashed())
+      {
+         uint32_t intraDeps = uop->getIntraInstrDependenciesLength();
+         if(intraDeps != 0)
+         {
+            uint32_t iBase = i - uop->getMicroOp()->microOpTypeOffset;
+            LOG_ASSERT_ERROR(iBase >= intraDeps, "intraInstructionDependancies (%d) should be <= (%d)", intraDeps, iBase);
+            uop->setIntraInstrDependenciesLength(intraDeps - (m_current_uops[iBase]->getSquashedCount() -
+                                           m_current_uops[iBase-intraDeps]->getSquashedCount()));
+         }
+      }
+   }
+}
+
 bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
 {
    if (m_state_instruction == NULL)
@@ -190,6 +234,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       m_state_icache_done = true;
    }
 
+   bool do_squashing = false;
    // Graphite instruction operands
    const OperandList &ops = instruction->getOperands();
 
@@ -234,7 +279,10 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
                                 "Expected uop %d to be a load.", load_index);
 
                if (std::find(m_cache_lines_read.begin(), m_cache_lines_read.end(), cache_line) != m_cache_lines_read.end())
+               {
                   m_current_uops[load_index]->squash(&m_current_uops);
+                  do_squashing = true;
+               }
                m_cache_lines_read.push_back(cache_line);
 
                // Update this uop with load latencies
@@ -269,7 +317,10 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
                                 "Expected uop %d to be a store. [%d|%s]", store_index, m_current_uops[store_index]->getMicroOp()->getType(), m_current_uops[store_index]->getMicroOp()->toString().c_str());
 
                if (std::find(m_cache_lines_written.begin(), m_cache_lines_written.end(), cache_line) != m_cache_lines_written.end())
+               {
                   m_current_uops[store_index]->squash(&m_current_uops);
+                  do_squashing = true;
+               }
                m_cache_lines_written.push_back(cache_line);
 
                // Update this uop with store latencies.
@@ -297,6 +348,9 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       }
 
    }
+
+   if(do_squashing > 0)
+      doSquashing();
 
    // Make sure there was an Operand/DynamicInstructionInfo for each MicroOp
    // This should detect mismatches between decoding as done by fillOperandListMemOps and InstructionDecoder

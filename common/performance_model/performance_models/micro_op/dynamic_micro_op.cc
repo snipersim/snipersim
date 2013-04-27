@@ -15,6 +15,8 @@ DynamicMicroOp::DynamicMicroOp(const MicroOp *uop, const CoreModel *core_model, 
    this->branchMispredicted = false;
 
    this->intraInstructionDependencies = uop->intraInstructionDependencies;
+   this->microOpTypeOffset = uop->microOpTypeOffset;
+   this->squashedCount = 0;
    this->dependenciesLength = 0;
 
    this->execLatency = m_core_model->getInstructionLatency(uop);
@@ -65,7 +67,7 @@ void DynamicMicroOp::squash(std::vector<DynamicMicroOp*>* array)
 uint64_t DynamicMicroOp::getDependency(uint32_t index) const
 {
    if (index < this->intraInstructionDependencies) {
-      return this->sequenceNumber - this->getMicroOp()->microOpTypeOffset - this->intraInstructionDependencies + index;
+      return this->sequenceNumber - this->microOpTypeOffset - this->intraInstructionDependencies + index;
    } else {
       assert((index >= this->intraInstructionDependencies) && ((index - this->intraInstructionDependencies) < this->dependenciesLength));
       return this->dependencies[index - this->intraInstructionDependencies];
@@ -83,11 +85,11 @@ void DynamicMicroOp::addDependency(uint64_t sequenceNumber)
 
 void DynamicMicroOp::removeDependency(uint64_t sequenceNumber)
 {
-   if (sequenceNumber >= this->sequenceNumber - this->getMicroOp()->microOpTypeOffset - this->intraInstructionDependencies) {
+   if (sequenceNumber >= this->sequenceNumber - this->microOpTypeOffset - this->intraInstructionDependencies) {
       // Intra-instruction dependency
-      while(intraInstructionDependencies && !(sequenceNumber == this->sequenceNumber - this->getMicroOp()->microOpTypeOffset - this->intraInstructionDependencies)) {
+      while(intraInstructionDependencies && !(sequenceNumber == this->sequenceNumber - this->microOpTypeOffset - this->intraInstructionDependencies)) {
          // Remove the first intra-instruction dependency, but since this is not the one to be removed, add it to the regular dependencies list
-         dependencies[dependenciesLength] = this->sequenceNumber - this->getMicroOp()->microOpTypeOffset - this->intraInstructionDependencies;
+         dependencies[dependenciesLength] = this->sequenceNumber - this->microOpTypeOffset - this->intraInstructionDependencies;
          dependenciesLength++;
          LOG_ASSERT_ERROR(dependenciesLength < MAXIMUM_NUMBER_OF_DEPENDENCIES, "dependenciesLength(%u) > MAX(%u)", dependenciesLength, MAXIMUM_NUMBER_OF_DEPENDENCIES);
          intraInstructionDependencies--;

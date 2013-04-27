@@ -26,6 +26,7 @@ protected:
 
    virtual boost::tuple<uint64_t,uint64_t> simulate(const std::vector<DynamicMicroOp*>& insts) = 0;
    virtual void notifyElapsedTimeUpdate() = 0;
+   void doSquashing(uint32_t first_squashed = 0);
 
 private:
    bool handleInstruction(Instruction const* instruction);
