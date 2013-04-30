@@ -23,7 +23,11 @@ DRAM_DIMMS_PER_SOCKET = 4
 
 
 def compute_dram_power(nread, nwrite, t, config):
-  sockets = math.ceil(float(config['general/total_cores']) / float(config['perf_model/dram/controllers_interleaving']))
+  num_dram_controllers = int(config['perf_model/dram/num_controllers'])
+  if num_dram_controllers > 0:
+    sockets = num_dram_controllers
+  else:
+    sockets = math.ceil(float(config['general/total_cores']) / float(config['perf_model/dram/controllers_interleaving']))
   chips_per_dimm = float(config.get('perf_model/dram/chips_per_dimm', DRAM_CHIPS_PER_DIMM))
   dimms_per_socket = float(config.get('perf_model/dram/dimms_per_controller', DRAM_DIMMS_PER_SOCKET))
 
