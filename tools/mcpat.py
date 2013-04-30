@@ -291,9 +291,12 @@ def edit_XML(stats, cfg, vdd):
   data = [ {} for core in range(ncores) ]
   for core in range(ncores):
     data[core]['idle_cycles'] = cycles_scale[core] * stats['performance_model.idle_elapsed_time'][core]
-    data[core]['FP_instructions'] = (stats['interval_timer.uop_fp_addsub'][core] + stats['interval_timer.uop_fp_muldiv'][core])
-    data[core]['Branch_instructions'] = (stats['interval_timer.uop_branch'][core])
-    data[core]['ialu_accesses'] = (stats['interval_timer.uop_load'][core]) + (stats['interval_timer.uop_store'][core]) + (stats['interval_timer.uop_generic'][core])
+    data[core]['FP_instructions'] = (stats.get('interval_timer.uop_fp_addsub', stats.get('rob_timer.uop_fp_addsub', []))[core] \
+                                  + stats.get('interval_timer.uop_fp_muldiv', stats.get('rob_timer.uop_fp_muldiv', []))[core])
+    data[core]['Branch_instructions'] = (stats.get('interval_timer.uop_branch', stats.get('rob_timer.uop_branch', []))[core])
+    data[core]['ialu_accesses'] = (stats.get('interval_timer.uop_load', stats.get('rob_timer.uop_load', []))[core]) \
+                                + (stats.get('interval_timer.uop_store', stats.get('rob_timer.uop_store', []))[core]) \
+                                + (stats.get('interval_timer.uop_generic', stats.get('rob_timer.uop_generic', []))[core])
   total_system_instructions = sum(instrs)
   DRAM_reads = int(stats['dram.reads'][0])
   DRAM_writes = int(stats['dram.writes'][0])
@@ -395,7 +398,7 @@ def edit_XML(stats, cfg, vdd):
           elif template[i][1][0]=="FPU.duty_cycle":
             template[i][0] = template[i][0] % min(1,float((int(data[core]['FP_instructions']))/max_system_cycles))
           elif template[i][1][0]=="MUL.duty_cycle":
-            template[i][0] = template[i][0] % min(1,float((stats['interval_timer.uop_fp_muldiv'][core])/max_system_cycles))
+            template[i][0] = template[i][0] % min(1,float((stats.get('interval_timer.uop_fp_muldiv', stats.get('rob_timer.uop_fp_muldiv', []))[core])/max_system_cycles))
           elif template[i][1][0]=="ALU.duty_cycle":             #check whether it is per FP  basis or total
             template[i][0] = template[i][0] % min(1,((instrs[core] - data[core]['FP_instructions'])/(max_system_cycles *  ALU_per_core)))
           elif template[i][1][0]=="memory.reads":
@@ -457,13 +460,13 @@ def edit_XML(stats, cfg, vdd):
           elif template[i][1][0]=="window_switches.fpu_accesses":
             template[i][0] = template[i][0] % int(data[core]['FP_instructions'])
           elif template[i][1][0]=="window_switches.mul_accesses":
-            template[i][0] = template[i][0] % int(stats['interval_timer.uop_fp_muldiv'][core])
+            template[i][0] = template[i][0] % int(stats.get('interval_timer.uop_fp_muldiv', stats.get('rob_timer.uop_fp_muldiv', []))[core])
           elif template[i][1][0]=="window_switches.cdb_alu_accesses":
             template[i][0] = template[i][0] % int(data[core]['ialu_accesses'])
           elif template[i][1][0]=="window_switches.cdb_fpu_accesses":
             template[i][0] = template[i][0] % int(data[core]['FP_instructions'])
           elif template[i][1][0]=="window_switches.cdb_mul_accesses":
-            template[i][0] = template[i][0] % int(stats['interval_timer.uop_fp_muldiv'][core])
+            template[i][0] = template[i][0] % int(stats.get('interval_timer.uop_fp_muldiv', stats.get('rob_timer.uop_fp_muldiv', []))[core])
           elif template[i][1][0]=="RF_accesses.int_regfile_reads":
             template[i][0] = template[i][0] % int(instrs[core]*1.5)
           elif template[i][1][0]=="RF_accesses.fp_regfile_reads":
