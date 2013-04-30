@@ -407,15 +407,33 @@ def edit_XML(stats, cfg, vdd):
             template[i][0] = template[i][0] % DRAM_writes
           elif template[i][1][0]=="memory.accesses":
             template[i][0] = template[i][0] % (int(DRAM_reads) + int(DRAM_writes))
+          elif template[i][1][0]=="NoC.type":
+            if 'network.shmem-1.mesh.link-in.num-requests' in stats:
+              # 1 = NoC
+              template[i][0] = template[i][0] % 1
+            else:
+              # 0 = bus
+              template[i][0] = template[i][0] % 0
           elif template[i][1][0]=="NoC.total_accesses":
-            if 'network.shmem-1.bus.num-requests' in stats:
+            if 'network.shmem-1.mesh.link-in.num-requests' in stats:
+              template[i][0] = template[i][0] % sum(stats['network.shmem-1.mesh.link-in.num-requests'])
+            elif 'network.shmem-1.bus.num-requests' in stats:
               template[i][0] = template[i][0] % int(stats['network.shmem-1.bus.num-requests'][0])  #assumption
             elif 'network.shmem-1.bus.num-packets' in stats:
               template[i][0] = template[i][0] % int(stats['network.shmem-1.bus.num-packets'][0])  #assumption
             else:
               template[i][0] = template[i][0] % int(stats['bus.num-requests'][0])  #assumption
           elif template[i][1][0]=="NoC.duty_cycle":
-            if 'network.shmem-1.bus.time-used' in stats:
+            if 'network.shmem-1.mesh.link-left.total-time-used' in stats:
+              DIRECTIONS = ('up', 'down', 'left', 'right')
+              total_time_used = sum([ sum(stats['network.shmem-1.mesh.link-%s.total-time-used' % direction]) for direction in DIRECTIONS ])
+              num_links_used = sum([ sum([ v > 0 and 1 or 0 for v in stats['network.shmem-1.mesh.link-%s.num-requests' % direction] ]) for direction in DIRECTIONS ])
+              # Not all links (e.g. boundary of mesh) are actually present in hardware
+              # Here we assume that all real links are used at least ones
+              avg_time_used = total_time_used / float(num_links_used)
+              duty_cycle = avg_time_used / stats['global.time']
+              template[i][0] = template[i][0] % duty_cycle
+            elif 'network.shmem-1.bus.time-used' in stats:
               template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['network.shmem-1.bus.time-used'][0])/max_system_cycles)
             else:
               template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['bus.time-used'][0])/max_system_cycles)
@@ -954,7 +972,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t<component id=\"system.NoC0\" name=\"noc0\">",""])
   template.append(["\t\t\t<param name=\"clockrate\" value=\"2660\"/>",""])
 #template.append(["\t\t\t<param name=\"clock_rate\" value='%i'/>",["clockFrequency","cfg"]])   #CFG
-  template.append(["\t\t\t<param name=\"type\" value=\"0\"/>",""])
+  template.append(["\t\t\t<param name=\"type\" value=\"%d\"/>",["NoC.type","stat",-1]])
   template.append(["\t\t\t<!--0:bus, 1:NoC , for bus no matter how many nodes sharing the bus at each time only one node can send req -->",""])
   template.append(["\t\t\t<param name=\"horizontal_nodes\" value=\"1\"/>",""])
   template.append(["\t\t\t<param name=\"vertical_nodes\" value=\"1\"/>",""])
