@@ -606,8 +606,8 @@ def edit_XML(stats, cfg, vdd):
             dconf.append(2)            #banks
             # Increase throughput and latency constraints, otherwise McPAT calls CACTI some more
             #   with tighter constraints, resulting in a ridiculously large dcache
-            dconf.append(100)            #thoughput="Cycle time of the component"
-            dconf.append(100*latency_l1_d)
+            dconf.append(10)            #thoughput="Cycle time of the component"
+            dconf.append(10*latency_l1_d)
             dconf.append(0) # unused?
             dconf.append(1) # 1 for writeback
             template[i][0] = template[i][0] % tuple(dconf)
@@ -908,7 +908,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t\t<param name=\"Directory_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<param name=\"Dir_config\" value=\"4096,2,0,1,100,100, 8\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"8, 8, 8, 8\"/>",""])
-    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"2660\"/>",""])
+    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
     template.append(["\t\t\t\t<param name=\"ports\" value=\"1,1,1\"/>",""])
     template.append(["\t\t\t\t<param name=\"device_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<!-- altough there are multiple access types, Performance simulator needs to cast them into reads or writes         e.g. the invalidates can be considered as writes -->",""])
@@ -924,7 +924,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t\t<param name=\"Directory_type\" value=\"1\"/>",""])
     template.append(["\t\t\t\t<param name=\"Dir_config\" value=\"1048576,16,16,1,2, 100\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"8, 8, 8, 8\"/>",""])
-    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"2660\"/>",""])
+    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
     template.append(["\t\t\t\t<param name=\"ports\" value=\"1,1,1\"/>",""])
     template.append(["\t\t\t\t<param name=\"device_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<!-- altough there are multiple access types, Performance simulator needs to cast them into reads or writes         e.g. the invalidates can be considered as writes -->",""])
@@ -940,7 +940,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t\t<param name=\"L2_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["L2_config","comb",iCount]])
     #template.append(["\t\t\t\t<param name=\"L2_config\" value=\"6291456,64, 16, 8, 8, 23, 32, 1\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"16, 16, 16, 16\"/>",""])
-    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"2660\"/>",""])
+    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
     template.append(["\t\t\t\t<param name=\"ports\" value=\"1,1,1\"/>",""])
     template.append(["\t\t\t\t<param name=\"device_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<stat name=\"read_accesses\" value=\"%i\"/>",["L2.read_accesses","stat",iCount]])
@@ -974,7 +974,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t\t<!--**********************************************************************-->",""])
 #template.append(["\t\t<component id=\"system.NoC%i\" name=\"noc%i\">"%(iCount,iCount),""])
   template.append(["\t\t<component id=\"system.NoC0\" name=\"noc0\">",""])
-  template.append(["\t\t\t<param name=\"clockrate\" value=\"2660\"/>",""])
+  template.append(["\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
 #template.append(["\t\t\t<param name=\"clock_rate\" value='%i'/>",["clockFrequency","cfg"]])   #CFG
   template.append(["\t\t\t<param name=\"type\" value=\"%d\"/>",["NoC.type","stat",-1]])
   template.append(["\t\t\t<!--0:bus, 1:NoC , for bus no matter how many nodes sharing the bus at each time only one node can send req -->",""])
