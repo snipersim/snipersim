@@ -133,6 +133,7 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
    if (i->isIdle())
    {
       handleIdleInstruction(i);
+      delete i;
    }
    else
    {
