@@ -278,6 +278,23 @@ def edit_XML(stats, cfg, vdd):
   num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
   if int(cfg['perf_model/cache/levels']) >= 3:
     num_l3s = int(math.ceil(ncores / float(l3_cacheSharedCores)))
+  elif cfg.get('perf_model/nuca/enabled') == 'true':
+    if cfg['perf_model/dram_directory/locations'] == 'interleaved':
+      l3_cacheSharedCores = int(cfg['perf_model/dram_directory/interleaving'])
+      num_l3s = int(math.ceil(ncores / float(l3_cacheSharedCores)))
+    else:
+      # TODO: compute number of NUCA caches in other cases
+      raise ValueError('Unsupported tag directory locations %s' % cfg['perf_model/dram_directory/locations'])
+    # Copy over NUCA statistics into L3 statistics so we don't have to change anything below here
+    cfg['perf_model/l3_cache/data_access_time'] = cfg['perf_model/nuca/data_access_time']
+    cfg['perf_model/l3_cache/associativity'] = cfg['perf_model/nuca/associativity']
+    cfg['perf_model/l3_cache/cache_block_size'] = cfg['perf_model/l2_cache/cache_block_size']
+    cfg['perf_model/l3_cache/cache_size'] = cfg['perf_model/nuca/cache_size']
+    cfg['perf_model/l3_cache/writeback_time'] = 0
+    stats['L3.loads'] = stats['nuca-cache.reads']
+    stats['L3.stores'] = stats['nuca-cache.writes']
+    stats['L3.load-misses'] = stats['nuca-cache.read-misses']
+    stats['L3.store-misses'] = stats['nuca-cache.write-misses']
   else:
     num_l3s = 0
 
