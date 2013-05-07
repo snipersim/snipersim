@@ -341,6 +341,20 @@ MYLOG("L1 hit");
          }
       }
 
+      if (modeled)
+      {
+         ScopedLock sl(getLock());
+         // This is a hit, but maybe the prefetcher filled it at a future time stamp. If so, delay.
+         SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+         if (m_master->mshr.count(ca_address)
+            && (m_master->mshr[ca_address].t_issue < t_now && m_master->mshr[ca_address].t_complete > t_now))
+         {
+            SubsecondTime latency = m_master->mshr[ca_address].t_complete - t_now;
+            stats.mshr_latency += latency;
+            getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
+         }
+      }
+
    } else {
       /* cache miss */
 MYLOG("L1 miss");
