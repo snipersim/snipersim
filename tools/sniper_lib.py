@@ -41,7 +41,7 @@ def get_results(jobid = None, resultsdir = None, config = None, stats = None, pa
   if jobid:
     if ic_invalid:
       raise RuntimeError('Cannot fetch results from server, make sure BENCHMARKS_ROOT points to a valid copy of benchmarks+iqlib')
-    results = ic.graphite_results(jobid, partial)
+    results = ic.graphite_results(jobid, partial, metrics)
     config = get_config(jobid = jobid, force_deleted = force)
   elif resultsdir:
     results = parse_results_from_dir(resultsdir, partial = partial, metrics = metrics)
