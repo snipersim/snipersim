@@ -185,23 +185,22 @@ static void endROI(THREADID threadid)
 
 ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 {
-   if (KnobUseROI.Value())
+   if (gax == SIM_CMD_ROI_START)
    {
-      if (gax == SIM_CMD_ROI_START && !any_thread_in_detail)
-      {
+      if (KnobUseROI.Value() && !any_thread_in_detail)
          beginROI(threadid);
-      }
-      else if (gax == SIM_CMD_ROI_END && any_thread_in_detail)
-      {
+   }
+   else if (gax == SIM_CMD_ROI_END)
+   {
+      if (KnobUseROI.Value() && any_thread_in_detail)
          endROI(threadid);
-      }
-      else
+   }
+   else
+   {
+      if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].in_detail)
       {
-         if (thread_data[threadid].running && thread_data[threadid].in_detail)
-         {
-            uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
-            return res;
-         }
+         uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
+         return res;
       }
    }
 
