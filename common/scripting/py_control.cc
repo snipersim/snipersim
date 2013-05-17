@@ -13,7 +13,7 @@ setROI(PyObject *self, PyObject *args)
 
    Sim()->getMagicServer()->Magic_unlocked(INVALID_CORE_ID, INVALID_THREAD_ID, inRoi ? SIM_CMD_ROI_START : SIM_CMD_ROI_END, 0, 0);
 
-    Py_RETURN_NONE;
+   Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -39,9 +39,25 @@ setInstrumentationMode(PyObject *self, PyObject *args)
    Py_RETURN_NONE;
 }
 
+static PyObject *
+simulatorAbort(PyObject *self, PyObject *args)
+{
+   // Exit now, cleaning up as best as possible
+   // For benchmarks where, after ROI, functionally simulating until the end takes too long.
+
+   // If we're still in ROI, make sure we end it properly
+   Sim()->getMagicServer()->Magic_unlocked(INVALID_CORE_ID, INVALID_THREAD_ID, SIM_CMD_ROI_END, 0, 0);
+
+   LOG_PRINT("Application exit.");
+   Simulator::release();
+
+   exit(0);
+}
+
 static PyMethodDef PyControlMethods[] = {
    { "set_roi", setROI, METH_VARARGS, "Set whether or not we are in the ROI" },
    { "set_instrumentation_mode", setInstrumentationMode, METH_VARARGS, "Set instrumentation mode" },
+   { "abort", simulatorAbort, METH_VARARGS, "Stop simulation now" },
    { NULL, NULL, 0, NULL } /* Sentinel */
 };
 

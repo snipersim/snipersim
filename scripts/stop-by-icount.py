@@ -25,6 +25,7 @@ class StopByIcount:
       sim.control.set_roi(False)
       self.inroi = False
       self.done = True
+      sim.control.abort()
     elif not self.inroi and icount > self.ninstrs_start:
       print '[SCRIPT] Starting ROI after %d instructions' % icount
       sim.control.set_roi(True)

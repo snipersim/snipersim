@@ -149,7 +149,8 @@ Simulator::~Simulator()
    m_config_file_allowed = true;
 
    // In case we're still in ROI (ROI is the full application, or someone forgot to turn it off), end ROI now
-   disablePerformanceGlobal();
+   if (getMagicServer()->inROI())
+      disablePerformanceGlobal();
 
    m_stats_manager->recordStats("stop");
    m_hooks_manager->callHooks(HookType::HOOK_SIM_END, 0);
