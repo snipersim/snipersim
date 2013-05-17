@@ -284,6 +284,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
          {
             if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
             {
+               LOG_ASSERT_ERROR(address_idx < inst.num_addresses, "Did not receive enough data addresses");
                core->accessMemory(
                      /*(is_atomic_update) ? Core::LOCK :*/ Core::NONE,
                      (is_atomic_update) ? Core::READ_EX : Core::READ,
@@ -300,6 +301,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
          {
             if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
             {
+               LOG_ASSERT_ERROR(address_idx < inst.num_addresses, "Did not receive enough data addresses");
                if (is_atomic_update)
                   core->logMemoryHit(false, Core::WRITE, va2pa(inst.addresses[address_idx]), Core::MEM_MODELED_COUNT, va2pa(inst.sinst->addr));
                else
@@ -403,9 +405,12 @@ void TraceThread::run()
          // We're the start of a new basic block
          core->countInstructions(m_bbv_base, m_bbv_count);
          // In cache-only mode, we'll want to do I-cache warmup
-         do_icache_warmup = true;
-         icache_warmup_addr = m_bbv_base;
-         icache_warmup_size = m_bbv_last - m_bbv_base;
+         if (m_bbv_base)
+         {
+            do_icache_warmup = true;
+            icache_warmup_addr = m_bbv_base;
+            icache_warmup_size = m_bbv_last - m_bbv_base;
+         }
          // Set up new basic block info
          m_bbv_base = inst.sinst->addr;
          m_bbv_count = 0;
