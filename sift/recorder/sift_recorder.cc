@@ -41,6 +41,7 @@
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "trace", "output");
 KNOB<UINT64> KnobBlocksize(KNOB_MODE_WRITEONCE, "pintool", "b", "0", "blocksize");
 KNOB<UINT64> KnobUseROI(KNOB_MODE_WRITEONCE, "pintool", "roi", "0", "use ROI markers");
+KNOB<UINT64> KnobMPIImplicitROI(KNOB_MODE_WRITEONCE, "pintool", "roi-mpi", "0", "Implicit ROI between MPI_Init and MPI_Finalize");
 KNOB<UINT64> KnobFastForwardTarget(KNOB_MODE_WRITEONCE, "pintool", "f", "0", "instructions to fast forward");
 KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "d", "0", "instructions to trace in detail (default = all)");
 KNOB<UINT64> KnobUseResponseFiles(KNOB_MODE_WRITEONCE, "pintool", "r", "0", "use response files (required for multithreaded applications or when emulating syscalls, default = 0)");
@@ -109,69 +110,90 @@ void findMyAppId();
 void openFile(THREADID threadid);
 void closeFile(THREADID threadid);
 
+static void beginROI(THREADID threadid)
+{
+   int numthreads = 0;
+   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   {
+      if (thread_data[i].running)
+         ++numthreads;
+   }
+   if (numthreads > 1)
+   {
+      std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: Threads have been spawned before ROI begin. This behavior is not supported." << std::endl;
+      exit(-1);
+   }
+
+   if (app_id < 0)
+      findMyAppId();
+
+   if (any_thread_in_detail)
+   {
+      std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: ROI_START seen, but we have already started." << std::endl;
+   }
+   else
+   {
+      if (verbose)
+         std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
+   }
+   any_thread_in_detail = true;
+   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   {
+      if (thread_data[i].running && !thread_data[i].in_detail)
+         openFile(i);
+   }
+
+   PIN_RemoveInstrumentation();
+
+   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   {
+      thread_data[i].in_detail = any_thread_in_detail;
+   }
+}
+
+static void endROI(THREADID threadid)
+{
+   if (KnobEmulateSyscalls.Value())
+   {
+      // Send SYS_exit_group to the simulator to end the application
+      syscall_args_t args = {0};
+      args[0] = 0; // Assume success
+      thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
+   }
+
+   // Delete our .appid file
+   char filename[1024] = {0};
+   sprintf(filename, "%s.app%" PRId32 ".appid", KnobOutputFile.Value().c_str(), app_id);
+   unlink(filename);
+
+   if (verbose)
+      std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
+   any_thread_in_detail = false;
+   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   {
+      if (thread_data[i].running && thread_data[i].in_detail)
+         closeFile(i);
+   }
+
+   PIN_RemoveInstrumentation();
+
+   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   {
+      thread_data[i].in_detail = any_thread_in_detail;
+   }
+}
+
 ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 {
    if (KnobUseROI.Value())
    {
-      if (gax == SIM_CMD_ROI_START)
+      if (gax == SIM_CMD_ROI_START && !any_thread_in_detail)
       {
-         int numthreads = 0;
-         for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-         {
-            if (thread_data[i].running)
-               ++numthreads;
-         }
-         if (numthreads > 1)
-         {
-            std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: Threads have been spawned before ROI begin. This behavior is not supported." << std::endl;
-            exit(-1);
-         }
-
-         if (app_id < 0)
-            findMyAppId();
-
-         if (any_thread_in_detail)
-         {
-            std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: ROI_START seen, but we have already started." << std::endl;
-         }
-         else
-         {
-            if (verbose)
-               std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
-         }
-         any_thread_in_detail = true;
-         for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-         {
-            if (thread_data[i].running && !thread_data[i].in_detail)
-               openFile(i);
-         }
-         PIN_RemoveInstrumentation();
+         beginROI(threadid);
       }
-      else if (gax == SIM_CMD_ROI_END)
+      else if (gax == SIM_CMD_ROI_END && any_thread_in_detail)
       {
-         if (KnobEmulateSyscalls.Value())
-         {
-            // Send SYS_exit_group to the simulator to end the application
-            syscall_args_t args = {0};
-            args[0] = 0; // Assume success
-            thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
-         }
-
-         // Delete our .appid file
-         char filename[1024] = {0};
-         sprintf(filename, "%s.app%" PRId32 ".appid", KnobOutputFile.Value().c_str(), app_id);
-         unlink(filename);
-
-         if (verbose)
-            std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
-         any_thread_in_detail = false;
-         for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-         {
-            if (thread_data[i].running && thread_data[i].in_detail)
-               closeFile(i);
-         }
-
-         PIN_RemoveInstrumentation();
+         endROI(threadid);
       }
       else
       {
@@ -180,11 +202,6 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
             uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
             return res;
          }
-      }
-
-      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-      {
-         thread_data[i].in_detail = any_thread_in_detail;
       }
    }
 
@@ -196,7 +213,7 @@ VOID countInsns(THREADID threadid, INT32 count)
 {
    thread_data[threadid].icount += count;
 
-   if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value())
+   if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
       if (verbose)
          std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
@@ -753,6 +770,34 @@ VOID forkBefore(THREADID threadid, const CONTEXT *ctxt, VOID *v)
    assert(!any_thread_in_detail); // Cannot fork after starting ROI
 }
 
+VOID handleRoutineImplicitROI(THREADID threadid, bool begin)
+{
+   if (begin)
+      beginROI(threadid);
+   else
+      endROI(threadid);
+}
+
+void routineCallback(RTN rtn, void* v)
+{
+   if (KnobMPIImplicitROI.Value())
+   {
+      std::string rtn_name = RTN_Name(rtn);
+      if (rtn_name.find("MPI_Init") != string::npos && rtn_name.find("MPI_Initialized") == string::npos) // Actual name can be MPI_Init, MPI_Init_thread, PMPI_Init_thread, etc.
+      {
+         RTN_Open(rtn);
+         RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_BOOL, true, IARG_END);
+         RTN_Close(rtn);
+      }
+      if (rtn_name == "MPI_Finalize")
+      {
+         RTN_Open(rtn);
+         RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_BOOL, false, IARG_END);
+         RTN_Close(rtn);
+      }
+   }
+}
+
 int main(int argc, char **argv)
 {
    if (PIN_Init(argc,argv))
@@ -778,12 +823,12 @@ int main(int argc, char **argv)
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();
-   if (!KnobUseROI.Value())
+   if (!KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
       if (app_id < 0)
          findMyAppId();
    }
-   if (fast_forward_target == 0 && !KnobUseROI.Value())
+   if (fast_forward_target == 0 && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
       for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
       {
@@ -823,6 +868,8 @@ int main(int argc, char **argv)
    }
 
    TRACE_AddInstrumentFunction(traceCallback, 0);
+   RTN_AddInstrumentFunction(routineCallback, 0);
+
    PIN_AddThreadStartFunction(threadStart, 0);
    PIN_AddThreadFiniFunction(threadFinish, 0);
    PIN_AddFiniFunction(Fini, 0);

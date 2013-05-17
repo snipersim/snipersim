@@ -310,7 +310,7 @@ if not configfiles:
 # Prepend config files to options, so -g options are always later on the command line and override config files
 sniperoptions = [ '--config=%s' % cfgfile for cfgfile in configfiles ] + sniperoptions
 
-if roi_only:
+if roi_only and not use_mpi:
   sniperoptions.append('-g --general/magic=true')
 if roi_script:
   sniperoptions.append('-g --general/roi_script=true')
@@ -387,7 +387,7 @@ elif use_mpi:
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all MPI ranks have completed
   # Set trace recorder options
   applications = [
-    [ '--roi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--' ] + cmdline
+    [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--' ] + cmdline
   ]
 elif pinballs and pinball_sift:
   tracegen = {}
