@@ -15,7 +15,7 @@ class StopByIcount:
       self.ninstrs_start = long(start)
       self.inroi = False
     self.done = False
-    sim.util.EveryIns(long(1000000), self.periodic, roi_only = (start == None))
+    sim.util.EveryIns(min(self.ninstrs_start or (), self.ninstrs, long(1000000)), self.periodic, roi_only = (start == None))
   def periodic(self, icount, icount_delta):
     if self.done:
       return
