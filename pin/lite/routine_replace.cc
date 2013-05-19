@@ -256,7 +256,7 @@ void routineCallback(RTN rtn, void* v)
    // os emulation
    else if (rtn_name == "sched_getcpu")      RTN_ReplaceSignature(rtn, AFUNPTR(emuGetCPU), IARG_THREAD_ID, IARG_END);
    else if (rtn_name == "get_nprocs")        RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
-   else if (rtn_name == "get_nprocs_conf")   RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
+   else if (rtn_name == "get_nprocs_conf" || rtn_name == "__get_nprocs_conf") RTN_Replace(rtn, AFUNPTR(emuGetNprocs));
    if (Sim()->getConfig()->getOSEmuClockReplace())
    {
       if (rtn_name == "clock_gettime")
