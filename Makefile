@@ -14,7 +14,7 @@ SIM_TARGETS=$(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(STANDALONE)
 
 all: dependencies $(SIM_TARGETS) configscripts
 
-dependencies: package_deps pin python mcpat linux output_files builddir showdebugstatus
+dependencies: package_deps pin python mcpat linux builddir showdebugstatus
 
 $(SIM_TARGETS): dependencies
 
@@ -112,7 +112,7 @@ else
 	rm -f config/sniper.py config/buildconf.sh config/buildconf.makefile
 endif
 
-clean: empty_logs empty_config empty_deps
+clean: empty_config empty_deps
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CLEAN ] standalone'
 	@$(MAKE) $(MAKE_QUIET) -C standalone clean
@@ -145,18 +145,7 @@ else
 	rm -f include/linux/perf_event.h
 endif
 
-regress_quick: output_files regress_unit regress_apps
-
-output_files:
-	mkdir output_files
-
-empty_logs :
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CLEAN ] logs'
-	@rm -f output_files/*
-else
-	rm -f output_files/*
-endif
+regress_quick: regress_unit regress_apps
 
 empty_deps:
 ifeq ($(SHOW_COMPILE),)
