@@ -58,21 +58,29 @@ core_id_t SchedulerPinned::threadCreate(thread_id_t thread_id)
    if (m_thread_info.size() <= (size_t)thread_id)
       m_thread_info.resize(m_thread_info.size() + 16);
 
-   while(!m_core_mask[m_next_core])
+   if (m_thread_info[thread_id].hasAffinity())
+   {
+      // Thread already has an affinity set at/before creation
+   }
+   else
+   {
+      while(!m_core_mask[m_next_core])
+         m_next_core = getNextCore(m_next_core);
+
+      core_id_t core_id = m_next_core;
+      m_thread_info[thread_id].setAffinitySingle(core_id);
+
       m_next_core = getNextCore(m_next_core);
-
-   core_id_t core_id = m_next_core;
-   m_thread_info[thread_id].setAffinitySingle(core_id);
-
-   m_next_core = getNextCore(m_next_core);
+   }
 
    // The first thread scheduled on this core can start immediately, the others have to wait
-   if (m_core_thread_running[core_id] == INVALID_THREAD_ID)
+   core_id_t free_core_id = findFreeCoreForThread(thread_id);
+   if (free_core_id != INVALID_CORE_ID)
    {
-      m_thread_info[thread_id].setCoreRunning(core_id);
-      m_core_thread_running[core_id] = thread_id;
-      m_quantum_left[core_id] = m_quantum;
-      return core_id;
+      m_thread_info[thread_id].setCoreRunning(free_core_id);
+      m_core_thread_running[free_core_id] = thread_id;
+      m_quantum_left[free_core_id] = m_quantum;
+      return free_core_id;
    }
    else
    {
@@ -107,6 +115,9 @@ void SchedulerPinned::threadYield(thread_id_t thread_id)
 
 bool SchedulerPinned::threadSetAffinity(thread_id_t calling_thread_id, thread_id_t thread_id, size_t cpusetsize, const cpu_set_t *mask)
 {
+   if (m_thread_info.size() <= (size_t)thread_id)
+      m_thread_info.resize(thread_id + 16);
+
    if (!mask)
    {
       // No mask given: free to schedule anywhere.
@@ -133,6 +144,10 @@ bool SchedulerPinned::threadSetAffinity(thread_id_t calling_thread_id, thread_id
 
       LOG_ASSERT_ERROR(any, "No valid core found in sched_setaffinity() mask");
    }
+
+   // We're setting the affinity of a thread that isn't yet created. Do nothing else for now.
+   if (thread_id >= (thread_id_t)Sim()->getThreadManager()->getNumThreads())
+      return true;
 
    if (thread_id == calling_thread_id)
    {

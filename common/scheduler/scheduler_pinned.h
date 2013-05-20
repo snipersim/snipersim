@@ -25,7 +25,8 @@ class SchedulerPinned : public SchedulerDynamic
       {
          public:
             ThreadInfo()
-               : m_core_affinity(Sim()->getConfig()->getApplicationCores(), false)
+               : m_has_affinity(false)
+               , m_core_affinity(Sim()->getConfig()->getApplicationCores(), false)
                , m_core_running(INVALID_CORE_ID)
                , m_last_scheduled(SubsecondTime::Zero())
             {}
@@ -40,10 +41,11 @@ class SchedulerPinned : public SchedulerDynamic
                clearAffinity();
                addAffinity(core_id);
             }
-            void addAffinity(core_id_t core_id) { m_core_affinity[core_id] = true; }
+            void addAffinity(core_id_t core_id) { m_core_affinity[core_id] = true; m_has_affinity = true; }
             bool hasAffinity(core_id_t core_id) const { return m_core_affinity[core_id]; }
             String getAffinityString() const;
             /* running on core */
+            bool hasAffinity() const { return m_has_affinity; }
             void setCoreRunning(core_id_t core_id) { m_core_running = core_id; }
             core_id_t getCoreRunning() const { return m_core_running; }
             bool isRunning() const { return m_core_running != INVALID_CORE_ID; }
@@ -51,6 +53,7 @@ class SchedulerPinned : public SchedulerDynamic
             void setLastScheduled(SubsecondTime time) { m_last_scheduled = time; }
             SubsecondTime getLastScheduled() const { return m_last_scheduled; }
          private:
+            bool m_has_affinity;
             std::vector<bool> m_core_affinity;
             core_id_t m_core_running;
             SubsecondTime m_last_scheduled;
