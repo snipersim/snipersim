@@ -176,6 +176,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "invalidate-warmup", &stats.invalidate_warmup);
    registerStatsMetric(name, core_id, "evict-shared", &stats.evict_shared);
    registerStatsMetric(name, core_id, "evict-modified", &stats.evict_modified);
+   registerStatsMetric(name, core_id, "backinval-shared", &stats.backinval_shared);
+   registerStatsMetric(name, core_id, "backinval-modified", &stats.backinval_modified);
    registerStatsMetric(name, core_id, "total-latency", &stats.total_latency);
    registerStatsMetric(name, core_id, "snoop-latency", &stats.snoop_latency);
    registerStatsMetric(name, core_id, "mshr-latency", &stats.mshr_latency);
@@ -1381,6 +1383,13 @@ MYLOG("@%lx  %c > %c", address, CStateString(cache_block_info ? cache_block_info
                ++stats.invalidate_prefetch;
             if (cache_block_info->hasOption(CacheBlockInfo::WARMUP) && new_cstate == CacheState::INVALID)
                ++stats.invalidate_warmup;
+         }
+         else if (reason == Transition::BACK_INVAL)
+         {
+            if (cache_block_info->getCState() == CacheState::MODIFIED)
+               ++stats.backinval_modified;
+            else
+               ++stats.backinval_shared;
          }
       }
 
