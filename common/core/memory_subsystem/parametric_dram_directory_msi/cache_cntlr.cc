@@ -53,7 +53,7 @@ const char * ReasonString(Transition::reason_t reason) {
       case Transition::CORE_WR:     return "write";
       case Transition::UPGRADE:     return "upgrade";
       case Transition::EVICT:       return "evict";
-      case Transition::EVICT_LOWER: return "evictlower";
+      case Transition::BACK_INVAL:  return "backinval";
       case Transition::COHERENCY:   return "coherency";
       default:                      return "other";
    }
@@ -1251,7 +1251,7 @@ MYLOG("evicting @%lx", evict_address);
 
          SubsecondTime latency = SubsecondTime::Zero();
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
-            latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(evict_address, CacheState::INVALID, Transition::EVICT_LOWER, NULL, thread_num).first);
+            latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(evict_address, CacheState::INVALID, Transition::BACK_INVAL, NULL, thread_num).first);
          getMemoryManager()->incrElapsedTime(latency, thread_num);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
 
@@ -1342,7 +1342,7 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
    if (! m_master->m_prev_cache_cntlrs.empty())
       for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
          std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(
-            address, new_cstate, reason == Transition::EVICT ? Transition::EVICT_LOWER : reason, NULL, thread_num);
+            address, new_cstate, reason == Transition::EVICT ? Transition::BACK_INVAL : reason, NULL, thread_num);
          // writeback_time is for the complete stack, so only model it at the last level, ignore latencies returned by previous ones
          //latency = getMax<SubsecondTime>(latency, res.first);
          sibling_hit |= res.second;
@@ -1789,7 +1789,7 @@ CacheCntlr::transition(IntPtr address, Transition::reason_t reason, CacheState::
    if (old_state == CacheState::INVALID) {
       if (seen.count(address) == 0)
          old_state = CacheState::INVALID_COLD;
-      else if (seen[address] == Transition::EVICT || seen[address] == Transition::EVICT_LOWER)
+      else if (seen[address] == Transition::EVICT || seen[address] == Transition::BACK_INVAL)
          old_state = CacheState::INVALID_EVICT;
       else if (seen[address] == Transition::COHERENCY)
          old_state = CacheState::INVALID_COHERENCY;

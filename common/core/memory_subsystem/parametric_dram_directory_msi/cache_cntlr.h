@@ -51,7 +51,7 @@ namespace ParametricDramDirectoryMSI
             CORE_RDEX,
             UPGRADE,
             EVICT,
-            EVICT_LOWER,
+            BACK_INVAL,
             COHERENCY,
             NUM_REASONS
          };
