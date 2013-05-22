@@ -37,8 +37,8 @@ def compute_dram_power(nread, nwrite, t, config):
     is3d = False
 
   ncycles = t * DRAM_CLOCK * 1e6
-  read_dc = nread / sockets / ncycles
-  write_dc = nwrite / sockets / ncycles
+  read_dc = nread / sockets / (ncycles or 1)
+  write_dc = nwrite / sockets / (ncycles or 1)
   power_chip_dyn  = read_dc * DRAM_POWER_READ + write_dc * DRAM_POWER_WRITE
   if is3d:
     power_chip_stat = DRAM_POWER_STATIC + DRAM_POWER_STATIC_TSV_INTERFACE
@@ -451,8 +451,8 @@ def edit_XML(stats, cfg, vdd):
               num_links_used = sum([ sum([ v > 0 and 1 or 0 for v in stats['network.shmem-1.mesh.link-%s.num-requests' % direction] ]) for direction in DIRECTIONS ])
               # Not all links (e.g. boundary of mesh) are actually present in hardware
               # Here we assume that all real links are used at least ones
-              avg_time_used = total_time_used / float(num_links_used)
-              duty_cycle = avg_time_used / stats['global.time']
+              avg_time_used = total_time_used / float(num_links_used or 1.)
+              duty_cycle = avg_time_used / (stats['global.time'] or 1.)
               template[i][0] = template[i][0] % duty_cycle
             elif 'network.shmem-1.bus.time-used' in stats:
               template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['network.shmem-1.bus.time-used'][0])/max_system_cycles)
