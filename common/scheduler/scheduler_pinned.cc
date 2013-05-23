@@ -32,7 +32,7 @@ SchedulerPinned::SchedulerPinned(ThreadManager *thread_manager)
 core_id_t SchedulerPinned::getNextCore(core_id_t core_id)
 {
    core_id += m_interleaving;
-   if (core_id > (core_id_t)Sim()->getConfig()->getApplicationCores())
+   if (core_id >= (core_id_t)Sim()->getConfig()->getApplicationCores())
    {
       core_id %= Sim()->getConfig()->getApplicationCores();
       core_id += 1;
