@@ -71,7 +71,7 @@ PeriodicSampling::callbackDetailed(SubsecondTime time)
       if (time < m_random_offset)
          ; // Stay in detailed
       else {
-         printf("Done initial detailed of %ld ns, now starting detailed interval for real\n", m_random_offset.getNS());
+         printf("Done initial detailed of %" PRId64 " ns, now starting detailed interval for real\n", m_random_offset.getNS());
          m_sampling_manager->resetCoreHistoricCPIs();
          m_periodic_last = time;
          m_random_start = false;
