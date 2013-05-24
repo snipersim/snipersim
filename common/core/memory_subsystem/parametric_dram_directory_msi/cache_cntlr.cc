@@ -451,7 +451,7 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
    }
 
 
-   if (modeled)
+   if (modeled && m_next_cache_cntlr && !m_perfect)
    {
       SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(ca_address);
       bool new_bits = cache_block_info->updateUsage(offset, data_length);
@@ -915,7 +915,7 @@ CacheCntlr::updateUsageBits(IntPtr address, CacheBlockInfo::BitsUsedType used)
       SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
       new_bits = cache_block_info->updateUsage(used);
    }
-   if (new_bits && m_next_cache_cntlr)
+   if (new_bits && m_next_cache_cntlr && !m_perfect)
    {
       m_next_cache_cntlr->updateUsageBits(address, used);
    }
