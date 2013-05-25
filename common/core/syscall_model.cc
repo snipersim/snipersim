@@ -170,6 +170,13 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          Thread *thread;
          bool success = false;
 
+         if (cpuset == NULL)
+         {
+            m_ret_val = -EFAULT;
+            m_emulated = true;
+            break;
+         }
+
          if (pid == 0)
             thread = m_thread;
          else
@@ -180,7 +187,12 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
             ScopedLock sl(Sim()->getThreadManager()->getLock());
             success = Sim()->getThreadManager()->getScheduler()->threadSetAffinity(m_thread->getId(), thread->getId(), cpusetsize, cpuset);
          }
-         // else: success is already false, return EINVAL for invalid pid
+         else
+         {
+            m_ret_val = -ESRCH;
+            m_emulated = true;
+            break;
+         }
 
          // We may have been rescheduled
          SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
