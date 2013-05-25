@@ -4,7 +4,7 @@ class ProgressTrace:
   def setup(self, args):
     self.last_ins = 0
     self.last_time = 0
-    sim.util.EveryIns(1000, self.periodic, roi_only = False)
+    sim.util.EveryIns(1000000, self.periodic, roi_only = False)
 
   def periodic(self, ins, ins_delta):
     time_now = time.time()
