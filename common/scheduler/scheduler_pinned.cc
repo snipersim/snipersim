@@ -252,19 +252,17 @@ void SchedulerPinned::reschedule(SubsecondTime time, core_id_t core_id, bool is_
 
    for(thread_id_t thread_id = 0; thread_id < (thread_id_t)m_threads_runnable.size(); ++thread_id)
    {
-      if (m_thread_info[thread_id].hasAffinity(core_id) && m_threads_runnable[thread_id] == true)
+      if (m_thread_info[thread_id].hasAffinity(core_id) // Thread is allowed to run on this core
+          && m_threads_runnable[thread_id] == true      // Thread is not stalled
+          && (!m_thread_info[thread_id].isRunning()     // Thread is not already running somewhere else
+              || m_thread_info[thread_id].getCoreRunning() == core_id)
+      )
       {
-         // Unless we're in periodic(), don't pre-empt threads currently running on a different core
-         if (is_periodic
-             || !m_thread_info[thread_id].isRunning()
-             || m_thread_info[thread_id].getCoreRunning() == core_id)
+         // Find thread that was scheduled the longest time ago
+         if (m_thread_info[thread_id].getLastScheduled() < min_last_scheduled)
          {
-            // Find thread that was scheduled the longest time ago
-            if (m_thread_info[thread_id].getLastScheduled() < min_last_scheduled)
-            {
-               new_thread_id = thread_id;
-               min_last_scheduled = m_thread_info[thread_id].getLastScheduled();
-            }
+            new_thread_id = thread_id;
+            min_last_scheduled = m_thread_info[thread_id].getLastScheduled();
          }
       }
    }
