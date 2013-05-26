@@ -384,6 +384,7 @@ elif use_mpi:
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'true'
   tracegen['num_apps'] = mpi_ranks
+  tracegen['redirect'] = False
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all MPI ranks have completed
   # Set trace recorder options
   applications = [
@@ -394,6 +395,7 @@ elif pinballs and pinball_sift:
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'false'
   tracegen['num_apps'] = len(pinballs)
+  tracegen['redirect'] = True
   # Set trace recorder options
   applications = []
   for app_id, pinball in enumerate(pinballs):
@@ -425,9 +427,9 @@ if tracegen:
     time.sleep(1)
     subprocess.Popen(tracecmd).communicate()
   for app_id, app_cmd in enumerate(applications):
-    if True: # redirect output
+    if tracegen['redirect']: # redirect output
       threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, app_cmd, outputdir)).start()
-    else:    # inline output
+    else:                    # inline output
       threading.Thread(target = run_sift_recorder, args = (app_cmd,)).start()
 
 sniperoptions = ' '.join(sniperoptions)
