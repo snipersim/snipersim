@@ -225,7 +225,7 @@ VOID countInsns(THREADID threadid, INT32 count)
    }
 }
 
-VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing)
+VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing, BOOL isbefore)
 {
    // We're still called for instructions in the same basic block as ROI end, ignore these
    if (!thread_data[threadid].in_detail)
@@ -255,6 +255,13 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
       addresses[i] = thread_data[threadid].dyn_address_queue->front();
       assert(!thread_data[threadid].dyn_address_queue->empty());
       thread_data[threadid].dyn_address_queue->pop_front();
+
+      if (isbefore)
+      {
+         // If the instruction hasn't executed yet, access the address to ensure a page fault if the mapping wasn't set up yet
+         static char dummy = 0;
+         dummy += *(char *)addresses[i];
+      }
    }
    assert(thread_data[threadid].dyn_address_queue->empty());
 
@@ -323,6 +330,7 @@ VOID insertCall(INS ins, IPOINT ipoint, UINT32 num_addresses, BOOL is_branch, BO
       IARG_BOOL, taken,
       IARG_BOOL, INS_IsPredicated(ins),
       IARG_EXECUTING,
+      IARG_BOOL, ipoint == IPOINT_BEFORE,
       IARG_END);
 }
 
