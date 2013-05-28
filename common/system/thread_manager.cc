@@ -95,6 +95,9 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
    m_thread_tls->set(thread);
    thread->updateCoreTLS();
 
+   // Set thread state to running for the duration of HOOK_THREAD_START, we'll move it to stalled later on if it didn't have a core
+   m_thread_state[thread_id].status = Core::RUNNING;
+
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_START, (UInt64)&args);
 

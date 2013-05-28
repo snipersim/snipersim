@@ -195,6 +195,10 @@ bool SchedulerPinned::threadGetAffinity(thread_id_t thread_id, size_t cpusetsize
 
 void SchedulerPinned::threadStart(thread_id_t thread_id, SubsecondTime time)
 {
+   // Thread transitioned out of INITIALIZING, if it did not get a core assigned by threadCreate but there is a free one now, schedule it there
+   core_id_t free_core_id = findFreeCoreForThread(thread_id);
+   if (free_core_id != INVALID_THREAD_ID)
+      reschedule(time, free_core_id, false);
 }
 
 void SchedulerPinned::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
