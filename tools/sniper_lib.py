@@ -1,6 +1,6 @@
 # A copy of this file is distributed with the binaries of Sniper and Benchmarks
 
-import sys, os, re, sniper_stats, sniper_config
+import sys, os, re, subprocess, cStringIO, sniper_stats, sniper_config
 try:
   import json
 except ImportError:
@@ -246,3 +246,28 @@ def kill_children():
     if pid != os.getpid():
       try: os.kill(pid, 9)
       except OSError: pass
+
+
+class OutputToLess:
+  def __enter__(self):
+    if sys.stdout.isatty():
+      self.stream = cStringIO.StringIO()
+      sys.stdout = self.stream
+    else:
+      self.stream = None
+  def __exit__(self, exc_type, exc_value, traceback):
+    if exc_type:
+      return False # Process exception normally
+    if self.stream:
+      sys.stdout.flush()
+      sys.stdout = sys.__stdout__
+      data = self.stream.getvalue()
+      if len(data) > 0:
+        less = subprocess.Popen([ 'less', '--no-init', '--quit-if-one-screen', '--chop-long-lines' ], stdin = subprocess.PIPE)
+        try:
+          less.stdin.write(data)
+          less.stdin.close()
+        except IOError:
+          # Ignore broken pipe when less doesn't read all of its input
+          pass
+        less.wait()
