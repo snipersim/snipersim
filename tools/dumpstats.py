@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, getopt, sniper_lib, sniper_stats
+import sys, os, getopt, subprocess, sniper_lib, sniper_stats
 
 def usage():
   print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [-d <resultsdir (default: .)>]'
@@ -48,6 +48,13 @@ if args:
   sys.exit(-1)
 
 
+if sys.stdout.isatty():
+  less = subprocess.Popen([ 'less', '-S' ], stdin = subprocess.PIPE)
+  sys.stdout = less.stdin
+else:
+  less = None
+
+
 if do_list:
   import sniper_stats
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
@@ -77,22 +84,24 @@ if do_markers:
     print '%9ld ns: core(%2d) thread(%2d)  %s' % (timestamp / 1e6, core, thread, marker)
 
 
-if not do_stats:
-  sys.exit(0)
+if do_stats:
+  results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
 
-results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
-
-
-def print_result(key, value):
-  if type(value) is dict:
-    for _key, _value in sorted(value.items()):
-      print_result(key+'.'+_key, _value)
-  else:
-    print key, '=',
-    if type(value) is list:
-      print ', '.join(map(str, value))
+  def print_result(key, value):
+    if type(value) is dict:
+      for _key, _value in sorted(value.items()):
+        print_result(key+'.'+_key, _value)
     else:
-      print value
+      print key, '=',
+      if type(value) is list:
+        print ', '.join(map(str, value))
+      else:
+        print value
 
-for key, value in sorted(results['results'].items()):
-  print_result(key, value)
+  for key, value in sorted(results['results'].items()):
+    print_result(key, value)
+
+
+if less:
+  sys.stdout.close()
+  less.wait()
