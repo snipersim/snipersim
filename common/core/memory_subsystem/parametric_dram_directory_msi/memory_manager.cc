@@ -346,7 +346,9 @@ MemoryManager::MemoryManager(Core* core,
       {
          LOG_ASSERT_ERROR(Sim()->getConfig()->getApplicationCores() <= cache_parameters[m_last_level_cache].shared_cores, "DRAM direct access is only possible when there is just a single last-level cache (LLC level %d shared by %d, num cores %d)", m_last_level_cache, cache_parameters[m_last_level_cache].shared_cores, Sim()->getConfig()->getApplicationCores());
          LOG_ASSERT_ERROR(m_dram_cntlr != NULL, "I'm supposed to have direct access to a DRAM controller, but there isn't one at this node");
-         m_cache_cntlrs[(UInt32)m_last_level_cache]->setDRAMDirectAccess(m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr);
+         m_cache_cntlrs[(UInt32)m_last_level_cache]->setDRAMDirectAccess(
+            m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr,
+            Sim()->getCfg()->getInt("perf_model/llc/evict_buffers"));
       }
    }
 

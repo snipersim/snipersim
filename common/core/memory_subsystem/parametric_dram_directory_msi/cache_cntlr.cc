@@ -236,6 +236,12 @@ CacheCntlr::setPrevCacheCntlrs(CacheCntlrList& prev_cache_cntlrs)
    #endif
 }
 
+void
+CacheCntlr::setDRAMDirectAccess(DramCntlrInterface* dram_cntlr, UInt64 num_outstanding)
+{
+   m_master->m_dram_cntlr = dram_cntlr;
+   m_master->m_dram_outstanding_writebacks = new ContentionModel("llc-evict-queue", m_core_id, num_outstanding);
+}
 
 
 /*****************************************************************************
@@ -833,8 +839,10 @@ MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
             else
             {
                Byte data_buf[getCacheBlockSize()];
+               SubsecondTime latency;
                // Do the DRAM access and increment local time
-               hit_where = accessDRAM(Core::READ, address, isPrefetch != Prefetch::NONE, data_buf);
+               boost::tie<HitWhere::where_t, SubsecondTime>(hit_where, latency) = accessDRAM(Core::READ, address, isPrefetch != Prefetch::NONE, data_buf);
+               getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
                // Insert the line. Be sure to use SHARED/MODIFIED as appropriate (upgrades are free anyway), we don't want to have to write back clean lines
                insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, data_buf, ShmemPerfModel::_USER_THREAD);
                if (isPrefetch != Prefetch::NONE)
@@ -940,7 +948,7 @@ CacheCntlr::walkUsageBits()
    }
 }
 
-HitWhere::where_t
+boost::tuple<HitWhere::where_t, SubsecondTime>
 CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf)
 {
    ScopedLock sl(getLock()); // DRAM is shared and owned by m_master
@@ -964,10 +972,7 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
          LOG_PRINT_ERROR("Unsupported Mem Op Type(%u)", mem_op_type);
    }
 
-   // Increment local time with access latency
-   getMemoryManager()->incrElapsedTime(dram_latency, ShmemPerfModel::_USER_THREAD);
-
-   return hit_where;
+   return boost::tuple<HitWhere::where_t, SubsecondTime>(hit_where, dram_latency);
 }
 
 void
@@ -1289,7 +1294,27 @@ MYLOG("evicting @%lx", evict_address);
       {
          if (evict_block_info.getCState() == CacheState::MODIFIED)
          {
-            accessDRAM(Core::WRITE, evict_address, false, evict_buf);
+            SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+            if (m_master->m_dram_outstanding_writebacks)
+            {
+               ScopedLock sl(getLock());
+               // Delay if all evict buffers are full
+               SubsecondTime t_issue = m_master->m_dram_outstanding_writebacks->getStartTime(t_now);
+               getMemoryManager()->incrElapsedTime(t_issue - t_now, ShmemPerfModel::_USER_THREAD);
+            }
+
+            // Access DRAM
+            SubsecondTime dram_latency;
+            HitWhere::where_t hit_where;
+            boost::tie<HitWhere::where_t, SubsecondTime>(hit_where, dram_latency) = accessDRAM(Core::WRITE, evict_address, false, evict_buf);
+
+            // Occupy evict buffer
+            if (m_master->m_dram_outstanding_writebacks)
+            {
+               ScopedLock sl(getLock());
+               m_master->m_dram_outstanding_writebacks->getCompletionTime(t_now, dram_latency);
+            }
          }
       }
       else

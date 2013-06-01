@@ -17,6 +17,8 @@
 #include "stats.h"
 #include "subsecond_time.h"
 
+#include "boost/tuple/tuple.hpp"
+
 class DramCntlrInterface;
 
 /* Enable to get a detailed count of state transitions */
@@ -141,6 +143,7 @@ namespace ParametricDramDirectoryMSI
          CacheCntlrList m_prev_cache_cntlrs;
          Prefetcher* m_prefetcher;
          DramCntlrInterface* m_dram_cntlr;
+         ContentionModel* m_dram_outstanding_writebacks;
 
          Mshr mshr;
          ContentionModel m_l1_mshr;
@@ -163,6 +166,7 @@ namespace ParametricDramDirectoryMSI
             : m_cache(NULL)
             , m_prefetcher(NULL)
             , m_dram_cntlr(NULL)
+            , m_dram_outstanding_writebacks(NULL)
             , m_l1_mshr(name + ".mshr", core_id, outstanding_misses)
             , m_next_level_read_bandwidth(name + ".next_read", core_id)
             , m_evicting_address(0)
@@ -274,7 +278,7 @@ namespace ParametricDramDirectoryMSI
          HitWhere::where_t processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool count, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock);
 
          // Process Request from L1 Cache
-         HitWhere::where_t accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf);
+         boost::tuple<HitWhere::where_t, SubsecondTime> accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf);
          void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, SubsecondTime t_issue);
          void processExReqToDirectory(IntPtr address);
          void processShReqToDirectory(IntPtr address);
@@ -334,7 +338,7 @@ namespace ParametricDramDirectoryMSI
          void setPrevCacheCntlrs(CacheCntlrList& prev_cache_cntlrs);
          void setNextCacheCntlr(CacheCntlr* next_cache_cntlr) { m_next_cache_cntlr = next_cache_cntlr; }
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores) { m_master->createSetLocks(cache_block_size, num_sets, core_offset, num_cores); }
-         void setDRAMDirectAccess(DramCntlrInterface* dram_cntlr) { m_master->m_dram_cntlr = dram_cntlr; }
+         void setDRAMDirectAccess(DramCntlrInterface* dram_cntlr, UInt64 num_outstanding);
 
          HitWhere::where_t processMemOpFromCore(
                Core::lock_signal_t lock_signal,
