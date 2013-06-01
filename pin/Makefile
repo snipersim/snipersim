@@ -2,8 +2,8 @@
 SIM_ROOT ?= $(CURDIR)/..
 
 # Note: Pin's makefile.config adds stuff to the `all' target which we don't want,
-#       so just use a different name here
-default: $(TARGET)
+#       while the target architecture is specified in TARGET so just some different names here
+default: $(TARGET_LIB)
 
 LD_LIBS += -lcarbon_sim
 
@@ -20,10 +20,10 @@ CXXFLAGS += -c \
 include $(SIM_ROOT)/Makefile.config
 
 ifeq ($(TARGET_ARCH),ia32)
-	TARGET = ia32
+   override TARGET:=ia32
 endif
 ifeq ($(TARGET_ARCH),intel64)
-	TARGET = ia32e
+   override TARGET:=intel64
 endif
 
 # When making clean, do not include this configuration file
@@ -52,13 +52,13 @@ SOURCES = $(wildcard $(SIM_ROOT)/pin/*.cc $(SIM_ROOT)/pin/lite/*.cc)
 OBJECTS = $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(SOURCES)))
 
 ## build rules
-TARGET = $(SIM_ROOT)/lib/pin_sim.so
+TARGET_LIB = $(SIM_ROOT)/lib/pin_sim.so
 
 $(SIM_ROOT)/lib/libcarbon_sim.a:
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
 
-$(TARGET): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
-$(TARGET): $(OBJECTS)
+$(TARGET_LIB): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
+$(TARGET_LIB): $(OBJECTS)
 ifeq ($(SHOW_COMPILE),)
 	@echo '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	@$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
@@ -79,5 +79,5 @@ endif
 
 ifneq ($(CLEAN),)
 clean:
-	-rm -f $(TARGET) $(OBJECTS) $(OBJECTS:%.o=%.d)
+	-rm -f $(TARGET_LIB) $(OBJECTS) $(OBJECTS:%.o=%.d)
 endif

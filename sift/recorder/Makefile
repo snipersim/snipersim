@@ -10,10 +10,12 @@ include $(SIM_ROOT)/common/Makefile.common
 
 # Translate Sniper's target names into Pin target name
 ifeq ($(TARGET_ARCH),intel64)
-   TARGET=ia32e
+   override TARGET:=intel64
+   CXXFLAGS_ARCH=
 else
    ifeq ($(TARGET_ARCH),ia32)
-      TARGET=ia32
+      override TARGET:=ia32
+      CXXFLAGS_ARCH=-m32
    else
       $(error unknown TARGET_ARCH $(TARGET_ARCH))
    endif
@@ -45,9 +47,9 @@ OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
 sift_recorder: $(OBJECTS) ../libsift.a
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS)
+	@$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS) $(CXXFLAGS_ARCH)
 else
-	$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS)
+	$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS) $(CXXFLAGS_ARCH)
 endif
 
 include $(SIM_ROOT)/common/Makefile.common
