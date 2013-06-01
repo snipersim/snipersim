@@ -1,6 +1,7 @@
 #include "simulator.h"
 #include "dram_perf_model.h"
 #include "dram_perf_model_constant.h"
+#include "dram_perf_model_readwrite.h"
 #include "dram_perf_model_normal.h"
 #include "config.hpp"
 
@@ -11,6 +12,10 @@ DramPerfModel* DramPerfModel::createDramPerfModel(core_id_t core_id, UInt32 cach
    if (type == "constant")
    {
       return new DramPerfModelConstant(core_id, cache_block_size);
+   }
+   else if (type == "readwrite")
+   {
+      return new DramPerfModelReadWrite(core_id, cache_block_size);
    }
    else if (type == "normal")
    {

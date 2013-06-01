@@ -92,16 +92,22 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
 
   results['dram.accesses'] = map(sum, zip(results['dram.reads'], results['dram.writes']))
   results['dram.avglatency'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-access-latency'], results['dram.accesses']))
-  results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-queueing-delay'], results['dram.accesses']))
-  if 'dram-queue.total-time-used' in results:
-    results['dram.bandwidth'] = map(lambda a: 100*a/time0, results['dram-queue.total-time-used'])
   template += [
     ('DRAM summary', '', ''),
     ('  num dram accesses', 'dram.accesses', str),
     ('  average dram access latency', 'dram.avglatency', format_ns(2)),
-    ('  average dram queueing delay', 'dram.avgqueue', format_ns(2)),
-    ('  average dram bandwidth utilization', 'dram.bandwidth', lambda v: '%.2f%%' % v),
   ]
+  if 'dram.total-read-queueing-delay' in results:
+    results['dram.avgqueueread'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-read-queueing-delay'], results['dram.reads']))
+    results['dram.avgqueuewrite'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-write-queueing-delay'], results['dram.writes']))
+    template.append(('  average dram read queueing delay', 'dram.avgqueueread', format_ns(2)))
+    template.append(('  average dram write queueing delay', 'dram.avgqueuewrite', format_ns(2)))
+  else:
+    results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-queueing-delay'], results['dram.accesses']))
+    template.append(('  average dram queueing delay', 'dram.avgqueue', format_ns(2)))
+  if 'dram-queue.total-time-used' in results:
+    results['dram.bandwidth'] = map(lambda a: 100*a/time0, results['dram-queue.total-time-used'])
+    template.append(('  average dram bandwidth utilization', 'dram.bandwidth', lambda v: '%.2f%%' % v))
 
 
   lines = []
