@@ -434,7 +434,10 @@ Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_add
       data_buffer = NULL; // initiateMemoryAccess's data is not used
    }
 
-   return initiateMemoryAccess(MemComponent::L1_DCACHE, lock_signal, mem_op_type, d_addr, (Byte*) data_buffer, data_size, modeled, eip, now);
+   if (modeled == MEM_MODELED_NONE)
+      return makeMemoryResult(HitWhere::UNKNOWN, SubsecondTime::Zero());
+   else
+      return initiateMemoryAccess(MemComponent::L1_DCACHE, lock_signal, mem_op_type, d_addr, (Byte*) data_buffer, data_size, modeled, eip, now);
 }
 
 
