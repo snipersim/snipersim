@@ -499,6 +499,7 @@ env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)
 env['PIN_LD_RESTORE_REQUIRED'] = '1'
 env['PIN_VM_LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH'] # Pin VM and Pintool (Sniper) use LD_LIBRARY_PATH as modified above
 env['PIN_APP_LD_LIBRARY_PATH'] = ld_library_path_orig  # Application uses original LD_LIBRARY_PATH
+env['SNIPER_INTERNAL_LD_LIBRARY_PATH'] = ld_library_path_orig  # Scripts running inside Sniper use original LD_LIBRARY_PATH
 env['PYTHONPATH'] = '%s/scripts:%s' % (HOME, os.getenv('PYTHONPATH') or '')
 env['SNIPER_ROOT'] = HOME
 env['GRAPHITE_ROOT'] = HOME
