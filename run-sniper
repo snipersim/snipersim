@@ -720,13 +720,18 @@ if tracegen:
 if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
   os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
 
-if run_power:
-  print '[SNIPER] Running McPAT'
-  os.system('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals())
+elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
-if use_viz:
-  print '[SNIPER] Generating visualization in viz/'
-  os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+  if run_power:
+    print '[SNIPER] Running McPAT'
+    os.system('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals())
+
+  if use_viz:
+    print '[SNIPER] Generating visualization in viz/'
+    os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+
+  gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'), silent = True)
+
 
 stats = dict(
   host = platform.node(),
@@ -747,9 +752,5 @@ file(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats))
 
 if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpath(outputdir):
   os.system('cp pin.log %s' % outputdir)
-
-simoutfile = os.path.join(outputdir, 'sim.out')
-if os.path.exists(simoutfile): os.unlink(simoutfile)
-gen_simout.generate_simout(resultsdir = outputdir, output = open(simoutfile, 'w'), silent = True)
 
 sys.exit(rc)
