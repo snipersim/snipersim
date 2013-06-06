@@ -67,7 +67,8 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
         self.margin_y = 50; self.step_y = 50
         self.size_x = 0; self.size_y = 0
         self.items = []
-      def paint_box(self, (x, y), (w, h), name = '', label = 0, color = '#ffffff', zorder = 0, margin = (.2, .2)):
+      def paint_box(self, (x, y), (w, h), name = '', label = 0, color = '#ffffff', zorder = 0, margin = (.2, .2), root = (0, 0)):
+        x += root[0]; y += root[1]
         self.size_x = max(self.size_x, (x+w) * self.step_x); self.size_y = max(self.size_y, (y+h) * self.step_y)
         svg = '''\
 <rect id="%s" x="%d" y="%d" width="%d" height="%d" rx="0"
@@ -97,28 +98,66 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
   '''
 
     svg = Svg()
+    ymax = None
+
+
+    is_mesh = (sniper_config.get_config(config, 'network/memory_model_1') == 'emesh_hop_by_hop')
+    if is_mesh:
+      dimensions = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/dimensions'))
+      if dimensions == 1:
+        width, height = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/size')), 1
+      else:
+        width, height = map(int, sniper_config.get_config(config, 'network/emesh_hop_by_hop/size').split(':'))
+      concentration = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/concentration'))
+
+      def lid_tile_root(lid):
+        return lid - lid % concentration
+
+      def xpos(lid):
+        return _xpos[lid] - _xpos[lid_tile_root(lid)]
+
+      def tile_root(lid):
+        return ((concentration + .25) * (int(lid / concentration) % width), (ymax + 1) * (lid / concentration / width))
+
+    else:
+      def xpos(lid):
+        return _xpos[lid]
+
+      def tile_root(lid):
+        return (0, 0)
+
 
     if topology:
-      xpos = range(max_id+1)
+      _xpos = range(max_id+1)
       if ids['smt'].keys():
         x = -1
         for lid in range(max_id+1):
           if ids['smt'][lid] == lid:
             x += 1
-          xpos[lid] = x
+          _xpos[lid] = x
         ypos = [ 0 for _ in range(max_id+1) ]
         for lid in range(max_id+1):
           mid = ids['smt'][lid]
-          svg.paint_box((xpos[lid]+.05, ypos[mid]+.1), (1-.1, 1-.2), 'core-%d' % lid, 'Core #%d' % lid)
           ypos[mid] += .7
-        for lid in range(max_id+1):
-          if ids['smt'][lid] == lid:
-            svg.paint_box((xpos[lid], 0), (1, ypos[mid] + .3), 'smt-%d' % lid, color = '#cccccc', zorder = 1)
         y = max(ypos) + .3
       else:
-        for lid in range(max_id+1):
-          svg.paint_box((lid, 0), (1, 1), 'core-%d' % lid, 'Core #%d' % lid)
         y = 1
+      ymin = y
+      for name in names:
+        if name in ('hwcontext', 'smt'): continue
+        if ids[name]:
+          y += 1
+      ymax = y
+      y = ymin
+      if ids['smt'].keys():
+        for lid in range(max_id+1):
+          svg.paint_box((xpos(lid)+.05, ypos[mid]+.1), (1-.1, 1-.2), 'core-%d' % lid, 'Core #%d' % lid, root = tile_root(lid))
+        for lid in range(max_id+1):
+          if ids['smt'][lid] == lid:
+            svg.paint_box((xpos(lid), 0), (1, ypos[mid] + .3), 'smt-%d' % lid, color = '#cccccc', zorder = 1, root = tile_root(lid))
+      else:
+        for lid in range(max_id+1):
+          svg.paint_box((xpos(lid), 0), (1, 1), 'core-%d' % lid, 'Core #%d' % lid, root = tile_root(lid))
       for name in names:
         if name in ('hwcontext', 'smt'): continue
         if ids[name]:
@@ -132,28 +171,29 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
                 label = '%s (%s)' % (name, cfg)
               else:
                 label = name
-              svg.paint_box((xpos[lid], y), (size, 1), '%s-%d' % (name, lid), label)
-              if name == 'dram-cntlr':
-                svg.paint_box((xpos[lid]-.075, -.2), (size+.15, y+1+.4), color = '#dddddd', zorder = 2)
+              if is_mesh:
+                size = min(size, concentration)
+              svg.paint_box((xpos(lid), y), (size, 1), '%s-%d' % (name, lid), label, root = tile_root(lid))
+              if name == 'dram-cntlr' and not is_mesh:
+                svg.paint_box((xpos(lid)-.075, -.2), (size+.15, y+1+.4), color = '#dddddd', zorder = 2, root = tile_root(lid))
               size = 0
           y += 1
+      if is_mesh:
+        for lid in range(0, max_id, concentration):
+          svg.paint_box((xpos(lid)-.075, -.2), (concentration+.15, y+.4), color = '#dddddd', zorder = 2, root = tile_root(lid))
+      y += 1
+      if is_mesh:
+        y *= height
     else:
       y = 0
 
 
-    if sniper_config.get_config(config, 'network/memory_model_1') == 'emesh_hop_by_hop':
+    if is_mesh:
 
       results = sniper_lib.get_results(resultsdir = resultsdir, jobid = jobid)['results']
       if 'dram-queue.total-time-used' in results \
          and 'network.shmem-1.mesh.link-up.num-requests' in results:
         import gridcolors
-
-        dimensions = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/dimensions'))
-        if dimensions == 1:
-          width, height = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/size')), 1
-        else:
-          width, height = map(int, sniper_config.get_config(config, 'network/emesh_hop_by_hop/size').split(':'))
-        concentration = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/concentration'))
 
         time0 = max(results['performance_model.elapsed_time'])
 
