@@ -1,7 +1,6 @@
 #include "simulator.h"
 #include "config.h"
 #include "memory_manager_base.h"
-#include "pr_l1_pr_l2_dram_directory_msi/memory_manager.h"
 #include "parametric_dram_directory_msi/memory_manager.h"
 #include "log.h"
 #include "config.hpp"
@@ -14,9 +13,6 @@ MemoryManagerBase::createMMU(String protocol_type,
 
    switch (caching_protocol)
    {
-      case PR_L1_PR_L2_DRAM_DIRECTORY_MSI:
-         return new PrL1PrL2DramDirectoryMSI::MemoryManager(core, network, shmem_perf_model);
-
       case PARAMETRIC_DRAM_DIRECTORY_MSI:
          return new ParametricDramDirectoryMSI::MemoryManager(core, network, shmem_perf_model);
 
@@ -29,9 +25,7 @@ MemoryManagerBase::createMMU(String protocol_type,
 MemoryManagerBase::CachingProtocol_t
 MemoryManagerBase::parseProtocolType(String& protocol_type)
 {
-   if (protocol_type == "pr_l1_pr_l2_dram_directory_msi")
-      return PR_L1_PR_L2_DRAM_DIRECTORY_MSI;
-   else if (protocol_type == "parametric_dram_directory_msi")
+   if (protocol_type == "parametric_dram_directory_msi")
       return PARAMETRIC_DRAM_DIRECTORY_MSI;
    else
       return NUM_CACHING_PROTOCOL_TYPES;

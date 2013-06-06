@@ -14,7 +14,6 @@ class MemoryManagerBase
    public:
       enum CachingProtocol_t
       {
-         PR_L1_PR_L2_DRAM_DIRECTORY_MSI = 0,
          PARAMETRIC_DRAM_DIRECTORY_MSI,
          NUM_CACHING_PROTOCOL_TYPES
       };
