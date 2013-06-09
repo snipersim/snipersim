@@ -36,7 +36,7 @@ UInt64 getWallclockTimeCallback(String objectName, UInt32 index, String metricNa
 {
    struct timeval tv = {0,0};
    gettimeofday(&tv, NULL);
-   UInt64 usec = (tv.tv_sec * 1000000) + tv.tv_usec;
+   UInt64 usec = (UInt64(tv.tv_sec) * 1000000) + tv.tv_usec;
    return usec;
 }
 
