@@ -17,13 +17,15 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   ncores = int(config['general/total_cores'])
 
   format_int = lambda v: str(long(v))
+  format_pct = lambda v: '%.1f%%' % (100. * v)
   def format_float(digits):
     return lambda v: ('%%.%uf' % digits) % v
   def format_ns(digits):
     return lambda v: ('%%.%uf' % digits) % (v/1e6)
 
-  time0_begin = max(results['performance_model.elapsed_time_begin'])
-  time0_end = max(results['performance_model.elapsed_time_end'])
+  if 'barrier.global_time_begin' in results:
+    time0_begin = results['barrier.global_time_begin']
+    time0_end = results['barrier.global_time_end']
 
   if 'barrier.global_time' in results:
     time0 = results['barrier.global_time'][0]
@@ -35,7 +37,7 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     results['performance_model.instruction_count'] = results['core.instructions']
 
   results['performance_model.elapsed_time_fixed'] = [
-    results['performance_model.elapsed_time_end'][c] - time0_begin
+    time0
     for c in range(ncores)
   ]
   results['performance_model.cycle_count_fixed'] = [
@@ -46,12 +48,26 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     i / (c or 1)
     for i, c in zip(results['performance_model.instruction_count'], results['performance_model.cycle_count_fixed'])
   ]
+  results['performance_model.nonidle_elapsed_time'] = [
+    results['performance_model.elapsed_time'][c] - results['performance_model.idle_elapsed_time'][c]
+    for c in range(ncores)
+  ]
+  results['performance_model.idle_elapsed_time'] = [
+    time0 - results['performance_model.nonidle_elapsed_time'][c]
+    for c in range(ncores)
+  ]
+  results['performance_model.idle_elapsed_percent'] = [
+    results['performance_model.idle_elapsed_time'][c] / float(time0)
+    for c in range(ncores)
+  ]
 
   template = [
     ('  Instructions', 'performance_model.instruction_count', str),
     ('  Cycles',       'performance_model.cycle_count_fixed', format_int),
     ('  IPC',          'performance_model.ipc', format_float(2)),
     ('  Time (ns)',    'performance_model.elapsed_time_fixed', format_ns(0)),
+    ('  Idle time (ns)', 'performance_model.idle_elapsed_time', format_ns(0)),
+    ('  Idle time (%)',  'performance_model.idle_elapsed_percent', format_pct),
   ]
 
   if 'branch_predictor.num-incorrect' in results:
