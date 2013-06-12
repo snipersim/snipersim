@@ -63,11 +63,18 @@ class TraceThread : public Runnable
       { return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
       static uint64_t __handleMagicFunc(void* arg, uint64_t a, uint64_t b, uint64_t c)
       { return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
+      static void __handleRoutineChangeFunc(void* arg, int64_t eip, Sift::RoutineOpType event)
+      { ((TraceThread*)arg)->handleRoutineChangeFunc(eip, event); }
+      static void __handleRoutineAnnounceFunc(void* arg, int64_t eip, const char *name, uint32_t line, uint32_t column, const char *filename)
+      { ((TraceThread*)arg)->handleRoutineAnnounceFunc(eip, name, line, column, filename); }
+
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
       uint64_t handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size);
       int32_t handleNewThreadFunc();
       int32_t handleJoinFunc(int32_t thread);
       uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c);
+      void handleRoutineChangeFunc(int64_t eip, Sift::RoutineOpType event);
+      void handleRoutineAnnounceFunc(int64_t eip, const char *name, uint32_t line, uint32_t column, const char *filename);
 
       BasicBlock* decode(Sift::Instruction &inst);
       void handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);

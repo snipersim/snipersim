@@ -31,6 +31,9 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , handleJoinArg(NULL)
    , handleMagicFunc(NULL)
    , handleMagicArg(NULL)
+   , handleRoutineChangeFunc(NULL)
+   , handleRoutineAnnounceFunc(NULL)
+   , handleRoutineArg(NULL)
    , filesize(0)
    , last_address(0)
    , icache()
@@ -310,6 +313,38 @@ bool Sift::Reader::Read(Instruction &inst)
                   result = a; // Do not modify GAX register
                }
                sendSimpleResponse(RecOtherMagicInstructionResponse, &result, sizeof(result));
+               break;
+            }
+            case RecOtherRoutineChange:
+            {
+               assert(rec.Other.size == sizeof(uint64_t) + sizeof(uint8_t));
+               uint64_t eip;
+               uint8_t event;
+               input->read(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&event), sizeof(uint8_t));
+               if (handleRoutineChangeFunc)
+                  handleRoutineChangeFunc(handleRoutineArg, eip, Sift::RoutineOpType(event));
+               break;
+            }
+            case RecOtherRoutineAnnounce:
+            {
+               uint64_t eip;
+               uint16_t len_name, len_filename;
+               char *name, *filename;
+               uint32_t line, column;
+               input->read(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&len_name), sizeof(uint16_t));
+               name = (char*)malloc(len_name);
+               input->read(name, len_name);
+               input->read(reinterpret_cast<char*>(&line), sizeof(uint32_t));
+               input->read(reinterpret_cast<char*>(&column), sizeof(uint32_t));
+               input->read(reinterpret_cast<char*>(&len_filename), sizeof(uint16_t));
+               filename = (char*)malloc(len_filename);
+               input->read(filename, len_filename);
+               if (handleRoutineAnnounceFunc)
+                  handleRoutineAnnounceFunc(handleRoutineArg, eip, name, line, column, filename);
+               free(name);
+               free(filename);
                break;
             }
             default:

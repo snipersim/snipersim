@@ -11,7 +11,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--outputdir <outputdir (.)>] { --pinball=<pinball-basename> | -- <cmdline> }' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] { --pinball=<pinball-basename> | -- <cmdline> }' % sys.argv[0]
   sys.exit(2)
 
 
@@ -30,6 +30,7 @@ gdb_quit = False
 gdb_screen = False
 use_follow = False
 use_pa = False
+use_routine_tracing = False
 pinball = None
 outputdir = '.'
 
@@ -37,7 +38,7 @@ if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:r:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "pinball=", "outputdir=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "ho:d:f:b:e:s:r:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -79,6 +80,8 @@ for o, a in opts:
     use_follow = True
   if o == '--pa':
     use_pa = True
+  if o == '--routine-tracing':
+    use_routine_tracing = True
   if o == '--pinball':
     if not os.path.exists('%s.address' % a):
       print >> sys.stderr, 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (a, a)
@@ -130,7 +133,8 @@ envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/%(arch)s/runtime:$LD_LIBRARY_PATH
 value_roi = use_roi and 1 or 0
 value_roi_mpi = roi_mpi and 1 or 0
 value_pa = use_pa and 1 or 0
-cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d %(pinballoptions)s -- ' % locals() + ' '.join(cmdline)
+value_routine_tracing = use_routine_tracing and 1 or 0
+cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d %(pinballoptions)s -- ' % locals() + ' '.join(cmdline)
 
 print '[SIFT_RECORDER]', 'Running', cmd
 sys.stdout.flush()

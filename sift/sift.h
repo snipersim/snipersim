@@ -30,6 +30,13 @@ namespace Sift
       MemRead,
       MemWrite,
    } MemoryOpType;
+
+   typedef enum
+   {
+      RoutineEnter = 0,
+      RoutineExit,
+      RoutineAssert,
+   } RoutineOpType;
 };
 
 #endif // __SIFT_H

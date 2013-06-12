@@ -13,7 +13,7 @@ void RoutineTracerPrint::RtnThread::functionEnter(IntPtr eip)
    printf("[%2d] ", m_thread->getId());
    for(unsigned int i = 0; i < m_depth; ++i)
      printf("  ");
-   printf("(%8" PRIxPTR ") %s\n", eip, m_master->getRoutine(eip)->m_name);
+   printf("(%8" PRIxPTR ") %s\n", eip, m_master->getRoutine(eip) ? m_master->getRoutine(eip)->m_name : "(unknown)");
    ++m_depth;
 }
 

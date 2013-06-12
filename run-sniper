@@ -394,7 +394,7 @@ elif use_mpi:
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all MPI ranks have completed
   # Set trace recorder options
   applications = [
-    [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--' ] + cmdline
+    [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline
   ]
 elif pinballs and pinball_sift:
   tracegen = {}

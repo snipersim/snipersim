@@ -44,6 +44,8 @@ namespace Sift
       typedef int32_t (*HandleNewThreadFunc)(void* arg);
       typedef int32_t (*HandleJoinFunc)(void* arg, int32_t thread);
       typedef uint64_t (*HandleMagicFunc)(void* arg, uint64_t a, uint64_t b, uint64_t c);
+      typedef void (*HandleRoutineChange)(void* arg, int64_t eip, Sift::RoutineOpType event);
+      typedef void (*HandleRoutineAnnounce)(void* arg, int64_t eip, const char *name, uint32_t line, uint32_t column, const char *filename);
 
       private:
          vistream *input;
@@ -58,6 +60,9 @@ namespace Sift
          void *handleJoinArg;
          HandleMagicFunc handleMagicFunc;
          void *handleMagicArg;
+         HandleRoutineChange handleRoutineChangeFunc;
+         HandleRoutineAnnounce handleRoutineAnnounceFunc;
+         void *handleRoutineArg;
          uint64_t filesize;
          std::ifstream *inputstream;
 
@@ -93,6 +98,8 @@ namespace Sift
          void setHandleNewThreadFunc(HandleNewThreadFunc func, void* arg = NULL) { assert(func); handleNewThreadFunc = func; handleNewThreadArg = arg; }
          void setHandleJoinFunc(HandleJoinFunc func, void* arg = NULL) { assert(func); handleJoinFunc = func; handleJoinArg = arg; }
          void setHandleMagicFunc(HandleMagicFunc func, void* arg = NULL) { assert(func); handleMagicFunc = func; handleMagicArg = arg; }
+         void setHandleRoutineFunc(HandleRoutineChange funcChange, HandleRoutineAnnounce funcAnnounce, void* arg = NULL) { assert(funcChange); assert(funcAnnounce); handleRoutineChangeFunc = funcChange; handleRoutineAnnounceFunc = funcAnnounce; handleRoutineArg = arg; }
+
          uint64_t getPosition();
          uint64_t getLength();
          bool getTraceHasPhysicalAddresses() const { return m_trace_has_pa; }

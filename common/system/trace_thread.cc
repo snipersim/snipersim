@@ -15,6 +15,7 @@
 #include "magic_client.h"
 #include "branch_predictor.h"
 #include "rng.h"
+#include "routine_tracer.h"
 
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -43,6 +44,8 @@ TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, 
    m_trace.setHandleNewThreadFunc(TraceThread::__handleNewThreadFunc, this);
    m_trace.setHandleJoinFunc(TraceThread::__handleJoinFunc, this);
    m_trace.setHandleMagicFunc(TraceThread::__handleMagicFunc, this);
+   if (Sim()->getRoutineTracer())
+      m_trace.setHandleRoutineFunc(TraceThread::__handleRoutineChangeFunc, TraceThread::__handleRoutineAnnounceFunc, this);
 
    if (m_address_randomization)
    {
@@ -203,6 +206,29 @@ int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)
 uint64_t TraceThread::handleMagicFunc(uint64_t a, uint64_t b, uint64_t c)
 {
    return handleMagicInstruction(m_thread->getId(), a, b, c);
+}
+
+void TraceThread::handleRoutineChangeFunc(int64_t eip, Sift::RoutineOpType event)
+{
+   switch(event)
+   {
+      case Sift::RoutineEnter:
+         m_thread->getRoutineTracer()->routineEnter(eip);
+         break;
+      case Sift::RoutineExit:
+         m_thread->getRoutineTracer()->routineExit(eip);
+         break;
+      case Sift::RoutineAssert:
+         m_thread->getRoutineTracer()->routineAssert(eip);
+         break;
+      default:
+         LOG_PRINT_ERROR("Invalid Sift::RoutineOpType %d", event);
+   }
+}
+
+void TraceThread::handleRoutineAnnounceFunc(int64_t eip, const char *name, uint32_t line, uint32_t column, const char *filename)
+{
+   Sim()->getRoutineTracer()->addRoutine(eip, name, column, line, filename);
 }
 
 BasicBlock* TraceThread::decode(Sift::Instruction &inst)

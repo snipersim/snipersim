@@ -49,6 +49,7 @@ KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "e", "0", "emul
 KNOB<BOOL>   KnobSendPhysicalAddresses(KNOB_MODE_WRITEONCE, "pintool", "pa", "0", "send logical to physical address mapping");
 KNOB<UINT64> KnobFlowControl(KNOB_MODE_WRITEONCE, "pintool", "flow", "1000", "number of instructions to send before syncing up");
 KNOB<INT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "sift app id (default = 0)");
+KNOB<BOOL> KnobRoutineTracing(KNOB_MODE_WRITEONCE, "pintool", "rtntrace", "0", "routine tracing");
 KNOB<BOOL> KnobDebug(KNOB_MODE_WRITEONCE, "pintool", "debug", "0", "start debugger on internal exception");
 
 # define KNOB_REPLAY_NAME "replay"
@@ -70,6 +71,7 @@ PIN_LOCK new_threadid_lock;
 std::deque<ADDRINT> tidptrs;
 BOOL any_thread_in_detail = false;
 const bool verbose = false;
+std::unordered_map<ADDRINT, bool> routines;
 
 typedef struct {
    Sift::Writer *output;
@@ -87,13 +89,14 @@ typedef struct {
    UINT32 last_syscall_returnval;
    UINT64 flowcontrol_target;
    ADDRINT tid_ptr;
+   ADDRINT last_routine;
    BOOL in_detail;
    BOOL last_syscall_emulated;
    BOOL running;
    #if defined(TARGET_IA32)
-      uint8_t __pad[44];
+      uint8_t __pad[40];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[20];
+      uint8_t __pad[12];
    #endif
 } __attribute__((packed)) thread_data_t;
 thread_data_t *thread_data;
@@ -418,8 +421,95 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    }
 }
 
+void routineEnter(THREADID threadid, ADDRINT eip)
+{
+   if (thread_data[threadid].output)
+   {
+      thread_data[threadid].output->RoutineChange(eip, Sift::RoutineEnter);
+      thread_data[threadid].last_routine = eip;
+   }
+}
+
+void routineExit(THREADID threadid, ADDRINT eip)
+{
+   if (thread_data[threadid].output)
+   {
+      thread_data[threadid].output->RoutineChange(eip, Sift::RoutineExit);
+      thread_data[threadid].last_routine = -1;
+   }
+}
+
+void routineAssert(THREADID threadid, ADDRINT eip)
+{
+   if (thread_data[threadid].output && thread_data[threadid].last_routine != eip)
+   {
+      thread_data[threadid].output->RoutineChange(eip, Sift::RoutineAssert);
+      thread_data[threadid].last_routine = eip;
+   }
+}
+
+void announceRoutine(RTN rtn)
+{
+   if (!thread_data[PIN_ThreadId()].output)
+      return;
+
+   routines[RTN_Address(rtn)] = true;
+
+   INT32 column = 0, line = 0;
+   std::string filename = "??";
+   PIN_GetSourceLocation(RTN_Address(rtn), &column, &line, &filename);
+   thread_data[PIN_ThreadId()].output->RoutineAnnounce(RTN_Address(rtn), RTN_Name(rtn).c_str(), column, line, filename.c_str());
+}
+
+void announceInvalidRoutine()
+{
+   if (!thread_data[PIN_ThreadId()].output)
+      return;
+
+   routines[0] = true;
+   thread_data[PIN_ThreadId()].output->RoutineAnnounce(0, "INVALID", 0, 0, "");
+}
+
+void addRtnTracer(RTN rtn)
+{
+   RTN_Open(rtn);
+
+   if (routines.count(RTN_Address(rtn)) == 0)
+      announceRoutine(rtn);
+
+   RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(routineEnter), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
+   RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(routineExit), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
+
+   RTN_Close(rtn);
+}
+
+void addRtnTracer(TRACE trace)
+{
+   // At the start of each trace, check to see if this part of the code belongs to the function we think we're in.
+   // This will detect longjmps and tail call elimination, and fix up the call stack appropriately.
+   RTN rtn = TRACE_Rtn(trace);
+
+   if (RTN_Valid(rtn))
+   {
+      if (routines.count(RTN_Address(rtn)) == 0)
+         announceRoutine(rtn);
+
+      TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
+   }
+   else
+   {
+      if (routines.count(0) == 0)
+         announceInvalidRoutine();
+
+      TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, 0, IARG_END);
+   }
+}
+
 VOID traceCallback(TRACE trace, void *v)
 {
+   if (KnobRoutineTracing.Value())
+      addRtnTracer(trace);
+
    BBL bbl_head = TRACE_BblHead(trace);
 
    for (BBL bbl = bbl_head; BBL_Valid(bbl); bbl = BBL_Next(bbl))
@@ -787,6 +877,9 @@ VOID handleRoutineImplicitROI(THREADID threadid, bool begin)
 
 void routineCallback(RTN rtn, void* v)
 {
+   if (KnobRoutineTracing.Value())
+      addRtnTracer(rtn);
+
    if (KnobMPIImplicitROI.Value())
    {
       std::string rtn_name = RTN_Name(rtn);
