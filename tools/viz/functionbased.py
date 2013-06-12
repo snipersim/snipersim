@@ -187,7 +187,7 @@ def createJSONData(resultsdir, outputdir, title = None, source = None, doxygenpa
   config = sniper_config.parse_config(file(os.path.join(resultsdir, 'sim.cfg')).read())
   stats = sniper_stats.SniperStats(resultsdir)
 
-  readInputData(os.path.join(resultsdir,"rtntrace.out"))
+  readInputData(os.path.join(resultsdir,"sim.rtntrace"))
   if not os.path.exists(os.path.join(outputdir,"levels","functionbased")):
     os.makedirs(os.path.join(outputdir,"levels","functionbased"))
 

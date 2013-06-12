@@ -86,7 +86,7 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
 
 RoutineTracerFunctionStats::RtnMaster::~RtnMaster()
 {
-   writeResults(Sim()->getConfig()->formatOutputFileName("rtntrace.out").c_str());
+   writeResults(Sim()->getConfig()->formatOutputFileName("sim.rtntrace").c_str());
 }
 
 UInt64 RoutineTracerFunctionStats::RtnMaster::ce_get_owner(core_id_t core_id)

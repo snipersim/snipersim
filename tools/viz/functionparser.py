@@ -2,7 +2,7 @@
 # coding: utf-8
 import subprocess
 
-#script that takes a rtntrace.out file and parses it
+#script that takes a rtntrace file and parses it
 
 #format of inputdata:
 

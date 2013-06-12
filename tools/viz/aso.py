@@ -238,8 +238,8 @@ if __name__ == '__main__':
   
   config = sniper_config.parse_config(file(os.path.join(resultsdir, 'sim.cfg')).read())
   if verbose:
-    print "parsing functions from rtntrace.out"
-  functions,total=functionparser.parseFunctions(os.path.join(resultsdir,"rtntrace.out"))
+    print "parsing functions from sim.rtntrace"
+  functions,total=functionparser.parseFunctions(os.path.join(resultsdir,"sim.rtntrace"))
   optimizationlist = runModules(functions,config)
   totaltime = total["core_elapsed_time"]
   print
