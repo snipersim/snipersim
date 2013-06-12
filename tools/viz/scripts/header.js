@@ -3,6 +3,11 @@ function writeHeader(currentView)
   //check if level 2 data exists
   level2exists = (typeof infostr != 'undefined');
   mcpatexists = false;
+  asoexists = false;
+  if (typeof asoinfo != 'undefined') {
+    aso = jQuery.parseJSON(asoinfo);
+    asoexists = aso['use_aso'];
+  }
   level3exists = (typeof ipcvaluestr != 'undefined');
   topoexists = (typeof topology != 'undefined');
   if (level2exists){
@@ -34,6 +39,7 @@ function writeHeader(currentView)
 (mcpatexists ? "<li><a href=\"../../levels/level2/mcpatviz.html\">McPAT visualizations over time</a></li>" : "<li class='unavailable' title='Use viz.py --mcpat to enable'>No McPAT</li>") +
 (level3exists ? "<li><a href=\"../../levels/level3/level3.html\">3D (time-cores-IPC) visualization</a></li>" : "<li class='unavailable'>No 3D (time-cores-IPC)</li>") +
 (topoexists ? "<li><a href=\"../../levels/topology/topology.html\">Topology</a></li>" : "<li class='unavailable'>No topology</li>") +
+(asoexists ? "<li><a href=\"../../levels/functionbased/functionbased.html\">Suggestions for Optimization</a></li>" : "<li class='unavailable' title='Use --viz-aso to enable'>No Suggestions</li>") +
 '      </ul>'+
 '      <div style="clear:both"></div>'+
 '    </div>'+

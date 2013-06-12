@@ -30,7 +30,7 @@ roi_script = False
 sim_end = 'first'
 sim_end_valid = ('first', 'last', 'last-restart')
 use_viz = False
-use_viz_aso = False
+use_viz_aso = ''
 use_viz_mcpat = ''
 use_perf = False
 use_valgrind = False
@@ -177,7 +177,7 @@ for o, a in opts:
   if o == '--viz':
     use_viz = True
   if o == '--viz-aso':
-    use_viz_aso = True
+    use_viz_aso = '--add-level=aso'
   if o == '--perf':
     use_perf = True
   if o == '--valgrind':
@@ -734,10 +734,10 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
   if use_viz:
     print '[SNIPER] Generating visualization in viz/'
-    os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+    os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s %(use_viz_aso)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
-  if use_viz_aso:
-    print '[SNIPER] Generating ASO visualization in viz/'
+  if use_viz_aso and not use_viz:
+    print '[SNIPER] Generating ASO visualization in viz/levels/functionbased/'
     os.system('%(sim_root)s/tools/viz/functionbased.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
   gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'), silent = True)

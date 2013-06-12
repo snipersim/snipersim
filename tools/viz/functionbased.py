@@ -172,6 +172,36 @@ def createDoxyGenOutput(source,doxygenpath,title):
 
 
 #-----------------------------------------------------------------------#
+#                       External function                               #
+#-----------------------------------------------------------------------#
+
+def createJSONData(resultsdir, outputdir, title = None, source = None, doxygenpath = None):
+
+  resultsdir = os.path.abspath(resultsdir)
+  outputdir = os.path.abspath(outputdir)
+  if not title:
+    title = os.path.basename(resultsdir)
+  title = title.replace(' ', '_')
+
+  global config, stats
+  config = sniper_config.parse_config(file(os.path.join(resultsdir, 'sim.cfg')).read())
+  stats = sniper_stats.SniperStats(resultsdir)
+
+  readInputData(os.path.join(resultsdir,"rtntrace.out"))
+  if not os.path.exists(os.path.join(outputdir,"levels","functionbased")):
+    os.makedirs(os.path.join(outputdir,"levels","functionbased"))
+
+  writeiptstats(os.path.join(outputdir,"levels","functionbased","iptstats.json"))
+  writerooflinestats(os.path.join(outputdir,"levels","functionbased","rooflinestats.json"))
+
+  if not os.path.exists(os.path.join(HOME,"levels","functionbased","doxygen")):
+    os.makedirs(os.path.join(HOME,"levels","functionbased","doxygen"))
+
+  if source and doxygenpath:
+    createDoxyGenOutput(source,doxygenpath,title)
+
+
+#-----------------------------------------------------------------------#
 #                       Main function                                   #
 #-----------------------------------------------------------------------#
 
@@ -222,30 +252,10 @@ if __name__ == '__main__':
   if verbose:
     print 'This script generates data for the roofline model'
 
-  resultsdir = os.path.abspath(resultsdir)
-  outputdir = os.path.abspath(outputdir)
-  if not title:
-    title = os.path.basename(resultsdir)
-  title = title.replace(' ', '_')
-
-  global config
-  config = sniper_config.parse_config(file(os.path.join(resultsdir, 'sim.cfg')).read())
-  stats = sniper_stats.SniperStats(resultsdir)
-
-  readInputData(os.path.join(resultsdir,"rtntrace.out"))
-  if not os.path.exists(os.path.join(outputdir,"levels","functionbased")):
-    os.makedirs(os.path.join(outputdir,"levels","functionbased"))
-
-  writeiptstats(os.path.join(outputdir,"levels","functionbased","iptstats.json"))
-  writerooflinestats(os.path.join(outputdir,"levels","functionbased","rooflinestats.json"))
-
-  doxypath = ''
-  if source and doxygenpath:
-    createDoxyGenOutput(source,doxygenpath,title)
-    doxypath = 'levels/functionbased/doxygen'
+  createJSONData(resultsdir, outputdir, title, source, doxygenpath)
 
   #write static files
   if outputdir != HOME:
     print "Copy files to output directory "+outputdir
-    os.system('cd "%s"; tar c flot/ levels/functionbased/functionbased.html levels/functionbased/*js css/ %s | tar x -C %s' % (HOME, doxypath, outputdir))
+    os.system('cd "%s"; tar c flot/ levels/functionbased/functionbased.html levels/functionbased/*js css/ levels/functionbased/doxygen | tar x -C %s' % (HOME, outputdir))
 
