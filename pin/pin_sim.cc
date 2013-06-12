@@ -81,6 +81,8 @@ extern struct user_desc *newtls;
 #endif
 extern int *child_tidptr;
 
+bool forkedInChild = false;
+
 // ---------------------------------------------------------------
 
 map <ADDRINT, string> rtn_map;
@@ -383,6 +385,9 @@ void ApplicationStart()
 
 void ApplicationExit(int, void*)
 {
+   if (forkedInChild)
+      return;
+
    // If we're still in ROI, make sure we exit properly
    disablePerformanceGlobal();
 
@@ -435,6 +440,9 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
 
 VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, VOID *v)
 {
+   if (forkedInChild)
+      return;
+
    Sim()->getThreadManager()->onThreadExit(localStore[threadIndex].thread->getId());
 
    if (localStore[threadIndex].thread->getId() == 0)
@@ -449,6 +457,13 @@ bool dumpLogmem(THREADID threadIndex, INT32 signal, CONTEXT *ctx, BOOL hasHandle
    printf("[SNIPER] Writing logmem allocations\n");
    logmem_write_allocations();
    return false;
+}
+
+VOID forkAfterChild(THREADID threadid, const CONTEXT *ctxt, VOID *v)
+{
+   // Application has fork()ed. We don't want to track child processes, but Pin will attempt to do cleanups.
+   // Make sure that these don't trigger any simulator code.
+   forkedInChild = true;
 }
 
 int main(int argc, char *argv[])
@@ -539,6 +554,8 @@ int main(int argc, char *argv[])
 
    PIN_AddDetachFunction(ApplicationDetach, 0);
    PIN_AddFiniUnlockedFunction(ApplicationExit, 0);
+
+   PIN_AddForkFunction(FPOINT_AFTER_IN_CHILD, forkAfterChild, 0);
 
    if (cfg->getBool("log/pin_codecache_trace"))
       initCodeCacheTracing();
