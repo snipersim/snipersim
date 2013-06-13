@@ -76,6 +76,12 @@ BarrierSyncServer::signal()
       barrierRelease();
 }
 
+void
+BarrierSyncServer::advance()
+{
+   barrierRelease(INVALID_THREAD_ID);
+}
+
 bool
 BarrierSyncServer::isBarrierReached()
 {

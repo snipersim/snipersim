@@ -66,6 +66,7 @@ public:
    void resumeThread_async(thread_id_t thread_id, thread_id_t thread_id_by, SubsecondTime time, void *msg = NULL);
    bool isThreadRunning(thread_id_t thread_id);
    bool isThreadInitializing(thread_id_t thread_id);
+   bool anyThreadRunning();
 
    void moveThread(thread_id_t thread_id, core_id_t core_id, SubsecondTime time);
 

@@ -32,6 +32,7 @@ class BarrierSyncServer : public ClockSkewMinimizationServer
       void synchronize(thread_id_t thread_id, SubsecondTime time);
       void signal();
       void release() { abortBarrier(); }
+      void advance();
       void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime());
       SubsecondTime getGlobalTime() { return m_global_time; }
 

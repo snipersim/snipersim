@@ -336,6 +336,12 @@ void ThreadManager::stallThread_async(thread_id_t thread_id, stall_type_t reason
 SubsecondTime ThreadManager::stallThread(thread_id_t thread_id, stall_type_t reason, SubsecondTime time)
 {
    stallThread_async(thread_id, reason, time);
+   // When all threads are stalled, we have a deadlock -- unless we let the barrier advance time
+   // which may wake up threads that are sleeping or waiting on a futex with a timeout value.
+   while(!anyThreadRunning())
+   {
+      Sim()->getClockSkewMinimizationServer()->advance();
+   }
    // It's possible that a HOOK_PERIODIC, called by SkewMinServer::signal(), called by stallThread_async(), woke us up again.
    // We will then have been signal()d, but this signal was lost since we weren't in wait()
    // If this is the case, don't go to sleep but return our wakeup time immediately
@@ -370,4 +376,14 @@ bool ThreadManager::isThreadRunning(thread_id_t thread_id)
 bool ThreadManager::isThreadInitializing(thread_id_t thread_id)
 {
    return (m_thread_state[thread_id].status == Core::INITIALIZING);
+}
+
+bool ThreadManager::anyThreadRunning()
+{
+   for(thread_id_t thread_id = 0; thread_id < (thread_id_t)getNumThreads(); ++thread_id)
+   {
+      if (m_thread_state[thread_id].status == Core::RUNNING)
+         return true;
+   }
+   return false;
 }
