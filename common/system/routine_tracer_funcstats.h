@@ -41,7 +41,7 @@ class RoutineTracerFunctionStats
             // The superclass data is copied, but clear the statistics.
             Routine(const Routine &r)
             : RoutineTracer::Routine(r)
-            , m_calls(0), m_values()
+            , m_calls(0), m_values(), m_bits_used(0), m_bits_total(0)
             {}
       };
 
