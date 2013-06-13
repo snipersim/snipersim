@@ -226,9 +226,9 @@ void TraceThread::handleRoutineChangeFunc(int64_t eip, Sift::RoutineOpType event
    }
 }
 
-void TraceThread::handleRoutineAnnounceFunc(int64_t eip, const char *name, const char *imgname, uint32_t line, uint32_t column, const char *filename)
+void TraceThread::handleRoutineAnnounceFunc(int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
 {
-   Sim()->getRoutineTracer()->addRoutine(eip, name, imgname, column, line, filename);
+   Sim()->getRoutineTracer()->addRoutine(eip, name, imgname, offset, column, line, filename);
 }
 
 BasicBlock* TraceThread::decode(Sift::Instruction &inst)

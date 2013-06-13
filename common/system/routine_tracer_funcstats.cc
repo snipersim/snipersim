@@ -144,13 +144,13 @@ RoutineTracerThread* RoutineTracerFunctionStats::RtnMaster::getThreadHandler(Thr
    return thread_handler;
 }
 
-void RoutineTracerFunctionStats::RtnMaster::addRoutine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename)
+void RoutineTracerFunctionStats::RtnMaster::addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)
 {
    ScopedLock sl(m_lock);
 
    if (m_routines.count(eip) == 0)
    {
-      m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, name, imgname, column, line, filename);
+      m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, name, imgname, offset, column, line, filename);
    }
 }
 
@@ -167,7 +167,7 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
 
    if (m_routines.count(eip) == 0)
    {
-      m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, "(unknown)", "(unknown)", 0, 0, "");
+      m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, "(unknown)", "(unknown)", 0, 0, 0, "");
    }
 
    LOG_ASSERT_ERROR(m_routines.count(eip), "Routine %lx not found", eip);

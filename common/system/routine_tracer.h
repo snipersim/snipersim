@@ -46,7 +46,7 @@ class RoutineTracer
             const char *m_name;
             const char *m_location;
 
-            Routine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename);
+            Routine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);
       };
 
       static RoutineTracer* create();
@@ -54,7 +54,7 @@ class RoutineTracer
       RoutineTracer();
       virtual ~RoutineTracer();
 
-      virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename) = 0;
+      virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename) = 0;
       virtual bool hasRoutine(IntPtr eip) = 0;
       virtual RoutineTracerThread* getThreadHandler(Thread *thread) = 0;
 };

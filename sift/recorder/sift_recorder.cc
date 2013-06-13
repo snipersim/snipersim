@@ -459,7 +459,12 @@ void announceRoutine(RTN rtn)
    std::string filename = "??";
    PIN_GetSourceLocation(RTN_Address(rtn), &column, &line, &filename);
    IMG img = IMG_FindByAddress(RTN_Address(rtn));
-   thread_data[PIN_ThreadId()].output->RoutineAnnounce(RTN_Address(rtn), RTN_Name(rtn).c_str(), IMG_Valid(img) ? IMG_Name(img).c_str() : "??", column, line, filename.c_str());
+   thread_data[PIN_ThreadId()].output->RoutineAnnounce(
+      RTN_Address(rtn),
+      RTN_Name(rtn).c_str(),
+      IMG_Valid(img) ? IMG_Name(img).c_str() : "??",
+      IMG_Valid(img) ? IMG_LoadOffset(img) : 0,
+      column, line, filename.c_str());
 }
 
 void announceInvalidRoutine()
@@ -468,7 +473,7 @@ void announceInvalidRoutine()
       return;
 
    routines[0] = true;
-   thread_data[PIN_ThreadId()].output->RoutineAnnounce(0, "INVALID", "", 0, 0, "");
+   thread_data[PIN_ThreadId()].output->RoutineAnnounce(0, "INVALID", "", 0, 0, 0, "");
 }
 
 void addRtnTracer(RTN rtn)

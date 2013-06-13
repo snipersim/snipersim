@@ -27,13 +27,13 @@ RoutineTracerThread* RoutineTracerPrint::RtnMaster::getThreadHandler(Thread *thr
    return new RtnThread(this, thread);
 }
 
-void RoutineTracerPrint::RtnMaster::addRoutine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename)
+void RoutineTracerPrint::RtnMaster::addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)
 {
    ScopedLock sl(m_lock);
 
    if (m_routines.count(eip) == 0)
    {
-      m_routines[eip] = new RoutineTracer::Routine(eip, name, imgname, column, line, filename);
+      m_routines[eip] = new RoutineTracer::Routine(eip, name, imgname, offset, column, line, filename);
    }
 }
 

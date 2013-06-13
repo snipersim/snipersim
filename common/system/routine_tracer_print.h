@@ -15,7 +15,7 @@ class RoutineTracerPrint
             virtual ~RtnMaster() {}
 
             virtual RoutineTracerThread* getThreadHandler(Thread *thread);
-            virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename);
+            virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);
             virtual bool hasRoutine(IntPtr eip);
             RoutineTracer::Routine* getRoutine(IntPtr eip);
 

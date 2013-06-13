@@ -34,14 +34,27 @@ class Function:
     self.eip = eip
     self.name = cppfilt(name).strip()
     self.location = location
+    self.offset = long(location.split(':')[1])
+    # link-time address
+    self.ieip = str(long(eip, 16) - self.offset)
   def __str__(self):
     return self.name
     #return '[%8s] %s' % (self.eip, self.name)
 
+def translateEip(eip):
+  if eip in functions:
+    return functions[eip].ieip
+  else:
+    return eip
+
 class Call:
-  def __init__(self, stack, data):
+  def __init__(self, eip, stack, data):
+    self.eip = eip
     self.stack = stack
     self.data = data
+  def add(self, data):
+    for k in data:
+      self.data[k] += data[k]
   def buildTotal(self):
     # Add self to global total
     for k in self.data:
@@ -61,7 +74,7 @@ class Call:
           '%6.2f%%\t' % (100 * self.total['instruction_count'] / float(totals['instruction_count'])) + \
           '%7.2f\t' % (self.total['instruction_count'] / (fs_to_cycles_cores * float(totals['core_elapsed_time']))) + \
           '%7.2f\t' % (1000 * self.total['l2miss'] / float(self.total['instruction_count'])) + \
-          '  '*len(self.stack.split(':')) + str(functions[self.stack.split(':')[-1]])
+          '  '*len(self.stack.split(':')) + str(functions[self.eip])
   def printTree(self):
     self.printLine()
     for stack in sorted(children[self.stack], key = lambda stack: calls[stack].total['core_elapsed_time'], reverse = True):
@@ -80,11 +93,16 @@ for line in fp:
     functions[eip] = Function(eip, name, location)
   else:
     line = line.strip().split('\t')
-    stack = line[0]
+    stack = line[0].split(':')
+    eip = stack[-1]
+    stack = ':'.join(map(translateEip, stack))
     data = dict(zip(headers[1:], map(long, line[1:])))
-    calls[stack] = Call(stack, data)
-    parent = stack.rpartition(':')[0]
-    children[parent].add(stack)
+    if stack in calls:
+      calls[stack].add(data)
+    else:
+      calls[stack] = Call(eip, stack, data)
+      parent = stack.rpartition(':')[0]
+      children[parent].add(stack)
 
 roots = set(calls.keys())
 for parent in calls:
