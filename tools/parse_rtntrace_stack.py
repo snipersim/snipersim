@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, subprocess, sniper_lib, sniper_config
+import sys, os, collections, subprocess, sniper_lib, sniper_config
 
 def ex_ret(cmd):
   return subprocess.Popen(cmd, stdout = subprocess.PIPE).communicate()[0]
@@ -24,6 +24,7 @@ fs_to_cycles_cores = freq / 1e15
 
 functions = {}
 calls = {}
+children = collections.defaultdict(set)
 roots = set()
 totals = {}
 
@@ -41,17 +42,18 @@ class Call:
   def __init__(self, stack, data):
     self.stack = stack
     self.data = data
-    self.total = dict([ (k, 0) for k in self.data.keys() ])
-    self.children = set()
   def buildTotal(self):
+    # Add self to global total
     for k in self.data:
       totals[k] = totals.get(k, 0) + self.data[k]
-    for stack, child in calls.items():
-      if stack.startswith(self.stack):
-        if len(stack.split(':')) == len(self.stack.split(':')) + 1:
-          self.children.add(stack)
-        for k in child.data:
-          self.total[k] += child.data[k]
+	# Calculate children's totals
+    for stack in children[self.stack]:
+      calls[stack].buildTotal()
+    # Add all children to our total
+    self.total = dict(self.data)
+    for stack in children[self.stack]:
+      for k in calls[stack].total:
+        self.total[k] += calls[stack].total[k]
   def printLine(self):
     print '%7d\t' % self.data['calls'] + \
           '%6.2f%%\t' % (100 * self.total['core_elapsed_time'] / float(totals['core_elapsed_time'])) + \
@@ -62,7 +64,7 @@ class Call:
           '  '*len(self.stack.split(':')) + str(functions[self.stack.split(':')[-1]])
   def printTree(self):
     self.printLine()
-    for stack in sorted(self.children, key = lambda stack: calls[stack].total['core_elapsed_time'], reverse = True):
+    for stack in sorted(children[self.stack], key = lambda stack: calls[stack].total['core_elapsed_time'], reverse = True):
       if calls[stack].total['core_elapsed_time'] / float(totals['core_elapsed_time']) < .001:
         break
       calls[stack].printTree()
@@ -81,11 +83,16 @@ for line in fp:
     stack = line[0]
     data = dict(zip(headers[1:], map(long, line[1:])))
     calls[stack] = Call(stack, data)
+    parent = stack.rpartition(':')[0]
+    children[parent].add(stack)
 
 roots = set(calls.keys())
-for stack in calls:
+for parent in calls:
+  for child in children[parent]:
+    roots.remove(child)
+
+for stack in roots:
   calls[stack].buildTotal()
-  roots -= calls[stack].children
 
 print '%7s\t%7s\t%7s\t%7s\t%7s\t%7s  %s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
 for stack in sorted(roots, key = lambda stack: calls[stack].total['core_elapsed_time'], reverse = True):
