@@ -101,6 +101,7 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
 {
    ThreadStatNamedStat::registerStat("fp_addsub", "interval_timer", "uop_fp_addsub");
    ThreadStatNamedStat::registerStat("fp_muldiv", "interval_timer", "uop_fp_muldiv");
+   ThreadStatNamedStat::registerStat("l2miss", "L2", "load-misses");
    ThreadStatNamedStat::registerStat("l3miss", "L3", "load-misses");
    ThreadStatAggregates::registerStats();
    ThreadStatNamedStat::registerStat("cpiBase", "interval_timer", "cpiBase");
