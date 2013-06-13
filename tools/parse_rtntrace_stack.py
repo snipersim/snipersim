@@ -72,7 +72,7 @@ class Call:
           '%6.2f%%\t' % (100 * self.total['core_elapsed_time'] / float(totals['core_elapsed_time'])) + \
           '%6.2f%%\t' % (100 * self.data['core_elapsed_time'] / float(totals['core_elapsed_time'])) + \
           '%6.2f%%\t' % (100 * self.total['instruction_count'] / float(totals['instruction_count'])) + \
-          '%7.2f\t' % (self.total['instruction_count'] / (fs_to_cycles_cores * float(totals['core_elapsed_time']))) + \
+          '%7.2f\t' % (self.total['instruction_count'] / (fs_to_cycles_cores * float(self.total['core_elapsed_time']))) + \
           '%7.2f\t' % (1000 * self.total['l2miss'] / float(self.total['instruction_count'])) + \
           '  '*(len(self.stack.split(':')) + offset) + str(functions[self.eip])
   def printTree(self, offset = 0):
