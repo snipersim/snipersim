@@ -33,8 +33,8 @@ class RoutineTracerFunctionStats
             RtnValues m_values;
             UInt64 m_bits_used, m_bits_total;
 
-            Routine(IntPtr eip, const char *name, int column, int line, const char *filename)
-            : RoutineTracer::Routine(eip, name, column, line, filename)
+            Routine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename)
+            : RoutineTracer::Routine(eip, name, imgname, column, line, filename)
             , m_calls(0), m_values(), m_bits_used(0), m_bits_total(0)
             {}
 
@@ -55,7 +55,7 @@ class RoutineTracerFunctionStats
             virtual ~RtnMaster();
 
             virtual RoutineTracerThread* getThreadHandler(Thread *thread);
-            virtual void addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename);
+            virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename);
             virtual bool hasRoutine(IntPtr eip);
             void updateRoutine(IntPtr eip, UInt64 calls, RtnValues values);
             void updateRoutineFull(const std::deque<IntPtr> &, UInt64 calls, RtnValues values);

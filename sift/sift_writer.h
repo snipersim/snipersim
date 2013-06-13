@@ -48,7 +48,7 @@ namespace Sift
          void Sync();
          uint64_t Magic(uint64_t a, uint64_t b, uint64_t c);
          void RoutineChange(uint64_t eip, Sift::RoutineOpType event);
-         void RoutineAnnounce(uint64_t eip, const char *name, uint32_t line, uint32_t column, const char *filename);
+         void RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint32_t line, uint32_t column, const char *filename);
 
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }
    };

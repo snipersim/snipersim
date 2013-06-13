@@ -143,13 +143,13 @@ RoutineTracerThread* RoutineTracerFunctionStats::RtnMaster::getThreadHandler(Thr
    return thread_handler;
 }
 
-void RoutineTracerFunctionStats::RtnMaster::addRoutine(IntPtr eip, const char *name, int column, int line, const char *filename)
+void RoutineTracerFunctionStats::RtnMaster::addRoutine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename)
 {
    ScopedLock sl(m_lock);
 
    if (m_routines.count(eip) == 0)
    {
-      m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, name, column, line, filename);
+      m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, name, imgname, column, line, filename);
    }
 }
 

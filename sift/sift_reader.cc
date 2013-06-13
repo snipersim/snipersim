@@ -329,20 +329,23 @@ bool Sift::Reader::Read(Instruction &inst)
             case RecOtherRoutineAnnounce:
             {
                uint64_t eip;
-               uint16_t len_name, len_filename;
-               char *name, *filename;
+               uint16_t len_name, len_imgname, len_filename;
+               char *name, *imgname, *filename;
                uint32_t line, column;
                input->read(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&len_name), sizeof(uint16_t));
                name = (char*)malloc(len_name);
                input->read(name, len_name);
+               input->read(reinterpret_cast<char*>(&len_imgname), sizeof(uint16_t));
+               imgname = (char*)malloc(len_imgname);
+               input->read(imgname, len_imgname);
                input->read(reinterpret_cast<char*>(&line), sizeof(uint32_t));
                input->read(reinterpret_cast<char*>(&column), sizeof(uint32_t));
                input->read(reinterpret_cast<char*>(&len_filename), sizeof(uint16_t));
                filename = (char*)malloc(len_filename);
                input->read(filename, len_filename);
                if (handleRoutineAnnounceFunc)
-                  handleRoutineAnnounceFunc(handleRoutineArg, eip, name, line, column, filename);
+                  handleRoutineAnnounceFunc(handleRoutineArg, eip, name, imgname, line, column, filename);
                free(name);
                free(filename);
                break;

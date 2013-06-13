@@ -583,18 +583,20 @@ void Sift::Writer::RoutineChange(uint64_t eip, Sift::RoutineOpType event)
    output->write(reinterpret_cast<char*>(&_event), sizeof(uint8_t));
 }
 
-void Sift::Writer::RoutineAnnounce(uint64_t eip, const char *name, uint32_t line, uint32_t column, const char *filename)
+void Sift::Writer::RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint32_t line, uint32_t column, const char *filename)
 {
-   uint16_t len_name = strlen(name) + 1, len_filename = strlen(filename) + 1;
+   uint16_t len_name = strlen(name) + 1, len_imgname = strlen(imgname) + 1, len_filename = strlen(filename) + 1;
 
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherRoutineAnnounce;
-   rec.Other.size = sizeof(uint64_t) + sizeof(uint16_t) + len_name + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t) + len_filename;
+   rec.Other.size = sizeof(uint64_t) + sizeof(uint16_t) + len_name + sizeof(uint16_t) + len_imgname + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t) + len_filename;
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    output->write(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
    output->write(reinterpret_cast<char*>(&len_name), sizeof(uint16_t));
    output->write(name, len_name);
+   output->write(reinterpret_cast<char*>(&len_imgname), sizeof(uint16_t));
+   output->write(imgname, len_imgname);
    output->write(reinterpret_cast<char*>(&line), sizeof(uint32_t));
    output->write(reinterpret_cast<char*>(&column), sizeof(uint32_t));
    output->write(reinterpret_cast<char*>(&len_filename), sizeof(uint16_t));

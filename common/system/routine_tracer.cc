@@ -118,12 +118,12 @@ void RoutineTracerThread::hookRoiEnd()
       functionExit(*it);
 }
 
-RoutineTracer::Routine::Routine(IntPtr eip, const char *name, int column, int line, const char *filename)
+RoutineTracer::Routine::Routine(IntPtr eip, const char *name, const char *imgname, int column, int line, const char *filename)
    : m_eip(eip), m_name(strdup(name))
 {
-   char location[1024];
-   snprintf(location, 1023, "%s:%d:%d", filename, line, column);
-   location[1023] = '\0';
+   char location[4096];
+   snprintf(location, 4095, "%s:%s:%d:%d", imgname, filename, line, column);
+   location[4095] = '\0';
    m_location = strdup(location);
 }
 
