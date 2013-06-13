@@ -71,9 +71,6 @@ class Category(Call):
 
 class Profile:
   def __init__(self, resultsdir = '.'):
-    self.load()
-
-  def load(self):
     filename = os.path.join(resultsdir, 'sim.rtntracefull')
     if not os.path.exists(filename):
       raise IOError('Cannot find trace file %s' % filename)
@@ -132,7 +129,7 @@ class Profile:
     bytype = dict([ (name, Category(name)) for name in catnames ])
     for func in self.calls.values():
       for catname, catfilter in catfilters:
-        if catfilter(func, prof):
+        if catfilter(func, self):
           break
       bytype[catname].add(func.data)
     print >> obj, '%7s\t%7s\t%7s\t%7s' % ('time', 'icount', 'ipc', 'l2.mpki')
