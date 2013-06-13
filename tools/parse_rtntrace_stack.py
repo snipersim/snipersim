@@ -23,11 +23,13 @@ headers = fp.readline().strip().split('\t')
 data = {}
 functions = {}
 for line in fp:
-  line = dict(zip(headers, line.strip().split('\t')))
-  data[line['eip']] = {'calls': long(line['calls']), 'time': long(line['core_elapsed_time'])/1e15, 'icount': long(line['instruction_count'])}
-  eip = line['eip'].split(':')[-1]
-  if eip not in functions:
-    functions[eip] = cppfilt(line['name']).strip()
+  if line.startswith(':'):
+    eip, name, location = line.strip().split('\t')
+    eip = eip[1:]
+    functions[eip] = cppfilt(name).strip()
+  else:
+    line = dict(zip(headers, line.strip().split('\t')))
+    data[line['stack']] = {'calls': long(line['calls']), 'time': long(line['core_elapsed_time'])/1e15, 'icount': long(line['instruction_count'])}
 
 for stack in sorted(data.keys()):
   eip = stack.split(':')[-1]

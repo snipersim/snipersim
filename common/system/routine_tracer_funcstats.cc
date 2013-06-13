@@ -220,11 +220,19 @@ void RoutineTracerFunctionStats::RtnMaster::writeResultsFull(const char *filenam
 
    const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
 
-   fprintf(fp, "eip\tname\tsource\tcalls\tbits_used\tbits_total");
+   // header line
+   fprintf(fp, "stack\tcalls\tbits_used\tbits_total");
    for(ThreadStatsManager::ThreadStatTypeList::const_iterator it = types.begin(); it != types.end(); ++it)
       fprintf(fp, "\t%s", Sim()->getThreadStatsManager()->getThreadStatName(*it));
    fprintf(fp, "\n");
 
+   // first print all routine names
+   for(RoutineMap::iterator it = m_routines.begin(); it != m_routines.end(); ++it)
+   {
+      fprintf(fp, ":%" PRIxPTR "\t%s\t%s\n", it->second->m_eip, it->second->m_name, it->second->m_location);
+   }
+
+   // now print context-aware statistics
    for(auto it = m_callstack_routines.begin(); it != m_callstack_routines.end(); ++it)
    {
       std::ostringstream s;
@@ -233,9 +241,8 @@ void RoutineTracerFunctionStats::RtnMaster::writeResultsFull(const char *filenam
       {
          s << ":" << std::hex << *kt << std::dec;
       }
-      fprintf(fp, "%s\t%s\t%s\t%" PRId64 "\t%" PRId64 "\t%" PRId64,
-         s.str().c_str(), it->second->m_name, it->second->m_location,
-         it->second->m_calls, it->second->m_bits_used, it->second->m_bits_total);
+      fprintf(fp, "%s\t%" PRId64 "\t%" PRId64 "\t%" PRId64,
+         s.str().c_str(), it->second->m_calls, it->second->m_bits_used, it->second->m_bits_total);
       for(ThreadStatsManager::ThreadStatTypeList::const_iterator jt = types.begin(); jt != types.end(); ++jt)
          fprintf(fp, "\t%" PRId64, it->second->m_values[*jt]);
       fprintf(fp, "\n");
