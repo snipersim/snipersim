@@ -165,6 +165,11 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
 {
    ScopedLock sl(m_lock);
 
+   if (m_routines.count(eip) == 0)
+   {
+      m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, "(unknown)", "(unknown)", 0, 0, "");
+   }
+
    LOG_ASSERT_ERROR(m_routines.count(eip), "Routine %lx not found", eip);
 
    m_routines[eip]->m_calls += calls;
