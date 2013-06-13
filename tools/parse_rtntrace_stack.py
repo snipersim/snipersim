@@ -67,20 +67,20 @@ class Call:
     for stack in children[self.stack]:
       for k in calls[stack].total:
         self.total[k] += calls[stack].total[k]
-  def printLine(self):
+  def printLine(self, offset = 0):
     print '%7d\t' % self.data['calls'] + \
           '%6.2f%%\t' % (100 * self.total['core_elapsed_time'] / float(totals['core_elapsed_time'])) + \
           '%6.2f%%\t' % (100 * self.data['core_elapsed_time'] / float(totals['core_elapsed_time'])) + \
           '%6.2f%%\t' % (100 * self.total['instruction_count'] / float(totals['instruction_count'])) + \
           '%7.2f\t' % (self.total['instruction_count'] / (fs_to_cycles_cores * float(totals['core_elapsed_time']))) + \
           '%7.2f\t' % (1000 * self.total['l2miss'] / float(self.total['instruction_count'])) + \
-          '  '*len(self.stack.split(':')) + str(functions[self.eip])
-  def printTree(self):
-    self.printLine()
+          '  '*(len(self.stack.split(':')) + offset) + str(functions[self.eip])
+  def printTree(self, offset = 0):
+    self.printLine(offset = offset)
     for stack in sorted(children[self.stack], key = lambda stack: calls[stack].total['core_elapsed_time'], reverse = True):
       if calls[stack].total['core_elapsed_time'] / float(totals['core_elapsed_time']) < .001:
         break
-      calls[stack].printTree()
+      calls[stack].printTree(offset = offset)
 
 
 fp = open(filename)
@@ -112,6 +112,6 @@ for parent in calls:
 for stack in roots:
   calls[stack].buildTotal()
 
-print '%7s\t%7s\t%7s\t%7s\t%7s\t%7s  %s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
+print '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
 for stack in sorted(roots, key = lambda stack: calls[stack].total['core_elapsed_time'], reverse = True):
-  calls[stack].printTree()
+  calls[stack].printTree(offset = -len(stack.split(':')))
