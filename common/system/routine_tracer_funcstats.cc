@@ -228,7 +228,7 @@ void RoutineTracerFunctionStats::RtnMaster::writeResultsFull(const char *filenam
    for(auto it = m_callstack_routines.begin(); it != m_callstack_routines.end(); ++it)
    {
       std::ostringstream s;
-      s << it->first.front();
+      s << std::hex << it->first.front();
       for (auto kt = ++it->first.begin(); kt != it->first.end(); ++kt)
       {
          s << ":" << std::hex << *kt << std::dec;
