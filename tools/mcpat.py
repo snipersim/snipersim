@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, sys, math, re, collections, buildstack, gnuplot, getopt, pprint, sniper_lib, sniper_config
+import os, sys, math, re, collections, buildstack, gnuplot, getopt, pprint, sniper_lib, sniper_config, sniper_stats
 import math
 
 #ISSUE_WIDTH = 4
@@ -111,7 +111,8 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   if config:
     results['config'].update(sniper_config.parse_config(file(config).read()))
-  power, nuca_at_level = edit_XML(results['results'], results['config'], vdd)
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+  power, nuca_at_level = edit_XML(stats, results['results'], results['config'], vdd)
   power = map(lambda v: v[0], power)
   file(tempfile, "w").write('\n'.join(power))
 
@@ -270,7 +271,7 @@ def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
   return buildstack.merge_items({ 0: data }, all_items, nocollapse = nocollapse)
 
 
-def edit_XML(stats, cfg, vdd):
+def edit_XML(statsobj, stats, cfg, vdd):
   #param = res['param']         #do it separately
 
   ncores = int(cfg['general/total_cores'])
@@ -297,8 +298,13 @@ def edit_XML(stats, cfg, vdd):
       nuca_cacheSharedCores = int(cfg['perf_model/dram_directory/interleaving'])
       num_nucas = int(math.ceil(ncores / float(nuca_cacheSharedCores)))
     else:
-      # TODO: compute number of NUCA caches in other cases
-      raise ValueError('Unsupported tag directory locations %s' % cfg['perf_model/dram_directory/locations'])
+      nuca_locations = [ lid for name, lid, mid in statsobj.get_topology() if name == 'nuca-cache' ]
+      # Right now we only support NUCA slices at regular interleaving
+      num_nucas = len(nuca_locations)
+      nuca_cacheSharedCores = ncores / num_nucas
+      nuca_locations_assumed = [ i*nuca_cacheSharedCores for i in range(num_nucas) ]
+      if nuca_locations != nuca_locations_assumed:
+        raise ValueError('Unsupported tag directory locations %s' % cfg['perf_model/dram_directory/locations'])
     if num_l2s == 0:
       # No L2s, use them for NUCA
       num_l2s = num_nucas
