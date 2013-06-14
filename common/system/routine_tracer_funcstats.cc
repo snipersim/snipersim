@@ -84,7 +84,9 @@ void RoutineTracerFunctionStats::RtnThread::functionEnd(IntPtr eip, bool is_func
    Sim()->getThreadStatsManager()->update(m_thread->getId());
 
    functionEndHelper(eip, is_function_start ? 1 : 0);
-   functionEndFullHelper(m_stack, is_function_start ? 1 : 0);
+   // Ignore simulated stack unwind at end of ROI (m_stack isn't kept up-to-date during this)
+   if (eip == m_stack.back())
+      functionEndFullHelper(m_stack, is_function_start ? 1 : 0);
 }
 
 UInt64 RoutineTracerFunctionStats::RtnThread::getThreadStat(ThreadStatsManager::ThreadStatType type)
@@ -235,7 +237,8 @@ void RoutineTracerFunctionStats::RtnMaster::writeResultsFull(const char *filenam
    // first print all routine names
    for(RoutineMap::iterator it = m_routines.begin(); it != m_routines.end(); ++it)
    {
-      fprintf(fp, ":%" PRIxPTR "\t%s\t%s\n", it->second->m_eip, it->second->m_name, it->second->m_location);
+      if (it->second->m_calls)
+         fprintf(fp, ":%" PRIxPTR "\t%s\t%s\n", it->second->m_eip, it->second->m_name, it->second->m_location);
    }
 
    // now print context-aware statistics
