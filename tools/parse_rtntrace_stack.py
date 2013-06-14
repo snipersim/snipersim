@@ -34,7 +34,7 @@ class Call:
     # Add self to global total
     for k, v in self.data.items():
       prof.totals[k] = prof.totals.get(k, 0) + v
-	# Calculate children's totals
+    # Calculate children's totals
     for stack in self.children:
       prof.calls[stack].buildTotal(prof)
     # Add all children to our total
@@ -86,7 +86,7 @@ class Profile:
     self.totals = {}
 
     fp = open(filename)
-    headers = fp.readline().strip().split('\t')
+    self.headers = fp.readline().strip().split('\t')
 
     for line in fp:
       if line.startswith(':'):
@@ -98,7 +98,7 @@ class Profile:
         stack = line[0].split(':')
         eip = stack[-1]
         stack = ':'.join(map(self.translateEip, stack))
-        data = dict(zip(headers[1:], map(long, line[1:])))
+        data = dict(zip(self.headers[1:], map(long, line[1:])))
         if stack in self.calls:
           self.calls[stack].add(data)
         else:
@@ -125,6 +125,55 @@ class Profile:
     for stack in sorted(self.roots, key = lambda stack: self.calls[stack].total['core_elapsed_time'], reverse = True):
       self.calls[stack].printTree(self, obj = obj, offset = -len(stack.split(':')))
 
+  def writeCallgrind(self, obj):
+    bystatic = dict([ (fn.ieip, Category(fn.eip)) for fn in self.functions.values() ])
+    for stack in self.calls:
+      fn = self.functions[self.calls[stack].eip]
+      bystatic[fn.ieip].add(self.calls[stack].data)
+      children = {}
+      for _stack in self.children[stack]:
+        _ieip = self.functions[self.calls[_stack].eip].ieip
+        if _ieip not in children:
+          children[_ieip] = Category(self.calls[_stack].eip)
+        children[_ieip].add(self.calls[_stack].total)
+        children[_ieip].calls = self.calls[_stack].data['calls']
+      bystatic[fn.ieip].children = children
+
+    costs = (
+      ('Cycles', 'Cycles',               lambda data: long(self.fs_to_cycles * data['core_elapsed_time'])),
+      ('Calls',  'Calls',                lambda data: data['calls']),
+      ('Icount', 'Instruction count',    lambda data: data['instruction_count']),
+      ('L2',     'L2 load misses',       lambda data: data['l2miss']),
+    )
+
+    def formatData(data):
+      return ' '.join(map(str, [ fn(data) for _, _, fn in costs ]))
+
+    print >> obj, 'cmd: Sniper run'
+    print >> obj, 'positions: instr'
+    print >> obj, 'events:', ' '.join([ cost for cost, _, _ in costs ])
+    for cost, desc, _ in costs:
+      print >> obj, 'event: %s : %s' % (cost, desc)
+    print >> obj, 'summary:', formatData(self.totals)
+    print >> obj
+
+    for site in sorted(bystatic.values(), key = lambda v: v.data.get('instruction_count',0), reverse=True):
+      if not site.data:
+        continue
+      fn = self.functions[site.name]
+      print >> obj, 'ob=%s' % fn.location[0]
+      print >> obj, 'fl=%s' % fn.location[2]
+      print >> obj, 'fn=%s' % fn.name
+      print >> obj, '0x%x' % long(fn.ieip), formatData(site.data)
+      for _site in site.children.values():
+        _fn = self.functions[_site.name]
+        print >> obj, 'cob=%s' % _fn.location[0]
+        print >> obj, 'cfi=%s' % _fn.location[2]
+        print >> obj, 'cfn=%s' % _fn.name
+        print >> obj, 'calls=%s 0x%x' % (_site.calls, long(_fn.ieip))
+        print >> obj, '0x%x' % long(_fn.ieip), formatData(_site.data)
+      print >> obj
+
   def summarize(self, catnames, catfilters, obj = sys.stdout):
     bytype = dict([ (name, Category(name)) for name in catnames ])
     for func in self.calls.values():
@@ -147,3 +196,4 @@ if __name__ == '__main__':
 
   prof = Profile(resultsdir)
   prof.write()
+  prof.writeCallgrind(file('callgrind.sim', 'w'))
