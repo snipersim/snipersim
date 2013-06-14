@@ -95,6 +95,7 @@ all_items = [
   [ 'dcache',   .01,    'dcache' ],
   [ 'l2',       .01,    'l2' ],
   [ 'l3',       .01,    'l3' ],
+  [ 'nuca',     .01,    'nuca' ],
   [ 'noc',      .01,    'noc' ],
   [ 'dram',     .01,    'dram' ],
 ]
@@ -110,7 +111,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   if config:
     results['config'].update(sniper_config.parse_config(file(config).read()))
-  power = edit_XML(results['results'], results['config'], vdd)
+  power, nuca_at_level = edit_XML(results['results'], results['config'], vdd)
   power = map(lambda v: v[0], power)
   file(tempfile, "w").write('\n'.join(power))
 
@@ -147,9 +148,14 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
           name = res.group(2).strip()
           prefix.append(name)
     if componentname in ('Core', 'L2', 'L3'):
-      if componentname not in power_dat:
-        power_dat[componentname] = []
-      power_dat[componentname].append(values)
+      # Translate whatever level we used for NUCA back into NUCA
+      if componentname == 'L%d' % nuca_at_level:
+        outputname = 'NUCA'
+      else:
+        outputname = componentname
+      if outputname not in power_dat:
+        power_dat[outputname] = []
+      power_dat[outputname].append(values)
     else:
       assert componentname not in power_dat
       power_dat[componentname] = values
@@ -231,8 +237,9 @@ def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
     else:
       raise ValueError('Unknown powertype %s' % powertype)
   data = {
-    'l2':               getpower(power_dat['Processor'], 'Total L2s'),
-    'l3':               getpower(power_dat['Processor'], 'Total L3s'),
+    'l2':               sum([ getpower(cache) for cache in power_dat.get('L2', []) ]),
+    'l3':               sum([ getpower(cache) for cache in power_dat.get('L3', []) ]),
+    'nuca':             sum([ getpower(cache) for cache in power_dat.get('NUCA', []) ]),
     'noc':              getpower(power_dat['Processor'], 'Total NoCs'),
     'dram':             getpower(power_dat['DRAM']),
     'core':             sum([ getpower(core, 'Execution Unit/Instruction Scheduler')
@@ -259,7 +266,7 @@ def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
                             ]),
   }
   data['core-other'] = getpower(power_dat['Processor'], 'Total Cores') \
-                     - sum(data.values()) + sum([ data[key] for key in ('l2', 'l3', 'noc', 'dram') ])
+                     - sum(data.values()) + sum([ data[key] for key in ('l2', 'l3', 'nuca', 'noc', 'dram') ])
   return buildstack.merge_items({ 0: data }, all_items, nocollapse = nocollapse)
 
 
@@ -274,6 +281,7 @@ def edit_XML(stats, cfg, vdd):
 
   l3_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
   l2_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
+  nuca_at_level = False
 
   if long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0)) > 0:
     num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
@@ -282,6 +290,8 @@ def edit_XML(stats, cfg, vdd):
     num_l2s = 0
   if int(cfg['perf_model/cache/levels']) >= 3:
     num_l3s = int(math.ceil(ncores / float(l3_cacheSharedCores)))
+    if cfg.get('perf_model/nuca/enabled') == 'true':
+      print >> sys.stderr, "L3 configured, NUCA power will be ignored"
   elif cfg.get('perf_model/nuca/enabled') == 'true':
     if cfg['perf_model/dram_directory/locations'] == 'interleaved':
       nuca_cacheSharedCores = int(cfg['perf_model/dram_directory/interleaving'])
@@ -295,11 +305,13 @@ def edit_XML(stats, cfg, vdd):
       l2_cacheSharedCores = nuca_cacheSharedCores
       l = 2
       num_l3s = 0
+      nuca_at_level = 2
     else:
       # We do have L2s, use L3 for NUCA
       num_l3s = num_nucas
       l3_cacheSharedCores = nuca_cacheSharedCores
       l = 3
+      nuca_at_level = 3
     # Copy over NUCA statistics into L2/L3 statistics so we don't have to change anything below here
     cfg['perf_model/l%d_cache/data_access_time'%l] = cfg['perf_model/nuca/data_access_time']
     cfg['perf_model/l%d_cache/associativity'%l] = cfg['perf_model/nuca/associativity']
@@ -653,7 +665,7 @@ def edit_XML(stats, cfg, vdd):
             l3conf.append(latency_l3)
             l3conf.append(1)
             template[i][0] = template[i][0] % tuple(l3conf)
-  return template
+  return template, nuca_at_level
 #----------
 def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
   Count = 0
