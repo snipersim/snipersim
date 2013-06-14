@@ -308,6 +308,24 @@ void SyscallServer::futexPeriodic(SubsecondTime time)
    }
 }
 
+SubsecondTime SyscallServer::getNextTimeout(SubsecondTime time)
+{
+   SubsecondTime next = SubsecondTime::MaxTime();
+   // Sleeping threads
+   for(SimFutex::ThreadQueue::iterator it = m_sleeping.begin(); it != m_sleeping.end(); ++it)
+   {
+      if (it->timeout < SubsecondTime::MaxTime())
+         next = it->timeout;
+   }
+   // Timeout futexes
+   for(FutexMap::iterator it = m_futexes.begin(); it != m_futexes.end(); ++it)
+   {
+      SubsecondTime t = it->second.getNextTimeout(time);
+      if (t < next)
+         next = t;
+   }
+   return next;
+}
 
 // -- SimFutex -- //
 SimFutex::SimFutex()
@@ -384,4 +402,15 @@ void SimFutex::wakeTimedOut(SubsecondTime time)
          break;
       }
    }
+}
+
+SubsecondTime SimFutex::getNextTimeout(SubsecondTime time)
+{
+   SubsecondTime next = SubsecondTime::MaxTime();
+   for(ThreadQueue::iterator it = m_waiting.begin(); it != m_waiting.end(); ++it)
+   {
+      if (it->timeout < SubsecondTime::MaxTime())
+         next = it->timeout;
+   }
+   return next;
 }

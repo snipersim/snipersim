@@ -40,6 +40,7 @@ class SimFutex
       thread_id_t dequeueWaiter(thread_id_t thread_by, int mask, SubsecondTime time);
       thread_id_t requeueWaiter(SimFutex *requeue_futex);
       void wakeTimedOut(SubsecondTime time);
+      SubsecondTime getNextTimeout(SubsecondTime time);
 };
 
 class SyscallServer
@@ -60,6 +61,7 @@ class SyscallServer
 
       void handleSleepCall(thread_id_t thread_id, SubsecondTime wake_time, SubsecondTime curr_time, SubsecondTime &end_time);
       IntPtr handleFutexCall(thread_id_t thread_id, futex_args_t &args, SubsecondTime curr_time, SubsecondTime &end_time);
+      SubsecondTime getNextTimeout(SubsecondTime time);
 
    private:
       // Handling Futexes

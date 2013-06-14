@@ -5,6 +5,7 @@
 #include "thread.h"
 #include "performance_model.h"
 #include "hooks_manager.h"
+#include "syscall_server.h"
 #include "config.h"
 #include "log.h"
 #include "stats.h"
@@ -79,7 +80,7 @@ BarrierSyncServer::signal()
 void
 BarrierSyncServer::advance()
 {
-   barrierRelease(INVALID_THREAD_ID);
+   barrierRelease(INVALID_THREAD_ID, true);
 }
 
 bool
@@ -125,7 +126,7 @@ BarrierSyncServer::isBarrierReached()
 }
 
 bool
-BarrierSyncServer::barrierRelease(thread_id_t caller_id)
+BarrierSyncServer::barrierRelease(thread_id_t caller_id, bool continue_until_release)
 {
    LOG_PRINT("Sending 'BARRIER_RELEASE'");
 
@@ -153,6 +154,15 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id)
    {
       m_global_time = m_next_barrier_time;
       Sim()->getHooksManager()->callHooks(HookType::HOOK_PERIODIC, static_cast<subsecond_time_t>(m_next_barrier_time).m_time);
+
+      if (continue_until_release)
+      {
+         // If HOOK_PERIODIC woke someone up, this thread can safely go to sleep
+         if (Sim()->getThreadManager()->anyThreadRunning())
+            return false;
+         else
+            LOG_ASSERT_ERROR(Sim()->getSyscallServer()->getNextTimeout(m_global_time) < SubsecondTime::MaxTime(), "No threads running, no timeout. Application has deadlocked...");
+      }
 
       // If the barrier was disabled from HOOK_PERIODIC (for instance, if roi-end was triggered from a script), break
       if (m_disable)
@@ -220,7 +230,9 @@ BarrierSyncServer::setFastForward(bool fastforward, SubsecondTime next_barrier_t
 {
    m_fastforward = fastforward;
    if (next_barrier_time != SubsecondTime::MaxTime())
-      m_next_barrier_time = next_barrier_time;
+   {
+      m_next_barrier_time = std::max(m_next_barrier_time, next_barrier_time);
+   }
 }
 
 void

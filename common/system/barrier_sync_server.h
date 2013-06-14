@@ -21,7 +21,7 @@ class BarrierSyncServer : public ClockSkewMinimizationServer
       volatile bool m_disable;
 
       bool isBarrierReached(void);
-      bool barrierRelease(thread_id_t thread_id = INVALID_THREAD_ID);
+      bool barrierRelease(thread_id_t thread_id = INVALID_THREAD_ID, bool continue_until_release = false);
       void abortBarrier(void);
 
    public:
