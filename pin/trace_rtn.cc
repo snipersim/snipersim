@@ -3,19 +3,19 @@
 #include "local_storage.h"
 #include "routine_tracer.h"
 
-void routineEnter(THREADID threadIndex, IntPtr eip)
+void routineEnter(THREADID threadIndex, IntPtr eip, IntPtr esp)
 {
-   localStore[threadIndex].thread->getRoutineTracer()->routineEnter(eip);
+   localStore[threadIndex].thread->getRoutineTracer()->routineEnter(eip, esp);
 }
 
-void routineExit(THREADID threadIndex, IntPtr eip)
+void routineExit(THREADID threadIndex, IntPtr eip, IntPtr esp)
 {
-   localStore[threadIndex].thread->getRoutineTracer()->routineExit(eip);
+   localStore[threadIndex].thread->getRoutineTracer()->routineExit(eip, esp);
 }
 
-void routineAssert(THREADID threadIndex, IntPtr eip)
+void routineAssert(THREADID threadIndex, IntPtr eip, IntPtr esp)
 {
-   localStore[threadIndex].thread->getRoutineTracer()->routineAssert(eip);
+   localStore[threadIndex].thread->getRoutineTracer()->routineAssert(eip, esp);
 }
 
 void announceRoutine(RTN rtn)
@@ -45,8 +45,8 @@ void addRtnTracer(RTN rtn)
 
       announceRoutine(rtn);
 
-      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(routineEnter), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
-      RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(routineExit), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
+      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(routineEnter), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
+      RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(routineExit), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
 
       RTN_Close(rtn);
    }
@@ -65,14 +65,14 @@ void addRtnTracer(TRACE trace)
          if (!Sim()->getRoutineTracer()->hasRoutine(RTN_Address(rtn)))
             announceRoutine(rtn);
 
-         TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
+         TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
       }
       else
       {
          if (!Sim()->getRoutineTracer()->hasRoutine(0))
             announceInvalidRoutine();
 
-         TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, 0, IARG_END);
+         TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, 0, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
       }
    }
 }

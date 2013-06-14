@@ -421,29 +421,29 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    }
 }
 
-void routineEnter(THREADID threadid, ADDRINT eip)
+void routineEnter(THREADID threadid, ADDRINT eip, ADDRINT esp)
 {
    if (thread_data[threadid].output)
    {
-      thread_data[threadid].output->RoutineChange(eip, Sift::RoutineEnter);
+      thread_data[threadid].output->RoutineChange(eip, esp, Sift::RoutineEnter);
       thread_data[threadid].last_routine = eip;
    }
 }
 
-void routineExit(THREADID threadid, ADDRINT eip)
+void routineExit(THREADID threadid, ADDRINT eip, ADDRINT esp)
 {
    if (thread_data[threadid].output)
    {
-      thread_data[threadid].output->RoutineChange(eip, Sift::RoutineExit);
+      thread_data[threadid].output->RoutineChange(eip, esp, Sift::RoutineExit);
       thread_data[threadid].last_routine = -1;
    }
 }
 
-void routineAssert(THREADID threadid, ADDRINT eip)
+void routineAssert(THREADID threadid, ADDRINT eip, ADDRINT esp)
 {
    if (thread_data[threadid].output && thread_data[threadid].last_routine != eip)
    {
-      thread_data[threadid].output->RoutineChange(eip, Sift::RoutineAssert);
+      thread_data[threadid].output->RoutineChange(eip, esp, Sift::RoutineAssert);
       thread_data[threadid].last_routine = eip;
    }
 }
@@ -483,8 +483,8 @@ void addRtnTracer(RTN rtn)
    if (routines.count(RTN_Address(rtn)) == 0)
       announceRoutine(rtn);
 
-   RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(routineEnter), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
-   RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(routineExit), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
+   RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(routineEnter), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
+   RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(routineExit), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
 
    RTN_Close(rtn);
 }
@@ -500,14 +500,14 @@ void addRtnTracer(TRACE trace)
       if (routines.count(RTN_Address(rtn)) == 0)
          announceRoutine(rtn);
 
-      TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_END);
+      TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
    }
    else
    {
       if (routines.count(0) == 0)
          announceInvalidRoutine();
 
-      TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, 0, IARG_END);
+      TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, 0, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
    }
 }
 

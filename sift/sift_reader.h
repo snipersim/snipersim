@@ -44,8 +44,8 @@ namespace Sift
       typedef int32_t (*HandleNewThreadFunc)(void* arg);
       typedef int32_t (*HandleJoinFunc)(void* arg, int32_t thread);
       typedef uint64_t (*HandleMagicFunc)(void* arg, uint64_t a, uint64_t b, uint64_t c);
-      typedef void (*HandleRoutineChange)(void* arg, int64_t eip, Sift::RoutineOpType event);
-      typedef void (*HandleRoutineAnnounce)(void* arg, int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
+      typedef void (*HandleRoutineChange)(void* arg, uint64_t eip, uint64_t esp, Sift::RoutineOpType event);
+      typedef void (*HandleRoutineAnnounce)(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 
       private:
          vistream *input;

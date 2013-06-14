@@ -18,19 +18,20 @@ RoutineTracerThread::~RoutineTracerThread()
 {
 }
 
-void RoutineTracerThread::routineEnter(IntPtr eip)
+void RoutineTracerThread::routineEnter(IntPtr eip, IntPtr esp)
 {
    if (m_stack.size())
       if (Sim()->getMagicServer()->inROI())
          functionChildEnter(m_stack.back(), eip);
 
    m_stack.push_back(eip);
+   m_last_esp = esp;
 
    if (Sim()->getMagicServer()->inROI())
       functionEnter(eip);
 }
 
-void RoutineTracerThread::routineExit(IntPtr eip)
+void RoutineTracerThread::routineExit(IntPtr eip, IntPtr esp)
 {
    if (m_stack.size() == 0)
       return;
@@ -54,30 +55,43 @@ void RoutineTracerThread::routineExit(IntPtr eip)
       m_stack.pop_back();
    }
 
+   m_last_esp = esp;
+
    if (m_stack.size())
       if (Sim()->getMagicServer()->inROI())
          functionChildExit(m_stack.back(), eip);
 }
 
-void RoutineTracerThread::routineAssert(IntPtr eip)
+void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
 {
    if (m_stack.size() == 0)
    {
       // Newly created thread just jumps into the first routine
-      routineEnter(eip);
+      routineEnter(eip, esp);
    }
-   else if (m_stack.back() != eip)
+   else if (m_stack.back() == eip)
+   {
+      // We are where we think we are, no action
+   }
+   else if (esp <= m_last_esp)
+   {
+      // Stack grew (downwards), or stayed constant (tail call): we entered a new function
+      routineEnter(eip, esp);
+   }
+   else
    {
       bool found = unwindTo(eip);
 
       if (!found)
       {
          // We now seem to be in a function we haven't been before, enter it (tail call elimination?)
-         routineEnter(eip);
+         routineEnter(eip, esp);
       }
       else
       {
          // Jumped back into a function further down the stack (longjmp?)
+         // unwindTo has already popped the stack
+         m_last_esp = esp;
       }
 
       // After all this, the current function should be at the top of the stack

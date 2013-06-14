@@ -14,13 +14,14 @@ class RoutineTracerThread
       RoutineTracerThread(Thread *thread);
       virtual ~RoutineTracerThread();
 
-      void routineEnter(IntPtr eip);
-      void routineExit(IntPtr eip);
-      void routineAssert(IntPtr eip);
+      void routineEnter(IntPtr eip, IntPtr esp);
+      void routineExit(IntPtr eip, IntPtr esp);
+      void routineAssert(IntPtr eip, IntPtr esp);
 
    protected:
       Thread *m_thread;
       std::deque<IntPtr> m_stack;
+      IntPtr m_last_esp;
 
    private:
       bool unwindTo(IntPtr eip);

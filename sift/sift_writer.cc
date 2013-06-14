@@ -571,14 +571,15 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
    return result;
 }
 
-void Sift::Writer::RoutineChange(uint64_t eip, Sift::RoutineOpType event)
+void Sift::Writer::RoutineChange(uint64_t eip, uint64_t esp, Sift::RoutineOpType event)
 {
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherRoutineChange;
-   rec.Other.size = sizeof(uint64_t) + sizeof(uint8_t);
+   rec.Other.size = 2*sizeof(uint64_t) + sizeof(uint8_t);
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    output->write(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
+   output->write(reinterpret_cast<char*>(&esp), sizeof(uint64_t));
    uint8_t _event = (uint8_t)event;
    output->write(reinterpret_cast<char*>(&_event), sizeof(uint8_t));
 }

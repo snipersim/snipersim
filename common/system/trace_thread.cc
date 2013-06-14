@@ -208,18 +208,18 @@ uint64_t TraceThread::handleMagicFunc(uint64_t a, uint64_t b, uint64_t c)
    return handleMagicInstruction(m_thread->getId(), a, b, c);
 }
 
-void TraceThread::handleRoutineChangeFunc(int64_t eip, Sift::RoutineOpType event)
+void TraceThread::handleRoutineChangeFunc(int64_t eip, int64_t esp, Sift::RoutineOpType event)
 {
    switch(event)
    {
       case Sift::RoutineEnter:
-         m_thread->getRoutineTracer()->routineEnter(eip);
+         m_thread->getRoutineTracer()->routineEnter(eip, esp);
          break;
       case Sift::RoutineExit:
-         m_thread->getRoutineTracer()->routineExit(eip);
+         m_thread->getRoutineTracer()->routineExit(eip, esp);
          break;
       case Sift::RoutineAssert:
-         m_thread->getRoutineTracer()->routineAssert(eip);
+         m_thread->getRoutineTracer()->routineAssert(eip, esp);
          break;
       default:
          LOG_PRINT_ERROR("Invalid Sift::RoutineOpType %d", event);

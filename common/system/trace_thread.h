@@ -63,9 +63,9 @@ class TraceThread : public Runnable
       { return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
       static uint64_t __handleMagicFunc(void* arg, uint64_t a, uint64_t b, uint64_t c)
       { return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
-      static void __handleRoutineChangeFunc(void* arg, int64_t eip, Sift::RoutineOpType event)
-      { ((TraceThread*)arg)->handleRoutineChangeFunc(eip, event); }
-      static void __handleRoutineAnnounceFunc(void* arg, int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
+      static void __handleRoutineChangeFunc(void* arg, uint64_t eip, uint64_t esp, Sift::RoutineOpType event)
+      { ((TraceThread*)arg)->handleRoutineChangeFunc(eip, esp, event); }
+      static void __handleRoutineAnnounceFunc(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
       { ((TraceThread*)arg)->handleRoutineAnnounceFunc(eip, name, imgname, offset, line, column, filename); }
 
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
@@ -73,7 +73,7 @@ class TraceThread : public Runnable
       int32_t handleNewThreadFunc();
       int32_t handleJoinFunc(int32_t thread);
       uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c);
-      void handleRoutineChangeFunc(int64_t eip, Sift::RoutineOpType event);
+      void handleRoutineChangeFunc(int64_t eip, int64_t esp, Sift::RoutineOpType event);
       void handleRoutineAnnounceFunc(int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 
       BasicBlock* decode(Sift::Instruction &inst);
