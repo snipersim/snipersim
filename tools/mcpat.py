@@ -275,26 +275,41 @@ def edit_XML(stats, cfg, vdd):
   l3_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
   l2_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
 
-  num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
+  if long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0)) > 0:
+    num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
+  else:
+    # L2 with zero access latency can be used when we don't really want an L2, but need one to interface with the NoC
+    num_l2s = 0
   if int(cfg['perf_model/cache/levels']) >= 3:
     num_l3s = int(math.ceil(ncores / float(l3_cacheSharedCores)))
   elif cfg.get('perf_model/nuca/enabled') == 'true':
     if cfg['perf_model/dram_directory/locations'] == 'interleaved':
-      l3_cacheSharedCores = int(cfg['perf_model/dram_directory/interleaving'])
-      num_l3s = int(math.ceil(ncores / float(l3_cacheSharedCores)))
+      nuca_cacheSharedCores = int(cfg['perf_model/dram_directory/interleaving'])
+      num_nucas = int(math.ceil(ncores / float(nuca_cacheSharedCores)))
     else:
       # TODO: compute number of NUCA caches in other cases
       raise ValueError('Unsupported tag directory locations %s' % cfg['perf_model/dram_directory/locations'])
-    # Copy over NUCA statistics into L3 statistics so we don't have to change anything below here
-    cfg['perf_model/l3_cache/data_access_time'] = cfg['perf_model/nuca/data_access_time']
-    cfg['perf_model/l3_cache/associativity'] = cfg['perf_model/nuca/associativity']
-    cfg['perf_model/l3_cache/cache_block_size'] = cfg['perf_model/l2_cache/cache_block_size']
-    cfg['perf_model/l3_cache/cache_size'] = cfg['perf_model/nuca/cache_size']
-    cfg['perf_model/l3_cache/writeback_time'] = 0
-    stats['L3.loads'] = stats['nuca-cache.reads']
-    stats['L3.stores'] = stats['nuca-cache.writes']
-    stats['L3.load-misses'] = stats['nuca-cache.read-misses']
-    stats['L3.store-misses'] = stats['nuca-cache.write-misses']
+    if num_l2s == 0:
+      # No L2s, use them for NUCA
+      num_l2s = num_nucas
+      l2_cacheSharedCores = nuca_cacheSharedCores
+      l = 2
+      num_l3s = 0
+    else:
+      # We do have L2s, use L3 for NUCA
+      num_l3s = num_nucas
+      l3_cacheSharedCores = nuca_cacheSharedCores
+      l = 3
+    # Copy over NUCA statistics into L2/L3 statistics so we don't have to change anything below here
+    cfg['perf_model/l%d_cache/data_access_time'%l] = cfg['perf_model/nuca/data_access_time']
+    cfg['perf_model/l%d_cache/associativity'%l] = cfg['perf_model/nuca/associativity']
+    cfg['perf_model/l%d_cache/cache_block_size'%l] = cfg['perf_model/l2_cache/cache_block_size']
+    cfg['perf_model/l%d_cache/cache_size'%l] = cfg['perf_model/nuca/cache_size']
+    cfg['perf_model/l%d_cache/writeback_time'%l] = 0
+    stats['L%d.loads'%l] = stats['nuca-cache.reads']
+    stats['L%d.stores'%l] = stats['nuca-cache.writes']
+    stats['L%d.load-misses'%l] = stats['nuca-cache.read-misses']
+    stats['L%d.store-misses'%l] = stats['nuca-cache.write-misses']
   else:
     num_l3s = 0
 
