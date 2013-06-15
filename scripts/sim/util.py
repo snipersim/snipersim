@@ -165,7 +165,7 @@ class EveryIns:
 
   def hook_periodic_ins(self, icount):
     if (not self.roi_only or self.in_roi) and icount >= self.icount_next:
+      self.callback(icount, icount - self.icount_last)
+
       self.icount_next += self.interval
       self.icount_last = icount
-
-      self.callback(icount, icount - self.icount_last)
