@@ -228,7 +228,7 @@ VOID countInsns(THREADID threadid, INT32 count)
    }
 }
 
-VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing, BOOL isbefore)
+VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing, BOOL isbefore, BOOL ispause)
 {
    // We're still called for instructions in the same basic block as ROI end, ignore these
    if (!thread_data[threadid].in_detail)
@@ -270,7 +270,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 
    thread_data[threadid].output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
 
-   if (KnobUseResponseFiles.Value() && KnobFlowControl.Value() && thread_data[threadid].icount > thread_data[threadid].flowcontrol_target)
+   if (KnobUseResponseFiles.Value() && KnobFlowControl.Value() && (thread_data[threadid].icount > thread_data[threadid].flowcontrol_target || ispause))
    {
       thread_data[threadid].output->Sync();
       thread_data[threadid].flowcontrol_target = thread_data[threadid].icount + KnobFlowControl.Value();
@@ -334,6 +334,7 @@ VOID insertCall(INS ins, IPOINT ipoint, UINT32 num_addresses, BOOL is_branch, BO
       IARG_BOOL, INS_IsPredicated(ins),
       IARG_EXECUTING,
       IARG_BOOL, ipoint == IPOINT_BEFORE,
+      IARG_BOOL, INS_Opcode(ins) == XED_ICLASS_PAUSE,
       IARG_END);
 }
 
