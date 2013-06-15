@@ -39,9 +39,19 @@ class Call:
       prof.calls[stack].buildTotal(prof)
     # Add all children to our total
     self.total = dict(self.data)
-    for stack in self.children:
+    for stack in self.children.copy():
       for k, v in prof.calls[stack].total.items():
         self.total[k] += v
+      # Child is to be folded: add it to self, remove from list of children
+      if prof.calls[stack].folded:
+        for k, v in prof.calls[stack].data.items():
+          if k != 'calls':
+            self.data[k] += v
+        self.children.remove(stack)
+        for grandchild in prof.calls[stack].children:
+          self.children.add(grandchild)
+    # Fold into parents?
+    self.folded = prof.foldCall(self)
   def printLine(self, obj, offset = 0):
     print >> obj, '%7d\t' % self.data['calls'] + \
                   '%6.2f%%\t' % (100 * self.total['core_elapsed_time'] / float(prof.totals['core_elapsed_time'])) + \
@@ -49,13 +59,13 @@ class Call:
                   '%6.2f%%\t' % (100 * self.total['instruction_count'] / float(prof.totals['instruction_count'])) + \
                   '%7.2f\t' % (self.total['instruction_count'] / (prof.fs_to_cycles * float(self.total['core_elapsed_time']))) + \
                   '%7.2f\t' % (1000 * self.total['l2miss'] / float(self.total['instruction_count'])) + \
-                  '  '*(len(self.stack.split(':')) + offset) + self.name
+                  '  ' * offset + self.name
   def printTree(self, prof, obj, offset = 0):
     self.printLine(obj, offset = offset)
     for stack in sorted(self.children, key = lambda stack: prof.calls[stack].total['core_elapsed_time'], reverse = True):
       if prof.calls[stack].total['core_elapsed_time'] / float(prof.totals['core_elapsed_time']) < .001:
         break
-      prof.calls[stack].printTree(prof, obj, offset = offset)
+      prof.calls[stack].printTree(prof, obj, offset = offset + 1)
 
 class Category(Call):
   def __init__(self, name):
@@ -120,10 +130,16 @@ class Profile:
     else:
       return eip
 
+  def foldCall(self, call):
+    if call.name == '.plt':
+      return True
+    else:
+      return False
+
   def write(self, obj = sys.stdout):
     print >> obj, '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
     for stack in sorted(self.roots, key = lambda stack: self.calls[stack].total['core_elapsed_time'], reverse = True):
-      self.calls[stack].printTree(self, obj = obj, offset = -len(stack.split(':')))
+      self.calls[stack].printTree(self, obj = obj)
 
   def writeCallgrind(self, obj):
     bystatic = dict([ (fn.ieip, Category(fn.eip)) for fn in self.functions.values() ])
