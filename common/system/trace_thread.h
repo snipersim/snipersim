@@ -34,6 +34,7 @@ class TraceThread : public Runnable
 
       _Thread *m__thread;
       Thread *m_thread;
+      SubsecondTime m_time_start;
       Sift::Reader m_trace;
       bool m_trace_has_pa;
       bool m_address_randomization;
@@ -80,10 +81,12 @@ class TraceThread : public Runnable
       void handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);
       void handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl);
 
+      SubsecondTime getCurrentTime() const;
+
    public:
       bool m_stopped;
 
-      TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id, bool cleanup);
+      TraceThread(Thread *thread, SubsecondTime time_start, String tracefile, String responsefile, app_id_t app_id, bool cleanup);
       ~TraceThread();
 
       void spawn();

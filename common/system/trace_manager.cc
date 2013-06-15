@@ -52,7 +52,7 @@ void TraceManager::init()
 {
    for (UInt32 i = 0 ; i < m_num_apps ; i++ )
    {
-      newThread(i /*app_id*/, true /*first*/, false /*spawn*/);
+      newThread(i /*app_id*/, true /*first*/, false /*spawn*/, SubsecondTime::Zero());
    }
 }
 
@@ -64,15 +64,15 @@ String TraceManager::getFifoName(app_id_t app_id, UInt64 thread_num, bool respon
    return filename;
 }
 
-thread_id_t TraceManager::createThread(app_id_t app_id)
+thread_id_t TraceManager::createThread(app_id_t app_id, SubsecondTime time)
 {
    // External version: acquire lock first
    ScopedLock sl(m_lock);
 
-   return newThread(app_id, false /*first*/, true /*spawn*/);
+   return newThread(app_id, false /*first*/, true /*spawn*/, time);
 }
 
-thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
+thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, SubsecondTime time)
 {
    // Internal version: assume we're already holding the lock
 
@@ -101,7 +101,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
 
    m_num_threads_running++;
    Thread *thread = Sim()->getThreadManager()->createThread(app_id);
-   TraceThread *tthread = new TraceThread(thread, tracefile, responsefile, app_id, first ? false : true /*cleaup*/);
+   TraceThread *tthread = new TraceThread(thread, time, tracefile, responsefile, app_id, first ? false : true /*cleaup*/);
    m_threads.push_back(tthread);
 
    if (spawn)
@@ -114,7 +114,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn)
    return thread->getId();
 }
 
-void TraceManager::signalDone(TraceThread *thread, bool aborted)
+void TraceManager::signalDone(TraceThread *thread, SubsecondTime time, bool aborted)
 {
    ScopedLock sl(m_lock);
 
@@ -154,7 +154,7 @@ void TraceManager::signalDone(TraceThread *thread, bool aborted)
             // Stop condition not met. Restart app?
             if (m_app_restart)
             {
-               newThread(app_id, true /*first*/, true /*spawn*/);
+               newThread(app_id, true /*first*/, true /*spawn*/, time);
             }
          }
       }
@@ -163,7 +163,7 @@ void TraceManager::signalDone(TraceThread *thread, bool aborted)
    m_num_threads_running--;
 }
 
-void TraceManager::endApplication(TraceThread *thread)
+void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
 {
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
    {
@@ -173,7 +173,7 @@ void TraceManager::endApplication(TraceThread *thread)
          // Ask thread to stop
          (*it)->stop();
          // Threads are often blocked on a futex in this case, so call signalDone in their place
-         signalDone(*it, true /* aborted */);
+         signalDone(*it, time, true /* aborted */);
       }
    }
 }

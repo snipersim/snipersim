@@ -20,9 +20,10 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 
-TraceThread::TraceThread(Thread *thread, String tracefile, String responsefile, app_id_t app_id, bool cleanup)
+TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracefile, String responsefile, app_id_t app_id, bool cleanup)
    : m__thread(NULL)
    , m_thread(thread)
+   , m_time_start(time_start)
    , m_trace(tracefile.c_str(), responsefile.c_str(), thread->getId())
    , m_trace_has_pa(false)
    , m_address_randomization(Sim()->getCfg()->getBool("traceinput/address_randomization"))
@@ -173,7 +174,7 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
    switch(syscall_number)
    {
       case SYS_exit_group:
-         Sim()->getTraceManager()->endApplication(this);
+         Sim()->getTraceManager()->endApplication(this, getCurrentTime());
          break;
 
       case SYS_write:
@@ -194,7 +195,7 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 
 int32_t TraceThread::handleNewThreadFunc()
 {
-   return Sim()->getTraceManager()->createThread(m_app_id);
+   return Sim()->getTraceManager()->createThread(m_app_id, getCurrentTime());
 }
 
 int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)
@@ -229,6 +230,12 @@ void TraceThread::handleRoutineChangeFunc(int64_t eip, int64_t esp, Sift::Routin
 void TraceThread::handleRoutineAnnounceFunc(int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
 {
    Sim()->getRoutineTracer()->addRoutine(eip, name, imgname, offset, column, line, filename);
+}
+
+SubsecondTime TraceThread::getCurrentTime() const
+{
+   LOG_ASSERT_ERROR(m_thread->getCore() != NULL, "Cannot get time while not on a core");
+   return m_thread->getCore()->getPerformanceModel()->getElapsedTime();
 }
 
 BasicBlock* TraceThread::decode(Sift::Instruction &inst)
@@ -397,7 +404,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
 
 void TraceThread::run()
 {
-   Sim()->getThreadManager()->onThreadStart(m_thread->getId(), SubsecondTime::Zero());
+   Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
 
    ClockSkewMinimizationClient *client = m_thread->getClockSkewMinimizationClient();
    LOG_ASSERT_ERROR(client != NULL, "Tracing doesn't work without a clock skew minimization scheme"); // as we'd just overrun our basicblock queue
@@ -477,8 +484,10 @@ void TraceThread::run()
 
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
 
+   SubsecondTime time_end = prfmdl->getElapsedTime();
+
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
-   Sim()->getTraceManager()->signalDone(this, m_stop /*aborted*/);
+   Sim()->getTraceManager()->signalDone(this, time_end, m_stop /*aborted*/);
 }
 
 void TraceThread::spawn()
