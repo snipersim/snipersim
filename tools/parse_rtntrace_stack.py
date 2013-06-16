@@ -52,18 +52,27 @@ class Call:
           self.children.add(grandchild)
     # Fold into parents?
     self.folded = prof.foldCall(self)
-  def printLine(self, obj, offset = 0):
-    print >> obj, '%7d\t' % self.data['calls'] + \
-                  '%6.2f%%\t' % (100 * self.total['core_elapsed_time'] / float(prof.totals['core_elapsed_time'])) + \
-                  '%6.2f%%\t' % (100 * self.data['core_elapsed_time'] / float(prof.totals['core_elapsed_time'])) + \
-                  '%6.2f%%\t' % (100 * self.total['instruction_count'] / float(prof.totals['instruction_count'])) + \
-                  '%7.2f\t' % (self.total['instruction_count'] / (prof.fs_to_cycles * float(self.total['core_elapsed_time']))) + \
-                  '%7.2f\t' % (1000 * self.total['l2miss'] / float(self.total['instruction_count'])) + \
-                  '  ' * offset + self.name
+  def printLine(self, prof, obj, offset = 0):
+    if prof.opt_absolute:
+      print >> obj, '%7d\t' % self.data['calls'] + \
+                    '%9d\t' % (prof.fs_to_cycles * float(self.total['core_elapsed_time'])) + \
+                    '%9d\t' % (prof.fs_to_cycles * float(self.data['core_elapsed_time'])) + \
+                    '%9d\t' % self.total['instruction_count'] + \
+                    '%9d\t' % self.data['instruction_count'] + \
+                    '%9d\t' % self.total['l2miss'] + \
+                    '  ' * offset + self.name
+    else:
+      print >> obj, '%7d\t' % self.data['calls'] + \
+                    '%6.2f%%\t' % (100 * self.total['core_elapsed_time'] / float(prof.totals['core_elapsed_time'])) + \
+                    '%6.2f%%\t' % (100 * self.data['core_elapsed_time'] / float(prof.totals['core_elapsed_time'])) + \
+                    '%6.2f%%\t' % (100 * self.total['instruction_count'] / float(prof.totals['instruction_count'])) + \
+                    '%7.2f\t' % (self.total['instruction_count'] / (prof.fs_to_cycles * float(self.total['core_elapsed_time']))) + \
+                    '%7.2f\t' % (1000 * self.total['l2miss'] / float(self.total['instruction_count'])) + \
+                    '  ' * offset + self.name
   def printTree(self, prof, obj, offset = 0):
-    self.printLine(obj, offset = offset)
+    self.printLine(prof, obj, offset = offset)
     for stack in sorted(self.children, key = lambda stack: prof.calls[stack].total['core_elapsed_time'], reverse = True):
-      if prof.calls[stack].total['core_elapsed_time'] / float(prof.totals['core_elapsed_time']) < .001:
+      if prof.calls[stack].total['core_elapsed_time'] / float(prof.totals['core_elapsed_time']) < prof.opt_cutoff:
         break
       prof.calls[stack].printTree(prof, obj, offset = offset + 1)
 
@@ -80,7 +89,10 @@ class Category(Call):
                   self.name
 
 class Profile:
-  def __init__(self, resultsdir = '.'):
+  def __init__(self, resultsdir = '.', opt_absolute = False, opt_cutoff = .001):
+    self.opt_absolute = opt_absolute
+    self.opt_cutoff = opt_cutoff
+
     filename = os.path.join(resultsdir, 'sim.rtntracefull')
     if not os.path.exists(filename):
       raise IOError('Cannot find trace file %s' % filename)
@@ -137,7 +149,10 @@ class Profile:
       return False
 
   def write(self, obj = sys.stdout):
-    print >> obj, '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
+    if self.opt_absolute:
+      print >> obj, '%7s\t%9s\t%9s\t%9s\t%9s\t%9s\t%s' % ('calls', 'cycles', 'c.self', 'icount', 'i.self', 'l2miss', 'name')
+    else:
+      print >> obj, '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
     for stack in sorted(self.roots, key = lambda stack: self.calls[stack].total['core_elapsed_time'], reverse = True):
       self.calls[stack].printTree(self, obj = obj)
 
