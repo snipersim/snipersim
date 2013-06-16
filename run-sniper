@@ -352,7 +352,7 @@ if use_viz_aso:
   sniperoptions.append('-g --routine_tracer/type=funcstats')
 
 if scripts:
-  scriptname = os.path.join(outputdir, 'scripts.py')
+  scriptname = os.path.join(outputdir, 'sim.scripts.py')
   scriptfileobj = open(scriptname, 'w')
   # Generate a Python script that executes all user scripts with their arguments
   scriptfileobj.write('import sys\n')
