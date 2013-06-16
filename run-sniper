@@ -55,6 +55,7 @@ heteroconfig = None
 pinballs = None
 pinball_sift = True
 tracegen = None
+verbose = False
 
 
 if not sys.argv[1:]:
@@ -139,7 +140,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "viz-aso", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "follow-execv=", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "viz-aso", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "follow-execv=", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print >> sys.stderr, e
@@ -148,6 +149,8 @@ for o, a in opts:
   if o == '-h':
     usage()
     sys.exit()
+  if o == '-v':
+    verbose = True
   if o == '-n':
     ncores = int(a)
   if o == '-d':
@@ -635,7 +638,8 @@ def execute():
   if use_perf:
     cmd = [ 'perf', 'record', '--force', '--output', os.path.join(outputdir, 'perf.data'), '--' ] + cmd
 
-  print 'Running', cmd
+  if verbose:
+    print '[SNIPER] Running', cmd
   sys.stdout.flush()
   sys.stderr.flush()
   subproc = subprocess.Popen(cmd, env = env)
@@ -659,7 +663,8 @@ def execute():
   return rc
 
 def execute_appdebug():
-  print 'Running', cmd
+  if verbose:
+    print '[SNIPER] Running', cmd
   sys.stdout.flush()
   sys.stderr.flush()
 
