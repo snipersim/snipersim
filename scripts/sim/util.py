@@ -132,6 +132,7 @@ class Every:
 
   def hook_periodic(self, time):
     if (not self.roi_only or self.in_roi) and time >= self.time_next:
+      time_delta = time - self.time_last
       self.time_next = time + self.interval
       self.time_last = time
 
@@ -141,7 +142,7 @@ class Every:
         doCall = True
 
       if doCall:
-        self.callback(time, time - self.time_last)
+        self.callback(time, time_delta)
 
 
 class EveryIns:
@@ -165,7 +166,8 @@ class EveryIns:
 
   def hook_periodic_ins(self, icount):
     if (not self.roi_only or self.in_roi) and icount >= self.icount_next:
-      self.callback(icount, icount - self.icount_last)
-
+      icount_delta = icount - self.icount_last
       self.icount_next += self.interval
       self.icount_last = icount
+
+      self.callback(icount, icount_delta)
