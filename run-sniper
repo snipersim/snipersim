@@ -11,7 +11,7 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--viz-aso]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinballs=<pinball-basename>,*  |  -- <cmdline> }' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--viz-aso]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--follow-execv=1]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinballs=<pinball-basename>,*  |  -- <cmdline> }' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -40,6 +40,7 @@ gdb_quit = False
 use_appdebug = False
 appdebug_manual = False
 appdebug_nowait = False
+follow_execv = False
 run_power = False
 save_patch = False
 pin_stats = False
@@ -138,7 +139,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "viz-aso", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "viz-aso", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "follow-execv=", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print >> sys.stderr, e
@@ -199,6 +200,12 @@ for o, a in opts:
   if o == '--appdebug-enable':
     use_appdebug = True
     appdebug_nowait = True
+  if o == '--follow-execv':
+    if a != '1':
+      # TODO: implement system where a path through an arbitrary execv() tree can be specified
+      print >> sys.stderr, 'Please use --follow-execv=1 to ensure future compatibility'
+      sys.exit(-1)
+    follow_execv = True
   if o == '--power':
     run_power = True
     use_viz_mcpat = '--mcpat'
@@ -287,9 +294,15 @@ if standalone:
   if use_valgrind and use_gdb:
     print >> sys.stderr, 'Cannot use both --valgrind and --gdb at the same time'
     sys.exit(-1)
+  if follow_execv:
+    print >> sys.stderr, '--follow-execv not supported in standalone mode'
+    sys.exit(-1)
 else:
   if use_valgrind:
     print >> sys.stderr, '--valgrind only supported in standalone mode'
+    sys.exit(-1)
+  if follow_execv and use_gdb:
+    print >> sys.stderr, 'Cannot use both --follow-execv and --gdb at the same time'
     sys.exit(-1)
 
 outputdir = os.path.realpath(outputdir)
@@ -542,6 +555,9 @@ if not standalone:
     else:
       pinoptions += ' -appdebug'
 
+  if follow_execv:
+    pinoptions += ' -follow_execv 1'
+
 if pinballs and not pinball_sift:
   pinoptions += ' -xyzzy -reserve_memory "%s.address"' % (pinballs[0])
   optcmd += ' -replay -replay:basename "%s" -pinplay:msgfile "%s" -replay:resultfile "%s" --general/enable_pinplay=true' % (pinballs[0], os.path.join(outputdir,'pinball_replay'), os.path.join(outputdir,'pinball_result'))
@@ -577,7 +593,11 @@ if standalone:
     gdbcmd = ''
   cmd = gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
 else:
-  cmd = '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/pin_sim' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
+  if follow_execv:
+    pintool = 'follow_execv'
+  else:
+    pintool = 'pin_sim'
+  cmd = '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/%(pintool)s' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
 
 queue = Queue.Queue()
 

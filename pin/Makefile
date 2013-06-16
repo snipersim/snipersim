@@ -3,7 +3,7 @@ SIM_ROOT ?= $(CURDIR)/..
 
 # Note: Pin's makefile.config adds stuff to the `all' target which we don't want,
 #       while the target architecture is specified in TARGET so just some different names here
-default: $(TARGET_LIB)
+default: $(TARGET_LIB) $(FOLLOW_LIB)
 
 LD_LIBS += -lcarbon_sim
 
@@ -53,6 +53,7 @@ OBJECTS = $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(SOURCES)))
 
 ## build rules
 TARGET_LIB = $(SIM_ROOT)/lib/pin_sim.so
+FOLLOW_LIB = $(SIM_ROOT)/lib/follow_execv.so
 
 $(SIM_ROOT)/lib/libcarbon_sim.a:
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
@@ -64,6 +65,14 @@ ifeq ($(SHOW_COMPILE),)
 	@$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
 else
 	$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
+endif
+
+$(FOLLOW_LIB): follow_execv/follow_execv.o
+ifeq ($(SHOW_COMPILE),)
+	@echo '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	@$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
+else
+	$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
 endif
 
 # This include must be here
