@@ -11,7 +11,35 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--viz-aso]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--follow-execv=1]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinballs=<pinball-basename>,*  |  -- <cmdline> }' % sys.argv[0]
+  print '  %s' % sys.argv[0] + \
+        '  [-n <ncores (1)>]' + \
+        '  [-d <outputdir (.)>]' + \
+        '  [-c <sniper-config>]' + \
+        '  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]' + \
+        '  [-g <sniper-options>]' + \
+        '  [-s <script>]' + \
+        '  [--roi]' + \
+        '  [--roi-script]' + \
+        '  [--viz]' + \
+        '  [--viz-aso]' + \
+        '  [--perf]' + \
+        '  [--gdb]' + \
+        '  [--gdb-wait]' + \
+        '  [--gdb-quit]' + \
+        '  [--appdebug]' + \
+        '  [--appdebug-manual]' + \
+        '  [--appdebug-enable]' + \
+        '  [--follow-execv=1]' + \
+        '  [--power]' + \
+        '  [--cache-only]' + \
+        '  [--fast-forward]' + \
+        '  [--no-cache-warming]' + \
+        '  [--save-patch]' + \
+        '  [--pin-stats]' + \
+        '  [--mpi [--mpi-ranks=<ranks>] ]' + \
+        '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
+        '  |  --pinballs=<pinball-basename>,*' + \
+        '  |  -- <cmdline> }'
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -140,7 +168,27 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "viz-aso", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "follow-execv=", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
+  opts, cmdline = getopt.getopt(
+    sys.argv[1:],
+    "hvn:m:d:c:g:s:",
+    [
+      "roi", "roi-script",
+      "viz", "viz-aso",
+      "perf", "valgrind",
+      "gdb", "gdb-wait", "gdb-quit",
+      "appdebug", "appdebug-manual", "appdebug-enable",
+      "follow-execv=",
+      "power",
+      "cache-only", "fast-forward", "no-cache-warming",
+      "save-patch",
+      "curdir=",
+      "pin-stats",
+      "traces=", "response-traces=", "trace-manual",
+      "sim-end=",
+      "mpi", "mpi-ranks=",
+      "pinballs=", "pinball-non-sift"
+    ]
+  )
 except getopt.GetoptError, e:
   # print help information and exit:
   print >> sys.stderr, e
