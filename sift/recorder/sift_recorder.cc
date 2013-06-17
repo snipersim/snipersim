@@ -90,13 +90,12 @@ typedef struct {
    UINT64 flowcontrol_target;
    ADDRINT tid_ptr;
    ADDRINT last_routine;
-   BOOL in_detail;
    BOOL last_syscall_emulated;
    BOOL running;
    #if defined(TARGET_IA32)
-      uint8_t __pad[40];
+      uint8_t __pad[41];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[12];
+      uint8_t __pad[13];
    #endif
 } __attribute__((packed)) thread_data_t;
 thread_data_t *thread_data;
@@ -115,18 +114,6 @@ void closeFile(THREADID threadid);
 
 static void beginROI(THREADID threadid)
 {
-   int numthreads = 0;
-   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-   {
-      if (thread_data[i].running)
-         ++numthreads;
-   }
-   if (numthreads > 1)
-   {
-      std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: Threads have been spawned before ROI begin. This behavior is not supported." << std::endl;
-      exit(-1);
-   }
-
    if (app_id < 0)
       findMyAppId();
 
@@ -140,18 +127,8 @@ static void beginROI(THREADID threadid)
          std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
    }
    any_thread_in_detail = true;
-   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-   {
-      if (thread_data[i].running && !thread_data[i].in_detail)
-         openFile(i);
-   }
 
    PIN_RemoveInstrumentation();
-
-   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-   {
-      thread_data[i].in_detail = any_thread_in_detail;
-   }
 }
 
 static void endROI(THREADID threadid)
@@ -171,19 +148,19 @@ static void endROI(THREADID threadid)
 
    if (verbose)
       std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
-   any_thread_in_detail = false;
-   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-   {
-      if (thread_data[i].running && thread_data[i].in_detail)
-         closeFile(i);
-   }
 
+   // Stop threads from sending any more data while we close the SIFT pipes
+   any_thread_in_detail = false;
    PIN_RemoveInstrumentation();
 
    for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
    {
-      thread_data[i].in_detail = any_thread_in_detail;
+      if (thread_data[i].running && thread_data[i].output)
+         closeFile(i);
    }
+
+   // No need to continue functional execution if we won't care about the instructions anyway
+   exit(0);
 }
 
 ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
@@ -200,7 +177,7 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
    }
    else
    {
-      if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].in_detail)
+      if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].output)
       {
          uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
          return res;
@@ -219,9 +196,8 @@ VOID countInsns(THREADID threadid, INT32 count)
    {
       if (verbose)
          std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
-      if (!thread_data[threadid].in_detail)
+      if (!thread_data[threadid].output)
          openFile(threadid);
-      thread_data[threadid].in_detail = true;
       thread_data[threadid].icount = 0;
       any_thread_in_detail = true;
       PIN_RemoveInstrumentation();
@@ -231,7 +207,7 @@ VOID countInsns(THREADID threadid, INT32 count)
 VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_addresses, BOOL is_branch, BOOL taken, BOOL is_predicate, BOOL executing, BOOL isbefore, BOOL ispause)
 {
    // We're still called for instructions in the same basic block as ROI end, ignore these
-   if (!thread_data[threadid].in_detail)
+   if (!thread_data[threadid].output)
       return;
 
    ++thread_data[threadid].icount;
@@ -278,7 +254,6 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 
    if (detailed_target != 0 && thread_data[threadid].icount_detailed >= detailed_target)
    {
-      thread_data[threadid].in_detail = false;
       closeFile(threadid);
       PIN_Detach();
       return;
@@ -294,7 +269,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 VOID handleMemory(THREADID threadid, ADDRINT address)
 {
    // We're still called for instructions in the same basic block as ROI end, ignore these
-   if (!thread_data[threadid].in_detail)
+   if (!thread_data[threadid].output)
       return;
 
    thread_data[threadid].dyn_address_queue->push_back(address);
@@ -529,6 +504,12 @@ VOID traceCallback(TRACE trace, void *v)
             INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_RETURN_REGS, REG_GAX, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX, IARG_REG_VALUE, REG_GBX, IARG_REG_VALUE, REG_GCX, IARG_END);
          }
 
+         // Handle emulated syscalls
+         if (INS_IsSyscall(ins))
+         {
+            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, AFUNPTR(emulateSyscallFunc), IARG_THREAD_ID, IARG_CONST_CONTEXT, IARG_END);
+         }
+
          if (ins == BBL_InsTail(bbl))
             break;
       }
@@ -556,20 +537,6 @@ VOID traceCallback(TRACE trace, void *v)
                // Whenever possible, use IPOINT_AFTER as this allows us to process addresses after the application has used them.
                // This ensures that their logical to physical mapping has been set up.
                insertCall(ins, INS_HasFallThrough(ins) ? IPOINT_AFTER : IPOINT_BEFORE, num_addresses, false /* is_branch */, false /* taken */);
-            }
-
-            // Handle emulated syscalls
-            if (INS_IsSyscall(ins))
-            {
-               INS_InsertPredicatedCall
-               (
-                  ins,
-                  IPOINT_BEFORE,
-                  AFUNPTR(emulateSyscallFunc),
-                  IARG_THREAD_ID,
-                  IARG_CONST_CONTEXT,
-                  IARG_END
-               );
             }
 
             if (ins == BBL_InsTail(bbl))
@@ -710,9 +677,6 @@ void openFile(THREADID threadid)
 
 void closeFile(THREADID threadid)
 {
-   if (thread_data[threadid].output)
-      thread_data[threadid].output->End();
-
    if (verbose)
    {
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Recorded " << thread_data[threadid].icount_detailed;
@@ -720,8 +684,12 @@ void closeFile(THREADID threadid)
          std::cerr << " (out of " << thread_data[threadid].icount << ")";
       std::cerr << " instructions" << std::endl;
    }
-   delete thread_data[threadid].output;
+
+   Sift::Writer *output = thread_data[threadid].output;
    thread_data[threadid].output = NULL;
+   // Thread will stop writing to output from this point on
+   output->End();
+   delete output;
 
    if (blocksize)
    {
@@ -764,11 +732,8 @@ VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    thread_data[threadid].bbv = new Bbv();
    thread_data[threadid].dyn_address_queue = new std::deque<ADDRINT>();
 
-   if (any_thread_in_detail)
-   {
+   if (threadid > 0 && (any_thread_in_detail || KnobEmulateSyscalls.Value()))
       openFile(threadid);
-      thread_data[threadid].in_detail = true;
-   }
 
    thread_data[threadid].running = true;
 }
@@ -795,9 +760,8 @@ VOID threadFinishHelper(VOID *arg)
    thread_data[threadid].dyn_address_queue = NULL;
    thread_data[threadid].bbv = NULL;
 
-   if (thread_data[threadid].in_detail)
+   if (thread_data[threadid].output)
    {
-      thread_data[threadid].in_detail = false;
       closeFile(threadid);
    }
 }
@@ -808,7 +772,7 @@ VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
    std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Finish Thread" << std::endl;
 #endif
 
-   if (thread_data[threadid].thread_num == 0 && thread_data[threadid].in_detail && KnobEmulateSyscalls.Value())
+   if (thread_data[threadid].thread_num == 0 && thread_data[threadid].output && KnobEmulateSyscalls.Value())
    {
       // Send SYS_exit_group to the simulator to end the application
       syscall_args_t args = {0};
@@ -930,18 +894,18 @@ int main(int argc, char **argv)
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();
-   if (!KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
+   if (KnobEmulateSyscalls.Value() || (!KnobUseROI.Value() && !KnobMPIImplicitROI.Value()))
    {
       if (app_id < 0)
          findMyAppId();
    }
    if (fast_forward_target == 0 && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
-      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
-      {
-         thread_data[i].in_detail = true;
-         any_thread_in_detail = true;
-      }
+      any_thread_in_detail = true;
+   }
+   if (KnobEmulateSyscalls.Value())
+   {
+      openFile(0);
    }
 
 #ifdef PINPLAY_SUPPORTED
