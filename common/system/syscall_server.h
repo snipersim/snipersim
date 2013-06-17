@@ -76,6 +76,8 @@ class SyscallServer
 
       void futexPeriodic(SubsecondTime time);
 
+      SubsecondTime applyRescheduleCost(thread_id_t thread_id, bool conditional = true);
+
       static SInt64 hook_periodic(UInt64 ptr, UInt64 time)
       {
          ((SyscallServer*)ptr)->futexPeriodic(*(subsecond_time_t*)(&time));

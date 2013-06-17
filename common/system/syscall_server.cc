@@ -93,6 +93,19 @@ IntPtr SyscallServer::handleFutexCall(thread_id_t thread_id, futex_args_t &args,
 }
 
 
+SubsecondTime SyscallServer::applyRescheduleCost(thread_id_t thread_id, bool conditional)
+{
+   if (conditional == false)
+      return SubsecondTime::Zero();
+   else if (Sim()->getThreadManager()->getThreadFromID(thread_id)->getCore()->getInstructionCount() == 0)
+      // Do not apply reschedule cost when we have not yet executed any instructions.
+      // This would be the case in MPI mode before ROI.
+      return SubsecondTime::Zero();
+   else
+      return m_reschedule_cost;
+}
+
+
 // -- Futex related functions --
 SimFutex* SyscallServer::findFutexByUaddr(int *uaddr, thread_id_t thread_id)
 {
@@ -124,7 +137,7 @@ IntPtr SyscallServer::futexWait(thread_id_t thread_id, int *uaddr, int val, int 
 
 thread_id_t SyscallServer::wakeFutexOne(SimFutex *sim_futex, thread_id_t thread_by, int mask, SubsecondTime curr_time)
 {
-   thread_id_t waiter = sim_futex->dequeueWaiter(thread_by, mask, curr_time + m_reschedule_cost);
+   thread_id_t waiter = sim_futex->dequeueWaiter(thread_by, mask, curr_time + applyRescheduleCost(thread_by));
    return waiter;
 }
 
@@ -143,7 +156,7 @@ IntPtr SyscallServer::futexWake(thread_id_t thread_id, int *uaddr, int nr_wake, 
       num_procs_woken_up ++;
    }
 
-   end_time = curr_time + (num_procs_woken_up > 0 ? m_reschedule_cost : SubsecondTime::Zero());
+   end_time = curr_time + applyRescheduleCost(thread_id, num_procs_woken_up > 0);
    return num_procs_woken_up;
 }
 
@@ -241,7 +254,7 @@ IntPtr SyscallServer::futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int
       }
    }
 
-   end_time = curr_time + (num_procs_woken_up > 0 ? m_reschedule_cost : SubsecondTime::Zero());
+   end_time = curr_time + applyRescheduleCost(thread_id, num_procs_woken_up > 0);
    return num_procs_woken_up;
 }
 
