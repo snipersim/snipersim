@@ -17,3 +17,6 @@ pi: pi_mpi.o Makefile
 
 run_$(TARGET):
 	../../run-sniper --mpi -n 4 -c gainestown -- mpirun -np 4 ./pi
+
+run_mpiexec:
+	../../run-sniper --mpi-exec --mpi-ranks=4 -n 4 -c gainestown -- ./pi

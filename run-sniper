@@ -36,7 +36,7 @@ def usage():
         '  [--no-cache-warming]' + \
         '  [--save-patch]' + \
         '  [--pin-stats]' + \
-        '  [--mpi [--mpi-ranks=<ranks>] ]' + \
+        '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec [--mpi-exec-args="<arg1 arg2>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
         '  |  -- <cmdline> }'
@@ -76,6 +76,8 @@ curdir = os.getcwd()
 scripts = []
 use_mpi = False
 mpi_ranks = 0
+use_mpiexec = False
+mpiexec_args = []
 traces = []
 resptraces = []
 trace_manual = False
@@ -185,7 +187,7 @@ try:
       "pin-stats",
       "traces=", "response-traces=", "trace-manual",
       "sim-end=",
-      "mpi", "mpi-ranks=",
+      "mpi", "mpi-ranks=", "mpi-exec", "mpi-exec-args=",
       "pinballs=", "pinball-non-sift"
     ]
   )
@@ -283,6 +285,11 @@ for o, a in opts:
     use_mpi = True
   if o == '--mpi-ranks':
     mpi_ranks = long(a)
+  if o == '--mpi-exec':
+    use_mpi = True
+    use_mpiexec = True
+  if o == '--mpi-exec-args':
+    mpiexec_args = a.split(' ')
   if o == '--pinballs':
     pinballs = a.split(',')
   if o == '--pinball-non-sift':
@@ -457,9 +464,14 @@ elif use_mpi:
   tracegen['redirect'] = False
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all MPI ranks have completed
   # Set trace recorder options
-  applications = [
-    [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline
-  ]
+  if use_mpiexec:
+    applications = [
+      (['mpiexec', '-np', str(mpi_ranks)] + mpiexec_args, [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+    ]
+  else:
+    applications = [
+      ([], [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+    ]
 elif pinballs and pinball_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
@@ -469,7 +481,7 @@ elif pinballs and pinball_sift:
   # Set trace recorder options
   applications = []
   for app_id, pinball in enumerate(pinballs):
-    applications.append([ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball, '--outputdir', outputdir ])
+    applications.append(([], [ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball, '--outputdir', outputdir ]))
 
 # Setup common generated trace files
 if tracegen:
@@ -489,8 +501,8 @@ if tracegen:
       os.mkfifo(filename)
       tracegen['tracefiles_created'].append(filename)
   # Start app(s) with trace recorder in a thread
-  def run_sift_recorder(app_cmd):
-    tracecmd = [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + app_cmd
+  def run_sift_recorder((pre_cmd, app_cmd)):
+    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + app_cmd
     print '[SNIPER] Running', tracecmd
     sys.stdout.flush()
     sys.stderr.flush()
