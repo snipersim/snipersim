@@ -220,11 +220,29 @@ class Profile:
 
 if __name__ == '__main__':
 
-  if len(sys.argv) > 1:
-    resultsdir = sys.argv[1]
-  else:
-    resultsdir = '.'
+  import getopt
+
+  def usage():
+    print '%s  [-d <resultsdir (.)]  [-o <outputdir (.)]' % sys.argv[0]
+
+  resultsdir = '.'
+  outputdir = '.'
+
+  try:
+    opts, cmdline = getopt.getopt(sys.argv[1:], "hd:o:")
+  except getopt.GetoptError, e:
+    # print help information and exit:
+    print >> sys.stderr, e
+    usage()
+  for o, a in opts:
+    if o == '-h':
+      usage()
+      sys.exit()
+    if o == '-d':
+      resultsdir = a
+    if o == '-o':
+      outputdir = a
 
   prof = Profile(resultsdir)
-  prof.write()
-  prof.writeCallgrind(file('callgrind.sim', 'w'))
+  prof.write(file(os.path.join(outputdir, 'sim.profile'), 'w'))
+  prof.writeCallgrind(file(os.path.join(outputdir, 'callgrind.out.sniper'), 'w'))

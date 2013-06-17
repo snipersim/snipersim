@@ -22,6 +22,7 @@ def usage():
         '  [--roi-script]' + \
         '  [--viz]' + \
         '  [--viz-aso]' + \
+        '  [--profile]' + \
         '  [--perf]' + \
         '  [--gdb]' + \
         '  [--gdb-wait]' + \
@@ -60,6 +61,7 @@ sim_end_valid = ('first', 'last', 'last-restart')
 use_viz = False
 use_viz_aso = ''
 use_viz_mcpat = ''
+use_profile = False
 use_perf = False
 use_valgrind = False
 use_gdb = False
@@ -176,6 +178,7 @@ try:
     [
       "roi", "roi-script",
       "viz", "viz-aso",
+      "profile",
       "perf", "valgrind",
       "gdb", "gdb-wait", "gdb-quit",
       "appdebug", "appdebug-manual", "appdebug-enable",
@@ -232,6 +235,8 @@ for o, a in opts:
     use_viz = True
   if o == '--viz-aso':
     use_viz_aso = '--add-level=aso'
+  if o == '--profile':
+    use_profile = True
   if o == '--perf':
     use_perf = True
   if o == '--valgrind':
@@ -400,7 +405,7 @@ elif sim_end == 'last-restart':
 if use_viz:
   scripts.append('periodic-stats:1000:2000')
   scripts.append('markers:markers')
-if use_viz_aso:
+if use_viz_aso or use_profile:
   sniperoptions.append('-g --instruction_tracer/type=fpstats')
   sniperoptions.append('-g --routine_tracer/type=funcstats')
 
@@ -811,6 +816,9 @@ if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
   os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
 
 elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
+
+  if use_profile:
+    os.system('%(sim_root)s/tools/gen_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
 
   if run_power:
     print '[SNIPER] Running McPAT'
