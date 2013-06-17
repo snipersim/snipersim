@@ -154,6 +154,11 @@ void RoutineTracerFunctionStats::RtnMaster::addRoutine(IntPtr eip, const char *n
    {
       m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, name, imgname, offset, column, line, filename);
    }
+   else if (m_routines[eip]->isProvisional())
+   {
+      m_routines[eip]->updateLocation(name, imgname, offset, column, line, filename);
+      m_routines[eip]->setProvisional(false);
+   }
 }
 
 bool RoutineTracerFunctionStats::RtnMaster::hasRoutine(IntPtr eip)
@@ -169,7 +174,11 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
 
    if (m_routines.count(eip) == 0)
    {
+      // Another thread must have done the instrumentation and set the function information,
+      // but it's still going through the (SIFT) pipe. Create a provisional record now to hold the statistics,
+      // we will update the name/location information once it arrives.
       m_routines[eip] = new RoutineTracerFunctionStats::Routine(eip, "(unknown)", "(unknown)", 0, 0, 0, "");
+      m_routines[eip]->setProvisional(true);
    }
 
    LOG_ASSERT_ERROR(m_routines.count(eip), "Routine %lx not found", eip);

@@ -44,10 +44,11 @@ class RoutineTracer
       {
          public:
             const IntPtr m_eip;
-            const char *m_name;
-            const char *m_location;
+            char *m_name;
+            char *m_location;
 
             Routine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);
+            void updateLocation(const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);
       };
 
       static RoutineTracer* create();

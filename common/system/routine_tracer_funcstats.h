@@ -29,14 +29,18 @@ class RoutineTracerFunctionStats
       class Routine : public RoutineTracer::Routine
       {
          public:
+            bool m_provisional;
             UInt64 m_calls;
             RtnValues m_values;
             UInt64 m_bits_used, m_bits_total;
 
             Routine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)
             : RoutineTracer::Routine(eip, name, imgname, offset, column, line, filename)
-            , m_calls(0), m_values(), m_bits_used(0), m_bits_total(0)
+            , m_provisional(false), m_calls(0), m_values(), m_bits_used(0), m_bits_total(0)
             {}
+
+            bool isProvisional() const { return m_provisional; }
+            void setProvisional(bool provisional) { m_provisional = provisional; }
 
             // The superclass data is copied, but clear the statistics.
             Routine(const Routine &r)

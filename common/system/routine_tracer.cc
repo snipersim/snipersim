@@ -133,8 +133,21 @@ void RoutineTracerThread::hookRoiEnd()
 }
 
 RoutineTracer::Routine::Routine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)
-   : m_eip(eip), m_name(strdup(name))
+   : m_eip(eip)
+   , m_name(NULL)
+   , m_location(NULL)
 {
+   updateLocation(name, imgname, offset, column, line, filename);
+}
+
+void RoutineTracer::Routine::updateLocation(const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)
+{
+   if (m_name)
+      free(m_name);
+   if (m_location)
+      free(m_location);
+
+   m_name = strdup(name);
    char location[4096];
    snprintf(location, 4095, "%s:%" PRIdPTR ":%s:%d:%d", imgname, offset, filename, line, column);
    location[4095] = '\0';
