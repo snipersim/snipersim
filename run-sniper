@@ -500,8 +500,9 @@ if tracegen:
       tracegen['tracefiles_created'].append(filename)
   # Start app(s) with trace recorder in a thread
   def run_sift_recorder((pre_cmd, app_cmd)):
-    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + app_cmd
-    print '[SNIPER] Running', tracecmd
+    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + app_cmd
+    if verbose:
+      print '[SNIPER] Running', tracecmd
     sys.stdout.flush()
     sys.stderr.flush()
     time.sleep(1)
