@@ -60,7 +60,7 @@ UInt64 Timer::now()
 {
    timespec t;
    clock_gettime(CLOCK_REALTIME, &t);
-   return (t.tv_sec * 1000000000) + t.tv_nsec;
+   return (UInt64(t.tv_sec) * 1000000000) + t.tv_nsec;
 }
 
 void Timer::start()
