@@ -11,7 +11,7 @@ HOME = env_setup.sim_root()
 def usage():
   print 'Run program under the Sniper simulator'
   print 'Usage:'
-  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinballs=<pinball-basename>,*  |  -- <cmdline> }' % sys.argv[0]
+  print '  %s  [-n <ncores (1)>]  [-d <outputdir (.)>]  [-c <sniper-config>]  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]  [-g <sniper-options>]  [-s <script>]  [--roi]  [--roi-script]  [--viz]  [--viz-aso]  [--perf]  [--gdb]  [--gdb-wait]  [--gdb-quit]  [--appdebug]  [--appdebug-manual]  [--appdebug-enable]  [--power]  [--cache-only]  [--fast-forward]  [--no-cache-warming]  [--save-patch]  [--pin-stats]  [--mpi [--mpi-ranks=<ranks>] ]  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]  |  --pinballs=<pinball-basename>,*  |  -- <cmdline> }' % sys.argv[0]
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -30,6 +30,7 @@ roi_script = False
 sim_end = 'first'
 sim_end_valid = ('first', 'last', 'last-restart')
 use_viz = False
+use_viz_aso = False
 use_viz_mcpat = ''
 use_perf = False
 use_valgrind = False
@@ -137,7 +138,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hn:m:d:c:g:s:", [ "roi", "roi-script", "viz", "viz-aso", "perf", "valgrind", "gdb", "gdb-wait", "gdb-quit", "appdebug", "appdebug-manual", "appdebug-enable", "power", "cache-only", "fast-forward", "no-cache-warming", "save-patch", "curdir=", "pin-stats", "traces=", "response-traces=", "trace-manual", "sim-end=", "mpi", "mpi-ranks=", "pinballs=", "pinball-non-sift" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print >> sys.stderr, e
@@ -175,6 +176,8 @@ for o, a in opts:
     scripts.append(a)
   if o == '--viz':
     use_viz = True
+  if o == '--viz-aso':
+    use_viz_aso = True
   if o == '--perf':
     use_perf = True
   if o == '--valgrind':
@@ -328,6 +331,9 @@ elif sim_end == 'last-restart':
 if use_viz:
   scripts.append('periodic-stats:1000:2000')
   scripts.append('markers:markers')
+if use_viz_aso:
+  sniperoptions.append('-g --instruction_tracer/type=fpstats')
+  sniperoptions.append('-g --routine_tracer/type=funcstats')
 
 if scripts:
   scriptname = os.path.join(outputdir, 'scripts.py')
@@ -729,6 +735,10 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
   if use_viz:
     print '[SNIPER] Generating visualization in viz/'
     os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+
+  if use_viz_aso:
+    print '[SNIPER] Generating ASO visualization in viz/'
+    os.system('%(sim_root)s/tools/viz/functionbased.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
   gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'), silent = True)
 
