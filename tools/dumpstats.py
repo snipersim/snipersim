@@ -93,5 +93,5 @@ with sniper_lib.OutputToLess():
         else:
           print value
 
-    for key, value in sorted(results['results'].items()):
+    for key, value in sorted(results['results'].items(), key = lambda (key, value): key.lower()):
       print_result(key, value)
