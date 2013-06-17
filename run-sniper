@@ -36,7 +36,7 @@ def usage():
         '  [--no-cache-warming]' + \
         '  [--save-patch]' + \
         '  [--pin-stats]' + \
-        '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec [--mpi-exec-args="<arg1 arg2>"] ]' + \
+        '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec="<mpiexec -mpiarg...>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
         '  |  -- <cmdline> }'
@@ -77,7 +77,7 @@ scripts = []
 use_mpi = False
 mpi_ranks = 0
 use_mpiexec = False
-mpiexec_args = []
+mpiexec_cmd = None
 traces = []
 resptraces = []
 trace_manual = False
@@ -187,7 +187,7 @@ try:
       "pin-stats",
       "traces=", "response-traces=", "trace-manual",
       "sim-end=",
-      "mpi", "mpi-ranks=", "mpi-exec", "mpi-exec-args=",
+      "mpi", "mpi-ranks=", "mpi-exec=",
       "pinballs=", "pinball-non-sift"
     ]
   )
@@ -287,9 +287,7 @@ for o, a in opts:
     mpi_ranks = long(a)
   if o == '--mpi-exec':
     use_mpi = True
-    use_mpiexec = True
-  if o == '--mpi-exec-args':
-    mpiexec_args = a.split(' ')
+    mpiexec_cmd = a
   if o == '--pinballs':
     pinballs = a.split(',')
   if o == '--pinball-non-sift':
@@ -464,14 +462,14 @@ elif use_mpi:
   tracegen['redirect'] = False
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all MPI ranks have completed
   # Set trace recorder options
-  if use_mpiexec:
-    applications = [
-      (['mpiexec', '-np', str(mpi_ranks)] + mpiexec_args, [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
-    ]
+  if mpiexec_cmd:
+    mpiexec = mpiexec_cmd.split(' ')
   else:
-    applications = [
-      ([], [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
-    ]
+    mpiexec = ['mpiexec']
+  mpiexec.extend(['-np', str(mpi_ranks)])
+  applications = [
+    (mpiexec, [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+  ]
 elif pinballs and pinball_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
