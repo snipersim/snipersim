@@ -3,6 +3,12 @@
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 	<title>Function Based</title>
+	<link type="text/css" rel="stylesheet" href="css/jquery-ui.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/graph.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/detail.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/legend.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/extensions.css" />
+	<link rel="stylesheet" href="../../css/visualization.css" type="text/css" media="screen" />
 	<link href="../../flot/roofline.css" rel="stylesheet" type="text/css">
 	<link href="../../flot/jquery-ui-1.10.2.custom.css" rel="stylesheet" type="text/css">
 
@@ -58,7 +64,7 @@
 		return Math.max.apply(null, datacolumn);
 
 	}
-		
+
 	//getLogscaleTicks, given a maxvalue
 	function getLogscaleTicks(maxvalue,base,start){
 		logscaleticks=[];
@@ -66,7 +72,7 @@
 		while (current < maxvalue){
 			logscaleticks.push(current);
 			current=current*base;
-		} 
+		}
 		logscaleticks.push(current);
 		return logscaleticks;
 	}
@@ -89,14 +95,14 @@
 
 
 
-	
 
 
 
-	
+
+
 
 	/* ------------------FUNCTIONS: INSTRUCTIONS VERSUS DATA --------------------*/
-	
+
 
 	$(function() {
 
@@ -119,9 +125,9 @@
 			},
 
 			grid: {
-				hoverable: true, 
-				clickable: true, 
-				
+				hoverable: true,
+				clickable: true,
+
 			},
 			selection: { mode: "xy"},
 			legend: {container: legend}
@@ -152,7 +158,7 @@
 		};
 
 
-		
+
 		//options of the functionseries
 		var functionseries = {
 			data: [],
@@ -170,7 +176,7 @@
 		var ymax =0;
 		var logscaleticksx=[];
 		var logscaleticksy=[];
-		
+
 		//load the data
 		function onDataReceived(series) {
 			functionseries["data"]=series["iptdata"];
@@ -181,14 +187,14 @@
 			optimizationspermodule = series["optimizationinfo"]["per_module"];
 			top_optimizations=series["optimizationinfo"]["top_optimizations"];
 			optimizationscombined = series["optimizationinfo"]["combined"];
-			
+
 			optimization_names=series["optimizationinfo"]["optimization_names"];
 			optimization_summary=series["optimizationinfo"]["summary"];
 			makeTabs();
 			fillOptimizationInfo();
 			fillOptimizationInfoCombined();
-			
-			
+
+
 			xmax = getMax(series["iptdata"],0);
 			logscaleticksx = getLogscaleTicks(xmax,10,1);
 			ymax = getMax(series["iptdata"],1);
@@ -198,10 +204,10 @@
 			plotGraph();
 			//now hide this div:
 			$("#container1").slideToggle('slow', function() {});
-			
+
 			getNext(0,functions);
 			makeRoofline();
-									
+
 		}
 		var dataurl = "iptstats.json"
 		$.ajax({
@@ -213,17 +219,17 @@
 
 		function plotGraph(){
 			//plot the big visualization
-			plot1 = $.plot("#placeholder", 
+			plot1 = $.plot("#placeholder",
 				[
 				functionseries	//series containing the functions
 				],
 				generalplotoptions //general options for the plot
 			);
 			//plot the overview visualization
-			overviewplot1 = $.plot("#overview", 
+			overviewplot1 = $.plot("#overview",
 				[
 				functionseries
-				], 
+				],
 				overviewplotoptions
 			);
 		}
@@ -255,7 +261,7 @@
 
 			// do the zooming
 
-			
+
 			plot1 = $.plot("#placeholder", [functionseries],
 				$.extend(true, {}, generalplotoptions, {
 					xaxis: { min: ranges.xaxis.from, max: ranges.xaxis.to },
@@ -263,7 +269,7 @@
 				})
 			);
 
-			plot1.highlight(0, currentfunctionid); 
+			plot1.highlight(0, currentfunctionid);
 
 			// don't fire event on the overview to prevent eternal loop
 
@@ -286,8 +292,8 @@
 		$("#zoomAllOut").click(function () {
 			plotGraph();
 			$("#zoomout").hide();
-			plot1.highlight(0, currentfunctionid); 
-			overviewplot1.highlight(0, currentfunctionid);	
+			plot1.highlight(0, currentfunctionid);
+			overviewplot1.highlight(0, currentfunctionid);
 		});
 
 
@@ -335,21 +341,21 @@
 			overviewplotoptions.xaxis.ticks = 0;
 
 		}
-		
+
 
 		//logscale checkbox
 		$('#logscalecheck').prop('checked', true); //turn on by default
 		$("#logscalecheck").click(function () {
 			if ($("#logscalecheck").prop("checked")){
-				setLogscaleOptions();				
+				setLogscaleOptions();
 			}
 			else {
 				setNonLogscaleOptions()
 			}
 			plotGraph();
-			plot1.highlight(0, currentfunctionid); 
-			overviewplot1.highlight(0, currentfunctionid);		
-			
+			plot1.highlight(0, currentfunctionid);
+			overviewplot1.highlight(0, currentfunctionid);
+
 		});
 
 
@@ -369,13 +375,13 @@
 		var peakmembandwidth=0;
 		var logscaleticksx=[];
 		var logscaleticksy=[];
-		
+
 		//this function calculates the size of the dot, according to the
 		//time consumed by the function, represented by this dot
 		pointSize.calls = 0;
 		//idea: store x,y values with functionindex
 		function pointSize(ctx, x, y, radius, shadow){
-			
+
 			//xdata = data.slice(0);
 			//xdata = data.map(function(value) { return value[0]; });
 			//ydata = data.map(function(value) { return value[1]; });
@@ -384,14 +390,14 @@
 			if (pointSize.calls >=  functions.length){
 				pointSize.calls=0;
 			}
-			if(functions.length > 0){			
+			if(functions.length > 0){
 				resizedot = functions[pointSize.calls]["core_elapsed_time"]/maxtime;
 				pointSize.calls++;
-				ctx.arc(x, y, radius*5*resizedot+3 , 0, shadow ? Math.PI : Math.PI * 2, false);				
+				ctx.arc(x, y, radius*5*resizedot+3 , 0, shadow ? Math.PI : Math.PI * 2, false);
 			}
 			else {
 				ctx.arc(x, y, radius , 0, shadow ? Math.PI : Math.PI * 2, false);
-			}	
+			}
 		}
 
 		function numberformat(number){
@@ -493,7 +499,7 @@
 		var plot = $.plot("#rooflineplaceholder", [], []);
 		var overview = $.plot("#rooflineoverview", [], []);
 
-		
+
 
 		function onDataReceived(series) {
 			functionseries["data"]=series["rooflinedata"];
@@ -508,7 +514,7 @@
 			ymax = getMax(series["rooflinedata"],1);
 			logscaleticksy = getLogscaleTicks(peakfloatperf,2,1/256);
 			maxtime = getMax(functions,"core_elapsed_time");
-			
+
 			fpperformanceseries["data"][0][0]=peakmembandwidth/peakfloatperf;
 			fpperformanceseries["data"][0][1]=peakfloatperf;
 			if (peakmembandwidth/peakfloatperf < xmax){
@@ -520,8 +526,8 @@
 			fpperformanceseries["data"][1][1]=peakfloatperf;
 			peakmembandwidthseries["data"][1][0]=peakmembandwidth/peakfloatperf;
 			peakmembandwidthseries["data"][1][1]=peakfloatperf;
-			
-                        
+
+
 			pointSize.calls = 0;
 			reset=0;
 			//logscale checkbox:
@@ -535,7 +541,7 @@
 			$("#container2").slideToggle('slow', function() {});
 			//$("#container2").hide();
 
-			
+
 		}
 
 		var dataurl = "rooflinestats.json"
@@ -546,31 +552,31 @@
 			success: onDataReceived
 		});
 
-		
+
 
 		function plotGraph(){
 			if (functions.length > 0){
 				if ($("#rooflinecheck").prop("checked")){
 					//plot the big visualization
-					plot2 = $.plot("#rooflineplaceholder", 
+					plot2 = $.plot("#rooflineplaceholder",
 						[
 						functionseries,	//series containing the functions
 						//series containing a line for the max floating point performance
 						fpperformanceseries,
 						//series containing a line for the max memory bandwidth
-						peakmembandwidthseries					
+						peakmembandwidthseries
 						],
 						generalplotoptions //general options for the plot
 					);
 					//plot the overview visualization
-					overviewplot2 = $.plot("#rooflineoverview", 
+					overviewplot2 = $.plot("#rooflineoverview",
 						[
 						overviewfunctionseries,	//series containing the functions
 						//series containing a line for the max floating point performance
 						fpperformanceseries,
 						//series containing a line for the max memory bandwidth
 						peakmembandwidthseries
-						], 
+						],
 						overviewplotoptions
 					);
 				}
@@ -580,7 +586,7 @@
 				}
 			}
 		}
-		
+
 
 		//handle hover overs
 		var previousPoint = null;
@@ -614,7 +620,7 @@
 
 			// don't fire event on the overview to prevent eternal loop
 
-			plot2.highlight(0, currentfunctionid); 
+			plot2.highlight(0, currentfunctionid);
 
 			//overview.setSelection(ranges, true);
 
@@ -629,7 +635,7 @@
 		//handle overviewclicks:
 		//handle clicks
 
-		
+
 
 		$("#rooflineoverview").bind("plotclick", showinfofunction);
 
@@ -642,7 +648,7 @@
 		$("#rooflinezoomAllOut").click(function () {
 			pointSize.calls = 0;
 			plotGraph();
-			plot2.highlight(0, currentfunctionid); 
+			plot2.highlight(0, currentfunctionid);
 			overviewplot2.highlight(0, currentfunctionid);
 			$("#rooflinezoomout").hide();
 		});
@@ -662,23 +668,23 @@
 
 		//roofline checkbox
 		//turn on by default
-		$('#rooflinecheck').prop('checked', true); 
+		$('#rooflinecheck').prop('checked', true);
 		$("#rooflinecheck").click(function () {
 			if ($("#rooflinecheck").prop("checked")){
 				plotGraph();
-			}			
+			}
 			else{
 				plot2 = $.plot("#rooflineplaceholder", [functionseries],generalplotoptions);
 				overviewplot2 = $.plot("#rooflineoverview", [overviewfunctionseries], overviewplotoptions);
-				plot2.highlight(0, currentfunctionid); 
+				plot2.highlight(0, currentfunctionid);
 				overviewplot2.highlight(0, currentfunctionid);
 			}
-			plot2.highlight(0, currentfunctionid); 
+			plot2.highlight(0, currentfunctionid);
 			overviewplot2.highlight(0, currentfunctionid);
-				
+
 		});
 
-		
+
 
 		var minval = 0.0625;
 		var displacementfunction = function (v) {
@@ -687,7 +693,7 @@
 			} else {
 				// Shift all negative numbers to be positive
 				return (-log2(minval) + log2(v));
-			}			
+			}
 		}
 
 		var inversedisplacementfunction = function (v) {
@@ -696,7 +702,7 @@
 			} else {
 				// Shift all negative numbers to be positive
 				return exp2(v+log2(minval));
-			}			
+			}
 		}
 
 		function setlogscaleoptions(){
@@ -720,7 +726,7 @@
 			overviewplotoptions.xaxis.min = 1/256;
 		}
 
-		
+
 		$("#rooflinelogscalecheck").click(function () {
 			if ($("#rooflinelogscalecheck").prop("checked")){
 				//change main viz
@@ -749,7 +755,7 @@
 			}
 			pointSize.calls = 0;
 			plotGraph();
-			plot2.highlight(0, currentfunctionid); 
+			plot2.highlight(0, currentfunctionid);
 			overviewplot2.highlight(0, currentfunctionid);
 		});
 
@@ -775,7 +781,7 @@
 
 		//go to optimization suggestions
 		$("#float_optimization").click(function() {
-			window.location.hash="optimization"; 
+			window.location.hash="optimization";
 			if ($('#optimizationcontainer').is(':hidden')) {
 				$("#optimizationcontainer").slideToggle('slow', function() {});
 			}
@@ -783,7 +789,7 @@
 
 		//go to function info
 		$("#float_functioninfo").click(function() {
-			window.location.hash="function_info"; 
+			window.location.hash="function_info";
 			if ($('#container3').is(':hidden')) {
 				$("#container3").slideToggle('slow', function() {});
 			}
@@ -791,7 +797,7 @@
 
 		//go to instructionsvstime
 		$("#float_instrvstime").click(function() {
-			window.location.hash="instrvstime"; 
+			window.location.hash="instrvstime";
 			if ($('#container1').is(':hidden')) {
 				$("#container1").slideToggle('slow', function() {});
 			}
@@ -799,7 +805,7 @@
 
 		//go to roofline
 		$("#float_roofline").click(function() {
-			window.location.hash="roofline"; 
+			window.location.hash="roofline";
 			if ($('#container2').is(':hidden')) {
 				$("#container2").slideToggle('slow', function() {});
 			}
@@ -814,14 +820,14 @@
 		$("#float").mouseleave(function() {
 			$("#float").fadeOut();
 		});
-	
+
 
 
 		//if window is too small, hide float
 		if ($(window).width() < 900){
 			$("#floaticons").hide();
 		}
-		
+
 		$("#nextcore_elapsed_time").click(function () {getInfo(getNext("core_elapsed_time","next"));});
 		$("#prevcore_elapsed_time").click(function () {getInfo(getNext("core_elapsed_time","prev"));});
 		$("#nextcalls").click(function () {getInfo(getNext("calls","next"));});
@@ -837,7 +843,7 @@
 		$("#nextl3miss").click(function () {getInfo(getNext("l3miss","next"));});
 		$("#prevl3miss").click(function () {getInfo(getNext("l3miss","prev"));});
 		$("#nextcpi").click(function () {getInfo(getNext("cpi","next"));});
-		$("#prevcpi").click(function () {getInfo(getNext("cpi","prev"));});		
+		$("#prevcpi").click(function () {getInfo(getNext("cpi","prev"));});
 
 		$("#maxinstruction_count").click(function () {getInfo(functionboundaries["instruction_count"]["max"]);});
 		$("#mininstruction_count").click(function () {getInfo(functionboundaries["instruction_count"]["min"]);});
@@ -864,19 +870,21 @@
 			}
 		});
 
-		
+
 
 	};
 
-	
+
 
 	</script>
 </head>
 <body>
 
-	<script type="text/javascript">
-		writeHeader('Suggestions for Optimization');
-	</script>
+  <script type="text/javascript">
+    writeHeader('Suggestions for Optimization');
+  </script>
+
+  <div class="roofline">
 
 	<div id="floaticons">
 		<div id="float_optimization2">
@@ -915,12 +923,12 @@
 		Function info</p></div>
 	</div>
 
-	
+
 
 	<div id="content">
 		<a name=optimization></a>
 		<div id="optimizationheader" class="header" title="Click to show/hide. Automatic suggestions for optimizing the application will be shown.">
-			<h3>Suggestions for Optimization</h3>		
+			<h3>Suggestions for Optimization</h3>
 		</div>
 		<div id="optimizationcontainer" class="optimization-container">
 			<div id="tabs"></div>
@@ -930,59 +938,59 @@
 			<div id="Page2">
 			     <div id="optimizationscombined"></div>
 			</div>
-			
+
 			<div id="optimizationtabs"></div>
-					
+
 		</div>
 
 		<a name=instrvstime></a>
 		<div id="functionheader" class="header" title="Click to show/hide. In this 2D scatter plot, each function is plotted regarding it's time and instructioncount. Outliers, e.g. functions with a lower instruction count, but using a lot of time can be identified quickly. Hover over the dots to see the function name. Click on the dots to retrieve more information. Check 'log scale' to get the loglog plot. Select a region on the plot to zoom in and keep an overview of the plot on the right hand side."
 				 >
-			<h3>Functions: instructions versus time</h3>		
+			<h3>Functions: instructions versus time</h3>
 		</div>
-		
-		
+
+
 		<div id="container1" class="demo-container">
 			<div id="placeholder" class="demo-placeholder" style="float:left; width:750px;"></div>
 			<div id="legend" class="demo-placeholder" style="float:right;width:180px; height:50px;"></div>
 			<div id="overview" class="demo-placeholder" style="float:right;width:160px; height:125px;"></div>
-			<div id="zoomout" style="display:none;"><input type="button" id="zoomAllOut" 
+			<div id="zoomout" style="display:none;"><input type="button" id="zoomAllOut"
 				value="" class="button_add" title="Zoom all the way out"/></div>
 			<p style="float:right; width:135px;">
-				<input type='checkbox' name="Logscale" id="logscalecheck" 
+				<input type='checkbox' name="Logscale" id="logscalecheck"
 				title="Use this checkbox to toggle log scale on and off"/>Logscale <br />
 			</p>
-			
+
 		</div>
 		<a name=roofline></a>
 		<div id="rooflineheader" class="header" title="Click to show/hide. This plot shows the roofline model.">
-			<h3>Roofline Model</h3>		
+			<h3>Roofline Model</h3>
 		</div>
 
 		<div id="container2" class="demo-container">
 			<div id="rooflineplaceholder" class="demo-placeholder" style="float:left; width:750px;"></div>
 			<div id="rooflinelegend" class="demo-placeholder" style="float:right;width:180px; height:100px;"></div>
 			<div id="rooflineoverview" class="demo-placeholder" style="float:right;width:160px; height:125px;"></div>
-			<div id="rooflinezoomout" style="display:none;"><input type="button" id="rooflinezoomAllOut" 
+			<div id="rooflinezoomout" style="display:none;"><input type="button" id="rooflinezoomAllOut"
 				value="" class="button_add" title="Zoom all the way out"/></div>
 			<p style="float:right; width:135px;">
-				<input type='checkbox' name="Logscale" id="rooflinelogscalecheck" 
+				<input type='checkbox' name="Logscale" id="rooflinelogscalecheck"
 				title="Use this checkbox to toggle log scale on and off"/>Logscale <br />
-				<input type='checkbox' name="Roofline" checked='checked' id='rooflinecheck' 
+				<input type='checkbox' name="Roofline" checked='checked' id='rooflinecheck'
 				title="Use this checkbox to toggle roofline on and off"/>Roofline
 			</p>
 		</div>
 
 		<a name=function_info></a>
 		<div id="functiondataheader" class="header" title="Click to show/hide. When you click on a function in one of the upper visualizations, info about this function is shown.">
-			<h3>Function Info</h3>		
+			<h3>Function Info</h3>
 		</div>
 		<div id="container3" class="functioninfo-container" style="display:none;">
 		<p>
 			<span id="hoverdata"></span>
-			
+
 			<!--<span id="clickdata">Click on a function to obtain more information about:</span><br />-->
-			
+
 			<table border="0" width="100%">
 				<tr>
 					<td style="width:200px;">Function name</td>
@@ -1003,14 +1011,14 @@
 					<td><table border="0"><tr><td width="150">
 						<span id="calls"></span></td><td><div id="callprogress"><span id="callspercentage"></span></div>
 					</td></tr></table>
-					
-					<td><input type="button" id="mincalls" value="" class="button_min" style="display:none;" 
+
+					<td><input type="button" id="mincalls" value="" class="button_min" style="display:none;"
 						title="Get min function by calls"/>
-					<input type="button" id="prevcalls" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="prevcalls" value="" class="button_prev" style="display:none;"
 						title="Get previous function by instruction count"/>
-					<input type="button" id="nextcalls" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextcalls" value="" class="button_next" style="display:none;"
 						title="Get next function by calls"/>
-					<input type="button" id="maxcalls" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxcalls" value="" class="button_max" style="display:none;"
 						title="Get max function by calls"/></td>
 				</tr>
 				<tr>
@@ -1018,13 +1026,13 @@
 					<td><table border="0"><tr><td width="150">
 						<span id="icount"></span></td><td><div id="icountprogress"><span id="icountpercentage"></span></div>
 					</td></tr></table>
-					<td><input type="button" id="mininstruction_count" value="" class="button_min" style="display:none;" 
+					<td><input type="button" id="mininstruction_count" value="" class="button_min" style="display:none;"
 						title="Get min function by instruction count"/>
-					<input type="button" id="previnstruction_count" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="previnstruction_count" value="" class="button_prev" style="display:none;"
 						title="Get previous function by instruction count"/>
-					<input type="button" id="nextinstruction_count" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextinstruction_count" value="" class="button_next" style="display:none;"
 						title="Get next function by instruction count"/>
-					<input type="button" id="maxinstruction_count" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxinstruction_count" value="" class="button_max" style="display:none;"
 						title="Get max function by instruction count"/></td>
 				</tr>
 				<tr>
@@ -1032,13 +1040,13 @@
 					<td><table border="0"><tr><td width="150">
 						<span id="coretime"></span></td><td><div id="coretimeprogress"><span id="coretimepercentage"></span></div>
 					</td></tr></table>
-					<td><input type="button" id="mincore_elapsed_time" value="" class="button_min" style="display:none;" 
+					<td><input type="button" id="mincore_elapsed_time" value="" class="button_min" style="display:none;"
 						title="Get min function by time"/>
-					<input type="button" id="prevcore_elapsed_time" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="prevcore_elapsed_time" value="" class="button_prev" style="display:none;"
 						title="Get previous function by time"/>
-					<input type="button" id="nextcore_elapsed_time" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextcore_elapsed_time" value="" class="button_next" style="display:none;"
 						title="Get next function by time"/>
-					<input type="button" id="maxcore_elapsed_time" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxcore_elapsed_time" value="" class="button_max" style="display:none;"
 						title="Get max function by time"/></td>
 				</tr>
 				<tr>
@@ -1046,13 +1054,13 @@
 					<td><table border="0"><tr><td width="150">
 						<span id="nonidletime"></span></td><td><div id="nonidletimeprogress"><span id="nonidletimepercentage"></span></div>
 					</td></tr></table>
-					<td><input type="button" id="minnonidle_elapsed_time" value="" class="button_min" style="display:none;" 
+					<td><input type="button" id="minnonidle_elapsed_time" value="" class="button_min" style="display:none;"
 						title="Get min function by time"/>
-					<input type="button" id="prevnonidle_elapsed_time" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="prevnonidle_elapsed_time" value="" class="button_prev" style="display:none;"
 						title="Get previous function by time"/>
-					<input type="button" id="nextnonidle_elapsed_time" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextnonidle_elapsed_time" value="" class="button_next" style="display:none;"
 						title="Get next function by time"/>
-					<input type="button" id="maxnonidle_elapsed_time" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxnonidle_elapsed_time" value="" class="button_max" style="display:none;"
 						title="Get max function by time"/></td>
 				</tr>
 				<tr>
@@ -1060,13 +1068,13 @@
 					<td><table border="0"><tr><td width="150">
 						<span id="fp_addsub"></span></td><td><div id="fp_addsubprogress"><span id="fp_addsubpercentage"></span></div>
 					</td></tr></table>
-					<td><input type="button" id="minfp_addsub" value="" class="button_min" style="display:none;" 
+					<td><input type="button" id="minfp_addsub" value="" class="button_min" style="display:none;"
 						title="Get min function by floating point operations"/>
-					<input type="button" id="prevfp_addsub" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="prevfp_addsub" value="" class="button_prev" style="display:none;"
 						title="Get previous function by floating point operations"/>
-					<input type="button" id="nextfp_addsub" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextfp_addsub" value="" class="button_next" style="display:none;"
 						title="Get next function by floating point operations"/>
-					<input type="button" id="maxfp_addsub" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxfp_addsub" value="" class="button_max" style="display:none;"
 						title="Get max function by floating point operations"/></td>
 				</tr>
 				<tr>
@@ -1074,13 +1082,13 @@
 					<td><table border="0"><tr><td width="150">
 						<span id="fp_muldiv"></span></td><td><div id="fp_muldivprogress"><span id="fp_muldivpercentage"></span></div>
 					</td></tr></table>
-					<td><input type="button" id="minfp_muldiv" value="" class="button_min" style="display:none;" 
+					<td><input type="button" id="minfp_muldiv" value="" class="button_min" style="display:none;"
 						title="Get min function by floating point operations"/>
-					<input type="button" id="prevfp_muldiv" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="prevfp_muldiv" value="" class="button_prev" style="display:none;"
 						title="Get previous function by floating point operations"/>
-					<input type="button" id="nextfp_muldiv" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextfp_muldiv" value="" class="button_next" style="display:none;"
 						title="Get next function by floating point operations"/>
-					<input type="button" id="maxfp_muldiv" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxfp_muldiv" value="" class="button_max" style="display:none;"
 						title="Get max function by floating point operations"/></td>
 				</tr>
 				<tr>
@@ -1088,29 +1096,29 @@
 					<td><table border="0"><tr><td width="150">
 						<span id="l3miss"></span></td><td><div id="l3missprogress"><span id="l3misspercentage"></span></div>
 					</td></tr></table>
-					<td><input type="button" id="minl3miss" value="" class="button_min" style="display:none;" 
+					<td><input type="button" id="minl3miss" value="" class="button_min" style="display:none;"
 						title="Get min function by L3 cache misses"/>
-					<input type="button" id="prevl3miss" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="prevl3miss" value="" class="button_prev" style="display:none;"
 						title="Get previous function by L3 cache misses"/>
-					<input type="button" id="nextl3miss" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextl3miss" value="" class="button_next" style="display:none;"
 						title="Get next function by L3 cache misses"/>
-					<input type="button" id="maxl3miss" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxl3miss" value="" class="button_max" style="display:none;"
 						title="Get max function by L3 cache misses"/></td>
 				</tr>
 				<tr><td>CPI</td>
 				<td>
 					<table border="0">
-						<tr><td width="150"><span id="cpivalue" title="CPI of this function"></span></td>				
+						<tr><td width="150"><span id="cpivalue" title="CPI of this function"></span></td>
 						<td><div id="cpibar" style="width:380px;height:15px;top:5px"></div></td></tr>
 					</table>
 				</td>
-				<td><input type="button" id="mincpi" value="" class="button_min" style="display:none;" 
+				<td><input type="button" id="mincpi" value="" class="button_min" style="display:none;"
 						title="Get min function by CPI"/>
-					<input type="button" id="prevcpi" value="" class="button_prev" style="display:none;" 
+					<input type="button" id="prevcpi" value="" class="button_prev" style="display:none;"
 						title="Get previous function by CPI"/>
-					<input type="button" id="nextcpi" value="" class="button_next" style="display:none;" 
+					<input type="button" id="nextcpi" value="" class="button_next" style="display:none;"
 						title="Get next function by CPI"/>
-					<input type="button" id="maxcpi" value="" class="button_max" style="display:none;" 
+					<input type="button" id="maxcpi" value="" class="button_max" style="display:none;"
 						title="Get max function by CPI"/></td>
 				</tr>
 				<tr>
@@ -1118,16 +1126,15 @@
 					<td><div id="optimizationtable"></div></td>
 				</tr>
 			</table>
-			
-			
+
+
 		</p>
-		
+
 		</div>
 
-		
-			
-
 	</div>
+
+  </div>
 
 <a name=bottom></a>
 </body>
