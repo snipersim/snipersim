@@ -223,10 +223,10 @@ if __name__ == '__main__':
   import getopt
 
   def usage():
-    print '%s  [-d <resultsdir (.)]  [-o <outputdir (.)]' % sys.argv[0]
+    print '%s  [-d <resultsdir (.)>]  [-o <outputdir>]' % sys.argv[0]
 
   resultsdir = '.'
-  outputdir = '.'
+  outputdir = None
 
   try:
     opts, cmdline = getopt.getopt(sys.argv[1:], "hd:o:")
@@ -244,5 +244,6 @@ if __name__ == '__main__':
       outputdir = a
 
   prof = Profile(resultsdir)
-  prof.write(file(os.path.join(outputdir, 'sim.profile'), 'w'))
-  prof.writeCallgrind(file(os.path.join(outputdir, 'callgrind.out.sniper'), 'w'))
+  prof.write(file(os.path.join(outputdir, 'sim.profile'), 'w') if outputdir else sys.stdout)
+  if outputdir:
+    prof.writeCallgrind(file(os.path.join(outputdir, 'callgrind.out.sniper'), 'w'))
