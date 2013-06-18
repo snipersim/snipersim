@@ -366,6 +366,16 @@ else:
     print >> sys.stderr, 'Cannot use both --follow-execv and --gdb at the same time'
     sys.exit(-1)
 
+yama_ptrace_file = '/proc/sys/kernel/yama/ptrace_scope'
+if use_gdb and os.path.isfile(yama_ptrace_file):
+  y_pt = int(open(yama_ptrace_file).readline())
+  if y_pt != 0:
+    print >> sys.stderr, '\nError: Unable to enable debugging via gdb when the yama ptrace_scope protection is enabled.'
+    print >> sys.stderr, ' Disable ptrace_scope by setting /proc/sys/kernel/yama/ptrace_scope to 0'
+    print >> sys.stderr, ' or by updating the value in /etc/sysctl.d/10-ptrace.conf.'
+    print >> sys.stderr, ' === GDB permission error ===\n'
+    sys.exit(-1)
+
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
   try:
