@@ -96,7 +96,7 @@ UInt64 RoutineTracerFunctionStats::RtnThread::getThreadStat(ThreadStatsManager::
 
 UInt64 RoutineTracerFunctionStats::RtnThread::getCurrentRoutineId()
 {
-   return m_current_eip;
+   return (UInt64)m_master->getRoutineFullPtr(m_stack);
 }
 
 RoutineTracerFunctionStats::RtnMaster::RtnMaster()
@@ -131,12 +131,15 @@ void RoutineTracerFunctionStats::RtnMaster::ce_notify(bool on_roi_end, UInt64 ow
 {
    ScopedLock sl(m_lock);
 
-   IntPtr eip = owner;
-   if (m_routines.count(eip))
-   {
-      m_routines[eip]->m_bits_used += countBits(bits_used);
-      m_routines[eip]->m_bits_total += bits_total;
-   }
+   RoutineTracerFunctionStats::Routine* rtn = (RoutineTracerFunctionStats::Routine*)owner;
+
+   LOG_ASSERT_ERROR(m_routines.count(rtn->m_eip) != 0, "Routine not found (rtn %lx, eip %lx)", rtn, rtn->m_eip);
+
+   m_routines[rtn->m_eip]->m_bits_used += countBits(bits_used);
+   m_routines[rtn->m_eip]->m_bits_total += bits_total;
+
+   rtn->m_bits_used += countBits(bits_used);
+   rtn->m_bits_total += bits_total;
 }
 
 RoutineTracerThread* RoutineTracerFunctionStats::RtnMaster::getThreadHandler(Thread *thread)
@@ -190,7 +193,7 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
    }
 }
 
-void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const std::deque<UInt64>& stack, UInt64 calls, RtnValues values)
+RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<UInt64>& stack)
 {
    ScopedLock sl(m_lock);
 
@@ -201,10 +204,22 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const std::deque<U
       m_callstack_routines[stack] = new RoutineTracerFunctionStats::Routine(*m_routines[stack.back()]);
    }
 
-   m_callstack_routines[stack]->m_calls += calls;
+   return m_callstack_routines[stack];
+}
+
+void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const std::deque<UInt64>& stack, UInt64 calls, RtnValues values)
+{
+   updateRoutineFull(getRoutineFullPtr(stack), calls, values);
+}
+
+void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(RoutineTracerFunctionStats::Routine* rtn, UInt64 calls, RtnValues values)
+{
+   ScopedLock sl(m_lock);
+
+   rtn->m_calls += calls;
    for(auto it = values.begin(); it != values.end(); ++it)
    {
-      m_callstack_routines[stack]->m_values[it->first] += it->second;
+      rtn->m_values[it->first] += it->second;
    }
 }
 
