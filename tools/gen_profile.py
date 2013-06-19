@@ -228,10 +228,11 @@ class Profile:
   def summarize(self, catnames, catfilters, obj = sys.stdout):
     bytype = dict([ (name, Category(name)) for name in catnames ])
     for func in self.calls.values():
-      for catname, catfilter in catfilters:
-        if catfilter(func, self):
-          break
-      bytype[catname].add(func.data)
+      if not func.folded:
+        for catname, catfilter in catfilters:
+          if catfilter(func, self):
+            break
+        bytype[catname].add(func.data)
     print >> obj, '%7s\t%7s\t%7s\t%7s' % ('time', 'icount', 'ipc', 'l2.mpki')
     for name in catnames:
       if bytype[name].data:
