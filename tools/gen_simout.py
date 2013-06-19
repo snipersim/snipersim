@@ -40,7 +40,7 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   template = [
     ('  Instructions', 'performance_model.instruction_count', str),
     ('  Cycles',       'performance_model.cycle_count_fixed', format_int),
-    ('  Time',         'performance_model.elapsed_time_fixed', format_ns(0)),
+    ('  Time (ns)',    'performance_model.elapsed_time_fixed', format_ns(0)),
   ]
 
   if 'branch_predictor.num-incorrect' in results:
@@ -95,7 +95,7 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   template += [
     ('DRAM summary', '', ''),
     ('  num dram accesses', 'dram.accesses', str),
-    ('  average dram access latency', 'dram.avglatency', format_ns(2)),
+    ('  average dram access latency (ns)', 'dram.avglatency', format_ns(2)),
   ]
   if 'dram.total-read-queueing-delay' in results:
     results['dram.avgqueueread'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-read-queueing-delay'], results['dram.reads']))
