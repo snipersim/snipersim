@@ -158,9 +158,6 @@ static void endROI(THREADID threadid)
       if (thread_data[i].running && thread_data[i].output)
          closeFile(i);
    }
-
-   // No need to continue functional execution if we won't care about the instructions anyway
-   exit(0);
 }
 
 ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
@@ -343,7 +340,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    // Default: not emulated, override later when needed
    thread_data[threadid].last_syscall_emulated = false;
 
-   if (syscall_number == SYS_write)
+   if (syscall_number == SYS_write && thread_data[threadid].output)
    {
       int fd = (int)args[0];
       const char *buf = (const char*)args[1];
@@ -353,7 +350,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          thread_data[threadid].output->Output(fd, buf, count);
    }
 
-   if (KnobEmulateSyscalls.Value())
+   if (KnobEmulateSyscalls.Value() && thread_data[threadid].output)
    {
       switch(syscall_number)
       {
