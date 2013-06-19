@@ -270,4 +270,10 @@ class OutputToLess:
         except IOError:
           # Ignore broken pipe when less doesn't read all of its input
           pass
-        less.wait()
+        while True:
+          try:
+            less.wait()
+            break
+          except KeyboardInterrupt:
+            # Ignore Ctrl+C to avoid aborting less before it restored the terminal settings
+            pass
