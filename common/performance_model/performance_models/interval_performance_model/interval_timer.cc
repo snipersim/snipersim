@@ -572,15 +572,29 @@ void IntervalTimer::blockWindow()
          mem_barrier_pending = true;
 
       // Generate dependencies using dependencies
-      for(uint32_t i = 0; i < micro_op.getDynMicroOp()->getDependenciesLength() && !micro_op.isDependent(); i++)
+      for(uint32_t i = 0; i < micro_op.getDynMicroOp()->getDependenciesLength(); i++)
       {
          if (m_windows->windowContains(micro_op.getDynMicroOp()->getDependency(i)))
          {
             Windows::WindowEntry& dependee = m_windows->getInstruction(micro_op.getDynMicroOp()->getDependency(i));
             if (dependee.isDependent())
             {
+               // Dependee depends on the long-latency load blocking the window: do not issue this uop now
                micro_op.setDataDependent();
+               break;
             }
+            else if (dependee.isIndependent() && dependee.getDynMicroOp()->isLongLatencyLoad())
+            {
+               // Our dependee is independent of the long-latency load blocking the window,
+               // but it is a long-latency event by itself: do not issue this uop now
+               // Since the window head is independent and long-latency,
+               // this code path will also start the chain of dependent loads.
+               micro_op.setDataDependent();
+               break;
+            }
+            // else: our dependee is independent of the long-latency load blocking the window,
+            // and is not a long-latency load in itself, which means it will complete under the original LLL.
+            // Therefore, we can also be hidden under the long-latency load which makes us not dependent.
          }
       }
 

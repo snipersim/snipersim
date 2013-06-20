@@ -88,6 +88,7 @@ public:
 
       void clearDependent() { this->dependent = NO_DEP; }
       bool isDependent() const { return this->dependent == DATA_DEP; }
+      bool isIndependent() const { return this->dependent == INDEP_MISS; }
       void setDataDependent() { this->dependent = DATA_DEP; }
       void setIndependentMiss() { this->dependent = INDEP_MISS; }
    };
