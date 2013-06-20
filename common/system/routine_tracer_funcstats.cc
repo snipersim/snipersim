@@ -268,17 +268,20 @@ void RoutineTracerFunctionStats::RtnMaster::writeResultsFull(const char *filenam
    // now print context-aware statistics
    for(auto it = m_callstack_routines.begin(); it != m_callstack_routines.end(); ++it)
    {
-      std::ostringstream s;
-      s << std::hex << it->first.front();
-      for (auto kt = ++it->first.begin(); kt != it->first.end(); ++kt)
+      if (it->second->m_calls)
       {
-         s << ":" << std::hex << *kt << std::dec;
+         std::ostringstream s;
+         s << std::hex << it->first.front();
+         for (auto kt = ++it->first.begin(); kt != it->first.end(); ++kt)
+         {
+            s << ":" << std::hex << *kt << std::dec;
+         }
+         fprintf(fp, "%s\t%" PRId64 "\t%" PRId64 "\t%" PRId64,
+            s.str().c_str(), it->second->m_calls, it->second->m_bits_used, it->second->m_bits_total);
+         for(ThreadStatsManager::ThreadStatTypeList::const_iterator jt = types.begin(); jt != types.end(); ++jt)
+            fprintf(fp, "\t%" PRId64, it->second->m_values[*jt]);
+         fprintf(fp, "\n");
       }
-      fprintf(fp, "%s\t%" PRId64 "\t%" PRId64 "\t%" PRId64,
-         s.str().c_str(), it->second->m_calls, it->second->m_bits_used, it->second->m_bits_total);
-      for(ThreadStatsManager::ThreadStatTypeList::const_iterator jt = types.begin(); jt != types.end(); ++jt)
-         fprintf(fp, "\t%" PRId64, it->second->m_values[*jt]);
-      fprintf(fp, "\n");
    }
    fclose(fp);
 }
