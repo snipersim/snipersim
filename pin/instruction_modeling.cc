@@ -56,20 +56,9 @@ static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADD
    }
 }
 
-static VOID handleMagic(THREADID threadIndex, CONTEXT * ctxt, ADDRINT next_eip)
+static ADDRINT handleMagic(THREADID threadIndex, ADDRINT a, ADDRINT b, ADDRINT c)
 {
-   ADDRINT res = handleMagicInstruction(localStore[threadIndex].thread->getId(),
-                    PIN_GetContextReg(ctxt, REG_GAX),
-                    #ifdef TARGET_IA32
-                       PIN_GetContextReg(ctxt, REG_GDX),
-                    #else
-                       PIN_GetContextReg(ctxt, REG_GBX),
-                    #endif
-                    PIN_GetContextReg(ctxt, REG_GCX));
-   PIN_SetContextReg(ctxt, REG_GAX, res);
-   // Forcefully abort the current trace (Redmine #118).
-   PIN_SetContextReg(ctxt, REG_INST_PTR, next_eip);
-   PIN_ExecuteAt(ctxt);
+   return handleMagicInstruction(localStore[threadIndex].thread->getId(), a, b, c);
 }
 
 static void handleRdtsc(THREADID thread_id, PIN_REGISTER * gax, PIN_REGISTER * gdx)
@@ -170,8 +159,16 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    // Simics-style magic instruction: xchg bx, bx
    if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
    {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_THREAD_ID, IARG_CONTEXT, IARG_FALLTHROUGH_ADDR, IARG_END);
-      // Trace will be aborted after MAGIC (Redmine #118), so don't add the subsequent instructions to the basic-block list.
+      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX,
+         #ifdef TARGET_IA32
+            IARG_REG_VALUE, REG_GBX,
+         #else
+            IARG_REG_VALUE, REG_GBX,
+         #endif
+         IARG_REG_VALUE, REG_GCX, IARG_RETURN_REGS, REG_GAX, IARG_END);
+      // Stop the trace after MAGIC (Redmine #118), which has potentially changed the instrumentation mode,
+      // so execution can resume in the correct instrumentation version
+      INS_InsertDirectJump(ins, IPOINT_AFTER, INS_Address(ins) + INS_Size(ins));
       return false;
    }
 
