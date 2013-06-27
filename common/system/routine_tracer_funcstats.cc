@@ -129,6 +129,9 @@ UInt64 RoutineTracerFunctionStats::RtnMaster::ce_get_owner(core_id_t core_id)
 
 void RoutineTracerFunctionStats::RtnMaster::ce_notify(bool on_roi_end, UInt64 owner, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total)
 {
+   if (owner == 0)
+      return;
+
    ScopedLock sl(m_lock);
 
    RoutineTracerFunctionStats::Routine* rtn = (RoutineTracerFunctionStats::Routine*)owner;
