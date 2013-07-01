@@ -256,11 +256,14 @@ class OutputToLess:
     else:
       self.stream = None
   def __exit__(self, exc_type, exc_value, traceback):
-    if exc_type:
-      return False # Process exception normally
     if self.stream:
       sys.stdout.flush()
       sys.stdout = sys.__stdout__
+      if exc_type:
+        # Dump output up to error
+        print self.stream.getvalue(),
+        # Process exception normally
+        return False
       data = self.stream.getvalue()
       if len(data) > 0:
         less = subprocess.Popen([ 'less', '--no-init', '--quit-if-one-screen', '--chop-long-lines' ], stdin = subprocess.PIPE)
@@ -277,3 +280,6 @@ class OutputToLess:
           except KeyboardInterrupt:
             # Ignore Ctrl+C to avoid aborting less before it restored the terminal settings
             pass
+    elif exc_type:
+      # Process exception normally
+      return False
