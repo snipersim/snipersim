@@ -89,11 +89,11 @@ class CallPrinterDefault(CallPrinter):
     print >> self.obj, '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
   def printLine(self, call, offset):
     print >> self.obj, '%7d\t' % call.data['calls'] + \
-                       '%6.2f%%\t' % (100 * call.total['core_elapsed_time'] / float(self.prof.totals['core_elapsed_time'])) + \
-                       '%6.2f%%\t' % (100 * call.data['core_elapsed_time'] / float(self.prof.totals['core_elapsed_time'])) + \
-                       '%6.2f%%\t' % (100 * call.total['instruction_count'] / float(self.prof.totals['instruction_count'])) + \
-                       '%7.2f\t' % (call.total['instruction_count'] / (self.prof.fs_to_cycles * float(call.total['core_elapsed_time']))) + \
-                       '%7.2f\t' % (1000 * call.total['l2miss'] / float(call.total['instruction_count'])) + \
+                       '%6.2f%%\t' % (100 * call.total['core_elapsed_time'] / float(self.prof.totals['core_elapsed_time'] or 1)) + \
+                       '%6.2f%%\t' % (100 * call.data['core_elapsed_time'] / float(self.prof.totals['core_elapsed_time'] or 1)) + \
+                       '%6.2f%%\t' % (100 * call.total['instruction_count'] / float(self.prof.totals['instruction_count'] or 1)) + \
+                       '%7.2f\t' % (call.total['instruction_count'] / (self.prof.fs_to_cycles * float(call.total['core_elapsed_time'] or 1))) + \
+                       '%7.2f\t' % (1000 * call.total['l2miss'] / float(call.total['instruction_count'] or 1)) + \
                        '  ' * offset + call.name
 
 
