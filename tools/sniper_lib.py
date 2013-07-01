@@ -137,30 +137,6 @@ def parse_results_from_dir(resultsdir, partial = None, metrics = None):
   results += [ ('ncores', -1, ncores) ]
   results += [ ('corefreq', idx, 1e9 * float(sniper_config.get_config(simcfg, 'perf_model/core/frequency', idx))) for idx in range(ncores) ]
 
-  ## stdout.txt
-  walltime = 0
-  roi = { 'instrs': 0, 'ipstotal': 0, 'ipscore': 0 }
-  stdout = os.path.join(resultsdir, 'stdout.txt')
-  stdout = os.path.exists(stdout) and open(stdout) or []
-  for line in stdout:
-    for marker in ('[SNIPER]', '[GRAPHITE]'):
-      try:
-        if line.startswith('%s Leaving ROI after' % marker):
-          walltime = float(line.split()[-2])
-      except (IndexError, ValueError):
-        pass
-      try:
-        if re.match('^\[%s(:0)?\] Simulated' % marker, line):
-          roi = re.match('\[%s(:0)?\] Simulated ([0-9.]+)M instructions @ ([0-9.]+) KIPS \(([0-9.]+) KIPS / target core' % marker, roi)
-          roi = { 'instrs': float(roi.group(2))*1e6, 'ipstotal': float(roi.group(3))*1e3, 'ipscore': float(roi.group(4))*1e3 }
-      except (IndexError, ValueError):
-        pass
-
-  results.append(('roi.walltime', -1, walltime))
-  results.append(('roi.instrs', -1, roi['instrs']))
-  results.append(('roi.ipstotal', -1, roi['ipstotal']))
-  results.append(('roi.ipscore', -1, roi['ipscore']))
-
   ## sim.info or graphite.out
   siminfo = os.path.join(resultsdir, 'sim.info')
   graphiteout = os.path.join(resultsdir, 'graphite.out')
@@ -183,6 +159,17 @@ def parse_results_from_dir(resultsdir, partial = None, metrics = None):
 
   stats = sniper_stats.SniperStats(resultsdir)
   results += stats.parse_stats((k1, k2), ncores, metrics = metrics)
+
+  if not partial:
+    walltime = [ v for k, _, v in results if k == 'time.walltime' ]
+    instrs = [ v for k, _, v in results if k == 'core.instructions' ]
+    if walltime and instrs:
+      walltime = walltime[0] / 1e6 # microseconds -> seconds
+      instrs = sum(instrs)
+      results.append(('roi.walltime', -1, walltime))
+      results.append(('roi.instrs', -1, instrs))
+      results.append(('roi.ipstotal', -1, instrs / walltime))
+      results.append(('roi.ipscore', -1, instrs / (walltime * ncores)))
 
   ## power.py
   power = {}
