@@ -27,6 +27,7 @@
 #endif
 
 #include "sift_writer.h"
+#include "sift_assert.h"
 #include "bbv_count.h"
 #include "../../include/sim_api.h"
 #include "pinboost_debug.h"
@@ -229,7 +230,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
    for(uint8_t i = 0; i < num_addresses; ++i)
    {
       addresses[i] = thread_data[threadid].dyn_address_queue->front();
-      assert(!thread_data[threadid].dyn_address_queue->empty());
+      sift_assert(!thread_data[threadid].dyn_address_queue->empty());
       thread_data[threadid].dyn_address_queue->pop_front();
 
       if (isbefore)
@@ -239,7 +240,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
          dummy += *(char *)addresses[i];
       }
    }
-   assert(thread_data[threadid].dyn_address_queue->empty());
+   sift_assert(thread_data[threadid].dyn_address_queue->empty());
 
    thread_data[threadid].output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
 
@@ -288,7 +289,7 @@ UINT32 addMemoryModeling(INS ins)
          num_addresses++;
       }
    }
-   assert(num_addresses <= Sift::MAX_DYNAMIC_ADDRESSES);
+   sift_assert(num_addresses <= Sift::MAX_DYNAMIC_ADDRESSES);
 
    return num_addresses;
 }
@@ -316,7 +317,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 {
    ADDRINT syscall_number = PIN_GetContextReg(ctxt, REG_GAX);
 
-   assert(syscall_number < MAX_NUM_SYSCALLS);
+   sift_assert(syscall_number < MAX_NUM_SYSCALLS);
 
    syscall_args_t args;
    #if defined(TARGET_IA32)
@@ -606,7 +607,7 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
    else
    {
       std::cerr << "Error: invalid memory operation type" << std::endl;
-      assert(false);
+      sift_assert(false);
    }
 
    if (lock_signal == Sift::MemUnlock)
@@ -625,7 +626,7 @@ void openFile(THREADID threadid)
 
    if (thread_data[threadid].thread_num != 0)
    {
-      assert(KnobUseResponseFiles.Value() != 0);
+      sift_assert(KnobUseResponseFiles.Value() != 0);
    }
 
    char filename[1024] = {0};
@@ -713,8 +714,8 @@ void closeFile(THREADID threadid)
 // The thread that watched this new thread start is responsible for setting up the connection with the simulator
 VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 {
-   assert(thread_data[threadid].bbv == NULL);
-   assert(thread_data[threadid].dyn_address_queue == NULL);
+   sift_assert(thread_data[threadid].bbv == NULL);
+   sift_assert(thread_data[threadid].dyn_address_queue == NULL);
 
    // The first thread (master) doesn't need to join with anyone else
    GetLock(&new_threadid_lock, threadid);
@@ -832,7 +833,7 @@ BOOL followChild(CHILD_PROCESS childProcess, VOID *val)
 
 VOID forkBefore(THREADID threadid, const CONTEXT *ctxt, VOID *v)
 {
-   assert(!any_thread_in_detail); // Cannot fork after starting ROI
+   sift_assert(!any_thread_in_detail); // Cannot fork after starting ROI
 }
 
 VOID handleRoutineImplicitROI(THREADID threadid, bool begin)
@@ -864,6 +865,15 @@ void routineCallback(RTN rtn, void* v)
          RTN_Close(rtn);
       }
    }
+}
+
+void __sift_assert_fail(__const char *__assertion, __const char *__file,
+                        unsigned int __line, __const char *__function)
+     __THROW
+{
+   std::cerr << "[SIFT_RECORDER] " << __file << ":" << __line << ": " << __function
+             << ": Assertion `" << __assertion << "' failed." << std::endl;
+   abort();
 }
 
 int main(int argc, char **argv)

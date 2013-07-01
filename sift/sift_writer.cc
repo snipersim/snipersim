@@ -1,9 +1,9 @@
 #include "sift_writer.h"
 #include "sift_format.h"
 #include "sift_utils.h"
+#include "sift_assert.h"
 #include "zfstream.h"
 
-#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -16,6 +16,17 @@
 #define VERBOSE 0
 #define VERBOSE_HEX 0
 #define VERBOSE_ICACHE 0
+
+
+// Weakly-linked default implementation of sift_assert() failure handler
+__attribute__ ((weak)) void
+__sift_assert_fail(__const char *__assertion, __const char *__file,
+                   unsigned int __line, __const char *__function)
+       __THROW
+{
+   __assert_fail(__assertion, __file, __line, __function);
+}
+
 
 Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn, bool send_va2pa_mapping)
    : response(NULL)
@@ -88,8 +99,8 @@ void Sift::Writer::End()
 
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(respRec.Other));
-      assert(respRec.Other.zero == 0);
-      assert(respRec.Other.type == RecOtherEndResponse);
+      sift_assert(respRec.Other.zero == 0);
+      sift_assert(respRec.Other.type == RecOtherEndResponse);
 */
       delete response;
       response = NULL;
@@ -122,8 +133,8 @@ Sift::Writer::~Writer()
 
 void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed)
 {
-   assert(size < 16);
-   assert(num_addresses <= MAX_DYNAMIC_ADDRESSES);
+   sift_assert(size < 16);
+   sift_assert(num_addresses <= MAX_DYNAMIC_ADDRESSES);
 
    if (m_requires_icache_per_insn)
    {
@@ -286,9 +297,9 @@ int32_t Sift::Writer::NewThread()
 
    if (!response)
    {
-     assert(strcmp(m_response_filename, "") != 0);
+     sift_assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
-     assert(!response->fail());
+     sift_assert(!response->fail());
    }
 
    int32_t retcode = 0;
@@ -296,7 +307,7 @@ int32_t Sift::Writer::NewThread()
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      assert(respRec.Other.zero == 0);
+      sift_assert(respRec.Other.zero == 0);
 
       switch(respRec.Other.type)
       {
@@ -304,7 +315,7 @@ int32_t Sift::Writer::NewThread()
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Read NewThreadResponse" << std::endl;
             #endif
-            assert(respRec.Other.size == sizeof(retcode));
+            sift_assert(respRec.Other.size == sizeof(retcode));
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Got NewThreadResponse thread=" << retcode << std::endl;
@@ -312,7 +323,7 @@ int32_t Sift::Writer::NewThread()
             return retcode;
             break;
          default:
-            assert(false);
+            sift_assert(false);
             break;
       }
    }
@@ -363,9 +374,9 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
 
    if (!response)
    {
-     assert(strcmp(m_response_filename, "") != 0);
+     sift_assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
-     assert(!response->fail());
+     sift_assert(!response->fail());
    }
 
    uint64_t retcode = 0;
@@ -373,8 +384,8 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      assert(!response->fail());
-      assert(respRec.Other.zero == 0);
+      sift_assert(!response->fail());
+      sift_assert(respRec.Other.zero == 0);
 
       switch(respRec.Other.type)
       {
@@ -382,7 +393,7 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Read SyscallResponse" << std::endl;
             #endif
-            assert(respRec.Other.size == sizeof(retcode));
+            sift_assert(respRec.Other.size == sizeof(retcode));
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
             return retcode;
             break;
@@ -394,17 +405,17 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
             uint32_t size;
             MemoryLockType lock;
             MemoryOpType type;
-            assert(respRec.Other.size >= (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type)));
+            sift_assert(respRec.Other.size >= (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type)));
             response->read(reinterpret_cast<char*>(&addr), sizeof(addr));
             response->read(reinterpret_cast<char*>(&size), sizeof(size));
             response->read(reinterpret_cast<char*>(&lock), sizeof(lock));
             response->read(reinterpret_cast<char*>(&type), sizeof(type));
             uint32_t payload_size = respRec.Other.size - (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type));
-            assert(handleAccessMemoryFunc);
+            sift_assert(handleAccessMemoryFunc);
             if (type == MemRead)
             {
-               assert(payload_size == 0);
-               assert(size > 0);
+               sift_assert(payload_size == 0);
+               sift_assert(size > 0);
                char *read_data = new char[size];
                bzero(read_data, size);
                // Do the read here via a callback to populate the read buffer
@@ -434,8 +445,8 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
                #if VERBOSE > 0
                std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Write" << std::endl;
                #endif
-               assert(payload_size > 0);
-               assert(payload_size == size);
+               sift_assert(payload_size > 0);
+               sift_assert(payload_size == size);
                char *payload = new char[payload_size];
                response->read(reinterpret_cast<char*>(payload), sizeof(payload_size));
                // Do the write here via a callback to write the data to the appropriate address
@@ -456,7 +467,7 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
             }
             else
             {
-               assert(false);
+               sift_assert(false);
             }
             break;
       }
@@ -485,7 +496,7 @@ int32_t Sift::Writer::Join(int32_t thread)
 
    if (!response)
    {
-     assert(strcmp(m_response_filename, "") != 0);
+     sift_assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
    }
 
@@ -497,7 +508,7 @@ int32_t Sift::Writer::Join(int32_t thread)
       #endif
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      assert(respRec.Other.zero == 0);
+      sift_assert(respRec.Other.zero == 0);
 
       switch(respRec.Other.type)
       {
@@ -505,12 +516,12 @@ int32_t Sift::Writer::Join(int32_t thread)
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Read JoinResponse" << std::endl;
             #endif
-            assert(respRec.Other.size == sizeof(retcode));
+            sift_assert(respRec.Other.size == sizeof(retcode));
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
             return retcode;
             break;
          default:
-            assert(false);
+            sift_assert(false);
             break;
       }
    }
@@ -529,16 +540,16 @@ void Sift::Writer::Sync()
 
    if (!response)
    {
-     assert(strcmp(m_response_filename, "") != 0);
+     sift_assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
    }
 
    // wait for reply
    Record respRec;
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-   assert(respRec.Other.zero == 0);
-   assert(respRec.Other.type == RecOtherSyncResponse);
-   assert(respRec.Other.size == 0);
+   sift_assert(respRec.Other.zero == 0);
+   sift_assert(respRec.Other.type == RecOtherSyncResponse);
+   sift_assert(respRec.Other.size == 0);
 }
 
 uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
@@ -556,16 +567,16 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 
    if (!response)
    {
-     assert(strcmp(m_response_filename, "") != 0);
+     sift_assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
    }
 
    // wait for reply
    Record respRec;
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-   assert(respRec.Other.zero == 0);
-   assert(respRec.Other.type == RecOtherMagicInstructionResponse);
-   assert(respRec.Other.size == sizeof(uint64_t));
+   sift_assert(respRec.Other.zero == 0);
+   sift_assert(respRec.Other.type == RecOtherMagicInstructionResponse);
+   sift_assert(respRec.Other.size == sizeof(uint64_t));
    uint64_t result;
    response->read(reinterpret_cast<char*>(&result), sizeof(uint64_t));
    return result;
@@ -622,7 +633,7 @@ uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
    }
    off64_t index = vp * sizeof(intptr_t);
    off64_t offset = lseek64(fd_va, index, SEEK_SET);
-   assert(offset == index);
+   sift_assert(offset == index);
    intptr_t pp;
    ssize_t size = read(fd_va, &pp, sizeof(intptr_t));
 
