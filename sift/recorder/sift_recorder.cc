@@ -899,6 +899,7 @@ int main(int argc, char **argv)
    if (fast_forward_target == 0 && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
       any_thread_in_detail = true;
+      openFile(0);
    }
    if (KnobEmulateSyscalls.Value())
    {
