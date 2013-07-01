@@ -4,6 +4,7 @@
 #include "trace_manager.h"
 #include "magic_client.h"
 #include "logmem.h"
+#include "exceptions.h"
 
 #include <signal.h>
 
@@ -28,6 +29,8 @@ int main(int argc, char* argv[])
    #ifdef LOGMEM_ENABLED
    signal(SIGUSR1, dumpLogmem);
    #endif
+
+   registerExceptionHandler();
 
    string_vec args;
 

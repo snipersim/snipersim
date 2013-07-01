@@ -8,11 +8,16 @@ def ex(cmd):
 bin = os.path.join(env_setup.sim_root(), 'lib', 'pin_sim.so')
 base = eval('0x' + ex('nm %s | grep _Z5rdtscv' % bin).split()[0])
 text = eval('0x' + ex(r'objdump -h %s | grep "\.text"' % bin).split()[5])
+bin_alt = os.path.join(env_setup.sim_root(), 'lib', 'sniper')
 
 def set_rdtsc(addr):
-  global real, offset
-  real = addr
-  offset = real - base
+  global bin, offset
+  if addr == 0:
+    bin = bin_alt
+    offset = 0
+  else:
+    real = addr
+    offset = real - base
 
 addr2line_cache = {}
 def addr2line(a):
