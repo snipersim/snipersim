@@ -867,13 +867,30 @@ void routineCallback(RTN rtn, void* v)
    }
 }
 
+bool assert_ignore()
+{
+   struct stat st;
+   if (stat((KnobOutputFile.Value() + ".sift_done").c_str(), &st) == 0)
+      return true;
+   else
+      return false;
+}
+
 void __sift_assert_fail(__const char *__assertion, __const char *__file,
                         unsigned int __line, __const char *__function)
      __THROW
 {
-   std::cerr << "[SIFT_RECORDER] " << __file << ":" << __line << ": " << __function
-             << ": Assertion `" << __assertion << "' failed." << std::endl;
-   abort();
+   if (assert_ignore())
+   {
+      // Timing model says it's done, ignore assert and pretend to have exited cleanly
+      exit(0);
+   }
+   else
+   {
+      std::cerr << "[SIFT_RECORDER] " << __file << ":" << __line << ": " << __function
+                << ": Assertion `" << __assertion << "' failed." << std::endl;
+      abort();
+   }
 }
 
 int main(int argc, char **argv)

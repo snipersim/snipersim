@@ -199,6 +199,15 @@ void TraceManager::stop()
    sleep(1);
    // Some threads may be blocked (SIFT reader, syscall, etc.). Don't wait for them or we'll deadlock.
    m_done.signal();
+   // Notify SIFT recorders that simulation is done,
+   // and that they should hide their errors when writing to an already-closed SIFT pipe.
+   mark_done();
+}
+
+void TraceManager::mark_done()
+{
+   FILE *fp = fopen((m_trace_prefix + ".sift_done").c_str(), "w");
+   fclose(fp);
 }
 
 void TraceManager::wait()

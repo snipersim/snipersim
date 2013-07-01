@@ -47,6 +47,7 @@ class TraceManager
       void init();
       void start();
       void stop();
+      void mark_done();
       void wait();
       void run();
       thread_id_t createThread(app_id_t app_id, SubsecondTime time);

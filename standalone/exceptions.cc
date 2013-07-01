@@ -1,5 +1,6 @@
 #include "exceptions.h"
 #include "simulator.h"
+#include "trace_manager.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -19,6 +20,12 @@ static void exceptionHandler(int sig, siginfo_t *scp, void *ctxt)
    }
    else
       in_handler = true;
+
+   // Hide errors caused by failing SIFT writers, the root cause is the timing model failure
+   if (Sim()->getTraceManager())
+   {
+      Sim()->getTraceManager()->mark_done();
+   }
 
    const int BACKTRACE_SIZE = 16;
    void * backtrace_buffer[BACKTRACE_SIZE];
