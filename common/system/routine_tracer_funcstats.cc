@@ -75,7 +75,8 @@ void RoutineTracerFunctionStats::RtnThread::functionBegin(IntPtr eip)
    Sim()->getThreadStatsManager()->update(m_thread->getId());
 
    functionBeginHelper(eip, m_values_start);
-   functionBeginHelper(eip, m_values_start_full[m_stack]);
+   if (m_stack.size())
+      functionBeginHelper(eip, m_values_start_full[m_stack]);
 
 }
 
@@ -85,7 +86,7 @@ void RoutineTracerFunctionStats::RtnThread::functionEnd(IntPtr eip, bool is_func
 
    functionEndHelper(eip, is_function_start ? 1 : 0);
    // Ignore simulated stack unwind at end of ROI (m_stack isn't kept up-to-date during this)
-   if (eip == m_stack.back())
+   if (m_stack.size() && eip == m_stack.back())
       functionEndFullHelper(m_stack, is_function_start ? 1 : 0);
 }
 
@@ -96,7 +97,10 @@ UInt64 RoutineTracerFunctionStats::RtnThread::getThreadStat(ThreadStatsManager::
 
 UInt64 RoutineTracerFunctionStats::RtnThread::getCurrentRoutineId()
 {
-   return (UInt64)m_master->getRoutineFullPtr(m_stack);
+   if (m_stack.size())
+      return (UInt64)m_master->getRoutineFullPtr(m_stack);
+   else
+      return 0;
 }
 
 RoutineTracerFunctionStats::RtnMaster::RtnMaster()
