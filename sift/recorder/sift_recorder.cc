@@ -752,16 +752,16 @@ VOID threadFinishHelper(VOID *arg)
       thread_data[threadid].output->Syscall(SYS_futex, (char*)args, sizeof(args));
    }
 
+   if (thread_data[threadid].output)
+   {
+      closeFile(threadid);
+   }
+
    delete thread_data[threadid].dyn_address_queue;
    delete thread_data[threadid].bbv;
 
    thread_data[threadid].dyn_address_queue = NULL;
    thread_data[threadid].bbv = NULL;
-
-   if (thread_data[threadid].output)
-   {
-      closeFile(threadid);
-   }
 }
 
 VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)
