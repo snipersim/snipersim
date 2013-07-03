@@ -17,13 +17,15 @@ class vistream;
 namespace Sift
 {
    // Static information
-   typedef struct
+   class StaticInstruction
    {
-      uint64_t addr;
-      uint8_t size;
-      uint8_t data[16];
-      const xed_decoded_inst_t xed_inst;
-   } StaticInstruction;
+      public:
+         uint64_t addr;
+         uint8_t size;
+         uint8_t data[16];
+         const xed_decoded_inst_t xed_inst;
+         const StaticInstruction *next;
+   };
 
    // Dynamic information
    typedef struct
@@ -81,7 +83,9 @@ namespace Sift
 
          bool m_trace_has_pa;
          bool m_seen_end;
+         const StaticInstruction *m_last_sinst;
 
+         const Sift::StaticInstruction* decodeInstruction(uint64_t addr, uint8_t size);
          const Sift::StaticInstruction* getStaticInstruction(uint64_t addr, uint8_t size);
          void sendSyscallResponse(uint64_t return_code);
          void sendSimpleResponse(RecOtherType type, void *data = NULL, uint32_t size = 0);

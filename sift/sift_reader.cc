@@ -40,6 +40,7 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , m_id(id)
    , m_trace_has_pa(false)
    , m_seen_end(false)
+   , m_last_sinst(NULL)
 {
    if (!xed_initialized)
    {
@@ -508,38 +509,62 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
    }
 }
 
+const Sift::StaticInstruction* Sift::Reader::decodeInstruction(uint64_t addr, uint8_t size)
+{
+   StaticInstruction *sinst = new StaticInstruction();
+   sinst->addr = addr;
+   sinst->size = size;
+   sinst->next = NULL;
+
+   uint8_t * dst = sinst->data;
+   uint64_t base_addr = addr & ICACHE_PAGE_MASK;
+   while(size > 0)
+   {
+      uint32_t offset = (dst == sinst->data) ? addr & ICACHE_OFFSET_MASK : 0;
+      uint32_t _size = std::min(uint32_t(size), ICACHE_SIZE - offset);
+      assert(icache.count(base_addr));
+      memcpy(dst, icache[base_addr] + offset, _size);
+      dst += _size;
+      size -= _size;
+      base_addr += ICACHE_SIZE;
+   }
+
+   xed_state_t xed_state = m_xed_state_init;
+   xed_decoded_inst_zero_set_mode((xed_decoded_inst_t*)&sinst->xed_inst, &xed_state);
+   xed_error_enum_t result = xed_decode((xed_decoded_inst_t*)&sinst->xed_inst, sinst->data, sinst->size);
+   assert(result == XED_ERROR_NONE);
+
+   return sinst;
+}
+
 const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(uint64_t addr, uint8_t size)
 {
-   if (!scache.count(addr))
+   const StaticInstruction *sinst;
+
+   // Lookup in a large unordered_map is quite expensive if we have to do this for every dynamic instruction
+   // Therefore, keep a pointer to the probable next instruction in each (static) instruction
+   if (m_last_sinst && m_last_sinst->next && m_last_sinst->next->addr == addr)
    {
-      StaticInstruction *sinst = new StaticInstruction();
-      sinst->addr = addr;
-      sinst->size = size;
-
-      uint8_t * dst = sinst->data;
-      uint64_t base_addr = addr & ICACHE_PAGE_MASK;
-      while(size > 0)
-      {
-         uint32_t offset = (dst == sinst->data) ? addr & ICACHE_OFFSET_MASK : 0;
-         uint32_t _size = std::min(uint32_t(size), ICACHE_SIZE - offset);
-         assert(icache.count(base_addr));
-         memcpy(dst, icache[base_addr] + offset, _size);
-         dst += _size;
-         size -= _size;
-         base_addr += ICACHE_SIZE;
-      }
-
-      xed_state_t xed_state = m_xed_state_init;
-      xed_decoded_inst_zero_set_mode((xed_decoded_inst_t*)&sinst->xed_inst, &xed_state);
-      xed_error_enum_t result = xed_decode((xed_decoded_inst_t*)&sinst->xed_inst, sinst->data, sinst->size);
-      assert(result == XED_ERROR_NONE);
-
+      sinst = m_last_sinst->next;
+   }
+   else if (scache.count(addr))
+   {
+      sinst = scache[addr];
+      assert(sinst->size == size);
+   }
+   else
+   {
+      sinst = decodeInstruction(addr, size);
       scache[addr] = sinst;
+   }
 
-   } else
-      assert(scache[addr]->size == size);
+   if (m_last_sinst && m_last_sinst->next == NULL)
+   {
+      ((StaticInstruction*)m_last_sinst)->next = sinst;
+   }
+   m_last_sinst = sinst;
 
-   return scache[addr];
+   return sinst;
 }
 
 void Sift::Reader::sendSyscallResponse(uint64_t return_code)
