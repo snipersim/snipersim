@@ -10,6 +10,7 @@
 #include <sys/file.h>
 #include <sys/syscall.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 void beginROI(THREADID threadid)
 {
