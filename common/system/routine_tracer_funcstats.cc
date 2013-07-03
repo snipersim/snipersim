@@ -200,11 +200,18 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
    }
 }
 
-RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<UInt64>& stack)
+RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<UInt64>& _stack)
 {
    ScopedLock sl(m_lock);
 
-   LOG_ASSERT_ERROR(m_routines.count(stack.back()), "Routine %lx not found", stack.back());
+   // The thread may be running and updating its stack, make a local copy so we can use a consistent value
+   const std::deque<UInt64> stack = _stack;
+
+   if (m_routines.count(stack.back()) == 0)
+   {
+      m_routines[stack.back()] = new RoutineTracerFunctionStats::Routine(stack.back(), "(unknown)", "(unknown)", 0, 0, 0, "");
+      m_routines[stack.back()]->setProvisional(true);
+   }
 
    if (m_callstack_routines.count(stack) == 0)
    {
