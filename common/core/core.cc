@@ -62,6 +62,7 @@ UInt64 Core::g_instructions_hpi_global_callback = 0;
 
 Core::Core(SInt32 id)
    : m_core_id(id)
+   , m_dvfs_domain(Sim()->getDvfsManager()->getCoreDomain(id))
    , m_thread(NULL)
    , m_dyninfo_save_used(false)
    , m_bbv(id)
@@ -109,11 +110,6 @@ Core::~Core()
    if (m_clock_skew_minimization_client)
       delete m_clock_skew_minimization_client;
    delete m_network;
-}
-
-const ComponentPeriod* Core::getDvfsDomain() const
-{
-   return Sim()->getDvfsManager()->getCoreDomain(this->getId());
 }
 
 void Core::enablePerformanceModels()
