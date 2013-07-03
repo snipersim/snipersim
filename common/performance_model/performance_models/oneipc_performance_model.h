@@ -15,6 +15,10 @@ private:
    bool isModeled(Instruction const* instruction) const;
 
    UInt64 m_latency_cutoff;
+
+   SubsecondTime m_cpiBase;
+   SubsecondTime m_cpiBranchPredictor;
+   std::vector<SubsecondTime> m_cpiDataCache;
 };
 
 #endif // ONEIPC_PERFORMANCE_MODEL_H

@@ -49,7 +49,7 @@ class CpiData:
 
     # Split up cpiBase into 1/issue and path dependencies
     for core in range(ncores):
-      if data[core]['SyncMemAccess'] == data[core]['SyncPthreadBarrier']:
+      if data[core].get('SyncMemAccess', 0) == data[core].get('SyncPthreadBarrier', 0):
         # Work around a bug in iGraphite where SyncMemAccess wrongly copied from SyncPthreadBarrier
         # Since SyncMemAccess usually isn't very big anyway, setting it to zero should be accurate enough
         # For simulations with a fixed version of iGraphite, the changes of SyncMemAccess being identical to
