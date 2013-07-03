@@ -8,6 +8,8 @@
 #include "fault_injection.h"
 #include "hooks_manager.h"
 
+#include <cstring>
+
 // Define to allow private L2 caches not to take the stack lock.
 // Works in most cases, but seems to have some more bugs or race conditions, preventing it from being ready for prime time.
 //#define PRIVATE_L2_OPTIMIZATION
@@ -291,13 +293,13 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
 
    SubsecondTime t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
 
-   bool cache_hit = operationPermissibleinCache(ca_address, mem_op_type), prefetch_hit = false;
+   CacheBlockInfo *cache_block_info;
+   bool cache_hit = operationPermissibleinCache(ca_address, mem_op_type, &cache_block_info), prefetch_hit = false;
 
    if (!cache_hit && m_perfect)
    {
       cache_hit = true;
       hit_where = HitWhere::where_t(m_mem_component);
-      SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(ca_address);
       if (cache_block_info)
          cache_block_info->setCState(CacheState::MODIFIED);
       else
@@ -309,7 +311,7 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
       ScopedLock sl(getLock());
       // Update the Cache Counters
       getCache()->updateCounters(cache_hit);
-      updateCounters(mem_op_type, ca_address, cache_hit, getCacheState(ca_address), Prefetch::NONE);
+      updateCounters(mem_op_type, ca_address, cache_hit, getCacheState(cache_block_info), Prefetch::NONE);
    }
 
    if (cache_hit)
@@ -318,7 +320,6 @@ MYLOG("L1 hit");
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
       hit_where = (HitWhere::where_t)m_mem_component;
 
-      SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(ca_address);
       if (cache_block_info->hasOption(CacheBlockInfo::WARMUP) && Sim()->getInstrumentationMode() != InstMode::CACHE_ONLY)
       {
          stats.hits_warmup++;
@@ -438,6 +439,8 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
       SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
       copyDataFromNextLevel(mem_op_type, ca_address, modeled, t_now);
 
+      cache_block_info = getCacheBlockInfo(ca_address);
+
       #ifdef PRIVATE_L2_OPTIMIZATION
       #else
       if (!lock_all)
@@ -457,9 +460,8 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
    }
 
 
-   if (modeled && m_next_cache_cntlr && !m_perfect)
+   if (modeled && m_next_cache_cntlr && !m_perfect && Sim()->getConfig()->hasCacheEfficiencyCallbacks())
    {
-      SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(ca_address);
       bool new_bits = cache_block_info->updateUsage(offset, data_length);
       if (new_bits)
       {
@@ -1072,11 +1074,14 @@ MYLOG("SH REQ @ %lx", address);
 
 bool
 CacheCntlr::operationPermissibleinCache(
-      IntPtr address, Core::mem_op_t mem_op_type)
+      IntPtr address, Core::mem_op_t mem_op_type, CacheBlockInfo **cache_block_info)
 {
-   // TODO: Verify why this works
+   CacheBlockInfo *block_info = getCacheBlockInfo(address);
+   if (cache_block_info != NULL)
+      *cache_block_info = block_info;
+
    bool cache_hit = false;
-   CacheState::cstate_t cstate = getCacheState(address);
+   CacheState::cstate_t cstate = getCacheState(block_info);
 MYLOG("address %lx state %c", address, CStateString(cstate));
 
    switch (mem_op_type)
@@ -1147,6 +1152,12 @@ CacheState::cstate_t
 CacheCntlr::getCacheState(IntPtr address)
 {
    SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
+   return getCacheState(cache_block_info);
+}
+
+CacheState::cstate_t
+CacheCntlr::getCacheState(CacheBlockInfo *cache_block_info)
+{
    return (cache_block_info == NULL) ? CacheState::INVALID : cache_block_info->getCState();
 }
 

@@ -253,7 +253,7 @@ namespace ParametricDramDirectoryMSI
                IntPtr ca_address, UInt32 offset,
                Byte* data_buf, UInt32 data_length);
          bool operationPermissibleinCache(
-               IntPtr address, Core::mem_op_t mem_op_type);
+               IntPtr address, Core::mem_op_t mem_op_type, CacheBlockInfo **cache_block_info = NULL);
 
          void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_start);
          void trainPrefetcher(IntPtr address, bool cache_hit, bool prefetch_hit, SubsecondTime t_issue);
@@ -263,6 +263,7 @@ namespace ParametricDramDirectoryMSI
          // Cache meta-data operations
          SharedCacheBlockInfo* getCacheBlockInfo(IntPtr address);
          CacheState::cstate_t getCacheState(IntPtr address);
+         CacheState::cstate_t getCacheState(CacheBlockInfo *cache_block_info);
          SharedCacheBlockInfo* setCacheState(IntPtr address, CacheState::cstate_t cstate);
 
          // Cache data operations
