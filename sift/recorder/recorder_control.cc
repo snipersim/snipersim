@@ -28,6 +28,15 @@ void beginROI(THREADID threadid)
    }
    any_thread_in_detail = true;
 
+   if (!KnobEmulateSyscalls.Value())
+   {
+      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      {
+         if (thread_data[i].running && !thread_data[i].output)
+            openFile(i);
+      }
+   }
+
    PIN_RemoveInstrumentation();
 }
 
