@@ -5,8 +5,15 @@ import sim
 
 class StopByIcount:
   def _min_callback(self):
-    return min(self.ninstrs_start or (), self.ninstrs, long(1000000))
+    return min(self.ninstrs_start or (), self.ninstrs, self.min_ins_global)
   def setup(self, args):
+    magic = sim.config.get_bool('general/magic')
+    if magic:
+      print '[STOPBYICOUNT] ERROR: Application ROIs are not supported by stop-by-icount'
+      sim.control.abort()
+      self.done = True
+      return
+    self.min_ins_global = long(sim.config.get('core/hook_periodic_ins/ins_global'))
     self.verbose = False
     args = dict(enumerate((args or '').split(':')))
     self.ninstrs = long(args.get(0, 1e9))
@@ -14,23 +21,30 @@ class StopByIcount:
     # Make the start input value canonical
     if start == '':
       start = None
-    if start == None:
+    roiscript = sim.config.get_bool('general/roi_script')
+    if start == None and not roiscript:
       self.roi_rel = True
-      self.ninstrs_start = None
+      self.ninstrs_start = 0
       self.inroi = True
-      print '[STOPBYICOUNT] Starting at ROI'
+      print '[STOPBYICOUNT] Starting in ROI (detail)'
     else:
+      if start == None:
+        # If start == None, then an explicit start has not been set, but --roi-script has also been enabled.
+        # Therefore, set to start on the next instruction callback
+        print '[STOPBYICOUNT] WARNING: No explicit start instruction count was set, but --roi-script is set'
+        print '               WARNING: Starting detailed simulation on the next callback, %d instructions' % self.min_ins_global
+        print '               WARNING: To start from the beginning, do not use --roi-script with a single stop argument'
+        start = self.min_ins_global
       self.roi_rel = False
       self.ninstrs_start = long(start)
       self.inroi = False
-      roiscript = sim.config.get_bool('general/roi_script')
       if not roiscript:
-        print '[STOPBYICOUNT] ERROR: --roi-script is not set, but is required when using a start instruction count. Aborting.'
+        print '[STOPBYICOUNT] ERROR: --roi-script is not set, but is required when using a start instruction count. Aborting'
         sim.control.abort()
         self.done = True
         return
       print '[STOPBYICOUNT] Starting after %s instructions' % self.ninstrs_start
-    print '[STOPBYICOUNT] Then stopping after %s instructions' % ((self.roi_rel and 'at least ' or '') + str(self.ninstrs))
+    print '[STOPBYICOUNT] Then stopping after simulating %s instructions in detail' % ((self.roi_rel and 'at least ' or '') + str(self.ninstrs))
     self.done = False
     sim.util.EveryIns(self._min_callback(), self.periodic, roi_only = (start == None))
   def periodic(self, icount, icount_delta):
@@ -38,12 +52,8 @@ class StopByIcount:
       return
     if self.verbose:
       print '[STOPBYICOUNT] Periodic at', icount, ' delta =', icount_delta
-    # For ROI-relative starts, setup an approximate starting instruction count
-    if self.ninstrs_start == None:
-      min_delta = self._min_callback()
-      self.ninstrs_start = (icount / min_delta) * min_delta
     if self.inroi and icount > (self.ninstrs + self.ninstrs_start):
-      print '[STOPBYICOUNT] Ending ROI after %s instructions' % ((self.roi_rel and 'at least ' or '') + str(icount))
+      print '[STOPBYICOUNT] Ending ROI after %s instructions (%s requested)' % (icount, self.ninstrs)
       sim.control.set_roi(False)
       self.inroi = False
       self.done = True
