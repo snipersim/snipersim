@@ -59,6 +59,7 @@ void HooksPy::setup()
    PyControl::setup();
    PyBbv::setup();
    PyMem::setup();
+   PyThread::setup();
 }
 
 void HooksPy::fini()

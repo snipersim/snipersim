@@ -5,6 +5,7 @@ import sim_dvfs as dvfs
 import sim_control as control
 import sim_bbv as bbv
 import sim_mem as mem
+import sim_thread as thread
 import util
 
 import os, sqlite3

@@ -46,6 +46,10 @@ class HooksPy {
           public:
               static void setup(void);
       };
+      class PyThread {
+          public:
+              static void setup(void);
+      };
 };
 
 #endif // HOOKS_PY_H
