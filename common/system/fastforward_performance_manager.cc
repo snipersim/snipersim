@@ -78,7 +78,7 @@ FastForwardPerformanceManager::instr_count(core_id_t core_id)
 {
    if (m_enabled)
    {
-       Sim()->getCoreManager()->getCoreFromID(core_id)->getThread()->getClockSkewMinimizationClient()->synchronize(SubsecondTime::Zero(), true);
+       Sim()->getCoreManager()->getCoreFromID(core_id)->getClockSkewMinimizationClient()->synchronize(SubsecondTime::Zero(), true);
 
       if (!Sim()->isRunning())
       {

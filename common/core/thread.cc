@@ -5,7 +5,6 @@
 #include "core_manager.h"
 #include "sync_client.h"
 #include "performance_model.h"
-#include "clock_skew_minimization_object.h"
 #include "routine_tracer.h"
 #include "config.hpp"
 
@@ -19,7 +18,6 @@ Thread::Thread(thread_id_t thread_id, app_id_t app_id)
 {
    m_syscall_model = new SyscallMdl(this);
    m_sync_client = new SyncClient(this);
-   m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(this);
    if (Sim()->getRoutineTracer())
       m_rtn_tracer = Sim()->getRoutineTracer()->getThreadHandler(this);
    memset(&m_os_info, 0, sizeof(m_os_info));
@@ -29,8 +27,6 @@ Thread::~Thread()
 {
    delete m_syscall_model;
    delete m_sync_client;
-   if (m_clock_skew_minimization_client)
-      delete m_clock_skew_minimization_client;
    if (m_rtn_tracer)
       delete m_rtn_tracer;
 }
@@ -89,15 +85,3 @@ bool Thread::updateCoreTLS(int threadIndex)
    else
       return false;
 }
-
-
-/*
-   // TODO: these were in Core::{enable,disable}PerformanceModels, do we still need them?
-   // With the Pin front-end, no sync calls are made when not in DETAILED instrumentation mode, so it seems to work without this
-
-   if (m_clock_skew_minimization_client)
-      m_clock_skew_minimization_client->enable();
-
-   if (m_clock_skew_minimization_client)
-      m_clock_skew_minimization_client->disable();
-*/

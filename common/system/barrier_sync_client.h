@@ -7,12 +7,12 @@
 #include "subsecond_time.h"
 
 // Forward Decls
-class Thread;
+class Core;
 
 class BarrierSyncClient : public ClockSkewMinimizationClient
 {
    private:
-      Thread* m_thread;
+      Core* m_core;
 
       SubsecondTime m_barrier_interval;
       SubsecondTime m_next_sync_time;
@@ -20,7 +20,7 @@ class BarrierSyncClient : public ClockSkewMinimizationClient
       UInt32 m_num_outstanding;
 
    public:
-      BarrierSyncClient(Thread* thread);
+      BarrierSyncClient(Core* core);
       ~BarrierSyncClient();
 
       void enable() {}

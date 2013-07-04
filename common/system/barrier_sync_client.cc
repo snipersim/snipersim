@@ -1,15 +1,14 @@
 #include "barrier_sync_client.h"
 #include "simulator.h"
 #include "config.h"
-#include "thread.h"
 #include "core.h"
 #include "performance_model.h"
 #include "subsecond_time.h"
 #include "dvfs_manager.h"
 #include "config.hpp"
 
-BarrierSyncClient::BarrierSyncClient(Thread* thread):
-   m_thread(thread),
+BarrierSyncClient::BarrierSyncClient(Core* core):
+   m_core(core),
    m_num_outstanding(0)
 {
    try
@@ -29,18 +28,15 @@ BarrierSyncClient::~BarrierSyncClient()
 void
 BarrierSyncClient::synchronize(SubsecondTime time, bool ignore_time, bool abort_func(void*), void* abort_arg)
 {
-   Core *core = m_thread->getCore();
    SubsecondTime curr_elapsed_time = time;
    if (time == SubsecondTime::Zero())
-      curr_elapsed_time = core->getPerformanceModel()->getElapsedTime();
+      curr_elapsed_time = m_core->getPerformanceModel()->getElapsedTime();
 
    if (curr_elapsed_time >= m_next_sync_time || ignore_time)
    {
       // TODO: implement interruptable wait
 
-      Sim()->getClockSkewMinimizationServer()->synchronize(m_thread->getId(), curr_elapsed_time);
-
-      m_thread->reschedule(curr_elapsed_time, core);
+      Sim()->getClockSkewMinimizationServer()->synchronize(m_core->getId(), curr_elapsed_time);
 
       // Update 'm_next_sync_time'
       m_next_sync_time = ((curr_elapsed_time / m_barrier_interval) * m_barrier_interval) + m_barrier_interval;

@@ -100,6 +100,8 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
 
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_START, (UInt64)&args);
+   // Note: we may have been rescheduled during HOOK_THREAD_START
+   // (Happens if core was occupied during our createThread() but became free since then)
 
    Core *core = thread->getCore();
    if (core)
@@ -159,17 +161,15 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
       Sim()->getSyscallServer()->futexWake(thread_id, (int*)thread->m_os_info.tid_ptr, 1, FUTEX_BITSET_MATCH_ANY, time, end_time);
    }
 
-   HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);
-   if (Sim()->getClockSkewMinimizationServer())
-      Sim()->getClockSkewMinimizationServer()->signal();
-
    // Set the CoreState to 'IDLE'
    core->setState(Core::IDLE);
 
    m_thread_tls->set(NULL);
    thread->setCore(NULL);
    thread->updateCoreTLS();
+
+   HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);
 }
 
 thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id, thread_func_t func, void *arg)
@@ -225,8 +225,6 @@ void ThreadManager::waitForThreadStart(thread_id_t thread_id, thread_id_t wait_t
 
 void ThreadManager::moveThread(thread_id_t thread_id, core_id_t core_id, SubsecondTime time)
 {
-   LOG_ASSERT_ERROR(getThreadState(thread_id) != Core::INITIALIZING, "Thread is initializing, it cannot be moved right now.");
-
    Thread *thread = getThreadFromID(thread_id);
 
    if (Core *core = thread->getCore())
@@ -240,7 +238,7 @@ void ThreadManager::moveThread(thread_id_t thread_id, core_id_t core_id, Subseco
    {
       if (thread->getCore() == NULL)
       {
-         // Unless core was stalled for sync/futex/..., wake it up
+         // Unless thread was stalled for sync/futex/..., wake it up
          if (
             m_thread_state[thread_id].status == Core::STALLED
             && m_thread_state[thread_id].stalled_reason == STALL_UNSCHEDULED
@@ -250,7 +248,8 @@ void ThreadManager::moveThread(thread_id_t thread_id, core_id_t core_id, Subseco
 
       Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
       thread->setCore(core);
-      core->setState(Core::RUNNING);
+      if (getThreadState(thread_id) != Core::STALLED)
+         core->setState(Core::RUNNING);
    }
 
    HooksManager::ThreadMigrate args = { thread_id: thread_id, core_id: core_id, time: time };
@@ -329,8 +328,6 @@ void ThreadManager::stallThread_async(thread_id_t thread_id, stall_type_t reason
 
    HooksManager::ThreadStall args = { thread_id: thread_id, reason: reason, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_STALL, (UInt64)&args);
-   if (Sim()->getClockSkewMinimizationServer())
-      Sim()->getClockSkewMinimizationServer()->signal();
 }
 
 SubsecondTime ThreadManager::stallThread(thread_id_t thread_id, stall_type_t reason, SubsecondTime time)

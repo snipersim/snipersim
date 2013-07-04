@@ -32,7 +32,6 @@
 #include "handle_args.h"
 #include "log.h"
 #include "instruction_modeling.h"
-#include "clock_skew_minimization.h"
 #include "magic_client.h"
 #include "sampling_manager.h"
 #include "sampling_provider.h"
@@ -248,9 +247,6 @@ VOID traceCallback(TRACE trace, void *v)
    addCheckScheduled(trace, ins_head);
 
    addRtnTracer(trace);
-
-   // Clock Skew Minimization
-   addPeriodicSync(trace, ins_head, inst_mode);
 
    // Routine replacement
    RTN rtn = TRACE_Rtn(trace);

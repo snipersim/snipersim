@@ -7,7 +7,6 @@
 class Core;
 class SyscallMdl;
 class SyncClient;
-class ClockSkewMinimizationClient;
 class RoutineTracerThread;
 
 class Thread
@@ -24,7 +23,6 @@ class Thread
       Core *m_core;
       SyscallMdl *m_syscall_model;
       SyncClient *m_sync_client;
-      ClockSkewMinimizationClient *m_clock_skew_minimization_client;
       RoutineTracerThread *m_rtn_tracer;
       va2pa_func_t m_va2pa_func;
       UInt64 m_va2pa_arg;
@@ -42,7 +40,6 @@ class Thread
       thread_id_t getId() const { return m_thread_id; }
       app_id_t getAppId() const { return m_app_id; }
       SyncClient *getSyncClient() const { return m_sync_client; }
-      ClockSkewMinimizationClient* getClockSkewMinimizationClient() const { return m_clock_skew_minimization_client; }
       RoutineTracerThread* getRoutineTracer() const { return m_rtn_tracer; }
 
       void setVa2paFunc(va2pa_func_t va2pa_func, UInt64 m_va2pa_arg);

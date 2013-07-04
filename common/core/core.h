@@ -6,6 +6,7 @@ class Thread;
 class Network;
 class MemoryManagerBase;
 class PerformanceModel;
+class ClockSkewMinimizationClient;
 class ShmemPerfModel;
 
 // FIXME: Move this out of here eventually
@@ -78,6 +79,8 @@ class Core
          MEM_MODELED_RETURN,    /* Count + time + return data to construct DynamicInstructionInfo */
       };
 
+      static const char * CoreStateString(State state);
+
       Core(SInt32 id);
       ~Core();
 
@@ -96,6 +99,7 @@ class Core
       void setThread(Thread *thread) { m_thread = thread; }
       Network *getNetwork() { return m_network; }
       PerformanceModel *getPerformanceModel() { return m_performance_model; }
+      ClockSkewMinimizationClient* getClockSkewMinimizationClient() const { return m_clock_skew_minimization_client; }
       MemoryManagerBase *getMemoryManager() { return m_memory_manager; }
       PinMemoryManager *getPinMemoryManager() { return m_pin_memory_manager; }
       ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
@@ -127,6 +131,7 @@ class Core
       Thread *m_thread;
       Network *m_network;
       PerformanceModel *m_performance_model;
+      ClockSkewMinimizationClient *m_clock_skew_minimization_client;
       Lock m_mem_lock;
       DynamicInstructionInfo m_dyninfo_save;
       bool m_dyninfo_save_used;

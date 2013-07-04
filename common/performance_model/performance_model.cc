@@ -292,6 +292,15 @@ void PerformanceModel::iterate()
       m_basic_block_queue.pop();
       m_current_ins_index = 0; // move to beginning of next bb
    }
+
+   synchronize();
+}
+
+void PerformanceModel::synchronize()
+{
+   ClockSkewMinimizationClient *client = m_core->getClockSkewMinimizationClient();
+   if (client)
+      client->synchronize(SubsecondTime::Zero(), false);
 }
 
 void PerformanceModel::pushDynamicInstructionInfo(DynamicInstructionInfo &i)

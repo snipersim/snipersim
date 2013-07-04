@@ -3,8 +3,9 @@
 
 #include "fixed_types.h"
 #include "subsecond_time.h"
+#include "log.h"
 
-class Thread;
+class Core;
 
 class ClockSkewMinimizationObject
 {
@@ -26,7 +27,7 @@ protected:
 
 public:
    virtual ~ClockSkewMinimizationClient() {}
-   static ClockSkewMinimizationClient* create(Thread* thread);
+   static ClockSkewMinimizationClient* create(Core* core);
 
    virtual void enable() = 0;
    virtual void disable() = 0;
@@ -55,10 +56,10 @@ public:
    static ClockSkewMinimizationServer* create();
 
    virtual void synchronize(thread_id_t thread_id, SubsecondTime time) = 0;
-   virtual void signal() = 0;
    virtual void release() = 0;
    virtual void advance() = 0;
    virtual void setDisable(bool disable) { }
+   virtual void setGroup(core_id_t core_id, core_id_t master_core_id) = 0;
    virtual void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime()) = 0;
    virtual SubsecondTime getGlobalTime();
 

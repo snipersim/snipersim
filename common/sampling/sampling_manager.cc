@@ -2,7 +2,6 @@
 #include "hooks_manager.h"
 #include "magic_server.h"
 #include "simulator.h"
-#include "thread.h"
 #include "core.h"
 #include "core_manager.h"
 #include "thread_manager.h"
@@ -211,6 +210,6 @@ SamplingManager::instr_count(core_id_t core_id)
             Sim()->getCoreManager()->getCoreFromID(core_id)->setInstructionsCallback(1);
          }
       }
-      Sim()->getCoreManager()->getCoreFromID(core_id)->getThread()->getClockSkewMinimizationClient()->synchronize(SubsecondTime::Zero(), true);
+      Sim()->getCoreManager()->getCoreFromID(core_id)->getClockSkewMinimizationClient()->synchronize(SubsecondTime::Zero(), true);
    }
 }

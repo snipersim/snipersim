@@ -4,6 +4,7 @@
 #include "memory_manager_base.h"
 #include "pin_memory_manager.h"
 #include "performance_model.h"
+#include "clock_skew_minimization_object.h"
 #include "core_manager.h"
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
@@ -36,6 +37,23 @@ const char * ModeledString(Core::MemModeled modeled) {
   return "?";
 }
 
+
+const char * core_state_names[] = {
+   "running",
+   "initializing",
+   "stalled",
+   "sleeping",
+   "waking_up",
+   "idle",
+   "broken",
+};
+static_assert(Core::NUM_STATES == sizeof(core_state_names) / sizeof(core_state_names[0]),
+              "Not enough values in core_state_names");
+const char * Core::CoreStateString(Core::State state)
+{
+   LOG_ASSERT_ERROR(state < Core::NUM_STATES, "Invalid core state %d", state);
+   return core_state_names[state];
+}
 
 
 Lock Core::m_global_core_lock;
@@ -70,6 +88,8 @@ Core::Core(SInt32 id)
 
    m_performance_model = PerformanceModel::create(this);
 
+   m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(this);
+
    m_shmem_perf_model = new ShmemPerfModel();
 
    LOG_PRINT("instantiated memory manager model");
@@ -86,6 +106,8 @@ Core::~Core()
    delete m_memory_manager;
    delete m_shmem_perf_model;
    delete m_performance_model;
+   if (m_clock_skew_minimization_client)
+      delete m_clock_skew_minimization_client;
    delete m_network;
 }
 

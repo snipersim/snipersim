@@ -7,7 +7,6 @@
 #include "instruction.h"
 #include "basic_block.h"
 #include "performance_model.h"
-#include "clock_skew_minimization_object.h"
 #include "instruction_decoder.h"
 #include "config.hpp"
 #include "syscall_model.h"
@@ -400,14 +399,14 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    // simulate
 
    prfmdl->iterate();
+
+   SubsecondTime time = prfmdl->getElapsedTime();
+   m_thread->reschedule(time, NULL);
 }
 
 void TraceThread::run()
 {
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
-
-   ClockSkewMinimizationClient *client = m_thread->getClockSkewMinimizationClient();
-   LOG_ASSERT_ERROR(client != NULL, "Tracing doesn't work without a clock skew minimization scheme"); // as we'd just overrun our basicblock queue
 
    // Open the trace (be sure to do this before potentially blocking on reschedule() as this causes deadlock)
    m_trace.initStream();
@@ -466,15 +465,14 @@ void TraceThread::run()
 
          case InstMode::DETAILED:
             handleInstructionDetailed(inst, next_inst, prfmdl);
+
+            // We may have been rescheduled to a different core
+            core = m_thread->getCore();
+            prfmdl = core->getPerformanceModel();
+
             break;
       }
 
-
-      client->synchronize(SubsecondTime::Zero(), false);
-
-      // We may have been rescheduled to a different core
-      core = m_thread->getCore();
-      prfmdl = core->getPerformanceModel();
 
       if (m_stop)
          break;

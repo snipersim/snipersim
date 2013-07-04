@@ -70,10 +70,6 @@ void SchedulerDynamic::moveThread(thread_id_t thread_id, core_id_t core_id, Subs
                     || Sim()->getThreadManager()->getThreadFromID(thread_id)->getCore() == NULL,
                     "Cannot pre-emptively move or unschedule thread outside of periodic()");
    #endif
-   // onThreadStart will initialize the core that was returned by createThread()
-   // Don't move threads that are initializing, or onThreadStart will use the wrong core
-   LOG_ASSERT_ERROR(Sim()->getThreadManager()->getThreadState(thread_id) != Core::INITIALIZING,
-                    "Cannot move thread %d which is in state INITIALIZING", thread_id);
 
    m_thread_manager->moveThread(thread_id, core_id, time);
    Sim()->getThreadStatsManager()->update(thread_id, time);

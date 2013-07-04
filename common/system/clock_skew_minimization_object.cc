@@ -17,14 +17,14 @@ ClockSkewMinimizationObject::parseScheme(String scheme)
 }
 
 ClockSkewMinimizationClient*
-ClockSkewMinimizationClient::create(Thread* thread)
+ClockSkewMinimizationClient::create(Core* core)
 {
    Scheme scheme = Sim()->getConfig()->getClockSkewMinimizationScheme();
 
    switch (scheme)
    {
       case BARRIER:
-         return new BarrierSyncClient(thread);
+         return new BarrierSyncClient(core);
 
       default:
          LOG_PRINT_ERROR("Unrecognized scheme: %u", scheme);

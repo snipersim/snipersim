@@ -22,15 +22,22 @@
 
 void InstructionModeling::handleBasicBlock(THREADID thread_id, BasicBlock *sim_basic_block)
 {
-   Core *core = localStore[thread_id].thread->getCore();
+   Thread *thread = localStore[thread_id].thread;
+   Core *core = thread->getCore();
    assert(core);
    PerformanceModel *prfmdl = core->getPerformanceModel();
 
-   prfmdl->queueBasicBlock(sim_basic_block);
-
-   #ifndef ENABLE_PERF_MODEL_OWN_THREAD
+#ifndef ENABLE_PERF_MODEL_OWN_THREAD
    prfmdl->iterate();
-   #endif
+   SubsecondTime time = prfmdl->getElapsedTime();
+   if (thread->reschedule(time, core))
+   {
+      core = thread->getCore();
+      prfmdl = core->getPerformanceModel();
+   }
+#endif
+
+   prfmdl->queueBasicBlock(sim_basic_block);
 }
 
 static void handleBranch(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)

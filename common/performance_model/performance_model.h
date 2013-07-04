@@ -31,6 +31,7 @@ public:
    void queueBasicBlock(BasicBlock *basic_block);
    void handleIdleInstruction(Instruction *instruction);
    void iterate();
+   virtual void synchronize();
 
    UInt64 getInstructionCount() const { return m_instruction_count; }
 
