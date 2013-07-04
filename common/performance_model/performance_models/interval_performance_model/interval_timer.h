@@ -70,6 +70,7 @@ private:
    const uint32_t m_dispatch_width;
    const uint32_t m_branch_misprediction_penalty;
    UInt64 m_mem_dep_mask; // Memory access dependency granularity
+   UInt64 m_lll_dep_mask; // Memory access dependency granularity for long-latency loads
 
    // State of previous cycle
    FixedPoint m_remaining_dispatch_bandwidth;

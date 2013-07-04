@@ -47,6 +47,11 @@ IntervalTimer::IntervalTimer(
    LOG_ASSERT_ERROR(isPower2(mem_gran), "memory_dependency_granularity needs to be a power of 2. [%u]", mem_gran);
    m_mem_dep_mask = ~(mem_gran - 1);
 
+   // Granularity of memory dependencies on long-latency loads, in bytes
+   UInt64 lll_gran = Sim()->getCfg()->getIntArray("perf_model/core/interval_timer/lll_dependency_granularity", core->getId());
+   LOG_ASSERT_ERROR(isPower2(lll_gran), "lll_dependency_granularity needs to be a power of 2. [%u]", lll_gran);
+   m_lll_dep_mask = ~(lll_gran - 1);
+
    for(int i = 0; i < MicroOp::UOP_SUBTYPE_SIZE; ++i)
    {
       m_uop_type_count[i] = 0;
@@ -558,6 +563,9 @@ void IntervalTimer::blockWindow()
    Windows::WindowEntry& head = window_iterator.next(); // Returns the current head: disregard it.
    head.setIndependentMiss();
 
+   IntPtr head_address = head.getMicroOp()->isLoad() ? head.getDynMicroOp()->getLoadAccess().phys : 0;
+   head_address &= m_lll_dep_mask;
+
    while(window_iterator.hasNext()) {
       Windows::WindowEntry& micro_op = window_iterator.next();
 
@@ -595,6 +603,19 @@ void IntervalTimer::blockWindow()
             // else: our dependee is independent of the long-latency load blocking the window,
             // and is not a long-latency load in itself, which means it will complete under the original LLL.
             // Therefore, we can also be hidden under the long-latency load which makes us not dependent.
+         }
+      }
+
+      if (micro_op.getMicroOp()->isLoad())
+      {
+         IntPtr address = micro_op.getDynMicroOp()->getLoadAccess().phys;
+         if ((address & m_lll_dep_mask) == head_address)
+         {
+            // This load accesses the same cache line as the long-latency load that's blocking the ROB
+            // We should be an overlapped miss, but due to the way the cache model works (instant completion),
+            // we will see an L1 hit. Still, we can't complete until the miss is resolved.
+            // Model this by making us dependent on the long-latency load.
+            micro_op.setDataDependent();
          }
       }
 
