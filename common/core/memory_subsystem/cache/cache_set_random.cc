@@ -28,7 +28,16 @@ CacheSetRandom::getReplacementIndex()
           return i;   // if there is an invalid line, use that line
    }
 
-   return (m_rand.next() % m_associativity);
+   UInt32 index = (m_rand.next() % m_associativity);
+   if (isValidReplacement(index))
+   {
+      return index;
+   }
+   else
+   {
+      // Could not find valid victim, try again, due to randomness, it might work
+      return getReplacementIndex();
+   }
 }
 
 void

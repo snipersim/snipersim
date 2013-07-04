@@ -28,7 +28,7 @@ CacheSetLRU::getReplacementIndex()
       {
          return i;
       }
-      else if (m_lru_bits[i] > max_bits)
+      else if (m_lru_bits[i] > max_bits && isValidReplacement(i) )
       {
          index = i;
          max_bits = m_lru_bits[i];

@@ -30,7 +30,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
          ShmemPerfModel* m_shmem_perf_model;
 
-         UInt64 evict_modified, evict_shared;
+         UInt64 evict_modified, evict_exclusive, evict_shared;
 
          UInt32 getCacheBlockSize() { return m_cache_block_size; }
          MemoryManagerBase* getMemoryManager() { return m_memory_manager; }
@@ -45,6 +45,8 @@ namespace PrL1PrL2DramDirectoryMSI
          void processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_data_buf = NULL);
          void retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type, core_id_t receiver, IntPtr address, Byte* cached_data_buf);
          void processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg);
+
+         void processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_data_buf = NULL);
 
          void processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);

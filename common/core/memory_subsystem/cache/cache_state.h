@@ -13,6 +13,8 @@ class CacheState
          CSTATE_FIRST = 0,
          INVALID = CSTATE_FIRST,
          SHARED,
+         SHARED_UPGRADING,
+         EXCLUSIVE,
          OWNED,
          MODIFIED,
          NUM_CSTATE_STATES,
@@ -28,7 +30,7 @@ class CacheState
 
       bool readable()
       {
-         return (cstate == MODIFIED) || (cstate == OWNED) || (cstate == SHARED);
+         return (cstate == MODIFIED) || (cstate == OWNED) || (cstate == SHARED) || (cstate == EXCLUSIVE);
       }
 
       bool writable()

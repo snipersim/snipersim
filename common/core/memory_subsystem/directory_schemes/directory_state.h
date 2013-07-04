@@ -10,6 +10,7 @@ class DirectoryState
          SHARED,
          OWNED,
          MODIFIED,
+         EXCLUSIVE,
          NUM_DIRECTORY_STATES
       };
 };

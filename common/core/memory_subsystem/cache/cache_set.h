@@ -47,6 +47,8 @@ class CacheSet
 
       virtual UInt32 getReplacementIndex() = 0;
       virtual void updateReplacementIndex(UInt32) = 0;
+
+      bool isValidReplacement(UInt32 index);
 };
 
 class CacheSetRoundRobin : public CacheSet

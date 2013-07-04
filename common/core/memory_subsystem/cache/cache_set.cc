@@ -185,3 +185,16 @@ CacheSet::parsePolicyType(String policy)
    else
       return (CacheBase::ReplacementPolicy) -1;
 }
+
+bool CacheSet::isValidReplacement(UInt32 index)
+{
+   if (m_cache_block_info_array[index]->getCState() == CacheState::SHARED_UPGRADING)
+   {
+      printf("invalid replacement candidate\n");
+      return false;
+   }
+   else
+   {
+      return true;
+   }
+}

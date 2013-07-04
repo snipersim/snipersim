@@ -89,6 +89,7 @@ namespace PrL1PrL2DramDirectoryMSI
          case FLUSH_REQ:
          case WB_REQ:
          case UPGRADE_REP:
+         case UPGRADE_REQ:
          case INV_REP:
          case DRAM_READ_REQ:
             // msg_type + address

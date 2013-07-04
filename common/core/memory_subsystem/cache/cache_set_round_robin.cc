@@ -16,7 +16,11 @@ CacheSetRoundRobin::getReplacementIndex()
 {
    UInt32 curr_replacement_index = m_replacement_index;
    m_replacement_index = (m_replacement_index == 0) ? (m_associativity-1) : (m_replacement_index-1);
-   return curr_replacement_index; 
+
+   if (!isValidReplacement(m_replacement_index))
+      return getReplacementIndex();
+   else
+      return curr_replacement_index;
 }
 
 void

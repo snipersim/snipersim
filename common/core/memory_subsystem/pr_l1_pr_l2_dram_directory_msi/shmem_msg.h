@@ -16,6 +16,7 @@ namespace PrL1PrL2DramDirectoryMSI
             // Cache > tag directory
             EX_REQ = MIN_MSG_TYPE,
             SH_REQ,
+            UPGRADE_REQ,
             INV_REQ,
             FLUSH_REQ,
             WB_REQ,

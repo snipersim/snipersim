@@ -28,9 +28,14 @@ CacheSetMRU::getReplacementIndex()
           return i;
    }
 
-   for (UInt32 i = 0; i < m_associativity; i++) {
-       if (m_lru_bits[i] == 0)
-          return i;
+   UInt32 target = 0;
+   while (target < m_associativity)
+   {
+      for (UInt32 i = 0; i < m_associativity; i++) {
+          if (m_lru_bits[i] == target && isValidReplacement(i))
+             return i;
+      }
+      target++;
    }
 
    LOG_PRINT_ERROR("Error Finding LRU bits");

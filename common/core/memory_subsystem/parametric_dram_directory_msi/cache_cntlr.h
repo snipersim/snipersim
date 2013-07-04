@@ -210,14 +210,14 @@ namespace ParametricDramDirectoryMSI
                   // some may still be in the cache, or could have been removed for some other reason.
                   // Also, in a shared cache, the prefetch may have been triggered by another core than the one
                   // accessing/evicting the line so *_prefetch statistics should be summed across the shared cache
-           UInt64 evict_shared, evict_modified;
+           UInt64 evict_shared, evict_modified, evict_exclusive;
            UInt64 backinval_shared, backinval_modified;
            UInt64 hits_warmup, evict_warmup, invalidate_warmup;
            SubsecondTime total_latency;
            SubsecondTime snoop_latency;
            SubsecondTime mshr_latency;
            UInt64 prefetches;
-           UInt64 coherency_downgrades, coherency_invalidates, coherency_writebacks;
+           UInt64 coherency_downgrades, coherency_upgrades, coherency_invalidates, coherency_writebacks;
            #ifdef ENABLE_TRANSITIONS
            UInt64 transitions[CacheState::NUM_CSTATE_STATES][CacheState::NUM_CSTATE_STATES];
            UInt64 transition_reasons[Transition::NUM_REASONS][CacheState::NUM_CSTATE_SPECIAL_STATES][CacheState::NUM_CSTATE_SPECIAL_STATES];
@@ -283,6 +283,7 @@ namespace ParametricDramDirectoryMSI
          void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, SubsecondTime t_issue);
          void processExReqToDirectory(IntPtr address);
          void processShReqToDirectory(IntPtr address);
+         void processUpgradeReqToDirectory(IntPtr address);
 
          // Process Request from Dram Dir
          void processExRepFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
@@ -290,6 +291,7 @@ namespace ParametricDramDirectoryMSI
          void processInvReqFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
          void processFlushReqFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
          void processWbReqFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
+         void processUpgradeRepFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
 
          // Cache Block Size
          UInt32 getCacheBlockSize() { return m_cache_block_size; }

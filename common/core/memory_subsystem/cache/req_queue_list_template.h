@@ -24,6 +24,7 @@ template <class T_Req> class ReqQueueListTemplate
       void enqueue(IntPtr address, T_Req* shmem_req);
       T_Req* dequeue(IntPtr address);
       T_Req* front(IntPtr address);
+      T_Req* back(IntPtr address);
       UInt32 size(IntPtr address);
       bool empty(IntPtr address);
 };
@@ -64,6 +65,16 @@ ReqQueueListTemplate<T_Req>::front(IntPtr address)
          "Could not find a request with address(0x%x)", address);
 
    return m_req_queue_list[address]->front();
+}
+
+template <class T_Req>
+T_Req*
+ReqQueueListTemplate<T_Req>::back(IntPtr address)
+{
+   LOG_ASSERT_ERROR(m_req_queue_list.count(address) != 0,
+         "Could not find a request with address(0x%x)", address);
+
+   return m_req_queue_list[address]->back();
 }
 
 template <class T_Req>

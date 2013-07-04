@@ -37,7 +37,7 @@ CacheSetNRU::getReplacementIndex()
 
    for (UInt32 i = 0; i < m_associativity; i++)
    {
-      if (m_lru_bits[m_replacement_pointer] == 0)
+      if (m_lru_bits[m_replacement_pointer] == 0 && isValidReplacement(m_replacement_pointer))
       {
          // We choose the first non-touched line as the victim (note that we start searching from the replacement pointer position)
          UInt8 index = m_replacement_pointer;
