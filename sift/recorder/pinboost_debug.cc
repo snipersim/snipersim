@@ -5,12 +5,20 @@
 #include <iostream>
 #include <cstdlib>
 
+bool assert_ignore();
+
 bool pinboost_do_debug = false;
 static std::string pinboost_name = "PINBOOST";
 
 static EXCEPT_HANDLING_RESULT pinboost_exceptionhandler(THREADID threadid, EXCEPTION_INFO *pExceptInfo, PHYSICAL_CONTEXT *pPhysCtxt, VOID *v)
 {
    static bool in_handler = false;
+
+   if (assert_ignore())
+   {
+      // Timing model says it's done, ignore assert and pretend to have exited cleanly
+      exit(0);
+   }
 
    std::cerr << "["<<pinboost_name<<"] Internal exception:" << PIN_ExceptionToString(pExceptInfo) << std::endl;
 
@@ -20,6 +28,12 @@ static EXCEPT_HANDLING_RESULT pinboost_exceptionhandler(THREADID threadid, EXCEP
       in_handler = true;
 
       pinboost_debugme(threadid);
+   }
+   else
+   {
+      // Error occurred while handling another error (either in the exception handler, or in another thread)
+      // Debug session should already be started, let's ignore this error and halt so the user can inspect the state.
+      pause();
    }
 
    return EHR_CONTINUE_SEARCH;
