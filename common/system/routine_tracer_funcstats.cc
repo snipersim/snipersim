@@ -200,12 +200,12 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
    }
 }
 
-RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<UInt64>& _stack)
+RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<IntPtr>& _stack)
 {
    ScopedLock sl(m_lock);
 
    // The thread may be running and updating its stack, make a local copy so we can use a consistent value
-   const std::deque<UInt64> stack = _stack;
+   const std::deque<IntPtr> stack = _stack;
 
    if (m_routines.count(stack.back()) == 0)
    {
@@ -221,7 +221,7 @@ RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getR
    return m_callstack_routines[stack];
 }
 
-void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const std::deque<UInt64>& stack, UInt64 calls, RtnValues values)
+void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const std::deque<IntPtr>& stack, UInt64 calls, RtnValues values)
 {
    updateRoutineFull(getRoutineFullPtr(stack), calls, values);
 }

@@ -62,9 +62,9 @@ class RoutineTracerFunctionStats
             virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);
             virtual bool hasRoutine(IntPtr eip);
             void updateRoutine(IntPtr eip, UInt64 calls, RtnValues values);
-            void updateRoutineFull(const std::deque<UInt64>& stack, UInt64 calls, RtnValues values);
+            void updateRoutineFull(const std::deque<IntPtr>& stack, UInt64 calls, RtnValues values);
             void updateRoutineFull(RoutineTracerFunctionStats::Routine* rtn, UInt64 calls, RtnValues values);
-            RoutineTracerFunctionStats::Routine* getRoutineFullPtr(const std::deque<UInt64>& stack);
+            RoutineTracerFunctionStats::Routine* getRoutineFullPtr(const std::deque<IntPtr>& stack);
 
          private:
             Lock m_lock;
