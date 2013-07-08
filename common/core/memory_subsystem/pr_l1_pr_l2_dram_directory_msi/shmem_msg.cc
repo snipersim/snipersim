@@ -12,7 +12,8 @@ namespace PrL1PrL2DramDirectoryMSI
       m_where(HitWhere::UNKNOWN),
       m_address(INVALID_ADDRESS),
       m_data_buf(NULL),
-      m_data_length(0)
+      m_data_length(0),
+      m_perf(NULL)
    {}
 
    ShmemMsg::ShmemMsg(msg_t msg_type,
@@ -21,7 +22,8 @@ namespace PrL1PrL2DramDirectoryMSI
          core_id_t requester,
          IntPtr address,
          Byte* data_buf,
-         UInt32 data_length) :
+         UInt32 data_length,
+         ShmemPerf* perf) :
       m_msg_type(msg_type),
       m_sender_mem_component(sender_mem_component),
       m_receiver_mem_component(receiver_mem_component),
@@ -29,7 +31,8 @@ namespace PrL1PrL2DramDirectoryMSI
       m_where(HitWhere::UNKNOWN),
       m_address(address),
       m_data_buf(data_buf),
-      m_data_length(data_length)
+      m_data_length(data_length),
+      m_perf(perf)
    {}
 
    ShmemMsg::ShmemMsg(ShmemMsg* shmem_msg) :
@@ -39,7 +42,8 @@ namespace PrL1PrL2DramDirectoryMSI
       m_requester(shmem_msg->getRequester()),
       m_address(shmem_msg->getAddress()),
       m_data_buf(shmem_msg->getDataBuf()),
-      m_data_length(shmem_msg->getDataLength())
+      m_data_length(shmem_msg->getDataLength()),
+      m_perf(shmem_msg->getPerf())
    {}
 
    ShmemMsg::~ShmemMsg()

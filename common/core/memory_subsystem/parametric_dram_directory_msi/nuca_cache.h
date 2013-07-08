@@ -12,6 +12,7 @@ class MemoryManagerBase;
 class ShmemPerfModel;
 class AddressHomeLookup;
 class QueueModel;
+class ShmemPerf;
 
 class NucaCache
 {
@@ -30,13 +31,13 @@ class NucaCache
 
       UInt64 m_reads, m_writes, m_read_misses, m_write_misses;
 
-      SubsecondTime accessDataArray(Cache::access_t access, SubsecondTime t_start);
+      SubsecondTime accessDataArray(Cache::access_t access, SubsecondTime t_start, ShmemPerf *perf);
 
    public:
       NucaCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, AddressHomeLookup* home_lookup, UInt32 cache_block_size, ParametricDramDirectoryMSI::CacheParameters& parameters);
       ~NucaCache();
 
-      boost::tuple<SubsecondTime, HitWhere::where_t> read(IntPtr address, Byte* data_buf, SubsecondTime now);
+      boost::tuple<SubsecondTime, HitWhere::where_t> read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *perf);
       boost::tuple<SubsecondTime, HitWhere::where_t> write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_address, Byte* evict_buf, SubsecondTime now);
 };
 

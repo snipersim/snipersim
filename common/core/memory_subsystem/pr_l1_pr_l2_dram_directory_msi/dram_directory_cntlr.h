@@ -6,6 +6,7 @@
 #include "address_home_lookup.h"
 #include "shmem_req.h"
 #include "shmem_msg.h"
+#include "shmem_perf.h"
 #include "mem_component.h"
 #include "memory_manager_base.h"
 
@@ -43,7 +44,7 @@ namespace PrL1PrL2DramDirectoryMSI
          void processNextReqFromL2Cache(IntPtr address);
          void processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_data_buf = NULL);
          void processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_data_buf = NULL);
-         void retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type, core_id_t receiver, IntPtr address, Byte* cached_data_buf);
+         void retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type, core_id_t receiver, IntPtr address, Byte* cached_data_buf, ShmemMsg *orig_shmem_msg);
          void processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg);
 
          void processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_data_buf = NULL);
@@ -53,6 +54,15 @@ namespace PrL1PrL2DramDirectoryMSI
          void processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
          void sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
+
+         void updateShmemPerf(ShmemReq *shmem_req, ShmemPerf::shmem_times_type_t reason = ShmemPerf::UNKNOWN)
+         {
+            updateShmemPerf(shmem_req->getShmemMsg(), reason);
+         }
+         void updateShmemPerf(ShmemMsg *shmem_msg, ShmemPerf::shmem_times_type_t reason = ShmemPerf::UNKNOWN)
+         {
+            shmem_msg->getPerf()->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), reason);
+         }
 
       public:
          DramDirectoryCntlr(core_id_t core_id,

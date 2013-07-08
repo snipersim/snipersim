@@ -3,6 +3,7 @@
 #include "config.h"
 #include "config.hpp"
 #include "stats.h"
+#include "shmem_perf.h"
 
 DramPerfModelNormal::DramPerfModelNormal(core_id_t core_id,
       UInt32 cache_block_size):
@@ -38,7 +39,7 @@ DramPerfModelNormal::~DramPerfModelNormal()
 }
 
 SubsecondTime
-DramPerfModelNormal::getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type)
+DramPerfModelNormal::getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf)
 {
    // pkt_size is in 'Bytes'
    // m_dram_bandwidth is in 'Bits per clock cycle'
@@ -61,8 +62,14 @@ DramPerfModelNormal::getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, c
       queue_delay = SubsecondTime::Zero();
    }
 
-   SubsecondTime access_latency = queue_delay + processing_time + m_dram_access_cost->next();
+   SubsecondTime dram_access_cost = m_dram_access_cost->next();
+   SubsecondTime access_latency = queue_delay + processing_time + dram_access_cost;
 
+
+   perf->updateTime(pkt_time);
+   perf->updateTime(pkt_time + queue_delay, ShmemPerf::DRAM_QUEUE);
+   perf->updateTime(pkt_time + queue_delay + processing_time, ShmemPerf::DRAM_BUS);
+   perf->updateTime(pkt_time + queue_delay + processing_time + dram_access_cost, ShmemPerf::DRAM_DEVICE);
 
    // Update Memory Counters
    m_num_accesses ++;

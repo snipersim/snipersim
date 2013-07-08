@@ -3,6 +3,7 @@
 #include "memory_manager.h"
 #include "stats.h"
 #include "nuca_cache.h"
+#include "shmem_perf.h"
 
 #if 0
    extern Lock iolock;
@@ -266,7 +267,7 @@ DramDirectoryCntlr::processDirectoryEntryAllocationReq(ShmemReq* shmem_req)
    // We get the entry with the lowest number of sharers
    DirectoryEntry* directory_entry = m_dram_directory_cache->replaceDirectoryEntry(replaced_address, address);
 
-   ShmemMsg nullify_msg(ShmemMsg::NULLIFY_REQ, MemComponent::TAG_DIR, MemComponent::TAG_DIR, requester, replaced_address, NULL, 0);
+   ShmemMsg nullify_msg(ShmemMsg::NULLIFY_REQ, MemComponent::TAG_DIR, MemComponent::TAG_DIR, requester, replaced_address, NULL, 0, NULL);
 
    ShmemReq* nullify_req = new ShmemReq(&nullify_msg, msg_time);
 
@@ -287,6 +288,8 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req)
    IntPtr address = shmem_req->getShmemMsg()->getAddress();
    core_id_t requester = shmem_req->getShmemMsg()->getRequester();
 
+   // NOTE: no ShmemPerf accounting for nullify requests as they may happen *after* core requests are completed
+
    MYLOG("Start @ %lx", address);
 
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
@@ -305,7 +308,9 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req)
                directory_entry->getOwner() /* receiver */,
                address,
                NULL, 0,
-               HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+               HitWhere::UNKNOWN,
+               NULL,
+               ShmemPerfModel::_SIM_THREAD);
          break;
 
       case DirectoryState::SHARED:
@@ -321,6 +326,7 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req)
                      requester /* requester */,
                      address,
                      NULL, 0,
+                     NULL,
                      ShmemPerfModel::_SIM_THREAD);
             }
             else
@@ -334,7 +340,9 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req)
                         sharers_list_pair.second[i] /* receiver */,
                         address,
                         NULL, 0,
-                        HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+                        HitWhere::UNKNOWN,
+                        NULL,
+                        ShmemPerfModel::_SIM_THREAD);
                }
             }
          }
@@ -365,6 +373,7 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    core_id_t requester = shmem_req->getShmemMsg()->getRequester();
 
    MYLOG("Start @ %lx", address);
+   updateShmemPerf(shmem_req);
 
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
    if (directory_entry == NULL)
@@ -374,6 +383,8 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
    DirectoryBlockInfo* directory_block_info = directory_entry->getDirectoryBlockInfo();
    DirectoryState::dstate_t curr_dstate = directory_block_info->getDState();
+
+   updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
    switch (curr_dstate)
    {
@@ -388,7 +399,7 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                directory_entry->getOwner() /* receiver */,
                address,
                NULL, 0,
-               HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+               HitWhere::UNKNOWN, shmem_req->getShmemMsg()->getPerf(), ShmemPerfModel::_SIM_THREAD);
          break;
       }
 
@@ -405,6 +416,7 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                   requester /* requester */,
                   address,
                   NULL, 0,
+                  NULL, // No ShmemPerf on broadcast
                   ShmemPerfModel::_SIM_THREAD);
          }
          else
@@ -419,7 +431,9 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                               sharers_list_pair.second[i] /* receiver */,
                               address,
                               NULL, 0,
-                              HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+                              HitWhere::UNKNOWN,
+                              i == 0 ? shmem_req->getShmemMsg()->getPerf() : NULL,
+                              ShmemPerfModel::_SIM_THREAD);
             }
          }
          break;
@@ -433,7 +447,7 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
          directory_entry->setOwner(requester);
          directory_block_info->setDState(DirectoryState::MODIFIED);
 
-         retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf);
+         retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
          break;
       }
 
@@ -451,6 +465,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    core_id_t requester = shmem_req->getShmemMsg()->getRequester();
 
    MYLOG("Start @ %lx", address);
+   updateShmemPerf(shmem_req);
 
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
    if (directory_entry == NULL)
@@ -460,6 +475,8 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
    DirectoryBlockInfo* directory_block_info = directory_entry->getDirectoryBlockInfo();
    DirectoryState::dstate_t curr_dstate = directory_block_info->getDState();
+
+   updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
    switch (curr_dstate)
    {
@@ -474,7 +491,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                directory_entry->getOwner() /* receiver */,
                address,
                NULL, 0,
-               HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+               HitWhere::UNKNOWN, shmem_req->getShmemMsg()->getPerf(), ShmemPerfModel::_SIM_THREAD);
          break;
       }
 
@@ -488,7 +505,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                directory_entry->getOwner() /* receiver */,
                address,
                NULL, 0,
-               HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+               HitWhere::UNKNOWN, shmem_req->getShmemMsg()->getPerf(), ShmemPerfModel::_SIM_THREAD);
          break;
       }
 
@@ -506,12 +523,12 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                   sharer_id /* receiver */,
                   address,
                   NULL, 0,
-                  HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+                  HitWhere::UNKNOWN, shmem_req->getShmemMsg()->getPerf(), ShmemPerfModel::_SIM_THREAD);
          }
          else
          {
             MYLOG("SHARED state, retrieve data and send")
-            retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf);
+            retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
          }
          break;
       }
@@ -525,7 +542,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
          directory_block_info->setDState(DirectoryState::EXCLUSIVE);
          directory_entry->setOwner(requester);
 
-         retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf);
+         retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
 
          break;
       }
@@ -539,7 +556,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
 void
 DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
-      core_id_t receiver, IntPtr address, Byte* cached_data_buf)
+      core_id_t receiver, IntPtr address, Byte* cached_data_buf, ShmemMsg *orig_shmem_msg)
 {
    MYLOG("Start @ %lx", address);
    if (cached_data_buf != NULL)
@@ -553,6 +570,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
             address,
             cached_data_buf, getCacheBlockSize(),
             HitWhere::CACHE_REMOTE /* cached_data_buf was filled by a WB_REQ or FLUSH_REQ */,
+            orig_shmem_msg->getPerf(),
             ShmemPerfModel::_SIM_THREAD);
 
       // Process Next Request
@@ -565,7 +583,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
          SubsecondTime nuca_latency;
          HitWhere::where_t hit_where;
          Byte nuca_data_buf[getCacheBlockSize()];
-         boost::tie(nuca_latency, hit_where) = m_nuca_cache->read(address, nuca_data_buf, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD));
+         boost::tie(nuca_latency, hit_where) = m_nuca_cache->read(address, nuca_data_buf, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), orig_shmem_msg->getPerf());
 
          getShmemPerfModel()->incrElapsedTime(nuca_latency, ShmemPerfModel::_SIM_THREAD);
 
@@ -578,6 +596,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
                   address,
                   nuca_data_buf, getCacheBlockSize(),
                   HitWhere::NUCA_CACHE,
+                  orig_shmem_msg->getPerf(),
                   ShmemPerfModel::_SIM_THREAD);
 
             // Process Next Request
@@ -613,6 +632,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
             address,
             NULL, 0,
             HitWhere::UNKNOWN,
+            orig_shmem_msg->getPerf(),
             ShmemPerfModel::_SIM_THREAD);
    }
    MYLOG("End @ %lx", address);
@@ -630,6 +650,7 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
 
    assert(m_dram_directory_req_queue_list->size(address) >= 1);
    ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
+   updateShmemPerf(shmem_req);
 
    //   Which reply type to use?
 
@@ -638,6 +659,8 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
    assert(directory_entry);
    DirectoryBlockInfo* directory_block_info = directory_entry->getDirectoryBlockInfo();
    DirectoryState::dstate_t curr_dstate = directory_block_info->getDState();
+
+   updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
    switch(shmem_req->getShmemMsg()->getMsgType())
    {
@@ -681,6 +704,7 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
          address,
          shmem_msg->getDataBuf(), getCacheBlockSize(),
          hit_where,
+         shmem_req->getShmemMsg()->getPerf(),
          ShmemPerfModel::_SIM_THREAD);
 
    // Keep a copy in NUCA
@@ -726,6 +750,7 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
          // An ShmemMsg::EX_REQ caused the invalidation
          if (directory_block_info->getDState() == DirectoryState::UNCACHED)
          {
+            updateShmemPerf(shmem_req, ShmemPerf::INV_IMBALANCE);
             processExReqFromL2Cache(shmem_req);
          }
       }
@@ -742,6 +767,7 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
             {
                // all Shared copies have been invalidated, UPGRADE_REQ can be completed now.
                MYLOG("UPGRADE_REQ: all OTHER shared copies have been invalided: complete upgrade req.\n");
+               updateShmemPerf(shmem_req, ShmemPerf::INV_IMBALANCE);
                processUpgradeReqFromL2Cache(shmem_req);
             }
          }
@@ -751,6 +777,7 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
 
             directory_block_info->setDState(DirectoryState::UNCACHED);
 
+            updateShmemPerf(shmem_req, ShmemPerf::INV_IMBALANCE);
             processUpgradeReqFromL2Cache(shmem_req);
          }
          else
@@ -763,6 +790,7 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
          if (shmem_req->getWaitForData() == false)
          {
             // A ShmemMsg::SH_REQ caused the invalidation
+            updateShmemPerf(shmem_req, ShmemPerf::INV_IMBALANCE);
             processShReqFromL2Cache(shmem_req);
          }
          else
@@ -775,6 +803,7 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
       {
          if (directory_block_info->getDState() == DirectoryState::UNCACHED)
          {
+            updateShmemPerf(shmem_req, ShmemPerf::INV_IMBALANCE);
             processNullifyReq(shmem_req);
          }
       }
@@ -789,6 +818,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
 
    IntPtr address = shmem_msg->getAddress();
    core_id_t requester = shmem_msg->getRequester();
+   updateShmemPerf(shmem_req);
 
    MYLOG("processUpgradeReqFromL2Cache for address: %lx, requester= %d", address, requester);
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
@@ -814,6 +844,8 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
       }
    }
 
+   updateShmemPerf(shmem_msg, ShmemPerf::TD_ACCESS);
+
    switch (curr_dstate)
    {
       case DirectoryState::EXCLUSIVE:
@@ -830,7 +862,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
                         requester /* receiver */,
                         address,
                         NULL, 0,
-                        HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+                        HitWhere::UNKNOWN, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD);
 
             directory_block_info->setDState(DirectoryState::MODIFIED);
 
@@ -846,7 +878,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
                   directory_entry->getOwner() /* receiver */,
                   address,
                   NULL, 0,
-                  HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+                  HitWhere::UNKNOWN, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD);
          }
 
          break;
@@ -866,7 +898,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
                   requester /* receiver */,
                   address,
                   NULL, 0,
-                  HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+                  HitWhere::UNKNOWN, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD);
 
             processNextReqFromL2Cache(address);
          }
@@ -888,6 +920,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
                      requester /* requester */,
                      address,
                      NULL, 0,
+                     NULL, // No ShmemPerf on broadcast
                      ShmemPerfModel::_SIM_THREAD);
             }
             else
@@ -907,7 +940,9 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
                            sharers_list_pair.second[i] /* receiver */,
                            address,
                            NULL, 0,
-                           HitWhere::UNKNOWN, ShmemPerfModel::_SIM_THREAD);
+                           HitWhere::UNKNOWN,
+                           i == 0 ? shmem_msg->getPerf() : NULL,
+                           ShmemPerfModel::_SIM_THREAD);
                   }
                }
             }
@@ -930,7 +965,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
             // maybe the data is stored in the msg already?
             cached_data_buf = shmem_msg->getDataBuf();
          }
-         retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf);
+         retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf, shmem_msg);
 
          break;
       }
@@ -978,6 +1013,9 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
       // Update times
       shmem_req->updateTime(now);
       getShmemPerfModel()->updateElapsedTime(shmem_req->getTime(), ShmemPerfModel::_SIM_THREAD);
+
+      shmem_req->getShmemMsg()->getPerf()->updateTime(now);
+      updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
       // An involuntary/voluntary Flush
       if (shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::EX_REQ)
@@ -1054,6 +1092,9 @@ DramDirectoryCntlr::processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_ms
       shmem_req->updateTime(now);
       getShmemPerfModel()->updateElapsedTime(shmem_req->getTime(), ShmemPerfModel::_SIM_THREAD);
 
+      shmem_req->getShmemMsg()->getPerf()->updateTime(now);
+      updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
+
       LOG_ASSERT_ERROR(shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::SH_REQ,
             "Address(0x%x), Req(%u)",
             address, shmem_req->getShmemMsg()->getMsgType());
@@ -1093,6 +1134,7 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
                evict_address,
                evict_buf, getCacheBlockSize(),
                HitWhere::UNKNOWN,
+               NULL,
                ShmemPerfModel::_SIM_THREAD);
       }
    }
@@ -1122,6 +1164,7 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
             address,
             data_buf, getCacheBlockSize(),
             HitWhere::UNKNOWN,
+            NULL,
             ShmemPerfModel::_SIM_THREAD);
 
       // DRAM latency is ignored on write

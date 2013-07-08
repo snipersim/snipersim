@@ -23,7 +23,7 @@ class DramPerfModelConstant : public DramPerfModel
 
       ~DramPerfModelConstant();
 
-      SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type);
+      SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf);
 };
 
 #endif /* __DRAM_PERF_MODEL_CONSTANT_H__ */

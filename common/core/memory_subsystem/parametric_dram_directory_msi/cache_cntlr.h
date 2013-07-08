@@ -34,6 +34,7 @@ namespace ParametricDramDirectoryMSI
    class MemoryManager;
 }
 class FaultInjector;
+class ShmemPerf;
 
 // Maximum size of the list of addresses to prefetch
 #define PREFETCH_MAX_QUEUE_LENGTH 32
@@ -231,6 +232,7 @@ namespace ParametricDramDirectoryMSI
          void updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cache_hit, CacheState::cstate_t state, Prefetch::prefetch_type_t isPrefetch);
          void cleanupMshr();
          void transition(IntPtr address, Transition::reason_t reason, CacheState::cstate_t old_state, CacheState::cstate_t new_state);
+         void updateUncoreStatistics(HitWhere::where_t hit_where, SubsecondTime now);
 
          core_id_t m_core_id;
          UInt32 m_cache_block_size;
@@ -244,6 +246,11 @@ namespace ParametricDramDirectoryMSI
          Semaphore* m_user_thread_sem;
          Semaphore* m_network_thread_sem;
          volatile HitWhere::where_t m_last_remote_hit_where;
+
+         ShmemPerf* m_shmem_perf;
+         ShmemPerf* m_shmem_perf_global;
+         SubsecondTime m_shmem_perf_totaltime;
+         UInt64 m_shmem_perf_numrequests;
 
          ShmemPerfModel* m_shmem_perf_model;
 
@@ -283,7 +290,7 @@ namespace ParametricDramDirectoryMSI
          void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, SubsecondTime t_issue);
          void processExReqToDirectory(IntPtr address);
          void processShReqToDirectory(IntPtr address);
-         void processUpgradeReqToDirectory(IntPtr address);
+         void processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf);
 
          // Process Request from Dram Dir
          void processExRepFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
@@ -331,7 +338,8 @@ namespace ParametricDramDirectoryMSI
                Semaphore* network_thread_sem,
                UInt32 cache_block_size,
                CacheParameters & cache_params,
-               ShmemPerfModel* shmem_perf_model);
+               ShmemPerfModel* shmem_perf_model,
+               bool is_last_level_cache);
 
          ~CacheCntlr();
 

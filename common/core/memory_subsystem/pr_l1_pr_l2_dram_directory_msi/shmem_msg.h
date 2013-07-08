@@ -4,6 +4,8 @@
 #include "fixed_types.h"
 #include "dynamic_instruction_info.h"
 
+class ShmemPerf;
+
 namespace PrL1PrL2DramDirectoryMSI
 {
    class ShmemMsg
@@ -47,6 +49,7 @@ namespace PrL1PrL2DramDirectoryMSI
          IntPtr m_address;
          Byte* m_data_buf;
          UInt32 m_data_length;
+         ShmemPerf* m_perf;
 
       public:
          ShmemMsg();
@@ -56,7 +59,8 @@ namespace PrL1PrL2DramDirectoryMSI
                core_id_t requester,
                IntPtr address,
                Byte* data_buf,
-               UInt32 data_length);
+               UInt32 data_length,
+               ShmemPerf* perf);
          ShmemMsg(ShmemMsg* shmem_msg);
 
          ~ShmemMsg();
@@ -79,6 +83,8 @@ namespace PrL1PrL2DramDirectoryMSI
 
          void setDataBuf(Byte* data_buf) { m_data_buf = data_buf; }
          void setWhere(HitWhere::where_t where) { m_where = where; }
+
+         ShmemPerf* getPerf() { return m_perf; }
 
    };
 

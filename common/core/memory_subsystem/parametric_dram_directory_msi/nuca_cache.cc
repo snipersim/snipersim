@@ -4,6 +4,7 @@
 #include "config.hpp"
 #include "stats.h"
 #include "queue_model.h"
+#include "shmem_perf.h"
 
 NucaCache::NucaCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, AddressHomeLookup* home_lookup, UInt32 cache_block_size, ParametricDramDirectoryMSI::CacheParameters& parameters)
    : m_core_id(memory_manager->getCore()->getId())
@@ -53,18 +54,20 @@ NucaCache::~NucaCache()
 }
 
 boost::tuple<SubsecondTime, HitWhere::where_t>
-NucaCache::read(IntPtr address, Byte* data_buf, SubsecondTime now)
+NucaCache::read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *perf)
 {
    HitWhere::where_t hit_where = HitWhere::MISS;
+   perf->updateTime(now);
 
    PrL1CacheBlockInfo* block_info = (PrL1CacheBlockInfo*)m_cache->peekSingleLine(address);
    SubsecondTime latency = m_tags_access_time.getLatency();
+   perf->updateTime(now + latency, ShmemPerf::NUCA_TAGS);
 
    if (block_info)
    {
       m_cache->accessSingleLine(address, Cache::LOAD, data_buf, m_cache_block_size, now + latency);
 
-      latency += accessDataArray(Cache::LOAD, now + latency);
+      latency += accessDataArray(Cache::LOAD, now + latency, perf);
       hit_where = HitWhere::NUCA_CACHE;
    }
    else
@@ -89,7 +92,7 @@ NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_a
       block_info->setCState(CacheState::MODIFIED);
       m_cache->accessSingleLine(address, Cache::STORE, data_buf, m_cache_block_size, now + latency);
 
-      latency += accessDataArray(Cache::STORE, now + latency);
+      latency += accessDataArray(Cache::STORE, now + latency, NULL);
       hit_where = HitWhere::NUCA_CACHE;
    }
    else
@@ -117,8 +120,10 @@ NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_a
 }
 
 SubsecondTime
-NucaCache::accessDataArray(Cache::access_t access, SubsecondTime t_start)
+NucaCache::accessDataArray(Cache::access_t access, SubsecondTime t_start, ShmemPerf *perf)
 {
+   perf->updateTime(t_start);
+
    // Compute Queue Delay
    SubsecondTime queue_delay;
    if (m_queue_model)
@@ -126,11 +131,16 @@ NucaCache::accessDataArray(Cache::access_t access, SubsecondTime t_start)
       SubsecondTime processing_time = m_data_array_bandwidth.getRoundedLatency(8 * m_cache_block_size); // bytes to bits
 
       queue_delay = processing_time + m_queue_model->computeQueueDelay(t_start, processing_time, m_core_id);
+
+      perf->updateTime(t_start + processing_time, ShmemPerf::NUCA_BUS);
+      perf->updateTime(t_start + queue_delay, ShmemPerf::NUCA_QUEUE);
    }
    else
    {
       queue_delay = SubsecondTime::Zero();
    }
+
+   perf->updateTime(t_start + queue_delay + m_data_access_time.getLatency(), ShmemPerf::NUCA_DATA);
 
    return queue_delay + m_data_access_time.getLatency();
 }

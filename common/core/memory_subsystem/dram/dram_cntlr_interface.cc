@@ -1,11 +1,13 @@
 #include "dram_cntlr_interface.h"
 #include "memory_manager.h"
 #include "shmem_msg.h"
+#include "shmem_perf.h"
 
 void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {
    PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+   shmem_msg->getPerf()->updateTime(msg_time);
 
    switch (shmem_msg_type)
    {
@@ -16,9 +18,12 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
          SubsecondTime dram_latency;
          HitWhere::where_t hit_where;
 
-         boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time);
+         boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf());
 
          getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);
+
+         shmem_msg->getPerf()->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD),
+            hit_where == HitWhere::DRAM_CACHE ? ShmemPerf::DRAM_CACHE : ShmemPerf::DRAM);
 
          getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_READ_REP,
                MemComponent::DRAM, MemComponent::TAG_DIR,
@@ -26,7 +31,7 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
                sender /* receiver */,
                address,
                data_buf, getCacheBlockSize(),
-               hit_where, ShmemPerfModel::_SIM_THREAD);
+               hit_where, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD);
          break;
       }
 

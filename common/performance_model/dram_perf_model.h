@@ -6,6 +6,8 @@
 #include "subsecond_time.h"
 #include "dram_cntlr_interface.h"
 
+class ShmemPerf;
+
 // Note: Each Dram Controller owns a single DramModel object
 // Hence, m_dram_bandwidth is the bandwidth for a single DRAM controller
 // Total Bandwidth = m_dram_bandwidth * Number of DRAM controllers
@@ -28,7 +30,7 @@ class DramPerfModel
 
       DramPerfModel(core_id_t core_id, UInt64 cache_block_size) : m_enabled(false), m_num_accesses(0) {}
       virtual ~DramPerfModel() {}
-      virtual SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type) = 0;
+      virtual SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf) = 0;
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
 

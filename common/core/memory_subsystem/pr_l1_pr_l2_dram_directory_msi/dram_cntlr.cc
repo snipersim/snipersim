@@ -48,7 +48,7 @@ DramCntlr::~DramCntlr()
 }
 
 boost::tuple<SubsecondTime, HitWhere::where_t>
-DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
+DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemPerf *perf)
 {
    if (Sim()->getFaultinjectionManager())
    {
@@ -65,7 +65,7 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
       memcpy((void*) data_buf, (void*) m_data_map[address], getCacheBlockSize());
    }
 
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ);
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ, perf);
 
    ++m_reads;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
@@ -92,7 +92,7 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
          m_fault_injector->postWrite(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
    }
 
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE);
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, NULL);
 
    ++m_writes;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
@@ -104,10 +104,10 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
 }
 
 SubsecondTime
-DramCntlr::runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type)
+DramCntlr::runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf)
 {
    UInt64 pkt_size = getCacheBlockSize();
-   SubsecondTime dram_access_latency = m_dram_perf_model->getAccessLatency(time, pkt_size, requester, address, access_type);
+   SubsecondTime dram_access_latency = m_dram_perf_model->getAccessLatency(time, pkt_size, requester, address, access_type, perf);
    return dram_access_latency;
 }
 
