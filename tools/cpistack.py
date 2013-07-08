@@ -48,6 +48,31 @@ def output_cpistack_text(results):
     print '  %-15s    %6.2f    %6.2f%%' % ('total', total['cpi'], 100 * total['time'])
 
 
+def output_cpistack_table(results, metric = 'cpi'):
+  data = results.get_data(metric)
+  total = [ 0 for core in results.cores ]
+
+  if metric == 'time':
+    format = lambda v: '%7.2f%%' % (100 * v)
+    title = 'Time (%)'
+  else:
+    format = lambda v: '%8.2f' % v
+    title = 'CPI' if metric == 'cpi' else 'Time (s)'
+
+  print '%-20s' % title, '  '.join([ '%-9s' % ('Core %d' % core) for core in results.cores ])
+  for label in results.labels:
+    print '%-15s ' % label,
+    for core in results.cores:
+      print ' ', format(data[core][label]),
+      total[core] += data[core][label]
+    print
+  print
+  print '%-15s ' % 'total',
+  for core in results.cores:
+    print ' ', format(total[core]),
+  print
+
+
 def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480)):
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
   plot_data = results.get_data(metric)
@@ -90,7 +115,7 @@ if __name__ == '__main__':
   partial = None
   outputfile = 'cpi-stack'
   title = ''
-  metric = 'time'
+  metric = None
   use_simple = False
   use_simple_mem = True
   no_collapse = False
@@ -144,5 +169,8 @@ if __name__ == '__main__':
                              groups = use_simple and cpistack_items.build_grouplist(legacy = True) or None,
                              use_simple = use_simple, use_simple_mem = use_simple_mem, no_collapse = no_collapse)
 
-  output_cpistack_text(results)
-  output_cpistack_gnuplot(results = results, metric = metric, outputfile = outputfile, title = title)
+  if len(results.cores) > 1:
+    output_cpistack_table(results, metric = metric or 'cpi')
+  else:
+    output_cpistack_text(results)
+  output_cpistack_gnuplot(results = results, metric = metric or 'time', outputfile = outputfile, title = title)
