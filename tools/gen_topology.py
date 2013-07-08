@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, collections, sniper_lib, sniper_stats, sniper_config, getopt
+import sys, os, math, collections, sniper_lib, sniper_stats, sniper_config, getopt
 
 
 def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format = 'svg', embedded = False):
@@ -103,12 +103,18 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
 
     is_mesh = (sniper_config.get_config(config, 'network/memory_model_1') == 'emesh_hop_by_hop')
     if is_mesh:
+      ncores = int(config['general/total_cores'])
       dimensions = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/dimensions'))
-      if dimensions == 1:
-        width, height = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/size')), 1
-      else:
-        width, height = map(int, sniper_config.get_config(config, 'network/emesh_hop_by_hop/size').split(':'))
       concentration = int(sniper_config.get_config(config, 'network/emesh_hop_by_hop/concentration'))
+      if dimensions == 1:
+        width, height = int(math.ceil(1.0 * ncores / concentration)), 1
+      else:
+        if config.get('network/emesh_hop_by_hop/size'):
+          width, height = map(int, sniper_config.get_config(config, 'network/emesh_hop_by_hop/size').split(':'))
+        else:
+          width = int(math.sqrt(ncores / concentration))
+          height = int(math.ceil(1.0 * ncores / concentration / width))
+      assert width * height * concentration == ncores
 
       def lid_tile_root(lid):
         return lid - lid % concentration
