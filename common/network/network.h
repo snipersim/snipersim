@@ -25,6 +25,7 @@ class NetPacket
 public:
    subsecond_time_t start_time;
    subsecond_time_t time;
+   subsecond_time_t queue_delay;
    PacketType type;
    SInt32 sender;
    SInt32 receiver;

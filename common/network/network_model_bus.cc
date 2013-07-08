@@ -37,12 +37,14 @@ NetworkModelBusGlobal::~NetworkModelBusGlobal()
 
 /* Model bus utilization. In: packet start time and size. Out: packet out time */
 SubsecondTime
-NetworkModelBusGlobal::useBus(SubsecondTime t_start, UInt32 length)
+NetworkModelBusGlobal::useBus(SubsecondTime t_start, UInt32 length, subsecond_time_t *queue_delay_stats)
 {
    SubsecondTime t_delay = _bandwidth.getLatency(length * 8);
    SubsecondTime t_queue = _queue_model->computeQueueDelay(t_start, t_delay);
    _time_used += t_delay;
    _total_delay += t_queue;
+   if (queue_delay_stats)
+      *queue_delay_stats += t_queue;
    if (t_queue > SubsecondTime::Zero())
       _num_packets_delayed ++;
    return t_start + t_queue + t_delay;
@@ -68,7 +70,7 @@ NetworkModelBus::routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops)
       ScopedLock sl(_bus->_lock);
       _bus->_num_packets ++;
       _bus->_num_bytes += getNetwork()->getModeledLength(pkt);
-      t_recv = _bus->useBus(pkt.time, pkt.length);
+      t_recv = _bus->useBus(pkt.time, pkt.length, (subsecond_time_t*)&pkt.queue_delay);
    } else
       t_recv = pkt.time;
 

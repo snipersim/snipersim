@@ -207,14 +207,17 @@ NetworkModelEMeshHopByHop::routePacket(const NetPacket &pkt, std::vector<Hop> &n
       // Injection Port Modeling
       SubsecondTime injection_port_queue_delay = SubsecondTime::Zero();
       if (pkt.sender == m_core_id)
+      {
          injection_port_queue_delay = computeInjectionPortQueueDelay(pkt.receiver, pkt.time, pkt_length);
+         *(subsecond_time_t*)&pkt.queue_delay += injection_port_queue_delay;
+      }
       SubsecondTime curr_time = pkt.time + injection_port_queue_delay;
 
       // A Unicast packet
       OutputDirection direction;
       core_id_t next_dest = getNextDest(pkt.receiver, direction);
 
-      addHop(direction, pkt.receiver, next_dest, curr_time, pkt_length, nextHops, requester);
+      addHop(direction, pkt.receiver, next_dest, curr_time, pkt_length, nextHops, requester, (subsecond_time_t*)&pkt.queue_delay);
    }
 }
 
@@ -250,6 +253,7 @@ NetworkModelEMeshHopByHop::processReceivedPacket(NetPacket& pkt)
       packet_latency += (ejection_port_queue_delay + processing_time);
       contention_delay += ejection_port_queue_delay;
       pkt.time += (ejection_port_queue_delay + processing_time);
+      pkt.queue_delay += ejection_port_queue_delay;
    }
 
    m_total_packets_received ++;
@@ -262,7 +266,8 @@ void
 NetworkModelEMeshHopByHop::addHop(OutputDirection direction,
       core_id_t final_dest, core_id_t next_dest,
       SubsecondTime pkt_time, UInt32 pkt_length,
-      std::vector<Hop>& nextHops, core_id_t requester)
+      std::vector<Hop>& nextHops, core_id_t requester,
+      subsecond_time_t *queue_delay_stats)
 {
    Hop h;
    h.final_dest = final_dest;
@@ -271,7 +276,7 @@ NetworkModelEMeshHopByHop::addHop(OutputDirection direction,
    if (direction > NUM_OUTPUT_DIRECTIONS)
       h.time = pkt_time;
    else
-      h.time = pkt_time + computeLatency(direction, pkt_time, pkt_length, requester);
+      h.time = pkt_time + computeLatency(direction, pkt_time, pkt_length, requester, queue_delay_stats);
 
    nextHops.push_back(h);
 }
@@ -307,7 +312,7 @@ NetworkModelEMeshHopByHop::computeCoreId(SInt32 x, SInt32 y)
 }
 
 SubsecondTime
-NetworkModelEMeshHopByHop::computeLatency(OutputDirection direction, SubsecondTime pkt_time, UInt32 pkt_length, core_id_t requester)
+NetworkModelEMeshHopByHop::computeLatency(OutputDirection direction, SubsecondTime pkt_time, UInt32 pkt_length, core_id_t requester, subsecond_time_t *queue_delay_stats)
 {
    LOG_ASSERT_ERROR(!m_fake_node, "Cannot computeLatency on a fake network node");
 
@@ -321,7 +326,11 @@ NetworkModelEMeshHopByHop::computeLatency(OutputDirection direction, SubsecondTi
 
    SubsecondTime queue_delay = SubsecondTime::Zero();
    if (m_queue_model_enabled)
+   {
       queue_delay = m_queue_models[direction]->computeQueueDelay(pkt_time, processing_time);
+      if (queue_delay_stats)
+         *queue_delay_stats += queue_delay;
+   }
 
    LOG_PRINT("Queue Delay(%s), Hop Latency(%s)", itostr(queue_delay).c_str(), itostr(m_hop_latency.getLatency()).c_str());
    SubsecondTime packet_latency = m_hop_latency.getLatency() + queue_delay;

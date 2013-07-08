@@ -52,8 +52,8 @@ class NetworkModelEMeshHopByHop : public NetworkModel
       core_id_t computeCoreId(SInt32 x, SInt32 y);
       SInt32 computeDistance(core_id_t sender, core_id_t receiver);
 
-      void addHop(OutputDirection direction, core_id_t final_dest, core_id_t next_dest, SubsecondTime pkt_time, UInt32 pkt_length, std::vector<Hop>& nextHops, core_id_t requester);
-      SubsecondTime computeLatency(OutputDirection direction, SubsecondTime pkt_time, UInt32 pkt_length, core_id_t requester);
+      void addHop(OutputDirection direction, core_id_t final_dest, core_id_t next_dest, SubsecondTime pkt_time, UInt32 pkt_length, std::vector<Hop>& nextHops, core_id_t requester, subsecond_time_t *queue_delay_stats = NULL);
+      SubsecondTime computeLatency(OutputDirection direction, SubsecondTime pkt_time, UInt32 pkt_length, core_id_t requester, subsecond_time_t *queue_delay_stats);
       SubsecondTime computeProcessingTime(UInt32 pkt_length);
       core_id_t getNextDest(core_id_t final_dest, OutputDirection& direction);
 

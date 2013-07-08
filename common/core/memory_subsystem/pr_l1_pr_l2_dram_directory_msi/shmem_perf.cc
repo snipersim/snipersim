@@ -3,7 +3,8 @@
 #include "log.h"
 
 const char* shmem_reason_names[] = {
-   "noc",
+   "noc-base",
+   "noc-queue",
    "td-access",
    "inv-imbalance",
    "remote-cache-inv",
@@ -60,7 +61,9 @@ void ShmemPerf::updatePacket(NetPacket& packet)
    {
       // TODO: - Split between NOC_BASE and NOC_QUEUE
       //       - Compare packet.start_time with time_last
-      updateTime(packet.time, NOC);
+      m_times[NOC_QUEUE] += packet.queue_delay;
+      m_time_last += packet.queue_delay;
+      updateTime(packet.time, NOC_BASE);
    }
 }
 

@@ -11,7 +11,8 @@ class ShmemPerf
 {
    public:
       typedef enum {
-         NOC,
+         NOC_BASE,
+         NOC_QUEUE,
          TD_ACCESS,
          INV_IMBALANCE,
          REMOTE_CACHE_INV,

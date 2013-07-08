@@ -23,7 +23,7 @@ class NetworkModelBusGlobal
 
       NetworkModelBusGlobal(String name);
       ~NetworkModelBusGlobal();
-      SubsecondTime useBus(SubsecondTime t_start, UInt32 length);
+      SubsecondTime useBus(SubsecondTime t_start, UInt32 length, subsecond_time_t *queue_delay_stats = NULL);
 };
 
 class NetworkModelBus : public NetworkModel
