@@ -29,17 +29,18 @@ CacheSetPLRU::getReplacementIndex()
          return i;
    }
 
+   UInt32 retValue = -1;
    if (m_associativity == 4)
    {
       if (b[0] == 0)
       {
-         if (b[1] == 0) return 0;
-         else           return 1;   // b1==1
+         if (b[1] == 0) retValue = 0;
+         else           retValue = 1;   // b1==1
       }
       else
       {
-         if (b[2] == 0) return 2;
-         else           return 3;   // b2==1
+         if (b[2] == 0) retValue = 2;
+         else           retValue = 3;   // b2==1
       }
    }
    else if (m_associativity == 8)
@@ -48,26 +49,26 @@ CacheSetPLRU::getReplacementIndex()
       {
          if (b[1] == 0)
          {
-            if (b[2] == 0) return 0;
-            else           return 1;  // b2==1
+            if (b[2] == 0) retValue= 0;
+            else           retValue= 1;  // b2==1
          }
          else
          {                            // b1==1
-            if (b[3] == 0) return 2;
-            else           return 3;  // b3==1
+            if (b[3] == 0) retValue = 2;
+            else           retValue = 3;  // b3==1
          }
       }
       else
       {                               // b0==1
          if (b[4] == 0)
          {
-            if (b[5] == 0) return 4;
-            else           return 5;  // b5==1
+            if (b[5] == 0) retValue = 4;
+            else           retValue = 5;  // b5==1
          }
          else
          {                            // b4==1
-            if (b[6] == 0) return 6;
-            else           return 7;  // b6==1
+            if (b[6] == 0) retValue = 6;
+            else           retValue = 7;  // b6==1
          }
       }
    }
@@ -76,7 +77,10 @@ CacheSetPLRU::getReplacementIndex()
       LOG_PRINT_ERROR("PLRU doesn't support associativity %d", m_associativity);
    }
 
-   LOG_PRINT_ERROR("Error Finding LRU bits");
+
+   LOG_ASSERT_ERROR(isValidReplacement(retValue), "PLRU selected an invalid replacement candidate" );
+   return retValue;
+
 }
 
 void

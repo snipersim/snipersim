@@ -50,6 +50,8 @@ CacheSetSRRIP::getReplacementIndex()
             m_replacement_pointer = (m_replacement_pointer + 1) % m_associativity;
             // Prepare way for a new line: set prediction to 'long'
             m_rrip_bits[index] = m_rrip_insert;
+
+            LOG_ASSERT_ERROR(isValidReplacement(index), "SRRIP selected an invalid replacement candidate" );
             return index;
          }
 
