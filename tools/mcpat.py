@@ -945,7 +945,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t</component>",""])
     template.append(["\t\t\t<component id=\"system.core%i.BTB\" name=\"BTB\">"%iCount,""])
     template.append(["\t\t\t\t<!-- all the buffer related are optional -->",""])
-    template.append(["\t\t\t\t<param name=\"BTB_config\" value=\"5120,4,2,1, 1,3\"/>",""])
+    template.append(["\t\t\t\t<param name=\"BTB_config\" value=\"18944,8,4,1, 1,3\"/>",""]) # ( (64 target + 3 type + 4 ffset + 3 PLRU bits) * 512 entries * 4 ways ) / 8 bits-per-byte = 18944 bytes; tag overheads are already taken into account; block size = 8, associativity = 4, num-of-banks = 1, throughput = 1, latency = 3
     template.append(["\t\t\t\t<stat name=\"read_accesses\" value=\"%i\"/>",["BTB.read_accesses","stat",iCount]])
     template.append(["\t\t\t\t<stat name=\"write_accesses\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<!-- the parameters are capacity,block_width,associativity,bank, throughput w.r.t. core clock, latency w.r.t. core clock,-->",""])
