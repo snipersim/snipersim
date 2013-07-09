@@ -246,6 +246,7 @@ if __name__ == '__main__':
   def usage():
     print '%s  [-d <resultsdir (.)>]  [-o <outputdir>]' % sys.argv[0]
 
+  HOME = os.path.dirname(__file__)
   resultsdir = '.'
   outputdir = None
 
@@ -266,5 +267,15 @@ if __name__ == '__main__':
 
   prof = Profile(resultsdir)
   prof.write(file(os.path.join(outputdir, 'sim.profile'), 'w') if outputdir else sys.stdout)
+
   if outputdir:
-    prof.writeCallgrind(file(os.path.join(outputdir, 'callgrind.out.sniper'), 'w'))
+    callgrindfile = os.path.join(outputdir, 'callgrind.out.sniper')
+    prof.writeCallgrind(file(callgrindfile, 'w'))
+
+    gprof2dot_py = os.path.join(HOME, 'gprof2dot.py')
+    dotbasefile = os.path.join(outputdir, 'sim.profile')
+    os.system('%s --format=callgrind --output=%s.dot %s' % (gprof2dot_py, dotbasefile, callgrindfile))
+    import distutils.spawn
+    if distutils.spawn.find_executable('dot'):
+      os.system('dot -Tpng %s.dot -o %s.png' % (dotbasefile, dotbasefile))
+      os.system('dot -Tsvg %s.dot -o %s.svg' % (dotbasefile, dotbasefile))
