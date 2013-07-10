@@ -9,6 +9,7 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
   items = [
     [ 'base',           .01,   'Base' ],
     [ 'dispatch_width', .01,   'Issue' ],
+    [ 'rs_full',        .01,   'RSFull' ],
     [ 'depend',   .01,   [
       [ 'int',      .01, 'PathInt' ],
       [ 'fp',       .01, 'PathFP' ],
@@ -101,14 +102,14 @@ def build_grouplist(legacy = False):
   # Used to collaps items when use_simple is true, and for coloring
   if legacy:
     return [
-      ('compute',     (0xff,0,0), ('dispatch_width', 'base', 'issue', 'depend',
+      ('compute',     (0xff,0,0), ('dispatch_width', 'rs_full', 'base', 'issue', 'depend',
                                    'branch', 'serial', 'smt')),
       ('communicate', (0,0xff,0), ('itlb','dtlb','ifetch','mem',)),
       ('synchronize', (0,0,0xff), ('sync', 'recv', 'dvfs-transition', 'imbalance')),
     ]
   else:
     return [
-      ('compute',     (0xff,0,0),    ('dispatch_width', 'base', 'issue', 'depend', 'serial', 'smt')),
+      ('compute',     (0xff,0,0),    ('dispatch_width', 'rs_full', 'base', 'issue', 'depend', 'serial', 'smt')),
       ('branch',      (0xff,0xff,0), ('branch',)),
       ('memory',      (0,0xff,0),    ('itlb','dtlb','ifetch','mem',)),
       ('synchronize', (0,0,0xff),    ('sync', 'recv', 'dvfs-transition', 'imbalance')),
