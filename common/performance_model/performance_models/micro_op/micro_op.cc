@@ -234,6 +234,14 @@ bool MicroOp::isFpLoadStore() const
 {
    if (isLoad() || isStore())
    {
+      switch(getSubtype_Exec(*this))
+      {
+         case UOP_SUBTYPE_FP_ADDSUB:
+         case UOP_SUBTYPE_FP_MULDIV:
+            return true;
+         default:
+            ; // fall through
+      }
       switch(getInstructionOpcode())
       {
          case XED_ICLASS_MOVAPS:
