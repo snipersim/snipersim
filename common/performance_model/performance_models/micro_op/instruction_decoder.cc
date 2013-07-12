@@ -276,6 +276,15 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
                // No store microop either: we also inherit its write operands
                addDsts(regs_dst, currentMicroOp);
          }
+
+         // Special cases
+         if ((xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVSD_XMM)
+            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVSS))
+         {
+            // These move instructions also depend on their output registers
+            addSrcs(regs_dst, currentMicroOp);
+         }
+
       }
 
       else if (index < numLoads + numExecs) /* EXEC */
@@ -293,13 +302,12 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
          if ((xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVHPD)
             || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVHPS)
             || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVLPD)
-            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVLPS))
+            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVLPS)
+            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVSD_XMM) // EXEC exists only for reg-to-reg moves
+            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVSS))
          {
-            if ((numExecs == 1) && (numLoads == 1) && (numStores == 0))
-            {
-               // In this case, we have a memory to XMM load, where the result merges the source and destination
-               addSrcs(regs_dst, currentMicroOp);
-            }
+            // In this case, we have a memory to XMM load, where the result merges the source and destination
+            addSrcs(regs_dst, currentMicroOp);
          }
       }
 
