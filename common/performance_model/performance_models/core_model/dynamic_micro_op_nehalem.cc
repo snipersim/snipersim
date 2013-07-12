@@ -152,12 +152,6 @@ DynamicMicroOpNehalem::uop_bypass_t DynamicMicroOpNehalem::getBypassType(const M
          if (uop->isFpLoadStore())
            return UOP_BYPASS_FP_STORE;
          break;
-      case MicroOp::UOP_SUBTYPE_FP_ADDSUB:
-      case MicroOp::UOP_SUBTYPE_FP_MULDIV:
-         if (uop->isLoad())
-            return UOP_BYPASS_LOAD_FP;
-         else if (uop->isStore())
-            return UOP_BYPASS_FP_STORE;
       default:
          break;
    }
