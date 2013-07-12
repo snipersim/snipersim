@@ -48,6 +48,14 @@ CoreModelNehalem::CoreModelNehalem()
    instructionLatencies[XED_ICLASS_VSUBPD] = 3;
    instructionLatencies[XED_ICLASS_VSUBSD] = 3;
 
+   instructionLatencies[XED_ICLASS_MAXSS] = 3;
+   instructionLatencies[XED_ICLASS_MAXSD] = 3;
+   instructionLatencies[XED_ICLASS_MAXPS] = 3;
+   instructionLatencies[XED_ICLASS_MAXPD] = 3;
+   instructionLatencies[XED_ICLASS_MINSS] = 3;
+   instructionLatencies[XED_ICLASS_MINSD] = 3;
+   instructionLatencies[XED_ICLASS_MINPS] = 3;
+   instructionLatencies[XED_ICLASS_MINPD] = 3;
 
    instructionLatencies[XED_ICLASS_MULSS] = 4;
    instructionLatencies[XED_ICLASS_MULPS] = 4;
