@@ -56,6 +56,18 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
       ('  mpki', 'branch_predictor.mpki', lambda v: '%.2f' % v),
     ]
 
+  for tlb in ('itlb', 'dtlb'):
+    if '%s.access'%tlb in results:
+      results['%s.missrate'%tlb] = map(lambda (a,b): 100*a/float(b or 1), zip(results['%s.miss'%tlb], results['%s.access'%tlb]))
+      results['%s.mpki'%tlb] = map(lambda (a,b): 1000*a/float(b or 1), zip(results['%s.miss'%tlb], results['performance_model.instruction_count']))
+      template.extend([
+        ('%s' % tlb.upper(), '', ''),
+        ('  num accesses', '%s.access'%tlb, str),
+        ('  num misses', '%s.miss'%tlb, str),
+        ('  miss rate', '%s.missrate'%tlb, lambda v: '%.2f%%' % v),
+        ('  mpki', '%s.mpki'%tlb, lambda v: '%.2f' % v),
+      ])
+
   template += [
     ('Cache Summary', '', ''),
   ]
