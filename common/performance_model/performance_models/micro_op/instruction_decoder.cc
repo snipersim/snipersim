@@ -277,14 +277,6 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
                addDsts(regs_dst, currentMicroOp);
          }
 
-         // Special cases
-         if ((xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVSD_XMM)
-            || (xed_decoded_inst_get_iclass(ins) == XED_ICLASS_MOVSS))
-         {
-            // These move instructions also depend on their output registers
-            addSrcs(regs_dst, currentMicroOp);
-         }
-
       }
 
       else if (index < numLoads + numExecs) /* EXEC */
