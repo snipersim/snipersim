@@ -37,6 +37,7 @@ def usage():
         '  [--no-cache-warming]' + \
         '  [--save-patch]' + \
         '  [--pin-stats]' + \
+        '  [--wrap-sim=]' + \
         '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec="<mpiexec -mpiarg...>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
@@ -64,6 +65,7 @@ use_viz_mcpat = ''
 use_profile = False
 use_perf = False
 use_valgrind = False
+use_wrap_sim = None
 use_gdb = False
 gdb_wait = False
 gdb_quit = False
@@ -179,7 +181,7 @@ try:
       "roi", "roi-script",
       "viz", "viz-aso",
       "profile",
-      "perf", "valgrind",
+      "perf", "valgrind", "wrap-sim=",
       "gdb", "gdb-wait", "gdb-quit",
       "appdebug", "appdebug-manual", "appdebug-enable",
       "follow-execv=",
@@ -241,6 +243,8 @@ for o, a in opts:
     use_perf = True
   if o == '--valgrind':
     use_valgrind = True
+  if o == '--wrap-sim':
+    use_wrap_sim = a
   if o == '--gdb':
     use_gdb = True
   if o == '--gdb-wait':
@@ -355,12 +359,18 @@ if standalone:
   if use_valgrind and use_gdb:
     print >> sys.stderr, 'Cannot use both --valgrind and --gdb at the same time'
     sys.exit(-1)
+  if use_wrap_sim and use_gdb:
+    print >> sys.stderr, 'Cannot use both --wrap-sim and --gdb at the same time'
+    sys.exit(-1)
   if follow_execv:
     print >> sys.stderr, '--follow-execv not supported in standalone mode'
     sys.exit(-1)
 else:
   if use_valgrind:
     print >> sys.stderr, '--valgrind only supported in standalone mode'
+    sys.exit(-1)
+  if use_wrap_sim:
+    print >> sys.stderr, '--wrap-sim only supported in standalone mode'
     sys.exit(-1)
   if follow_execv and use_gdb:
     print >> sys.stderr, 'Cannot use both --follow-execv and --gdb at the same time'
@@ -666,6 +676,8 @@ if standalone:
     gdbcmd = 'gdb -quiet --command=%(fn)s %(HOME)s/lib/sniper --args ' % locals()
   elif use_valgrind:
     gdbcmd = 'valgrind '
+  elif use_wrap_sim:
+    gdbcmd = '%(use_wrap_sim)s ' % locals()
   else:
     gdbcmd = ''
   cmd = gdbcmd + '%(HOME)s/lib/sniper' % locals() + optcmd
