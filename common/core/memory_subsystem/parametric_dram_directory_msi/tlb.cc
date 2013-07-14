@@ -20,7 +20,7 @@ TLB::lookup(IntPtr address, SubsecondTime now)
 {
    m_access++;
 
-   if (m_cache.peekSingleLine(address))
+   if (m_cache.accessSingleLine(address, Cache::LOAD, NULL, 0, now))
       return true;
 
    m_miss++;
