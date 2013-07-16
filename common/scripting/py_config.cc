@@ -6,7 +6,7 @@ static PyObject *
 getConfigString(PyObject *self, PyObject *args)
 {
    const char *key = NULL;
-   SInt64 index = -1;
+   SInt32 index = -1;
    String result = "";
 
    if (!PyArg_ParseTuple(args, "s|i", &key, &index))
@@ -24,7 +24,7 @@ static PyObject *
 getConfigInt(PyObject *self, PyObject *args)
 {
    const char *key = NULL;
-   SInt64 index = -1;
+   SInt32 index = -1;
    SInt64 result = 0;
 
    if (!PyArg_ParseTuple(args, "s|i", &key, &index))
@@ -42,7 +42,7 @@ static PyObject *
 getConfigFloat(PyObject *self, PyObject *args)
 {
    const char *key = NULL;
-   SInt64 index = -1;
+   SInt32 index = -1;
    double result = 0;
 
    if (!PyArg_ParseTuple(args, "s|i", &key, &index))
@@ -60,7 +60,7 @@ static PyObject *
 getConfigBool(PyObject *self, PyObject *args)
 {
    const char *key = NULL;
-   SInt64 index = -1;
+   SInt32 index = -1;
    bool result = false;
 
    if (!PyArg_ParseTuple(args, "s|i", &key, &index))
