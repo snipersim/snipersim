@@ -37,7 +37,9 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
    m_shmem_perf_model(shmem_perf_model),
    evict_modified(0),
    evict_exclusive(0),
-   evict_shared(0)
+   evict_shared(0),
+   forward(0),
+   forward_failed(0)
 {
    m_dram_directory_cache = new DramDirectoryCache(
          core_id,
@@ -53,6 +55,8 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
    registerStatsMetric("directory", core_id, "evict-modified", &evict_modified);
    registerStatsMetric("directory", core_id, "evict-exclusive", &evict_exclusive);
    registerStatsMetric("directory", core_id, "evict-shared", &evict_shared);
+   registerStatsMetric("directory", core_id, "forward", &forward);
+   registerStatsMetric("directory", core_id, "forward-failed", &forward_failed);
 }
 
 DramDirectoryCntlr::~DramDirectoryCntlr()
@@ -514,24 +518,38 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
       case DirectoryState::SHARED:
       {
-         bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
-         if (add_result == false)
+         if (directory_entry->hasSharer(requester))
          {
-            core_id_t sharer_id = directory_entry->getOneSharer();
-            // Send a message to another sharer to invalidate that
-            MYLOG("INV_REQ>%d for %lx because I could not add sharer", directory_entry->getOwner(), address  )
-            getMemoryManager()->sendMsg(ShmemMsg::INV_REQ,
-                  MemComponent::TAG_DIR, MemComponent::L2_CACHE,
-                  requester /* requester */,
-                  sharer_id /* receiver */,
-                  address,
-                  NULL, 0,
-                  HitWhere::UNKNOWN, shmem_req->getShmemMsg()->getPerf(), ShmemPerfModel::_SIM_THREAD);
+            MYLOG("got a WB/INV REP from the forwarder and now handling the original SH REQ");
+            ++forward;
+            if (cached_data_buf == NULL)
+            {
+               // Forwarder evicted the data while we requested it. Will have to get it from DRAM anyway.
+               ++forward_failed;
+            }
+            retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
          }
          else
          {
-            MYLOG("SHARED state, retrieve data and send")
-            retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
+            bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
+            if (add_result == false)
+            {
+               core_id_t sharer_id = directory_entry->getOneSharer();
+               // Send a message to another sharer to invalidate that
+               MYLOG("INV_REQ>%d for %lx because I could not add sharer", directory_entry->getOwner(), address  )
+               getMemoryManager()->sendMsg(ShmemMsg::INV_REQ,
+                     MemComponent::TAG_DIR, MemComponent::L2_CACHE,
+                     requester /* requester */,
+                     sharer_id /* receiver */,
+                     address,
+                     NULL, 0,
+                     HitWhere::UNKNOWN, shmem_req->getShmemMsg()->getPerf(), ShmemPerfModel::_SIM_THREAD);
+            }
+            else
+            {
+               MYLOG("SHARED state, retrieve data and send")
+               retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
+            }
          }
          break;
       }
@@ -561,9 +579,16 @@ void
 DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
       core_id_t receiver, IntPtr address, Byte* cached_data_buf, ShmemMsg *orig_shmem_msg)
 {
+   DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
+   assert(directory_entry != NULL);
+
    MYLOG("Start @ %lx", address);
    if (cached_data_buf != NULL)
    {
+      // Forwarder state moves to the last cache receiving a copy,
+      // assuming this one is the least likely to evict it early.
+      directory_entry->setForwarder(receiver);
+
       // I already have the data I need cached
       MYLOG("Already have the data that I need cached");
       getMemoryManager()->sendMsg(reply_msg_type,
@@ -609,13 +634,32 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
          }
       }
 
+      assert(m_dram_directory_req_queue_list->size(address) > 0);
+      ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
+
+      // MESIF protocol: get data from a sharing cache
+
+      if (shmem_req->getForwardingFrom() == INVALID_CORE_ID // If forwarding already failed once, don't try again
+          && directory_entry->getDirectoryBlockInfo()->getDState() == DirectoryState::SHARED
+          && directory_entry->getForwarder() != INVALID_CORE_ID)
+      {
+         core_id_t forwarder = directory_entry->getForwarder();
+         shmem_req->setForwardingFrom(forwarder);
+
+         // Send WB_REQ to forwarder to have it send us the data
+         getMemoryManager()->sendMsg(ShmemMsg::WB_REQ,
+            MemComponent::TAG_DIR, MemComponent::L2_CACHE,
+            receiver /* requester */,
+            forwarder /* receiver */,
+            address,
+            NULL, 0,
+            HitWhere::UNKNOWN, shmem_req->getShmemMsg()->getPerf(), ShmemPerfModel::_SIM_THREAD);
+         return;
+      }
+
       // Get the data from DRAM
       // This could be directly forwarded to the cache or passed
       // through the Dram Directory Controller
-
-
-      assert(m_dram_directory_req_queue_list->size(address) > 0);
-      ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
 
       if (shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::UPGRADE_REQ)
       {
@@ -734,6 +778,10 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
    assert(directory_block_info->getDState() == DirectoryState::SHARED || directory_block_info->getDState() == DirectoryState::EXCLUSIVE);
 
    directory_entry->removeSharer(sender);
+   if (directory_entry->getForwarder() == sender)
+   {
+      directory_entry->setForwarder(INVALID_CORE_ID);
+   }
    if (directory_entry->getNumSharers() == 0)
    {
       directory_block_info->setDState(DirectoryState::UNCACHED);
@@ -790,16 +838,21 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
       }
       else if (shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::SH_REQ)
       {
-         if (shmem_req->getWaitForData() == false)
+         if (shmem_req->getWaitForData())
+         {
+            // This is a voluntary invalidate (probably part of an upgrade or eviction),
+            // the next request should only be woken up once its data arrives from DRAM.
+         }
+         else if (shmem_req->isForwarding() && sender != shmem_req->getForwardingFrom())
+         {
+            // This is a voluntary invalidate (probably part of an upgrade or eviction),
+            // the next request should only be woken up once its data arrives from the forwarder.
+         }
+         else
          {
             // A ShmemMsg::SH_REQ caused the invalidation
             updateShmemPerf(shmem_req, ShmemPerf::INV_IMBALANCE);
             processShReqFromL2Cache(shmem_req);
-         }
-         else
-         {
-            // This is a voluntary invalidate (probably part of an upgrade),
-            // the next request should only be woken up once its data arrives.
          }
       }
       else // shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::NULLIFY_REQ
@@ -996,6 +1049,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
 
    assert(directory_entry->hasSharer(sender));
    directory_entry->removeSharer(sender);
+   directory_entry->setForwarder(INVALID_CORE_ID);
    directory_entry->setOwner(INVALID_CORE_ID);
 
    // could be that this is a FLUSH to force a core with S-state to to write back clean data

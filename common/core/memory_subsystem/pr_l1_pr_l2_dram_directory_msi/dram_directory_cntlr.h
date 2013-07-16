@@ -31,6 +31,7 @@ namespace PrL1PrL2DramDirectoryMSI
          ShmemPerfModel* m_shmem_perf_model;
 
          UInt64 evict_modified, evict_exclusive, evict_shared;
+         UInt64 forward, forward_failed;
 
          UInt32 getCacheBlockSize() { return m_cache_block_size; }
          MemoryManagerBase* getMemoryManager() { return m_memory_manager; }

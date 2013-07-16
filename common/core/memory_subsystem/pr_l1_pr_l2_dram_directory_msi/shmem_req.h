@@ -12,14 +12,17 @@ namespace PrL1PrL2DramDirectoryMSI
          ShmemMsg* m_shmem_msg;
          SubsecondTime m_time;
          bool m_wait_for_data;
+         core_id_t m_forwarding_from;
 
       public:
          ShmemReq(ShmemMsg* shmem_msg, SubsecondTime time);
          ~ShmemReq();
 
-         ShmemMsg* getShmemMsg() { return m_shmem_msg; }
-         SubsecondTime getTime() { return m_time; }
-         bool getWaitForData() { return m_wait_for_data; }
+         ShmemMsg* getShmemMsg() const { return m_shmem_msg; }
+         SubsecondTime getTime() const { return m_time; }
+         bool getWaitForData() const { return m_wait_for_data; }
+         core_id_t getForwardingFrom() const { return m_forwarding_from; }
+         bool isForwarding() const { return m_forwarding_from != INVALID_CORE_ID; }
 
          void setTime(SubsecondTime time) { m_time = time; }
          void updateTime(SubsecondTime time)
@@ -28,6 +31,7 @@ namespace PrL1PrL2DramDirectoryMSI
                m_time = time;
          }
          void setWaitForData(bool wait) { m_wait_for_data = wait; }
+         void setForwardingFrom(core_id_t core_id) { m_forwarding_from = core_id; }
    };
 
 }

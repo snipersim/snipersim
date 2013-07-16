@@ -39,6 +39,7 @@ class DirectoryEntry
       IntPtr m_address;
       DirectoryBlockInfo m_directory_block_info;
       core_id_t m_owner_id;
+      core_id_t m_forwarder_id;
 
    public:
       DirectoryEntry()
@@ -58,6 +59,16 @@ class DirectoryEntry
 
       virtual core_id_t getOwner() = 0;
       virtual void setOwner(core_id_t owner_id) = 0;
+
+      virtual core_id_t getForwarder()
+      {
+         return m_forwarder_id;
+      }
+
+      virtual void setForwarder(core_id_t forwarder_id)
+      {
+         m_forwarder_id = forwarder_id;
+      }
 
       IntPtr getAddress() { return m_address; }
       void setAddress(IntPtr address) { m_address = address; }
