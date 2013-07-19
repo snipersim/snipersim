@@ -8,7 +8,6 @@
 #include "address_home_lookup.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/shmem_msg.h"
 #include "mem_component.h"
-#include "tlb.h"
 #include "semaphore.h"
 #include "fixed_types.h"
 #include "shmem_perf_model.h"
@@ -19,6 +18,7 @@
 
 class DramCache;
 class ShmemPerf;
+class TLB;
 
 namespace ParametricDramDirectoryMSI
 {
@@ -35,7 +35,7 @@ namespace ParametricDramDirectoryMSI
          PrL1PrL2DramDirectoryMSI::DramCntlr* m_dram_cntlr;
          AddressHomeLookup* m_tag_directory_home_lookup;
          AddressHomeLookup* m_dram_controller_home_lookup;
-         TLB *m_itlb, *m_dtlb;
+         TLB *m_itlb, *m_dtlb, *m_stlb;
          ComponentLatency m_tlb_miss_penalty;
 
          core_id_t m_core_id_master;

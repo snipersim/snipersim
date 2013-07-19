@@ -36,7 +36,7 @@ MemoryManager::MemoryManager(Core* core,
    m_dram_cache(NULL),
    m_dram_directory_cntlr(NULL),
    m_dram_cntlr(NULL),
-   m_itlb(NULL), m_dtlb(NULL),
+   m_itlb(NULL), m_dtlb(NULL), m_stlb(NULL),
    m_tlb_miss_penalty(NULL,0),
    m_tag_directory_present(false),
    m_dram_cntlr_present(false),
@@ -67,12 +67,15 @@ MemoryManager::MemoryManager(Core* core,
 
       m_last_level_cache = (MemComponent::component_t)(Sim()->getCfg()->getInt("perf_model/cache/levels") - 2 + MemComponent::L2_CACHE);
 
+      UInt32 stlb_size = Sim()->getCfg()->getInt("perf_model/stlb/size");
+      if (stlb_size)
+         m_stlb = new TLB("stlb", "perf_model/stlb", getCore()->getId(), stlb_size, Sim()->getCfg()->getInt("perf_model/stlb/associativity"), NULL);
       UInt32 itlb_size = Sim()->getCfg()->getInt("perf_model/itlb/size");
       if (itlb_size)
-         m_itlb = new TLB("itlb", "perf_model/itlb", getCore()->getId(), itlb_size, Sim()->getCfg()->getInt("perf_model/itlb/associativity"));
+         m_itlb = new TLB("itlb", "perf_model/itlb", getCore()->getId(), itlb_size, Sim()->getCfg()->getInt("perf_model/itlb/associativity"), m_stlb);
       UInt32 dtlb_size = Sim()->getCfg()->getInt("perf_model/dtlb/size");
       if (dtlb_size)
-         m_dtlb = new TLB("dtlb", "perf_model/dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"));
+         m_dtlb = new TLB("dtlb", "perf_model/dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"), m_stlb);
       m_tlb_miss_penalty = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/tlb/penalty"));
 
       smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
@@ -571,7 +574,11 @@ void
 MemoryManager::accessTLB(TLB * tlb, IntPtr address, bool isIfetch, Core::MemModeled modeled)
 {
    bool hit = tlb->lookup(address, getShmemPerfModel()->getElapsedTime());
-   if (!hit && !(modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT)) {
+   if (hit == false
+       && !(modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT)
+       && m_tlb_miss_penalty.getLatency() != SubsecondTime::Zero()
+   )
+   {
       Instruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
       getCore()->getPerformanceModel()->queueDynamicInstruction(i);
    }

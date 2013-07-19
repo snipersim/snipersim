@@ -17,12 +17,14 @@ namespace ParametricDramDirectoryMSI
          UInt32 m_associativity;
          Cache m_cache;
 
+         TLB *m_next_level;
+
          UInt64 m_access, m_miss;
       public:
-         TLB(String name, String cfgname, core_id_t core_id, UInt32 size, UInt32 associativity);
-         bool lookup(IntPtr address, SubsecondTime now);
+         TLB(String name, String cfgname, core_id_t core_id, UInt32 size, UInt32 associativity, TLB *next_level);
+         bool lookup(IntPtr address, SubsecondTime now, bool allocate_on_miss = true);
+         void allocate(IntPtr address, SubsecondTime now);
    };
 }
 
 #endif // TLB_H
-

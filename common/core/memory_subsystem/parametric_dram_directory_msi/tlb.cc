@@ -4,10 +4,11 @@
 namespace ParametricDramDirectoryMSI
 {
 
-TLB::TLB(String name, String cfgname, core_id_t core_id, UInt32 size, UInt32 associativity)
+TLB::TLB(String name, String cfgname, core_id_t core_id, UInt32 size, UInt32 associativity, TLB *next_level)
    : m_size(size)
    , m_associativity(associativity)
    , m_cache(name + "_cache", cfgname, core_id, size, associativity, SIM_PAGE_SIZE, "lru", CacheBase::PR_L1_CACHE)
+   , m_next_level(next_level)
    , m_access(0)
    , m_miss(0)
 {
@@ -16,21 +17,41 @@ TLB::TLB(String name, String cfgname, core_id_t core_id, UInt32 size, UInt32 ass
 }
 
 bool
-TLB::lookup(IntPtr address, SubsecondTime now)
+TLB::lookup(IntPtr address, SubsecondTime now, bool allocate_on_miss)
 {
+   bool hit = m_cache.accessSingleLine(address, Cache::LOAD, NULL, 0, now);
+
    m_access++;
 
-   if (m_cache.accessSingleLine(address, Cache::LOAD, NULL, 0, now))
+   if (hit)
       return true;
 
    m_miss++;
 
+   if (m_next_level)
+   {
+      hit = m_next_level->lookup(address, now, false /* no allocation */);
+   }
+
+   if (allocate_on_miss)
+   {
+      allocate(address, now);
+   }
+
+   return hit;
+}
+
+void
+TLB::allocate(IntPtr address, SubsecondTime now)
+{
    bool eviction;
    IntPtr evict_addr;
    CacheBlockInfo evict_block_info;
    m_cache.insertSingleLine(address, NULL, &eviction, &evict_addr, &evict_block_info, NULL, now);
 
-   return false;
+   // Use next level as a victim cache
+   if (eviction && m_next_level)
+      m_next_level->allocate(evict_addr, now);
 }
 
 }
