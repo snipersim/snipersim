@@ -41,14 +41,17 @@ void InstructionTracerFPStats::init()
 
 void InstructionTracerFPStats::handleInstruction(Instruction const* instruction)
 {
-   for (std::vector<const MicroOp *>::const_iterator uop = instruction->getMicroOps()->begin() ; uop != instruction->getMicroOps()->end() ; ++uop)
+   if (instruction->getMicroOps())
    {
-      int iclass = static_cast<int>((*uop)->getInstructionOpcode());
-      if (m_iclasses.count(iclass))
+      for (std::vector<const MicroOp *>::const_iterator uop = instruction->getMicroOps()->begin() ; uop != instruction->getMicroOps()->end() ; ++uop)
       {
-         m_iclasses[iclass]++;
+         int iclass = static_cast<int>((*uop)->getInstructionOpcode());
+         if (m_iclasses.count(iclass))
+         {
+            m_iclasses[iclass]++;
+         }
+         // The opcode data from the first micro-op is enough
+         break;
       }
-      // The opcode data from the first micro-op is enough
-      break;
    }
 }
