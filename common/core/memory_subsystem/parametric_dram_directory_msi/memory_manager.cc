@@ -3,6 +3,7 @@
 #include "cache_base.h"
 #include "nuca_cache.h"
 #include "dram_cache.h"
+#include "tlb.h"
 #include "simulator.h"
 #include "log.h"
 #include "dvfs_manager.h"

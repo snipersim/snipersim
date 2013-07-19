@@ -18,10 +18,11 @@
 
 class DramCache;
 class ShmemPerf;
-class TLB;
 
 namespace ParametricDramDirectoryMSI
 {
+   class TLB;
+
    typedef std::pair<core_id_t, MemComponent::component_t> CoreComponentType;
    typedef std::map<CoreComponentType, CacheCntlr*> CacheCntlrMap;
 
