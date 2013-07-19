@@ -128,8 +128,22 @@ void RoutineTracerThread::hookRoiBegin()
 
 void RoutineTracerThread::hookRoiEnd()
 {
-   for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
-      functionExit(*it);
+   // Call functionExit for all functions that are left on the stack.
+   // Since functionExit might use m_stack we need to keep it up-to-date by popping items off,
+   // we'll use stack_save to remember them and restore m_stack to its original state on exit.
+   std::deque<IntPtr> stack_save;
+
+   while(m_stack.size())
+   {
+      functionExit(m_stack.back());
+      stack_save.push_back(m_stack.back());
+      m_stack.pop_back();
+   }
+   while(stack_save.size())
+   {
+      m_stack.push_back(stack_save.back());
+      stack_save.pop_back();
+   }
 }
 
 RoutineTracer::Routine::Routine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)

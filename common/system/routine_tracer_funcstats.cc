@@ -85,8 +85,7 @@ void RoutineTracerFunctionStats::RtnThread::functionEnd(IntPtr eip, bool is_func
    Sim()->getThreadStatsManager()->update(m_thread->getId());
 
    functionEndHelper(eip, is_function_start ? 1 : 0);
-   // Ignore simulated stack unwind at end of ROI (m_stack isn't kept up-to-date during this)
-   if (m_stack.size() && eip == m_stack.back())
+   if (m_stack.size())
       functionEndFullHelper(m_stack, is_function_start ? 1 : 0);
 }
 
