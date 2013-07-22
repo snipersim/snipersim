@@ -2,7 +2,7 @@
 import os, sys, getopt, re, math, subprocess, json
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
-import sniper_lib, sniper_stats, cpistack, level1, level2, level3, topology, functionbased
+import sniper_lib, sniper_stats, cpistack, level1, level2, level3, topology, profile, functionbased
 
 
 # From http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
@@ -16,7 +16,7 @@ def mkdir_p(path):
     else: raise
 
 
-levels_all = [ '1', '2', '3', 'topo', 'aso' ]
+levels_all = [ '1', '2', '3', 'topo', 'profile', 'aso' ]
 levels_default = [ '1', '2', '3', 'topo' ]
 
 
@@ -125,6 +125,7 @@ if __name__ == '__main__':
   if '2' in levels: level2.createJSONData(defaultinterval, defaultnum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, verbose = verbose)
   if '3' in levels: level3.createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbose = verbose)
   if 'topo' in levels: topology.createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = verbose)
+  if 'profile' in levels: profile.createJSONData(resultsdir, outputdir, verbose = verbose)
   if 'aso' in levels: functionbased.createJSONData(resultsdir, outputdir, title)
 
   if verbose:
@@ -137,6 +138,7 @@ if __name__ == '__main__':
   info.write("use_mcpat = "+str(1 if use_mcpat else 0)+";\n")
   info.write("use_level3 = "+str(1 if '3' in levels else 0)+";\n")
   info.write("use_topo = "+str(1 if 'topo' in levels else 0)+";\n")
+  info.write("use_profile = "+str(1 if 'profile' in levels else 0)+";\n")
   info.write("use_aso = "+str(1 if 'aso' in levels else 0)+";\n")
   info.close()
 
@@ -148,7 +150,7 @@ if __name__ == '__main__':
   if outputdir != HOME:
     if verbose:
       print "Copy files to output directory "+outputdir
-    os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html levels/level3/*html levels/topology/*html css/ images/ scripts/ levels/level2/css levels/level2/javascript/ levels/level3/javascript | tar x -C %s' % (HOME, outputdir))
+    os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html levels/level3/*html levels/topology/*html levels/profile/*html css/ images/ scripts/ levels/level2/css levels/level2/javascript/ levels/level3/javascript | tar x -C %s' % (HOME, outputdir))
     if 'aso' in levels:
       os.system('cd "%s"; tar c flot/ levels/functionbased/functionbased.html levels/functionbased/*js css/ levels/functionbased/doxygen | tar x -C %s' % (HOME, outputdir))
   if verbose:

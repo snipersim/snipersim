@@ -21,6 +21,7 @@ function writeHeader(currentView)
 (use_mcpat ? "<li><a href=\"../../levels/level2/mcpatviz.html\">McPAT visualizations over time</a></li>" : "<li class='unavailable' title='Use viz.py --mcpat to enable'>No McPAT</li>") +
 (use_level3 ? "<li><a href=\"../../levels/level3/level3.html\">3D (time-cores-IPC) visualization</a></li>" : "<li class='unavailable'>No 3D (time-cores-IPC)</li>") +
 (use_topo ? "<li><a href=\"../../levels/topology/topology.html\">Topology</a></li>" : "<li class='unavailable'>No topology</li>") +
+(use_profile ? "<li><a href=\"../../levels/profile/profile.html\">Profile</a></li>" : "<li class='unavailable'>No profile</li>") +
 (use_aso ? "<li><a href=\"../../levels/functionbased/functionbased.html\">Suggestions for Optimization</a></li>" : "<li class='unavailable' title='Use --viz-aso to enable'>No Suggestions</li>") +
 '      </ul>'+
 '      <div style="clear:both"></div>'+

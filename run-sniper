@@ -60,6 +60,7 @@ roi_script = False
 sim_end = 'first'
 sim_end_valid = ('first', 'last', 'last-restart')
 use_viz = False
+use_viz_profile = ''
 use_viz_aso = ''
 use_viz_mcpat = ''
 use_profile = False
@@ -238,6 +239,7 @@ for o, a in opts:
     use_viz_aso = '--add-level=aso'
   if o == '--profile':
     use_profile = True
+    use_viz_profile = '--add-level=profile'
   if o == '--perf':
     use_perf = True
   if o == '--valgrind':
@@ -839,7 +841,7 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
   if use_viz:
     print '[SNIPER] Generating visualization in viz/'
-    os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s %(use_viz_aso)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+    os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s %(use_viz_profile)s %(use_viz_aso)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
   if use_viz_aso and not use_viz:
     print '[SNIPER] Generating ASO visualization in viz/levels/functionbased/'
