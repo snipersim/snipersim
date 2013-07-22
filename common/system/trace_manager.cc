@@ -4,6 +4,7 @@
 #include "thread_manager.h"
 #include "hooks_manager.h"
 #include "config.hpp"
+#include "sim_api.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -186,12 +187,18 @@ TraceManager::~TraceManager()
 
 void TraceManager::start()
 {
+   // Begin of region-of-interest when running Sniper inside Sniper
+   SimRoiStart();
+
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
       (*it)->spawn();
 }
 
 void TraceManager::stop()
 {
+   // End of region-of-interest when running Sniper inside Sniper
+   SimRoiEnd();
+
    // Signal threads to stop.
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
       (*it)->stop();
