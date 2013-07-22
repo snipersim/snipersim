@@ -133,8 +133,11 @@ if __name__ == '__main__':
   info.write("title = '"+title+"';\n")
   info.write("num_intervals = '"+str(num_intervals)+"';\n")
   info.write("interval = '"+str(interval)+"';\n")
-  info.write("use_mcpat = '"+str(use_mcpat)+"';\n")
-  info.write("use_aso = '"+str('aso' in levels)+"';\n")
+  info.write("use_level2 = "+str(1 if '2' in levels else 0)+";\n")
+  info.write("use_mcpat = "+str(1 if use_mcpat else 0)+";\n")
+  info.write("use_level3 = "+str(1 if '3' in levels else 0)+";\n")
+  info.write("use_topo = "+str(1 if 'topo' in levels else 0)+";\n")
+  info.write("use_aso = "+str(1 if 'aso' in levels else 0)+";\n")
   info.close()
 
   asoinfo = open(os.path.join(outputdir,'asoinfo.txt'), "w")
