@@ -423,6 +423,7 @@ var colors = {
 					data : [[10,0]]
 				     };
 				var barlength = maxbarvalue*((optimizationspermodule[optname][j]["app_speedup"]-1)/normalizedvalue);
+				if (barlength == 0) barlength = 1;
 				document.getElementById('peroptplaceholder'+optname+'a'+j).style.width=barlength+"px";
 				$.plot($("#peroptplaceholder"+optname+"a"+j), [Optbar], plotoptions);
 				previousSeries=null;
