@@ -34,7 +34,9 @@ class ShmemPerf
          NUM_SHMEM_TIMES
       } shmem_times_type_t;
 
-      ShmemPerf(SubsecondTime time_begin);
+      ShmemPerf();
+      void disable();
+      void reset(SubsecondTime time);
       void updateTime(SubsecondTime time, shmem_times_type_t reason = UNKNOWN);
       void updatePacket(NetPacket& packet);
       void add(ShmemPerf *perf);

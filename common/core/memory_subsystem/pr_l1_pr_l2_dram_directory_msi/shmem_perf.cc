@@ -35,11 +35,25 @@ const char* ShmemReasonString(ShmemPerf::shmem_times_type_t reason)
 }
 
 
-ShmemPerf::ShmemPerf(SubsecondTime time_begin)
-   : m_time_begin(time_begin)
-   , m_time_last(time_begin)
+ShmemPerf::ShmemPerf()
+   : m_time_begin(SubsecondTime::Zero())
+   , m_time_last(SubsecondTime::Zero())
    , m_times(NUM_SHMEM_TIMES)
 {
+}
+
+void ShmemPerf::disable()
+{
+   // Make sure no-one increments any of our counters anymore
+   m_time_last = SubsecondTime::MaxTime();
+}
+
+void ShmemPerf::reset(SubsecondTime time)
+{
+   m_time_begin = time;
+   m_time_last = time;
+   for(int i = 0; i < ShmemPerf::NUM_SHMEM_TIMES; ++i)
+      m_times[i] = SubsecondTime::Zero();
 }
 
 void ShmemPerf::updateTime(SubsecondTime time, shmem_times_type_t reason)
@@ -50,17 +64,19 @@ void ShmemPerf::updateTime(SubsecondTime time, shmem_times_type_t reason)
    {
       LOG_ASSERT_ERROR(reason < NUM_SHMEM_TIMES, "Invalid ShmemPerf reason %d", reason);
 
-      m_times[reason] += time - m_time_last;
-      m_time_last = time;
+      // Ignore duplicate paths or updates using stale pointers
+      if (time > m_time_last)
+      {
+         m_times[reason] += time - m_time_last;
+         m_time_last = time;
+      }
    }
 }
 
 void ShmemPerf::updatePacket(NetPacket& packet)
 {
-   if (this)
+   if (this && packet.time > m_time_last)
    {
-      // TODO: - Split between NOC_BASE and NOC_QUEUE
-      //       - Compare packet.start_time with time_last
       m_times[NOC_QUEUE] += packet.queue_delay;
       m_time_last += packet.queue_delay;
       updateTime(packet.time, NOC_BASE);

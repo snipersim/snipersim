@@ -126,7 +126,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_user_thread_sem(user_thread_sem),
    m_network_thread_sem(network_thread_sem),
    m_last_remote_hit_where(HitWhere::UNKNOWN),
-   m_shmem_perf(NULL),
+   m_shmem_perf(new ShmemPerf()),
    m_shmem_perf_global(NULL),
    m_shmem_perf_model(shmem_perf_model)
 {
@@ -220,7 +220,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 #endif
    if (is_last_level_cache)
    {
-      m_shmem_perf_global = new ShmemPerf(SubsecondTime::Zero());
+      m_shmem_perf_global = new ShmemPerf();
       m_shmem_perf_totaltime = SubsecondTime::Zero();
       m_shmem_perf_numrequests = 0;
 
@@ -241,6 +241,7 @@ CacheCntlr::~CacheCntlr()
       delete m_master->m_cache;
       delete m_master;
    }
+   delete m_shmem_perf;
    if (m_shmem_perf_global)
       delete m_shmem_perf_global;
    #ifdef TRACK_LATENCY_BY_HITWHERE
@@ -912,8 +913,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             }
             else
             {
-               LOG_ASSERT_ERROR(m_shmem_perf == NULL, "Another transaction still running?");
-               m_shmem_perf = new ShmemPerf(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
+               m_shmem_perf->reset(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
 
                Byte data_buf[getCacheBlockSize()];
                SubsecondTime latency;
@@ -1088,8 +1088,7 @@ CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, 
 
    if (first)
    {
-      LOG_ASSERT_ERROR(m_shmem_perf == NULL, "Another transaction still running?");
-      m_shmem_perf = new ShmemPerf(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
+      m_shmem_perf->reset(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
 
       /* We're the first one to request this address, send the message to the directory now */
       if (exclusive)
@@ -2041,14 +2040,18 @@ CacheCntlr::updateUncoreStatistics(HitWhere::where_t hit_where, SubsecondTime no
    m_last_remote_hit_where = hit_where;
 
    // Update ShmemPerf
-   if (m_shmem_perf)
+   if (m_shmem_perf->getInitialTime() > SubsecondTime::Zero())
    {
+      // We can't really be sure that there are not outstanding transations that still pass a pointer
+      // around to our ShmemPerf structure. By settings its last time to MaxTime, we prevent anyone
+      // from updating statistics while we're reading them.
+      m_shmem_perf->disable();
+
       m_shmem_perf_global->add(m_shmem_perf);
       m_shmem_perf_totaltime += now - m_shmem_perf->getInitialTime();
       m_shmem_perf_numrequests ++;
 
-      delete m_shmem_perf;
-      m_shmem_perf = NULL;
+      m_shmem_perf->reset(SubsecondTime::Zero());
    }
 }
 
