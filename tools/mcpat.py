@@ -383,6 +383,10 @@ def edit_XML(statsobj, stats, cfg, vdd):
       peak_issue_width = long(long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
       ALU_per_core = peak_issue_width
       window_size = int(sniper_config.get_config(cfg, "perf_model/core/interval_timer/window_size", core))
+      if sniper_config.get_config(cfg, "perf_model/core/type", core) == 'rob' and sniper_config.get_config(cfg, "perf_model/core/rob_timer/in_order", core) == 'true':
+        machineType = 1 # in-order
+      else:
+        machineType = 0 # OoO
       latency_bp = long(sniper_config.get_config(cfg, 'perf_model/branch_predictor/mispredict_penalty', core))
         #---FROM CONFIG----------
       latency_l1_d = long(sniper_config.get_config(cfg, 'perf_model/l1_dcache/data_access_time', core))
@@ -425,6 +429,8 @@ def edit_XML(statsobj, stats, cfg, vdd):
             template[i][0] = template[i][0] % ALU_per_core
           elif template[i][1][0]=="window_size":
             template[i][0] = template[i][0] % window_size
+          elif template[i][1][0]=="machineType":
+            template[i][0] = template[i][0] % machineType
         elif template[i][1][1]=="stat":
           cores_l2s = range(l2_cacheSharedCores*core, min(ncores, l2_cacheSharedCores*core+l2_cacheSharedCores))
           cores_l3s = range(l3_cacheSharedCores*core, min(ncores, l3_cacheSharedCores*core+l3_cacheSharedCores))
@@ -741,16 +747,16 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t<param name=\"opcode_width\" value=\"16\"/>",""])
     template.append(["\t\t\t<!-- address width determins the tag_width in Cache, LSQ and buffers in cache controller ",""])
     template.append(["\t\t\tdefault value is machine_bits, if not set --> ",""])
-    template.append(["\t\t\t<param name=\"machine_type\" value=\"0\"/><!-- 1 inorder; 0 OOO-->",""])
+    template.append(["\t\t\t<param name=\"machine_type\" value=\"%i\"/><!-- 1 inorder; 0 OOO-->",["machineType","cfg",iCount]])
     template.append(["\t\t\t<!-- inorder/OoO -->",""])
     template.append(["\t\t\t<param name=\"number_hardware_threads\" value=\"1\"/>",""])
     template.append(["\t\t\t<!-- number_instruction_fetch_ports(icache ports) is always 1 in single-thread processor,",""])
     template.append(["\t\t\tit only may be more than one in SMT processors. BTB ports always equals to fetch ports since ",""])
     template.append(["\t\t\tbranch information in consective branch instructions in the same fetch group can be read out from BTB once.--> ",""])
-    template.append(["\t\t\t<param name=\"fetch_width\" value=\"4\"/>",""])
+    template.append(["\t\t\t<param name=\"fetch_width\" value=\"%d\"/>",["issue_width","cfg",iCount]])
     template.append(["\t\t\t<!-- fetch_width determins the size of cachelines of L1 cache block -->",""])
     template.append(["\t\t\t<param name=\"number_instruction_fetch_ports\" value=\"1\"/>",""])
-    template.append(["\t\t\t<param name=\"decode_width\" value=\"4\"/>",""])
+    template.append(["\t\t\t<param name=\"decode_width\" value=\"%d\"/>",["issue_width","cfg",iCount]])
     template.append(["\t\t\t<!-- decode_width determins the number of ports of the ",""])
     template.append(["\t\t\trenaming table (both RAM and CAM) scheme -->",""])
 #---------------------------------------------------------------------------
