@@ -191,21 +191,35 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, confi
       print '                         Area    Area %'
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
+      total_core = 0.
       for name, value in res:
         if print_stack:
           print '  %-12s    %6.2f mm^2   %6.2f%%' % (name, float(value), 100 * float(value) / total)
+        if name.startswith('core'):
+          total_core += float(value)
         plot_labels.append(name)
         plot_data[core][name] = float(value)
+      if print_stack:
+        print
+        print '  %-12s    %6.2f mm^2   %6.2f%%' % ('core', float(total_core), 100 * float(total_core) / total)
+        print '  %-12s    %6.2f mm^2   %6.2f%%' % ('total', float(total), 100 * float(total) / total)
   else:
     if print_stack:
       print '                     Power     Energy   Energy %'
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
+      total_core = 0.
       for name, value in res:
         if print_stack:
           print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % (name, float(value), float(value) * seconds, 100 * float(value) / total)
+        if name.startswith('core'):
+          total_core += float(value)
         plot_labels.append(name)
         plot_data[core][name] = float(value) * seconds
+      if print_stack:
+        print
+        print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % ('core', float(total_core), float(total_core) * seconds, 100 * float(total_core) / total)
+        print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % ('total', float(total), float(total) * seconds, 100 * float(total) / total)
 
   if not no_graph:
     # Use Gnuplot to make a stacked bargraphs of these cpi-stacks
