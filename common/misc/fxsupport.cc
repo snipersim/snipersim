@@ -17,9 +17,6 @@ Fxsupport::Fxsupport(core_id_t core_count)
    m_ref_count = (uint64_t**) malloc (m_core_count * sizeof(uint64_t*));
    for (int i = 0; i < m_core_count; i++)
    {
-      // put reference counts on seperate cache lines; 64-bytes is a typical cache-line size
-      __attribute__((unused)) int status = posix_memalign ((void**) &m_ref_count[i], 64, sizeof(uint64_t));
-      assert (status == 0);
       m_ref_count[i] = 0;
    }
 }
@@ -30,9 +27,6 @@ Fxsupport::~Fxsupport()
       free ((void*) m_fx_buf[i]);
 
    free (m_fx_buf);
-
-   for (int i = 0; i < m_core_count; i++)
-      free ((void*) m_ref_count[i]);
 
    free (m_ref_count);
 }

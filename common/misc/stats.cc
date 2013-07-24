@@ -52,6 +52,11 @@ StatsManager::StatsManager()
 
 StatsManager::~StatsManager()
 {
+   for(StatsObjectList::iterator it1 = m_objects.begin(); it1 != m_objects.end(); ++it1)
+      for (StatsMetricList::iterator it2 = it1->second.begin(); it2 != it1->second.end(); ++it2)
+         for(StatsIndexList::iterator it3 = it2->second.second.begin(); it3 != it2->second.second.end(); ++it3)
+            delete it3->second;
+
    if (m_db)
    {
       sqlite3_finalize(m_stmt_insert_name);

@@ -178,8 +178,12 @@ Simulator::~Simulator()
       delete m_faultinjection_manager;
    delete m_sim_thread_manager;
    delete m_thread_manager;
+   delete m_thread_stats_manager;
    delete m_core_manager;
+   delete m_dvfs_manager;
    delete m_magic_server;
+   delete m_sync_server;
+   delete m_syscall_server;
    delete m_hooks_manager;
    delete m_tags_manager;
    delete m_transport;

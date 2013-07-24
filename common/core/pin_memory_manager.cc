@@ -15,7 +15,10 @@ PinMemoryManager::PinMemoryManager(Core* core):
 }
 
 PinMemoryManager::~PinMemoryManager()
-{}
+{
+   for (unsigned int i = 0; i < NUM_ACCESS_TYPES; i++)
+      free(m_scratchpad[i]);
+}
 
 carbon_reg_t
 PinMemoryManager::redirectMemOp (IntPtr eip, bool has_lock_prefix, IntPtr tgt_ea, IntPtr size, UInt32 op_num, bool is_read)

@@ -264,8 +264,8 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
    instruction->setAddress(va2pa(inst.sinst->addr));
    instruction->setSize(inst.sinst->size);
    instruction->setAtomic(xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst)));
-   char disassembly[40];
-   xed_format(m_syntax, &xed_inst, disassembly, sizeof(disassembly), inst.sinst->addr);
+   char disassembly[64];
+   xed_format(m_syntax, &xed_inst, disassembly, sizeof(disassembly) - 1, inst.sinst->addr);
    instruction->setDisassembly(disassembly);
 
    const std::vector<const MicroOp*> *uops = InstructionDecoder::decode(inst.sinst->addr, &xed_inst, instruction);

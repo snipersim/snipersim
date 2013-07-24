@@ -79,6 +79,11 @@ void SimThreadManager::quitSimThreads()
 
    Transport::getSingleton()->barrier();
 
+   delete [] m_sim_threads;
+   #ifdef ENABLE_PERF_MODEL_OWN_THREAD
+   delete [] m_core_threads;
+   #endif
+
    LOG_PRINT("All threads have exited.");
 }
 

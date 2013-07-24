@@ -119,6 +119,7 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
       SpawnInstruction const* spawn_insn = dynamic_cast<SpawnInstruction const*>(i);
       LOG_ASSERT_ERROR(spawn_insn != NULL, "Expected a SpawnInstruction, but did not get one.");
       setElapsedTime(spawn_insn->getTime());
+      delete i;
       return;
    }
 

@@ -16,8 +16,8 @@ int main(int argc, char* argv[])
       while(reader.Read(inst))
       {
          printf("%016" PRIx64 " ", inst.sinst->addr);
-         char buffer[40];
-         xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer), inst.sinst->addr);
+         char buffer[64];
+         xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr);
          printf("%-40s  ", buffer);
 
          for(int i = 0; i < inst.sinst->size; ++i)

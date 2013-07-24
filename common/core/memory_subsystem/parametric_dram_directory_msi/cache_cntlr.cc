@@ -126,6 +126,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_user_thread_sem(user_thread_sem),
    m_network_thread_sem(network_thread_sem),
    m_last_remote_hit_where(HitWhere::UNKNOWN),
+   m_shmem_perf(NULL),
+   m_shmem_perf_global(NULL),
    m_shmem_perf_model(shmem_perf_model)
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
@@ -234,10 +236,13 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 
 CacheCntlr::~CacheCntlr()
 {
-   if (isMasterCache()) {
+   if (isMasterCache())
+   {
       delete m_master->m_cache;
       delete m_master;
    }
+   if (m_shmem_perf_global)
+      delete m_shmem_perf_global;
    #ifdef TRACK_LATENCY_BY_HITWHERE
    for(std::unordered_map<HitWhere::where_t, StatHist>::iterator it = lat_by_where.begin(); it != lat_by_where.end(); ++it) {
       printf("%2u-%s: ", m_core_id, HitWhereString(it->first));

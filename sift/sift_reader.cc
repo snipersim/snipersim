@@ -58,8 +58,10 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
 
 Sift::Reader::~Reader()
 {
-   delete m_filename;
-   delete m_response_filename;
+   free(m_filename);
+   free(m_response_filename);
+   if (input)
+      delete input;
    if (response)
       delete response;
    for(std::unordered_map<uint64_t, const uint8_t*>::iterator i = icache.begin() ; i != icache.end() ; ++i)
@@ -68,7 +70,7 @@ Sift::Reader::~Reader()
    }
    for(std::unordered_map<uint64_t, const StaticInstruction*>::iterator i = scache.begin() ; i != scache.end() ; ++i)
    {
-      delete [] (*i).second;
+      delete (*i).second;
    }
 }
 
