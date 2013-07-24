@@ -118,7 +118,7 @@ int main(int argc, char **argv)
       any_thread_in_detail = true;
       openFile(0);
    }
-   if (KnobEmulateSyscalls.Value())
+   else if (KnobEmulateSyscalls.Value())
    {
       openFile(0);
    }
