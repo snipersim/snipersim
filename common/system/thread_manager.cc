@@ -16,7 +16,7 @@
 #include "os_compat.h"
 
 const char* ThreadManager::stall_type_names[] = {
-   "unscheduled", "broken", "join", "mutex", "cond", "barrier", "futex", "pause", "sleep"
+   "unscheduled", "broken", "join", "mutex", "cond", "barrier", "futex", "pause", "sleep", "syscall"
 };
 static_assert(ThreadManager::STALL_TYPES_MAX == sizeof(ThreadManager::stall_type_names) / sizeof(char*),
               "Not enough values in ThreadManager::stall_type_names");

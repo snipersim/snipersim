@@ -65,7 +65,7 @@ ClockSkewMinimizationServer::create()
 }
 
 SubsecondTime
-ClockSkewMinimizationServer::getGlobalTime()
+ClockSkewMinimizationServer::getGlobalTime(bool upper_bound)
 {
    LOG_PRINT_ERROR("This clock skew minimization server does not support getGlobalTime");
 }

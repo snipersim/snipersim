@@ -51,6 +51,7 @@ class TraceThread : public Runnable
       String m_tracefile;
       String m_responsefile;
       app_id_t m_app_id;
+      bool m_blocked;
       bool m_cleanup;
 
       void run();
