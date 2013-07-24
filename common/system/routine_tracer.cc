@@ -122,8 +122,14 @@ bool RoutineTracerThread::unwindTo(IntPtr eip)
 
 void RoutineTracerThread::hookRoiBegin()
 {
+   IntPtr eip_parent = 0;
    for(std::deque<IntPtr>::iterator it = m_stack.begin(); it != m_stack.end(); ++it)
+   {
+      if (eip_parent)
+         functionChildEnter(eip_parent, *it);
       functionEnter(*it);
+      eip_parent = *it;
+   }
 }
 
 void RoutineTracerThread::hookRoiEnd()
@@ -132,10 +138,14 @@ void RoutineTracerThread::hookRoiEnd()
    // Since functionExit might use m_stack we need to keep it up-to-date by popping items off,
    // we'll use stack_save to remember them and restore m_stack to its original state on exit.
    std::deque<IntPtr> stack_save;
+   IntPtr eip_child = 0;
 
    while(m_stack.size())
    {
+      if (eip_child)
+         functionChildExit(m_stack.back(), eip_child);
       functionExit(m_stack.back());
+      eip_child = m_stack.back();
       stack_save.push_back(m_stack.back());
       m_stack.pop_back();
    }
