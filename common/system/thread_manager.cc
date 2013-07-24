@@ -379,7 +379,7 @@ bool ThreadManager::anyThreadRunning()
 {
    for(thread_id_t thread_id = 0; thread_id < (thread_id_t)getNumThreads(); ++thread_id)
    {
-      if (m_thread_state[thread_id].status == Core::RUNNING)
+      if (isThreadRunning(thread_id) || isThreadInitializing(thread_id))
          return true;
    }
    return false;
