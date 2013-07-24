@@ -124,6 +124,7 @@ private:
    SubsecondTime m_cpiSyncJoin;
    SubsecondTime m_cpiSyncPause;
    SubsecondTime m_cpiSyncSleep;
+   SubsecondTime m_cpiSyncSyscall;
    SubsecondTime m_cpiSyncUnscheduled;
    SubsecondTime m_cpiSyncDvfsTransition;
    SubsecondTime m_cpiRecv;

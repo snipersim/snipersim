@@ -82,6 +82,7 @@ PerformanceModel::PerformanceModel(Core *core)
    registerStatsMetric("performance_model", core->getId(), "cpiSyncJoin", &m_cpiSyncJoin);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncPause", &m_cpiSyncPause);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncSleep", &m_cpiSyncSleep);
+   registerStatsMetric("performance_model", core->getId(), "cpiSyncSyscall", &m_cpiSyncSyscall);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncUnscheduled", &m_cpiSyncUnscheduled);
    registerStatsMetric("performance_model", core->getId(), "cpiSyncDvfsTransition", &m_cpiSyncDvfsTransition);
 
@@ -211,6 +212,9 @@ void PerformanceModel::handleIdleInstruction(Instruction *instruction)
          break;
       case(SyncInstruction::SLEEP):
          m_cpiSyncSleep += insn_cost;
+         break;
+      case(SyncInstruction::SYSCALL):
+         m_cpiSyncSyscall += insn_cost;
          break;
       case(SyncInstruction::UNSCHEDULED):
          m_cpiSyncUnscheduled += insn_cost;

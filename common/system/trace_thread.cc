@@ -36,6 +36,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_tracefile(tracefile)
    , m_responsefile(responsefile)
    , m_app_id(app_id)
+   , m_blocked(false)
    , m_cleanup(cleanup)
    , m_stopped(false)
 {
@@ -188,6 +189,14 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
          m_thread->getSyscallMdl()->runEnter(syscall_number, *args);
          ret = m_thread->getSyscallMdl()->runExit(ret);
          break;
+      }
+
+      case SYS_wait4:
+      {
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         // Let the thread manager know we are blocked on this system call
+         Sim()->getThreadManager()->stallThread_async(m_thread->getId(), ThreadManager::STALL_SYSCALL, getCurrentTime());
+         m_blocked = true;
       }
    }
 
@@ -484,11 +493,27 @@ void TraceThread::run()
 
    while(have_first && m_trace.Read(next_inst))
    {
-      // We may have been rescheduled to a different core
-      // by prfmdl->iterate (at the end of the last iteration),
-      // or a system call (handled out-of-band by m_trace.Read)
-      core = m_thread->getCore();
-      prfmdl = core->getPerformanceModel();
+      if (m_blocked)
+      {
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         // We were blocked on a system call, but started executing instructions again.
+         // This means we woke up. Since there is no explicit wakeup nor an associated time,
+         // use global time.
+         SubsecondTime end_time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
+         Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, end_time, NULL);
+         // We may have been rescheduled to a different core
+         core = m_thread->getCore();
+         prfmdl = core->getPerformanceModel();
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
+         m_blocked = false;
+      }
+      else
+      {
+         // We may have been rescheduled to a different core
+         // by prfmdl->iterate (at the end of the last iteration)
+         core = m_thread->getCore();
+         prfmdl = core->getPerformanceModel();
+      }
 
       bool do_icache_warmup = false;
       UInt64 icache_warmup_addr = 0, icache_warmup_size = 0;

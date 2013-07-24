@@ -162,6 +162,7 @@ public:
       JOIN,
       PAUSE,
       SLEEP,
+      SYSCALL,
       UNSCHEDULED,
       NUM_TYPES
    };
