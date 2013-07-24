@@ -383,7 +383,7 @@ def edit_XML(statsobj, stats, cfg, vdd):
       peak_issue_width = long(long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
       ALU_per_core = peak_issue_width
       window_size = int(sniper_config.get_config(cfg, "perf_model/core/interval_timer/window_size", core))
-      if sniper_config.get_config(cfg, "perf_model/core/type", core) == 'rob' and sniper_config.get_config(cfg, "perf_model/core/rob_timer/in_order", core) == 'true':
+      if sniper_config.get_config(cfg, "perf_model/core/type", core) == 'rob' and sniper_config.get_config_bool(cfg, "perf_model/core/rob_timer/in_order", core):
         machineType = 1 # in-order
       else:
         machineType = 0 # OoO

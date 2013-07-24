@@ -52,6 +52,16 @@ def get_config(config, key, index = None):
     return config[key]
 
 
+def get_config_bool(config, key, index = None):
+  value = get_config(config, key, index)
+  if value.lower() in ('true', 'yes', '1'):
+    return True
+  elif value.lower() in ('false', 'no', '0'):
+    return False
+  else:
+    raise ValueError('Invalid value for bool %s' % value)
+
+
 def get_config_default(config, key, defaultval, index = None):
   if key in config:
     return get_config(config, key, index)
