@@ -2,6 +2,7 @@
 #define __SIFT_WRITER_H
 
 #include "sift.h"
+#include "sift_format.h"
 
 #include <unordered_map>
 #include <fstream>
@@ -33,6 +34,7 @@ namespace Sift
          bool m_requires_icache_per_insn;
          bool m_send_va2pa_mapping;
 
+         void handleMemoryRequest(Record &respRec);
          void send_va2pa(uint64_t va);
          uint64_t va2pa_lookup(uint64_t va);
 

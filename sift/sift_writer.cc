@@ -396,85 +396,14 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
             sift_assert(respRec.Other.size == sizeof(retcode));
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
             return retcode;
-            break;
          case RecOtherMemoryRequest:
-            #if VERBOSE > 0
-            std::cerr << "[DEBUG:" << m_id << "] Read MemoryRequest" << std::endl;
-            #endif
-            uint64_t addr;
-            uint32_t size;
-            MemoryLockType lock;
-            MemoryOpType type;
-            sift_assert(respRec.Other.size >= (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type)));
-            response->read(reinterpret_cast<char*>(&addr), sizeof(addr));
-            response->read(reinterpret_cast<char*>(&size), sizeof(size));
-            response->read(reinterpret_cast<char*>(&lock), sizeof(lock));
-            response->read(reinterpret_cast<char*>(&type), sizeof(type));
-            uint32_t payload_size = respRec.Other.size - (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type));
-            sift_assert(handleAccessMemoryFunc);
-            if (type == MemRead)
-            {
-               sift_assert(payload_size == 0);
-               sift_assert(size > 0);
-               char *read_data = new char[size];
-               bzero(read_data, size);
-               // Do the read here via a callback to populate the read buffer
-               handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)read_data, size);
-               rec.Other.zero = 0;
-               rec.Other.type = RecOtherMemoryResponse;
-               rec.Other.size = sizeof(addr) + sizeof(type) + size;
-               #if VEBOSE_HEX > 0
-               hexdump((char*)&rec, sizeof(rec.Other));
-               hexdump((char*)&addr, sizeof(addr));
-               hexdump((char*)&type, sizeof(type));
-               hexdump((char*)read_data, size);
-               #endif
-               #if VERBOSE
-               std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Read" << std::endl;
-               #endif
-
-               output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
-               output->write(reinterpret_cast<char*>(&addr), sizeof(addr));
-               output->write(reinterpret_cast<char*>(&type), sizeof(type));
-               output->write(read_data, size);
-               output->flush();
-               delete read_data;
-            }
-            else if (type == MemWrite)
-            {
-               #if VERBOSE > 0
-               std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Write" << std::endl;
-               #endif
-               sift_assert(payload_size > 0);
-               sift_assert(payload_size == size);
-               char *payload = new char[payload_size];
-               response->read(reinterpret_cast<char*>(payload), sizeof(payload_size));
-               // Do the write here via a callback to write the data to the appropriate address
-               handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)payload, payload_size);
-               rec.Other.zero = 0;
-               rec.Other.type = RecOtherMemoryResponse;
-               rec.Other.size = sizeof(addr) + sizeof(type);
-               #if VEBOSE_HEX > 0
-               hexdump((char*)&rec, sizeof(rec.Other));
-               hexdump((char*)&addr, sizeof(addr));
-               hexdump((char*)&type, sizeof(type));
-               #endif
-               output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
-               output->write(reinterpret_cast<char*>(&addr), sizeof(addr));
-               output->write(reinterpret_cast<char*>(&type), sizeof(type));
-               output->flush();
-               delete payload;
-            }
-            else
-            {
-               sift_assert(false);
-            }
+            handleMemoryRequest(respRec);
             break;
       }
    }
 
    // We should not get here
-   return retcode;
+   sift_assert(false);
 }
 
 int32_t Sift::Writer::Join(int32_t thread)
@@ -572,14 +501,30 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
    }
 
    // wait for reply
-   Record respRec;
-   response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-   sift_assert(respRec.Other.zero == 0);
-   sift_assert(respRec.Other.type == RecOtherMagicInstructionResponse);
-   sift_assert(respRec.Other.size == sizeof(uint64_t));
-   uint64_t result;
-   response->read(reinterpret_cast<char*>(&result), sizeof(uint64_t));
-   return result;
+   while (true)
+   {
+      Record respRec;
+      response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      sift_assert(!response->fail());
+      sift_assert(respRec.Other.zero == 0);
+
+      switch(respRec.Other.type)
+      {
+         case RecOtherMagicInstructionResponse:
+         {
+            sift_assert(respRec.Other.size == sizeof(uint64_t));
+            uint64_t result;
+            response->read(reinterpret_cast<char*>(&result), sizeof(uint64_t));
+            return result;
+         }
+         case RecOtherMemoryRequest:
+            handleMemoryRequest(respRec);
+            break;
+      }
+   }
+
+   // We should not get here
+   sift_assert(false);
 }
 
 void Sift::Writer::RoutineChange(uint64_t eip, uint64_t esp, Sift::RoutineOpType event)
@@ -614,6 +559,83 @@ void Sift::Writer::RoutineAnnounce(uint64_t eip, const char *name, const char *i
    output->write(reinterpret_cast<char*>(&column), sizeof(uint32_t));
    output->write(reinterpret_cast<char*>(&len_filename), sizeof(uint16_t));
    output->write(filename, len_filename);
+}
+
+void Sift::Writer::handleMemoryRequest(Record &respRec)
+{
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Read MemoryRequest" << std::endl;
+   #endif
+   uint64_t addr;
+   uint32_t size;
+   MemoryLockType lock;
+   MemoryOpType type;
+   sift_assert(respRec.Other.size >= (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type)));
+   response->read(reinterpret_cast<char*>(&addr), sizeof(addr));
+   response->read(reinterpret_cast<char*>(&size), sizeof(size));
+   response->read(reinterpret_cast<char*>(&lock), sizeof(lock));
+   response->read(reinterpret_cast<char*>(&type), sizeof(type));
+   uint32_t payload_size = respRec.Other.size - (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type));
+   sift_assert(handleAccessMemoryFunc);
+   if (type == MemRead)
+   {
+      sift_assert(payload_size == 0);
+      sift_assert(size > 0);
+      char *read_data = new char[size];
+      bzero(read_data, size);
+      // Do the read here via a callback to populate the read buffer
+      handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)read_data, size);
+      Record rec;
+      rec.Other.zero = 0;
+      rec.Other.type = RecOtherMemoryResponse;
+      rec.Other.size = sizeof(addr) + sizeof(type) + size;
+      #if VEBOSE_HEX > 0
+      hexdump((char*)&rec, sizeof(rec.Other));
+      hexdump((char*)&addr, sizeof(addr));
+      hexdump((char*)&type, sizeof(type));
+      hexdump((char*)read_data, size);
+      #endif
+      #if VERBOSE
+      std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Read" << std::endl;
+      #endif
+
+      output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+      output->write(reinterpret_cast<char*>(&addr), sizeof(addr));
+      output->write(reinterpret_cast<char*>(&type), sizeof(type));
+      output->write(read_data, size);
+      output->flush();
+      delete read_data;
+   }
+   else if (type == MemWrite)
+   {
+      #if VERBOSE > 0
+      std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Write" << std::endl;
+      #endif
+      sift_assert(payload_size > 0);
+      sift_assert(payload_size == size);
+      char *payload = new char[payload_size];
+      response->read(reinterpret_cast<char*>(payload), sizeof(payload_size));
+      // Do the write here via a callback to write the data to the appropriate address
+      handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)payload, payload_size);
+      Record rec;
+      rec.Other.zero = 0;
+      rec.Other.type = RecOtherMemoryResponse;
+      rec.Other.size = sizeof(addr) + sizeof(type);
+      #if VEBOSE_HEX > 0
+      hexdump((char*)&rec, sizeof(rec.Other));
+      hexdump((char*)&addr, sizeof(addr));
+      hexdump((char*)&type, sizeof(type));
+      #endif
+      output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+      output->write(reinterpret_cast<char*>(&addr), sizeof(addr));
+      output->write(reinterpret_cast<char*>(&type), sizeof(type));
+      output->flush();
+      delete payload;
+   }
+   else
+   {
+      sift_assert(false);
+   }
 }
 
 uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
