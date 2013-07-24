@@ -49,6 +49,7 @@ namespace Sift
          int32_t Join(int32_t);
          void Sync();
          uint64_t Magic(uint64_t a, uint64_t b, uint64_t c);
+         int32_t Fork();
          void RoutineChange(uint64_t eip, uint64_t esp, Sift::RoutineOpType event);
          void RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 

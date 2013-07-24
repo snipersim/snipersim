@@ -95,6 +95,8 @@ namespace Sift
       RecOtherMagicInstructionResponse,
       RecOtherRoutineChange,
       RecOtherRoutineAnnounce,
+      RecOtherFork,
+      RecOtherForkResponse,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

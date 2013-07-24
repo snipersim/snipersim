@@ -481,6 +481,35 @@ void Sift::Writer::Sync()
    sift_assert(respRec.Other.size == 0);
 }
 
+int32_t Sift::Writer::Fork()
+{
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherFork;
+   rec.Other.size = 0;
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->flush();
+
+   if(!response)
+   {
+      assert(strcmp(m_response_filename, "") != 0);
+      response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   Record respRec;
+   response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+
+   assert(!response->fail());
+   assert(respRec.Other.zero == 0);
+   assert(respRec.Other.type == RecOtherForkResponse);
+   assert(respRec.Other.size == sizeof(int32_t));
+
+   int32_t result;
+   response->read(reinterpret_cast<char*>(&result), sizeof(int32_t));
+   assert(!response->fail());
+   return result;
+}
+
 uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 {
    // send magic

@@ -53,7 +53,7 @@ void TraceManager::init()
 {
    for (UInt32 i = 0 ; i < m_num_apps ; i++ )
    {
-      newThread(i /*app_id*/, true /*first*/, false /*spawn*/, SubsecondTime::Zero());
+      newThread(i /*app_id*/, true /*first*/, false /*init_fifo*/, false /*spawn*/, SubsecondTime::Zero());
    }
 }
 
@@ -70,31 +70,39 @@ thread_id_t TraceManager::createThread(app_id_t app_id, SubsecondTime time)
    // External version: acquire lock first
    ScopedLock sl(m_lock);
 
-   return newThread(app_id, false /*first*/, true /*spawn*/, time);
+   return newThread(app_id, false /*first*/, true /*init_fifo*/, true /*spawn*/, time);
 }
 
-thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, SubsecondTime time)
+thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool init_fifo, bool spawn, SubsecondTime time)
 {
    // Internal version: assume we're already holding the lock
 
    assert(static_cast<decltype(app_id)>(m_num_apps) > app_id);
 
    String tracefile = "", responsefile = "";
+   int thread_num;
    if (first)
    {
       m_app_info[app_id].num_threads = 1;
       m_app_info[app_id].thread_count = 1;
       Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_START, (UInt64)app_id);
+      thread_num = 0;
 
-      tracefile = m_tracefiles[app_id];
-      if (m_responsefiles.size())
-         responsefile = m_responsefiles[app_id];
+      if (!init_fifo)
+      {
+         tracefile = m_tracefiles[app_id];
+         if (m_responsefiles.size())
+            responsefile = m_responsefiles[app_id];
+      }
    }
    else
    {
       m_app_info[app_id].num_threads++;
-      int thread_num = m_app_info[app_id].thread_count++;
+      thread_num = m_app_info[app_id].thread_count++;
+   }
 
+   if (init_fifo)
+   {
       tracefile = getFifoName(app_id, thread_num, false /*response*/, true /*create*/);
       if (m_responsefiles.size())
          responsefile = getFifoName(app_id, thread_num, true /*response*/, true /*create*/);
@@ -102,7 +110,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, Sub
 
    m_num_threads_running++;
    Thread *thread = Sim()->getThreadManager()->createThread(app_id);
-   TraceThread *tthread = new TraceThread(thread, time, tracefile, responsefile, app_id, first ? false : true /*cleaup*/);
+   TraceThread *tthread = new TraceThread(thread, time, tracefile, responsefile, app_id, init_fifo /*cleaup*/);
    m_threads.push_back(tthread);
 
    if (spawn)
@@ -113,6 +121,23 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, Sub
    }
 
    return thread->getId();
+}
+
+app_id_t TraceManager::createApplication(SubsecondTime time)
+{
+   ScopedLock sl(m_lock);
+
+
+   app_id_t app_id = m_num_apps;
+   m_num_apps++;
+   m_num_apps_nonfinish++;
+
+   app_info_t app_info;
+   m_app_info.push_back(app_info);
+
+   newThread(app_id, true /*first*/, true /*init_fifo*/, true /*spawn*/, time);
+
+   return app_id;
 }
 
 void TraceManager::signalDone(TraceThread *thread, SubsecondTime time, bool aborted)
@@ -155,7 +180,7 @@ void TraceManager::signalDone(TraceThread *thread, SubsecondTime time, bool abor
             // Stop condition not met. Restart app?
             if (m_app_restart)
             {
-               newThread(app_id, true /*first*/, true /*spawn*/, time);
+               newThread(app_id, true /*first*/, false /*init_fifo*/, true /*spawn*/, time);
             }
          }
       }

@@ -44,6 +44,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    m_trace.setHandleNewThreadFunc(TraceThread::__handleNewThreadFunc, this);
    m_trace.setHandleJoinFunc(TraceThread::__handleJoinFunc, this);
    m_trace.setHandleMagicFunc(TraceThread::__handleMagicFunc, this);
+   m_trace.setHandleForkFunc(TraceThread::__handleForkFunc, this);
    if (Sim()->getRoutineTracer())
       m_trace.setHandleRoutineFunc(TraceThread::__handleRoutineChangeFunc, TraceThread::__handleRoutineAnnounceFunc, this);
 
@@ -195,6 +196,11 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 int32_t TraceThread::handleNewThreadFunc()
 {
    return Sim()->getTraceManager()->createThread(m_app_id, getCurrentTime());
+}
+
+int32_t TraceThread::handleForkFunc()
+{
+   return Sim()->getTraceManager()->createApplication(getCurrentTime());
 }
 
 int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)

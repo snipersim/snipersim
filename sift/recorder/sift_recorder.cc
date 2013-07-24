@@ -54,7 +54,24 @@ BOOL followChild(CHILD_PROCESS childProcess, VOID *val)
 
 VOID forkBefore(THREADID threadid, const CONTEXT *ctxt, VOID *v)
 {
-   sift_assert(!any_thread_in_detail); // Cannot fork after starting ROI
+   if(thread_data[threadid].output)
+   {
+      child_app_id = thread_data[threadid].output->Fork();
+   }
+}
+
+VOID forkAfterInChild(THREADID threadid, const CONTEXT *ctxt, VOID *v)
+{
+   // Forget about everything we inherited from the parent
+   routines.clear();
+   bzero(thread_data, MAX_NUM_THREADS * sizeof(*thread_data));
+   // Assume identity of child process
+   app_id = child_app_id;
+   num_threads = 1;
+   // Open new SIFT pipe for thread 0
+   thread_data[0].bbv = new Bbv();
+   thread_data[0].dyn_address_queue = new std::deque<ADDRINT>();
+   openFile(0);
 }
 
 bool assert_ignore()
@@ -163,7 +180,11 @@ int main(int argc, char **argv)
    PIN_AddDetachFunction(Detach, 0);
 
    PIN_AddFollowChildProcessFunction(followChild, 0);
-   PIN_AddForkFunction(FPOINT_BEFORE, forkBefore, 0);
+   if (KnobEmulateSyscalls.Value())
+   {
+      PIN_AddForkFunction(FPOINT_BEFORE, forkBefore, 0);
+      PIN_AddForkFunction(FPOINT_AFTER_IN_CHILD, forkAfterInChild, 0);
+   }
 
    if (KnobDebug.Value())
       pinboost_register("SIFT_RECORDER");
