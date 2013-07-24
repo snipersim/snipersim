@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf8 -*-
 
 import os, sys, re, collections, gnuplot, getopt
 import cpistack_data, cpistack_items, cpistack_results
@@ -51,25 +52,38 @@ def output_cpistack_text(results):
 def output_cpistack_table(results, metric = 'cpi'):
   data = results.get_data(metric)
   total = [ 0 for core in results.cores ]
+  multiplier = 1.
 
   if metric == 'time':
     format = lambda v: '%7.2f%%' % (100 * v)
     title = 'Time (%)'
-  else:
+  elif metric == 'abstime':
     format = lambda v: '%8.2f' % v
-    title = 'CPI' if metric == 'cpi' else 'Time (s)'
+    prefixes = ['', 'm', 'µ', 'n']
+    scaleidx = 0
+    totaltime = sum(data[0].values())
+    while totaltime < 100. and scaleidx < len(prefixes)-1:
+      scaleidx += 1
+      totaltime *= 1000
+    title = 'Time (%ss)' % prefixes[scaleidx]
+    multiplier = 1000. ** scaleidx
+  elif metric == 'cpi':
+    format = lambda v: '%8.2f' % v
+    title = 'CPI'
+  else:
+    raise ValueError('Unknown metric %s' % metric)
 
   print '%-20s' % title, '  '.join([ '%-9s' % ('Core %d' % core) for core in results.cores ])
   for label in results.labels:
     print '%-15s ' % label,
     for core in results.cores:
-      print ' ', format(data[core][label]),
+      print ' ', format(multiplier * data[core][label]),
       total[core] += data[core][label]
     print
   print
   print '%-15s ' % 'total',
   for core in results.cores:
-    print ' ', format(total[core]),
+    print ' ', format(multiplier * total[core]),
   print
 
 
@@ -148,7 +162,7 @@ if __name__ == '__main__':
     if o == '--no-simple-mem':
       use_simple_mem = False
     if o == '--time':
-      pass
+      metric = 'time'
     if o == '--cpi':
       metric = 'cpi'
     if o == '--abstime':
