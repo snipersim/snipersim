@@ -114,6 +114,10 @@ private:
    uint64_t m_totalHiddenLongerDCacheLatency;
    uint64_t m_numHiddenLongerDCacheLatency;
 
+   uint64_t m_outstandingLongLatencyInsns;
+   uint64_t m_outstandingLongLatencyCycles;
+   uint64_t m_lastAccountedMemoryCycle;
+
    uint64_t m_numMfenceInsns;
    uint64_t m_totalMfenceLatency;
 

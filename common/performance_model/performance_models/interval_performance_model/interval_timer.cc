@@ -94,6 +94,13 @@ IntervalTimer::IntervalTimer(
    registerStatsMetric("interval_timer", core->getId(), "totalHiddenLongerDCacheLatency", &m_totalHiddenLongerDCacheLatency);
    registerStatsMetric("interval_timer", core->getId(), "numHiddenLongerDCacheLatency", &m_numHiddenLongerDCacheLatency);
 
+   m_outstandingLongLatencyCycles = 0;
+   m_outstandingLongLatencyInsns = 0;
+   m_lastAccountedMemoryCycle = 0;
+
+   registerStatsMetric("interval_timer", core->getId(), "outstandingLongLatencyInsns", &m_outstandingLongLatencyInsns);
+   registerStatsMetric("interval_timer", core->getId(), "outstandingLongLatencyCycles", &m_outstandingLongLatencyCycles);
+
 #if DEBUG_IT_INSN_PRINT
    String insn_filename;
    insn_filename = "sim.timer_insn_log." + itostr(core->getId());
@@ -500,6 +507,29 @@ uint64_t IntervalTimer::dispatchInstruction(Windows::WindowEntry& micro_op, Stop
          }
 
          m_max_load_completion_time = std::max(m_max_load_completion_time, micro_op.getExecTime());
+
+         // Compute MLP
+         if (micro_op.getDynMicroOp()->isLongLatencyLoad())
+         {
+            uint64_t now = m_windows->getCriticalPathTail();
+            uint64_t done = now + exec_latency;
+
+            // Ins will be outstanding for until it is done. By accounting beforehand I don't need to
+            // worry about fast-forwarding simulations
+            m_outstandingLongLatencyInsns += exec_latency;
+
+            // Only account for the cycles that have not yet been accounted for by other long
+            // latency misses (don't account cycles twice).
+            if (m_lastAccountedMemoryCycle < now)
+            {
+               m_lastAccountedMemoryCycle = now;
+            }
+            if (done > m_lastAccountedMemoryCycle)
+            {
+               m_outstandingLongLatencyCycles += done - m_lastAccountedMemoryCycle;
+               m_lastAccountedMemoryCycle = done;
+            }
+         }
 
       } else if (micro_op.getMicroOp()->isStore()) {
 
