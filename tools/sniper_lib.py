@@ -31,7 +31,7 @@ def get_config(jobid = None, resultsdir = None, force_deleted = True):
   elif resultsdir:
     cfgfile = os.path.join(resultsdir, 'sim.cfg')
     if not os.path.exists(cfgfile):
-      raise ValueError('Cannot find config file at %d' % resultsdir)
+      raise ValueError('Cannot find config file at %s' % resultsdir)
     simcfg = file(cfgfile).read()
   config = sniper_config.parse_config(simcfg)
   return config
