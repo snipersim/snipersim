@@ -27,7 +27,7 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
       UInt32 dram_directory_max_num_sharers,
       UInt32 dram_directory_max_hw_sharers,
       String dram_directory_type_str,
-      SubsecondTime dram_directory_cache_access_time,
+      ComponentLatency dram_directory_cache_access_time,
       ShmemPerfModel* shmem_perf_model):
    m_memory_manager(memory_manager),
    m_dram_controller_home_lookup(dram_controller_home_lookup),
@@ -67,14 +67,20 @@ DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
 {
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+   IntPtr address = shmem_msg->getAddress();
 
-   MYLOG("begin for address %lx, %d in queue", shmem_msg->getAddress(), m_dram_directory_req_queue_list->size(shmem_msg->getAddress()));
+   MYLOG("begin for address %lx, %d in queue", address, m_dram_directory_req_queue_list->size(address));
+
+   // Look up line state in the tag directory
+   // This is just for modeling the TD lookup time (this is the only place where we call getDirectoryEntry with modeled==true),
+   // elsewhere we assume outstanding requests are stored in a fast MSHR-like structure
+   m_dram_directory_cache->getDirectoryEntry(address, true);
+   updateShmemPerf(shmem_msg, ShmemPerf::TD_ACCESS);
 
    switch (shmem_msg_type)
    {
       case ShmemMsg::EX_REQ:
       {
-         IntPtr address = shmem_msg->getAddress();
          MYLOG("E REQ<%u @ %lx", sender, address);
 
          // Add request onto a queue
@@ -94,7 +100,6 @@ DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
       }
       case ShmemMsg::SH_REQ:
       {
-         IntPtr address = shmem_msg->getAddress();
          MYLOG("S REQ<%u @ %lx", sender, address);
 
          // Add request onto a queue
@@ -114,17 +119,17 @@ DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
       }
 
       case ShmemMsg::INV_REP:
-         MYLOG("INV REP<%u @ %lx", sender, shmem_msg->getAddress());
+         MYLOG("INV REP<%u @ %lx", sender, address);
          processInvRepFromL2Cache(sender, shmem_msg);
          break;
 
       case ShmemMsg::FLUSH_REP:
-         MYLOG("FLUSH REP<%u @ %lx", sender, shmem_msg->getAddress());
+         MYLOG("FLUSH REP<%u @ %lx", sender, address);
          processFlushRepFromL2Cache(sender, shmem_msg);
          break;
 
       case ShmemMsg::WB_REP:
-         MYLOG("WB REP<%u @ %lx", sender, shmem_msg->getAddress());
+         MYLOG("WB REP<%u @ %lx", sender, address);
          processWbRepFromL2Cache(sender, shmem_msg);
          break;
 
@@ -133,11 +138,10 @@ DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
          break;
 
       case ShmemMsg::UPGRADE_REQ:
-         MYLOG("UPGR REQ<%u @ %lx", sender, shmem_msg->getAddress());
+         MYLOG("UPGR REQ<%u @ %lx", sender, address);
 
          // Add request onto a queue
          ShmemReq* shmem_req = new ShmemReq(shmem_msg, msg_time);
-         IntPtr address = shmem_msg->getAddress();
          m_dram_directory_req_queue_list->enqueue(address, shmem_req);
          MYLOG("ENqueued  UPGRADE REQ for address %lx",  address );
 
@@ -153,7 +157,7 @@ DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
          break;
 
    }
-MYLOG("done for %lx", shmem_msg->getAddress() );
+MYLOG("done for %lx", address);
 }
 
 void
@@ -265,7 +269,7 @@ DramDirectoryCntlr::processDirectoryEntryAllocationReq(ShmemReq* shmem_req)
    IntPtr replaced_address = (*replacement_candidate)->getAddress();
 
    // We get the entry with the lowest number of sharers
-   DirectoryEntry* directory_entry = m_dram_directory_cache->replaceDirectoryEntry(replaced_address, address);
+   DirectoryEntry* directory_entry = m_dram_directory_cache->replaceDirectoryEntry(replaced_address, address, true);
 
    ShmemMsg nullify_msg(ShmemMsg::NULLIFY_REQ, MemComponent::TAG_DIR, MemComponent::TAG_DIR, requester, replaced_address, NULL, 0, NULL);
 

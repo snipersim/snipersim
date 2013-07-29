@@ -13,7 +13,7 @@ DramDirectoryCache::DramDirectoryCache(
       UInt32 cache_block_size,
       UInt32 max_hw_sharers,
       UInt32 max_num_sharers,
-      SubsecondTime dram_directory_cache_access_time,
+      ComponentLatency dram_directory_cache_access_time,
       ShmemPerfModel* shmem_perf_model):
    m_total_entries(total_entries),
    m_associativity(associativity),
@@ -37,10 +37,10 @@ DramDirectoryCache::~DramDirectoryCache()
 }
 
 DirectoryEntry*
-DramDirectoryCache::getDirectoryEntry(IntPtr address)
+DramDirectoryCache::getDirectoryEntry(IntPtr address, bool modeled)
 {
-   if (m_shmem_perf_model)
-      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time);
+   if (m_shmem_perf_model && modeled)
+      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time.getLatency());
 
    IntPtr tag;
    UInt32 set_index;
@@ -55,7 +55,7 @@ DramDirectoryCache::getDirectoryEntry(IntPtr address)
 
       if (directory_entry->getAddress() == address)
       {
-         if (m_shmem_perf_model)
+         if (m_shmem_perf_model && modeled)
             getShmemPerfModel()->incrElapsedTime(directory_entry->getLatency());
          // Simple check for now. Make sophisticated later
          return directory_entry;
@@ -103,10 +103,10 @@ DramDirectoryCache::getReplacementCandidates(IntPtr address, std::vector<Directo
 }
 
 DirectoryEntry*
-DramDirectoryCache::replaceDirectoryEntry(IntPtr replaced_address, IntPtr address)
+DramDirectoryCache::replaceDirectoryEntry(IntPtr replaced_address, IntPtr address, bool modeled)
 {
-   if (m_shmem_perf_model)
-      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time);
+   if (m_shmem_perf_model && modeled)
+      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time.getLatency());
 
    IntPtr tag;
    UInt32 set_index;

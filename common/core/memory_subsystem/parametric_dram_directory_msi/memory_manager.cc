@@ -51,6 +51,8 @@ MemoryManager::MemoryManager(Core* core,
    bool nuca_enable = false;
    CacheParameters nuca_parameters;
 
+   const ComponentPeriod *global_domain = Sim()->getDvfsManager()->getGlobalDomain();
+
    UInt32 smt_cores;
    bool dram_direct_access = false;
    UInt32 dram_directory_total_entries = 0;
@@ -59,9 +61,7 @@ MemoryManager::MemoryManager(Core* core,
    UInt32 dram_directory_max_hw_sharers = 0;
    String dram_directory_type_str;
    UInt32 dram_directory_home_lookup_param = 0;
-   SubsecondTime dram_directory_cache_access_time = SubsecondTime::Zero();
-
-   const ComponentPeriod *global_domain = Sim()->getDvfsManager()->getGlobalDomain();
+   ComponentLatency dram_directory_cache_access_time(global_domain, 0);
 
    try
    {
@@ -164,7 +164,7 @@ MemoryManager::MemoryManager(Core* core,
       dram_directory_max_hw_sharers = Sim()->getCfg()->getInt("perf_model/dram_directory/max_hw_sharers");
       dram_directory_type_str = Sim()->getCfg()->getString("perf_model/dram_directory/directory_type");
       dram_directory_home_lookup_param = Sim()->getCfg()->getInt("perf_model/dram_directory/home_lookup_param");
-      dram_directory_cache_access_time = SubsecondTime::NS() * Sim()->getCfg()->getInt("perf_model/dram_directory/directory_cache_access_time");
+      dram_directory_cache_access_time = ComponentLatency(global_domain, Sim()->getCfg()->getInt("perf_model/dram_directory/directory_cache_access_time"));
 
       // Dram Cntlr
       dram_direct_access = Sim()->getCfg()->getBool("perf_model/dram/direct_access");

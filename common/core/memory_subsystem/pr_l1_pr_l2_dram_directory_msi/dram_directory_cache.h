@@ -22,7 +22,7 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 m_log_num_sets;
          UInt32 m_log_cache_block_size;
 
-         SubsecondTime m_dram_directory_cache_access_time;
+         ComponentLatency m_dram_directory_cache_access_time;
          ShmemPerfModel* m_shmem_perf_model;
 
          ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
@@ -42,12 +42,12 @@ namespace PrL1PrL2DramDirectoryMSI
                UInt32 cache_block_size,
                UInt32 max_hw_sharers,
                UInt32 max_num_sharers,
-               SubsecondTime dram_directory_cache_access_time,
+               ComponentLatency dram_directory_cache_access_time,
                ShmemPerfModel* shmem_perf_model);
          ~DramDirectoryCache();
 
-         DirectoryEntry* getDirectoryEntry(IntPtr address);
-         DirectoryEntry* replaceDirectoryEntry(IntPtr replaced_address, IntPtr address);
+         DirectoryEntry* getDirectoryEntry(IntPtr address, bool modeled = false);
+         DirectoryEntry* replaceDirectoryEntry(IntPtr replaced_address, IntPtr address, bool modeled);
          void invalidateDirectoryEntry(IntPtr address);
          void getReplacementCandidates(IntPtr address, std::vector<DirectoryEntry*>& replacement_candidate_list);
 
