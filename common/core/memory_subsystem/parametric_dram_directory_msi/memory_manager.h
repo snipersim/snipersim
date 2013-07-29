@@ -38,6 +38,7 @@ namespace ParametricDramDirectoryMSI
          AddressHomeLookup* m_dram_controller_home_lookup;
          TLB *m_itlb, *m_dtlb, *m_stlb;
          ComponentLatency m_tlb_miss_penalty;
+         bool m_tlb_miss_parallel;
 
          core_id_t m_core_id_master;
 

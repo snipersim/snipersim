@@ -39,6 +39,7 @@ MemoryManager::MemoryManager(Core* core,
    m_dram_cntlr(NULL),
    m_itlb(NULL), m_dtlb(NULL), m_stlb(NULL),
    m_tlb_miss_penalty(NULL,0),
+   m_tlb_miss_parallel(false),
    m_tag_directory_present(false),
    m_dram_cntlr_present(false),
    m_enabled(false)
@@ -78,6 +79,7 @@ MemoryManager::MemoryManager(Core* core,
       if (dtlb_size)
          m_dtlb = new TLB("dtlb", "perf_model/dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"), m_stlb);
       m_tlb_miss_penalty = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/tlb/penalty"));
+      m_tlb_miss_parallel = Sim()->getCfg()->getBool("perf_model/tlb/penalty_parallel");
 
       smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
 
@@ -581,8 +583,15 @@ MemoryManager::accessTLB(TLB * tlb, IntPtr address, bool isIfetch, Core::MemMode
        && m_tlb_miss_penalty.getLatency() != SubsecondTime::Zero()
    )
    {
-      Instruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
-      getCore()->getPerformanceModel()->queueDynamicInstruction(i);
+      if (m_tlb_miss_parallel)
+      {
+         incrElapsedTime(m_tlb_miss_penalty.getLatency(), ShmemPerfModel::_USER_THREAD);
+      }
+      else
+      {
+         Instruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
+         getCore()->getPerformanceModel()->queueDynamicInstruction(i);
+      }
    }
 }
 
