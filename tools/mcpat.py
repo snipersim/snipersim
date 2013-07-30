@@ -482,7 +482,7 @@ def edit_XML(statsobj, stats, cfg, vdd):
           elif template[i][1][0]=="memory.accesses":
             template[i][0] = template[i][0] % (int(DRAM_reads) + int(DRAM_writes))
           elif template[i][1][0]=="NoC.type":
-            if 'network.shmem-1.mesh.link-in.num-requests' in stats:
+            if 'network.shmem-1.mesh.link-in.num-requests' in stats or 'network.shmem-1.mesh.packets-in' in stats:
               # 1 = NoC
               template[i][0] = template[i][0] % 1
             else:
@@ -491,6 +491,8 @@ def edit_XML(statsobj, stats, cfg, vdd):
           elif template[i][1][0]=="NoC.total_accesses":
             if 'network.shmem-1.mesh.link-in.num-requests' in stats:
               template[i][0] = template[i][0] % sum(stats['network.shmem-1.mesh.link-in.num-requests'])
+            elif 'network.shmem-1.mesh.packets-in' in stats:
+              template[i][0] = template[i][0] % sum(stats['network.shmem-1.mesh.packets-in'])
             elif 'network.shmem-1.bus.num-requests' in stats:
               template[i][0] = template[i][0] % int(stats['network.shmem-1.bus.num-requests'][0])  #assumption
             elif 'network.shmem-1.bus.num-packets' in stats:
@@ -507,6 +509,9 @@ def edit_XML(statsobj, stats, cfg, vdd):
               avg_time_used = total_time_used / float(num_links_used or 1.)
               duty_cycle = avg_time_used / (stats['global.time'] or 1.)
               template[i][0] = template[i][0] % duty_cycle
+            elif 'network.shmem-1.mesh.packets-in' in stats:
+              # Mesh network model without proper accounting. Take a wild guess...
+              template[i][0] = template[i][0] % .5
             elif 'network.shmem-1.bus.time-used' in stats:
               template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['network.shmem-1.bus.time-used'][0])/max_system_cycles)
             else:
