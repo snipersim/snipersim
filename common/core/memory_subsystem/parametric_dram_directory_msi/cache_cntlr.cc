@@ -1920,7 +1920,10 @@ MYLOG("processWbReqFromDramDirectory l%d", m_mem_component);
 
       // Write-Back the line
       Byte data_buf[getCacheBlockSize()];
-      updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, data_buf, ShmemPerfModel::_SIM_THREAD);
+      if (cstate != CacheState::SHARED_UPGRADING)
+      {
+         updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, data_buf, ShmemPerfModel::_SIM_THREAD);
+      }
 
       shmem_msg->getPerf()->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), ShmemPerf::REMOTE_CACHE_WB);
 
