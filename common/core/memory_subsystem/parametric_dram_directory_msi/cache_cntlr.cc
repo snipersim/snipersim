@@ -1818,13 +1818,29 @@ MYLOG("processShRepFromDramDirectory l%d", m_mem_component);
    // We now have the only copy. Change to a writeable state.
    IntPtr address = shmem_msg->getAddress();
    CacheState::cstate_t cstate = getCacheState(address);
-   LOG_ASSERT_ERROR( cstate == CacheState::SHARED_UPGRADING, "Trying to upgrade a block that is not SHARED_UPGRADING but %c (%lx)",CStateString(cstate), address);
 
-   // Last-Level Cache received a upgrade REP, but multiple private lower-level caches might
-   // still have a shared copy. Should invalidate all except the ones from the core that initiated
-   // the upgrade request (sender).
+   if (cstate == CacheState::INVALID)
+   {
+      // I lost my copy because a concurrent UPGRADE REQ had INVed it, because the state
+      // was Modified  when this request was processed, the data should be in the message
+      // because it was FLUSHed (see dram_directory_cntlr.cc, MODIFIED case of the upgrade req)
+      Byte* data_buf = shmem_msg->getDataBuf();
+      LOG_ASSERT_ERROR(data_buf, "Trying to upgrade a block that is now INV and no data in the shmem_msg");
 
-   updateCacheBlock(address, CacheState::MODIFIED, Transition::UPGRADE, NULL, ShmemPerfModel::_SIM_THREAD);
+      updateCacheBlock(address, CacheState::MODIFIED, Transition::UPGRADE, data_buf, ShmemPerfModel::_SIM_THREAD);
+   }
+   else if  (cstate == CacheState::SHARED_UPGRADING)
+   {
+      // Last-Level Cache received a upgrade REP, but multiple private lower-level caches might
+      // still have a shared copy. Should invalidate all except the ones from the core that initiated
+      // the upgrade request (sender).
+
+      updateCacheBlock(address, CacheState::MODIFIED, Transition::UPGRADE, NULL, ShmemPerfModel::_SIM_THREAD);
+   }
+   else
+   {
+      LOG_PRINT_ERROR("Trying to upgrade a block that is not SHARED_UPGRADING but %c (%lx)",CStateString(cstate), address);
+   }
 }
 
 void
