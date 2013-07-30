@@ -35,7 +35,6 @@ if args:
   sys.exit(-1)
 
 
-statsobj = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
 results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
 config = results['config']
 stats = results['results']
@@ -43,7 +42,7 @@ stats = results['results']
 ncores = int(config['general/total_cores'])
 llc_number = int(config['perf_model/cache/levels'])
 llc_name = 'L%d' % llc_number
-llc_components = [ name for id, (obj, name) in sorted(statsobj.names.items()) if name.startswith('uncore-time-') ]
+llc_components = [ name.split('.', 1)[1] for name in sorted(stats.keys()) if '.uncore-time-' in name ]
 
 totaltime = stats['%s.uncore-totaltime' % llc_name]
 requests = stats['%s.uncore-requests' % llc_name]
