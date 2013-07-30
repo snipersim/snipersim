@@ -79,7 +79,6 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   template += [
     ('Cache Summary', '', ''),
   ]
-
   allcaches = [ 'L1-I', 'L1-D' ] + [ 'L%u'%l for l in range(2, 5) ]
   existcaches = [ c for c in allcaches if '%s.loads'%c in results ]
   for c in existcaches:
@@ -129,6 +128,17 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     results['dram.bandwidth'] = map(lambda a: 100*a/time0 if time0 else float('inf'), results['dram-queue.total-time-used'])
     template.append(('  average dram bandwidth utilization', 'dram.bandwidth', lambda v: '%.2f%%' % v))
 
+  results['L1-D.loads-where-dram'] = map(sum, zip(results['L1-D.loads-where-dram-local'], results['L1-D.loads-where-dram-remote']))
+  results['L1-D.stores-where-dram'] = map(sum, zip(results['L1-D.stores-where-dram-local'], results['L1-D.stores-where-dram-remote']))
+  results['L1-D.loads-where-cache-remote'] = map(sum, zip(results['L1-D.loads-where-cache-remote'], results['L1-D.loads-where-dram-remote']))
+  results['L1-D.stores-where-cache-remote'] = map(sum, zip(results['L1-D.stores-where-cache-remote'], results['L1-D.stores-where-dram-remote']))
+  template.extend([
+      ('Coherency Traffic', '', ''),
+      ('  num loads from dram', 'L1-D.loads-where-dram' , str),
+      #('  num stores from dram', 'L1-D.stores-where-dram' , str),
+      ('  num loads from remote cache', 'L1-D.loads-where-cache-remote' , str),
+      #('  num stores from remote cache', 'L1-D.stores-where-cache-remote' , str),
+    ])
 
   lines = []
   lines.append([''] + [ 'Core %u' % i for i in range(ncores) ])
