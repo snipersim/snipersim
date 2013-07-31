@@ -358,7 +358,8 @@ def edit_XML(statsobj, stats, cfg, vdd):
   max_system_cycles = float(max(cycles)) or 1 # avoid division by zero
   data = [ {} for core in range(ncores) ]
   for core in range(ncores):
-    data[core]['idle_cycles'] = cycles_scale[core] * stats['performance_model.idle_elapsed_time'][core]
+    # Don't use performance_model.idle_elapsed_time, as it may not be up-to-date, or contain time from previous intervals, when using short intervals
+    data[core]['idle_cycles'] = cycles_scale[core] * max(0, stats['global.time'] - stats['performance_model.elapsed_time'][core])
     data[core]['FP_instructions'] = (stats.get('interval_timer.uop_fp_addsub', stats.get('rob_timer.uop_fp_addsub', []))[core] \
                                   + stats.get('interval_timer.uop_fp_muldiv', stats.get('rob_timer.uop_fp_muldiv', []))[core])
     data[core]['Branch_instructions'] = (stats.get('interval_timer.uop_branch', stats.get('rob_timer.uop_branch', []))[core])
