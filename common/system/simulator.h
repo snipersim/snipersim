@@ -106,6 +106,8 @@ private:
    static config::Config *m_config_file;
    static bool m_config_file_allowed;
    static Config::SimulationMode m_mode;
+
+   void printInstModeSummary();
 };
 
 __attribute__((unused)) static Simulator *Sim()

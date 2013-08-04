@@ -120,6 +120,8 @@ void Simulator::start()
    InstMode::inst_mode_roi  = InstMode::fromString(getCfg()->getString("general/inst_mode_roi"));
    InstMode::inst_mode_end  = InstMode::fromString(getCfg()->getString("general/inst_mode_end"));
    m_inst_mode_output = getCfg()->getBool("general/inst_mode_output");
+
+   printInstModeSummary();
    setInstrumentationMode(InstMode::inst_mode_init, true /* update_barrier */);
 
    /* Save a copy of the configuration for reference */
@@ -208,10 +210,13 @@ void Simulator::disablePerformanceModels()
 
 void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode, bool update_barrier)
 {
-   if (new_mode != InstMode::inst_mode) {
-      InstMode::inst_mode = new_mode;
-      if (m_inst_mode_output)
+   if (new_mode != InstMode::inst_mode)
+   {
+      if (m_inst_mode_output && InstMode::inst_mode != InstMode::INVALID)
+      {
          printf("[SNIPER] Setting instrumentation mode to %s\n", inst_mode_names[new_mode]); fflush(stdout);
+      }
+      InstMode::inst_mode = new_mode;
 
       if (Sim()->getConfig()->getSimulationMode() == Config::PINTOOL)
          InstMode::updateInstrumentationMode();
@@ -224,4 +229,40 @@ void Simulator::setInstrumentationMode(InstMode::inst_mode_t new_mode, bool upda
 
       Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTRUMENT_MODE, (UInt64)new_mode);
    }
+}
+
+void Simulator::printInstModeSummary()
+{
+   printf("[SNIPER] --------------------------------------------------------------------------------\n");
+   printf("[SNIPER] Sniper using ");
+   switch(getConfig()->getSimulationMode())
+   {
+      case Config::PINTOOL:
+         printf("Pin");
+         break;
+      case Config::STANDALONE:
+         printf("SIFT/trace-driven");
+         break;
+      default:
+         LOG_PRINT_ERROR("Unknown simulation mode");
+   }
+   printf(" frontend\n");
+   switch(getConfig()->getSimulationROI())
+   {
+      case Config::ROI_FULL:
+         printf("[SNIPER] Running full application in %s mode\n", inst_mode_names[InstMode::inst_mode_roi]);
+         break;
+      case Config::ROI_MAGIC:
+         printf("[SNIPER] Running pre-ROI region in  %s mode\n", inst_mode_names[InstMode::inst_mode_init]);
+         printf("[SNIPER] Running application ROI in %s mode\n", inst_mode_names[InstMode::inst_mode_roi]);
+         printf("[SNIPER] Running post-ROI region in %s mode\n", inst_mode_names[InstMode::inst_mode_end]);
+         break;
+      case Config::ROI_SCRIPT:
+         printf("[SNIPER] Running in script-driven instrumenation mode (--roi-script)\n");
+         // Script should print something here...
+         break;
+      default:
+         LOG_PRINT_ERROR("Unknown ROI mode");
+   }
+   printf("[SNIPER] --------------------------------------------------------------------------------\n");
 }

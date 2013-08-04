@@ -7,7 +7,7 @@ class InstMode
 {
    public:
       enum inst_mode_t {
-         BASE = 0, DETAILED, CACHE_ONLY, FAST_FORWARD
+         INVALID = 0, DETAILED, CACHE_ONLY, FAST_FORWARD
       };
       static inst_mode_t inst_mode_init, inst_mode_roi, inst_mode_end;
       static inst_mode_t fromString(const String str);

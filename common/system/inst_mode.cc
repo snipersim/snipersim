@@ -6,12 +6,12 @@ const char * inst_mode_names[] = {
 };
 
 // Instrumentation modes
-InstMode::inst_mode_t InstMode::inst_mode_init = InstMode::CACHE_ONLY;   // Change this into FAST_FORWARD if you don't care about    warm caches
-InstMode::inst_mode_t InstMode::inst_mode_roi  = InstMode::DETAILED;
-InstMode::inst_mode_t InstMode::inst_mode_end  = InstMode::FAST_FORWARD;
+InstMode::inst_mode_t InstMode::inst_mode_init = InstMode::INVALID;
+InstMode::inst_mode_t InstMode::inst_mode_roi  = InstMode::INVALID;
+InstMode::inst_mode_t InstMode::inst_mode_end  = InstMode::INVALID;
 
 // Initial instrumentation mode
-InstMode::inst_mode_t InstMode::inst_mode = InstMode::inst_mode_init;
+InstMode::inst_mode_t InstMode::inst_mode = InstMode::INVALID;
 
 
 __attribute__((weak)) void

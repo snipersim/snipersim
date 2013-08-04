@@ -455,7 +455,6 @@ void TraceThread::run()
 
       switch(Sim()->getInstrumentationMode())
       {
-         case InstMode::BASE:
          case InstMode::FAST_FORWARD:
             break;
 
@@ -471,6 +470,9 @@ void TraceThread::run()
             prfmdl = core->getPerformanceModel();
 
             break;
+
+         default:
+            LOG_PRINT_ERROR("Unknown instrumentation mode");
       }
 
 
