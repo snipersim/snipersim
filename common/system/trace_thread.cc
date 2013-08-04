@@ -307,7 +307,6 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
    if (inst.executed)
    {
       const bool is_atomic_update = xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst));
-      int address_idx = 0;
 
       // Ignore memory-referencing operands in NOP instructions
       if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
@@ -316,16 +315,15 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
          {
             if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
             {
-               LOG_ASSERT_ERROR(address_idx < inst.num_addresses, "Did not receive enough data addresses");
+               LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
                core->accessMemory(
                      /*(is_atomic_update) ? Core::LOCK :*/ Core::NONE,
                      (is_atomic_update) ? Core::READ_EX : Core::READ,
-                     va2pa(inst.addresses[address_idx]),
+                     va2pa(inst.addresses[mem_idx]),
                      NULL,
                      xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
                      Core::MEM_MODELED_COUNT,
                      va2pa(inst.sinst->addr));
-               ++address_idx;
             }
          }
 
@@ -333,19 +331,18 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
          {
             if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
             {
-               LOG_ASSERT_ERROR(address_idx < inst.num_addresses, "Did not receive enough data addresses");
+               LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
                if (is_atomic_update)
-                  core->logMemoryHit(false, Core::WRITE, va2pa(inst.addresses[address_idx]), Core::MEM_MODELED_COUNT, va2pa(inst.sinst->addr));
+                  core->logMemoryHit(false, Core::WRITE, va2pa(inst.addresses[mem_idx]), Core::MEM_MODELED_COUNT, va2pa(inst.sinst->addr));
                else
                   core->accessMemory(
                         /*(is_atomic_update) ? Core::UNLOCK :*/ Core::NONE,
                         Core::WRITE,
-                        va2pa(inst.addresses[address_idx]),
+                        va2pa(inst.addresses[mem_idx]),
                         NULL,
                         xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
                         Core::MEM_MODELED_COUNT,
                         va2pa(inst.sinst->addr));
-               ++address_idx;
             }
          }
       }
