@@ -25,22 +25,15 @@ class ShmemPerfModel
       UInt64 m_num_memory_accesses;
       SubsecondTime m_total_memory_access_latency;
 
-      // If we already know our thread_num, pass it in as getting it through the TLS is very costly
-      Thread_t getThreadNum(Thread_t thread_num = NUM_CORE_THREADS);
-
    public:
       ShmemPerfModel();
       ~ShmemPerfModel();
 
       void setElapsedTime(Thread_t thread_num, SubsecondTime time);
 
-      void setElapsedTime(SubsecondTime time)
-      {
-         setElapsedTime(getThreadNum(), time);
-      }
-      SubsecondTime getElapsedTime(Thread_t thread_num = NUM_CORE_THREADS);
-      void incrElapsedTime(SubsecondTime time, Thread_t thread_num = NUM_CORE_THREADS);
-      void updateElapsedTime(SubsecondTime time, Thread_t thread_num = NUM_CORE_THREADS);
+      SubsecondTime getElapsedTime(Thread_t thread_num);
+      void incrElapsedTime(SubsecondTime time, Thread_t thread_num);
+      void updateElapsedTime(SubsecondTime time, Thread_t thread_num);
 
       void incrTotalMemoryAccessLatency(SubsecondTime shmem_time);
 

@@ -17,29 +17,6 @@ ShmemPerfModel::ShmemPerfModel():
 ShmemPerfModel::~ShmemPerfModel()
 {}
 
-ShmemPerfModel::Thread_t
-ShmemPerfModel::getThreadNum(Thread_t thread_num)
-{
-   if (thread_num != NUM_CORE_THREADS)
-   {
-      return thread_num;
-   }
-   if (Sim()->getCoreManager()->amiUserThread()
-       || Sim()->getCoreManager()->amiCoreThread())
-   {
-      return _USER_THREAD;
-   }
-   else if (Sim()->getCoreManager()->amiSimThread())
-   {
-      return _SIM_THREAD;
-   }
-   else
-   {
-      assert(false);
-      return NUM_CORE_THREADS;
-   }
-}
-
 void
 ShmemPerfModel::setElapsedTime(Thread_t thread_num, SubsecondTime time)
 {
@@ -55,7 +32,7 @@ ShmemPerfModel::getElapsedTime(Thread_t thread_num)
 {
    //ScopedReadLock sl(m_shmem_perf_model_lock);
 
-   return m_elapsed_time[getThreadNum(thread_num)];
+   return m_elapsed_time[thread_num];
 }
 
 void
@@ -64,7 +41,6 @@ ShmemPerfModel::updateElapsedTime(SubsecondTime time, Thread_t thread_num)
    LOG_PRINT("updateElapsedTime: time(%s)", itostr(time).c_str());
    //ScopedLock sl(m_shmem_perf_model_lock);
 
-   thread_num = getThreadNum(thread_num);
    if (m_elapsed_time[thread_num] < time)
       m_elapsed_time[thread_num] = time;
 }
@@ -74,8 +50,6 @@ ShmemPerfModel::incrElapsedTime(SubsecondTime time, Thread_t thread_num)
 {
    LOG_PRINT("incrElapsedTime: time(%s)", itostr(time).c_str());
    //ScopedLock sl(m_shmem_perf_model_lock);
-
-   thread_num = getThreadNum(thread_num);
 
    SubsecondTime i_elapsed_time = m_elapsed_time[thread_num];
    SubsecondTime t_elapsed_time = i_elapsed_time + time;

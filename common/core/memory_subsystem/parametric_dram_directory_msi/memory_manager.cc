@@ -436,7 +436,7 @@ MYLOG("begin");
    PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg = PrL1PrL2DramDirectoryMSI::ShmemMsg::getShmemMsg((Byte*) packet.data);
    SubsecondTime msg_time = packet.time;
 
-   getShmemPerfModel()->setElapsedTime(msg_time);
+   getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_SIM_THREAD, msg_time);
    shmem_msg->getPerf()->updatePacket(packet);
 
    MemComponent::component_t receiver_mem_component = shmem_msg->getReceiverMemComponent();
@@ -577,7 +577,7 @@ MYLOG("bcast msg");
 void
 MemoryManager::accessTLB(TLB * tlb, IntPtr address, bool isIfetch, Core::MemModeled modeled)
 {
-   bool hit = tlb->lookup(address, getShmemPerfModel()->getElapsedTime());
+   bool hit = tlb->lookup(address, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
    if (hit == false
        && !(modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT)
        && m_tlb_miss_penalty.getLatency() != SubsecondTime::Zero()

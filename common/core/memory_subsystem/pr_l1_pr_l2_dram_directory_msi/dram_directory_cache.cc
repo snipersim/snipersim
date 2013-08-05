@@ -40,7 +40,7 @@ DirectoryEntry*
 DramDirectoryCache::getDirectoryEntry(IntPtr address, bool modeled)
 {
    if (m_shmem_perf_model && modeled)
-      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time.getLatency());
+      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time.getLatency(), ShmemPerfModel::_SIM_THREAD);
 
    IntPtr tag;
    UInt32 set_index;
@@ -56,7 +56,7 @@ DramDirectoryCache::getDirectoryEntry(IntPtr address, bool modeled)
       if (directory_entry->getAddress() == address)
       {
          if (m_shmem_perf_model && modeled)
-            getShmemPerfModel()->incrElapsedTime(directory_entry->getLatency());
+            getShmemPerfModel()->incrElapsedTime(directory_entry->getLatency(), ShmemPerfModel::_SIM_THREAD);
          // Simple check for now. Make sophisticated later
          return directory_entry;
       }
@@ -106,7 +106,7 @@ DirectoryEntry*
 DramDirectoryCache::replaceDirectoryEntry(IntPtr replaced_address, IntPtr address, bool modeled)
 {
    if (m_shmem_perf_model && modeled)
-      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time.getLatency());
+      getShmemPerfModel()->incrElapsedTime(m_dram_directory_cache_access_time.getLatency(), ShmemPerfModel::_SIM_THREAD);
 
    IntPtr tag;
    UInt32 set_index;
