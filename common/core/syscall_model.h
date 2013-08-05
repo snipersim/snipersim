@@ -58,6 +58,7 @@ class SyscallMdl
       Thread *m_thread;
       IntPtr m_syscall_number;
       bool m_emulated;
+      bool m_stalled;
       IntPtr m_ret_val;
 
       // ------------------------------------------------------

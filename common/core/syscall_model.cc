@@ -31,6 +31,7 @@ const char *SyscallMdl::futex_names[] =
 SyscallMdl::SyscallMdl(Thread *thread)
       : m_thread(thread)
       , m_emulated(false)
+      , m_stalled(false)
       , m_ret_val(0)
 {
    UInt32 futex_counters_size = sizeof(struct futex_counters_t);
@@ -134,11 +135,15 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
       }
 
       case SYS_pause:
+      case SYS_select:
+      case SYS_poll:
       {
          // System call is blocking, mark thread as asleep
          ScopedLock sl(Sim()->getThreadManager()->getLock());
-         Sim()->getThreadManager()->stallThread_async(m_thread->getId(), ThreadManager::STALL_PAUSE,
+         Sim()->getThreadManager()->stallThread_async(m_thread->getId(),
+                                                      syscall_number == SYS_pause ? ThreadManager::STALL_PAUSE : ThreadManager::STALL_SYSCALL,
                                                       m_thread->getCore()->getPerformanceModel()->getElapsedTime());
+         m_stalled = true;
          break;
       }
 
@@ -256,30 +261,24 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
 IntPtr SyscallMdl::runExit(IntPtr old_return)
 {
-   switch(m_syscall_number)
+   if (m_stalled)
    {
-      case SYS_pause:
+      SubsecondTime time_wake = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
+
       {
-         SubsecondTime time_wake = Sim()->getClockSkewMinimizationServer()
-                                 ? Sim()->getClockSkewMinimizationServer()->getGlobalTime()
-                                 : m_thread->getCore()->getPerformanceModel()->getElapsedTime();
-
-         {
-            // System call is blocking, mark thread as awake
-            ScopedLock sl(Sim()->getThreadManager()->getLock());
-            Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, time_wake, NULL);
-         }
-
-         Core *core = Sim()->getCoreManager()->getCurrentCore();
-         m_thread->reschedule(time_wake, core);
-         core = m_thread->getCore();
-
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time_wake, SyncInstruction::PAUSE));
-         break;
+         // System call is blocking, mark thread as awake
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, time_wake, NULL);
       }
 
-      default:
-         break;
+      Core *core = Sim()->getCoreManager()->getCurrentCore();
+      m_thread->reschedule(time_wake, core);
+      core = m_thread->getCore();
+
+      core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time_wake,
+         m_syscall_number == SYS_pause ? SyncInstruction::PAUSE : SyncInstruction::SYSCALL));
+
+      m_stalled = false;
    }
 
    if (!m_emulated)
