@@ -9,10 +9,7 @@ $(TARGET): $(TARGET).o
 	$(CC) $(TARGET).o -lm $(SNIPER_LDFLAGS) -o $(TARGET)
 
 run_$(TARGET):
-	../../run-sniper -n 4 -c gainestown -c small,big,small,big -g --scheduler/type=big_small -g --scheduler/big_small/quantum=10 -g --scheduler/big_small/debug=true  -- ./fft -p 4
+	../../run-sniper -n 4 -c gainestown -c big,big,small,small -g --scheduler/type=big_small -g --scheduler/big_small/quantum=10000 -g --scheduler/big_small/debug=true -ssynctrace -- ./fft -p 4
 
 run_pinned:
-	../../run-sniper -n 2 -c gainestown -c small,big -g --scheduler/type=pinned -g --scheduler/pinned/quantum=1000000 -- ./fft -p 4
-
-run_static: fft 
-	../../run-sniper -n 4 -c gainestown -c small,big,small,big --roi -g --scheduler/type=static -- ./fft -p 4
+	../../run-sniper -n 2 -c gainestown -c big,small -g --scheduler/type=pinned -g --scheduler/pinned/quantum=10000 -ssynctrace -- ./fft -p 4

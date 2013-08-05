@@ -5,185 +5,157 @@
 #include "performance_model.h"
 #include "core_manager.h"
 #include "misc/tags.h"
-#include <list>
+#include "rng.h"
+
+// Example random big-small scheduler using thread affinity
+//
+// The hardware consists of B big cores and S small cores
+// This scheduler selects B threads that have affinity to (all) big cores,
+// while the other threads have affinity to the small cores.
+// Periodically, or when threads on a big core stall/end,
+// new threads are promoted to run on the big core(s)
+//
+// This scheduler uses only setThreadAffinity(), and leaves all messy
+// low-level details that govern thread stalls etc. to the implementation
+// of SchedulerPinnedBase
 
 SchedulerBigSmall::SchedulerBigSmall(ThreadManager *thread_manager)
-   : SchedulerDynamic(thread_manager)
-   , m_quantum(SubsecondTime::US(1000))
-   , m_last_periodic(SubsecondTime::Zero())
+   : SchedulerPinnedBase(thread_manager, SubsecondTime::NS(Sim()->getCfg()->getInt("scheduler/big_small/quantum")))
+   , m_debug_output(Sim()->getCfg()->getBool("scheduler/big_small/debug"))
+   , m_last_reshuffle(SubsecondTime::Zero())
+   , m_rng(rng_seed(42))
 {
-   m_debug_output = Sim()->getCfg()->getBool("scheduler/big_small/debug");
+   // Figure out big and small cores, and create affinity masks for the set of big cores and the set of small cores, respectively
 
-   if (m_debug_output)
-      std::cout << "[SchedulerBigSmall] created Big Small scheduler" << std::endl;
+   m_num_big_cores = 0;
+   CPU_ZERO(&m_mask_big);
+   CPU_ZERO(&m_mask_small);
 
-   uint64_t t = Sim()->getCfg()->getInt("scheduler/big_small/quantum");
-   m_quantum = SubsecondTime::US(t);
-
-   m_nSmallCores = m_nBigCores = 0;
    for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
    {
       bool isBig = Sim()->getTagsManager()->hasTag("core", coreId, "big");
       if (isBig)
-         m_nBigCores++;
+      {
+         ++m_num_big_cores;
+         CPU_SET(coreId, &m_mask_big);
+      }
       else
-         m_nSmallCores++;
+      {
+         CPU_SET(coreId, &m_mask_small);
+      }
    }
 }
 
-
-core_id_t SchedulerBigSmall::threadCreate(thread_id_t thread_id)
+void SchedulerBigSmall::threadSetInitialAffinity(thread_id_t thread_id)
 {
-   // initially schedule threads on the next available core
-   core_id_t freeCoreId = findFirstFreeCore();
-   LOG_ASSERT_ERROR(freeCoreId != INVALID_CORE_ID, "[SchedulerBigSmall] No cores available for spawnThread request.");
-
-   if (m_debug_output)
-     std::cout << "[SchedulerBigSmall] created thread " << thread_id << " on core " << freeCoreId << " in Big Small scheduler" << std::endl;
-
-   return freeCoreId;
-}
-
-void SchedulerBigSmall::threadStart(thread_id_t thread_id, SubsecondTime time)
-{
-   if (m_debug_output)
-      std::cout << "[SchedulerBigSmall] thread " << thread_id << " started" << std::endl;
-
-   // Nothing needs to be done
+   // All threads start out on the small core(s)
+   moveToSmall(thread_id);
 }
 
 void SchedulerBigSmall::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
 {
+   // When a thread on the big core stalls, promote another thread to the big core(s)
+
    if (m_debug_output)
       std::cout << "[SchedulerBigSmall] thread " << thread_id << " stalled" << std::endl;
 
-   // thread will just waste a core
-}
+   if (m_thread_isbig[thread_id])
+   {
+      // Pick a new thread to run on the big core(s)
+      pickBigThread();
+      // Move this thread to the small core(s)
+      moveToSmall(thread_id);
+   }
 
-void SchedulerBigSmall::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
-{
+   // Call threadStall() in parent class
+   SchedulerPinnedBase::threadStall(thread_id, reason, time);
+
    if (m_debug_output)
-      std::cout << "[SchedulerBigSmall] thread " << thread_id << " resumed" << std::endl;
-
-   // Nothing needs to be done
+      printState();
 }
 
 void SchedulerBigSmall::threadExit(thread_id_t thread_id, SubsecondTime time)
 {
-   if (m_debug_output)
-      std::cout << "[SchedulerBigSmall] thread " << thread_id << " EXIT" << std::endl;
+   // When a thread on the big core ends, promote another thread to the big core(s)
 
-   // Nothing needs to be done
+   if (m_debug_output)
+      std::cout << "[SchedulerBigSmall] thread " << thread_id << " ended" << std::endl;
+
+   if (m_thread_isbig[thread_id])
+   {
+      // Pick a new thread to run on the big core(s)
+      pickBigThread();
+   }
+
+   // Call threadExit() in parent class
+   SchedulerPinnedBase::threadExit(thread_id, time);
+
+   if (m_debug_output)
+      printState();
 }
 
 void SchedulerBigSmall::periodic(SubsecondTime time)
 {
-   SubsecondTime delta = time - m_last_periodic;
+   bool print_state = false;
 
-   if (delta > m_quantum_left)
+   if (time > m_last_reshuffle + m_quantum)
    {
-      reschedule(time);
-   }
-   else
-   {
-      m_quantum_left -= delta;
+      // First move all threads back to the small cores
+      for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
+      {
+         if (m_thread_isbig[thread_id])
+            moveToSmall(thread_id);
+      }
+      // Now promote as many threads to the big core pool as there are big cores
+      for(UInt64 i = 0; i < std::min(m_num_big_cores, Sim()->getThreadManager()->getNumThreads()); ++i)
+      {
+         pickBigThread();
+      }
+
+      m_last_reshuffle = time;
+      print_state = true;
    }
 
-   m_last_periodic = time;
+   // Call periodic() in parent class
+   SchedulerPinnedBase::periodic(time);
+
+   if (print_state && m_debug_output)
+         printState();
 }
 
-void SchedulerBigSmall::reschedule(SubsecondTime time)
+void SchedulerBigSmall::moveToSmall(thread_id_t thread_id)
 {
-   std::list<std::pair<uint64_t, core_id_t> > cid;
-   for (core_id_t coreId = 0; coreId < (core_id_t) Sim()->getConfig()->getApplicationCores(); coreId++)
-   {
-      cid.push_back(std::pair<uint64_t, core_id_t>(rand(), coreId));
-   }
-
-   // Sorting using a random value generates a random ordering.
-   cid.sort();
-
-   remap(cid, time);
-
-   if (m_debug_output)
-   {
-      std::cout << "[SchedulerBigSmall] mapping: ";
-      printMapping();
-   }
-
-   m_quantum_left = m_quantum;
+   threadSetAffinity(INVALID_THREAD_ID, thread_id, sizeof(m_mask_small), &m_mask_small);
+   m_thread_isbig[thread_id] = false;
 }
 
-
-void SchedulerBigSmall::remap(std::list< std::pair< uint64_t, core_id_t> > &mapping, SubsecondTime time )
+void SchedulerBigSmall::moveToBig(thread_id_t thread_id)
 {
-   // The threads with the lowest value get scheduled on the small cores, the remaining ones
-   // end up on the big cores.
-   std::list< std::pair< uint64_t, core_id_t> >::iterator it= mapping.begin();
-   std::list< std::pair< uint64_t, core_id_t> >::iterator rit= mapping.end(); rit--;
+   threadSetAffinity(INVALID_THREAD_ID, thread_id, sizeof(m_mask_big), &m_mask_big);
+   m_thread_isbig[thread_id] = true;
+}
 
-   uint64_t left = 0;
-   uint64_t right = mapping.size()-1;
+void SchedulerBigSmall::pickBigThread()
+{
+   // Randomly select one thread to promote from the small to the big core pool
 
-   while ( left < right )
+   // First build a list of all eligible cores
+   std::vector<thread_id_t> eligible;
+   for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
    {
-      core_id_t coreId = it->second;
-
-      bool isSmall = Sim()->getTagsManager()->hasTag("core", coreId, "small");
-      if (isSmall)
+      if (m_thread_isbig[thread_id] == false && m_thread_info[thread_id].isRunning())
       {
-         // This thread needs to end up on a small core (low value), but already is; don't move it.
-         it++; left++;
-         continue;
+         eligible.push_back(thread_id);
       }
-      else
-      {
-         // This thread has a low enough value so that it should end up on a small core, but it
-         // is currently running on a big core. Find a suitable candidate to swap with: the thread
-         // with the highest value that is currently scheduled on a big core type.
-         while ( Sim()->getTagsManager()->hasTag("core", rit->second, "big") && (left < right) )
-         {
-            rit--; right--;
-         }
+   }
 
-         if ( left != right )
-         {
-            core_id_t srcId = it->second;
-            core_id_t destId = rit->second;
-            Core::State srcState = Sim()->getCoreManager()->getCoreFromID(srcId)->getState();
-            Core::State destState = Sim()->getCoreManager()->getCoreFromID(destId)->getState();
+   if (eligible.size() > 0)
+   {
+      // Randomly select a thread from our list
+      thread_id_t thread_id = eligible[rng_next(m_rng) % eligible.size()];
+      moveToBig(thread_id);
 
-            if ((srcState == Core::INITIALIZING) || (destState == Core::INITIALIZING))
-            {
-               if (m_debug_output)
-                  std::cout << "[SchedulerBigSmall] Will not move thread that is initializing" << std::endl;
-            }
-            else
-            {
-
-               if (( srcState == Core::IDLE ) && ( destState != Core::IDLE ))
-               {
-                  thread_id_t threadId = Sim()->getCoreManager()->getCoreFromID(destId)->getThread()->getId();
-                  moveThread( threadId , srcId, time);
-               }
-               else if (( srcState != Core::IDLE ) && ( destState == Core::IDLE ))
-               {
-                  thread_id_t threadId = Sim()->getCoreManager()->getCoreFromID(srcId)->getThread()->getId();
-                  moveThread( threadId , destId, time);
-               }
-               else if  (( srcState != Core::IDLE ) && ( destState != Core::IDLE ))
-               {
-                  thread_id_t srcThreadId = Sim()->getCoreManager()->getCoreFromID(srcId)->getThread()->getId();
-                  thread_id_t destThreadId = Sim()->getCoreManager()->getCoreFromID(destId)->getThread()->getId();
-
-                  moveThread( destThreadId, INVALID_CORE_ID, time);
-                  moveThread( srcThreadId , destId, time);
-                  moveThread( destThreadId, srcId, time);
-               }
-            }
-         }
-         rit--; right--;
-         it++; left++;
-      }
+      if (m_debug_output)
+         std::cout << "[SchedulerBigSmall] thread " << thread_id << " promoted to big core" << std::endl;
    }
 }

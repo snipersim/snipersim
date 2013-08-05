@@ -1,35 +1,35 @@
-#ifndef __SCHEDULER_RAND_H
-#define __SCHEDULER_RAND_H
+#ifndef __SCHEDULER_BIG_SMALL_H
+#define __SCHEDULER_BIG_SMALL_H
 
-#include "scheduler_dynamic.h"
+#include "scheduler_pinned_base.h"
 
-#include <list>
+#include <unordered_map>
 
-class SchedulerBigSmall : public SchedulerDynamic
+class SchedulerBigSmall : public SchedulerPinnedBase
 {
    public:
       SchedulerBigSmall(ThreadManager *thread_manager);
 
-      virtual core_id_t threadCreate(thread_id_t);
-      virtual void periodic(SubsecondTime time);
-      virtual void threadStart(thread_id_t thread_id, SubsecondTime time);
+      virtual void threadSetInitialAffinity(thread_id_t thread_id);
       virtual void threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time);
-      virtual void threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time);
       virtual void threadExit(thread_id_t thread_id, SubsecondTime time);
+      virtual void periodic(SubsecondTime time);
 
    private:
-      uint64_t m_nBigCores;
-      uint64_t m_nSmallCores;
+      const bool m_debug_output;
 
-      SubsecondTime m_quantum;
-      SubsecondTime m_quantum_left;
-      SubsecondTime m_last_periodic;
+      // Configuration
+      UInt64 m_num_big_cores;
+      cpu_set_t m_mask_big;
+      cpu_set_t m_mask_small;
 
-      bool m_debug_output;
+      SubsecondTime m_last_reshuffle;
+      UInt64 m_rng;
+      std::unordered_map<thread_id_t, bool> m_thread_isbig;
 
-      void reschedule(SubsecondTime time);
-      void remap( std::list< std::pair< uint64_t, core_id_t> > &mapping, SubsecondTime time );
-
+      void moveToBig(thread_id_t thread_id);
+      void moveToSmall(thread_id_t thread_id);
+      void pickBigThread();
 };
 
-#endif // __SCHEDULER_RAND_H
+#endif // __SCHEDULER_BIG_SMALL_H
