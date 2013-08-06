@@ -31,8 +31,10 @@ ThreadManager::~ThreadManager()
 {
    for (UInt32 i = 0; i < m_thread_state.size(); i++)
    {
+      #if 0 // Disabled: applications are not required to do proper cleanup
       if (m_thread_state[i].status != Core::IDLE)
          fprintf(stderr, "Thread %d still active when ThreadManager destructs\n", i);
+      #endif
       delete m_threads[i];
    }
 

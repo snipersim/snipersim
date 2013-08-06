@@ -346,6 +346,7 @@ SimFutex::SimFutex()
 
 SimFutex::~SimFutex()
 {
+   #if 0 // Disabled: applications are not required to do proper cleanup
    if (!m_waiting.empty())
    {
       printf("Threads still waiting for futex %p: ", this);
@@ -356,6 +357,7 @@ SimFutex::~SimFutex()
       }
       printf("\n");
    }
+   #endif
 }
 
 bool SimFutex::enqueueWaiter(thread_id_t thread_id, int mask, SubsecondTime time, SubsecondTime timeout_time, SubsecondTime &time_end)

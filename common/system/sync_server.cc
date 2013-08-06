@@ -13,6 +13,7 @@ SimMutex::SimMutex()
 
 SimMutex::~SimMutex()
 {
+   #if 0 // Disabled: applications are not required to do proper cleanup
    if (! m_waiting.empty()) {
       printf("WARNING: Waiters remaining for SimMutex@%p: ", this);
       while(! m_waiting.empty()) {
@@ -21,6 +22,7 @@ SimMutex::~SimMutex()
       }
       printf("\n");
    }
+   #endif
 }
 
 bool SimMutex::isLocked(thread_id_t thread_id)
@@ -83,6 +85,7 @@ thread_id_t SimMutex::unlock(thread_id_t thread_id, SubsecondTime time)
 SimCond::SimCond() {}
 SimCond::~SimCond()
 {
+   #if 0 // Disabled: applications are not required to do proper cleanup
    if (!m_waiting.empty()) {
       printf("Threads still waiting for SimCond@%p: ", this);
       while(!m_waiting.empty()) {
@@ -91,6 +94,7 @@ SimCond::~SimCond()
       }
       printf("\n");
    }
+   #endif
 }
 
 SubsecondTime SimCond::wait(thread_id_t thread_id, SubsecondTime time, SimMutex * simMux)
