@@ -2,6 +2,7 @@
 #include "simulator.h"
 #include "clock_skew_minimization_object.h"
 #include "stats.h"
+#include "magic_server.h"
 
 
 //////////
@@ -216,6 +217,18 @@ getTime(PyObject *self, PyObject *args)
 
 
 //////////
+// icount(): Return current global instruction count
+//////////
+
+static PyObject *
+getIcount(PyObject *self, PyObject *args)
+{
+   UInt64 icount = MagicServer::getGlobalInstructionCount();
+   return PyLong_FromUnsignedLongLong(icount);
+}
+
+
+//////////
 // module definition
 //////////
 
@@ -226,6 +239,7 @@ static PyMethodDef PyStatsMethods[] = {
    {"register", registerStats, METH_VARARGS, "Register callback that defines statistics value for (objectName, index, metricName)."},
    {"marker", writeMarker, METH_VARARGS, "Record a marker (coreid, threadid, arg0, arg1, [description])."},
    {"time", getTime, METH_VARARGS, "Retrieve the current global time in femtoseconds (approximate, last barrier)."},
+   {"icount", getIcount, METH_VARARGS, "Retrieve current global instruction count."},
    {NULL, NULL, 0, NULL} /* Sentinel */
 };
 
