@@ -185,7 +185,7 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
               size = 0
           y += 1
       if is_mesh:
-        for lid in range(0, max_id, concentration):
+        for lid in range(0, max_id+1, concentration):
           svg.paint_box((xpos(lid)-.075, -.2), (concentration+.15, y+.4), color = '#dddddd', zorder = 2, root = tile_root(lid))
       y += 1
       if is_mesh:
