@@ -7,12 +7,7 @@ class StopByIcount:
   def _min_callback(self):
     return min(self.ninstrs_start or (), self.ninstrs, self.min_ins_global)
   def setup(self, args):
-    magic = sim.config.get_bool('general/magic')
-    if magic:
-      print '[STOPBYICOUNT] ERROR: Application ROIs are not supported by stop-by-icount'
-      sim.control.abort()
-      self.done = True
-      return
+    self.magic = sim.config.get_bool('general/magic')
     self.min_ins_global = long(sim.config.get('core/hook_periodic_ins/ins_global'))
     self.verbose = False
     args = dict(enumerate((args or '').split(':')))
@@ -23,11 +18,22 @@ class StopByIcount:
       start = None
     roiscript = sim.config.get_bool('general/roi_script')
     if start == None and not roiscript:
-      self.roi_rel = True
-      self.ninstrs_start = 0
-      self.inroi = True
-      print '[STOPBYICOUNT] Starting in ROI (detail)'
+      if self.magic:
+        self.roi_rel = True
+        self.ninstrs_start = 0
+        self.inroi = False
+        print '[STOPBYICOUNT] Waiting for application ROI'
+      else:
+        self.roi_rel = True
+        self.ninstrs_start = 0
+        self.inroi = True
+        print '[STOPBYICOUNT] Starting in ROI (detail)'
     else:
+      if self.magic:
+        print '[STOPBYICOUNT] ERROR: Application ROIs and warmup are not supported by stop-by-icount'
+        sim.control.abort()
+        self.done = True
+        return
       if start == None:
         # If start == None, then an explicit start has not been set, but --roi-script has also been enabled.
         # Therefore, set to start on the next instruction callback
@@ -47,13 +53,18 @@ class StopByIcount:
     print '[STOPBYICOUNT] Then stopping after simulating %s instructions in detail' % ((self.roi_rel and 'at least ' or '') + str(self.ninstrs))
     self.done = False
     sim.util.EveryIns(self._min_callback(), self.periodic, roi_only = (start == None))
+  def hook_roi_begin(self):
+    if self.magic:
+      self.ninstrs_start = sim.stats.icount()
+      self.inroi = True
+      print '[STOPBYICOUNT] Application ROI started, now simulating', self.ninstrs, 'in detail'
   def periodic(self, icount, icount_delta):
     if self.done:
       return
     if self.verbose:
       print '[STOPBYICOUNT] Periodic at', icount, ' delta =', icount_delta
     if self.inroi and icount > (self.ninstrs + self.ninstrs_start):
-      print '[STOPBYICOUNT] Ending ROI after %s instructions (%s requested)' % (icount, self.ninstrs)
+      print '[STOPBYICOUNT] Ending ROI after %s instructions (%s requested)' % (icount - self.ninstrs_start, self.ninstrs)
       sim.control.set_roi(False)
       self.inroi = False
       self.done = True
