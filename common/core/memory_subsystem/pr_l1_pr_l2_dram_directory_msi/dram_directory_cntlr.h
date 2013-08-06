@@ -27,7 +27,6 @@ namespace PrL1PrL2DramDirectoryMSI
 
          core_id_t m_core_id;
          UInt32 m_cache_block_size;
-         UInt32 m_max_hw_sharers;
 
          ShmemPerfModel* m_shmem_perf_model;
 

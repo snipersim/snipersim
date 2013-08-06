@@ -11,6 +11,7 @@ Directory::Directory(core_id_t core_id, String directory_type_str, UInt32 num_en
    m_num_entries(num_entries),
    m_num_entries_allocated(0),
    m_max_hw_sharers(max_hw_sharers),
+   m_use_max_hw_sharers(max_hw_sharers), // Value to pass through to DirectoryEntry::addSharer
    m_max_num_sharers(max_num_sharers),
    m_limitless_software_trap_penalty(SubsecondTime::Zero())
 {
@@ -107,6 +108,7 @@ Directory::createDirectoryEntrySized()
    switch (m_directory_type)
    {
       case FULL_MAP:
+         m_use_max_hw_sharers = m_max_num_sharers;
          return new DirectoryEntryLimitedNoBroadcast<DirectorySharers>(m_max_num_sharers, m_max_num_sharers);
 
       case LIMITED_NO_BROADCAST:

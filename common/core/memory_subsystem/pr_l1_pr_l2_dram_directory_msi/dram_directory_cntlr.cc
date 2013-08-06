@@ -34,7 +34,6 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
    m_nuca_cache(nuca_cache),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
-   m_max_hw_sharers(dram_directory_max_hw_sharers),
    m_shmem_perf_model(shmem_perf_model),
    evict_modified(0),
    evict_exclusive(0),
@@ -446,7 +445,7 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
       case DirectoryState::UNCACHED:
       {
          // Modifiy the directory entry contents
-         bool add_result = directory_entry->addSharer(requester, m_max_hw_sharers);
+         bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
          assert(add_result == true);
          directory_entry->setOwner(requester);
          directory_block_info->setDState(DirectoryState::MODIFIED);
@@ -515,7 +514,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
       case DirectoryState::SHARED:
       {
-         bool add_result = directory_entry->addSharer(requester, m_max_hw_sharers);
+         bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
          if (add_result == false)
          {
             core_id_t sharer_id = directory_entry->getOneSharer();
@@ -541,7 +540,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
       {
          MYLOG("was UNCACHED, is now EXCLUSIVE")
          // Modifiy the directory entry contents
-         bool add_result = directory_entry->addSharer(requester, m_max_hw_sharers);
+         bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
          assert(add_result == true);
          directory_block_info->setDState(DirectoryState::EXCLUSIVE);
          directory_entry->setOwner(requester);
@@ -959,7 +958,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
          assert (sharers_list_pair.second.size() == 0);
 
          // Modifiy the directory entry contents
-         bool add_result = directory_entry->addSharer(requester, m_max_hw_sharers);
+         bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
          assert(add_result == true);
          directory_entry->setOwner(requester);
          directory_block_info->setDState(DirectoryState::MODIFIED);

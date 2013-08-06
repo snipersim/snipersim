@@ -21,6 +21,7 @@ class Directory
       UInt32 m_num_entries;
       UInt64 m_num_entries_allocated;
       UInt32 m_max_hw_sharers;
+      UInt32 m_use_max_hw_sharers;
       UInt32 m_max_num_sharers;
 
       // FIXME: Hack: Get me out of here
@@ -36,6 +37,8 @@ class Directory
       void setDirectoryEntry(UInt32 entry_num, DirectoryEntry* directory_entry);
       DirectoryEntry* createDirectoryEntry();
       template <class DirectorySharers> DirectoryEntry* createDirectoryEntrySized();
+
+      UInt32 getMaxHwSharers() const { return m_use_max_hw_sharers; }
 
       static DirectoryType parseDirectoryType(String directory_type_str);
 };

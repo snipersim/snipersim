@@ -51,5 +51,6 @@ namespace PrL1PrL2DramDirectoryMSI
          void invalidateDirectoryEntry(IntPtr address);
          void getReplacementCandidates(IntPtr address, std::vector<DirectoryEntry*>& replacement_candidate_list);
 
+         UInt32 getMaxHwSharers() const { return m_directory->getMaxHwSharers(); }
    };
 }
