@@ -2,7 +2,7 @@ import sim
 
 class SyncTrace:
   def hook_thread_start(self, threadid, time):
-    print '[SYNC]', threadid, 'start at', time / 1000000 # Time in ns
+    print '[SYNC]', threadid, 'from app', sim.thread.get_thread_appid(threadid), 'start at', time / 1000000 # Time in ns
 
   def hook_thread_exit(self, threadid, time):
     print '[SYNC]', threadid, 'exit at', time / 1000000
