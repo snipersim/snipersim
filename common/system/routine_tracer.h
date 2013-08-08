@@ -19,12 +19,15 @@ class RoutineTracerThread
       void routineAssert(IntPtr eip, IntPtr esp);
 
    protected:
+      Lock m_lock;
       Thread *m_thread;
       std::deque<IntPtr> m_stack;
       IntPtr m_last_esp;
 
    private:
       bool unwindTo(IntPtr eip);
+
+      void routineEnter_unlocked(IntPtr eip, IntPtr esp);
 
       virtual void functionEnter(IntPtr eip) {}
       virtual void functionExit(IntPtr eip) {}

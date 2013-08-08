@@ -20,6 +20,13 @@ RoutineTracerThread::~RoutineTracerThread()
 
 void RoutineTracerThread::routineEnter(IntPtr eip, IntPtr esp)
 {
+   ScopedLock sl(m_lock);
+
+   routineEnter_unlocked(eip, esp);
+}
+
+void RoutineTracerThread::routineEnter_unlocked(IntPtr eip, IntPtr esp)
+{
    if (m_stack.size())
       if (Sim()->getMagicServer()->inROI())
          functionChildEnter(m_stack.back(), eip);
@@ -33,6 +40,8 @@ void RoutineTracerThread::routineEnter(IntPtr eip, IntPtr esp)
 
 void RoutineTracerThread::routineExit(IntPtr eip, IntPtr esp)
 {
+   ScopedLock sl(m_lock);
+
    if (m_stack.size() == 0)
       return;
 
@@ -64,10 +73,12 @@ void RoutineTracerThread::routineExit(IntPtr eip, IntPtr esp)
 
 void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
 {
+   ScopedLock sl(m_lock);
+
    if (m_stack.size() == 0)
    {
       // Newly created thread just jumps into the first routine
-      routineEnter(eip, esp);
+      routineEnter_unlocked(eip, esp);
    }
    else if (m_stack.back() == eip)
    {
@@ -76,7 +87,7 @@ void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
    else if (esp <= m_last_esp)
    {
       // Stack grew (downwards), or stayed constant (tail call): we entered a new function
-      routineEnter(eip, esp);
+      routineEnter_unlocked(eip, esp);
    }
    else
    {
@@ -85,7 +96,7 @@ void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
       if (!found)
       {
          // We now seem to be in a function we haven't been before, enter it (tail call elimination?)
-         routineEnter(eip, esp);
+         routineEnter_unlocked(eip, esp);
       }
       else
       {
@@ -122,6 +133,8 @@ bool RoutineTracerThread::unwindTo(IntPtr eip)
 
 void RoutineTracerThread::hookRoiBegin()
 {
+   ScopedLock sl(m_lock);
+
    IntPtr eip_parent = 0;
    for(std::deque<IntPtr>::iterator it = m_stack.begin(); it != m_stack.end(); ++it)
    {
@@ -134,6 +147,8 @@ void RoutineTracerThread::hookRoiBegin()
 
 void RoutineTracerThread::hookRoiEnd()
 {
+   ScopedLock sl(m_lock);
+
    // Call functionExit for all functions that are left on the stack.
    // Since functionExit might use m_stack we need to keep it up-to-date by popping items off,
    // we'll use stack_save to remember them and restore m_stack to its original state on exit.
