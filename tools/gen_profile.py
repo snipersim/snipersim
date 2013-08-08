@@ -33,13 +33,11 @@ class Call:
     for k, v in data.items():
       self.data[k] = self.data.get(k, 0) + v
   def buildTotal(self, prof):
+    # Assumes all children have already been visited!
     self.children = prof.children[self.stack]
     # Add self to global total
     for k, v in self.data.items():
       prof.totals[k] = prof.totals.get(k, 0) + v
-    # Calculate children's totals
-    for stack in self.children:
-      prof.calls[stack].buildTotal(prof)
     # Add all children to our total
     self.total = dict(self.data)
     for stack in self.children.copy():
@@ -152,7 +150,17 @@ class Profile:
       for child in self.children[parent]:
         self.roots.remove(child)
 
-    for stack in self.roots:
+    # Construct a list of calls where each child is ordered before its parent.
+    calls_ordered = collections.deque()
+    calls_tovisit = collections.deque(self.roots)
+    while calls_tovisit:
+      stack = calls_tovisit.pop()
+      calls_ordered.appendleft(stack)
+      calls_tovisit.extend(self.children[stack])
+    # Now implement a non-recursive version of buildTotal, which requires that each
+    # function's children have been visited before processing the parent,
+    # by visiting calls_ordered in left-to-right order.
+    for stack in calls_ordered:
       self.calls[stack].buildTotal(self)
 
   def translateEip(self, eip):
