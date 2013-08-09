@@ -23,17 +23,25 @@ CacheSetMRU::getReplacementIndex()
 {
    // Invalidations may mess up the LRU bits
 
-   for (UInt32 i = 0; i < m_associativity; i++) {
-       if (!m_cache_block_info_array[i]->isValid())
-          return i;
+   for (UInt32 i = 0; i < m_associativity; i++)
+   {
+      if (!m_cache_block_info_array[i]->isValid())
+      {
+         updateReplacementIndex(i);
+         return i;
+      }
    }
 
    UInt32 target = 0;
    while (target < m_associativity)
    {
-      for (UInt32 i = 0; i < m_associativity; i++) {
-          if (m_lru_bits[i] == target && isValidReplacement(i))
-             return i;
+      for (UInt32 i = 0; i < m_associativity; i++)
+      {
+         if (m_lru_bits[i] == target && isValidReplacement(i))
+         {
+            updateReplacementIndex(i);
+            return i;
+         }
       }
       target++;
    }

@@ -31,6 +31,8 @@ CacheSetNRU::getReplacementIndex()
       if (!m_cache_block_info_array[i]->isValid())
       {
          // If there is an invalid line(s) in the set, regardless of the LRU bits of other lines, we choose the first invalid line to replace
+         // Mark our newly-inserted line as recently used
+         updateReplacementIndex(i);
          return i;
       }
    }
@@ -42,6 +44,9 @@ CacheSetNRU::getReplacementIndex()
          // We choose the first non-touched line as the victim (note that we start searching from the replacement pointer position)
          UInt8 index = m_replacement_pointer;
          m_replacement_pointer = (m_replacement_pointer + 1) % m_associativity;
+
+         // Mark our newly-inserted line as recently used
+         updateReplacementIndex(index);
          return index;
       }
 

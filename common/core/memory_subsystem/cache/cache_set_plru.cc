@@ -26,7 +26,10 @@ CacheSetPLRU::getReplacementIndex()
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       if (!m_cache_block_info_array[i]->isValid())
+      {
+         updateReplacementIndex(i);
          return i;
+      }
    }
 
    UInt32 retValue = -1;
@@ -79,6 +82,7 @@ CacheSetPLRU::getReplacementIndex()
 
 
    LOG_ASSERT_ERROR(isValidReplacement(retValue), "PLRU selected an invalid replacement candidate" );
+   updateReplacementIndex(retValue);
    return retValue;
 
 }

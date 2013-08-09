@@ -26,6 +26,8 @@ CacheSetLRU::getReplacementIndex()
    {
       if (!m_cache_block_info_array[i]->isValid())
       {
+         // Mark our newly-inserted line as most-recently used
+         updateReplacementIndex(i);
          return i;
       }
       else if (m_lru_bits[i] > max_bits && isValidReplacement(i) )
@@ -36,6 +38,9 @@ CacheSetLRU::getReplacementIndex()
    }
 
    LOG_ASSERT_ERROR(index < m_associativity, "Error Finding LRU bits");
+
+   // Mark our newly-inserted line as most-recently used
+   updateReplacementIndex(index);
    return index;
 }
 

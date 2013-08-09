@@ -28,7 +28,10 @@ CacheSetNMRU::getReplacementIndex()
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       if (!m_cache_block_info_array[i]->isValid())
+      {
+         updateReplacementIndex(i);
          return i;
+      }
    }
 
    for (UInt32 i = 0; i < m_associativity; i++)
@@ -38,6 +41,7 @@ CacheSetNMRU::getReplacementIndex()
          // We choose the first line that is not MRU as the victim (note that we start searching from the replacement pointer position)
          UInt8 index = m_replacement_pointer;
          m_replacement_pointer = (m_replacement_pointer + 1) % m_associativity;
+         updateReplacementIndex(index);
          return index;
       }
 
