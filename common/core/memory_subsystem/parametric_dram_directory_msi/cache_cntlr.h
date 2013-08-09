@@ -20,6 +20,7 @@
 #include "boost/tuple/tuple.hpp"
 
 class DramCntlrInterface;
+class ATD;
 
 /* Enable to get a detailed count of state transitions */
 //#define ENABLE_TRANSITIONS
@@ -153,6 +154,8 @@ namespace ParametricDramDirectoryMSI
          IntPtr m_evicting_address;
          Byte* m_evicting_buf;
 
+         std::vector<ATD*> m_atds;
+
          std::vector<SetLock> m_setlocks;
          UInt32 m_log_blocksize;
          UInt32 m_num_sets;
@@ -163,6 +166,10 @@ namespace ParametricDramDirectoryMSI
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores);
          SetLock* getSetLock(IntPtr addr);
 
+         void createATDs(String name, String configName, core_id_t core_id, UInt32 shared_cores, UInt32 size, UInt32 associativity, UInt32 block_size,
+            String replacement_policy, CacheBase::hash_t hash_function);
+         void accessATDs(Core::mem_op_t mem_op_type, bool hit, IntPtr address, UInt32 core_num);
+
          CacheMasterCntlr(String name, core_id_t core_id, UInt32 outstanding_misses)
             : m_cache(NULL)
             , m_prefetcher(NULL)
@@ -172,6 +179,7 @@ namespace ParametricDramDirectoryMSI
             , m_next_level_read_bandwidth(name + ".next_read", core_id)
             , m_evicting_address(0)
             , m_evicting_buf(NULL)
+            , m_atds()
             , m_prefetch_list()
             , m_prefetch_next(SubsecondTime::Zero())
          {}

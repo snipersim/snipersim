@@ -7,6 +7,7 @@
 #include "config.hpp"
 #include "fault_injection.h"
 #include "hooks_manager.h"
+#include "cache_atd.h"
 #include "shmem_perf.h"
 
 #include <cstring>
@@ -93,8 +94,31 @@ CacheMasterCntlr::getSetLock(IntPtr addr)
    return &m_setlocks.at((addr >> m_log_blocksize) & (m_num_sets-1));
 }
 
+void
+CacheMasterCntlr::createATDs(String name, String configName, core_id_t master_core_id, UInt32 shared_cores, UInt32 size,
+   UInt32 associativity, UInt32 block_size, String replacement_policy, CacheBase::hash_t hash_function)
+{
+   // Instantiate an ATD for each sharing core
+   for(UInt32 core_id = 0; core_id < shared_cores; ++core_id)
+   {
+      m_atds.push_back(new ATD(name + ".atd", configName, core_id, size, associativity, block_size, replacement_policy, hash_function));
+   }
+}
+
+void
+CacheMasterCntlr::accessATDs(Core::mem_op_t mem_op_type, bool hit, IntPtr address, UInt32 core_num)
+{
+   if (m_atds.size())
+      m_atds[core_num]->access(mem_op_type, hit, address);
+}
+
 CacheMasterCntlr::~CacheMasterCntlr()
 {
+   delete m_cache;
+   for(std::vector<ATD*>::iterator it = m_atds.begin(); it != m_atds.end(); ++it)
+   {
+      delete *it;
+   }
 }
 
 CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
@@ -153,6 +177,19 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
                ? Sim()->getFaultinjectionManager()->getFaultInjector(m_core_id_master, mem_component)
                : NULL);
       m_master->m_prefetcher = Prefetcher::createPrefetcher(cache_params.prefetcher, cache_params.configName, m_core_id);
+
+      if (Sim()->getCfg()->getBoolDefault("perf_model/" + cache_params.configName + "/atd/enabled", false))
+      {
+         m_master->createATDs(name,
+               "perf_model/" + cache_params.configName,
+               m_core_id,
+               m_shared_cores,
+               cache_params.size,
+               cache_params.associativity,
+               m_cache_block_size,
+               cache_params.replacement_policy,
+               CacheBase::parseAddressHash(cache_params.hash_function));
+      }
 
       Sim()->getHooksManager()->registerHook(HookType::HOOK_ROI_END, __walkUsageBits, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
    }
@@ -238,7 +275,6 @@ CacheCntlr::~CacheCntlr()
 {
    if (isMasterCache())
    {
-      delete m_master->m_cache;
       delete m_master;
    }
    delete m_shmem_perf;
@@ -1973,6 +2009,10 @@ CacheCntlr::updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cach
       of the previous miss was done instantaneously. But mshr[address] contains its completion time */
    SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
    bool overlapping = m_master->mshr.count(address) && m_master->mshr[address].t_issue < t_now && m_master->mshr[address].t_complete > t_now;
+
+   // ATD doesn't track state, so when reporting hit/miss to it we shouldn't either (i.e. write hit to shared line becomes hit, not miss)
+   bool cache_data_hit = (state != CacheState::INVALID);
+   m_master->accessATDs(mem_op_type, cache_data_hit, address, m_core_id - m_core_id_master);
 
    if (mem_op_type == Core::WRITE)
    {
