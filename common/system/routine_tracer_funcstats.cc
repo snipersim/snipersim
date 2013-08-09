@@ -96,6 +96,8 @@ UInt64 RoutineTracerFunctionStats::RtnThread::getThreadStat(ThreadStatsManager::
 
 UInt64 RoutineTracerFunctionStats::RtnThread::getCurrentRoutineId()
 {
+   ScopedLock sl(m_lock);
+
    if (m_stack.size())
       return (UInt64)m_master->getRoutineFullPtr(m_stack);
    else
@@ -199,12 +201,9 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
    }
 }
 
-RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<IntPtr>& _stack)
+RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<IntPtr>& stack)
 {
    ScopedLock sl(m_lock);
-
-   // The thread may be running and updating its stack, make a local copy so we can use a consistent value
-   const std::deque<IntPtr> stack = _stack;
 
    if (m_routines.count(stack.back()) == 0)
    {
