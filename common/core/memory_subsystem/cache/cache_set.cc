@@ -32,7 +32,7 @@ CacheSet::~CacheSet()
 }
 
 void
-CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 bytes)
+CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 bytes, bool update_replacement)
 {
    assert(offset + bytes <= m_blocksize);
    //assert((out_buff == NULL) == (bytes == 0));
@@ -40,11 +40,12 @@ CacheSet::read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 byt
    if (out_buff != NULL && m_blocks != NULL)
       memcpy((void*) out_buff, &m_blocks[line_index * m_blocksize + offset], bytes);
 
-   updateReplacementIndex(line_index);
+   if (update_replacement)
+      updateReplacementIndex(line_index);
 }
 
 void
-CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes)
+CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes, bool update_replacement)
 {
    assert(offset + bytes <= m_blocksize);
    //assert((in_buff == NULL) == (bytes == 0));
@@ -52,7 +53,8 @@ CacheSet::write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 byt
    if (in_buff != NULL && m_blocks != NULL)
       memcpy(&m_blocks[line_index * m_blocksize + offset], (void*) in_buff, bytes);
 
-   updateReplacementIndex(line_index);
+   if (update_replacement)
+      updateReplacementIndex(line_index);
 }
 
 CacheBlockInfo*

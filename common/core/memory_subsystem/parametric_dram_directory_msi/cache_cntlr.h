@@ -258,7 +258,7 @@ namespace ParametricDramDirectoryMSI
          void accessCache(
                Core::mem_op_t mem_op_type,
                IntPtr ca_address, UInt32 offset,
-               Byte* data_buf, UInt32 data_length);
+               Byte* data_buf, UInt32 data_length, bool update_replacement);
          bool operationPermissibleinCache(
                IntPtr address, Core::mem_op_t mem_op_type, CacheBlockInfo **cache_block_info = NULL);
 
@@ -275,7 +275,7 @@ namespace ParametricDramDirectoryMSI
 
          // Cache data operations
          void invalidateCacheBlock(IntPtr address);
-         void retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::Thread_t thread_num);
+         void retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::Thread_t thread_num, bool update_replacement);
 
 
          SharedCacheBlockInfo* insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, ShmemPerfModel::Thread_t thread_num);

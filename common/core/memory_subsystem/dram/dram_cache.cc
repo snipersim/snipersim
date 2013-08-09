@@ -89,7 +89,7 @@ DramCache::doAccess(Cache::access_t access, IntPtr address, core_id_t requester,
 
    if (block_info)
    {
-      m_cache->accessSingleLine(address, access, data_buf, m_cache_block_size, now + latency);
+      m_cache->accessSingleLine(address, access, data_buf, m_cache_block_size, now + latency, true);
 
       latency += accessDataArray(access, requester, now + latency, perf);
       if (access == Cache::STORE)

@@ -53,7 +53,7 @@ class Cache : public CacheBase
 
       bool invalidateSingleLine(IntPtr addr);
       CacheBlockInfo* accessSingleLine(IntPtr addr,
-            access_t access_type, Byte* buff, UInt32 bytes, SubsecondTime now);
+            access_t access_type, Byte* buff, UInt32 bytes, SubsecondTime now, bool update_replacement);
       void insertSingleLine(IntPtr addr, Byte* fill_buff,
             bool* eviction, IntPtr* evict_addr,
             CacheBlockInfo* evict_block_info, Byte* evict_buff, SubsecondTime now);

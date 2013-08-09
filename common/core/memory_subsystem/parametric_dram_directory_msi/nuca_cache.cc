@@ -65,7 +65,7 @@ NucaCache::read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *pe
 
    if (block_info)
    {
-      m_cache->accessSingleLine(address, Cache::LOAD, data_buf, m_cache_block_size, now + latency);
+      m_cache->accessSingleLine(address, Cache::LOAD, data_buf, m_cache_block_size, now + latency, true);
 
       latency += accessDataArray(Cache::LOAD, now + latency, perf);
       hit_where = HitWhere::NUCA_CACHE;
@@ -90,7 +90,7 @@ NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_a
    if (block_info)
    {
       block_info->setCState(CacheState::MODIFIED);
-      m_cache->accessSingleLine(address, Cache::STORE, data_buf, m_cache_block_size, now + latency);
+      m_cache->accessSingleLine(address, Cache::STORE, data_buf, m_cache_block_size, now + latency, true);
 
       latency += accessDataArray(Cache::STORE, now + latency, NULL);
       hit_where = HitWhere::NUCA_CACHE;

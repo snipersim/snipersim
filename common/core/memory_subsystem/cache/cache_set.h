@@ -34,8 +34,8 @@ class CacheSet
       UInt32 getAssociativity() { return m_associativity; }
       Lock& getLock() { return m_lock; }
 
-      void read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 bytes);
-      void write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes);
+      void read_line(UInt32 line_index, UInt32 offset, Byte *out_buff, UInt32 bytes, bool update_replacement);
+      void write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes, bool update_replacement);
       CacheBlockInfo* find(IntPtr tag, UInt32* line_index = NULL);
       bool invalidate(IntPtr& tag);
       void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff);
