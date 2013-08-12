@@ -421,8 +421,9 @@ void TraceThread::run()
 
    Sift::Instruction inst, next_inst;
 
-   m_trace.Read(inst);
-   while(m_trace.Read(next_inst))
+   bool have_first = m_trace.Read(inst);
+
+   while(have_first && m_trace.Read(next_inst))
    {
       bool do_icache_warmup = false;
       UInt64 icache_warmup_addr = 0, icache_warmup_size = 0;
