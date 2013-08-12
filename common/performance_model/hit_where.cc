@@ -24,3 +24,12 @@ const char * HitWhereString(HitWhere::where_t where) {
       default:                        return "????";
    }
 }
+
+bool HitWhereIsValid(HitWhere::where_t where)
+{
+   const char * name = HitWhereString(where);
+   if (name[0] == '?')
+      return false;
+   else
+      return true;
+}

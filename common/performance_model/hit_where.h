@@ -33,5 +33,6 @@ class HitWhere
 };
 
 const char * HitWhereString(HitWhere::where_t where);
+bool HitWhereIsValid(HitWhere::where_t where);
 
 #endif /* __HIT_WHERE */

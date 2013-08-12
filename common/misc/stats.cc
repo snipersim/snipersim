@@ -172,7 +172,11 @@ void
 StatsManager::registerMetric(StatsMetricBase *metric)
 {
    std::string _objectName(metric->objectName.c_str()), _metricName(metric->metricName.c_str());
+
+   LOG_ASSERT_ERROR(m_objects[_objectName][_metricName].second.count(metric->index) == 0,
+      "Duplicate statistic %s.%s[%d]", _objectName.c_str(), _metricName.c_str(), metric->index);
    m_objects[_objectName][_metricName].second[metric->index] = metric;
+
    if (m_objects[_objectName][_metricName].first == 0)
    {
       m_objects[_objectName][_metricName].first = ++m_keyid;

@@ -127,14 +127,20 @@ IntervalTimer::IntervalTimer(
    m_cpiInstructionCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
    for (int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
    {
-      String name = "cpiInstructionCache" + String(HitWhereString((HitWhere::where_t)h));
-      registerStatsMetric("interval_timer", core->getId(), name, &(m_cpiInstructionCache[h]));
+      if (HitWhereIsValid((HitWhere::where_t)h))
+      {
+         String name = "cpiInstructionCache" + String(HitWhereString((HitWhere::where_t)h));
+         registerStatsMetric("interval_timer", core->getId(), name, &(m_cpiInstructionCache[h]));
+      }
    }
    m_cpiDataCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
    for (int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
    {
-      String name = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
-      registerStatsMetric("interval_timer", core->getId(), name, &(m_cpiDataCache[h]));
+      if (HitWhereIsValid((HitWhere::where_t)h))
+      {
+         String name = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
+         registerStatsMetric("interval_timer", core->getId(), name, &(m_cpiDataCache[h]));
+      }
    }
 
    for (int i = 0 ; i < STOP_DISPATCH_SIZE ; i++ )
