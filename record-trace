@@ -2,7 +2,7 @@
 
 import sys, os, getopt
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-import debugpin
+import debugpin, run_sniper
 
 
 HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
@@ -132,7 +132,9 @@ if pinball:
   # Replace the command line with the null app for use with PinPlay
   cmdline = ['%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()]
 
-envcmd = 'export LD_LIBRARY_PATH="%(pin_home)s/%(arch)s/runtime:$LD_LIBRARY_PATH"; ' % locals()
+cxx_override = run_sniper.get_cxx_override(HOME, pin_home, arch)
+
+envcmd = 'export LD_LIBRARY_PATH="%(cxx_override)s:%(pin_home)s/%(arch)s/runtime/cpplibs:%(pin_home)s/%(arch)s/runtime:$LD_LIBRARY_PATH"; ' % locals()
 value_roi = use_roi and 1 or 0
 value_roi_mpi = roi_mpi and 1 or 0
 value_pa = use_pa and 1 or 0

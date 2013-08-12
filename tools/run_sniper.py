@@ -1,4 +1,4 @@
-import sys, os, time, subprocess, threading, sniper_lib
+import sys, os, time, subprocess, threading, tempfile, sniper_lib
 
 def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
   out = file(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), 'w', 0) # Open unbuffered to maintain stdout/stderr interleaving
@@ -45,3 +45,40 @@ def run_multi(snipercmd, applications, repeat = False, outputdir = '.'):
     t.join()
 
   return p_sniper.returncode
+
+# Determine libstdc++.so used by default by pin_sim.so using ldd
+# Should take into account the current LD_LIBRARY_PATH
+def get_cxx_inuse(sim_root):
+  pin_sim = '%s/lib/pin_sim.so' % sim_root
+  try:
+    ldd_out_name = tempfile.NamedTemporaryFile(delete = False).name
+    os.system('ldd %s > %s 2> /dev/null' % (pin_sim, ldd_out_name))
+    ldd_out = open(ldd_out_name).read()
+    os.unlink(ldd_out_name)
+    libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
+  except Exception, e:
+    print >> sys.stderr, `e`
+    return None
+  return libcxx_path
+
+# Find libstdc++.so version number in a given path
+def get_cxx_version(path):
+  filename = os.path.join(path, 'libstdc++.so.6')
+  if os.path.exists(filename):
+    realname = os.path.realpath(filename)
+    try:
+      version = int(realname.split('.')[-1])
+      return version
+    except Exception, e:
+      print >> sys.stderr, `e`
+      return 0
+  else:
+    return 0
+
+def get_cxx_override(sim_root, pin_home, arch):
+  # Find which libstdc++.so is newer: either the system default one, or the Pin one
+  cxx_versions = [get_cxx_inuse(sim_root), '%s/%s/runtime/cpplibs' % (pin_home, arch)]
+  if 'BENCHMARKS_ROOT' in os.environ:
+    cxx_versions.append('%s/libs' % os.environ['BENCHMARKS_ROOT'])
+  cxx_override = sorted(map(lambda x:(get_cxx_version(x),x), cxx_versions), key=lambda x:x[0])[-1][1]
+  return cxx_override

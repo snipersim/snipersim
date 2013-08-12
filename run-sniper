@@ -550,45 +550,14 @@ sim_root = HOME
 arch = config.get('target', 'intel64')
 
 
-# Determine libstdc++.so used by default by pin_sim.so using ldd
-# Should take into account the current LD_LIBRARY_PATH
-def get_cxx_inuse():
-  pin_sim = '%s/lib/pin_sim.so' % sim_root
-  try:
-    os.system('ldd %s > ldd.out 2> /dev/null' % pin_sim)
-    ldd_out = open('ldd.out').read()
-    os.unlink('ldd.out')
-    libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
-  except Exception, e:
-    print >> sys.stderr, `e`
-    return None
-  return libcxx_path
-
-# Find libstdc++.so version number in a given path
-def get_cxx_version(path):
-  filename = os.path.join(path, 'libstdc++.so.6')
-  if os.path.exists(filename):
-    realname = os.path.realpath(filename)
-    try:
-      version = int(realname.split('.')[-1])
-      return version
-    except Exception, e:
-      print >> sys.stderr, `e`
-      return 0
-  else:
-    return 0
-
-cxx_versions = [get_cxx_inuse(), '%(pin_home)s/%(arch)s/runtime/cpplibs' % locals()]
-if 'BENCHMARKS_ROOT' in os.environ:
-  cxx_versions.append('%s/libs' % os.environ['BENCHMARKS_ROOT'])
-cxx_touse = sorted(map(lambda x:(get_cxx_version(x),x), cxx_versions), key=lambda x:x[0])[-1][1]
+cxx_override = run_sniper.get_cxx_override(sim_root, pin_home, arch)
 
 env = dict(os.environ)
 ld_library_path_orig = env.get('LD_LIBRARY_PATH', '')
 ld_library_path = []
-# Make sure that our version of Python is used, not the system version normally found in cxx_touse
+# Make sure that our version of Python is used, not the system version normally found in cxx_override
 ld_library_path.append('%(HOME)s/python_kit/%(arch)s/lib' % locals())
-ld_library_path.append(cxx_touse)
+ld_library_path.append(cxx_override)
 if not standalone:
   ld_library_path.append('%(pin_home)s/%(arch)s/runtime/cpplibs' % locals())
   ld_library_path.append('%(pin_home)s/%(arch)s/runtime' % locals())
