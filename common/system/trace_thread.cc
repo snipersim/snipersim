@@ -422,6 +422,8 @@ void TraceThread::run()
    Sift::Instruction inst, next_inst;
 
    bool have_first = m_trace.Read(inst);
+   // Recieved first instruction, let TraceManager know our SIFT connection is up and running
+   Sim()->getTraceManager()->signalStarted();
 
    while(have_first && m_trace.Read(next_inst))
    {

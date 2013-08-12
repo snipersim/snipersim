@@ -11,7 +11,9 @@
 #include <sys/stat.h>
 
 TraceManager::TraceManager()
-   : m_threads(0)
+   : m_monitor(new Monitor(this))
+   , m_threads(0)
+   , m_num_threads_started(0)
    , m_num_threads_running(0)
    , m_done(0)
    , m_stop_with_first_app(Sim()->getCfg()->getBool("traceinput/stop_with_first_app"))
@@ -115,6 +117,11 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, Sub
    return thread->getId();
 }
 
+void TraceManager::signalStarted()
+{
+   ++m_num_threads_started;
+}
+
 void TraceManager::signalDone(TraceThread *thread, SubsecondTime time, bool aborted)
 {
    ScopedLock sl(m_lock);
@@ -190,6 +197,7 @@ void TraceManager::start()
    // Begin of region-of-interest when running Sniper inside Sniper
    SimRoiStart();
 
+   m_monitor->spawn();
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
       (*it)->spawn();
 }
@@ -265,4 +273,43 @@ void TraceManager::accessMemory(int core_id, Core::lock_signal_t lock_signal, Co
       }
    }
    LOG_PRINT_ERROR("Unable to find core %d", core_id);
+}
+
+TraceManager::Monitor::Monitor(TraceManager *manager)
+   : m_manager(manager)
+{
+}
+
+TraceManager::Monitor::~Monitor()
+{
+   delete m_thread;
+}
+
+void TraceManager::Monitor::run()
+{
+   UInt64 n = 0;
+   while(true)
+   {
+      if (m_manager->m_num_threads_started > 0)
+         break;
+
+      if (n == 10)
+      {
+         fprintf(stderr, "[SNIPER] WARNING: No SIFT connections made yet. Waiting...\n");
+      }
+      else if (n == 60)
+      {
+         fprintf(stderr, "[SNIPER] ERROR: Could not establish SIFT connection, aborting! Check benchmark-app*.log for errors.\n");
+         exit(1);
+      }
+
+      sleep(1);
+      ++n;
+   }
+}
+
+void TraceManager::Monitor::spawn()
+{
+   m_thread = _Thread::create(this);
+   m_thread->run();
 }
