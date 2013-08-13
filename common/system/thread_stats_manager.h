@@ -52,7 +52,12 @@ class ThreadStatsManager
 
       const ThreadStatTypeList& getThreadStatTypes() { return m_thread_stat_types; }
       const char* getThreadStatName(ThreadStatType type) { return m_thread_stat_callbacks[type].m_name; }
-      UInt64 getThreadStatistic(thread_id_t thread_id, ThreadStatType type) { return m_threads_stats[thread_id]->m_counts[type]; }
+      UInt64 getThreadStatistic(thread_id_t thread_id, ThreadStatType type)
+      {
+         LOG_ASSERT_ERROR(m_threads_stats.count(thread_id) > 0, "Invalid thread_id(%d)", thread_id);
+         LOG_ASSERT_ERROR(m_threads_stats[thread_id]->m_counts.count(type) > 0, "Invalid type(%d)", type);
+         return m_threads_stats[thread_id]->m_counts[type];
+      }
 
       ThreadStatType registerThreadStatMetric(ThreadStatType type, const char* name, ThreadStatCallback func, UInt64 user);
 

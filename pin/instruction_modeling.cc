@@ -305,6 +305,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address, INT32 count)
 {
    Core* core = localStore[thread_id].thread->getCore();
+   assert(core);
    core->countInstructions(address, count);
 }
 
