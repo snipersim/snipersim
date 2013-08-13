@@ -63,7 +63,7 @@ void routineStartCallback(RTN rtn, INS ins)
    }
 
    // icc/openmp compatibility
-   if (rtn_name == "__kmp_reap_monitor")
+   if (rtn_name == "__kmp_reap_monitor" || rtn_name == "__kmp_internal_end_atexit")
    {
       INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(emuKmpReapMonitor), IARG_THREAD_ID, IARG_CONTEXT, IARG_END);
    }
