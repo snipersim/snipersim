@@ -47,7 +47,8 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'remote',   .01, 'DataCachecache-remote' ],
       [ 'nuca',     .01, 'DataCachenuca-cache' ],
       [ 'dram-cache', .01, 'DataCachedram-cache' ],
-      [ 'dram',     .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote', 'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
+      [ 'dram',     .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote',
+                          'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
     ] ],
   ]
   else:
@@ -63,7 +64,9 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'l4',           .01, 'DataCacheL4' ],
       [ 'off_socket',   .01, 'DataCachecache-remote' ],
       [ 'nuca',         .01, 'DataCachenuca-cache' ],
-      [ 'dram',         .01, ('DataCachedram-local', 'DataCachedram-remote', 'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
+      [ 'dram-cache', .01, 'DataCachedram-cache' ],
+      [ 'dram',         .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote',
+                              'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
     ] ],
   ]
 
