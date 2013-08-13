@@ -352,10 +352,13 @@ RoutineTracerFunctionStats::ThreadStatCpiMem::ThreadStatCpiMem()
    {
       for (int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
       {
-         String metricName = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
-         StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject("interval_timer", core_id, metricName);
-         LOG_ASSERT_ERROR(m != NULL, "Invalid statistic %s.%d.%s", "interval_timer", core_id, metricName.c_str());
-         m_stats[core_id].push_back(m);
+         if (HitWhereIsValid((HitWhere::where_t)h))
+         {
+            String metricName = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
+            StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject("interval_timer", core_id, metricName);
+            LOG_ASSERT_ERROR(m != NULL, "Invalid statistic %s.%d.%s", "interval_timer", core_id, metricName.c_str());
+            m_stats[core_id].push_back(m);
+         }
       }
    }
 }
