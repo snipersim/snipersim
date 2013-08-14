@@ -234,12 +234,28 @@ class Profile:
       print >> obj
 
   def summarize(self, catnames, catfilters, obj = sys.stdout):
+    def get_catname(func):
+      stack = func.stack
+      while stack:
+        has_parent = (':' in stack)
+        # Find category for this function by trying a match against all filters in catfilters
+        for catname, catfilter in catfilters:
+          if catfilter(self.calls[stack], self):
+            if catname:
+              return catname
+            elif has_parent:
+              # catname == None means fold into the parent
+              # break out of this for loop, and visit parent function
+              break
+            else:
+              # Ignore fold matches for root functions, try to match with another category
+              continue
+        # Visit parent function
+        stack = stack.rpartition(':')[0]
     bytype = dict([ (name, Category(name)) for name in catnames ])
     for func in self.calls.values():
       if not func.folded:
-        for catname, catfilter in catfilters:
-          if catfilter(func, self):
-            break
+        catname = get_catname(func)
         bytype[catname].add(func.data)
     print >> obj, '%7s\t%7s\t%7s\t%7s' % ('time', 'icount', 'ipc', 'l2.mpki')
     for name in catnames:
