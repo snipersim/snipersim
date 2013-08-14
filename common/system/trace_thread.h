@@ -64,6 +64,8 @@ class TraceThread : public Runnable
       { return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
       static uint64_t __handleMagicFunc(void* arg, uint64_t a, uint64_t b, uint64_t c)
       { return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
+      static bool __handleEmuFunc(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
+      { return ((TraceThread*)arg)->handleEmuFunc(type, req, res); }
       static void __handleRoutineChangeFunc(void* arg, uint64_t eip, uint64_t esp, Sift::RoutineOpType event)
       { ((TraceThread*)arg)->handleRoutineChangeFunc(eip, esp, event); }
       static void __handleRoutineAnnounceFunc(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
@@ -74,6 +76,7 @@ class TraceThread : public Runnable
       int32_t handleNewThreadFunc();
       int32_t handleJoinFunc(int32_t thread);
       uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c);
+      bool handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
       void handleRoutineChangeFunc(int64_t eip, int64_t esp, Sift::RoutineOpType event);
       void handleRoutineAnnounceFunc(int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 

@@ -31,6 +31,8 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , handleJoinArg(NULL)
    , handleMagicFunc(NULL)
    , handleMagicArg(NULL)
+   , handleEmuFunc(NULL)
+   , handleEmuArg(NULL)
    , handleRoutineChangeFunc(NULL)
    , handleRoutineAnnounceFunc(NULL)
    , handleRoutineArg(NULL)
@@ -318,6 +320,24 @@ bool Sift::Reader::Read(Instruction &inst)
                sendSimpleResponse(RecOtherMagicInstructionResponse, &result, sizeof(result));
                break;
             }
+            case RecOtherEmu:
+            {
+               assert(rec.Other.size <= sizeof(uint16_t) + sizeof(EmuRequest));
+               uint16_t type; EmuRequest req;
+               input->read(reinterpret_cast<char*>(&type), sizeof(uint16_t));
+               input->read(reinterpret_cast<char*>(&req), rec.Other.size - sizeof(uint16_t));
+               bool result; EmuReply res;
+               if (handleEmuFunc)
+               {
+                  result = handleEmuFunc(handleEmuArg, EmuType(type), req, res);
+               }
+               else
+               {
+                  result = false;
+               }
+               sendEmuResponse(result, res);
+               break;
+            }
             case RecOtherRoutineChange:
             {
                assert(rec.Other.size == 2*sizeof(uint64_t) + sizeof(uint8_t));
@@ -593,6 +613,35 @@ void Sift::Reader::sendSyscallResponse(uint64_t return_code)
    rec.Other.size = sizeof(return_code);
    response->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    response->write(reinterpret_cast<char*>(&return_code), sizeof(return_code));
+   response->flush();
+}
+
+void Sift::Reader::sendEmuResponse(bool handled, EmuReply res)
+{
+   #if VERBOSE > 0
+   std::cerr << "[DEBUG:" << m_id << "] Write sendEmuResponse" << std::endl;
+   #endif
+
+   if (!response)
+   {
+      assert (strcmp(m_response_filename, "") != 0);
+      response = new std::ofstream(m_response_filename, std::ios::out);
+   }
+
+   if (!response->is_open())
+   {
+      std::cerr << "Cannot open " << m_response_filename << std::endl;
+      assert(false);
+   }
+
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherEmuResponse;
+   rec.Other.size = sizeof(uint8_t) + sizeof(EmuReply);
+   uint8_t result = handled;
+   response->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   response->write(reinterpret_cast<char*>(&result), sizeof(uint8_t));
+   response->write(reinterpret_cast<char*>(&res), sizeof(EmuReply));
    response->flush();
 }
 

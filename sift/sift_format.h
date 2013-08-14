@@ -95,8 +95,19 @@ namespace Sift
       RecOtherMagicInstructionResponse,
       RecOtherRoutineChange,
       RecOtherRoutineAnnounce,
+      RecOtherEmu,
+      RecOtherEmuResponse,
       RecOtherEnd = 0xff,
    } RecOtherType;
+
+   typedef enum {
+   } EmuType;
+
+   typedef union {
+   } EmuRequest;
+
+   typedef union {
+   } EmuReply;
 
    // Determine record type based on first uint8_t
    inline bool IsInstructionSimple(uint8_t byte) { return byte > 0; }

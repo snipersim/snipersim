@@ -22,6 +22,7 @@
 #include "recorder_base.h"
 #include "syscall_modeling.h"
 #include "trace_rtn.h"
+#include "emulation.h"
 #include "sift_writer.h"
 #include "sift_assert.h"
 #include "pinboost_debug.h"
@@ -155,6 +156,7 @@ int main(int argc, char **argv)
    initThreads();
    initRecorderControl();
    initRecorderBase();
+   initEmulation();
 
    if (KnobRoutineTracing.Value())
       initRoutineTracer();

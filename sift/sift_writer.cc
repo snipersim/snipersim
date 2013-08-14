@@ -520,6 +520,60 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
          case RecOtherMemoryRequest:
             handleMemoryRequest(respRec);
             break;
+         default:
+            sift_assert(false);
+            break;
+      }
+   }
+
+   // We should not get here
+   sift_assert(false);
+}
+
+bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
+{
+   // send magic
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherEmu;
+   rec.Other.size = sizeof(uint16_t) + sizeof(EmuRequest);
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   uint16_t _type = type;
+   output->write(reinterpret_cast<char*>(&_type), sizeof(uint16_t));
+   output->write(reinterpret_cast<char*>(&req), sizeof(EmuRequest));
+   output->flush();
+
+   if (!response)
+   {
+     sift_assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   // wait for reply
+   while (true)
+   {
+      Record respRec;
+      response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      sift_assert(!response->fail());
+      sift_assert(respRec.Other.zero == 0);
+
+      switch(respRec.Other.type)
+      {
+         case RecOtherEmuResponse:
+         {
+            sift_assert(respRec.Other.size <= sizeof(uint8_t) + sizeof(EmuReply));
+            uint8_t result;
+            response->read(reinterpret_cast<char*>(&result), sizeof(uint8_t));
+            // Support servers which still use a smaller EmuReply
+            response->read(reinterpret_cast<char*>(&res), respRec.Other.size - sizeof(uint8_t));
+            return result;
+         }
+         case RecOtherMemoryRequest:
+            handleMemoryRequest(respRec);
+            break;
+         default:
+            sift_assert(false);
+            break;
       }
    }
 

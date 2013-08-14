@@ -46,6 +46,7 @@ namespace Sift
       typedef int32_t (*HandleNewThreadFunc)(void* arg);
       typedef int32_t (*HandleJoinFunc)(void* arg, int32_t thread);
       typedef uint64_t (*HandleMagicFunc)(void* arg, uint64_t a, uint64_t b, uint64_t c);
+      typedef bool (*HandleEmuFunc)(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
       typedef void (*HandleRoutineChange)(void* arg, uint64_t eip, uint64_t esp, Sift::RoutineOpType event);
       typedef void (*HandleRoutineAnnounce)(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 
@@ -62,6 +63,8 @@ namespace Sift
          void *handleJoinArg;
          HandleMagicFunc handleMagicFunc;
          void *handleMagicArg;
+         HandleEmuFunc handleEmuFunc;
+         void *handleEmuArg;
          HandleRoutineChange handleRoutineChangeFunc;
          HandleRoutineAnnounce handleRoutineAnnounceFunc;
          void *handleRoutineArg;
@@ -88,6 +91,7 @@ namespace Sift
          const Sift::StaticInstruction* decodeInstruction(uint64_t addr, uint8_t size);
          const Sift::StaticInstruction* getStaticInstruction(uint64_t addr, uint8_t size);
          void sendSyscallResponse(uint64_t return_code);
+         void sendEmuResponse(bool handled, EmuReply res);
          void sendSimpleResponse(RecOtherType type, void *data = NULL, uint32_t size = 0);
 
       public:
@@ -102,6 +106,7 @@ namespace Sift
          void setHandleNewThreadFunc(HandleNewThreadFunc func, void* arg = NULL) { assert(func); handleNewThreadFunc = func; handleNewThreadArg = arg; }
          void setHandleJoinFunc(HandleJoinFunc func, void* arg = NULL) { assert(func); handleJoinFunc = func; handleJoinArg = arg; }
          void setHandleMagicFunc(HandleMagicFunc func, void* arg = NULL) { assert(func); handleMagicFunc = func; handleMagicArg = arg; }
+         void setHandleEmuFunc(HandleEmuFunc func, void* arg = NULL) { assert(func); handleEmuFunc = func; handleEmuArg = arg; }
          void setHandleRoutineFunc(HandleRoutineChange funcChange, HandleRoutineAnnounce funcAnnounce, void* arg = NULL) { assert(funcChange); assert(funcAnnounce); handleRoutineChangeFunc = funcChange; handleRoutineAnnounceFunc = funcAnnounce; handleRoutineArg = arg; }
 
          uint64_t getPosition();

@@ -44,6 +44,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    m_trace.setHandleNewThreadFunc(TraceThread::__handleNewThreadFunc, this);
    m_trace.setHandleJoinFunc(TraceThread::__handleJoinFunc, this);
    m_trace.setHandleMagicFunc(TraceThread::__handleMagicFunc, this);
+   m_trace.setHandleEmuFunc(TraceThread::__handleEmuFunc, this);
    if (Sim()->getRoutineTracer())
       m_trace.setHandleRoutineFunc(TraceThread::__handleRoutineChangeFunc, TraceThread::__handleRoutineAnnounceFunc, this);
 
@@ -223,6 +224,16 @@ void TraceThread::handleRoutineChangeFunc(int64_t eip, int64_t esp, Sift::Routin
          break;
       default:
          LOG_PRINT_ERROR("Invalid Sift::RoutineOpType %d", event);
+   }
+}
+
+bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
+{
+   switch(type)
+   {
+      default:
+         // Not emulated
+         return false;
    }
 }
 
