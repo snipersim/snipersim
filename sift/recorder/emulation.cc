@@ -91,7 +91,7 @@ static void rtnCallback(RTN rtn, VOID *v)
 
    if (rtn_name == "sched_getcpu")
       RTN_ReplaceSignature(rtn, AFUNPTR(emuGetCPU), IARG_THREAD_ID, IARG_END);
-   else if (rtn_name == "get_nprocs")
+   else if (rtn_name == "get_nprocs" || rtn_name == "__get_nprocs")
       RTN_ReplaceSignature(rtn, AFUNPTR(emuGetNprocs), IARG_THREAD_ID, IARG_END);
    else if (rtn_name == "get_nprocs_conf" || rtn_name == "__get_nprocs_conf")
       RTN_ReplaceSignature(rtn, AFUNPTR(emuGetNprocs), IARG_THREAD_ID, IARG_END);
