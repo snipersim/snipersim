@@ -102,17 +102,23 @@ namespace Sift
 
    typedef enum {
       EmuTypeRdtsc,
+      EmuTypeGetProcInfo,
    } EmuType;
 
    typedef union {
       struct {
       } rdtsc;
+      struct {
+      } getprocinfo;
    } EmuRequest;
 
    typedef union {
       struct {
          uint64_t cycles;
       } rdtsc;
+      struct {
+         uint64_t procid, nprocs, emunprocs;
+      } getprocinfo;
    } EmuReply;
 
    // Determine record type based on first uint8_t

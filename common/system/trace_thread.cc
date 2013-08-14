@@ -242,6 +242,13 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
          res.rdtsc.cycles = cycles;
          return true;
       }
+      case Sift::EmuTypeGetProcInfo:
+      {
+         res.getprocinfo.procid = m_thread->getCore()->getId();
+         res.getprocinfo.nprocs = Sim()->getConfig()->getApplicationCores();
+         res.getprocinfo.emunprocs = Sim()->getConfig()->getOSEmuNprocs() ? Sim()->getConfig()->getOSEmuNprocs() : Sim()->getConfig()->getApplicationCores();
+         return true;
+      }
       default:
          // Not emulated
          return false;
