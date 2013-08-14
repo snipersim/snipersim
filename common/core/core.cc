@@ -13,6 +13,7 @@
 #include "log.h"
 #include "config.hpp"
 #include "stats.h"
+#include "topology_info.h"
 
 #include <cstring>
 
@@ -66,6 +67,7 @@ Core::Core(SInt32 id)
    , m_thread(NULL)
    , m_dyninfo_save_used(false)
    , m_bbv(id)
+   , m_topology_info(new TopologyInfo(id))
    , m_core_state(Core::IDLE)
    , m_icache_last_block(-1)
    , m_spin_loops(0)
@@ -103,6 +105,7 @@ Core::Core(SInt32 id)
 
 Core::~Core()
 {
+   delete m_topology_info;
    delete m_pin_memory_manager;
    delete m_memory_manager;
    delete m_shmem_perf_model;

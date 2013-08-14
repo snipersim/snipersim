@@ -8,6 +8,7 @@ class MemoryManagerBase;
 class PerformanceModel;
 class ClockSkewMinimizationClient;
 class ShmemPerfModel;
+class TopologyInfo;
 
 // FIXME: Move this out of here eventually
 class PinMemoryManager;
@@ -104,6 +105,8 @@ class Core
       PinMemoryManager *getPinMemoryManager() { return m_pin_memory_manager; }
       ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
       const ComponentPeriod* getDvfsDomain() const { return m_dvfs_domain; }
+      TopologyInfo* getTopologyInfo() { return m_topology_info; }
+      const TopologyInfo* getTopologyInfo() const { return m_topology_info; }
 
       State getState() const { return m_core_state; }
       void setState(State core_state) { m_core_state = core_state; }
@@ -138,6 +141,7 @@ class Core
       bool m_dyninfo_save_used;
       ShmemPerfModel* m_shmem_perf_model;
       BbvCount m_bbv;
+      TopologyInfo *m_topology_info;
 
       State m_core_state;
 

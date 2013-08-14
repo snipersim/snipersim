@@ -12,6 +12,7 @@
 #include "performance_model.h"
 #include "config.hpp"
 #include "distribution.h"
+#include "topology_info.h"
 
 #include <algorithm>
 
@@ -361,6 +362,9 @@ MemoryManager::MemoryManager(Core* core,
 
    // Register Call-backs
    getNetwork()->registerCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
+
+   // Set up core topology information
+   getCore()->getTopologyInfo()->setup(smt_cores, cache_parameters[m_last_level_cache].shared_cores);
 }
 
 MemoryManager::~MemoryManager()
