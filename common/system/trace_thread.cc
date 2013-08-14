@@ -249,6 +249,12 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
          res.getprocinfo.emunprocs = Sim()->getConfig()->getOSEmuNprocs() ? Sim()->getConfig()->getOSEmuNprocs() : Sim()->getConfig()->getApplicationCores();
          return true;
       }
+      case Sift::EmuTypeGetTime:
+      {
+         res.gettime.time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
+                             + getCurrentTime().getNS();
+         return true;
+      }
       default:
          // Not emulated
          return false;

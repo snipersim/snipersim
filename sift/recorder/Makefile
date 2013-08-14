@@ -34,7 +34,7 @@ endif
 
 LINKER?=${CXX}
 CXXFLAGS += -std=c++0x -Wall -Wno-unknown-pragmas $(DBG) $(OPT_CFLAGS) $(TOOL_CXXFLAGS) -I..
-LDFLAGS += -L.. -lsift -lz
+LDFLAGS += -L.. -lsift -lz -lrt
 
 PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
 ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
