@@ -4,6 +4,7 @@
 #include "core_manager.h"
 #include "thread_manager.h"
 #include "thread.h"
+#include "dvfs_manager.h"
 #include "instruction.h"
 #include "basic_block.h"
 #include "performance_model.h"
@@ -231,6 +232,16 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
 {
    switch(type)
    {
+      case Sift::EmuTypeRdtsc:
+      {
+         SubsecondTime cycles_fs = getCurrentTime();
+         // Convert SubsecondTime to cycles in global clock domain
+         const ComponentPeriod *dom_global = Sim()->getDvfsManager()->getGlobalDomain();
+         UInt64 cycles = SubsecondTime::divideRounded(cycles_fs, *dom_global);
+
+         res.rdtsc.cycles = cycles;
+         return true;
+      }
       default:
          // Not emulated
          return false;

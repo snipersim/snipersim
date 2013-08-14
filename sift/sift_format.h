@@ -101,12 +101,18 @@ namespace Sift
    } RecOtherType;
 
    typedef enum {
+      EmuTypeRdtsc,
    } EmuType;
 
    typedef union {
+      struct {
+      } rdtsc;
    } EmuRequest;
 
    typedef union {
+      struct {
+         uint64_t cycles;
+      } rdtsc;
    } EmuReply;
 
    // Determine record type based on first uint8_t
