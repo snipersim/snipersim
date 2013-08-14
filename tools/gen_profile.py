@@ -252,14 +252,16 @@ if __name__ == '__main__':
   import getopt
 
   def usage():
-    print '%s  [-d <resultsdir (.)>]  [-o <outputdir>]' % sys.argv[0]
+    print '%s  [-d <resultsdir (.)> | -o <outputdir>] [--abs]' % sys.argv[0]
+    sys.exit(1)
 
   HOME = os.path.dirname(__file__)
   resultsdir = '.'
   outputdir = None
+  opt_absolute = False
 
   try:
-    opts, cmdline = getopt.getopt(sys.argv[1:], "hd:o:")
+    opts, cmdline = getopt.getopt(sys.argv[1:], "hd:o:", ['abs'])
   except getopt.GetoptError, e:
     # print help information and exit:
     print >> sys.stderr, e
@@ -272,9 +274,11 @@ if __name__ == '__main__':
       resultsdir = a
     if o == '-o':
       outputdir = a
+    if o == '--abs':
+      opt_absolute = True
 
   prof = Profile(resultsdir)
-  prof.write(file(os.path.join(outputdir, 'sim.profile'), 'w') if outputdir else sys.stdout)
+  prof.write(file(os.path.join(outputdir, 'sim.profile'), 'w') if outputdir else sys.stdout, opt_absolute = opt_absolute)
 
   if outputdir:
     callgrindfile = os.path.join(outputdir, 'callgrind.out.sniper')
