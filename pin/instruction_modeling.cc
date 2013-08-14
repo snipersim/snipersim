@@ -81,6 +81,20 @@ static void handleRdtsc(THREADID thread_id, PIN_REGISTER * gax, PIN_REGISTER * g
    gax->dword[0] = cycles & 0xffffffff;
 }
 
+static void handleCpuid(THREADID thread_id, PIN_REGISTER * gax, PIN_REGISTER * gbx, PIN_REGISTER * gcx, PIN_REGISTER * gdx)
+{
+   Core *core = localStore[thread_id].thread->getCore();
+   assert (core);
+
+   cpuid_result_t res;
+   core->emulateCpuid(gax->dword[0], gcx->dword[0], res);
+
+   gax->dword[0] = res.eax;
+   gbx->dword[0] = res.ebx;
+   gcx->dword[0] = res.ecx;
+   gdx->dword[0] = res.edx;
+}
+
 static void handlePause()
 {
    // Mostly used Inside spinlocks, use it here to increase the probability
@@ -181,6 +195,12 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
    if (INS_IsRDTSC(ins))
       INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+
+   if (INS_Opcode(ins) == XED_ICLASS_CPUID)
+   {
+      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleCpuid, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GBX, IARG_REG_REFERENCE, REG_GCX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+      INS_Delete(ins);
+   }
 
    if (INS_Opcode(ins) == XED_ICLASS_PAUSE)
       INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handlePause, IARG_END);

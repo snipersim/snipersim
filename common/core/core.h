@@ -21,6 +21,7 @@ class PinMemoryManager;
 #include "dynamic_instruction_info.h"
 #include "subsecond_time.h"
 #include "bbv_count.h"
+#include "cpuid.h"
 
 struct MemoryResult {
    HitWhere::where_t hit_where;
@@ -93,6 +94,8 @@ class Core
 
       void logMemoryHit(bool icache, mem_op_t mem_op_type, IntPtr address, MemModeled modeled = MEM_MODELED_NONE, IntPtr eip = 0);
       void countInstructions(IntPtr address, UInt32 count);
+
+      void emulateCpuid(UInt32 eax, UInt32 ecx, cpuid_result_t &res) const;
 
       // network accessor since network is private
       int getId() const { return m_core_id; }

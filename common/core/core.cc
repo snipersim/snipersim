@@ -24,6 +24,8 @@
 #  define MYLOG(...) {}
 #endif
 
+#define VERBOSE 0
+
 const char * ModeledString(Core::MemModeled modeled) {
    switch(modeled)
    {
@@ -498,4 +500,57 @@ __attribute__((weak)) void
 applicationMemCopy(void *dest, const void *src, size_t n)
 {
    memcpy(dest, src, n);
+}
+
+void
+Core::emulateCpuid(UInt32 eax, UInt32 ecx, cpuid_result_t &res) const
+{
+   switch(eax)
+   {
+      case 0x1:
+      {
+         // Return native results, except for CPU id
+         cpuid(eax, ecx, res);
+         res.ebx = (m_core_id << 24) | (Sim()->getConfig()->getApplicationCores() << 16) | (res.ebx &0xffff);
+         break;
+      }
+      case 0xb:
+      {
+         // Extended Topology Enumeration Leaf
+         switch(ecx)
+         {
+            case 0:
+               // Level 0: SMT
+               res.eax = TopologyInfo::SMT_SHIFT_BITS;
+               res.ebx = m_topology_info->smt_count; // SMT threads / core
+               res.ecx = ecx | (1 << 8); // Level type = SMT
+               break;
+            case 1:
+               // Level 1: cores
+               res.eax = TopologyInfo::PACKAGE_SHIFT_BITS;
+               res.ebx = m_topology_info->smt_count * m_topology_info->core_count; // HW contexts / package
+               res.ecx = ecx | (2 << 8); // Level type = Core
+               break;
+            default:
+               // Invalid level
+               res.eax = 0;
+               res.ebx = 0;
+               res.ecx = ecx;
+               break;
+         }
+         res.edx = m_topology_info->apic_id;
+         break;
+      }
+      default:
+      {
+         // Return native results (original cpuid instruction is deleted)
+         cpuid(eax, ecx, res);
+         break;
+      }
+   }
+
+   #if VERBOSE
+   printf("CPUID[%d]: %08x %08x => ", m_core_id, eax, ecx);
+   printf("%08x %08x %08x %08x\n", res.eax, res.ebx, res.ecx, res.edx);
+   #endif
 }

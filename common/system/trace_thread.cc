@@ -255,6 +255,16 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
                              + getCurrentTime().getNS();
          return true;
       }
+      case Sift::EmuTypeCpuid:
+      {
+         cpuid_result_t result;
+         m_thread->getCore()->emulateCpuid(req.cpuid.eax, req.cpuid.ecx, result);
+         res.cpuid.eax = result.eax;
+         res.cpuid.ebx = result.ebx;
+         res.cpuid.ecx = result.ecx;
+         res.cpuid.edx = result.edx;
+         return true;
+      }
       default:
          // Not emulated
          return false;

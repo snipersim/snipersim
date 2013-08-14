@@ -104,6 +104,7 @@ namespace Sift
       EmuTypeRdtsc,
       EmuTypeGetProcInfo,
       EmuTypeGetTime,
+      EmuTypeCpuid,
    } EmuType;
 
    typedef union {
@@ -113,6 +114,9 @@ namespace Sift
       } getprocinfo;
       struct {
       } gettime;
+      struct {
+         uint32_t eax, ecx;
+      } cpuid;
    } EmuRequest;
 
    typedef union {
@@ -125,6 +129,9 @@ namespace Sift
       struct {
          uint64_t time_ns;
       } gettime;
+      struct {
+         uint32_t eax, ebx, ecx, edx;
+      } cpuid;
    } EmuReply;
 
    // Determine record type based on first uint8_t

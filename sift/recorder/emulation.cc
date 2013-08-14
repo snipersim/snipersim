@@ -19,6 +19,22 @@ static void handleRdtsc(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gd
    }
 }
 
+static void handleCpuid(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gbx, PIN_REGISTER * gcx, PIN_REGISTER * gdx)
+{
+   Sift::EmuRequest req;
+   Sift::EmuReply res;
+
+   req.cpuid.eax = gax->dword[0];
+   req.cpuid.ecx = gcx->dword[0];
+   bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeCpuid, req, res);
+
+   sift_assert(emulated);
+   gax->dword[0] = res.cpuid.eax;
+   gbx->dword[0] = res.cpuid.ebx;
+   gcx->dword[0] = res.cpuid.ecx;
+   gdx->dword[0] = res.cpuid.edx;
+}
+
 static ADDRINT emuGetNprocs(THREADID threadid)
 {
    Sift::EmuRequest req;
@@ -83,6 +99,12 @@ static void insCallback(INS ins, VOID *v)
 {
    if (INS_IsRDTSC(ins))
       INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+
+   if (INS_Opcode(ins) == XED_ICLASS_CPUID)
+   {
+      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleCpuid, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GBX, IARG_REG_REFERENCE, REG_GCX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+      INS_Delete(ins);
+   }
 }
 
 static void rtnCallback(RTN rtn, VOID *v)
