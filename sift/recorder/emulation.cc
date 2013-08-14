@@ -19,12 +19,6 @@ static void handleRdtsc(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gd
    }
 }
 
-static void insCallback(INS ins, VOID *v)
-{
-   if (INS_IsRDTSC(ins))
-      INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
-}
-
 static ADDRINT emuGetNprocs(THREADID threadid)
 {
    Sift::EmuRequest req;
@@ -85,6 +79,12 @@ ADDRINT emuGettimeofday(THREADID threadid, struct timeval *tv, struct timezone *
    return 0;
 }
 
+static void insCallback(INS ins, VOID *v)
+{
+   if (INS_IsRDTSC(ins))
+      INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+}
+
 static void rtnCallback(RTN rtn, VOID *v)
 {
    std::string rtn_name = RTN_Name(rtn);
@@ -105,6 +105,9 @@ static void rtnCallback(RTN rtn, VOID *v)
 
 void initEmulation()
 {
-   INS_AddInstrumentFunction(insCallback, 0);
-   RTN_AddInstrumentFunction(rtnCallback, 0);
+   if (KnobEmulateSyscalls.Value())
+   {
+      INS_AddInstrumentFunction(insCallback, 0);
+      RTN_AddInstrumentFunction(rtnCallback, 0);
+   }
 }
