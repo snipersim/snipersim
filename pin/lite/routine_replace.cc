@@ -420,7 +420,7 @@ IntPtr emuClockGettime(THREADID thread_id, clockid_t clk_id, struct timespec *tp
          {
             Core *core = localStore[thread_id].thread->getCore();
             assert(core);
-            UInt64 time = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart()).getNS()
+            UInt64 time = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
                         + core->getPerformanceModel()->getElapsedTime().getNS();
 
             tp->tv_sec = time / 1000000000;
@@ -440,7 +440,7 @@ IntPtr emuGettimeofday(THREADID thread_id, struct timeval *tv, struct timezone *
 
    Core *core = localStore[thread_id].thread->getCore();
    assert(core);
-   UInt64 time = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart()).getNS()
+   UInt64 time = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
                + core->getPerformanceModel()->getElapsedTime().getNS();
 
    tv->tv_sec = time / 1000000000;

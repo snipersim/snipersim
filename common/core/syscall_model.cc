@@ -83,14 +83,14 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          {
             clockid_t clock = (clock_t)args.arg0;
             struct timespec *ts = (struct timespec *)args.arg1;
-            SubsecondTime time = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart())
-                               + m_thread->getCore()->getPerformanceModel()->getElapsedTime();
+            UInt64 time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
+                           + m_thread->getCore()->getPerformanceModel()->getElapsedTime().getNS();
 
             switch(clock) {
                case CLOCK_REALTIME:
                case CLOCK_MONOTONIC:
-                  ts->tv_sec = time.getNS() / 1000000000;
-                  ts->tv_nsec = time.getNS() % 1000000000;
+                  ts->tv_sec = time_ns / 1000000000;
+                  ts->tv_nsec = time_ns % 1000000000;
                   m_ret_val = 0;
                   break;
                default:
