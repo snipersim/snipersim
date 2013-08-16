@@ -30,7 +30,14 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    thread_data[threadid].dyn_address_queue = new std::deque<ADDRINT>();
 
    if (threadid > 0 && (any_thread_in_detail || KnobEmulateSyscalls.Value()))
+   {
       openFile(threadid);
+
+      Sift::EmuRequest req;
+      Sift::EmuReply res;
+      req.setthreadinfo.tid = syscall(__NR_gettid);
+      thread_data[threadid].output->Emulate(Sift::EmuTypeSetThreadInfo, req, res);
+   }
 
    thread_data[threadid].running = true;
 }

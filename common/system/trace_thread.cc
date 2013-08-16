@@ -264,6 +264,11 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
          res.cpuid.edx = result.edx;
          return true;
       }
+      case Sift::EmuTypeSetThreadInfo:
+      {
+         m_thread->m_os_info.tid = req.setthreadinfo.tid;
+         return true;
+      }
       default:
          // Not emulated
          return false;

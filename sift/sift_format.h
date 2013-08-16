@@ -5,6 +5,8 @@
 //
 // ia32 and intel64, little-endian
 
+#include <sys/types.h>
+
 namespace Sift
 {
 
@@ -105,6 +107,7 @@ namespace Sift
       EmuTypeGetProcInfo,
       EmuTypeGetTime,
       EmuTypeCpuid,
+      EmuTypeSetThreadInfo,
    } EmuType;
 
    typedef union {
@@ -117,6 +120,9 @@ namespace Sift
       struct {
          uint32_t eax, ecx;
       } cpuid;
+      struct {
+         pid_t tid;
+      } setthreadinfo;
    } EmuRequest;
 
    typedef union {
@@ -132,6 +138,8 @@ namespace Sift
       struct {
          uint32_t eax, ebx, ecx, edx;
       } cpuid;
+      struct {
+      } setthreadinfo;
    } EmuReply;
 
    // Determine record type based on first uint8_t
