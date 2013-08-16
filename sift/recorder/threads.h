@@ -20,8 +20,8 @@ typedef struct {
    UINT64 blocknum;
    UINT64 icount;
    UINT64 icount_detailed;
-   UINT32 last_syscall_number;
-   UINT32 last_syscall_returnval;
+   ADDRINT last_syscall_number;
+   ADDRINT last_syscall_returnval;
    UINT64 flowcontrol_target;
    ADDRINT tid_ptr;
    ADDRINT last_routine;
@@ -30,7 +30,7 @@ typedef struct {
    #if defined(TARGET_IA32)
       uint8_t __pad[41];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[13];
+      uint8_t __pad[5];
    #endif
 } __attribute__((packed)) thread_data_t;
 
