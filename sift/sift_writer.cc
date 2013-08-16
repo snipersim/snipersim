@@ -658,7 +658,7 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
       output->write(reinterpret_cast<char*>(&type), sizeof(type));
       output->write(read_data, size);
       output->flush();
-      delete read_data;
+      delete [] read_data;
    }
    else if (type == MemWrite)
    {
@@ -668,7 +668,7 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
       sift_assert(payload_size > 0);
       sift_assert(payload_size == size);
       char *payload = new char[payload_size];
-      response->read(reinterpret_cast<char*>(payload), sizeof(payload_size));
+      response->read(reinterpret_cast<char*>(payload), payload_size);
       // Do the write here via a callback to write the data to the appropriate address
       handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)payload, payload_size);
       Record rec;
@@ -684,7 +684,7 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
       output->write(reinterpret_cast<char*>(&addr), sizeof(addr));
       output->write(reinterpret_cast<char*>(&type), sizeof(type));
       output->flush();
-      delete payload;
+      delete [] payload;
    }
    else
    {
