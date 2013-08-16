@@ -471,6 +471,12 @@ void TraceThread::run()
 
    while(have_first && m_trace.Read(next_inst))
    {
+      // We may have been rescheduled to a different core
+      // by prfmdl->iterate (at the end of the last iteration),
+      // or a system call (handled out-of-band by m_trace.Read)
+      core = m_thread->getCore();
+      prfmdl = core->getPerformanceModel();
+
       bool do_icache_warmup = false;
       UInt64 icache_warmup_addr = 0, icache_warmup_size = 0;
 
@@ -508,11 +514,6 @@ void TraceThread::run()
 
          case InstMode::DETAILED:
             handleInstructionDetailed(inst, next_inst, prfmdl);
-
-            // We may have been rescheduled to a different core
-            core = m_thread->getCore();
-            prfmdl = core->getPerformanceModel();
-
             break;
 
          default:
