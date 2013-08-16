@@ -184,8 +184,13 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
          if (thread)
          {
+            char *local_cpuset = new char[cpusetsize];
+            core->accessMemory(Core::NONE, Core::READ, (IntPtr) cpuset, local_cpuset, cpusetsize);
+
             ScopedLock sl(Sim()->getThreadManager()->getLock());
-            success = Sim()->getThreadManager()->getScheduler()->threadSetAffinity(m_thread->getId(), thread->getId(), cpusetsize, cpuset);
+            success = Sim()->getThreadManager()->getScheduler()->threadSetAffinity(m_thread->getId(), thread->getId(), cpusetsize, (cpu_set_t *)local_cpuset);
+
+            delete [] local_cpuset;
          }
          else
          {
@@ -221,8 +226,15 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
          if (thread)
          {
+            char *local_cpuset = cpuset ? new char[cpusetsize] : 0;
+
             ScopedLock sl(Sim()->getThreadManager()->getLock());
-            success = Sim()->getThreadManager()->getScheduler()->threadGetAffinity(m_thread->getId(), cpusetsize, cpuset);
+            success = Sim()->getThreadManager()->getScheduler()->threadGetAffinity(m_thread->getId(), cpusetsize, (cpu_set_t *)local_cpuset);
+
+            if (success && cpuset)
+               core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) cpuset, local_cpuset, cpusetsize);
+            if (local_cpuset)
+               delete [] local_cpuset;
          }
          // else: success is already false, return EINVAL for invalid pid
 

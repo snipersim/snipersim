@@ -178,8 +178,7 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
          Sim()->getTraceManager()->endApplication(this, getCurrentTime());
          break;
 
-      case SYS_write:
-      case SYS_futex:
+      default:
       {
          LOG_ASSERT_ERROR(size == sizeof(SyscallMdl::syscall_args_t), "Syscall arguments not the correct size");
 
