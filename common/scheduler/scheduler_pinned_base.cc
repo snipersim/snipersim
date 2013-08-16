@@ -235,6 +235,11 @@ void SchedulerPinnedBase::reschedule(SubsecondTime time, core_id_t core_id, bool
               || m_thread_info[thread_id].getCoreRunning() == core_id)
       )
       {
+         // If thread is running here now, update its last-scheduled time to now
+         if (thread_id == m_core_thread_running[core_id])
+         {
+            m_thread_info[thread_id].setLastScheduled(time);
+         }
          // Find thread that was scheduled the longest time ago
          if (m_thread_info[thread_id].getLastScheduled() < min_last_scheduled)
          {
