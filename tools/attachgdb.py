@@ -53,11 +53,22 @@ def get_bin_path(pid, bin, strip=True):
   except IndexError:
     raise IOError
 
-def attach_gdb(pid, symoff, pintoolname = 'pin_sim.so'):
-  pinbin = get_bin_path(pid, 'pinbin')
-  pin_sim = get_bin_path(pid, pintoolname)
+def find_pintool_name(pid, pintoolname):
+  if pintoolname:
+    pintoolnames = (pintoolname,)
+  else:
+    pintoolnames = ('pin_sim.so', 'sift_recorder', 'sniper')
+  for pintoolname in pintoolnames:
+    if get_bin_path(pid, pintoolname):
+      return pintoolname
+  print 'No pintool found, please use --toolname'
+  sys.exit(1)
 
-  symbols = 'add-symbol-file %s %s -s .data %s -s .bss %s' % (pin_sim, symoff['.text'], symoff['.data'], symoff['.bss'])
+def attach_gdb(pid, symoff, pintoolname):
+  pinbin = get_bin_path(pid, 'pinbin')
+  pintool = get_bin_path(pid, pintoolname)
+
+  symbols = 'add-symbol-file %s %s -s .data %s -s .bss %s' % (pintool, symoff['.text'], symoff['.data'], symoff['.bss'])
 
   # If we are debugging something in a chroot, and we can access it, change
   #  the solib path in gdb so that it doesn't use our local libraries incorrectly
@@ -84,12 +95,12 @@ def attach_gdb(pid, symoff, pintoolname = 'pin_sim.so'):
 if __name__ == '__main__':
 
   actions = [ 'interactive', 'bt' ]
-  pintoolname = 'pin_sim.so'
+  pintoolname = None
 
   def usage():
     print 'Attach GDB to a running Sniper process'
     print 'Usage:'
-    print '  %s  [-h|--help] [--all-threads] [--action={bt}] [--abt] [--toolname={%s}] <pid>' % (sys.argv[0], pintoolname)
+    print '  %s  [-h|--help] [--all-threads] [--action={bt}] [--abt] [--toolname={auto}] <pid>' % sys.argv[0]
     sys.exit(2)
 
   action = 'interactive'
@@ -137,16 +148,17 @@ if __name__ == '__main__':
   if pgm_orig_state == 'R':
     os.kill(pgm_pid, signal.SIGSTOP)
   try:
-    pin_sim = get_bin_path(pgm_pid, pintoolname)
-    base_offset = get_base_offset(pgm_pid, pin_sim)
-    symoff = add_offset(get_section_offsets(pin_sim), base_offset)
+    pintoolname = find_pintool_name(pgm_pid, pintoolname)
+    pintool = get_bin_path(pgm_pid, pintoolname)
+    base_offset = get_base_offset(pgm_pid, pintool)
+    symoff = add_offset(get_section_offsets(pintool), base_offset)
     for pid in pids:
       attach_gdb(pid, symoff, pintoolname)
   except IOError:
     print ""
     print "Error: Unable to correctly determine the path to a mapped object."
     print "  This means that either you do not have permission to view the dynamic"
-    print "  linking maps, or the pid provided isn't a pin/Graphite program."
+    print "  linking maps, or the pid provided isn't a pin/Sniper program."
     print ""
     ret_code = 1
   if pgm_orig_state == 'R':
