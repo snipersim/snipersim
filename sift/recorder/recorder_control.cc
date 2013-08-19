@@ -23,7 +23,7 @@ void beginROI(THREADID threadid)
    }
    else
    {
-      if (verbose)
+      if (KnobVerbose.Value())
          std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
    }
    any_thread_in_detail = true;
@@ -55,7 +55,7 @@ void endROI(THREADID threadid)
    sprintf(filename, "%s.app%" PRId32 ".appid", KnobOutputFile.Value().c_str(), app_id);
    unlink(filename);
 
-   if (verbose)
+   if (KnobVerbose.Value())
       std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
 
    // Stop threads from sending any more data while we close the SIFT pipes
@@ -191,13 +191,13 @@ void openFile(THREADID threadid)
          sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, thread_data[threadid].thread_num);
    }
 
-   if (verbose)
+   if (KnobVerbose.Value())
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Output = [" << filename << "]" << std::endl;
 
    if (KnobUseResponseFiles.Value())
    {
       sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), app_id, thread_data[threadid].thread_num);
-      if (verbose)
+      if (KnobVerbose.Value())
          std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Response = [" << response_filename << "]" << std::endl;
    }
 
@@ -220,7 +220,7 @@ void openFile(THREADID threadid)
 
 void closeFile(THREADID threadid)
 {
-   if (verbose)
+   if (KnobVerbose.Value())
    {
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Recorded " << thread_data[threadid].icount_detailed;
       if (thread_data[threadid].icount > thread_data[threadid].icount_detailed)

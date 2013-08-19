@@ -13,7 +13,7 @@ VOID countInsns(THREADID threadid, INT32 count)
 
    if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
-      if (verbose)
+      if (KnobVerbose.Value())
          std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       if (!thread_data[threadid].output)
          openFile(threadid);

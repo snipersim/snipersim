@@ -32,6 +32,7 @@ extern KNOB<UINT64> KnobFlowControl;
 extern KNOB<INT64> KnobSiftAppId;
 extern KNOB<BOOL> KnobRoutineTracing;
 extern KNOB<BOOL> KnobDebug;
+extern KNOB<BOOL> KnobVerbose;
 
 # define KNOB_REPLAY_NAME "replay"
 # define KNOB_FAMILY "pintool:sift-recorder"
