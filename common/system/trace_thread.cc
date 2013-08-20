@@ -348,6 +348,13 @@ void TraceThread::handleInstructionCountFunc(uint32_t icount)
       }
 
       core->countInstructions(0, icount);
+
+      if (Sim()->getInstrumentationMode() == InstMode::DETAILED)
+      {
+         // We're in detailed mode, but our SIFT recorder doesn't know it yet
+         // Do something to advance time
+         core->getPerformanceModel()->queueDynamicInstruction(new UnknownInstruction(icount * core->getDvfsDomain()->getPeriod()));
+      }
    }
 }
 
