@@ -54,6 +54,8 @@ class TraceThread : public Runnable
       bool m_cleanup;
 
       void run();
+      static void __handleInstructionCountFunc(void* arg, uint32_t icount)
+      { ((TraceThread*)arg)->handleInstructionCountFunc(icount); }
       static void __handleOutputFunc(void* arg, uint8_t fd, const uint8_t *data, uint32_t size)
       { ((TraceThread*)arg)->handleOutputFunc(fd, data, size); }
       static uint64_t __handleSyscallFunc(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size)
@@ -71,6 +73,7 @@ class TraceThread : public Runnable
       static void __handleRoutineAnnounceFunc(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
       { ((TraceThread*)arg)->handleRoutineAnnounceFunc(eip, name, imgname, offset, line, column, filename); }
 
+      void handleInstructionCountFunc(uint32_t icount);
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
       uint64_t handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size);
       int32_t handleNewThreadFunc();

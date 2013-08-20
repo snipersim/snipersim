@@ -71,6 +71,13 @@ void endROI(THREADID threadid)
 
 ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 {
+   uint64_t res = gax; // Default: don't modify gax
+
+   if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].output)
+   {
+      res = thread_data[threadid].output->Magic(gax, gbx, gcx);
+   }
+
    if (gax == SIM_CMD_ROI_START)
    {
       if (KnobUseROI.Value() && !any_thread_in_detail)
@@ -81,16 +88,7 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
       if (KnobUseROI.Value() && any_thread_in_detail)
          endROI(threadid);
    }
-   else
-   {
-      if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].output)
-      {
-         uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
-         return res;
-      }
-   }
 
-   // Default: don't modify gax
    return gax;
 }
 
@@ -131,9 +129,15 @@ void findMyAppId()
 VOID handleRoutineImplicitROI(THREADID threadid, bool begin)
 {
    if (begin)
+   {
+      thread_data[threadid].output->Magic(SIM_CMD_ROI_START, 0, 0);
       beginROI(threadid);
+   }
    else
+   {
+      thread_data[threadid].output->Magic(SIM_CMD_ROI_END, 0, 0);
       endROI(threadid);
+   }
 }
 
 static void routineCallback(RTN rtn, void* v)

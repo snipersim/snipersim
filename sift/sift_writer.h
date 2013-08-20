@@ -43,6 +43,7 @@ namespace Sift
          ~Writer();
          void End();
          void Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
+         void InstructionCount(uint32_t icount);
          void Output(uint8_t fd, const char *data, uint32_t size);
          uint64_t Syscall(uint16_t syscall_number, const char *data, uint32_t size);
          int32_t NewThread();

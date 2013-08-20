@@ -39,6 +39,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_cleanup(cleanup)
    , m_stopped(false)
 {
+   m_trace.setHandleInstructionCountFunc(TraceThread::__handleInstructionCountFunc, this);
    if (Sim()->getCfg()->getBool("traceinput/mirror_output"))
       m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
    m_trace.setHandleSyscallFunc(TraceThread::__handleSyscallFunc, this);
@@ -324,6 +325,13 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
    basic_block->push_back(instruction);
 
    return basic_block;
+}
+
+void TraceThread::handleInstructionCountFunc(uint32_t icount)
+{
+   Core *core = m_thread->getCore();
+   if (core)
+      core->countInstructions(0, icount);
 }
 
 void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)

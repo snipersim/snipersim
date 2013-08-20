@@ -41,6 +41,7 @@ namespace Sift
 
    class Reader
    {
+      typedef void (*HandleInstructionCountFunc)(void* arg, uint32_t icount);
       typedef void (*HandleOutputFunc)(void* arg, uint8_t fd, const uint8_t *data, uint32_t size);
       typedef uint64_t (*HandleSyscallFunc)(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size);
       typedef int32_t (*HandleNewThreadFunc)(void* arg);
@@ -53,6 +54,8 @@ namespace Sift
       private:
          vistream *input;
          std::ofstream *response;
+         HandleInstructionCountFunc handleInstructionCountFunc;
+         void *handleInstructionCountArg;
          HandleOutputFunc handleOutputFunc;
          void *handleOutputArg;
          HandleSyscallFunc handleSyscallFunc;
@@ -101,6 +104,7 @@ namespace Sift
          bool Read(Instruction&);
          void AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size);
 
+         void setHandleInstructionCountFunc(HandleInstructionCountFunc func, void* arg = NULL) { handleInstructionCountFunc = func; handleInstructionCountArg = arg; }
          void setHandleOutputFunc(HandleOutputFunc func, void* arg = NULL) { handleOutputFunc = func; handleOutputArg = arg; }
          void setHandleSyscallFunc(HandleSyscallFunc func, void* arg = NULL) { assert(func); handleSyscallFunc = func; handleSyscallArg = arg; }
          void setHandleNewThreadFunc(HandleNewThreadFunc func, void* arg = NULL) { assert(func); handleNewThreadFunc = func; handleNewThreadArg = arg; }

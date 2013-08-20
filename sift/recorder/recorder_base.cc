@@ -11,6 +11,9 @@ VOID countInsns(THREADID threadid, INT32 count)
 {
    thread_data[threadid].icount += count;
 
+   if (!any_thread_in_detail && thread_data[threadid].output)
+      thread_data[threadid].output->InstructionCount(count);
+
    if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
       if (KnobVerbose.Value())

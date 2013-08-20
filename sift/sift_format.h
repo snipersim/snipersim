@@ -99,6 +99,7 @@ namespace Sift
       RecOtherRoutineAnnounce,
       RecOtherEmu,
       RecOtherEmuResponse,
+      RecOtherInstructionCount,
       RecOtherEnd = 0xff,
    } RecOtherType;
 
