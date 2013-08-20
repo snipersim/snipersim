@@ -340,7 +340,15 @@ void TraceThread::handleInstructionCountFunc(uint32_t icount)
 {
    Core *core = m_thread->getCore();
    if (core)
+   {
+      // We may have been blocked in a system call, if we start executing instructions again that means we're continuing
+      if (m_blocked)
+      {
+         unblock();
+      }
+
       core->countInstructions(0, icount);
+   }
 }
 
 void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)
@@ -467,6 +475,21 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    m_thread->reschedule(time, NULL);
 }
 
+void TraceThread::unblock()
+{
+   LOG_ASSERT_ERROR(m_blocked == true, "Must call only when m_blocked == true");
+
+   ScopedLock sl(Sim()->getThreadManager()->getLock());
+   // We were blocked on a system call, but started executing instructions again.
+   // This means we woke up. Since there is no explicit wakeup nor an associated time,
+   // use global time.
+   SubsecondTime end_time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
+   Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, end_time, NULL);
+   // We may have been rescheduled to a different core
+   m_thread->getCore()->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
+   m_blocked = false;
+}
+
 void TraceThread::run()
 {
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
@@ -495,25 +518,14 @@ void TraceThread::run()
    {
       if (m_blocked)
       {
-         ScopedLock sl(Sim()->getThreadManager()->getLock());
-         // We were blocked on a system call, but started executing instructions again.
-         // This means we woke up. Since there is no explicit wakeup nor an associated time,
-         // use global time.
-         SubsecondTime end_time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
-         Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, end_time, NULL);
-         // We may have been rescheduled to a different core
-         core = m_thread->getCore();
-         prfmdl = core->getPerformanceModel();
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
-         m_blocked = false;
+         unblock();
       }
-      else
-      {
-         // We may have been rescheduled to a different core
-         // by prfmdl->iterate (at the end of the last iteration)
-         core = m_thread->getCore();
-         prfmdl = core->getPerformanceModel();
-      }
+
+      // We may have been rescheduled to a different core
+      // by prfmdl->iterate (at the end of the last iteration)
+      // or a system call (handled out-of-band by m_trace.Read)
+      core = m_thread->getCore();
+      prfmdl = core->getPerformanceModel();
 
       bool do_icache_warmup = false;
       UInt64 icache_warmup_addr = 0, icache_warmup_size = 0;

@@ -87,6 +87,7 @@ class TraceThread : public Runnable
       BasicBlock* decode(Sift::Instruction &inst);
       void handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);
       void handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl);
+      void unblock();
 
       SubsecondTime getCurrentTime() const;
 
