@@ -28,7 +28,15 @@ void beginROI(THREADID threadid)
    }
    any_thread_in_detail = true;
 
-   if (!KnobEmulateSyscalls.Value())
+   if (KnobEmulateSyscalls.Value())
+   {
+      if (thread_data[threadid].icount_reported > 0)
+      {
+         thread_data[threadid].output->InstructionCount(thread_data[threadid].icount_reported);
+         thread_data[threadid].icount_reported = 0;
+      }
+   }
+   else
    {
       for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
       {

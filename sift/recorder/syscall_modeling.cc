@@ -42,7 +42,6 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
 VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 {
    ADDRINT syscall_number = PIN_GetContextReg(ctxt, REG_GAX);
-
    sift_assert(syscall_number < MAX_NUM_SYSCALLS);
 
    syscall_args_t args;
@@ -63,6 +62,12 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    #else
       #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64"
    #endif
+
+   if (thread_data[threadid].icount_reported > 0)
+   {
+      thread_data[threadid].output->InstructionCount(thread_data[threadid].icount_reported);
+      thread_data[threadid].icount_reported = 0;
+   }
 
    // Default: not emulated, override later when needed
    thread_data[threadid].last_syscall_emulated = false;

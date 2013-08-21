@@ -12,7 +12,14 @@ VOID countInsns(THREADID threadid, INT32 count)
    thread_data[threadid].icount += count;
 
    if (!any_thread_in_detail && thread_data[threadid].output)
-      thread_data[threadid].output->InstructionCount(count);
+   {
+      thread_data[threadid].icount_reported += count;
+      if (thread_data[threadid].icount_reported > KnobFlowControlFF.Value())
+      {
+         thread_data[threadid].output->InstructionCount(thread_data[threadid].icount_reported);
+         thread_data[threadid].icount_reported = 0;
+      }
+   }
 
    if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
