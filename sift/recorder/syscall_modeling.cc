@@ -105,6 +105,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          }
 
          // System calls not emulated (passed through to OS)
+         case SYS_read:
          case SYS_write:
          case SYS_wait4:
             thread_data[threadid].last_syscall_number = syscall_number;
