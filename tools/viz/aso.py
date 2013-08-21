@@ -184,7 +184,7 @@ def prettyPrint(optimizationlist,totaltime,numberofresults,originalfunctions):
     originalfunction    = getFunctionById(originalfunctions, function["id"])
     originaltime        = originalfunction["nonidle_elapsed_time"]
 
-    print "#"+str(i+1),         function["name"], "id: ",function["id"]
+    print "#"+str(i+1),         function["name_clean"], "id: ",function["id"]
     print "Optimization: ",     function["optimizations"]
     print "Time won back: ",    function["time_won_back"], "("+str(function["time_won_back"]/originaltime*100)+"% of function time)"
     print "Speedup factor for application: ","x"+str(totaltime/(totaltime-function["time_won_back"]))
@@ -206,18 +206,19 @@ def printResult(optimizationlist,totaltime,numberofresults, originalfunctions):
 #main function
 if __name__ == '__main__':
   def usage():
-    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-n number of results (default: 10) [-v|--verbose]')
+    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-j <jobid>] [-n number of results (default: 10)] [-v|--verbose]')
     sys.exit()
 
   resultsdir = '.'
   outputdir = '.'
   verbose = False
   numberofresults = 10
+  jobid = None
 
   totaltime=0
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hd:n:v:", [ "help", "verbose" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hd:n:vj:", [ "help", "verbose" ])
   except getopt.GetoptError, e:
     print(e)
     usage()
@@ -231,15 +232,21 @@ if __name__ == '__main__':
       numberofresults = int(a)
     if o == '-v' or o == '--verbose':
       verbose = True
+    if o == '-j':
+      jobid = int(a)
 
 
   if verbose:
     print 'This script generates automatic suggestions for optimization'
   
-  config = sniper_config.parse_config(file(os.path.join(resultsdir, 'sim.cfg')).read())
+  config = sniper_lib.get_config(jobid = jobid, resultsdir = resultsdir)
   if verbose:
     print "parsing functions from sim.rtntrace"
-  functions,total=functionparser.parseFunctions(os.path.join(resultsdir,"sim.rtntrace"))
+  for fn in ("sim.rtntrace", "rtntrace.out"):
+    rtntrace = sniper_lib.get_results_file(filename = fn, jobid = jobid, resultsdir = resultsdir)
+    if rtntrace:
+      break
+  functions,total=functionparser.parseFunctions(inputdata = rtntrace)
   optimizationlist = runModules(functions,config)
   totaltime = total["core_elapsed_time"]
   print

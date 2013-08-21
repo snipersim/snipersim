@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-import subprocess
+import subprocess, cStringIO
 
 #script that takes a rtntrace file and parses it
 
@@ -19,7 +19,7 @@ def cppfilt(name):
 
 	
 #read inputdata
-def parseFunctions(inputfile):
+def parseFunctions(inputfile = None, inputdata = None):
   functiondata = []
   total = dict(
     calls = 0,
@@ -30,18 +30,22 @@ def parseFunctions(inputfile):
     fp_muldiv = 0,
     l3miss = 0
   )
-  f=open(inputfile, "r" )
+  if inputfile:
+    f=open(inputfile, "r")
+  elif inputdata:
+    f=cStringIO.StringIO(inputdata)
+  else:
+    return None,None
   i=0
   idnr=0
   name2idx={}
   for line in f:
-    file=line  
-    output=file.rstrip(' \n').split('\t')
+    output=line.rstrip(' \n').split('\t')
     if i == 0:
       name2idx = dict(map(lambda a:(a[1],a[0]), enumerate(output)))
     #only functions that execute 1 or more instructions are stored
-    if i > 0 and float(output[6]) >0:
-      functiondata.append(dict(
+    if i > 0 and float(output[name2idx['instruction_count']]) >0:
+      d = dict(
 	eip				=output[name2idx['eip']], 
 	name				=output[name2idx['name']],
         name_clean			=cppfilt(output[name2idx['name']]), 
@@ -54,7 +58,6 @@ def parseFunctions(inputfile):
         nonidle_elapsed_time 		=float(output[name2idx['nonidle_elapsed_time']]),
 	fp_addsub			=float(output[name2idx['fp_addsub']]),
         fp_muldiv			=float(output[name2idx['fp_muldiv']]), 
-	l2miss				=float(output[name2idx['l2miss']]),
 	l3miss				=float(output[name2idx['l3miss']]),
         global_instructions		=float(output[name2idx['global_instructions']]),
         global_non_idle_elapsed_time	=float(output[name2idx['global_nonidle_elapsed_time']]),
@@ -80,7 +83,13 @@ def parseFunctions(inputfile):
 	time_won_back			=0,
 	optimizations			=[],
         id				=idnr
-	))
+	)
+      try:
+        d['l2miss'] = output[name2idx['l2miss']]
+      except KeyError:
+        pass
+      functiondata.append(d)
+
       total["calls"]+=float(output[name2idx['calls']])
       total["instruction_count"]+=float(output[name2idx['instruction_count']])
       total["core_elapsed_time"]+=(float(output[name2idx['core_elapsed_time']]))
