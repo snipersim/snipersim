@@ -37,6 +37,18 @@ void RegisterDependencies::setDependencies(DynamicMicroOp& microOp, uint64_t low
 
 }
 
+uint64_t RegisterDependencies::peekProducer(xed_reg_enum_t reg, uint64_t lowestValidSequenceNumber)
+{
+   if (reg == XED_REG_INVALID)
+      return INVALID_SEQNR;
+
+   uint64_t producerSequenceNumber = producers[reg];
+   if (producerSequenceNumber == INVALID_SEQNR || producerSequenceNumber < lowestValidSequenceNumber)
+      return INVALID_SEQNR;
+
+   return producerSequenceNumber;
+}
+
 void RegisterDependencies::clear()
 {
    for(uint32_t i = 0; i < XED_REG_LAST; i++)
