@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <xed-iclass-enum.h>
+#include <xed-reg-enum.h>
 }
 
 #include <vector>
@@ -93,13 +94,13 @@ struct MicroOp
    /** This field contains the length of the sourceRegisters array. */
    uint32_t sourceRegistersLength;
    /** This array contains the registers read by this MicroOperation, the integer is an id given by libdisasm64. Only valid for UOP_LOAD and UOP_EXECUTE. */
-   uint32_t sourceRegisters[MAXIMUM_NUMBER_OF_SOURCE_REGISTERS];
+   xed_reg_enum_t sourceRegisters[MAXIMUM_NUMBER_OF_SOURCE_REGISTERS];
    /** This field contains the length of the destinationRegisters array. */
    uint32_t addressRegistersLength;
-   uint32_t addressRegisters[MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS];
+   xed_reg_enum_t addressRegisters[MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS];
    uint32_t destinationRegistersLength;
    /** This array contains the registers written by this MicroOperation, the integer is an id given by libdisasm64. Only valid for UOP_EXECUTE. */
-   uint32_t destinationRegisters[MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS];
+   xed_reg_enum_t destinationRegisters[MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS];
 
 #ifdef ENABLE_MICROOP_STRINGS
    std::vector<String> sourceRegisterNames;
@@ -161,16 +162,16 @@ struct MicroOp
    void verify() const;
 
    uint32_t getSourceRegistersLength() const;
-   uint8_t getSourceRegister(uint32_t index) const;
-   void addSourceRegister(uint32_t registerId, const String& registerName);
+   xed_reg_enum_t getSourceRegister(uint32_t index) const;
+   void addSourceRegister(xed_reg_enum_t registerId, const String& registerName);
 
    uint32_t getAddressRegistersLength() const;
-   uint8_t getAddressRegister(uint32_t index) const;
-   void addAddressRegister(uint32_t registerId, const String& registerName);
+   xed_reg_enum_t getAddressRegister(uint32_t index) const;
+   void addAddressRegister(xed_reg_enum_t registerId, const String& registerName);
 
    uint32_t getDestinationRegistersLength() const;
-   uint8_t getDestinationRegister(uint32_t index) const;
-   void addDestinationRegister(uint32_t registerId, const String& registerName);
+   xed_reg_enum_t getDestinationRegister(uint32_t index) const;
+   void addDestinationRegister(xed_reg_enum_t registerId, const String& registerName);
 
 #ifdef ENABLE_MICROOP_STRINGS
    const String& getSourceRegisterName(uint32_t index) const;

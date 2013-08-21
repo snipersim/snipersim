@@ -12,7 +12,7 @@ void InstructionDecoder::addSrcs(std::set<xed_reg_enum_t> regs, MicroOp * curren
       if (*it != XED_REG_INVALID) {
          xed_reg_enum_t reg = xed_get_largest_enclosing_register(*it);
          if (reg == XED_REG_EIP || reg == XED_REG_RIP) continue; // eip/rip is known at decode time, shouldn't be a dependency
-         currentMicroOp->addSourceRegister((uint32_t)reg, String(xed_reg_enum_t2str(reg)));
+         currentMicroOp->addSourceRegister(reg, String(xed_reg_enum_t2str(reg)));
       }
 }
 
@@ -21,7 +21,7 @@ void InstructionDecoder::addAddrs(std::set<xed_reg_enum_t> regs, MicroOp * curre
       if (*it != XED_REG_INVALID) {
          xed_reg_enum_t reg = xed_get_largest_enclosing_register(*it);
          if (reg == XED_REG_EIP || reg == XED_REG_RIP) continue; // eip/rip is known at decode time, shouldn't be a dependency
-         currentMicroOp->addAddressRegister((uint32_t)reg, String(xed_reg_enum_t2str(reg)));
+         currentMicroOp->addAddressRegister(reg, String(xed_reg_enum_t2str(reg)));
       }
 }
 
@@ -30,7 +30,7 @@ void InstructionDecoder::addDsts(std::set<xed_reg_enum_t> regs, MicroOp * curren
       if (*it != XED_REG_INVALID) {
          xed_reg_enum_t reg = xed_get_largest_enclosing_register(*it);
          if (reg == XED_REG_EIP || reg == XED_REG_RIP) continue; // eip/rip is known at decode time, shouldn't be a dependency
-         currentMicroOp->addDestinationRegister((uint32_t)reg, String(xed_reg_enum_t2str(reg)));
+         currentMicroOp->addDestinationRegister(reg, String(xed_reg_enum_t2str(reg)));
       }
 }
 

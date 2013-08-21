@@ -11,7 +11,7 @@ void RegisterDependencies::setDependencies(DynamicMicroOp& microOp, uint64_t low
    // Create the dependencies for the microOp
    for(uint32_t i = 0; i < microOp.getMicroOp()->getSourceRegistersLength(); i++)
    {
-      uint32_t sourceRegister = microOp.getMicroOp()->getSourceRegister(i);
+      xed_reg_enum_t sourceRegister = microOp.getMicroOp()->getSourceRegister(i);
       uint64_t producerSequenceNumber;
       LOG_ASSERT_ERROR(sourceRegister < XED_REG_LAST, "Source register src[%u]=%u is invalid", i, sourceRegister);
       if ((producerSequenceNumber = producers[sourceRegister]) != INVALID_SEQNR)

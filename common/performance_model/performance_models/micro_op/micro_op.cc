@@ -51,9 +51,11 @@ MicroOp::MicroOp()
    this->operand_size = 0;
 
    for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_SOURCE_REGISTERS; i++)
-      this->sourceRegisters[i] = -1;
+      this->sourceRegisters[i] = XED_REG_INVALID;
+   for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS; i++)
+      this->addressRegisters[i] = XED_REG_INVALID;
    for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS; i++)
-      this->destinationRegisters[i] = -1;
+      this->destinationRegisters[i] = XED_REG_INVALID;
 
 #ifdef ENABLE_MICROOP_STRINGS
    sourceRegisterNames.clear();
@@ -338,7 +340,7 @@ uint32_t MicroOp::getSourceRegistersLength() const {
    return this->sourceRegistersLength;
 }
 
-uint8_t MicroOp::getSourceRegister(uint32_t index) const {
+xed_reg_enum_t MicroOp::getSourceRegister(uint32_t index) const {
    VERIFY_MICROOP();
    assert(index < this->sourceRegistersLength);
    return this->sourceRegisters[index];
@@ -352,7 +354,7 @@ const String& MicroOp::getSourceRegisterName(uint32_t index) const {
 }
 #endif
 
-void MicroOp::addSourceRegister(uint32_t registerId, const String& registerName) {
+void MicroOp::addSourceRegister(xed_reg_enum_t registerId, const String& registerName) {
    VERIFY_MICROOP();
    assert(sourceRegistersLength < MAXIMUM_NUMBER_OF_SOURCE_REGISTERS);
 // assert(registerId >= 0 && registerId < TOTAL_NUM_REGISTERS);
@@ -368,7 +370,7 @@ uint32_t MicroOp::getAddressRegistersLength() const {
    return this->addressRegistersLength;
 }
 
-uint8_t MicroOp::getAddressRegister(uint32_t index) const {
+xed_reg_enum_t MicroOp::getAddressRegister(uint32_t index) const {
    VERIFY_MICROOP();
    assert(index < this->addressRegistersLength);
    return this->addressRegisters[index];
@@ -382,7 +384,7 @@ const String& MicroOp::getAddressRegisterName(uint32_t index) const {
 }
 #endif
 
-void MicroOp::addAddressRegister(uint32_t registerId, const String& registerName) {
+void MicroOp::addAddressRegister(xed_reg_enum_t registerId, const String& registerName) {
    VERIFY_MICROOP();
    assert(addressRegistersLength < MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS);
 // assert(registerId >= 0 && registerId < TOTAL_NUM_REGISTERS);
@@ -398,7 +400,7 @@ uint32_t MicroOp::getDestinationRegistersLength() const {
    return this->destinationRegistersLength;
 }
 
-uint8_t MicroOp::getDestinationRegister(uint32_t index) const {
+xed_reg_enum_t MicroOp::getDestinationRegister(uint32_t index) const {
    VERIFY_MICROOP();
    assert(index < this->destinationRegistersLength);
    return this->destinationRegisters[index];
@@ -412,7 +414,7 @@ const String& MicroOp::getDestinationRegisterName(uint32_t index) const {
 }
 #endif
 
-void MicroOp::addDestinationRegister(uint32_t registerId, const String& registerName) {
+void MicroOp::addDestinationRegister(xed_reg_enum_t registerId, const String& registerName) {
    VERIFY_MICROOP();
    assert(destinationRegistersLength < MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS);
 // assert(registerId >= 0 && registerId < TOTAL_NUM_REGISTERS);
