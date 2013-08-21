@@ -52,7 +52,7 @@ SyscallMdl::~SyscallMdl()
    free(futex_counters);
 }
 
-void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
+bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 {
    Core *core = m_thread->getCore();
 
@@ -134,9 +134,11 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          break;
       }
 
+      case SYS_read:
       case SYS_pause:
       case SYS_select:
       case SYS_poll:
+      case SYS_wait4:
       {
          // System call is blocking, mark thread as asleep
          ScopedLock sl(Sim()->getThreadManager()->getLock());
@@ -257,6 +259,8 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
    }
 
    LOG_PRINT("Syscall finished");
+
+   return m_stalled;
 }
 
 IntPtr SyscallMdl::runExit(IntPtr old_return)

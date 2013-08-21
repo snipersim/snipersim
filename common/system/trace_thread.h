@@ -53,6 +53,7 @@ class TraceThread : public Runnable
       app_id_t m_app_id;
       bool m_blocked;
       bool m_cleanup;
+      bool m_started;
 
       void run();
       static void __handleInstructionCountFunc(void* arg, uint32_t icount)
