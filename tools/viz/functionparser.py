@@ -102,3 +102,7 @@ def parseFunctions(inputfile = None, inputdata = None):
     i+=1
   f.close() # dont forget to close the file
   return functiondata, total
+
+def parseFunctionsDict(d):
+  da = zip(*d.items())
+  return parseFunctions(inputdata = ('\t'.join(map(str,da[0]))+'\n'+'\t'.join(map(str,da[1]))))
