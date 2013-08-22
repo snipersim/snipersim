@@ -72,6 +72,9 @@ public:
    UInt64 getFS() const { return m_time / FS_1; }
    UInt64 getPS() const { return m_time / PS_1; }
    UInt64 getNS() const { return m_time / NS_1; }
+   UInt64 getUS() const { return m_time / US_1; }
+   UInt64 getMS() const { return m_time / MS_1; }
+   UInt64 getSEC() const { return m_time / SEC_1; }
 
    // Public operators
 
