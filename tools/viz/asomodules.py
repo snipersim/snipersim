@@ -28,6 +28,7 @@ def ILPModule(function, config):
     optimizedfunction["core_elapsed_time"]      -= time_gain
     optimizedfunction["nonidle_elapsed_time"]   -= time_gain
     optimizedfunction["optimizations"].append(dict(optimization="ILP",timegain=time_gain))
+    optimizedfunction["originalfunction"]       = function
   return optimizedfunction
 
 
@@ -44,6 +45,7 @@ def BranchModule(function):
   optimizedfunction["core_elapsed_time"]        -= cpiBranchPredictor
   optimizedfunction["nonidle_elapsed_time"]     -= cpiBranchPredictor
   optimizedfunction["optimizations"].append(dict(optimization="Branch", timegain=cpiBranchPredictor))
+  optimizedfunction["originalfunction"]         = function
   return optimizedfunction
 
 #==================================================================================
@@ -76,6 +78,7 @@ def NonFPModule(function):
     optimizedfunction["cpiMem"]                 -=non_fp_fraction*cpiMem
     optimizedfunction["cpiBranchPredictor"]     -=non_fp_fraction*cpiBranchPredictor
     optimizedfunction["optimizations"].append(dict(optimization="NonFP", timegain=non_fp_time))
+    optimizedfunction["originalfunction"]       = function
 
   return optimizedfunction
 
@@ -168,6 +171,7 @@ def VectorizationModule(function):
       optimizedfunction["nonidle_elapsed_time"] -= time_gain
       optimizedfunction["cpiBase"]              = new_cpiBase
       optimizedfunction["optimizations"].append(dict(optimization="Vectorization", timegain=time_gain))
+      optimizedfunction["originalfunction"]     = function
 
     assert time_gain >= 0, "we should not gain negative time"
 
@@ -192,6 +196,7 @@ def MemoryModule(function):
   optimizedfunction["bits_used"]                = 0
   optimizedfunction["bits_total"]               = 0
   optimizedfunction["optimizations"].append(dict(optimization="Memory", timegain=cpiMem))
+  optimizedfunction["originalfunction"]         = function
   return optimizedfunction
 
 #==================================================================================
@@ -214,6 +219,7 @@ def TLPModule(function, config):
     optimizedfunction["nonidle_elapsed_time"]   -= time_gain
     optimizedfunction["cpiBase"]                -= time_gain
     optimizedfunction["optimizations"].append(dict(optimization="TLP", timegain=time_gain))
+    optimizedfunction["originalfunction"]       = function
   return optimizedfunction
 
 #==================================================================================
@@ -249,7 +255,8 @@ def PercentOfDataUtilizedModule(function):
     optimizedfunction["core_elapsed_time"]      -= time_gain
     optimizedfunction["nonidle_elapsed_time"]   -= time_gain
     optimizedfunction["bits_total"]             = bits_used
-    optimizedfunction["optimizations"].append(dict(optimization="PercentOfDataUtilized", timegain=time_gain))
+    optimizedfunction["optimizations"].append(dict(optimization="PercentOfDataUtilized", timegain=time_gain, detail={'bits_used':bits_used,'bits_total':bits_total}))
+    optimizedfunction["originalfunction"]       = function
   return optimizedfunction
 
 
