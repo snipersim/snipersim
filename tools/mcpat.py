@@ -297,9 +297,11 @@ def edit_XML(statsobj, stats, cfg, vdd):
   l3_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
   l2_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
   nuca_at_level = False
+  private_l2s = True
 
   if long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0)) > 0:
     num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
+    private_l2s = int(sniper_config.get_config(cfg, 'perf_model/l2_cache/shared_cores')) == 1
   else:
     # L2 with zero access latency can be used when we don't really want an L2, but need one to interface with the NoC
     num_l2s = 0
@@ -371,7 +373,7 @@ def edit_XML(statsobj, stats, cfg, vdd):
   DRAM_writes = int(stats['dram.writes'][0])
   #branch_misprediction = stats['branch_predictor.num-incorrect'][1]
 
-  template=readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node)
+  template=readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node)
   #for j in range(ncores):
   for i in xrange(len(template)-1):
     #for j in range(ncores):
@@ -699,7 +701,7 @@ def edit_XML(statsobj, stats, cfg, vdd):
             template[i][0] = template[i][0] % tuple(l3conf)
   return template, nuca_at_level
 #----------
-def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
+def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   Count = 0
   template=[]
   template.append(["<?xml version=\"1.0\" ?>",""])
@@ -713,7 +715,7 @@ def readTemplate(ncores, num_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t<param name=\"number_of_L1Directories\" value=\"0\"/>",""])
   template.append(["\t\t<param name=\"number_of_L2Directories\" value=\"0\"/>",""])
   template.append(["\t\t<param name=\"number_of_L2s\" value=\"%i\"/> <!-- This number means how many L2 clusters in each cluster there can be multiple banks/ports -->"%num_l2s,""])
-  template.append(["\t\t<param name=\"Private_L2\" value =\"0\"/>",""])
+  template.append(["\t\t<param name=\"Private_L2\" value =\"%i\"/>"%(1 if private_l2s else 0),""])
   template.append(["\t\t<param name=\"number_of_L3s\" value=\"%i\"/> <!-- This number means how many L3 clusters -->"%num_l3s,""])
   template.append(["\t\t<param name=\"number_of_NoCs\" value=\"1\"/>",""])
   template.append(["\t\t<param name=\"homogeneous_cores\" value=\"0\"/><!--1 means homo -->",""])
