@@ -4,7 +4,7 @@
 
 static void routineEnter(THREADID threadid, ADDRINT eip, ADDRINT esp)
 {
-   if (any_thread_in_detail && thread_data[threadid].output)
+   if ((any_thread_in_detail || KnobRoutineTracingOutsideDetailed.Value()) && thread_data[threadid].output)
    {
       thread_data[threadid].output->RoutineChange(eip, esp, Sift::RoutineEnter);
       thread_data[threadid].last_routine = eip;
@@ -13,7 +13,7 @@ static void routineEnter(THREADID threadid, ADDRINT eip, ADDRINT esp)
 
 static void routineExit(THREADID threadid, ADDRINT eip, ADDRINT esp)
 {
-   if (any_thread_in_detail && thread_data[threadid].output)
+   if ((any_thread_in_detail || KnobRoutineTracingOutsideDetailed.Value()) && thread_data[threadid].output)
    {
       thread_data[threadid].output->RoutineChange(eip, esp, Sift::RoutineExit);
       thread_data[threadid].last_routine = -1;
@@ -22,7 +22,8 @@ static void routineExit(THREADID threadid, ADDRINT eip, ADDRINT esp)
 
 static void routineAssert(THREADID threadid, ADDRINT eip, ADDRINT esp)
 {
-   if (any_thread_in_detail && thread_data[threadid].output && thread_data[threadid].last_routine != eip)
+   if ((any_thread_in_detail || KnobRoutineTracingOutsideDetailed.Value())
+       && thread_data[threadid].output && thread_data[threadid].last_routine != eip)
    {
       thread_data[threadid].output->RoutineChange(eip, esp, Sift::RoutineAssert);
       thread_data[threadid].last_routine = eip;
