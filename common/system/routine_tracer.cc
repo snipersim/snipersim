@@ -3,6 +3,7 @@
 #include "magic_server.h"
 #include "config.hpp"
 #include "routine_tracer_print.h"
+#include "routine_tracer_ondemand.h"
 #include "routine_tracer_funcstats.h"
 
 #include <cstring>
@@ -209,6 +210,8 @@ RoutineTracer* RoutineTracer::create()
       return NULL;
    else if (type == "print")
       return new RoutineTracerPrint::RtnMaster();
+   else if (type == "ondemand")
+      return new RoutineTracerOndemand::RtnMaster();
    else if (type == "funcstats")
       return new RoutineTracerFunctionStats::RtnMaster();
    else
