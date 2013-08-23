@@ -34,12 +34,13 @@ use_routine_tracing = False
 pinball = None
 outputdir = '.'
 verbose = False
+extra_args = []
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -92,6 +93,8 @@ for o, a in opts:
     pinball = a
   if o == '--outputdir':
     outputdir = a
+  if o == '-X':
+    extra_args.append(a)
 
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
@@ -140,7 +143,8 @@ value_roi_mpi = roi_mpi and 1 or 0
 value_pa = use_pa and 1 or 0
 value_routine_tracing = use_routine_tracing and 1 or 0
 value_verbose = verbose and 1 or 0
-cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d %(pinballoptions)s -- ' % locals() + ' '.join(cmdline)
+extra_args = ' '.join(extra_args)
+cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d %(pinballoptions)s %(extra_args)s -- ' % locals() + ' '.join(cmdline)
 
 if verbose:
   print '[SIFT_RECORDER]', 'Running', cmd

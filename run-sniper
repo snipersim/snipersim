@@ -89,6 +89,7 @@ heteroconfig = None
 pinballs = None
 pinball_sift = True
 tracegen = None
+trace_extra_args = []
 verbose = False
 
 
@@ -190,7 +191,7 @@ try:
       "save-patch",
       "curdir=",
       "pin-stats",
-      "traces=", "response-traces=", "trace-manual",
+      "traces=", "response-traces=", "trace-manual", "trace-args=",
       "sim-end=",
       "mpi", "mpi-ranks=", "mpi-exec=",
       "pinballs=", "pinball-non-sift"
@@ -291,6 +292,8 @@ for o, a in opts:
     resptraces.extend(a.split(','))
   if o == '--trace-manual':
     trace_manual = True
+  if o == '--trace-args':
+    trace_extra_args.extend(['-X', a])
   if o == '--mpi':
     use_mpi = True
   if o == '--mpi-ranks':
@@ -302,7 +305,6 @@ for o, a in opts:
     pinballs = a.split(',')
   if o == '--pinball-non-sift':
     pinball_sift = False
-
 
 
 if cmdline:
@@ -520,7 +522,7 @@ if tracegen:
       tracegen['tracefiles_created'].append(filename)
   # Start app(s) with trace recorder in a thread
   def run_sift_recorder((pre_cmd, app_cmd)):
-    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + app_cmd
+    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     if verbose:
       print '[SNIPER] Running', tracecmd
     sys.stdout.flush()
