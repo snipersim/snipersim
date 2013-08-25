@@ -44,7 +44,9 @@ class SyscallMdl
 
       void runEnter(IntPtr syscall_number, syscall_args_t &args);
       IntPtr runExit(IntPtr old_return);
-      bool isEmulated() { return m_emulated; }
+      bool isEmulated() const { return m_emulated; }
+      bool inSyscall() const { return m_in_syscall; }
+      String formatSyscall() const;
 
    private:
       static const char *futex_names[];
@@ -59,6 +61,8 @@ class SyscallMdl
       IntPtr m_syscall_number;
       bool m_emulated;
       IntPtr m_ret_val;
+      bool m_in_syscall;
+      syscall_args_t m_syscall_args;
 
       // ------------------------------------------------------
 

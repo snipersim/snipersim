@@ -45,6 +45,7 @@ public:
    Thread *getCurrentThread(int threadIndex = -1);
    UInt64 getNumThreads() const { return m_threads.size(); }
    Core::State getThreadState(thread_id_t thread_id) const { return m_thread_state.at(thread_id).status; }
+   stall_type_t getThreadStallReason(thread_id_t thread_id) const { return m_thread_state.at(thread_id).stalled_reason; }
 
    Thread *findThreadByTid(pid_t tid);
 

@@ -11,6 +11,7 @@
 #include "scheduler.h"
 #include "hooks_manager.h"
 #include "stats.h"
+#include "syscall_strings.h"
 
 #include <errno.h>
 #include <sys/syscall.h>
@@ -58,6 +59,8 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
    LOG_PRINT("Got Syscall: %i", syscall_number);
 
    m_syscall_number = syscall_number;
+   m_in_syscall = true;
+   m_syscall_args = args;
 
    HookSyscallEnter hook_args;
    hook_args.thread_id = m_thread->getId();
@@ -300,6 +303,7 @@ IntPtr SyscallMdl::runExit(IntPtr old_return)
    }
 
    m_emulated = false;
+   m_in_syscall = false;
 
    return m_ret_val;
 }
@@ -347,4 +351,11 @@ IntPtr SyscallMdl::handleFutexCall(syscall_args_t &args)
    futexCount(cmd, delay);
 
    return ret_val;
+}
+
+String SyscallMdl::formatSyscall() const
+{
+   return String(syscall_string(m_syscall_number)) + "[" + itostr(m_syscall_number) + "] ("
+      + itostr(m_syscall_args.arg0) + ", " + itostr(m_syscall_args.arg1) + ", " + itostr(m_syscall_args.arg2) + ", "
+      + itostr(m_syscall_args.arg3) + ", " + itostr(m_syscall_args.arg4) + ", " + itostr(m_syscall_args.arg5) + ")";
 }

@@ -2,6 +2,7 @@
 #include "simulator.h"
 #include "thread_manager.h"
 #include "thread.h"
+#include "syscall_model.h"
 
 #include <signal.h>
 
@@ -11,7 +12,11 @@ void RoutineTracerOndemand::RtnThread::printStack()
    printf("Thread %d (app %d): %s", m_thread->getId(), m_thread->getAppId(), Core::CoreStateString(state));
    if (m_thread->getCore())
       printf(" on core %d", m_thread->getCore()->getId());
+   else if (state == Core::STALLED)
+      printf(" for %s", ThreadManager::stall_type_names[Sim()->getThreadManager()->getThreadStallReason(m_thread->getId())]);
    printf("\n");
+   if (m_thread->getSyscallMdl()->inSyscall())
+      printf("\tSyscall: %s\n", m_thread->getSyscallMdl()->formatSyscall().c_str());
    for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
    {
       printf("\t(%12" PRIxPTR ") %s\n", *it, m_master->getRoutine(*it) ? m_master->getRoutine(*it)->m_name : "(unknown)");
