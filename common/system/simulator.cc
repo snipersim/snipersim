@@ -259,6 +259,8 @@ void Simulator::printInstModeSummary()
          break;
       case Config::ROI_SCRIPT:
          printf("[SNIPER] Running in script-driven instrumenation mode (--roi-script)\n");
+         printf("[SNIPER] Using %s mode for warmup\n", inst_mode_names[InstMode::inst_mode_init]);
+         printf("[SNIPER] Using %s mode for detailed\n", inst_mode_names[InstMode::inst_mode_roi]);
          // Script should print something here...
          break;
       default:
