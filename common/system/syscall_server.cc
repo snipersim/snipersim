@@ -86,7 +86,7 @@ IntPtr SyscallServer::handleFutexCall(thread_id_t thread_id, futex_args_t &args,
    }
    else if (cmd == FUTEX_WAKE_OP)
    {
-      return futexWakeOp(thread_id, args.op, args.uaddr, args.val, args.uaddr2, args.val2, args.val3, curr_time, end_time);
+      return futexWakeOp(thread_id, args.uaddr, args.uaddr2, args.val, args.val2, args.val3, curr_time, end_time);
    }
    else if(cmd == FUTEX_CMP_REQUEUE)
    {
@@ -201,6 +201,12 @@ int SyscallServer::futexDoOp(Core *core, int encoded_op, int *uaddr)
         LOG_ASSERT_ERROR(false, "futexWakeOp: unknown op = %d", op);
    }
 
+   if (op != FUTEX_OP_SET)
+   {
+      // TODO: Implement these using an atomic read-modify-write version of core->accessMemory
+      LOG_PRINT_WARNING_ONCE("FUTEX_WAKE_OP is implemented non-atomically, race condition may have occured");
+   }
+
    core->accessMemory(Core::UNLOCK, Core::WRITE, (IntPtr) uaddr, (char*) &newval, sizeof(newval));
 
    switch (cmp) {
@@ -229,7 +235,7 @@ int SyscallServer::futexDoOp(Core *core, int encoded_op, int *uaddr)
    return ret;
 }
 
-IntPtr SyscallServer::futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int val, int *uaddr2, int nr_wake, int nr_wake2, SubsecondTime curr_time, SubsecondTime &end_time)
+IntPtr SyscallServer::futexWakeOp(thread_id_t thread_id, int *uaddr, int *uaddr2, int nr_wake, int nr_wake2, int op, SubsecondTime curr_time, SubsecondTime &end_time)
 {
    LOG_PRINT("Futex WakeOp");
    SimFutex *sim_futex = findFutexByUaddr(uaddr, thread_id);
@@ -251,7 +257,7 @@ IntPtr SyscallServer::futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int
    }
 
    if (op_ret > 0) {
-      for (int i = 0; i < nr_wake; i++)
+      for (int i = 0; i < nr_wake2; i++)
       {
          thread_id_t waiter = wakeFutexOne(sim_futex2, thread_id, FUTEX_BITSET_MATCH_ANY, curr_time);
          if (waiter == INVALID_THREAD_ID)

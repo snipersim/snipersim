@@ -67,7 +67,7 @@ class SyscallServer
       // Handling Futexes
       IntPtr futexWait(thread_id_t thread_id, int *uaddr, int val, int act_val, int val3, SubsecondTime curr_time, SubsecondTime timeout_time, SubsecondTime &end_time);
       IntPtr futexWake(thread_id_t thread_id, int *uaddr, int nr_wake, int val3, SubsecondTime curr_time, SubsecondTime &end_time);
-      IntPtr futexWakeOp(thread_id_t thread_id, int op, int *uaddr, int val, int *uaddr2, int nr_wake, int nr_wake2, SubsecondTime curr_time, SubsecondTime &end_time);
+      IntPtr futexWakeOp(thread_id_t thread_id, int *uaddr, int *uaddr2, int nr_wake, int nr_wake2, int op, SubsecondTime curr_time, SubsecondTime &end_time);
       IntPtr futexCmpRequeue(thread_id_t thread_id, int *uaddr, int val, int *uaddr2, int val3, int act_val, SubsecondTime curr_time, SubsecondTime &end_time);
 
       SimFutex* findFutexByUaddr(int *uaddr, thread_id_t thread_id);
