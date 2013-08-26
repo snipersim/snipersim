@@ -7,6 +7,9 @@
 
 static void handleRdtsc(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gdx)
 {
+   if (!thread_data[threadid].output)
+      return;
+
    Sift::EmuRequest req;
    Sift::EmuReply res;
    bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeRdtsc, req, res);
@@ -21,6 +24,9 @@ static void handleRdtsc(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gd
 
 static void handleCpuid(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gbx, PIN_REGISTER * gcx, PIN_REGISTER * gdx)
 {
+   if (!thread_data[threadid].output)
+      return;
+
    Sift::EmuRequest req;
    Sift::EmuReply res;
 
@@ -37,6 +43,9 @@ static void handleCpuid(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gb
 
 static ADDRINT emuGetNprocs(THREADID threadid)
 {
+   if (!thread_data[threadid].output)
+      return 1;
+
    Sift::EmuRequest req;
    Sift::EmuReply res;
    bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeGetProcInfo, req, res);
@@ -47,6 +56,9 @@ static ADDRINT emuGetNprocs(THREADID threadid)
 
 static ADDRINT emuGetCPU(THREADID threadid)
 {
+   if (!thread_data[threadid].output)
+      return 0;
+
    Sift::EmuRequest req;
    Sift::EmuReply res;
    bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeGetProcInfo, req, res);
@@ -57,6 +69,9 @@ static ADDRINT emuGetCPU(THREADID threadid)
 
 ADDRINT emuClockGettime(THREADID threadid, clockid_t clk_id, struct timespec *tp)
 {
+   if (!thread_data[threadid].output)
+      return 0;
+
    switch(clk_id)
    {
       case CLOCK_REALTIME:
@@ -81,6 +96,9 @@ ADDRINT emuClockGettime(THREADID threadid, clockid_t clk_id, struct timespec *tp
 
 ADDRINT emuGettimeofday(THREADID threadid, struct timeval *tv, struct timezone *tz)
 {
+   if (!thread_data[threadid].output)
+      return 0;
+
    //sift_assert(tz == NULL); // gettimeofday() with non-NULL timezone not supported
    sift_assert(tv != NULL); // gettimeofday() called with NULL timeval not supported
 
