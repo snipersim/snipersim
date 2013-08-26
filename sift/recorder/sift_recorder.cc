@@ -167,8 +167,7 @@ int main(int argc, char **argv)
    PIN_AddFollowChildProcessFunction(followChild, 0);
    PIN_AddForkFunction(FPOINT_BEFORE, forkBefore, 0);
 
-   if (KnobDebug.Value())
-      pinboost_register("SIFT_RECORDER");
+   pinboost_register("SIFT_RECORDER", KnobDebug.Value());
 
    PIN_StartProgram();
 

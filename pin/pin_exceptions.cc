@@ -27,6 +27,7 @@ EXCEPT_HANDLING_RESULT exceptionHandler(THREADID tid, EXCEPTION_INFO *pExceptInf
 
    FILE* fp = fopen(Sim()->getConfig()->formatOutputFileName("debug_backtrace.out").c_str(), "w");
    // so addr2line can calculate the offset where we're really mapped
+   fprintf(fp, "pin_sim.so\n");
    fprintf(fp, "%" PRIdPTR "\n", (intptr_t)rdtsc);
    // actual function function where the exception occured (won't be in the backtrace)
    fprintf(fp, "%" PRIdPTR "", (intptr_t)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_INST_PTR));
@@ -40,4 +41,3 @@ EXCEPT_HANDLING_RESULT exceptionHandler(THREADID tid, EXCEPTION_INFO *pExceptInf
 
    return EHR_CONTINUE_SEARCH;
 }
-

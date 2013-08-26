@@ -33,8 +33,8 @@ include $(CONFIG_ROOT)/makefile.config
 endif
 
 LINKER?=${CXX}
-CXXFLAGS += -std=c++0x -Wall -Wno-unknown-pragmas $(DBG) $(OPT_CFLAGS) $(TOOL_CXXFLAGS) -I..
-LDFLAGS += -L.. -lsift -lz -lrt
+CXXFLAGS += -std=c++0x -Wall -Wno-unknown-pragmas $(DBG) $(OPT_CFLAGS) $(TOOL_CXXFLAGS) -I.. -I../../common/misc
+LDFLAGS += -L.. -L ../../lib -lsift -lcarbon_sim -lz -lrt
 
 PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
 ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)

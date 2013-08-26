@@ -33,6 +33,7 @@ static void exceptionHandler(int sig, siginfo_t *scp, void *ctxt)
 
    FILE* fp = fopen(Sim()->getConfig()->formatOutputFileName("debug_backtrace.out").c_str(), "w");
    // Usually rdtsc address, use 0 to tell addr2line we're in standalone mode
+   fprintf(fp, "sniper\n");
    fprintf(fp, "%" PRIdPTR "\n", (intptr_t)0);
    // Skip functions 0 (this is us) and 1 (a libc internal function)
    for(unsigned int i = 2; i < backtrace_n; ++i)
