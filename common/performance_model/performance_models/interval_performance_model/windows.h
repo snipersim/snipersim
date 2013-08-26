@@ -12,8 +12,6 @@
 class Core;
 class IntervalContention;
 
-#define INVALID_SEQNR 0xffffffffffffffff
-
 enum CpContrType {
    CPCONTR_TYPE_FP_ADDSUB,
    CPCONTR_TYPE_FP_MULDIV,

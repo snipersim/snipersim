@@ -27,7 +27,7 @@ class Instruction;
 #define MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS (MAX_DEST_REGS + MAX_CF_REGS)
 #define MAXIMUM_NUMBER_OF_DEPENDENCIES MAXIMUM_NUMBER_OF_SOURCE_REGISTERS
 
-const uint64_t INVALID_SEQNR UINT64_MAX;
+const uint64_t INVALID_SEQNR = UINT64_MAX;
 
 /**
  * An instruction will be decoded in MicroOperations. There are 3 MicroOperation types: LOAD, EXECUTE AND STORE.

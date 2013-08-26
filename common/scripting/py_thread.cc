@@ -88,7 +88,7 @@ setThreadAffinity(PyObject *self, PyObject *args)
       return NULL;
    }
 
-   if (PySequence_Size(py_mask) > Sim()->getConfig()->getApplicationCores())
+   if (PySequence_Size(py_mask) > (Py_ssize_t)Sim()->getConfig()->getApplicationCores())
    {
       PyErr_SetString(PyExc_ValueError, "Core mask is longer than number of available cores");
       return NULL;
@@ -96,7 +96,7 @@ setThreadAffinity(PyObject *self, PyObject *args)
 
    cpu_set_t mask;
    CPU_ZERO(&mask);
-   for(unsigned int cpu = 0; cpu < PySequence_Size(py_mask) && cpu < 8*sizeof(cpu_set_t); ++cpu)
+   for(unsigned int cpu = 0; cpu < (unsigned int)PySequence_Size(py_mask) && cpu < 8*sizeof(cpu_set_t); ++cpu)
    {
       PyObject *item = PySequence_ITEM(py_mask, cpu);
       if (PyObject_IsTrue(item))
