@@ -26,14 +26,14 @@ class MagicServer
       UInt64 setFrequency(UInt64 core_number, UInt64 freq_in_mhz);
       UInt64 getFrequency(UInt64 core_number);
 
-   private:
-      bool m_performance_enabled;
-
       void enablePerformance();
       void disablePerformance();
       UInt64 setPerformance(bool enabled);
 
       UInt64 setInstrumentationMode(UInt64 sim_api_opt);
+
+   private:
+      bool m_performance_enabled;
 };
 
 #endif // SYNC_SERVER_H

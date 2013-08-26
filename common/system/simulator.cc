@@ -135,7 +135,7 @@ void Simulator::start()
    if (Sim()->getConfig()->getSimulationROI() == Config::ROI_FULL)
    {
       // roi-begin
-      enablePerformanceGlobal();
+      Sim()->getMagicServer()->setPerformance(true);
    }
    else if (Sim()->getFastForwardPerformanceManager())
    {
@@ -152,7 +152,10 @@ Simulator::~Simulator()
 
    // In case we're still in ROI (ROI is the full application, or someone forgot to turn it off), end ROI now
    if (getMagicServer()->inROI())
-      disablePerformanceGlobal();
+   {
+      // roi-end
+      getMagicServer()->setPerformance(false);
+   }
 
    m_stats_manager->recordStats("stop");
    m_hooks_manager->callHooks(HookType::HOOK_SIM_END, 0);

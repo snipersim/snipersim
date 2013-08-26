@@ -43,8 +43,6 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_ROI_BEGIN, 0);
          if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
          {
-            if (! m_performance_enabled)
-               Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_BEGIN, 0);
             return setPerformance(true);
          }
          else
@@ -55,8 +53,6 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_ROI_END, 0);
          if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
          {
-            if (m_performance_enabled)
-               Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_END, 0);
             return setPerformance(false);
          }
          else
@@ -160,12 +156,17 @@ UInt64 MagicServer::setPerformance(bool enabled)
    static Timer t_start;
    //ScopedLock sl(l_alloc);
 
-   if (m_performance_enabled) {
+   if (m_performance_enabled)
+   {
       printf("[SNIPER] Enabling performance models\n");
       fflush(NULL);
       t_start.start();
       logmem_enable(true);
-   } else {
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_BEGIN, 0);
+   }
+   else
+   {
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_ROI_END, 0);
       printf("[SNIPER] Disabling performance models\n");
       float seconds = t_start.getTime() / 1e9;
       printf("[SNIPER] Leaving ROI after %.2f seconds\n", seconds);

@@ -384,9 +384,6 @@ void ApplicationExit(int, void*)
    if (forkedInChild)
       return;
 
-   // If we're still in ROI, make sure we exit properly
-   disablePerformanceGlobal();
-
    LOG_PRINT("Application exit.");
    Simulator::release();
 

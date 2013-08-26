@@ -14,16 +14,6 @@ static UInt64 handleMagic(thread_id_t thread_id, UInt64 cmd, UInt64 arg0 = 0, UI
    return Sim()->getMagicServer()->Magic(thread_id, core ? core->getId() : INVALID_CORE_ID, cmd, arg0, arg1);
 }
 
-void enablePerformanceGlobal(void)
-{
-   handleMagic(INVALID_THREAD_ID, SIM_CMD_ROI_START);
-}
-
-void disablePerformanceGlobal(void)
-{
-   handleMagic(INVALID_THREAD_ID, SIM_CMD_ROI_END);
-}
-
 void setInstrumentationMode(UInt64 opt)
 {
    handleMagic(INVALID_THREAD_ID, SIM_CMD_INSTRUMENT_MODE, opt);
