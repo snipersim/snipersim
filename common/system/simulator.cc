@@ -197,7 +197,7 @@ Simulator::~Simulator()
 
 void Simulator::enablePerformanceModels()
 {
-   if (Sim()->getFastForwardPerformanceManager())
+   if (Sim()->getFastForwardPerformanceManager() && InstMode::inst_mode_roi == InstMode::DETAILED)
       Sim()->getFastForwardPerformanceManager()->disable();
    for (UInt32 i = 0; i < Sim()->getConfig()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->enablePerformanceModels();
@@ -207,7 +207,7 @@ void Simulator::disablePerformanceModels()
 {
    for (UInt32 i = 0; i < Sim()->getConfig()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->disablePerformanceModels();
-   if (Sim()->getFastForwardPerformanceManager())
+   if (Sim()->getFastForwardPerformanceManager() && InstMode::inst_mode_roi == InstMode::DETAILED)
       Sim()->getFastForwardPerformanceManager()->enable();
 }
 
