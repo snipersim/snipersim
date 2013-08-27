@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, getopt
+import sys, os, getopt, subprocess
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
 import debugpin, run_sniper
 
@@ -135,21 +135,21 @@ if pinball:
   # Replace the command line with the null app for use with PinPlay
   cmdline = ['%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()]
 
-cxx_override = run_sniper.get_cxx_override(HOME, pin_home, arch)
+env = run_sniper.setup_env(HOME, pin_home, arch)
 
-envcmd = 'export LD_LIBRARY_PATH="%(cxx_override)s:%(pin_home)s/%(arch)s/runtime/cpplibs:%(pin_home)s/%(arch)s/runtime:$LD_LIBRARY_PATH"; ' % locals()
 value_roi = use_roi and 1 or 0
 value_roi_mpi = roi_mpi and 1 or 0
 value_pa = use_pa and 1 or 0
 value_routine_tracing = use_routine_tracing and 1 or 0
 value_verbose = verbose and 1 or 0
 extra_args = ' '.join(extra_args)
-cmd = envcmd + '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d %(pinballoptions)s %(extra_args)s -- ' % locals() + ' '.join(cmdline)
+cmd = '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d %(pinballoptions)s %(extra_args)s -- ' % locals() + ' '.join(cmdline)
 
 if verbose:
   print '[SIFT_RECORDER]', 'Running', cmd
   sys.stdout.flush()
 if use_gdb:
-  debugpin.execute_gdb(cmd = cmd, env = {}, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit)
+  debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit)
 else:
-  os.system(cmd)
+  subproc = subprocess.Popen([ 'bash', '-c', cmd ], env = env)
+  pid, rc, usage = os.wait4(subproc.pid, 0)

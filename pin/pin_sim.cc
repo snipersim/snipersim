@@ -477,7 +477,7 @@ int main(int argc, char *argv[])
    setvbuf(stdout, NULL, _IOLBF, 0);
    setvbuf(stderr, NULL, _IOLBF, 0);
 
-   const char *ld_orig = getenv("SNIPER_INTERNAL_LD_LIBRARY_PATH");
+   const char *ld_orig = getenv("SNIPER_SCRIPT_LD_LIBRARY_PATH");
    if (ld_orig)
       setenv("LD_LIBRARY_PATH", ld_orig, 1);
 

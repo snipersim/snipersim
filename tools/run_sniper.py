@@ -82,3 +82,58 @@ def get_cxx_override(sim_root, pin_home, arch):
     cxx_versions.append('%s/libs' % os.environ['BENCHMARKS_ROOT'])
   cxx_override = sorted(map(lambda x:(get_cxx_version(x),x), cxx_versions), key=lambda x:x[0])[-1][1]
   return cxx_override
+
+# LD_LIBRARY_PATH setup
+#
+# There are many different versions of LD_LIBRARY_PATH to consider:
+# - the initial LD_LIBRARY_PATH which will affect Python when running this script
+# - the application being simulated (PIN_APP_LD_LIBRARY_PATH):
+#   SNIPER_APP_LD_LIBRARY_PATH, defaults to original LD_LIBRARY_PATH
+# - the Sniper pintool or standalone executable and Pin itself (PIN_VM_LD_LIBRARY_PATH):
+#   Pin runtime libraries, system libstdc++ (depending on version),
+#   can be extended by setting SNIPER_SIM_LD_LIBRARY_PATH
+# - scripts being run inside the simulator (SNIPER_SCRIPT_LD_LIBRARY_PATH): original LD_LIBRARY_PATH
+#   (e.g. mcpat when running powertrace.py)
+
+def setup_env(sim_root, pin_home, arch, standalone = False):
+
+  env = dict(os.environ)
+  ld_library_path_orig = env.get('LD_LIBRARY_PATH', '')
+
+  # Construct Sniper/Pintool LD_LIBRARY_PATH
+  ld_library_path = []
+  # Make sure that our version of Python is used, not the system version normally found in cxx_override
+  ld_library_path.append('%s/python_kit/%s/lib' % (sim_root, arch))
+  cxx_override = get_cxx_override(sim_root, pin_home, arch)
+  ld_library_path.append(cxx_override)
+  if not standalone:
+    ld_library_path.append('%s/%s/runtime/cpplibs' % (pin_home, arch))
+    ld_library_path.append('%s/%s/runtime' % (pin_home, arch))
+  if 'SNIPER_SIM_LD_LIBRARY_PATH' in os.environ:
+    ld_library_path.append(os.environ['SNIPER_SIM_LD_LIBRARY_PATH'])
+  env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)
+  env['PIN_LD_RESTORE_REQUIRED'] = '1'
+  env['PIN_VM_LD_LIBRARY_PATH'] = env['LD_LIBRARY_PATH'] # Pin VM and Pintool (Sniper) use LD_LIBRARY_PATH as modified above
+
+  # Application LD_LIBRARY_PATH
+  if 'SNIPER_APP_LD_LIBRARY_PATH' in env:
+    env['PIN_APP_LD_LIBRARY_PATH'] = env['SNIPER_APP_LD_LIBRARY_PATH'] # Application uses explicit LD_LIBRARY_PATH
+    del env['SNIPER_APP_LD_LIBRARY_PATH']
+  else:
+    env['PIN_APP_LD_LIBRARY_PATH'] = ld_library_path_orig  # Application uses original LD_LIBRARY_PATH
+
+  # Scripts LD_LIBRARY_PATH
+  env['SNIPER_SCRIPT_LD_LIBRARY_PATH'] = ld_library_path_orig  # Scripts running inside Sniper use original LD_LIBRARY_PATH
+
+  # Other environment variables
+  if 'SNIPER_APP_LD_PRELOAD' in env:
+    env['PIN_APP_LD_PRELOAD'] = env['SNIPER_APP_LD_PRELOAD']
+    del env['SNIPER_APP_LD_PRELOAD']
+  elif 'LD_PRELOAD' in env:
+    env['PIN_APP_LD_PRELOAD'] = env['LD_PRELOAD']
+  env['LD_PRELOAD'] = ''
+  env['PYTHONPATH'] = '%s/scripts:%s' % (sim_root, os.getenv('PYTHONPATH') or '')
+  env['SNIPER_ROOT'] = sim_root
+  env['GRAPHITE_ROOT'] = sim_root
+
+  return env
