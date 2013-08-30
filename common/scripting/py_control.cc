@@ -11,7 +11,7 @@ setROI(PyObject *self, PyObject *args)
    if (!PyArg_ParseTuple(args, "b", &inRoi))
       return NULL;
 
-   Sim()->getMagicServer()->Magic_unlocked(INVALID_CORE_ID, INVALID_THREAD_ID, inRoi ? SIM_CMD_ROI_START : SIM_CMD_ROI_END, 0, 0);
+   Sim()->getMagicServer()->setPerformance(inRoi);
 
    Py_RETURN_NONE;
 }
@@ -46,7 +46,7 @@ simulatorAbort(PyObject *self, PyObject *args)
    // For benchmarks where, after ROI, functionally simulating until the end takes too long.
 
    // If we're still in ROI, make sure we end it properly
-   Sim()->getMagicServer()->Magic_unlocked(INVALID_CORE_ID, INVALID_THREAD_ID, SIM_CMD_ROI_END, 0, 0);
+   Sim()->getMagicServer()->setPerformance(false);
 
    LOG_PRINT("Application exit.");
    Simulator::release();
