@@ -3,6 +3,7 @@
 #include "recorder_control.h"
 
 #include <iostream>
+#include <unistd.h>
 #include <syscall.h>
 #include <linux/futex.h>
 
