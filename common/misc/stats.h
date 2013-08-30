@@ -15,6 +15,7 @@ class StatsMetricBase
       StatsMetricBase(String _objectName, UInt32 _index, String _metricName) :
          objectName(_objectName), index(_index), metricName(_metricName)
       {}
+      virtual ~StatsMetricBase() {}
       virtual UInt64 recordMetric() = 0;
       virtual bool isDefault() { return false; } // Return true when value hasn't changed from its initialization value
 };
