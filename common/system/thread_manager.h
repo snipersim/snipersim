@@ -39,7 +39,7 @@ public:
    Lock &getLock() { return m_thread_lock; }
    Scheduler *getScheduler() const { return m_scheduler; }
 
-   Thread* createThread(app_id_t app_id);
+   Thread* createThread(app_id_t app_id, thread_id_t creator_thread_id);
 
    Thread *getThreadFromID(thread_id_t thread_id);
    Thread *getCurrentThread(int threadIndex = -1);
@@ -100,7 +100,7 @@ private:
 
    Scheduler *m_scheduler;
 
-   Thread* createThread_unlocked(app_id_t app_id);
+   Thread* createThread_unlocked(app_id_t app_id, thread_id_t creator_thread_id);
    void wakeUpWaiter(thread_id_t thread_id, SubsecondTime time);
 };
 

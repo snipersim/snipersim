@@ -23,6 +23,7 @@ public:
       HOOK_MAGIC_MARKER,        // MagicServer::MagicMarkerType *    Magic marker (SimMarker) in application
       HOOK_MAGIC_USER,          // MagicServer::MagicMarkerType *    Magic user function (SimUser) in application
       HOOK_INSTR_COUNT,         // UInt64 coreid                     Core has executed a preset number of instructions
+      HOOK_THREAD_CREATE,       // HooksManager::ThreadCreate        Thread creation
       HOOK_THREAD_START,        // HooksManager::ThreadTime          Thread start
       HOOK_THREAD_EXIT,         // HooksManager::ThreadTime          Thread end
       HOOK_THREAD_STALL,        // HooksManager::ThreadStall         Thread has entered stalled state
@@ -68,6 +69,10 @@ public:
       HookCallbackOrder order;
       HookCallback(HookCallbackFunc _func, UInt64 _arg, HookCallbackOrder _order) : func(_func), arg(_arg), order(_order) {}
    };
+   typedef struct {
+      thread_id_t thread_id;
+      thread_id_t creator_thread_id;
+   } ThreadCreate;
    typedef struct {
       thread_id_t thread_id;
       subsecond_time_t time;

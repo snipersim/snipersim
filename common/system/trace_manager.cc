@@ -55,7 +55,7 @@ void TraceManager::init()
 {
    for (UInt32 i = 0 ; i < m_num_apps ; i++ )
    {
-      newThread(i /*app_id*/, true /*first*/, false /*spawn*/, SubsecondTime::Zero());
+      newThread(i /*app_id*/, true /*first*/, false /*spawn*/, SubsecondTime::Zero(), INVALID_THREAD_ID);
    }
 }
 
@@ -67,15 +67,15 @@ String TraceManager::getFifoName(app_id_t app_id, UInt64 thread_num, bool respon
    return filename;
 }
 
-thread_id_t TraceManager::createThread(app_id_t app_id, SubsecondTime time)
+thread_id_t TraceManager::createThread(app_id_t app_id, SubsecondTime time, thread_id_t creator_thread_id)
 {
    // External version: acquire lock first
    ScopedLock sl(m_lock);
 
-   return newThread(app_id, false /*first*/, true /*spawn*/, time);
+   return newThread(app_id, false /*first*/, true /*spawn*/, time, creator_thread_id);
 }
 
-thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, SubsecondTime time)
+thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, SubsecondTime time, thread_id_t creator_thread_id)
 {
    // Internal version: assume we're already holding the lock
 
@@ -103,7 +103,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool spawn, Sub
    }
 
    m_num_threads_running++;
-   Thread *thread = Sim()->getThreadManager()->createThread(app_id);
+   Thread *thread = Sim()->getThreadManager()->createThread(app_id, creator_thread_id);
    TraceThread *tthread = new TraceThread(thread, time, tracefile, responsefile, app_id, first ? false : true /*cleaup*/);
    m_threads.push_back(tthread);
 
@@ -162,7 +162,7 @@ void TraceManager::signalDone(TraceThread *thread, SubsecondTime time, bool abor
             // Stop condition not met. Restart app?
             if (m_app_restart)
             {
-               newThread(app_id, true /*first*/, true /*spawn*/, time);
+               newThread(app_id, true /*first*/, true /*spawn*/, time, INVALID_THREAD_ID);
             }
          }
       }

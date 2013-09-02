@@ -62,13 +62,13 @@ Thread* ThreadManager::findThreadByTid(pid_t tid)
    return NULL;
 }
 
-Thread* ThreadManager::createThread(app_id_t app_id)
+Thread* ThreadManager::createThread(app_id_t app_id, thread_id_t creator_thread_id)
 {
    ScopedLock sl(m_thread_lock);
-   return createThread_unlocked(app_id);
+   return createThread_unlocked(app_id, creator_thread_id);
 }
 
-Thread* ThreadManager::createThread_unlocked(app_id_t app_id)
+Thread* ThreadManager::createThread_unlocked(app_id_t app_id, thread_id_t creator_thread_id)
 {
    thread_id_t thread_id = m_threads.size();
    Thread *thread = new Thread(thread_id, app_id);
@@ -83,6 +83,9 @@ Thread* ThreadManager::createThread_unlocked(app_id_t app_id)
       thread->setCore(core);
       core->setState(Core::INITIALIZING);
    }
+
+   HooksManager::ThreadCreate args = { thread_id: thread_id, creator_thread_id: creator_thread_id };
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_CREATE, (UInt64)&args);
 
    return thread;
 }
@@ -188,7 +191,7 @@ thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id, t
 
    LOG_PRINT("(1) spawnThread with func: %p and arg: %p", func, arg);
 
-   Thread *new_thread = createThread_unlocked(app_id);
+   Thread *new_thread = createThread_unlocked(app_id, thread_id);
 
    // Insert the request in the thread request queue
    ThreadSpawnRequest req = { thread_id, new_thread->getId(), time_start };

@@ -44,6 +44,13 @@ static SInt64 hookCallbackMagicMarkerType(UInt64 pFunc, UInt64 _argument)
    return hookCallbackResult(pResult);
 }
 
+static SInt64 hookCallbackThreadCreateType(UInt64 pFunc, UInt64 _argument)
+{
+   HooksManager::ThreadCreate* argument = (HooksManager::ThreadCreate*)_argument;
+   PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(ii)", argument->thread_id, argument->creator_thread_id));
+   return hookCallbackResult(pResult);
+}
+
 static SInt64 hookCallbackThreadTimeType(UInt64 pFunc, UInt64 _argument)
 {
    HooksManager::ThreadTime* argument = (HooksManager::ThreadTime*)_argument;
@@ -139,6 +146,9 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_MAGIC_MARKER:
       case HookType::HOOK_MAGIC_USER:
          Sim()->getHooksManager()->registerHook(type, hookCallbackMagicMarkerType, (UInt64)pFunc);
+         break;
+      case HookType::HOOK_THREAD_CREATE:
+         Sim()->getHooksManager()->registerHook(type, hookCallbackThreadCreateType, (UInt64)pFunc);
          break;
       case HookType::HOOK_THREAD_START:
       case HookType::HOOK_THREAD_EXIT:
