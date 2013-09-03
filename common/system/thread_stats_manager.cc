@@ -8,7 +8,8 @@
 #include <cstring>
 
 ThreadStatsManager::ThreadStatsManager()
-   : m_thread_stat_types()
+   : m_threads_stats(MAX_THREADS)
+   , m_thread_stat_types()
    , m_thread_stat_callbacks()
    , m_next_dynamic_type(DYNAMIC)
 {
@@ -26,8 +27,9 @@ ThreadStatsManager::ThreadStatsManager()
 
 ThreadStatsManager::~ThreadStatsManager()
 {
-   for(std::unordered_map<thread_id_t, ThreadStats*>::iterator it = m_threads_stats.begin(); it != m_threads_stats.end(); ++it)
-      delete it->second;
+   for(std::vector<ThreadStats*>::iterator it = m_threads_stats.begin(); it != m_threads_stats.end(); ++it)
+      if (*it)
+         delete *it;
 }
 
 ThreadStatsManager::ThreadStatType ThreadStatsManager::registerThreadStatMetric(ThreadStatType type, const char* name, ThreadStatCallback func, UInt64 user)
@@ -54,8 +56,9 @@ void ThreadStatsManager::update(thread_id_t thread_id, SubsecondTime time)
 
    if (thread_id == INVALID_THREAD_ID)
    {
-      for(std::unordered_map<thread_id_t, ThreadStats*>::iterator it = m_threads_stats.begin(); it != m_threads_stats.end(); ++it)
-         it->second->update(time);
+      for(thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
+         if (m_threads_stats[thread_id])
+            m_threads_stats[thread_id]->update(time);
    }
    else
    {
@@ -85,6 +88,7 @@ void ThreadStatsManager::pre_stat_write()
 
 void ThreadStatsManager::threadStart(thread_id_t thread_id, SubsecondTime time)
 {
+   LOG_ASSERT_ERROR(thread_id < MAX_THREADS, "Too many application threads, increase MAX_THREADS");
    m_threads_stats[thread_id] = new ThreadStats(thread_id, time);
    m_threads_stats[thread_id]->update(time); // initialize statistic counters
 }

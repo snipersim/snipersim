@@ -52,12 +52,7 @@ class ThreadStatsManager
 
       const ThreadStatTypeList& getThreadStatTypes() { return m_thread_stat_types; }
       const char* getThreadStatName(ThreadStatType type) { return m_thread_stat_callbacks[type].m_name; }
-      UInt64 getThreadStatistic(thread_id_t thread_id, ThreadStatType type)
-      {
-         LOG_ASSERT_ERROR(m_threads_stats.count(thread_id) > 0, "Invalid thread_id(%d)", thread_id);
-         LOG_ASSERT_ERROR(m_threads_stats[thread_id]->m_counts.count(type) > 0, "Invalid type(%d)", type);
-         return m_threads_stats[thread_id]->m_counts[type];
-      }
+      UInt64 getThreadStatistic(thread_id_t thread_id, ThreadStatType type) { return m_threads_stats[thread_id]->m_counts[type]; }
 
       ThreadStatType registerThreadStatMetric(ThreadStatType type, const char* name, ThreadStatCallback func, UInt64 user);
 
@@ -71,7 +66,10 @@ private:
          StatCallback(const char* name, ThreadStatCallback func, UInt64 user) : m_name(name), m_func(func), m_user(user) {}
          UInt64 call(ThreadStatType type, thread_id_t thread_id, Core *core) { return m_func(type, thread_id, core, m_user); }
       };
-      std::unordered_map<thread_id_t, ThreadStats*> m_threads_stats;
+      // Make sure m_threads_stats is statically allocated, as we may do inserts and reads simultaneously
+      // which does not work on an unordered_map
+      static const int MAX_THREADS = 4096;
+      std::vector<ThreadStats*> m_threads_stats;
       ThreadStatTypeList m_thread_stat_types;
       std::unordered_map<ThreadStatType, StatCallback> m_thread_stat_callbacks;
       ThreadStatType m_next_dynamic_type;
