@@ -574,6 +574,13 @@ if not standalone:
   if pin_version >= 49303:
     pinoptions += ' -xyzzy -enable_vsm 0' # TODO: Enable vsm once OpenMP thread exit is solved (Redmine #148)
 
+  if arch == 'ia32':
+    # Running Jikes (which is 32-bit) on Sandy Bridge machines sometimes seem to suffer from data corruption,
+    # leading to weird application crashes. This problem is gone when disabling AVX support.
+    # Note that this was on Pin 2.12.55942, later versions (up to 2.12.58423) have even worse problems
+    # (broken SMC or something, see http://groups.yahoo.com/neo/groups/pinheads/conversations/topics/9147 )
+    pinoptions += ' -xyzzy -allow_AVX_support 0'
+
   if pin_stats:
     pinoptions += ' -xyzzy -profile -statistic -log_inline'
 
