@@ -9,6 +9,7 @@
 #include "shmem_perf.h"
 #include "mem_component.h"
 #include "memory_manager_base.h"
+#include "coherency_protocol.h"
 
 class NucaCache;
 
@@ -29,6 +30,8 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 m_cache_block_size;
 
          ShmemPerfModel* m_shmem_perf_model;
+
+         CoherencyProtocol::type_t m_protocol;
 
          UInt64 evict_modified, evict_exclusive, evict_shared;
          UInt64 forward, forward_failed;

@@ -4,6 +4,8 @@
 #include "stats.h"
 #include "nuca_cache.h"
 #include "shmem_perf.h"
+#include "coherency_protocol.h"
+#include "config.hpp"
 
 #if 0
    extern Lock iolock;
@@ -57,6 +59,24 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
    registerStatsMetric("directory", core_id, "evict-shared", &evict_shared);
    registerStatsMetric("directory", core_id, "forward", &forward);
    registerStatsMetric("directory", core_id, "forward-failed", &forward_failed);
+
+   String protocol = Sim()->getCfg()->getString("caching_protocol/variant");
+   if (protocol == "msi")
+   {
+      m_protocol = CoherencyProtocol::MSI;
+   }
+   else if (protocol == "mesi")
+   {
+      m_protocol = CoherencyProtocol::MESI;
+   }
+   else if (protocol == "mesif")
+   {
+      m_protocol = CoherencyProtocol::MESIF;
+   }
+   else
+   {
+      LOG_PRINT_ERROR("Invalid coherency protocol %s, must be msi, mesi or mesif", protocol.c_str());
+   }
 }
 
 DramDirectoryCntlr::~DramDirectoryCntlr()
@@ -560,10 +580,19 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
          // Modifiy the directory entry contents
          bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
          assert(add_result == true);
-         directory_block_info->setDState(DirectoryState::EXCLUSIVE);
+
          directory_entry->setOwner(requester);
 
-         retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
+         if (m_protocol == CoherencyProtocol::MSI)
+         {
+            directory_block_info->setDState(DirectoryState::SHARED);
+            retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
+         }
+         else
+         {
+            directory_block_info->setDState(DirectoryState::EXCLUSIVE);
+            retrieveDataAndSendToL2Cache(ShmemMsg::EX_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
+         }
 
          break;
       }
@@ -639,7 +668,8 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
 
       // MESIF protocol: get data from a sharing cache
 
-      if (shmem_req->getForwardingFrom() == INVALID_CORE_ID // If forwarding already failed once, don't try again
+      if (m_protocol == CoherencyProtocol::MESIF
+          && shmem_req->getForwardingFrom() == INVALID_CORE_ID // If forwarding already failed once, don't try again
           && directory_entry->getDirectoryBlockInfo()->getDState() == DirectoryState::SHARED
           && directory_entry->getForwarder() != INVALID_CORE_ID)
       {
