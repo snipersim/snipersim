@@ -219,8 +219,8 @@ namespace ParametricDramDirectoryMSI
                   // some may still be in the cache, or could have been removed for some other reason.
                   // Also, in a shared cache, the prefetch may have been triggered by another core than the one
                   // accessing/evicting the line so *_prefetch statistics should be summed across the shared cache
-           UInt64 evict_shared, evict_modified, evict_exclusive;
-           UInt64 backinval_shared, backinval_modified;
+           UInt64 evict[CacheState::NUM_CSTATE_STATES];
+           UInt64 backinval[CacheState::NUM_CSTATE_STATES];
            UInt64 hits_warmup, evict_warmup, invalidate_warmup;
            SubsecondTime total_latency;
            SubsecondTime snoop_latency;

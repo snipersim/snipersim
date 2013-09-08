@@ -19,6 +19,18 @@
 namespace PrL1PrL2DramDirectoryMSI
 {
 
+char DStateString(DirectoryState::dstate_t state) {
+   switch(state)
+   {
+      case DirectoryState::UNCACHED:  return 'U';
+      case DirectoryState::SHARED:    return 'S';
+      case DirectoryState::EXCLUSIVE: return 'E';
+      case DirectoryState::OWNED:     return 'O';
+      case DirectoryState::MODIFIED:  return 'M';
+      default:                        return '?';
+   }
+}
+
 DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
       MemoryManagerBase* memory_manager,
       AddressHomeLookup* dram_controller_home_lookup,
@@ -37,9 +49,6 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
    m_shmem_perf_model(shmem_perf_model),
-   evict_modified(0),
-   evict_exclusive(0),
-   evict_shared(0),
    forward(0),
    forward_failed(0)
 {
@@ -54,9 +63,14 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
          dram_directory_cache_access_time,
          m_shmem_perf_model);
    m_dram_directory_req_queue_list = new ReqQueueList();
-   registerStatsMetric("directory", core_id, "evict-modified", &evict_modified);
-   registerStatsMetric("directory", core_id, "evict-exclusive", &evict_exclusive);
-   registerStatsMetric("directory", core_id, "evict-shared", &evict_shared);
+   for(DirectoryState::dstate_t state = DirectoryState::dstate_t(0); state < DirectoryState::NUM_DIRECTORY_STATES; state = DirectoryState::dstate_t(int(state)+1))
+   {
+      if (state != DirectoryState::UNCACHED)
+      {
+         evict[state] = 0;
+         registerStatsMetric("directory", core_id, String("evict-")+DStateString(state), &evict[state]);
+      }
+   }
    registerStatsMetric("directory", core_id, "forward", &forward);
    registerStatsMetric("directory", core_id, "forward-failed", &forward_failed);
 
@@ -272,22 +286,8 @@ DramDirectoryCntlr::processDirectoryEntryAllocationReq(ShmemReq* shmem_req)
    LOG_ASSERT_ERROR(replacement_candidate != replacement_candidate_list.end(),
          "Cannot find a directory entry to be replaced with a non-zero request list (see Redmine #175)");
 
-   switch(DirectoryState::dstate_t curr_dstate = (*replacement_candidate)->getDirectoryBlockInfo()->getDState()) {
-      case DirectoryState::MODIFIED:
-         evict_modified++;
-         break;
-      case DirectoryState::EXCLUSIVE:
-         evict_exclusive++;
-         break;
-      case DirectoryState::SHARED:
-         evict_shared++;
-         break;
-      case DirectoryState::UNCACHED:
-         break;
-      default:
-         LOG_PRINT_ERROR("Unsupported Directory State: %u", curr_dstate);
-         break;
-   }
+   DirectoryState::dstate_t curr_dstate = (*replacement_candidate)->getDirectoryBlockInfo()->getDState();
+   evict[curr_dstate]++;
 
    IntPtr replaced_address = (*replacement_candidate)->getAddress();
 

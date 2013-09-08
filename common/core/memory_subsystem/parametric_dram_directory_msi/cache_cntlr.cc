@@ -219,11 +219,6 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "hits-warmup", &stats.hits_warmup);
    registerStatsMetric(name, core_id, "evict-warmup", &stats.evict_warmup);
    registerStatsMetric(name, core_id, "invalidate-warmup", &stats.invalidate_warmup);
-   registerStatsMetric(name, core_id, "evict-shared", &stats.evict_shared);
-   registerStatsMetric(name, core_id, "evict-modified", &stats.evict_modified);
-   registerStatsMetric(name, core_id, "evict-exclusive", &stats.evict_exclusive);
-   registerStatsMetric(name, core_id, "backinval-shared", &stats.backinval_shared);
-   registerStatsMetric(name, core_id, "backinval-modified", &stats.backinval_modified);
    registerStatsMetric(name, core_id, "total-latency", &stats.total_latency);
    registerStatsMetric(name, core_id, "snoop-latency", &stats.snoop_latency);
    registerStatsMetric(name, core_id, "mshr-latency", &stats.mshr_latency);
@@ -233,6 +228,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       registerStatsMetric(name, core_id, String("stores-")+CStateString(state), &stats.stores_state[state]);
       registerStatsMetric(name, core_id, String("load-misses-")+CStateString(state), &stats.load_misses_state[state]);
       registerStatsMetric(name, core_id, String("store-misses-")+CStateString(state), &stats.store_misses_state[state]);
+      registerStatsMetric(name, core_id, String("evict-")+CStateString(state), &stats.evict[state]);
+      registerStatsMetric(name, core_id, String("backinval-")+CStateString(state), &stats.backinval[state]);
    }
    if (mem_component == MemComponent::L1_ICACHE || mem_component == MemComponent::L1_DCACHE) {
       for(HitWhere::where_t hit_where = HitWhere::WHERE_FIRST; hit_where < HitWhere::NUM_HITWHERES; hit_where = HitWhere::where_t(int(hit_where)+1)) {
@@ -1388,18 +1385,12 @@ MYLOG("evicting @%lx", evict_address);
             CacheState::INVALID
          );
 
+         ++stats.evict[old_state];
          // Line was prefetched, but is evicted without ever being used
          if (evict_block_info.hasOption(CacheBlockInfo::PREFETCH))
             ++stats.evict_prefetch;
          if (evict_block_info.hasOption(CacheBlockInfo::WARMUP))
             ++stats.evict_warmup;
-
-         if (old_state == CacheState::MODIFIED)
-            ++stats.evict_modified;
-         else if (old_state == CacheState::EXCLUSIVE)
-            ++stats.evict_exclusive;
-         else if (old_state == CacheState::SHARED)
-            ++stats.evict_shared;
       }
 
       /* TODO: this part looks a lot like updateCacheBlock's dirty case, but with the eviction buffer
@@ -1585,10 +1576,7 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
          }
          else if (reason == Transition::BACK_INVAL)
          {
-            if (cache_block_info->getCState() == CacheState::MODIFIED)
-               ++stats.backinval_modified;
-            else
-               ++stats.backinval_shared;
+            ++stats.backinval[cache_block_info->getCState()];
          }
       }
 

@@ -33,7 +33,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
          CoherencyProtocol::type_t m_protocol;
 
-         UInt64 evict_modified, evict_exclusive, evict_shared;
+         UInt64 evict[DirectoryState::NUM_DIRECTORY_STATES];
          UInt64 forward, forward_failed;
 
          UInt32 getCacheBlockSize() { return m_cache_block_size; }
