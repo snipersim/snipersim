@@ -1,20 +1,30 @@
 #ifndef CACHE_SET_H
 #define CACHE_SET_H
 
-#include <string.h>
-
 #include "fixed_types.h"
 #include "cache_block_info.h"
 #include "cache_base.h"
 #include "lock.h"
 #include "random.h"
+#include "log.h"
+
+#include <cstring>
+
+// Per-cache object to store replacement-policy related info (e.g. statistics),
+// can collect data from all CacheSet* objects which are per set and implement the actual replacement policy
+class CacheSetInfo
+{
+   public:
+      virtual ~CacheSetInfo() {}
+};
 
 // Everything related to cache sets
 class CacheSet
 {
    public:
 
-      static CacheSet* createCacheSet(String cfgname, core_id_t core_id, String replacement_policy, CacheBase::cache_t cache_type, UInt32 associativity, UInt32 blocksize);
+      static CacheSet* createCacheSet(String cfgname, core_id_t core_id, String replacement_policy, CacheBase::cache_t cache_type, UInt32 associativity, UInt32 blocksize, CacheSetInfo* set_info = NULL);
+      static CacheSetInfo* createCacheSetInfo(String name, String cfgname, core_id_t core_id, String replacement_policy, UInt32 associativity);
       static CacheBase::ReplacementPolicy parsePolicyType(String policy);
 
    protected:
@@ -65,11 +75,26 @@ class CacheSetRoundRobin : public CacheSet
       UInt32 m_replacement_index;
 };
 
+class CacheSetInfoLRU : public CacheSetInfo
+{
+   public:
+      CacheSetInfoLRU(String name, String cfgname, core_id_t core_id, UInt32 associativity);
+      virtual ~CacheSetInfoLRU();
+      void increment(UInt32 index)
+      {
+         LOG_ASSERT_ERROR(index < m_associativity, "Index(%d) >= Associativity(%d)", index, m_associativity);
+         ++m_access[index];
+      }
+   private:
+      const UInt32 m_associativity;
+      UInt64* m_access;
+};
+
 class CacheSetLRU : public CacheSet
 {
    public:
       CacheSetLRU(CacheBase::cache_t cache_type,
-            UInt32 associativity, UInt32 blocksize);
+            UInt32 associativity, UInt32 blocksize, CacheSetInfoLRU* set_info);
       ~CacheSetLRU();
 
       UInt32 getReplacementIndex();
@@ -77,6 +102,8 @@ class CacheSetLRU : public CacheSet
 
    private:
       UInt8* m_lru_bits;
+      CacheSetInfoLRU* m_set_info;
+      void moveToMRU(UInt32 accessed_index);
 };
 
 class CacheSetNRU : public CacheSet

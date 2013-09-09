@@ -27,6 +27,7 @@ class Cache : public CacheBase
       // Generic Cache Info
       cache_t m_cache_type;
       CacheSet** m_sets;
+      CacheSetInfo* m_set_info;
 
       FaultInjector *m_fault_injector;
 

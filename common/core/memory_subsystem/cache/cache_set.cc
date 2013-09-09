@@ -126,7 +126,7 @@ CacheSet*
 CacheSet::createCacheSet(String cfgname, core_id_t core_id,
       String replacement_policy,
       CacheBase::cache_t cache_type,
-      UInt32 associativity, UInt32 blocksize)
+      UInt32 associativity, UInt32 blocksize, CacheSetInfo* set_info)
 {
    CacheBase::ReplacementPolicy policy = parsePolicyType(replacement_policy);
    switch(policy)
@@ -135,7 +135,7 @@ CacheSet::createCacheSet(String cfgname, core_id_t core_id,
          return new CacheSetRoundRobin(cache_type, associativity, blocksize);
 
       case CacheBase::LRU:
-         return new CacheSetLRU(cache_type, associativity, blocksize);
+         return new CacheSetLRU(cache_type, associativity, blocksize, dynamic_cast<CacheSetInfoLRU*>(set_info));
 
       case CacheBase::NRU:
          return new CacheSetNRU(cache_type, associativity, blocksize);
@@ -162,6 +162,19 @@ CacheSet::createCacheSet(String cfgname, core_id_t core_id,
    }
 
    return (CacheSet*) NULL;
+}
+
+CacheSetInfo*
+CacheSet::createCacheSetInfo(String name, String cfgname, core_id_t core_id, String replacement_policy, UInt32 associativity)
+{
+   CacheBase::ReplacementPolicy policy = parsePolicyType(replacement_policy);
+   switch(policy)
+   {
+      case CacheBase::LRU:
+         return new CacheSetInfoLRU(name, cfgname, core_id, associativity);
+      default:
+         return NULL;
+   }
 }
 
 CacheBase::ReplacementPolicy

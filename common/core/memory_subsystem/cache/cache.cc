@@ -22,10 +22,11 @@ Cache::Cache(String name,
    m_cache_type(cache_type),
    m_fault_injector(fault_injector)
 {
+   m_set_info = CacheSet::createCacheSetInfo(name, cfgname, core_id, replacement_policy, m_associativity);
    m_sets = new CacheSet*[m_num_sets];
    for (UInt32 i = 0; i < m_num_sets; i++)
    {
-      m_sets[i] = CacheSet::createCacheSet(cfgname, core_id, replacement_policy, m_cache_type, m_associativity, m_blocksize);
+      m_sets[i] = CacheSet::createCacheSet(cfgname, core_id, replacement_policy, m_cache_type, m_associativity, m_blocksize, m_set_info);
    }
 
    #ifdef ENABLE_SET_USAGE_HIST
@@ -44,6 +45,9 @@ Cache::~Cache()
    printf("\n");
    delete [] m_set_usage_hist;
    #endif
+
+   if (m_set_info)
+      delete m_set_info;
 
    for (SInt32 i = 0; i < (SInt32) m_num_sets; i++)
       delete m_sets[i];
