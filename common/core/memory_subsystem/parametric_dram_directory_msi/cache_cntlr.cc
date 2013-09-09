@@ -531,7 +531,7 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
    }
 
 
-   accessCache(mem_op_type, ca_address, offset, data_buf, data_length, hit_where == HitWhere::where_t(m_mem_component) && modeled);
+   accessCache(mem_op_type, ca_address, offset, data_buf, data_length, hit_where == HitWhere::where_t(m_mem_component) && count);
 MYLOG("access done");
 
 
@@ -974,7 +974,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
    {
       MYLOG("Yay, hit!!");
       Byte data_buf[getCacheBlockSize()];
-      retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD, first_hit && modeled);
+      retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD, first_hit && count);
       /* Store completion time so we can detect overlapping accesses */
       if (modeled && !first_hit)
       {
