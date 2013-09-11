@@ -28,6 +28,10 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   else:
     time0 = time0_begin - time0_end
 
+  if sum(results['performance_model.instruction_count']) == 0:
+    # core.instructions is less exact, but in cache-only mode it's all there is
+    results['performance_model.instruction_count'] = results['core.instructions']
+
   results['performance_model.elapsed_time_fixed'] = [
     results['performance_model.elapsed_time_end'][c] - time0_begin
     for c in range(ncores)
@@ -81,8 +85,8 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   for c in existcaches:
     results['%s.accesses'%c] = map(sum, zip(results['%s.loads'%c], results['%s.stores'%c]))
     results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results['%s.store-misses-I'%c]))
-    results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b or 1), zip(results['%s.misses'%c], results['%s.accesses'%c]))
-    results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b or 1), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
+    results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['%s.accesses'%c]))
+    results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
     template.extend([
       ('  Cache %s'%c, '', ''),
       ('    num cache accesses', '%s.accesses'%c, str),
@@ -96,8 +100,8 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   for c in existcaches:
     results['%s.accesses'%c] = map(sum, zip(results['%s.reads'%c], results['%s.writes'%c]))
     results['%s.misses'%c] = map(sum, zip(results['%s.read-misses'%c], results['%s.write-misses'%c]))
-    results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b or 1), zip(results['%s.misses'%c], results['%s.accesses'%c]))
-    results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b or 1), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
+    results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['%s.accesses'%c]))
+    results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
     template.extend([
       ('  %s cache'% c.split('-')[0].upper(), '', ''),
       ('    num cache accesses', '%s.accesses'%c, str),
@@ -107,7 +111,7 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     ])
 
   results['dram.accesses'] = map(sum, zip(results['dram.reads'], results['dram.writes']))
-  results['dram.avglatency'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-access-latency'], results['dram.accesses']))
+  results['dram.avglatency'] = map(lambda (a,b): a/b if b else float('inf'), zip(results['dram.total-access-latency'], results['dram.accesses']))
   template += [
     ('DRAM summary', '', ''),
     ('  num dram accesses', 'dram.accesses', str),
@@ -122,7 +126,7 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-queueing-delay'], results['dram.accesses']))
     template.append(('  average dram queueing delay', 'dram.avgqueue', format_ns(2)))
   if 'dram-queue.total-time-used' in results:
-    results['dram.bandwidth'] = map(lambda a: 100*a/time0, results['dram-queue.total-time-used'])
+    results['dram.bandwidth'] = map(lambda a: 100*a/time0 if time0 else float('inf'), results['dram-queue.total-time-used'])
     template.append(('  average dram bandwidth utilization', 'dram.bandwidth', lambda v: '%.2f%%' % v))
 
 
