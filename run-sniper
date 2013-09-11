@@ -330,13 +330,12 @@ elif pinballs:
     print >> sys.stderr, 'Cannot combine a pinball with tracing (--traces= or --trace-manual)'
     usage()
   for idx, pinball in enumerate(pinballs[:]):
-    pinball = findtrace(pinball, suffix='.address')
-    if not pinball:
-      pinball = pinball.rpartition('.')[0]
+    pinball_found = findtrace(pinball, suffix='.address')
+    if not pinball_found:
       print >> sys.stderr, 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (pinball, pinball)
       usage()
     else:
-      pinballs[idx] = pinball.rpartition('.')[0]
+      pinballs[idx] = pinball_found.rpartition('.')[0]
 else:
   standalone = True
   opt_count = 0
