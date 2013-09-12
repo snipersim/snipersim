@@ -99,10 +99,11 @@ UInt64 TraceThread::va2pa(UInt64 va)
       else
       {
          LOG_PRINT_WARNING("No mapping found for logical address %lx", va);
-         return va;
+         // Fall through to construct an address with our thread id in the upper bits (assume address is private)
       }
    }
-   else if (m_address_randomization)
+
+   if (m_address_randomization)
    {
       // Set 16 bits to app_id | remap middle 36 bits using app_id-specific mapping | keep lower 12 bits (page offset)
       return (UInt64(m_thread->getAppId()) << pa_core_shift) | (remapAddress(va >> va_page_shift) << va_page_shift) | (va & va_page_mask);
