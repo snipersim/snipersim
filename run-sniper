@@ -559,8 +559,8 @@ pin_version = 'unknown'
 pinoptions = ''
 if not standalone:
   try:
-    pin_version = subprocess.Popen(['%(pin_home)s/%(arch)s/bin/pinbin' % locals(), '-version'], stdout = subprocess.PIPE, env = env).communicate()[0]
-    pin_version = int([ line.split()[3] for line in pin_version.split('\n') if line.startswith('@CHARM-VERSION') ][0])
+    pin_version = subprocess.Popen(['%(HOME)s/tools/pinversion.py' % locals(), pin_home], stdout = subprocess.PIPE, env = env).communicate()[0]
+    pin_version = int(pin_version.split('.')[2])
     assert 10000 < pin_version < 1000000
   except Exception, e:
     print >> sys.stderr, 'Cannot get Pin version'
