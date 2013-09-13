@@ -18,13 +18,13 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    sift_assert(thread_data[threadid].dyn_address_queue == NULL);
 
    // The first thread (master) doesn't need to join with anyone else
-   GetLock(&new_threadid_lock, threadid);
+   PIN_GetLock(&new_threadid_lock, threadid);
    if (tidptrs.size() > 0)
    {
       thread_data[threadid].tid_ptr = tidptrs.front();
       tidptrs.pop_front();
    }
-   ReleaseLock(&new_threadid_lock);
+   PIN_ReleaseLock(&new_threadid_lock);
 
    thread_data[threadid].thread_num = num_threads++;
    thread_data[threadid].bbv = new Bbv();

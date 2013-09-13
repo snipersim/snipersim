@@ -12,7 +12,7 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
    // This operation does not occur very frequently, so this should not impact performance
    if (lock_signal == Sift::MemLock)
    {
-      GetLock(&access_memory_lock, 0);
+      PIN_GetLock(&access_memory_lock, 0);
    }
 
    if (mem_op == Sift::MemRead)
@@ -33,7 +33,7 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
 
    if (lock_signal == Sift::MemUnlock)
    {
-      ReleaseLock(&access_memory_lock);
+      PIN_ReleaseLock(&access_memory_lock);
    }
 }
 
@@ -93,9 +93,9 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
             #elif defined(TARGET_INTEL64)
                ADDRINT tidptr = args[3];
             #endif
-            GetLock(&new_threadid_lock, threadid);
+            PIN_GetLock(&new_threadid_lock, threadid);
             tidptrs.push_back(tidptr);
-            ReleaseLock(&new_threadid_lock);
+            PIN_ReleaseLock(&new_threadid_lock);
             break;
          }
 

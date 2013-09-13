@@ -98,7 +98,7 @@ void applicationMemCopy(void *dest, const void *src, size_t n)
 
 void printRtn (ADDRINT rtn_addr, bool enter)
 {
-   GetLock (&rtn_map_lock, 1);
+   PIN_GetLock (&rtn_map_lock, 1);
    map<ADDRINT, string>::iterator it = rtn_map.find (rtn_addr);
 
    string point = enter ? "Enter" : "Exit";
@@ -111,7 +111,7 @@ void printRtn (ADDRINT rtn_addr, bool enter)
       LOG_PRINT ("Stack trace : %s UNKNOWN", point.c_str());
    }
 
-   ReleaseLock (&rtn_map_lock);
+   PIN_ReleaseLock (&rtn_map_lock);
 }
 
 VOID printInsInfo(CONTEXT* ctxt)
@@ -463,7 +463,7 @@ int main(int argc, char *argv[])
 {
    // ---------------------------------------------------------------
    // FIXME:
-   InitLock (&rtn_map_lock);
+   PIN_InitLock (&rtn_map_lock);
    // ---------------------------------------------------------------
 
    // Global initialization

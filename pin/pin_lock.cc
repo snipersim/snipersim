@@ -2,7 +2,7 @@
 
 PinLock::PinLock()
 {
-   InitLock(&_lock);
+   PIN_InitLock(&_lock);
 }
 
 PinLock::~PinLock()
@@ -11,12 +11,12 @@ PinLock::~PinLock()
 
 void PinLock::acquire()
 {
-   GetLock(&_lock, 1);
+   PIN_GetLock(&_lock, 1);
 }
 
 void PinLock::release()
 {
-   ReleaseLock(&_lock);
+   PIN_ReleaseLock(&_lock);
 }
 
 #if 1

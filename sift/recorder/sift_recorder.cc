@@ -102,8 +102,8 @@ int main(int argc, char **argv)
    }
    bzero(thread_data, thread_data_size);
 
-   InitLock(&access_memory_lock);
-   InitLock(&new_threadid_lock);
+   PIN_InitLock(&access_memory_lock);
+   PIN_InitLock(&new_threadid_lock);
 
    app_id = KnobSiftAppId.Value();
    blocksize = KnobBlocksize.Value();
