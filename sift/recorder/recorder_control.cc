@@ -81,13 +81,11 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
       if (KnobUseROI.Value() && any_thread_in_detail)
          endROI(threadid);
    }
-   else
+
+   if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].output)
    {
-      if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].output)
-      {
-         uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
-         return res;
-      }
+      uint64_t res = thread_data[threadid].output->Magic(gax, gbx, gcx);
+      return res;
    }
 
    // Default: don't modify gax
