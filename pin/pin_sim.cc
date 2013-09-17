@@ -169,7 +169,7 @@ BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block, InstMode
    return true;
 }
 
-void handleCheckScheduled(THREADID threadIndex, const CONTEXT *ctxt)
+void handleCheckScheduled(THREADID threadIndex)
 {
    Thread* thread = localStore[threadIndex].thread;
    Core* core = thread->getCore();
@@ -188,17 +188,11 @@ void handleCheckScheduled(THREADID threadIndex, const CONTEXT *ctxt)
       time = std::max(time, core->getPerformanceModel()->getElapsedTime());
       core->getPerformanceModel()->queueDynamicInstruction(new SpawnInstruction(time));
    }
-
-   if (core->getState() == Core::BROKEN)
-   {
-      // Core has failed, don't block (Pin doesn't like this) but restart so we make zero progress
-      PIN_ExecuteAt(ctxt);
-   }
 }
 
 VOID addCheckScheduled(TRACE trace, INS ins_head)
 {
-   INS_InsertCall(ins_head, IPOINT_BEFORE, AFUNPTR(handleCheckScheduled), IARG_THREAD_ID, IARG_CONST_CONTEXT, IARG_END);
+   INS_InsertCall(ins_head, IPOINT_BEFORE, AFUNPTR(handleCheckScheduled), IARG_THREAD_ID, IARG_END);
 }
 
 namespace std
