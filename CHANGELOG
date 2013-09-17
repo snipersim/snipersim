@@ -1,3 +1,19 @@
+Version 5.2
+  * Configurable coherency protocol (MSI/MESI/MESIF), made MESI the default
+  * Add more cache statistics: LRU stack distance historgram, LLC miss latency breakdown
+  * Implement auxiliary tag directories (ATD) to track constructive/destructive interference in shared caches
+  * Implement 2-level TLB hierarchy with Nehalem configuration
+  * New hooks HOOK_APPLICATION_ROI_{BEGIN,END}, called even when ROI markers are not used directly; these hooks can be used to trigger ROI from a script
+  * Improved stop-by-icount script to support ROI-relative warmup and detailed lengths
+  * Ondemand routine stack printer: configure routine_tracer/type=ondemand, then send a SIGUSR1 to Sniper to get a per-thread application backtrace
+  * Emulate leaf 11 of the cpuid instruction to pass topology information to runtimes (used by Intel OpenMP)
+  * Emulation of sched_* system calls, gettimeofday replacement, cpuid in SIFT mode
+  * Improve handling of LD_LIBRARY_PATH: use SNIPER_SIM_LD_LIBRARY_PATH for the simulator, SNIPER_APP_LD_LIBRARY_PATH for the application
+  * Re-implemented BigSmall scheduler to use thread affinity calls rather than the low-level (and error prone) moveThread API
+  * sim.thread Python interface to interact with threads (get num threads, get appid, get/set affinity)
+  * Use newest Pin version 2.13.61206
+  * Numerous bug fixes and improvements
+
 Version 5.1
   * New Suggestions for Optimization visualization (--viz-aso)
   * KCacheGrind-compatible output for profiling simulated applications (--profile)
