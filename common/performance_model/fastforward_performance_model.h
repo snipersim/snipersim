@@ -8,6 +8,7 @@ class FastforwardPerformanceModel
    private:
       Core *m_core;
       PerformanceModel *m_perf;
+      const bool m_include_memory_latency;
 
       SubsecondTime m_cpi;
       SubsecondTime m_fastforwarded_time;
@@ -22,6 +23,7 @@ class FastforwardPerformanceModel
       void incrementElapsedTime(SubsecondTime latency);
       void notifyElapsedTimeUpdate();
       void countInstructions(IntPtr address, UInt32 count);
+      void handleMemoryLatency(SubsecondTime latency);
       void queueDynamicInstruction(Instruction *i);
       void queueBasicBlock(BasicBlock *basic_block);
 

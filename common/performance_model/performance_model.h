@@ -39,6 +39,8 @@ public:
    SubsecondTime getNonIdleElapsedTime() const { return getElapsedTime() - m_idle_elapsed_time.getElapsedTime(); }
 
    void countInstructions(IntPtr address, UInt32 count);
+   void handleMemoryLatency(SubsecondTime latency);
+
    void pushDynamicInstructionInfo(DynamicInstructionInfo &i);
    void popDynamicInstructionInfo();
    DynamicInstructionInfo* getDynamicInstructionInfo(const Instruction &instruction, bool exec_loads = true);

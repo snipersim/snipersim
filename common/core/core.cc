@@ -384,31 +384,37 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
    // Calculate the round-trip time
    SubsecondTime shmem_time = final_time - initial_time;
 
-   switch(modeled) {
+   switch(modeled)
+   {
       case MEM_MODELED_DYNINFO:
       {
          LOG_ASSERT_ERROR(hit_where != HitWhere::UNKNOWN, "hit_where = HitWhere::UNKNOWN"); // HitWhere::UNKNOWN is used to indicate the timing thread still needs to do the access.
          DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, true, shmem_time, address, data_size, (mem_op_type == WRITE) ? Operand::WRITE : Operand::READ, num_misses, hit_where);
-         if (lock_signal == Core::LOCK) {
+         if (lock_signal == Core::LOCK)
+         {
             // deadlock can occur if we try to push a dyninfo to a full queue while holding m_mem_lock
             LOG_ASSERT_ERROR(m_dyninfo_save_used == false, "We already have a saved m_dyninfo_save");
             m_dyninfo_save = info;
             m_dyninfo_save_used = true;
-         } else
+         }
+         else
             m_performance_model->pushDynamicInstructionInfo(info);
          break;
       }
       case MEM_MODELED_TIME:
       case MEM_MODELED_FENCED:
-         if (m_performance_model->isEnabled()) {
+         if (m_performance_model->isEnabled())
+         {
             /* queue a fake instruction that will account for the access latency */
             Instruction *i = new MemAccessInstruction(shmem_time, address, data_size, modeled == MEM_MODELED_FENCED);
             m_performance_model->queueDynamicInstruction(i);
          }
          break;
-      case MEM_MODELED_NONE:
       case MEM_MODELED_COUNT:
       case MEM_MODELED_COUNT_TLBTIME:
+         m_performance_model->handleMemoryLatency(shmem_time);
+         break;
+      case MEM_MODELED_NONE:
       case MEM_MODELED_RETURN:
          break;
    }

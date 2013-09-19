@@ -112,6 +112,14 @@ void PerformanceModel::countInstructions(IntPtr address, UInt32 count)
    }
 }
 
+void PerformanceModel::handleMemoryLatency(SubsecondTime latency)
+{
+   if (m_fastforward)
+   {
+      m_fastforward_model->handleMemoryLatency(latency);
+   }
+}
+
 void PerformanceModel::queueDynamicInstruction(Instruction *i)
 {
    if (i->getType() == INST_SPAWN)

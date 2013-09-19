@@ -4,10 +4,12 @@
 #include "core.h"
 #include "sampling_manager.h"
 #include "stats.h"
+#include "config.hpp"
 
 FastforwardPerformanceModel::FastforwardPerformanceModel(Core *core, PerformanceModel *perf)
    : m_core(core)
    , m_perf(perf)
+   , m_include_memory_latency(Sim()->getCfg()->getBool("perf_model/fast_forward/oneipc/include_memory_latency"))
    , m_cpi(SubsecondTime::Zero())
    , m_fastforwarded_time(SubsecondTime::Zero())
 {
@@ -35,6 +37,13 @@ void
 FastforwardPerformanceModel::countInstructions(IntPtr address, UInt32 count)
 {
    incrementElapsedTime(count * m_cpi);
+}
+
+void
+FastforwardPerformanceModel::handleMemoryLatency(SubsecondTime latency)
+{
+   if (m_include_memory_latency)
+      incrementElapsedTime(latency);
 }
 
 void
