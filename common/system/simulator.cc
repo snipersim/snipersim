@@ -132,14 +132,14 @@ void Simulator::start()
 
    m_hooks_manager->callHooks(HookType::HOOK_SIM_START, 0);
    m_stats_manager->recordStats("start");
+   if (Sim()->getFastForwardPerformanceManager())
+   {
+      Sim()->getFastForwardPerformanceManager()->enable();
+   }
    if (Sim()->getConfig()->getSimulationROI() == Config::ROI_FULL)
    {
       // roi-begin
       Sim()->getMagicServer()->setPerformance(true);
-   }
-   else if (Sim()->getFastForwardPerformanceManager())
-   {
-      Sim()->getFastForwardPerformanceManager()->enable();
    }
 
    m_running = true;
