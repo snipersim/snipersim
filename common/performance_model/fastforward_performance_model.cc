@@ -17,12 +17,32 @@ FastforwardPerformanceModel::FastforwardPerformanceModel(Core *core, Performance
 {
    registerStatsMetric("fastforward_performance_model", core->getId(), "fastforwarded_time", &m_fastforwarded_time);
    registerStatsMetric("performance_model", core->getId(), "cpiFastforwardTime", &m_fastforwarded_time);
+
+   registerStatsMetric("fastforward_timer", core->getId(), "cpiBase", &m_cpiBase);
+   registerStatsMetric("fastforward_timer", core->getId(), "cpiBranchPredictor", &m_cpiBranchPredictor);
+
+   m_cpiDataCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
+   for (int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
+   {
+      if (HitWhereIsValid((HitWhere::where_t)h))
+      {
+         String name = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
+         registerStatsMetric("fastforward_timer", core->getId(), name, &(m_cpiDataCache[h]));
+      }
+   }
 }
 
 void
 FastforwardPerformanceModel::incrementElapsedTime(SubsecondTime latency)
 {
+   incrementElapsedTime(latency, m_cpiBase);
+}
+
+void
+FastforwardPerformanceModel::incrementElapsedTime(SubsecondTime latency, SubsecondTime &cpiComponent)
+{
    m_fastforwarded_time += latency;
+   cpiComponent += latency;
    m_perf->incrementElapsedTime(latency);
 }
 
@@ -38,21 +58,21 @@ FastforwardPerformanceModel::notifyElapsedTimeUpdate()
 void
 FastforwardPerformanceModel::countInstructions(IntPtr address, UInt32 count)
 {
-   incrementElapsedTime(count * m_cpi);
+   incrementElapsedTime(count * m_cpi, m_cpiBase);
 }
 
 void
-FastforwardPerformanceModel::handleMemoryLatency(SubsecondTime latency)
+FastforwardPerformanceModel::handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where)
 {
    if (m_include_memory_latency)
-      incrementElapsedTime(latency);
+      incrementElapsedTime(latency, m_cpiDataCache[hit_where]);
 }
 
 void
 FastforwardPerformanceModel::handleBranchMispredict()
 {
    if (m_include_branch_mispredict)
-      incrementElapsedTime(m_branch_misprediction_penalty.getLatency());
+      incrementElapsedTime(m_branch_misprediction_penalty.getLatency(), m_cpiBranchPredictor);
 }
 
 void

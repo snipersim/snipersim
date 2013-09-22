@@ -15,6 +15,10 @@ class FastforwardPerformanceModel
       SubsecondTime m_cpi;
       SubsecondTime m_fastforwarded_time;
 
+      SubsecondTime m_cpiBase;
+      SubsecondTime m_cpiBranchPredictor;
+      std::vector<SubsecondTime> m_cpiDataCache;
+
    public:
       FastforwardPerformanceModel(Core *core, PerformanceModel *perf);
       ~FastforwardPerformanceModel() {}
@@ -23,9 +27,10 @@ class FastforwardPerformanceModel
       void setCurrentCPI(SubsecondTime cpi) { m_cpi = cpi; }
 
       void incrementElapsedTime(SubsecondTime latency);
+      void incrementElapsedTime(SubsecondTime latency, SubsecondTime &cpiComponent);
       void notifyElapsedTimeUpdate();
       void countInstructions(IntPtr address, UInt32 count);
-      void handleMemoryLatency(SubsecondTime latency);
+      void handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where);
       void handleBranchMispredict();
       void queueDynamicInstruction(Instruction *i);
       void queueBasicBlock(BasicBlock *basic_block);

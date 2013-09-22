@@ -22,8 +22,11 @@ OneIPCPerformanceModel::OneIPCPerformanceModel(Core *core)
    m_cpiDataCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
    for (int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
    {
-      String name = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
-      registerStatsMetric("oneipc_timer", core->getId(), name, &(m_cpiDataCache[h]));
+      if (HitWhereIsValid((HitWhere::where_t)h))
+      {
+         String name = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
+         registerStatsMetric("oneipc_timer", core->getId(), name, &(m_cpiDataCache[h]));
+      }
    }
 }
 

@@ -112,11 +112,11 @@ void PerformanceModel::countInstructions(IntPtr address, UInt32 count)
    }
 }
 
-void PerformanceModel::handleMemoryLatency(SubsecondTime latency)
+void PerformanceModel::handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where)
 {
    if (m_fastforward)
    {
-      m_fastforward_model->handleMemoryLatency(latency);
+      m_fastforward_model->handleMemoryLatency(latency, hit_where);
    }
 }
 

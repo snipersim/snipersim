@@ -413,7 +413,7 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
       case MEM_MODELED_COUNT:
       case MEM_MODELED_COUNT_TLBTIME:
          if (shmem_time > SubsecondTime::Zero())
-            m_performance_model->handleMemoryLatency(shmem_time);
+            m_performance_model->handleMemoryLatency(shmem_time, hit_where);
          break;
       case MEM_MODELED_NONE:
       case MEM_MODELED_RETURN:

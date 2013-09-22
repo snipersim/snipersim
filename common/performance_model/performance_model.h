@@ -39,7 +39,7 @@ public:
    SubsecondTime getNonIdleElapsedTime() const { return getElapsedTime() - m_idle_elapsed_time.getElapsedTime(); }
 
    void countInstructions(IntPtr address, UInt32 count);
-   void handleMemoryLatency(SubsecondTime latency);
+   void handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where);
    void handleBranchMispredict();
 
    void pushDynamicInstructionInfo(DynamicInstructionInfo &i);
