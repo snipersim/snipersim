@@ -10,6 +10,8 @@ FastforwardPerformanceModel::FastforwardPerformanceModel(Core *core, Performance
    : m_core(core)
    , m_perf(perf)
    , m_include_memory_latency(Sim()->getCfg()->getBool("perf_model/fast_forward/oneipc/include_memory_latency"))
+   , m_include_branch_mispredict(Sim()->getCfg()->getBool("perf_model/fast_forward/oneipc/include_branch_misprediction"))
+   , m_branch_misprediction_penalty(core->getDvfsDomain(), Sim()->getCfg()->getIntArray("perf_model/branch_predictor/mispredict_penalty", core->getId()))
    , m_cpi(SubsecondTime::Zero())
    , m_fastforwarded_time(SubsecondTime::Zero())
 {
@@ -44,6 +46,13 @@ FastforwardPerformanceModel::handleMemoryLatency(SubsecondTime latency)
 {
    if (m_include_memory_latency)
       incrementElapsedTime(latency);
+}
+
+void
+FastforwardPerformanceModel::handleBranchMispredict()
+{
+   if (m_include_branch_mispredict)
+      incrementElapsedTime(m_branch_misprediction_penalty.getLatency());
 }
 
 void

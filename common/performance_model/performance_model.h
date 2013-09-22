@@ -40,6 +40,7 @@ public:
 
    void countInstructions(IntPtr address, UInt32 count);
    void handleMemoryLatency(SubsecondTime latency);
+   void handleBranchMispredict();
 
    void pushDynamicInstructionInfo(DynamicInstructionInfo &i);
    void popDynamicInstructionInfo();

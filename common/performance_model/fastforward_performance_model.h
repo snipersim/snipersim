@@ -9,6 +9,8 @@ class FastforwardPerformanceModel
       Core *m_core;
       PerformanceModel *m_perf;
       const bool m_include_memory_latency;
+      const bool m_include_branch_mispredict;
+      ComponentLatency m_branch_misprediction_penalty;
 
       SubsecondTime m_cpi;
       SubsecondTime m_fastforwarded_time;
@@ -24,6 +26,7 @@ class FastforwardPerformanceModel
       void notifyElapsedTimeUpdate();
       void countInstructions(IntPtr address, UInt32 count);
       void handleMemoryLatency(SubsecondTime latency);
+      void handleBranchMispredict();
       void queueDynamicInstruction(Instruction *i);
       void queueBasicBlock(BasicBlock *basic_block);
 

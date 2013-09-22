@@ -349,6 +349,8 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
       {
          bool prediction = bp->predict(va2pa(inst.sinst->addr), va2pa(next_inst.sinst->addr));
          bp->update(prediction, inst.taken, va2pa(inst.sinst->addr), va2pa(next_inst.sinst->addr));
+         if (prediction != inst.taken)
+            core->getPerformanceModel()->handleBranchMispredict();
       }
    }
 

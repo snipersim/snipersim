@@ -120,6 +120,14 @@ void PerformanceModel::handleMemoryLatency(SubsecondTime latency)
    }
 }
 
+void PerformanceModel::handleBranchMispredict()
+{
+   if (m_fastforward)
+   {
+      m_fastforward_model->handleBranchMispredict();
+   }
+}
+
 void PerformanceModel::queueDynamicInstruction(Instruction *i)
 {
    if (i->getType() == INST_SPAWN)

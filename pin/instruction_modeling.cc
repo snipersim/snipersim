@@ -60,6 +60,8 @@ static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADD
    if (bp) {
       bool prediction = bp->predict(eip, target);
       bp->update(prediction, taken, eip, target);
+      if (prediction != taken)
+         prfmdl->handleBranchMispredict();
    }
 }
 
