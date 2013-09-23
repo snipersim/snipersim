@@ -55,6 +55,7 @@ class CacheBase
          NMRU,
          PLRU,
          SRRIP,
+         SRRIP_QBS,
          RANDOM,
          NUM_REPLACEMENT_POLICIES
       };
