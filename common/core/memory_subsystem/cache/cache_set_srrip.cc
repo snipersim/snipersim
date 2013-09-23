@@ -8,13 +8,14 @@
 CacheSetSRRIP::CacheSetSRRIP(
       String cfgname, core_id_t core_id,
       CacheBase::cache_t cache_type,
-      UInt32 associativity, UInt32 blocksize, UInt8 num_attempts)
+      UInt32 associativity, UInt32 blocksize, CacheSetInfoLRU* set_info, UInt8 num_attempts)
    : CacheSet(cache_type, associativity, blocksize)
    , m_rrip_numbits(Sim()->getCfg()->getIntArray(cfgname + "/srrip/bits", core_id))
    , m_rrip_max((1 << m_rrip_numbits) - 1)
    , m_rrip_insert(m_rrip_max - 1)
    , m_num_attempts(num_attempts)
    , m_replacement_pointer(0)
+   , m_set_info(set_info)
 {
    m_rrip_bits = new UInt8[m_associativity];
    for (UInt32 i = 0; i < m_associativity; i++)
@@ -72,6 +73,8 @@ CacheSetSRRIP::getReplacementIndex(CacheCntlr *cntlr)
             // Prepare way for a new line: set prediction to 'long'
             m_rrip_bits[index] = m_rrip_insert;
 
+            m_set_info->incrementAttempt(attempt);
+
             LOG_ASSERT_ERROR(isValidReplacement(index), "SRRIP selected an invalid replacement candidate" );
             return index;
          }
@@ -92,6 +95,8 @@ CacheSetSRRIP::getReplacementIndex(CacheCntlr *cntlr)
 void
 CacheSetSRRIP::updateReplacementIndex(UInt32 accessed_index)
 {
+   m_set_info->increment(m_rrip_bits[accessed_index]);
+
    if (m_rrip_bits[accessed_index] > 0)
       m_rrip_bits[accessed_index]--;
 }

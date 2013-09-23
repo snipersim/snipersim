@@ -161,7 +161,7 @@ CacheSet::createCacheSet(String cfgname, core_id_t core_id,
 
       case CacheBase::SRRIP:
       case CacheBase::SRRIP_QBS:
-         return new CacheSetSRRIP(cfgname, core_id, cache_type, associativity, blocksize, getNumQBSAttempts(policy, cfgname, core_id));
+         return new CacheSetSRRIP(cfgname, core_id, cache_type, associativity, blocksize, dynamic_cast<CacheSetInfoLRU*>(set_info), getNumQBSAttempts(policy, cfgname, core_id));
 
       case CacheBase::RANDOM:
          return new CacheSetRandom(cache_type, associativity, blocksize);
@@ -183,6 +183,8 @@ CacheSet::createCacheSetInfo(String name, String cfgname, core_id_t core_id, Str
    {
       case CacheBase::LRU:
       case CacheBase::LRU_QBS:
+      case CacheBase::SRRIP:
+      case CacheBase::SRRIP_QBS:
          return new CacheSetInfoLRU(name, cfgname, core_id, associativity, getNumQBSAttempts(policy, cfgname, core_id));
       default:
          return NULL;
