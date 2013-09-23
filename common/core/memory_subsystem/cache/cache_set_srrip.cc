@@ -1,4 +1,4 @@
-#include "cache_set.h"
+#include "cache_set_srrip.h"
 #include "simulator.h"
 #include "config.hpp"
 #include "log.h"
