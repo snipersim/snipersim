@@ -136,13 +136,8 @@ CacheSet::createCacheSet(String cfgname, core_id_t core_id,
          return new CacheSetRoundRobin(cache_type, associativity, blocksize);
 
       case CacheBase::LRU:
-         return new CacheSetLRU(cache_type, associativity, blocksize, dynamic_cast<CacheSetInfoLRU*>(set_info));
-
       case CacheBase::LRU_QBS:
-      {
-         UInt8 num_attempts = Sim()->getCfg()->getIntArray(cfgname + "/qbs/attempts", core_id);
-         return new CacheSetLRUQBS(cache_type, associativity, blocksize, dynamic_cast<CacheSetInfoLRUQBS*>(set_info), num_attempts);
-      }
+         return new CacheSetLRU(cache_type, associativity, blocksize, dynamic_cast<CacheSetInfoLRU*>(set_info), getNumQBSAttempts(policy, cfgname, core_id));
 
       case CacheBase::NRU:
          return new CacheSetNRU(cache_type, associativity, blocksize);
@@ -178,14 +173,22 @@ CacheSet::createCacheSetInfo(String name, String cfgname, core_id_t core_id, Str
    switch(policy)
    {
       case CacheBase::LRU:
-         return new CacheSetInfoLRU(name, cfgname, core_id, associativity);
       case CacheBase::LRU_QBS:
-      {
-         UInt8 num_attempts = Sim()->getCfg()->getIntArray(cfgname + "/qbs/attempts", core_id);
-         return new CacheSetInfoLRUQBS(name, cfgname, core_id, associativity, num_attempts);
-      }
+         return new CacheSetInfoLRU(name, cfgname, core_id, associativity, getNumQBSAttempts(policy, cfgname, core_id));
       default:
          return NULL;
+   }
+}
+
+UInt8
+CacheSet::getNumQBSAttempts(CacheBase::ReplacementPolicy policy, String cfgname, core_id_t core_id)
+{
+   switch(policy)
+   {
+      case CacheBase::LRU_QBS:
+         return Sim()->getCfg()->getIntArray(cfgname + "/qbs/attempts", core_id);
+      default:
+         return 1;
    }
 }
 
