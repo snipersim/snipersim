@@ -18,7 +18,7 @@ CacheSetRandom::~CacheSetRandom()
 }
 
 UInt32
-CacheSetRandom::getReplacementIndex()
+CacheSetRandom::getReplacementIndex(CacheCntlr *cntlr)
 {
    // Invalidations may mess up the LRU bits
 
@@ -36,7 +36,7 @@ CacheSetRandom::getReplacementIndex()
    else
    {
       // Could not find valid victim, try again, due to randomness, it might work
-      return getReplacementIndex();
+      return getReplacementIndex(cntlr);
    }
 }
 

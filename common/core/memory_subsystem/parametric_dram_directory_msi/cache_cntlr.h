@@ -188,7 +188,7 @@ namespace ParametricDramDirectoryMSI
          friend class CacheCntlr;
    };
 
-   class CacheCntlr
+   class CacheCntlr : ::CacheCntlr
    {
       private:
          // Data Members
@@ -224,6 +224,7 @@ namespace ParametricDramDirectoryMSI
            UInt64 hits_warmup, evict_warmup, invalidate_warmup;
            SubsecondTime total_latency;
            SubsecondTime snoop_latency;
+           SubsecondTime qbs_query_latency;
            SubsecondTime mshr_latency;
            UInt64 prefetches;
            UInt64 coherency_downgrades, coherency_upgrades, coherency_invalidates, coherency_writebacks;
@@ -384,6 +385,9 @@ namespace ParametricDramDirectoryMSI
          bool isFirstLevel(void) { return m_master->m_prev_cache_cntlrs.empty(); }
          bool isLastLevel(void) { return ! m_next_cache_cntlr; }
          bool isShared(core_id_t core_id); //< Return true if core shares this cache
+
+         bool isInLowerLevelCache(CacheBlockInfo *block_info);
+         void incrementQBSLookupCost();
 
          void enable() { m_master->m_cache->enable(); }
          void disable() { m_master->m_cache->disable(); }

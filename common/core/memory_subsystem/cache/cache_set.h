@@ -48,14 +48,14 @@ class CacheSet
       void write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes, bool update_replacement);
       CacheBlockInfo* find(IntPtr tag, UInt32* line_index = NULL);
       bool invalidate(IntPtr& tag);
-      void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff);
+      void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr = NULL);
 
       CacheBlockInfo* peekBlock(UInt32 way) const { return m_cache_block_info_array[way]; }
 
       char* getDataPtr(UInt32 line_index, UInt32 offset = 0);
       UInt32 getBlockSize(void) const { return m_blocksize; }
 
-      virtual UInt32 getReplacementIndex() = 0;
+      virtual UInt32 getReplacementIndex(CacheCntlr *cntlr) = 0;
       virtual void updateReplacementIndex(UInt32) = 0;
 
       bool isValidReplacement(UInt32 index);
@@ -68,7 +68,7 @@ class CacheSetRoundRobin : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetRoundRobin();
 
-      UInt32 getReplacementIndex();
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
    private:
@@ -95,15 +95,37 @@ class CacheSetLRU : public CacheSet
    public:
       CacheSetLRU(CacheBase::cache_t cache_type,
             UInt32 associativity, UInt32 blocksize, CacheSetInfoLRU* set_info);
-      ~CacheSetLRU();
+      virtual ~CacheSetLRU();
 
-      UInt32 getReplacementIndex();
+      virtual UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
-   private:
+   protected:
       UInt8* m_lru_bits;
       CacheSetInfoLRU* m_set_info;
       void moveToMRU(UInt32 accessed_index);
+};
+
+class CacheSetInfoLRUQBS : public CacheSetInfoLRU
+{
+   public:
+      CacheSetInfoLRUQBS(String name, String cfgname, core_id_t core_id, UInt32 associativity, UInt8 num_attempts);
+      virtual ~CacheSetInfoLRUQBS();
+      void incrementAttempt(UInt8 attempt) { ++m_attempts[attempt]; }
+   private:
+      UInt64* m_attempts;
+};
+
+class CacheSetLRUQBS : public CacheSetLRU
+{
+   public:
+      CacheSetLRUQBS(CacheBase::cache_t cache_type,
+            UInt32 associativity, UInt32 blocksize, CacheSetInfoLRUQBS* set_info, UInt8 num_attempts);
+
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
+
+   private:
+      const UInt8 m_num_attempts;
 };
 
 class CacheSetNRU : public CacheSet
@@ -113,7 +135,7 @@ class CacheSetNRU : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetNRU();
 
-      UInt32 getReplacementIndex();
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
    private:
@@ -129,7 +151,7 @@ class CacheSetMRU : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetMRU();
 
-      UInt32 getReplacementIndex();
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
    private:
@@ -143,7 +165,7 @@ class CacheSetNMRU : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetNMRU();
 
-      UInt32 getReplacementIndex();
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
    private:
@@ -158,7 +180,7 @@ class CacheSetPLRU : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetPLRU();
 
-      UInt32 getReplacementIndex();
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
    private:
@@ -173,7 +195,7 @@ class CacheSetSRRIP : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetSRRIP();
 
-      UInt32 getReplacementIndex();
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
    private:
@@ -191,7 +213,7 @@ class CacheSetRandom : public CacheSet
             UInt32 associativity, UInt32 blocksize);
       ~CacheSetRandom();
 
-      UInt32 getReplacementIndex();
+      UInt32 getReplacementIndex(CacheCntlr *cntlr);
       void updateReplacementIndex(UInt32 accessed_index);
 
    private:

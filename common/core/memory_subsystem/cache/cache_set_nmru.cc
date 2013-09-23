@@ -21,7 +21,7 @@ CacheSetNMRU::~CacheSetNMRU()
 }
 
 UInt32
-CacheSetNMRU::getReplacementIndex()
+CacheSetNMRU::getReplacementIndex(CacheCntlr *cntlr)
 {
    // Invalidations may mess up the LRU bits
 

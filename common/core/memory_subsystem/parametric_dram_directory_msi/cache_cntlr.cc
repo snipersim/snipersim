@@ -221,6 +221,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "invalidate-warmup", &stats.invalidate_warmup);
    registerStatsMetric(name, core_id, "total-latency", &stats.total_latency);
    registerStatsMetric(name, core_id, "snoop-latency", &stats.snoop_latency);
+   registerStatsMetric(name, core_id, "qbs-query-latency", &stats.qbs_query_latency);
    registerStatsMetric(name, core_id, "mshr-latency", &stats.mshr_latency);
    registerStatsMetric(name, core_id, "prefetches", &stats.prefetches);
    for(CacheState::cstate_t state = CacheState::CSTATE_FIRST; state < CacheState::NUM_CSTATE_STATES; state = CacheState::cstate_t(int(state)+1)) {
@@ -1347,7 +1348,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
 
    m_master->m_cache->insertSingleLine(address, data_buf,
          &eviction, &evict_address, &evict_block_info, evict_buf,
-         getShmemPerfModel()->getElapsedTime(thread_num));
+         getShmemPerfModel()->getElapsedTime(thread_num), this);
    SharedCacheBlockInfo* cache_block_info = setCacheState(address, cstate);
 
    if (Sim()->getInstrumentationMode() == InstMode::CACHE_ONLY)
@@ -1696,6 +1697,27 @@ assert(data_length==getCacheBlockSize());
    }
 }
 
+bool
+CacheCntlr::isInLowerLevelCache(CacheBlockInfo *block_info)
+{
+   IntPtr address = m_master->m_cache->tagToAddress(block_info->getTag());
+   for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
+   {
+      // All caches are inclusive, so there is no need to propagate further
+      SharedCacheBlockInfo* block_info = (*it)->getCacheBlockInfo(address);
+      if (block_info != NULL)
+         return true;
+   }
+   return false;
+}
+
+void
+CacheCntlr::incrementQBSLookupCost()
+{
+   SubsecondTime latency = m_writeback_time.getLatency();
+   getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
+   atomic_add_subsecondtime(stats.qbs_query_latency, latency);
+}
 
 
 /*****************************************************************************

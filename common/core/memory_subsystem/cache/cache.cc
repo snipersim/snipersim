@@ -121,7 +121,7 @@ void
 Cache::insertSingleLine(IntPtr addr, Byte* fill_buff,
       bool* eviction, IntPtr* evict_addr,
       CacheBlockInfo* evict_block_info, Byte* evict_buff,
-      SubsecondTime now)
+      SubsecondTime now, CacheCntlr *cntlr)
 {
    IntPtr tag;
    UInt32 set_index;
@@ -131,7 +131,7 @@ Cache::insertSingleLine(IntPtr addr, Byte* fill_buff,
    cache_block_info->setTag(tag);
 
    m_sets[set_index]->insert(cache_block_info, fill_buff,
-         eviction, evict_block_info, evict_buff);
+         eviction, evict_block_info, evict_buff, cntlr);
    *evict_addr = tagToAddress(evict_block_info->getTag());
 
    if (m_fault_injector) {

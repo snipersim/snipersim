@@ -19,7 +19,7 @@ CacheSetLRU::~CacheSetLRU()
 }
 
 UInt32
-CacheSetLRU::getReplacementIndex()
+CacheSetLRU::getReplacementIndex(CacheCntlr *cntlr)
 {
    // Invalidations may mess up the LRU bits, so find either a free way or the one with the highest LRU bits
    UInt32 index = 0;

@@ -62,4 +62,11 @@ class CacheBlockInfo
       static const char* getOptionName(option_t option);
 };
 
+class CacheCntlr
+{
+   public:
+      virtual bool isInLowerLevelCache(CacheBlockInfo *block_info) { return false; }
+      virtual void incrementQBSLookupCost() {}
+};
+
 #endif /* __CACHE_BLOCK_INFO_H__ */

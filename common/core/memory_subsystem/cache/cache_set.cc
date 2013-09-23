@@ -3,6 +3,7 @@
 #include "log.h"
 #include "simulator.h"
 #include "config.h"
+#include "config.hpp"
 
 CacheSet::CacheSet(CacheBase::cache_t cache_type,
       UInt32 associativity, UInt32 blocksize):
@@ -87,11 +88,11 @@ CacheSet::invalidate(IntPtr& tag)
 }
 
 void
-CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff)
+CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr)
 {
    // This replacement strategy does not take into account the fact that
    // cache blocks can be voluntarily flushed or invalidated due to another write request
-   const UInt32 index = getReplacementIndex();
+   const UInt32 index = getReplacementIndex(cntlr);
    assert(index < m_associativity);
 
    assert(eviction != NULL);
@@ -137,6 +138,12 @@ CacheSet::createCacheSet(String cfgname, core_id_t core_id,
       case CacheBase::LRU:
          return new CacheSetLRU(cache_type, associativity, blocksize, dynamic_cast<CacheSetInfoLRU*>(set_info));
 
+      case CacheBase::LRU_QBS:
+      {
+         UInt8 num_attempts = Sim()->getCfg()->getIntArray(cfgname + "/qbs/attempts", core_id);
+         return new CacheSetLRUQBS(cache_type, associativity, blocksize, dynamic_cast<CacheSetInfoLRUQBS*>(set_info), num_attempts);
+      }
+
       case CacheBase::NRU:
          return new CacheSetNRU(cache_type, associativity, blocksize);
 
@@ -172,6 +179,11 @@ CacheSet::createCacheSetInfo(String name, String cfgname, core_id_t core_id, Str
    {
       case CacheBase::LRU:
          return new CacheSetInfoLRU(name, cfgname, core_id, associativity);
+      case CacheBase::LRU_QBS:
+      {
+         UInt8 num_attempts = Sim()->getCfg()->getIntArray(cfgname + "/qbs/attempts", core_id);
+         return new CacheSetInfoLRUQBS(name, cfgname, core_id, associativity, num_attempts);
+      }
       default:
          return NULL;
    }
@@ -184,6 +196,8 @@ CacheSet::parsePolicyType(String policy)
       return CacheBase::ROUND_ROBIN;
    if (policy == "lru")
       return CacheBase::LRU;
+   if (policy == "lru_qbs")
+      return CacheBase::LRU_QBS;
    if (policy == "nru")
       return CacheBase::NRU;
    if (policy == "mru")
