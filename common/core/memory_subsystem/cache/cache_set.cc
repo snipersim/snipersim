@@ -197,6 +197,7 @@ CacheSet::getNumQBSAttempts(CacheBase::ReplacementPolicy policy, String cfgname,
    switch(policy)
    {
       case CacheBase::LRU_QBS:
+      case CacheBase::SRRIP_QBS:
          return Sim()->getCfg()->getIntArray(cfgname + "/qbs/attempts", core_id);
       default:
          return 1;
