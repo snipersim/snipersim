@@ -197,8 +197,7 @@ CacheSet::parsePolicyType(String policy)
    if (policy == "random")
       return CacheBase::RANDOM;
 
-   else
-      return (CacheBase::ReplacementPolicy) -1;
+   LOG_PRINT_ERROR("Unknown replacement policy %s", policy.c_str());
 }
 
 bool CacheSet::isValidReplacement(UInt32 index)
