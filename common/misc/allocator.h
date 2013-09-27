@@ -5,6 +5,7 @@
 #include "FSBAllocator.hh"
 
 #include <typeinfo>
+#include <cxxabi.h>
 
 // Pool allocator
 
@@ -33,7 +34,7 @@ template <typename T, unsigned MaxItems = 0> class TypedAllocator : public Alloc
 {
    private:
       UInt64 m_items;
-      FSBAllocator_ElemAllocator<sizeof(DataElement) + sizeof(T), MaxItems> m_alloc;
+      FSBAllocator_ElemAllocator<sizeof(DataElement) + sizeof(T), MaxItems, T> m_alloc;
 
       // In ROB-SMT, DynamicMicroOps are allocated by their own thread but free'd in simulate() which can be called by anyone
       Lock m_lock;
@@ -46,7 +47,12 @@ template <typename T, unsigned MaxItems = 0> class TypedAllocator : public Alloc
       virtual ~TypedAllocator()
       {
          if (m_items)
-            printf("[ALLOC] %" PRIu64 " items of type %s not freed\n", m_items, typeid(T).name());
+         {
+            int status;
+            char *nameoftype = abi::__cxa_demangle(typeid(T).name(), 0, 0, &status);
+            printf("[ALLOC] %" PRIu64 " items of type %s not freed\n", m_items, nameoftype);
+            free(nameoftype);
+         }
       }
 
       virtual void* alloc(size_t bytes)

@@ -30,8 +30,14 @@ THE SOFTWARE.
 
 #include <new>
 #include <vector>
+#include <typeinfo>
+#include <cxxabi.h>
 
-template<unsigned ElemSize, unsigned MaxElem = 0>
+class UnspecifiedType
+{
+};
+
+template<unsigned ElemSize, unsigned MaxElem = 0, typename TypeToAlloc = UnspecifiedType>
 class FSBAllocator_ElemAllocator
 {
     typedef std::size_t Data_t;
@@ -126,7 +132,12 @@ class FSBAllocator_ElemAllocator
             blocksWithFree.push_back(blocksVector.data.size());
             blocksVector.data.push_back(MemBlock());
             if (MaxElem)
-               LOG_ASSERT_ERROR(blocksVector.data.size() * BlockElements <= MaxElem, "Maximum number of blocks exceeded for allocator of %d-sized objects", ElemSize);
+            {
+               int status;
+               char *nameoftype = abi::__cxa_demangle(typeid(TypeToAlloc).name(), 0, 0, &status);
+               LOG_ASSERT_ERROR(blocksVector.data.size() * BlockElements <= MaxElem, "Maximum number of blocks exceeded for allocator of %d-sized objects of %s", ElemSize, nameoftype);
+               free(nameoftype);
+            }
         }
 
         const Data_t index = blocksWithFree.back();
