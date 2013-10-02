@@ -31,7 +31,7 @@ class PowerTrace:
     _t1 = t1 or 'roi-end'
     if not t1: t1 = self.t_roi_end
     os.system('unset PYTHONHOME; %s -d %s -o %s --partial=%s:%s --no-graph' % (
-      os.path.join(os.getenv('GRAPHITE_ROOT'), 'tools/mcpat.py'),
+      os.path.join(os.getenv('SNIPER_ROOT'), 'tools/mcpat.py'),
       sim.config.output_dir,
       os.path.join(sim.config.output_dir, 'power-%s-%s-%s' % (t0, t1, t1 - t0)),
       _t0, _t1

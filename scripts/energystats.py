@@ -63,7 +63,7 @@ class EnergyStats:
   def run_power(self, name0, name1):
     outputbase = os.path.join(sim.config.output_dir, 'energystats-temp')
     os.system('unset PYTHONHOME; %s -d %s -o %s --partial=%s:%s --no-graph --no-text' % (
-      os.path.join(os.getenv('GRAPHITE_ROOT'), 'tools/mcpat.py'),
+      os.path.join(os.getenv('SNIPER_ROOT'), 'tools/mcpat.py'),
       sim.config.output_dir,
       outputbase,
       name0, name1
