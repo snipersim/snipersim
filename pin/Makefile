@@ -16,6 +16,9 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 CXXFLAGS += -c \
             -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
 
+PIN_INC_DIRS := ${shell find $(CURDIR) -type d -print}
+CPPFLAGS = $(foreach dir,$(PIN_INC_DIRS),-I$(dir))
+
 # Use the pin flags for building
 include $(SIM_ROOT)/Makefile.config
 

@@ -2,31 +2,8 @@ SIM_ROOT ?= $(shell readlink -f "$(CURDIR)/../")
 
 include $(SIM_ROOT)/Makefile.config
 
-DIRECTORIES = $(SIM_ROOT)/common/core \
-	$(SIM_ROOT)/common/core/memory_subsystem \
-	$(SIM_ROOT)/common/core/memory_subsystem/cache \
-	$(SIM_ROOT)/common/core/memory_subsystem/directory_schemes \
-	$(SIM_ROOT)/common/core/memory_subsystem/dram \
-	$(SIM_ROOT)/common/core/memory_subsystem/parametric_dram_directory_msi \
-	$(SIM_ROOT)/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi \
-	$(SIM_ROOT)/common/network \
-	$(SIM_ROOT)/common/transport \
-	$(SIM_ROOT)/common/misc \
-	$(SIM_ROOT)/common/config \
-	$(SIM_ROOT)/common/system \
-	$(SIM_ROOT)/common/scheduler \
-	$(SIM_ROOT)/common/scripting \
-	$(SIM_ROOT)/common/sampling \
-	$(SIM_ROOT)/common/fault_injection \
-	$(SIM_ROOT)/common/performance_model \
-	$(SIM_ROOT)/common/performance_model/branch_predictors \
-	$(SIM_ROOT)/common/performance_model/performance_models \
-	$(SIM_ROOT)/common/performance_model/performance_models/micro_op \
-	$(SIM_ROOT)/common/performance_model/performance_models/core_model \
-	$(SIM_ROOT)/common/performance_model/performance_models/interval_performance_model \
-	$(SIM_ROOT)/common/user \
-	$(SIM_ROOT)/include \
-	$(CURDIR)/
+DIRECTORIES := ${shell find $(SIM_ROOT)/common -type d -print} \
+	$(SIM_ROOT)/include
 
 LIBCARBON_SOURCES = $(foreach dir,$(DIRECTORIES),$(wildcard $(dir)/*.cc)) \
 	$(wildcard $(SIM_ROOT)/common/config/*.cpp)
@@ -50,8 +27,7 @@ endif
 include $(SIM_ROOT)/Makefile.config
 
 ifneq ($(BOOST_INCLUDE),)
-	CFLAGS += -I$(BOOST_INCLUDE)
-	CXXFLAGS += -I$(BOOST_INCLUDE)
+	CPPFLAGS += -I$(BOOST_INCLUDE)
 endif
 
 LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/lib -lpython2.7 -lrt -lz -lsqlite3
@@ -60,8 +36,10 @@ LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 
 # Include paths
-CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
-          -I$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/include/python2.7 \
+CPPFLAGS+=$(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
+          -I$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/include/python2.7
+
+CXXFLAGS+=-c \
           -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++0x -fno-strict-aliasing $(OPT_CFLAGS) #-Werror
 
 %.h %.hh %.hpp:
@@ -75,48 +53,48 @@ CXXFLAGS+=-c $(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
 %.d: %.cpp
 ifeq ($(SHOW_COMPILE),)
 	@echo '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) -MM -MG $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+	@$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
 else
-	$(CXX) -MM -MG $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+	$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
 endif
 
 %.d: %.cc
 ifeq ($(SHOW_COMPILE),)
 	@echo '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) -MM -MG $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+	@$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
 else
-	$(CXX) -MM -MG $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+	$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
 endif
 
 %.d: %.c
 ifeq ($(SHOW_COMPILE),)
 	@echo '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CC) -MM -MG $(CFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+	@$(CC) -MM -MG $(CPPFLAGS) $(CFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
 else
-	$(CC) -MM -MG $(CFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
+	$(CC) -MM -MG $(CPPFLAGS) $(CFLAGS) $< | sed -e 's,^\([^:]*\)\.o[ ]*:,$(@D)/\1.o $(@D)/\1.d:,' >$@
 endif
 
 # Build rules for object generation
 %.o: %.cpp
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(CXXFLAGS) -c $< -o $@
+	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 else
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 endif
 
 %.o : %.cc
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(CXXFLAGS) -c $< -o $@
+	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 else
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 endif
 
 %.o : %.c
 ifeq ($(SHOW_COMPILE),)
 	@echo '[CC    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 else
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 endif
