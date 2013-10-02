@@ -1172,10 +1172,11 @@ if __name__ == '__main__':
   config = None
   outputfile = 'power'
   no_graph = False
+  no_text = False
   partial = None
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:t:c:v:d:o:", [ 'no-graph', 'partial=' ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:t:c:v:d:o:", [ 'no-graph', 'no-text', 'partial=' ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -1199,6 +1200,8 @@ if __name__ == '__main__':
       outputfile = a
     if o == '--no-graph':
       no_graph = True
+    if o == '--no-text':
+      no_text = True
     if o == '--partial':
       if ':' not in a:
         sys.stderr.write('--partial=<from>:<to>\n')
@@ -1206,4 +1209,4 @@ if __name__ == '__main__':
       partial = a.split(':')
 
 
-  main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, vdd = vdd, config = config, outputfile = outputfile, no_graph = no_graph, partial = partial)
+  main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, vdd = vdd, config = config, outputfile = outputfile, no_graph = no_graph, print_stack = not no_text, partial = partial)
