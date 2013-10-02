@@ -142,22 +142,18 @@ writeStats(PyObject *self, PyObject *args)
 // register(): register a callback function that returns a statistics value
 //////////
 
-static String statsCallback(String objectName, UInt32 index, String metricName, PyObject *pFunc)
+static UInt64 statsCallback(String objectName, UInt32 index, String metricName, UInt64 _pFunc)
 {
+   PyObject *pFunc = (PyObject*)_pFunc;
    PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(sls)", objectName.c_str(), index, metricName.c_str()));
 
-   if (!PyString_Check(pResult)) {
-      PyObject *pAsString = PyObject_Str(pResult);
-      if (!pAsString) {
-         fprintf(stderr, "Stats callback: return value must be (convertable into) string\n");
-         Py_XDECREF(pResult);
-         return "";
-      }
+   if (!PyLong_Check(pResult)) {
+      fprintf(stderr, "Stats callback: return value must be (convertable into) 64-bit unsigned integer\n");
       Py_XDECREF(pResult);
-      pResult = pAsString;
+      return 0;
    }
 
-   String val(PyString_AsString(pResult));
+   UInt64 val = PyLong_AsLongLong(pResult);
    Py_XDECREF(pResult);
 
    return val;
@@ -179,7 +175,7 @@ registerStats(PyObject *self, PyObject *args)
    }
    Py_INCREF(pFunc);
 
-   Sim()->getStatsManager()->registerMetric(new StatsMetricCallback(objectName, index, metricName, (StatsCallback)statsCallback, (void*)pFunc));
+   Sim()->getStatsManager()->registerMetric(new StatsMetricCallback(objectName, index, metricName, (StatsCallback)statsCallback, (UInt64)pFunc));
 
    Py_RETURN_NONE;
 }

@@ -32,7 +32,7 @@ const char db_insert_stmt_name[] = "INSERT INTO `names` (nameid, objectname, met
 const char db_insert_stmt_prefix[] = "INSERT INTO `prefixes` (prefixid, prefixname) VALUES (?, ?);";
 const char db_insert_stmt_value[] = "INSERT INTO `values` (prefixid, nameid, core, value) VALUES (?, ?, ?, ?);";
 
-UInt64 getWallclockTimeCallback(String objectName, UInt32 index, String metricName, void *arg)
+UInt64 getWallclockTimeCallback(String objectName, UInt32 index, String metricName, UInt64 arg)
 {
    struct timeval tv = {0,0};
    gettimeofday(&tv, NULL);
@@ -47,7 +47,7 @@ StatsManager::StatsManager()
 {
    init();
 
-   registerMetric(new StatsMetricCallback("time", 0, "walltime", getWallclockTimeCallback, (void*)NULL));
+   registerMetric(new StatsMetricCallback("time", 0, "walltime", getWallclockTimeCallback, 0));
 }
 
 StatsManager::~StatsManager()

@@ -39,13 +39,13 @@ template <class T> class StatsMetric : public StatsMetricBase
       }
 };
 
-typedef UInt64 (*StatsCallback)(String objectName, UInt32 index, String metricName, void *arg);
+typedef UInt64 (*StatsCallback)(String objectName, UInt32 index, String metricName, UInt64 arg);
 class StatsMetricCallback : public StatsMetricBase
 {
    public:
       StatsCallback func;
-      void *arg;
-      StatsMetricCallback(String _objectName, UInt32 _index, String _metricName, StatsCallback _func, void *_arg) :
+      UInt64 arg;
+      StatsMetricCallback(String _objectName, UInt32 _index, String _metricName, StatsCallback _func, UInt64 _arg) :
          StatsMetricBase(_objectName, _index, _metricName), func(_func), arg(_arg)
       {}
       virtual UInt64 recordMetric()
