@@ -17,7 +17,6 @@ class PeriodicStats:
     self.interval = long(interval * sim.util.Time.NS)
     self.next_interval = float('inf')
     self.in_roi = False
-    self.have_deleted = False
     sim.util.Every(self.interval, self.periodic, roi_only = True)
 
   def hook_roi_begin(self):
@@ -32,25 +31,13 @@ class PeriodicStats:
   def periodic(self, time, time_delta):
     if self.max_snapshots and self.num_snapshots > self.max_snapshots:
       self.num_snapshots /= 2
-      cursor = sim.stats.db.cursor()
       for t in range(self.interval, time, self.interval * 2):
-        prefixid = sim.stats.db.execute('SELECT prefixid FROM prefixes WHERE prefixname = ?', ('periodic-%d' % t,)).fetchall()
-        if prefixid:
-          cursor.execute('DELETE FROM prefixes WHERE prefixid = ?', (prefixid[0][0],))
-          cursor.execute('DELETE FROM `values` WHERE prefixid = ?', (prefixid[0][0],))
-      sim.stats.db.commit()
+        sim.util.db_delete('periodic-%d' % t)
       self.interval *= 2
-      self.have_deleted = True
 
     if time >= self.next_interval:
       self.num_snapshots += 1
       sim.stats.write('periodic-%d' % (self.num_snapshots * self.interval))
       self.next_interval += self.interval
-
-  def hook_sim_end(self):
-    if self.have_deleted:
-      # We have deleted entries from the database, reclaim free space now
-      sim.stats.db.cursor().execute('VACUUM')
-      sim.stats.db.commit()
 
 sim.util.register(PeriodicStats())

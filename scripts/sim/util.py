@@ -171,3 +171,22 @@ class EveryIns:
       self.icount_last = icount
 
       self.callback(icount, icount_delta)
+
+
+have_deleted_stats = False
+def db_delete(prefix):
+  global have_deleted_stats
+  cursor = sim.stats.db.cursor()
+  prefixid = sim.stats.db.execute('SELECT prefixid FROM prefixes WHERE prefixname = ?', (prefix,)).fetchall()
+  if prefixid:
+    cursor.execute('DELETE FROM prefixes WHERE prefixid = ?', (prefixid[0][0],))
+    cursor.execute('DELETE FROM `values` WHERE prefixid = ?', (prefixid[0][0],))
+  sim.stats.db.commit()
+  if not have_deleted_stats:
+    sim.hooks.register(sim.hooks.HOOK_SIM_END, db_delete_sim_end_vacuum)
+    have_deleted_stats = True
+
+def db_delete_sim_end_vacuum():
+  # We have deleted entries from the database, reclaim free space now
+  sim.stats.db.cursor().execute('VACUUM')
+  sim.stats.db.commit()
