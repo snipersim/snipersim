@@ -131,7 +131,7 @@ StatsManager::recordStats(String prefix)
    LOG_ASSERT_ERROR(m_db, "m_db not yet set up !?");
 
    // Allow lazily-maintained statistics to be updated
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_PRE_STAT_WRITE, 0);
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_PRE_STAT_WRITE, (UInt64)prefix.c_str());
 
    int res;
    int prefixid = ++m_prefixnum;

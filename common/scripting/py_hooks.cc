@@ -37,6 +37,13 @@ static SInt64 hookCallbackSubsecondTime(UInt64 pFunc, UInt64 argument)
    return hookCallbackResult(pResult);
 }
 
+static SInt64 hookCallbackString(UInt64 pFunc, UInt64 _argument)
+{
+   const char* argument = (const char*)_argument;
+   PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(s)", argument));
+   return hookCallbackResult(pResult);
+}
+
 static SInt64 hookCallbackMagicMarkerType(UInt64 pFunc, UInt64 _argument)
 {
    MagicServer::MagicMarkerType* argument = (MagicServer::MagicMarkerType*)_argument;
@@ -130,7 +137,6 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_SIM_END:
       case HookType::HOOK_ROI_BEGIN:
       case HookType::HOOK_ROI_END:
-      case HookType::HOOK_PRE_STAT_WRITE:
       case HookType::HOOK_APPLICATION_ROI_BEGIN:
       case HookType::HOOK_APPLICATION_ROI_END:
          Sim()->getHooksManager()->registerHook(type, hookCallbackNone, (UInt64)pFunc);
@@ -142,6 +148,9 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_APPLICATION_START:
       case HookType::HOOK_APPLICATION_EXIT:
          Sim()->getHooksManager()->registerHook(type, hookCallbackInt, (UInt64)pFunc);
+         break;
+      case HookType::HOOK_PRE_STAT_WRITE:
+         Sim()->getHooksManager()->registerHook(type, hookCallbackString, (UInt64)pFunc);
          break;
       case HookType::HOOK_MAGIC_MARKER:
       case HookType::HOOK_MAGIC_USER:
