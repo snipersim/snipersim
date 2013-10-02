@@ -13,7 +13,7 @@ class CpiData:
 
   def parse(self):
     ncores = int(self.config['general/total_cores'])
-    instrs = self.stats['performance_model.instruction_count']
+    instrs = self.stats['performance_model.instruction_count'] if sum(self.stats['performance_model.instruction_count']) else self.stats['core.instructions']
     try:
       times = self.stats['performance_model.elapsed_time']
       cycles_scale = self.stats['fs_to_cycles_cores']
@@ -25,13 +25,15 @@ class CpiData:
     time0_end = self.stats['global.time_end']
     times = [ self.stats['performance_model.elapsed_time_end'][core] - time0_begin for core in range(ncores) ]
 
-    if self.stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:
-      fastforward_scale = times[0] / (times[0] - self.stats['fastforward_performance_model.fastforwarded_time'][0])
-      times = [ t-f for t, f in zip(times, self.stats['fastforward_performance_model.fastforwarded_time']) ]
-    else:
-      fastforward_scale = 1.
+    # TODO: The below is needed for sampling. We're currently set up to work properly with the one-IPC model using in combination with --cache-only
+    #if self.stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:
+    #  fastforward_scale = times[0] / (times[0] - self.stats['fastforward_performance_model.fastforwarded_time'][0])
+    #  times = [ t-f for t, f in zip(times, self.stats['fastforward_performance_model.fastforwarded_time']) ]
+    #else:
+    #  fastforward_scale = 1.
     if 'performance_model.cpiFastforwardTime' in self.stats:
       del self.stats['performance_model.cpiFastforwardTime']
+    fastforward_scale = 1.
 
 
     data = collections.defaultdict(collections.defaultdict)
