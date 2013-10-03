@@ -7,11 +7,12 @@ class DefaultValue:
     return self.val
 
 # Parse sim.cfg, read from file or from ic.job_output(jobid, 'sim.cfg'), into a dictionary
-def parse_config(simcfg):
+def parse_config(simcfg, cfg = None):
   import ConfigParser, cStringIO
   cp = ConfigParser.ConfigParser()
   cp.readfp(cStringIO.StringIO(str(simcfg)))
-  cfg = {}
+  if not cfg:
+    cfg = {}
   for section in cp.sections():
     for key, value in sorted(cp.items(section)):
       # Remove comments at the end of a line

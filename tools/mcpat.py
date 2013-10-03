@@ -110,7 +110,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
 
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   if config:
-    results['config'].update(sniper_config.parse_config(file(config).read()))
+    results['config'] = sniper_config.parse_config(file(config).read(), results['config'])
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
   power, nuca_at_level = edit_XML(stats, results['results'], results['config'])
   power = map(lambda v: v[0], power)
