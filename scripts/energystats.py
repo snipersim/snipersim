@@ -10,11 +10,24 @@ Works by registering a PRE_STAT_WRITE hook, which, before a stats snapshot write
 
 import sys, os, sim
 
+
+def build_dvfs_table(tech):
+  # Build a table of (frequency, voltage) pairs.
+  # Frequencies should be from high to low, and end with zero (or the lowest possible frequency)
+  if tech == 22:
+    return [ (2000, 1.2), (1800, 1.1), (1500, 1.0), (1000, 0.8), (0, 0.6) ]
+  elif tech == 45:
+    return [ (2000, 1.6), (1800, 1.4), (1500, 1.2), (1000, 1.1), (0, 0.8) ]
+  else:
+    raise ValueError('No DVFS table available for %d nm technology node' % tech)
+
+
 class EnergyStats:
   def setup(self, args):
     self.name_last = None
     self.time_last = 0
     self.in_stats_write = False
+    self.dvfs_table = build_dvfs_table(int(sim.config.get('power/technology_node')))
     self.power = {}
     self.energy = {}
     for core in range(sim.config.ncores):
@@ -60,14 +73,40 @@ class EnergyStats:
       self.energy[key] = self.energy.get(key, 0) + long(time_delta * power)
     self.time_last = sim.stats.time()
 
+  def get_vdd_from_freq(self, f):
+    # Assume self.dvfs_table is sorted from highest frequency to lowest
+    for _f, _v in self.dvfs_table:
+      if f >= _f:
+        return _v
+    assert ValueError('Could not find a Vdd for invalid frequency %f' % f)
+
+  def gen_config(self, outputbase):
+    freq = [ sim.dvfs.get_frequency(core) for core in range(sim.config.ncores) ]
+    vdd = [ self.get_vdd_from_freq(f) for f in freq ]
+    configfile = outputbase+'.cfg'
+    cfg = open(configfile, 'w')
+    cfg.write('''
+[perf_model/core]
+frequency[] = %s
+[power]
+vdd[] = %s
+    ''' % (','.join(map(str, freq)), ','.join(map(str, vdd))))
+    cfg.close()
+    return configfile
+
   def run_power(self, name0, name1):
     outputbase = os.path.join(sim.config.output_dir, 'energystats-temp')
-    os.system('unset PYTHONHOME; %s -d %s -o %s --partial=%s:%s --no-graph --no-text' % (
+
+    configfile = self.gen_config(outputbase)
+
+    os.system('unset PYTHONHOME; %s -d %s -o %s -c %s --partial=%s:%s --no-graph --no-text' % (
       os.path.join(os.getenv('SNIPER_ROOT'), 'tools/mcpat.py'),
       sim.config.output_dir,
       outputbase,
+      configfile,
       name0, name1
     ))
+
     result = {}
     execfile(outputbase + '.py', {}, result)
     return result['power']
