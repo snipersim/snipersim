@@ -68,15 +68,15 @@ endif
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
-mcpat: mcpat/mcpatXeonCore.cache
-mcpat/mcpatXeonCore.cache:
+mcpat: mcpat/mcpat-1.0
+mcpat/mcpat-1.0:
 ifeq ($(SHOW_COMPILE),)
 	@echo '[DOWNLO] McPAT'
 	@mkdir -p mcpat
-	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat.tgz" | tar xz -C mcpat
+	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 else
 	mkdir -p mcpat
-	wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat.tgz" | tar xz -C mcpat
+	wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 endif
 endif
 

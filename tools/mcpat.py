@@ -70,12 +70,12 @@ def mcpat_bin():
     suffix = '.cache'
   else:
     suffix = ''
-  bin = os.path.join(mcpatdir, 'mcpatXeonCore%s' % suffix)
+  bin = os.path.join(mcpatdir, 'mcpat-1.0%s' % suffix)
   if os.path.exists(bin):
     # Fancy McPAT versions haven't been downloaded yet, use the plain old one
     return bin
   else:
-    os.path.join(mcpatdir, 'mcpatXeonCore')
+    os.path.join(mcpatdir, 'mcpat-1.0')
 
 def mcpat_run(inputfile, outputfile):
   os.system("LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%s %s -print_level 5 -opt_for_clk 1 -infile %s > %s" % \
@@ -1072,6 +1072,8 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
 ###################################################################################################################
 #------------------------------------------------------------------------------------------------------------------------
   template.append(["\t\t\t<!--**********************************************************************-->",""])
+  # system.mem is no longer valid for McPAT 1.0 (it wasn't used anyway, we have our own DRAM power model above)
+  '''
   template.append(["\t\t<component id=\"system.mem\" name=\"mem\">",""])
   template.append(["\t\t\t<!-- Main memory property -->",""])
   template.append(["\t\t\t<param name=\"mem_tech_node\" value=\"32\"/>",""])
@@ -1096,6 +1098,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t\t<stat name=\"memory_reads\" value=\"%i\"/>",["memory.reads","stat",-1]])             #get from STATS
   template.append(["\t\t\t<stat name=\"memory_writes\" value=\"%i\"/>",["memory.writes","stat",-1]])                                                    #get from STATS
   template.append(["\t\t\t</component>",""])
+  '''
   template.append(["\t\t<component id=\"system.mc\" name=\"mc\">",""])        #It is required to add this component, however we set number_mcs=0
   template.append(["\t\t\t<!-- current version of McPAT uses published values for base parameters of memory controller",""])
   template.append(["\t\t\timprovments on MC will be added in later versions. -->",""])
