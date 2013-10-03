@@ -22,6 +22,16 @@ def build_dvfs_table(tech):
     raise ValueError('No DVFS table available for %d nm technology node' % tech)
 
 
+class Power:
+  def __init__(self, static, dynamic):
+    self.s = static
+    self.d = dynamic
+  def __add__(self, v):
+    return Power(self.s + v.s, self.d + v.d)
+  def __sub__(self, v):
+    return Power(self.s - v.s, self.d - v.d)
+
+
 class EnergyStats:
   def setup(self, args):
     self.name_last = None
@@ -30,13 +40,14 @@ class EnergyStats:
     self.dvfs_table = build_dvfs_table(int(sim.config.get('power/technology_node')))
     self.power = {}
     self.energy = {}
-    for core in range(sim.config.ncores):
-      sim.stats.register('core', core, 'energy.static', self.get_stat)
-      sim.stats.register('core', core, 'energy.dynamic', self.get_stat)
-    sim.stats.register('processor', 0, 'energy.static', self.get_stat)
-    sim.stats.register('processor', 0, 'energy.dynamic', self.get_stat)
-    sim.stats.register('dram', 0, 'energy.static', self.get_stat)
-    sim.stats.register('dram', 0, 'energy.dynamic', self.get_stat)
+    for metric in ('energy-static', 'energy-dynamic'):
+      for core in range(sim.config.ncores):
+        sim.stats.register('core', core, metric, self.get_stat)
+        sim.stats.register('L1-I', core, metric, self.get_stat)
+        sim.stats.register('L1-D', core, metric, self.get_stat)
+        sim.stats.register('L2', core, metric, self.get_stat)
+      sim.stats.register('processor', 0, metric, self.get_stat)
+      sim.stats.register('dram', 0, metric, self.get_stat)
 
   def hook_pre_stat_write(self, prefix):
     if not self.in_stats_write:
@@ -55,22 +66,21 @@ class EnergyStats:
     return self.energy.get((objectName, index, metricName), 0L)
 
   def update_power(self, power):
-    def get_power_static(component):
-      return component['Subthreshold Leakage'] + component['Gate Leakage']
-    def get_power_dynamic(component):
-      return component['Peak Dynamic']
+    def get_power(component, prefix = ''):
+      return Power(component[prefix + 'Subthreshold Leakage'] + component[prefix + 'Gate Leakage'], component[prefix + 'Peak Dynamic'])
     for core in range(sim.config.ncores):
-      self.power[('core', core, 'energy.static')] = get_power_static(power['Core'][core])
-      self.power[('core', core, 'energy.dynamic')] = get_power_dynamic(power['Core'][core])
-    self.power[('processor', 0, 'energy.static')] = get_power_static(power['Processor'])
-    self.power[('processor', 0, 'energy.dynamic')] = get_power_dynamic(power['Processor'])
-    self.power[('dram', 0, 'energy.static')] = get_power_static(power['DRAM'])
-    self.power[('dram', 0, 'energy.dynamic')] = get_power_dynamic(power['DRAM'])
+      self.power[('L1-I', core)] = get_power(power['Core'][core], 'Instruction Fetch Unit/Instruction Cache/')
+      self.power[('L1-D', core)] = get_power(power['Core'][core], 'Load Store Unit/Data Cache/')
+      self.power[('L2',   core)] = get_power(power['Core'][core], 'L2/')
+      self.power[('core', core)] = get_power(power['Core'][core]) - (self.power[('L1-I', core)] + self.power[('L1-D', core)] + self.power[('L2', core)])
+    self.power[('processor', 0)] = get_power(power['Processor'])
+    self.power[('dram', 0)] = get_power(power['DRAM'])
 
   def update_energy(self):
     time_delta = sim.stats.time() - self.time_last
-    for key, power in self.power.items():
-      self.energy[key] = self.energy.get(key, 0) + long(time_delta * power)
+    for (component, core), power in self.power.items():
+      self.energy[(component, core, 'energy.static')] = self.energy.get((component, core, 'energy.static'), 0) + long(time_delta * power.s)
+      self.energy[(component, core, 'energy.dynamic')] = self.energy.get((component, core, 'energy.dynamic'), 0) + long(time_delta * power.d)
     self.time_last = sim.stats.time()
 
   def get_vdd_from_freq(self, f):
