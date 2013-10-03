@@ -105,14 +105,14 @@ all_names = buildstack.get_names(all_items)
 def get_all_names():
   return all_names
 
-def main(jobid, resultsdir, outputfile, powertype = 'dynamic', vdd = None, config = None, no_graph = False, partial = None, print_stack = True, return_data = False):
+def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no_graph = False, partial = None, print_stack = True, return_data = False):
   tempfile = outputfile + '.xml'
 
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   if config:
     results['config'].update(sniper_config.parse_config(file(config).read()))
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
-  power, nuca_at_level = edit_XML(stats, results['results'], results['config'], vdd)
+  power, nuca_at_level = edit_XML(stats, results['results'], results['config'])
   power = map(lambda v: v[0], power)
   file(tempfile, "w").write('\n'.join(power))
 
@@ -285,13 +285,10 @@ def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
   return buildstack.merge_items({ 0: data }, all_items, nocollapse = nocollapse)
 
 
-def edit_XML(statsobj, stats, cfg, vdd):
+def edit_XML(statsobj, stats, cfg):
   #param = res['param']         #do it separately
 
   ncores = int(cfg['general/total_cores'])
-
-  if not vdd and 'power/vdd' in cfg: # Vdd on command line overrides configuration file
-    vdd = float(cfg['power/vdd'])
   technology_node = int(cfg.get('power/technology_node', 45))
 
   l3_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
@@ -340,6 +337,7 @@ def edit_XML(statsobj, stats, cfg, vdd):
     cfg['perf_model/l%d_cache/cache_block_size'%l] = cfg['perf_model/l2_cache/cache_block_size']
     cfg['perf_model/l%d_cache/cache_size'%l] = cfg['perf_model/nuca/cache_size']
     cfg['perf_model/l%d_cache/writeback_time'%l] = 0
+    cfg['perf_model/l%d_cache/dvfs_domain'%l] = 'global'
     stats['L%d.loads'%l] = stats['nuca-cache.reads']
     stats['L%d.stores'%l] = stats['nuca-cache.writes']
     stats['L%d.load-misses'%l] = stats['nuca-cache.read-misses']
@@ -373,7 +371,7 @@ def edit_XML(statsobj, stats, cfg, vdd):
   DRAM_writes = int(stats['dram.writes'][0])
   #branch_misprediction = stats['branch_predictor.num-incorrect'][1]
 
-  template=readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node)
+  template=readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node)
   #for j in range(ncores):
   for i in xrange(len(template)-1):
     #for j in range(ncores):
@@ -381,7 +379,30 @@ def edit_XML(statsobj, stats, cfg, vdd):
         core = template[i][1][2]
       else:
         core = None
-      clock_Frequency  = float(sniper_config.get_config(cfg, 'perf_model/core/frequency', core))*1000
+      clock_core = float(sniper_config.get_config(cfg, 'perf_model/core/frequency', core))*1000
+      clock_global = float(sniper_config.get_config(cfg, 'perf_model/core/frequency'))*1000
+      if 'power/vdd' in cfg:
+        vdd_global = float(sniper_config.get_config(cfg, 'power/vdd'))
+        vdd_core = float(sniper_config.get_config(cfg, 'power/vdd', core))
+      else:
+        vdd_global = 0
+        vdd_core = 0
+      def get_clock(component):
+        domain = sniper_config.get_config(cfg, component+'/dvfs_domain', core)
+        if domain == 'core':
+          return clock_core
+        elif domain == 'global':
+          return clock_global
+        else:
+          raise ValueError('Unknown DVFS domain %s' % domain)
+      def get_vdd(component):
+        domain = sniper_config.get_config(cfg, component+'/dvfs_domain', core)
+        if domain == 'core':
+          return vdd_core
+        elif domain == 'global':
+          return vdd_global
+        else:
+          raise ValueError('Unknown DVFS domain %s' % domain)
       issue_width = long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core))
       peak_issue_width = long(long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
       ALU_per_core = peak_issue_width
@@ -422,8 +443,10 @@ def edit_XML(statsobj, stats, cfg, vdd):
           # hardcoded
           template[i][0] = template[i][0] % template[i][1][0]
         elif template[i][1][1]=="cfg":
-          if template[i][1][0]=="clockFrequency":
-            template[i][0] = template[i][0] % clock_Frequency
+          if template[i][1][0]=="core_clock":
+            template[i][0] = template[i][0] % clock_core
+          elif template[i][1][0]=="core_vdd":
+            template[i][0] = template[i][0] % vdd_core
           elif template[i][1][0]=="issue_width":
             template[i][0] = template[i][0] % issue_width
           elif template[i][1][0]=="peak_issue_width":
@@ -434,6 +457,20 @@ def edit_XML(statsobj, stats, cfg, vdd):
             template[i][0] = template[i][0] % window_size
           elif template[i][1][0]=="machineType":
             template[i][0] = template[i][0] % machineType
+          elif template[i][1][0]=="L2_clock":
+            template[i][0] = template[i][0] % get_clock('perf_model/l2_cache')
+          elif template[i][1][0]=="L3_clock":
+            template[i][0] = template[i][0] % get_clock('perf_model/l3_cache')
+          elif template[i][1][0]=="NoC_clock":
+            template[i][0] = template[i][0] % clock_global
+          elif template[i][1][0]=="L2_vdd":
+            template[i][0] = template[i][0] % get_vdd('perf_model/l2_cache')
+          elif template[i][1][0]=="L3_vdd":
+            template[i][0] = template[i][0] % get_vdd('perf_model/l3_cache')
+          elif template[i][1][0]=="NoC_vdd":
+            template[i][0] = template[i][0] % vdd_global
+          else:
+            raise ValueError('Unknown cfg template %s' % template[i][1][0])
         elif template[i][1][1]=="stat":
           cores_l2s = range(l2_cacheSharedCores*core, min(ncores, l2_cacheSharedCores*core+l2_cacheSharedCores))
           cores_l3s = range(l3_cacheSharedCores*core, min(ncores, l3_cacheSharedCores*core+l3_cacheSharedCores))
@@ -653,6 +690,8 @@ def edit_XML(statsobj, stats, cfg, vdd):
             template[i][0] = template[i][0] % ('L3.store-misses' in stats and sum([ stats['L3.store-misses'][c] for c in cores_l3s ]) or 0)
           elif template[i][1][0]=="L3_duty_cycle":
             template[i][0] = template[i][0] % min(1,('L3.loads' in stats and sum([ stats['L3.loads'][c] + stats['L3.stores'][c] for c in cores_l3s ]) / float(max_system_cycles) or 0))
+          else:
+            raise ValueError('Unknown stat template %s' % template[i][1][0])
         elif template[i][1][1]=="comb":
           if template[i][1][0]=="icache_cfg":
             iconf=[]
@@ -701,15 +740,13 @@ def edit_XML(statsobj, stats, cfg, vdd):
             template[i][0] = template[i][0] % tuple(l3conf)
   return template, nuca_at_level
 #----------
-def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
+def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
   Count = 0
   template=[]
   template.append(["<?xml version=\"1.0\" ?>",""])
   template.append(["<!-- McPAT interface-->",""])
   template.append(["<component id=\"root\" name=\"root\">",""])
   template.append(["\t<component id=\"system\" name=\"system\">",""])
-  if vdd:
-    template.append(["\t\t<param name=\"vdd\" value=\"%f\"/>" % vdd,""])
   template.append(["\t\t<!--McPAT will skip the components if number is set to 0 -->",""])
   template.append(["\t\t<param name=\"number_of_cores\" value=\"%i\"/>"%ncores,""])
   template.append(["\t\t<param name=\"number_of_L1Directories\" value=\"0\"/>",""])
@@ -726,7 +763,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t<param name=\"homogeneous_ccs\" value=\"1\"/><!--cache coherece hardware -->",""])
   template.append(["\t\t<param name=\"homogeneous_NoCs\" value=\"1\"/>",""])
   template.append(["\t\t<param name=\"core_tech_node\" value=\"%u\"/><!-- nm -->"%technology_node,""])
-  template.append(["\t\t<param name=\"target_core_clockrate\" value='%i'/><!--MHz -->",["clockFrequency","cfg",None]]) #CFG
+  template.append(["\t\t<param name=\"target_core_clockrate\" value='%i'/><!--MHz -->",["core_clock","cfg",None]]) #CFG
   template.append(["\t\t<param name=\"temperature\" value=\"330\"/> <!-- Kelvin -->",""])
   template.append(["\t\t<param name=\"number_cache_levels\" value=\"3\"/>",""])
   template.append(["\t\t<param name=\"interconnect_projection_type\" value=\"0\"/><!--0: agressive wire technology; 1: conservative wire technology -->",""])
@@ -749,7 +786,8 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t<component id=\"system.core%i\" name=\"core%i\">"%(iCount,iCount),""])  #check how this can be done/
     template.append(["\t\t<!-- Core property -->",""])
 #       template.append(["\t\t\t<param name=\"clock_rate\" value=\"2660\"/>",""])       #CFG
-    template.append(["\t\t\t<param name=\"clock_rate\" value='%i'/>",["clockFrequency","cfg",iCount]])   #CFG
+    template.append(["\t\t\t<param name=\"clock_rate\" value='%i'/>",["core_clock","cfg",iCount]])   #CFG
+    template.append(["\t\t\t<param name=\"vdd\" value=\"%f\"/><!-- 0 means using ITRS default vdd -->",["core_vdd","cfg",iCount]])
     template.append(["\t\t\t<param name=\"opt_local\" value=\"1\"/>",""])
     template.append(["\t\t\t<param name=\"instruction_length\" value=\"32\"/>",""])
     template.append(["\t\t\t<param name=\"opcode_width\" value=\"16\"/>",""])
@@ -986,7 +1024,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t\t<param name=\"Directory_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<param name=\"Dir_config\" value=\"4096,2,0,1,100,100, 8\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"8, 8, 8, 8\"/>",""])
-    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
+    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["core_clock","cfg",iCount]])
     template.append(["\t\t\t\t<param name=\"ports\" value=\"1,1,1\"/>",""])
     template.append(["\t\t\t\t<param name=\"device_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<!-- altough there are multiple access types, Performance simulator needs to cast them into reads or writes         e.g. the invalidates can be considered as writes -->",""])
@@ -1002,7 +1040,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t\t<param name=\"Directory_type\" value=\"1\"/>",""])
     template.append(["\t\t\t\t<param name=\"Dir_config\" value=\"1048576,16,16,1,2, 100\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"8, 8, 8, 8\"/>",""])
-    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
+    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["core_clock","cfg",iCount]])
     template.append(["\t\t\t\t<param name=\"ports\" value=\"1,1,1\"/>",""])
     template.append(["\t\t\t\t<param name=\"device_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<!-- altough there are multiple access types, Performance simulator needs to cast them into reads or writes         e.g. the invalidates can be considered as writes -->",""])
@@ -1018,7 +1056,8 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t\t<param name=\"L2_config\" value=\"%i,%i,%i,%i,%i,%i, %i, %i\"/>",["L2_config","comb",iCount]])
     #template.append(["\t\t\t\t<param name=\"L2_config\" value=\"6291456,64, 16, 8, 8, 23, 32, 1\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"16, 16, 16, 16\"/>",""])
-    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
+    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["L2_clock","cfg",iCount]])
+    template.append(["\t\t\t\t<param name=\"vdd\" value=\"%f\"/><!-- 0 means using ITRS default vdd -->",["L2_vdd","cfg",iCount]])
     template.append(["\t\t\t\t<param name=\"ports\" value=\"1,1,1\"/>",""])
     template.append(["\t\t\t\t<param name=\"device_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<stat name=\"read_accesses\" value=\"%i\"/>",["L2.read_accesses","stat",iCount]])
@@ -1034,7 +1073,8 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
     template.append(["\t\t\t\t<param name=\"L3_config\" value=\"%i,%i,%i, %i, %i, %i,%i\"/>",["L3_config","comb",iCount]])
     #template.append(["\t\t\t<param name=\"L3_config\" value=\"16777216 , 64 ,16, 16, 16, 100,1\"/>",""])
     template.append(["\t\t<!-- the parameters are capacity,block_width, associativity,bank, throughput w.r.t. core clock, latency w.r.t. core clock,-->",""])
-    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"850\"/>",""])
+    template.append(["\t\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["L3_clock","cfg",iCount]])
+    template.append(["\t\t\t\t<param name=\"vdd\" value=\"%f\"/><!-- 0 means using ITRS default vdd -->",["L3_vdd","cfg",iCount]])
     template.append(["\t\t\t\t<param name=\"ports\" value=\"1,1,1\"/>",""])
     template.append(["\t\t\t\t<param name=\"device_type\" value=\"0\"/>",""])
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"16, 16, 16, 16\"/>",""])
@@ -1052,7 +1092,8 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t\t<!--**********************************************************************-->",""])
 #template.append(["\t\t<component id=\"system.NoC%i\" name=\"noc%i\">"%(iCount,iCount),""])
   template.append(["\t\t<component id=\"system.NoC0\" name=\"noc0\">",""])
-  template.append(["\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["clockFrequency","cfg",iCount]])
+  template.append(["\t\t\t<param name=\"clockrate\" value=\"%i\"/>",["NoC_clock","cfg",iCount]])
+  template.append(["\t\t\t<param name=\"vdd\" value=\"%f\"/><!-- 0 means using ITRS default vdd -->",["NoC_vdd","cfg",iCount]])
 #template.append(["\t\t\t<param name=\"clock_rate\" value='%i'/>",["clockFrequency","cfg"]])   #CFG
   template.append(["\t\t\t<param name=\"type\" value=\"%d\"/>",["NoC.type","stat",-1]])
   template.append(["\t\t\t<!--0:bus, 1:NoC , for bus no matter how many nodes sharing the bus at each time only one node can send req -->",""])
@@ -1103,6 +1144,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t\t<!-- current version of McPAT uses published values for base parameters of memory controller",""])
   template.append(["\t\t\timprovments on MC will be added in later versions. -->",""])
   template.append(["\t\t\t<param name=\"mc_clock\" value=\"200\"/><!--MHz-->",""])
+  template.append(["\t\t\t<param name=\"vdd\" value=\"0\"/><!-- 0 means using ITRS default vdd -->",""])
   template.append(["\t\t\t<param name=\"peak_transfer_rate\" value=\"3200\"/>",""])
   template.append(["\t\t\t<param name=\"block_size\" value=\"64\"/><!--B-->",""])
   template.append(["\t\t\t<param name=\"number_mcs\" value=\"0\"/>",""])
@@ -1126,6 +1168,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t<component id=\"system.niu\" name=\"niu\">",""])
   template.append(["\t\t\t<param name=\"type\" value=\"0\"/> <!-- 1: low power; 0 high performance -->",""])
   template.append(["\t\t\t<param name=\"clockrate\" value=\"350\"/>",""])
+  template.append(["\t\t\t<param name=\"vdd\" value=\"0\"/><!-- 0 means using ITRS default vdd -->",""])
   template.append(["\t\t\t<param name=\"number_units\" value=\"0\"/> <!-- unlike PCIe and memory controllers, each Ethernet controller only have one port -->",""])
   template.append(["\t\t\t<stat name=\"duty_cycle\" value=\"1.0\"/> <!-- achievable max load <= 1.0 -->",""])
   template.append(["\t\t\t<stat name=\"total_load_perc\" value=\"0.7\"/> <!-- ratio of total achived load to total achivable bandwidth  -->",""])
@@ -1137,6 +1180,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t\t<param name=\"type\" value=\"0\"/> <!-- 1: low power; 0 high performance -->",""])
   template.append(["\t\t\t<param name=\"withPHY\" value=\"1\"/>",""])
   template.append(["\t\t\t<param name=\"clockrate\" value=\"350\"/>",""])
+  template.append(["\t\t\t<param name=\"vdd\" value=\"0\"/><!-- 0 means using ITRS default vdd -->",""])
   template.append(["\t\t\t<param name=\"number_units\" value=\"0\"/>",""])
   template.append(["\t\t\t<param name=\"num_channels\" value=\"8\"/> <!-- 2 ,4 ,8 ,16 ,32 -->",""])
   template.append(["\t\t\t<stat name=\"duty_cycle\" value=\"1.0\"/> <!-- achievable max load <= 1.0 -->",""])
@@ -1148,6 +1192,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
   template.append(["\t\t\t<param name=\"type\" value=\"1\"/> <!-- 1: low power; 0 high performance -->",""])
   template.append(["\t\t\t<param name=\"withPHY\" value=\"1\"/>",""])
   template.append(["\t\t\t<param name=\"peak_transfer_rate\" value=\"200\"/><!--Per controller sustainable reak rate MB/S -->",""])
+  template.append(["\t\t\t<param name=\"vdd\" value=\"0\"/><!-- 0 means using ITRS default vdd -->",""])
   template.append(["\t\t\t<stat name=\"duty_cycle\" value=\"1.0\"/> <!-- achievable max load <= 1.0 -->",""])
   template.append(["\t\t\t<stat name=\"total_load_perc\" value=\"0.7\"/> <!-- Percentage of total achived load to total achivable bandwidth  -->",""])
   template.append(["\t\t</component>",""])
@@ -1164,14 +1209,13 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, vdd, technology_node):
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-v <Vdd>] [-c <override-config>] [-o <output-file (power{.png,.txt,.py})>]' % '|'.join(powertypes)
+    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-c <override-config>] [-o <output-file (power{.png,.txt,.py})>]' % '|'.join(powertypes)
     sys.exit(-1)
 
   jobid = 0
   resultsdir = '.'
   powertypes = ['dynamic', 'rundynamic', 'static', 'total', 'area']
   powertype = 'dynamic'
-  vdd = None
   config = None
   outputfile = 'power'
   no_graph = False
@@ -1179,7 +1223,7 @@ if __name__ == '__main__':
   partial = None
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:t:c:v:d:o:", [ 'no-graph', 'no-text', 'partial=' ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:t:c:d:o:", [ 'no-graph', 'no-text', 'partial=' ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -1195,8 +1239,6 @@ if __name__ == '__main__':
         sys.stderr.write('Power type %s not supported\n' % a)
         usage()
       powertype = a
-    if o == '-v':
-      vdd = float(a)
     if o == '-c':
       config = a
     if o == '-o':
@@ -1212,4 +1254,4 @@ if __name__ == '__main__':
       partial = a.split(':')
 
 
-  main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, vdd = vdd, config = config, outputfile = outputfile, no_graph = no_graph, print_stack = not no_text, partial = partial)
+  main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, config = config, outputfile = outputfile, no_graph = no_graph, print_stack = not no_text, partial = partial)
