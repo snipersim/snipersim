@@ -3,19 +3,20 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
-  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [-d <resultsdir (default: .)>]'
+  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [--through-time|tt <statname>]  [-d <resultsdir (default: .)>]'
 
 
 jobid = 0
 resultsdir = '.'
 partial = None
+through_time = None
 do_list = False
 do_topo = False
 do_markers = False
 do_stats = True
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmt", [ 'list', 'markers', 'topology', 'partial=' ])
+  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmt", [ 'list', 'markers', 'topology', 'partial=', 'tt=', 'through-time=' ])
 except getopt.GetoptError, e:
   print e
   usage()
@@ -33,6 +34,8 @@ for o, a in opts:
       sys.stderr.write('--partial=<from>:<to>\n')
       usage()
     partial = a.split(':')
+  if o in ('--tt', '--through-time'):
+    through_time = a.split(',')
   if o in ('-l', '--list'):
     do_list = True
     do_stats = False
@@ -78,7 +81,6 @@ if do_markers:
 
 
 if do_stats:
-  results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
 
   def print_result(key, value):
     if type(value) is dict:
@@ -91,6 +93,27 @@ if do_stats:
       else:
         print value
 
-  with sniper_lib.OutputToLess():
-    for key, value in sorted(results['results'].items(), key = lambda (key, value): key.lower()):
-      print_result(key, value)
+  if through_time:
+    import sniper_stats
+    stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+    names = stats.read_metricnames()
+    metrics = through_time
+    nameids = dict([ ('%s.%s' % (objectname, metricname), nameid) for nameid, (objectname, metricname) in names.items() if '%s.%s' % (objectname, metricname) in metrics ])
+    prefixes = stats.get_snapshots()
+    prefixes_len = max(map(len, prefixes))
+    data = dict([ (prefix, stats.read_snapshot(prefix, metrics)) for prefix in prefixes ])
+
+    with sniper_lib.OutputToLess():
+      for metric in metrics:
+        print '==', metric, '=='
+        for prefix in prefixes:
+          v = data[prefix][nameids[metric]]
+          v = [ v.get(i, 0) for i in range(max(v.keys())+1) ]
+          print_result('%-*s' % (prefixes_len, prefix), v)
+
+  else:
+    results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
+
+    with sniper_lib.OutputToLess():
+      for key, value in sorted(results['results'].items(), key = lambda (key, value): key.lower()):
+        print_result(key, value)
