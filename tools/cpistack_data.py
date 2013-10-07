@@ -28,23 +28,28 @@ class CpiData:
     # TODO: The below is needed for sampling. We're currently set up to work properly with the one-IPC model using in combination with --cache-only
     #if self.stats.get('fastforward_performance_model.fastforwarded_time', [0])[0]:
     #  fastforward_scale = times[0] / (times[0] - self.stats['fastforward_performance_model.fastforwarded_time'][0])
+    #  fastforward_extrapolate = True
     #  times = [ t-f for t, f in zip(times, self.stats['fastforward_performance_model.fastforwarded_time']) ]
     #else:
     #  fastforward_scale = 1.
+    #  fastforward_extrapolate = False
     if 'performance_model.cpiFastforwardTime' in self.stats:
       del self.stats['performance_model.cpiFastforwardTime']
     fastforward_scale = 1.
+    fastforward_extrapolate = False
 
 
-    data = collections.defaultdict(collections.defaultdict)
+    data = collections.defaultdict(lambda: collections.defaultdict(long))
     for key, values in self.stats.items():
       if '.cpi' in key:
         if key.startswith('thread.'):
           # Ignore per-thread statistics
           continue
+        if key.startswith('fastforward_timer.') and fastforward_extrapolate:
+          continue
         key = key.split('.cpi')[1]
         for core in range(ncores):
-          data[core][key] = values[core] * cycles_scale[core]
+          data[core][key] += values[core] * cycles_scale[core]
 
     if not data:
       raise ValueError('No .cpi data found, simulation did not use the interval core model')
