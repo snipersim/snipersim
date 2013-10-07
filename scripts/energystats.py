@@ -35,6 +35,7 @@ class Power:
 class EnergyStats:
   def setup(self, args):
     self.name_last = None
+    self.prefix_last = None
     self.time_last = 0
     self.in_stats_write = False
     self.dvfs_table = build_dvfs_table(int(sim.config.get('power/technology_node')))
@@ -51,16 +52,36 @@ class EnergyStats:
 
   def hook_pre_stat_write(self, prefix):
     if not self.in_stats_write:
-      if self.name_last and sim.stats.time() > self.time_last:
-        if not self.power or (sim.stats.time() - self.time_last >= 1 * sim.util.Time.US):
-          self.in_stats_write = True
-          sim.stats.write('energystats-temp')
-          self.in_stats_write = False
-          power = self.run_power(self.name_last, 'energystats-temp')
-          sim.util.db_delete('energystats-temp')
-          self.update_power(power)
-        self.update_energy()
-      self.name_last = prefix
+      self.update()
+      self.prefix_last = prefix
+
+  def hook_sim_end(self):
+    if self.name_last:
+      sim.util.db_delete(self.name_last)
+
+  def update(self):
+    if sim.stats.time() == self.time_last:
+      # Time did not advance: don't recompute
+      return
+    if not self.power or (sim.stats.time() - self.time_last >= 1 * sim.util.Time.US):
+      # Time advanced significantly, or no power result yet: compute power
+      #   Save snapshot
+      current = 'energystats-temp%s' % ('B' if self.name_last and self.name_last[-1] == 'A' else 'A')
+      self.in_stats_write = True
+      sim.stats.write(current)
+      self.in_stats_write = False
+      #   If we also have a previous snapshot: update power
+      last = self.name_last or self.prefix_last
+      if last:
+        power = self.run_power(last, current)
+        self.update_power(power)
+      #   Clean up previous last
+      if self.name_last:
+        sim.util.db_delete(self.name_last)
+      #   Update new last
+      self.name_last = current
+    # Increment energy
+    self.update_energy()
 
   def get_stat(self, objectName, index, metricName):
     return self.energy.get((objectName, index, metricName), 0L)
@@ -79,8 +100,8 @@ class EnergyStats:
   def update_energy(self):
     time_delta = sim.stats.time() - self.time_last
     for (component, core), power in self.power.items():
-      self.energy[(component, core, 'energy.static')] = self.energy.get((component, core, 'energy.static'), 0) + long(time_delta * power.s)
-      self.energy[(component, core, 'energy.dynamic')] = self.energy.get((component, core, 'energy.dynamic'), 0) + long(time_delta * power.d)
+      self.energy[(component, core, 'energy-static')] = self.energy.get((component, core, 'energy-static'), 0) + long(time_delta * power.s)
+      self.energy[(component, core, 'energy-dynamic')] = self.energy.get((component, core, 'energy-dynamic'), 0) + long(time_delta * power.d)
     self.time_last = sim.stats.time()
 
   def get_vdd_from_freq(self, f):
@@ -121,4 +142,6 @@ vdd[] = %s
     execfile(outputbase + '.py', {}, result)
     return result['power']
 
-sim.util.register(EnergyStats())
+# All scripts execute in global scope, so other scripts will be able to call energystats.update()
+energystats = EnergyStats()
+sim.util.register(energystats)
