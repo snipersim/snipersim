@@ -48,50 +48,49 @@ if args:
   sys.exit(-1)
 
 
-with sniper_lib.OutputToLess():
+if do_list:
+  import sniper_stats
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+  print ', '.join(stats.get_snapshots())
 
-  if do_list:
-    import sniper_stats
-    stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
-    print ', '.join(stats.get_snapshots())
+if do_topo:
+  import sniper_stats
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+  for t in stats.get_topology():
+    print ', '.join(map(str,t))
 
-  if do_topo:
-    import sniper_stats
-    stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
-    for t in stats.get_topology():
-      print ', '.join(map(str,t))
+if do_markers:
+  import sniper_stats
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+  try:
+    markers = stats.get_markers()
+  except Exception, e:
+    print >> sys.stderr, e
+    print >> sys.stderr, "--markers could not be fetched"
+    sys.exit(1)
 
-  if do_markers:
-    import sniper_stats
-    stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
-    try:
-      markers = stats.get_markers()
-    except Exception, e:
-      print >> sys.stderr, e
-      print >> sys.stderr, "--markers could not be fetched"
-      sys.exit(1)
+  for timestamp, core, thread, value0, value1, description in markers:
+    if description:
+      marker = 'a = %3d,  str = "%s"' % (value0, description)
+    else:
+      marker = 'a = %3d,  b = %3d' % (value0, value1)
+    print '%9ld ns: core(%2d) thread(%2d)  %s' % (timestamp / 1e6, core, thread, marker)
 
-    for timestamp, core, thread, value0, value1, description in markers:
-      if description:
-        marker = 'a = %3d,  str = "%s"' % (value0, description)
+
+if do_stats:
+  results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
+
+  def print_result(key, value):
+    if type(value) is dict:
+      for _key, _value in sorted(value.items()):
+        print_result(key+'.'+_key, _value)
+    else:
+      print key, '=',
+      if type(value) is list:
+        print ', '.join(map(str, value))
       else:
-        marker = 'a = %3d,  b = %3d' % (value0, value1)
-      print '%9ld ns: core(%2d) thread(%2d)  %s' % (timestamp / 1e6, core, thread, marker)
+        print value
 
-
-  if do_stats:
-    results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
-
-    def print_result(key, value):
-      if type(value) is dict:
-        for _key, _value in sorted(value.items()):
-          print_result(key+'.'+_key, _value)
-      else:
-        print key, '=',
-        if type(value) is list:
-          print ', '.join(map(str, value))
-        else:
-          print value
-
+  with sniper_lib.OutputToLess():
     for key, value in sorted(results['results'].items(), key = lambda (key, value): key.lower()):
       print_result(key, value)
