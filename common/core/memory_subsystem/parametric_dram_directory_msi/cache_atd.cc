@@ -18,6 +18,8 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 cache_size, U
    , loads_destructive(0)
    , stores_destructive(0)
 {
+   m_set_info = CacheSet::createCacheSetInfo(name, configName, core_id, replacement_policy, associativity);
+
    registerStatsMetric(name, core_id, "loads", &loads);
    registerStatsMetric(name, core_id, "stores", &stores);
    registerStatsMetric(name, core_id, "load-misses", &load_misses);
@@ -34,7 +36,7 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 cache_size, U
    {
       for(UInt64 set_index = 0; set_index < num_sets; ++set_index)
       {
-         m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0);
+         m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0, m_set_info);
       }
    }
    else if (sampling == "2^n+1")
@@ -42,7 +44,7 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 cache_size, U
       // Sample sets at indexes 2^N+1
       for(UInt64 set_index = 1; set_index < num_sets - 1; set_index <<= 1)
       {
-         m_sets[set_index+1] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0);
+         m_sets[set_index+1] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0, m_set_info);
       }
    }
    else if (sampling == "random")
@@ -59,7 +61,7 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 cache_size, U
          UInt64 set_index = rng_next(state) % num_sets;
          if (m_sets.count(set_index) == 0)
          {
-            m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0);
+            m_sets[set_index] = CacheSet::createCacheSet(name, core_id, replacement_policy, CacheBase::PR_L1_CACHE, associativity, 0, m_set_info);
             --num_atds;
          }
          LOG_ASSERT_ERROR(++num_attempts < 10 * num_sets, "Cound not find unique ATD sets even after many attempts");
@@ -69,6 +71,12 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 cache_size, U
    {
       LOG_PRINT_ERROR("Invalid ATD sampling method %s", sampling.c_str());
    }
+}
+
+ATD::~ATD()
+{
+   if (m_set_info)
+      delete m_set_info;
 }
 
 bool ATD::isSampledSet(UInt32 set_index)
