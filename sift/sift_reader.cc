@@ -345,14 +345,10 @@ bool Sift::Reader::Read(Instruction &inst)
                uint16_t type; EmuRequest req;
                input->read(reinterpret_cast<char*>(&type), sizeof(uint16_t));
                input->read(reinterpret_cast<char*>(&req), rec.Other.size - sizeof(uint16_t));
-               bool result; EmuReply res;
+               bool result = false; EmuReply res = {};
                if (handleEmuFunc)
                {
                   result = handleEmuFunc(handleEmuArg, EmuType(type), req, res);
-               }
-               else
-               {
-                  result = false;
                }
                sendEmuResponse(result, res);
                break;
