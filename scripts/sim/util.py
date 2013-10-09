@@ -174,7 +174,7 @@ class EveryIns:
 
 
 have_deleted_stats = False
-def db_delete(prefix):
+def db_delete(prefix, in_sim_end = False):
   global have_deleted_stats
   cursor = sim.stats.db.cursor()
   prefixid = sim.stats.db.execute('SELECT prefixid FROM prefixes WHERE prefixname = ?', (prefix,)).fetchall()
@@ -183,8 +183,13 @@ def db_delete(prefix):
     cursor.execute('DELETE FROM `values` WHERE prefixid = ?', (prefixid[0][0],))
   sim.stats.db.commit()
   if not have_deleted_stats:
-    sim.hooks.register(sim.hooks.HOOK_SIM_END, db_delete_sim_end_vacuum)
-    have_deleted_stats = True
+    if in_sim_end:
+      # We shouldn't be registering a new sim_end hook while in sim_end
+      # (this will crash HooksManager), but we can make the call directly
+      db_delete_sim_end_vacuum()
+    else:
+      sim.hooks.register(sim.hooks.HOOK_SIM_END, db_delete_sim_end_vacuum)
+      have_deleted_stats = True
 
 def db_delete_sim_end_vacuum():
   # We have deleted entries from the database, reclaim free space now

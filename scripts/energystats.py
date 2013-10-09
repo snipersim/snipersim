@@ -57,7 +57,7 @@ class EnergyStats:
 
   def hook_sim_end(self):
     if self.name_last:
-      sim.util.db_delete(self.name_last)
+      sim.util.db_delete(self.name_last, True)
 
   def update(self):
     if sim.stats.time() == self.time_last:
