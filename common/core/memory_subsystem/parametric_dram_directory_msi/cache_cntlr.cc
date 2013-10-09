@@ -99,7 +99,7 @@ CacheMasterCntlr::createATDs(String name, String configName, core_id_t master_co
    UInt32 associativity, UInt32 block_size, String replacement_policy, CacheBase::hash_t hash_function)
 {
    // Instantiate an ATD for each sharing core
-   for(UInt32 core_id = 0; core_id < shared_cores; ++core_id)
+   for(UInt32 core_id = master_core_id; core_id < master_core_id + shared_cores; ++core_id)
    {
       m_atds.push_back(new ATD(name + ".atd", configName, core_id, size, associativity, block_size, replacement_policy, hash_function));
    }
