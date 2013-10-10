@@ -350,7 +350,7 @@ namespace ParametricDramDirectoryMSI
                ShmemPerfModel* shmem_perf_model,
                bool is_last_level_cache);
 
-         ~CacheCntlr();
+         virtual ~CacheCntlr();
 
          Cache* getCache() { return m_master->m_cache; }
          Lock& getLock() { return m_master->m_cache_lock; }
