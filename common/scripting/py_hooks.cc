@@ -4,6 +4,7 @@
 #include "hooks_manager.h"
 #include "magic_server.h"
 #include "syscall_model.h"
+#include "sim_api.h"
 
 static SInt64 hookCallbackResult(PyObject *pResult)
 {
@@ -185,8 +186,22 @@ registerHook(PyObject *self, PyObject *args)
    Py_RETURN_NONE;
 }
 
+static PyObject *
+triggerHookMagicUser(PyObject *self, PyObject *args)
+{
+   UInt64 a, b;
+
+   if (!PyArg_ParseTuple(args, "ll", &a, &b))
+      return NULL;
+
+   UInt64 res = Sim()->getMagicServer()->Magic_unlocked(INVALID_THREAD_ID, INVALID_CORE_ID, SIM_CMD_USER, a, b);
+
+   return PyInt_FromLong(res);
+}
+
 static PyMethodDef PyHooksMethods[] = {
    {"register",  registerHook, METH_VARARGS, "Register callback function to a Sniper hook."},
+   {"trigger_magic_user", triggerHookMagicUser, METH_VARARGS, "Trigger HOOK_MAGIC_USER hook."},
    {NULL, NULL, 0, NULL} /* Sentinel */
 };
 
