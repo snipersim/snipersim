@@ -42,7 +42,7 @@ Register a callback for a given SimUser command.
 """
 
 def register_command(mycmd, func):
-  def callback(thread, core, cmd, arg):
+  def callback(thread, core, cmd, arg, string):
     if cmd == mycmd:
       return func(core, arg)
   sim.hooks.register(sim.hooks.HOOK_MAGIC_USER, callback)
