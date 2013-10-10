@@ -15,9 +15,9 @@ def build_dvfs_table(tech):
   # Build a table of (frequency, voltage) pairs.
   # Frequencies should be from high to low, and end with zero (or the lowest possible frequency)
   if tech == 22:
-    return [ (2000, 1.2), (1800, 1.1), (1500, 1.0), (1000, 0.8), (0, 0.6) ]
+    return [ (2000, 1.0), (1800, 0.9), (1500, 0.8), (1000, 0.7), (0, 0.6) ]
   elif tech == 45:
-    return [ (2000, 1.6), (1800, 1.4), (1500, 1.2), (1000, 1.1), (0, 0.8) ]
+    return [ (2000, 1.2), (1800, 1.1), (1500, 1.0), (1000, 0.9), (0, 0.8) ]
   else:
     raise ValueError('No DVFS table available for %d nm technology node' % tech)
 
@@ -121,7 +121,7 @@ class EnergyStats:
 frequency[] = %s
 [power]
 vdd[] = %s
-    ''' % (','.join(map(str, freq)), ','.join(map(str, vdd))))
+    ''' % (','.join(map(lambda f: '%f' % (f / 1000.), freq)), ','.join(map(str, vdd))))
     cfg.close()
     return configfile
 
