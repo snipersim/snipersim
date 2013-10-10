@@ -60,14 +60,14 @@ void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
       LOG_PRINT_ERROR("execv system call not supported in Pin mode, use SIFT mode instead (--sift)");
    }
 
-   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+   Thread* thread = localStore[threadIndex].thread;
    LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
    thread->getSyscallMdl()->runEnter(syscall_number, args);
 }
 
 void syscallEnterRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD syscall_standard, void* v)
 {
-   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+   Thread* thread = localStore[threadIndex].thread;
    LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
    if (thread->getSyscallMdl()->isEmulated())
    {
@@ -77,7 +77,7 @@ void syscallEnterRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD s
 
 void syscallExitRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD syscall_standard, void* v)
 {
-   Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+   Thread* thread = localStore[threadIndex].thread;
    LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
    IntPtr old_return_val = PIN_GetSyscallReturn(ctx, syscall_standard);
 

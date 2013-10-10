@@ -318,7 +318,7 @@ void emuPthreadCreateBefore(THREADID threadIndex, ADDRINT thread_ptr, void* (*th
    // and only act on the outer call.
    if (0 == localStore[threadIndex].pthread_create.count++)
    {
-      Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
+      Thread* thread = localStore[threadIndex].thread;
       thread_id_t new_thread_id = Sim()->getThreadManager()->spawnThread(thread->getId(), 0, thread_func, arg);
 
       localStore[threadIndex].pthread_create.thread_ptr = thread_ptr;
@@ -360,7 +360,7 @@ static thread_id_t findThreadByPthreadId(pthread_t pthread)
 
 void emuPthreadJoinBefore(THREADID thread_id, pthread_t pthread)
 {
-   Thread* thread = Sim()->getThreadManager()->getCurrentThread(thread_id);
+   Thread* thread = localStore[thread_id].thread;
 
    thread_id_t join_thread_id = findThreadByPthreadId(pthread);
    LOG_ASSERT_ERROR(join_thread_id != INVALID_THREAD_ID, "Could not find thread_id");
