@@ -93,7 +93,7 @@ class Core
       MemoryResult nativeMemOp(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
 
       void logMemoryHit(bool icache, mem_op_t mem_op_type, IntPtr address, MemModeled modeled = MEM_MODELED_NONE, IntPtr eip = 0);
-      void countInstructions(IntPtr address, UInt32 count);
+      bool countInstructions(IntPtr address, UInt32 count);
 
       void emulateCpuid(UInt32 eax, UInt32 ecx, cpuid_result_t &res) const;
 

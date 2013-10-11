@@ -133,23 +133,31 @@ void Core::disablePerformanceModels()
    getPerformanceModel()->disable();
 }
 
-void
+bool
 Core::countInstructions(IntPtr address, UInt32 count)
 {
+   bool check_rescheduled = false;
+
    m_instructions += count;
    if (m_bbv.sample())
       m_bbv.count(address, count);
    m_performance_model->countInstructions(address, count);
 
-   if (isEnabledInstructionsCallback()) {
+   if (isEnabledInstructionsCallback())
+   {
       if (m_instructions >= m_instructions_callback)
       {
          disableInstructionsCallback();
          Sim()->getHooksManager()->callHooks(HookType::HOOK_INSTR_COUNT, m_core_id);
+         // When using the fast-forward performance model, HOOK_INSTR_COUNT may cause a rescheduling
+         // of the current thread so let it know that it should make the appropriate checks
+         check_rescheduled = true;
       }
    }
 
    hookPeriodicInsCheck();
+
+   return check_rescheduled;
 }
 
 void

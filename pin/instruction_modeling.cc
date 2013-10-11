@@ -328,7 +328,18 @@ VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address,
 {
    Core* core = localStore[thread_id].thread->getCore();
    assert(core);
-   core->countInstructions(address, count);
+   bool check_rescheduled = core->countInstructions(address, count);
+
+   if (check_rescheduled)
+   {
+      // If countInstructions returns true, we may have been rescheduled (using the fast-forward performance model)
+      SubsecondTime time;
+      if (localStore[thread_id].thread->reschedule(time, core))
+      {
+         core = localStore[thread_id].thread->getCore();
+         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+      }
+   }
 }
 
 VOID InstructionModeling::accessInstructionCacheWarmup(THREADID threadid, ADDRINT address, UINT32 size)
