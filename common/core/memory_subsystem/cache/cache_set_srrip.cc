@@ -47,7 +47,7 @@ CacheSetSRRIP::getReplacementIndex(CacheCntlr *cntlr)
    {
       for (UInt32 i = 0; i < m_associativity; i++)
       {
-         if (m_rrip_bits[m_replacement_pointer] == m_rrip_max)
+         if (m_rrip_bits[m_replacement_pointer] >= m_rrip_max)
          {
             // We choose the first non-touched line as the victim (note that we start searching from the replacement pointer position)
             UInt8 index = m_replacement_pointer;
@@ -85,7 +85,10 @@ CacheSetSRRIP::getReplacementIndex(CacheCntlr *cntlr)
       // Increment all RRIP counters until one hits RRIP_MAX
       for (UInt32 i = 0; i < m_associativity; i++)
       {
-         m_rrip_bits[i]++;
+         if (m_rrip_bits[i] < m_rrip_max)
+         {
+            m_rrip_bits[i]++;
+         }
       }
    }
 
