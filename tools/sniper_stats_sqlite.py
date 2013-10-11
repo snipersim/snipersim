@@ -32,11 +32,12 @@ class SniperStatsSqlite(sniper_stats.SniperStatsBase):
         namefilter = ' and nameid in (%s)' % ','.join(nameids)
       else:
         namefilter = ''
-      values = collections.defaultdict(dict)
+      values = {}
       c = self.db.cursor()
       c.execute('select nameid, core, value from `values` where prefixid = ? %s' % namefilter, (prefixid,))
       for nameid, core, value in c:
-        values[nameid][core] =  value
+        if nameid not in values: values[nameid] = {}
+        values[nameid][core] = value
       return values
     else:
       raise ValueError('Invalid prefix %s' % prefix)

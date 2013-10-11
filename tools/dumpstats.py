@@ -107,8 +107,8 @@ if do_stats:
       for metric in metrics:
         print '==', metric, '=='
         for prefix in prefixes:
-          v = data[prefix][nameids[metric]]
-          v = [ v.get(i, 0) for i in range(max(v.keys())+1) ]
+          v = data[prefix].get(nameids[metric], {})
+          v = [ v.get(i, 0) for i in range(max(v.keys() or [0])+1) ]
           print_result('%-*s' % (prefixes_len, prefix), v)
 
   else:
