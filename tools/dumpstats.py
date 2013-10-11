@@ -97,18 +97,29 @@ if do_stats:
     import sniper_stats
     stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
     names = stats.read_metricnames()
-    metrics = through_time
+    metrics = [ metric[1:] if metric[0] in '-' else metric for metric in through_time ]
     nameids = dict([ ('%s.%s' % (objectname, metricname), nameid) for nameid, (objectname, metricname) in names.items() if '%s.%s' % (objectname, metricname) in metrics ])
     prefixes = stats.get_snapshots()
     prefixes_len = max(map(len, prefixes))
     data = dict([ (prefix, stats.read_snapshot(prefix, metrics)) for prefix in prefixes ])
 
+    def do_op(op, state, v):
+      if op == '-':
+        for i, _v in enumerate(v):
+          v[i], state[i] = v[i] - state.get(i, 0), v[i]
+        return v
+      else:
+        return v
+
     with sniper_lib.OutputToLess():
-      for metric in metrics:
+      for metric, _metric in zip(metrics, through_time):
+        op = _metric[0]
         print '==', metric, '=='
+        state = {}
         for prefix in prefixes:
           v = data[prefix].get(nameids[metric], {})
           v = [ v.get(i, 0) for i in range(max(v.keys() or [0])+1) ]
+          v = do_op(op, state, v)
           print_result('%-*s' % (prefixes_len, prefix), v)
 
   else:
