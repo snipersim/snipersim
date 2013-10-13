@@ -3,6 +3,7 @@
 #include "clock_skew_minimization_object.h"
 #include "stats.h"
 #include "magic_server.h"
+#include "thread_stats_manager.h"
 
 
 //////////
@@ -180,6 +181,19 @@ registerStats(PyObject *self, PyObject *args)
    Py_RETURN_NONE;
 }
 
+static PyObject *
+registerPerThread(PyObject *self, PyObject *args)
+{
+   const char *objectName = NULL, *metricName = NULL, *sPerThread = NULL;
+
+   if (!PyArg_ParseTuple(args, "sss", &sPerThread, &objectName, &metricName))
+      return NULL;
+
+   ThreadStatNamedStat::registerStat(strdup(sPerThread), objectName, metricName);
+
+   Py_RETURN_NONE;
+}
+
 
 //////////
 // marker(): record a marker
@@ -233,6 +247,7 @@ static PyMethodDef PyStatsMethods[] = {
    {"getter", getStatsGetter, METH_VARARGS, "Return object to retrieve statistics value."},
    {"write", writeStats, METH_VARARGS, "Write statistics (<prefix>, [<filename>])."},
    {"register", registerStats, METH_VARARGS, "Register callback that defines statistics value for (objectName, index, metricName)."},
+   {"register_per_thread", registerPerThread, METH_VARARGS, "Add a per-thread statistic (perthreadName) based on a named statistic (objectName, metricName)."},
    {"marker", writeMarker, METH_VARARGS, "Record a marker (coreid, threadid, arg0, arg1, [description])."},
    {"time", getTime, METH_VARARGS, "Retrieve the current global time in femtoseconds (approximate, last barrier)."},
    {"icount", getIcount, METH_VARARGS, "Retrieve current global instruction count."},
