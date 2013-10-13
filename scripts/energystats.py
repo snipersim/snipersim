@@ -34,11 +34,16 @@ class Power:
 
 class EnergyStats:
   def setup(self, args):
+    args = dict(enumerate((args or '').split(':')))
+    interval_ns = long(args.get(0, None) or 1000000) # Default power update every 1 ms
+    sim.util.Every(interval_ns * sim.util.Time.NS, self.periodic, roi_only = True)
+    self.dvfs_table = build_dvfs_table(int(sim.config.get('power/technology_node')))
+    #
     self.name_last = None
     self.prefix_last = None
-    self.time_last = 0
+    self.time_last_power = 0
+    self.time_last_energy = 0
     self.in_stats_write = False
-    self.dvfs_table = build_dvfs_table(int(sim.config.get('power/technology_node')))
     self.power = {}
     self.energy = {}
     for metric in ('energy-static', 'energy-dynamic'):
@@ -47,8 +52,15 @@ class EnergyStats:
         sim.stats.register('L1-I', core, metric, self.get_stat)
         sim.stats.register('L1-D', core, metric, self.get_stat)
         sim.stats.register('L2', core, metric, self.get_stat)
+      sim.stats.register_per_thread('core-'+metric, 'core', metric)
+      sim.stats.register_per_thread('L1-I-'+metric, 'L1-I', metric)
+      sim.stats.register_per_thread('L1-D-'+metric, 'L1-D', metric)
+      sim.stats.register_per_thread('L2-'+metric, 'L2', metric)
       sim.stats.register('processor', 0, metric, self.get_stat)
       sim.stats.register('dram', 0, metric, self.get_stat)
+
+  def periodic(self, time, time_delta):
+    self.update()
 
   def hook_pre_stat_write(self, prefix):
     if not self.in_stats_write:
@@ -60,10 +72,10 @@ class EnergyStats:
       sim.util.db_delete(self.name_last, True)
 
   def update(self):
-    if sim.stats.time() == self.time_last:
+    if sim.stats.time() == self.time_last_power:
       # Time did not advance: don't recompute
       return
-    if not self.power or (sim.stats.time() - self.time_last >= 1 * sim.util.Time.US):
+    if not self.power or (sim.stats.time() - self.time_last_power >= 10 * sim.util.Time.US):
       # Time advanced significantly, or no power result yet: compute power
       #   Save snapshot
       current = 'energystats-temp%s' % ('B' if self.name_last and self.name_last[-1] == 'A' else 'A')
@@ -84,6 +96,7 @@ class EnergyStats:
     self.update_energy()
 
   def get_stat(self, objectName, index, metricName):
+    self.update_energy()
     return self.energy.get((objectName, index, metricName), 0L)
 
   def update_power(self, power):
@@ -98,11 +111,12 @@ class EnergyStats:
     self.power[('dram', 0)] = get_power(power['DRAM'])
 
   def update_energy(self):
-    time_delta = sim.stats.time() - self.time_last
-    for (component, core), power in self.power.items():
-      self.energy[(component, core, 'energy-static')] = self.energy.get((component, core, 'energy-static'), 0) + long(time_delta * power.s)
-      self.energy[(component, core, 'energy-dynamic')] = self.energy.get((component, core, 'energy-dynamic'), 0) + long(time_delta * power.d)
-    self.time_last = sim.stats.time()
+    if self.power and sim.stats.time() > self.time_last_energy:
+      time_delta = sim.stats.time() - self.time_last_energy
+      for (component, core), power in self.power.items():
+        self.energy[(component, core, 'energy-static')] = self.energy.get((component, core, 'energy-static'), 0) + long(time_delta * power.s)
+        self.energy[(component, core, 'energy-dynamic')] = self.energy.get((component, core, 'energy-dynamic'), 0) + long(time_delta * power.d)
+      self.time_last_energy = sim.stats.time()
 
   def get_vdd_from_freq(self, f):
     # Assume self.dvfs_table is sorted from highest frequency to lowest
