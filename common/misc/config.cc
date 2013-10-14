@@ -29,6 +29,8 @@ UInt64 Config::m_knob_hpi_percore;
 UInt64 Config::m_knob_hpi_global;
 bool Config::m_knob_enable_spinloopdetection;
 CacheEfficiencyTracker::Callbacks Config::m_cache_efficiency_callbacks;
+bool Config::m_suppress_stdout;
+bool Config::m_suppress_stderr;
 
 Config *Config::m_singleton;
 
@@ -78,6 +80,9 @@ Config::Config(SimulationMode mode)
    m_knob_hpi_global = Sim()->getCfg()->getInt("core/hook_periodic_ins/ins_global");
 
    m_knob_enable_spinloopdetection = Sim()->getCfg()->getBool("core/spin_loop_detection");
+
+   m_suppress_stdout = Sim()->getCfg()->getBool("general/suppress_stdout");
+   m_suppress_stderr = Sim()->getCfg()->getBool("general/suppress_stderr");
 
    m_knob_clock_skew_minimization_scheme = ClockSkewMinimizationObject::parseScheme(Sim()->getCfg()->getString("clock_skew_minimization/scheme"));
 

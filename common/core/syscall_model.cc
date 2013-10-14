@@ -34,6 +34,8 @@ SyscallMdl::SyscallMdl(Thread *thread)
       , m_emulated(false)
       , m_stalled(false)
       , m_ret_val(0)
+      , m_stdout_bytes(0)
+      , m_stderr_bytes(0)
 {
    UInt32 futex_counters_size = sizeof(struct futex_counters_t);
    __attribute__((unused)) int rc = posix_memalign((void**)&futex_counters, 64, futex_counters_size); // Align by cache line size to prevent thread contention
@@ -46,6 +48,9 @@ SyscallMdl::SyscallMdl(Thread *thread)
       registerStatsMetric("futex", thread->getId(), boost::to_lower_copy(String(futex_names[e]) + "_count"), &(futex_counters->count[e]));
       registerStatsMetric("futex", thread->getId(), boost::to_lower_copy(String(futex_names[e]) + "_delay"), &(futex_counters->delay[e]));
    }
+
+   registerStatsMetric("syscall", thread->getId(), "stdout-bytes", &m_stdout_bytes);
+   registerStatsMetric("syscall", thread->getId(), "stderr-bytes", &m_stderr_bytes);
 }
 
 SyscallMdl::~SyscallMdl()
@@ -250,6 +255,25 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          // (returning a value that is too large can cause a segfault in the application's libc)
          m_ret_val = success ? (Sim()->getConfig()->getApplicationCores()+7)/8 : -EINVAL;
          m_emulated = true;
+
+         break;
+      }
+
+      case SYS_write:
+      {
+         int fd = (int)args.arg0;
+         size_t count = (size_t)args.arg2;
+
+         if ((fd == STDOUT_FILENO && Sim()->getConfig()->suppressStdout()) || (fd == STDERR_FILENO && Sim()->getConfig()->suppressStderr()))
+         {
+            m_ret_val = count;
+            m_emulated = true;
+         }
+
+         if (fd == STDOUT_FILENO)
+            m_stdout_bytes += count;
+         if (fd == STDERR_FILENO)
+            m_stderr_bytes += count;
 
          break;
       }

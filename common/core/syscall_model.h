@@ -65,6 +65,9 @@ class SyscallMdl
       bool m_in_syscall;
       syscall_args_t m_syscall_args;
 
+      UInt64 m_stdout_bytes;
+      UInt64 m_stderr_bytes;
+
       // ------------------------------------------------------
 
       IntPtr handleFutexCall(syscall_args_t &args);

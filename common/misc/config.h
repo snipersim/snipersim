@@ -85,6 +85,8 @@ public:
    UInt64 getHPIInstructionsPerCore() const { return m_knob_hpi_percore; }
    UInt64 getHPIInstructionsGlobal() const { return m_knob_hpi_global; }
    bool getEnableSpinLoopDetection() const { return m_knob_enable_spinloopdetection; }
+   bool suppressStdout() const { return m_suppress_stdout; }
+   bool suppressStderr() const { return m_suppress_stderr; }
 
    bool getBBVsEnabled() const { return m_knob_bbvs; }
    void setBBVsEnabled(bool enable) { m_knob_bbvs = enable; }
@@ -129,6 +131,8 @@ private:
    static UInt64 m_knob_hpi_percore;
    static UInt64 m_knob_hpi_global;
    static bool m_knob_enable_spinloopdetection;
+   static bool m_suppress_stdout;
+   static bool m_suppress_stderr;
 
    static CacheEfficiencyTracker::Callbacks m_cache_efficiency_callbacks;
 
