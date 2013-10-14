@@ -463,9 +463,6 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    // simulate
 
    prfmdl->iterate();
-
-   SubsecondTime time = prfmdl->getElapsedTime();
-   m_thread->reschedule(time, NULL);
 }
 
 void TraceThread::run()
