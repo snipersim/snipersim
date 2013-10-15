@@ -4,15 +4,18 @@
 #include "rng.h"
 #include "address_home_lookup.h"
 
-CacheBase::CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash, AddressHomeLookup *ahl):
+CacheBase::CacheBase(
+   String name, UInt32 num_sets, UInt32 associativity, UInt32 cache_block_size,
+   CacheBase::hash_t hash, AddressHomeLookup *ahl)
+:
    m_name(name),
-   m_cache_size(k_KILO * UInt64(cache_size)),
+   m_cache_size(UInt64(num_sets) * associativity * cache_block_size),
    m_associativity(associativity),
    m_blocksize(cache_block_size),
    m_hash(hash),
+   m_num_sets(num_sets),
    m_ahl(ahl)
 {
-   m_num_sets = m_cache_size / (m_associativity * m_blocksize);
    m_log_blocksize = floorLog2(m_blocksize);
 
    LOG_ASSERT_ERROR((m_num_sets == (1UL << floorLog2(m_num_sets))) || (hash != CacheBase::HASH_MASK),

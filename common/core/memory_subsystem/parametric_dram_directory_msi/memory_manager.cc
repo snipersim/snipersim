@@ -116,6 +116,7 @@ MemoryManager::MemoryManager(Core* core,
             configName,
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/cache_size", core->getId()),
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/associativity", core->getId()),
+            getCacheBlockSize(),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/address_hash", core->getId()),
             Sim()->getCfg()->getStringArray("perf_model/" + configName + "/replacement_policy", core->getId()),
             Sim()->getCfg()->getBoolArray(  "perf_model/" + configName + "/perfect", core->getId()),
@@ -149,13 +150,18 @@ MemoryManager::MemoryManager(Core* core,
       nuca_enable = Sim()->getCfg()->getBoolArray(  "perf_model/nuca/enabled", core->getId());
       if (nuca_enable)
       {
-         nuca_parameters.configName = "nuca";
-         nuca_parameters.size                = Sim()->getCfg()->getIntArray(   "perf_model/nuca/cache_size", core->getId());
-         nuca_parameters.associativity       = Sim()->getCfg()->getIntArray(   "perf_model/nuca/associativity", core->getId());
-         nuca_parameters.hash_function       = Sim()->getCfg()->getStringArray("perf_model/nuca/address_hash", core->getId());
-         nuca_parameters.replacement_policy  = Sim()->getCfg()->getStringArray("perf_model/nuca/replacement_policy", core->getId());
-         nuca_parameters.data_access_time    = ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/data_access_time", core->getId()));
-         nuca_parameters.tags_access_time    = ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/tags_access_time", core->getId()));
+         nuca_parameters = CacheParameters(
+            "nuca",
+            Sim()->getCfg()->getIntArray(   "perf_model/nuca/cache_size", core->getId()),
+            Sim()->getCfg()->getIntArray(   "perf_model/nuca/associativity", core->getId()),
+            getCacheBlockSize(),
+            Sim()->getCfg()->getStringArray("perf_model/nuca/address_hash", core->getId()),
+            Sim()->getCfg()->getStringArray("perf_model/nuca/replacement_policy", core->getId()),
+            false, true,
+            ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/data_access_time", core->getId())),
+            ComponentLatency(global_domain, Sim()->getCfg()->getIntArray("perf_model/nuca/tags_access_time", core->getId())),
+            ComponentLatency(global_domain, 0), ComponentBandwidthPerCycle(global_domain, 0), "", false, 0, "", 0 // unused
+         );
       }
 
       // Dram Directory Cache
@@ -330,7 +336,7 @@ MemoryManager::MemoryManager(Core* core,
 
    if (m_core_id_master == getCore()->getId())
    {
-      UInt32 num_sets = k_KILO * cache_parameters[MemComponent::L1_DCACHE].size / (cache_parameters[MemComponent::L1_DCACHE].associativity * getCacheBlockSize());
+      UInt32 num_sets = cache_parameters[MemComponent::L1_DCACHE].num_sets;
       // With heterogeneous caches, or fancy hash functions, we can no longer be certain that operations
       // only have effect within a set as we see it. Turn of optimization...
       if (num_sets != (1UL << floorLog2(num_sets)))

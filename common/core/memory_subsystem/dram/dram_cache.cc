@@ -23,11 +23,16 @@ DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
    , m_read_misses(0)
    , m_write_misses(0)
 {
+   UInt32 cache_size = Sim()->getCfg()->getIntArray("perf_model/dram/cache/cache_size", m_core_id);
+   UInt32 associativity = Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", m_core_id);
+   UInt32 num_sets = k_KILO * cache_size / (associativity * m_cache_block_size);
+   LOG_ASSERT_ERROR(k_KILO * cache_size == num_sets * associativity * m_cache_block_size, "Invalid cache configuration: size(%d Kb) != sets(%d) * associativity(%d) * block_size(%d)", cache_size, num_sets, associativity, m_cache_block_size);
+
    m_cache = new Cache("dram-cache",
       "perf_model/dram/cache",
       m_core_id,
-      Sim()->getCfg()->getIntArray("perf_model/dram/cache/cache_size", m_core_id),
-      Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", m_core_id),
+      num_sets,
+      associativity,
       m_cache_block_size,
       Sim()->getCfg()->getStringArray("perf_model/dram/cache/replacement_policy", m_core_id),
       CacheBase::PR_L1_CACHE,

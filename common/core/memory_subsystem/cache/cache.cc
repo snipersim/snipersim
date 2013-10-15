@@ -4,18 +4,20 @@
 
 // Cache class
 // constructors/destructors
-Cache::Cache(String name,
-      String cfgname,
-      core_id_t core_id,
-      UInt32 cache_size,
-      UInt32 associativity, UInt32 cache_block_size,
-      String replacement_policy,
-      cache_t cache_type,
-      hash_t hash,
-      FaultInjector *fault_injector,
-      AddressHomeLookup *ahl) :
-
-   CacheBase(name, cache_size, associativity, cache_block_size, hash, ahl),
+Cache::Cache(
+   String name,
+   String cfgname,
+   core_id_t core_id,
+   UInt32 num_sets,
+   UInt32 associativity,
+   UInt32 cache_block_size,
+   String replacement_policy,
+   cache_t cache_type,
+   hash_t hash,
+   FaultInjector *fault_injector,
+   AddressHomeLookup *ahl)
+:
+   CacheBase(name, num_sets, associativity, cache_block_size, hash, ahl),
    m_enabled(false),
    m_num_accesses(0),
    m_num_hits(0),

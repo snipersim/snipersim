@@ -77,6 +77,7 @@ namespace ParametricDramDirectoryMSI
       public:
          String configName;
          UInt32 size;
+         UInt32 num_sets;
          UInt32 associativity;
          String hash_function;
          String replacement_policy;
@@ -97,16 +98,24 @@ namespace ParametricDramDirectoryMSI
             , tags_access_time(NULL,0)
             , writeback_time(NULL,0)
          {}
-         CacheParameters(String _configName, UInt32 _size, UInt32 _associativity, String _hash_function, String _replacement_policy, bool _perfect, bool _coherent,
+         CacheParameters(
+            String _configName, UInt32 _size, UInt32 _associativity, UInt32 block_size,
+            String _hash_function, String _replacement_policy, bool _perfect, bool _coherent,
             const ComponentLatency& _data_access_time, const ComponentLatency& _tags_access_time,
             const ComponentLatency& _writeback_time, const ComponentBandwidthPerCycle& _next_level_read_bandwidth,
-            String _perf_model_type, bool _writethrough, UInt32 _shared_cores, String _prefetcher, UInt32 _outstanding_misses) :
-            configName(_configName), size(_size), associativity(_associativity), hash_function(_hash_function), replacement_policy(_replacement_policy), perfect(_perfect), coherent(_coherent),
+            String _perf_model_type, bool _writethrough, UInt32 _shared_cores,
+            String _prefetcher, UInt32 _outstanding_misses)
+         :
+            configName(_configName), size(_size), associativity(_associativity),
+            hash_function(_hash_function), replacement_policy(_replacement_policy), perfect(_perfect), coherent(_coherent),
             data_access_time(_data_access_time), tags_access_time(_tags_access_time),
             writeback_time(_writeback_time), next_level_read_bandwidth(_next_level_read_bandwidth),
             perf_model_type(_perf_model_type), writethrough(_writethrough), shared_cores(_shared_cores),
             prefetcher(_prefetcher), outstanding_misses(_outstanding_misses)
-         {}
+         {
+            num_sets = k_KILO * _size / (_associativity * block_size);
+            LOG_ASSERT_ERROR(k_KILO * _size == num_sets * associativity * block_size, "Invalid cache configuration: size(%d Kb) != sets(%d) * associativity(%d) * block_size(%d)", _size, num_sets, associativity, block_size);
+         }
    };
 
    class CacheCntlrList : public std::vector<CacheCntlr*>

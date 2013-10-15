@@ -24,7 +24,7 @@ NucaCache::NucaCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
    m_cache = new Cache("nuca-cache",
       "perf_model/nuca/cache",
       m_core_id,
-      parameters.size,
+      parameters.num_sets,
       parameters.associativity,
       m_cache_block_size,
       parameters.replacement_policy,

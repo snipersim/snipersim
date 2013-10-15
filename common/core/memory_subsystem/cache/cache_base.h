@@ -75,7 +75,7 @@ class CacheBase
 
    public:
       // constructors/destructors
-      CacheBase(String name, UInt32 cache_size, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash, AddressHomeLookup *ahl = NULL);
+      CacheBase(String name, UInt32 num_sets, UInt32 associativity, UInt32 cache_block_size, CacheBase::hash_t hash, AddressHomeLookup *ahl = NULL);
       virtual ~CacheBase();
 
       // utilities

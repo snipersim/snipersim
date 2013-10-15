@@ -41,7 +41,7 @@ class Cache : public CacheBase
       Cache(String name,
             String cfgname,
             core_id_t core_id,
-            UInt32 cache_size,
+            UInt32 num_sets,
             UInt32 associativity, UInt32 cache_block_size,
             String replacement_policy,
             cache_t cache_type,

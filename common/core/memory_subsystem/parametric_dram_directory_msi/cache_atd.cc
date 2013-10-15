@@ -5,9 +5,9 @@
 #include "config.hpp"
 #include "rng.h"
 
-ATD::ATD(String name, String configName, core_id_t core_id, UInt32 cache_size, UInt32 associativity,
+ATD::ATD(String name, String configName, core_id_t core_id, UInt32 num_sets, UInt32 associativity,
          UInt32 cache_block_size, String replacement_policy, CacheBase::hash_t hash_function)
-   : m_cache_base(name, cache_size, associativity, cache_block_size, hash_function)
+   : m_cache_base(name, num_sets, associativity, cache_block_size, hash_function)
    , m_sets()
    , loads(0)
    , stores(0)
@@ -28,8 +28,6 @@ ATD::ATD(String name, String configName, core_id_t core_id, UInt32 cache_size, U
    registerStatsMetric(name, core_id, "loads-destructive", &loads_destructive);
    registerStatsMetric(name, core_id, "stores-constructive", &stores_constructive);
    registerStatsMetric(name, core_id, "stores-destructive", &stores_destructive);
-
-   UInt32 num_sets = m_cache_base.getNumSets();
 
    String sampling = Sim()->getCfg()->getStringArray(configName + "/atd/sampling", core_id);
    if (sampling == "full")
