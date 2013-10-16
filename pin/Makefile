@@ -22,10 +22,10 @@ CPPFLAGS = $(foreach dir,$(PIN_INC_DIRS),-I$(dir))
 # Use the pin flags for building
 include $(SIM_ROOT)/Makefile.config
 
-ifeq ($(TARGET_ARCH),ia32)
+ifeq ($(SNIPER_TARGET_ARCH),ia32)
    override TARGET:=ia32
 endif
-ifeq ($(TARGET_ARCH),intel64)
+ifeq ($(SNIPER_TARGET_ARCH),intel64)
    override TARGET:=intel64
 endif
 
@@ -45,7 +45,7 @@ PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
 ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
 CXXFLAGS += -DPINPLAY_SUPPORTED -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_HOME)/include
 LD_LIBS += -lpinplay -lbz2 -lz
-LD_FLAGS += -L$(PINPLAY_HOME)/lib/$(TARGET_ARCH)
+LD_FLAGS += -L$(PINPLAY_HOME)/lib/$(SNIPER_TARGET_ARCH)
 endif
 
 # Sources must come before the Makefile.common include to allow for

@@ -4,13 +4,13 @@ TARGET=libsift.a
 
 include ../common/Makefile.common
 
-ifeq ($(TARGET_ARCH),intel64)
+ifeq ($(SNIPER_TARGET_ARCH),intel64)
    CXXFLAGS_ARCH=
 else
-   ifeq ($(TARGET_ARCH),ia32)
+   ifeq ($(SNIPER_TARGET_ARCH),ia32)
       CXXFLAGS_ARCH=-m32
    else
-      $(error unknown TARGET_ARCH $(TARGET_ARCH))
+      $(error unknown SNIPER_TARGET_ARCH $(SNIPER_TARGET_ARCH))
    endif
 endif
 
@@ -20,7 +20,7 @@ all : $(TARGET) siftdump recorder
 
 include ../common/Makefile.common
 
-XED_HOME=$(PIN_HOME)/extras/xed2-$(TARGET_ARCH)
+XED_HOME=$(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)
 
 CXXFLAGS=$(OPT_CFLAGS) -fPIC -std=c++0x -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
 

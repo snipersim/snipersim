@@ -10,16 +10,16 @@ LIBCARBON_SOURCES = $(foreach dir,$(DIRECTORIES),$(wildcard $(dir)/*.cc)) \
 
 LIBCARBON_OBJECTS = $(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(LIBCARBON_SOURCES) ) ) )
 
-INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed2-$(TARGET_ARCH)/include $(SIM_ROOT)/linux $(SIM_ROOT)/sift
+INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)/include $(SIM_ROOT)/linux $(SIM_ROOT)/sift
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
-ifeq ($(TARGET_ARCH),ia32)
+ifeq ($(SNIPER_TARGET_ARCH),ia32)
   # Add -march=i686 to enable some extra instructions that allow for implementation of 64-bit atomic adds
   CXXFLAGS += -m32 -march=i686 -DTARGET_IA32
   LD_FLAGS += -m32
 endif
-ifeq ($(TARGET_ARCH),intel64)
+ifeq ($(SNIPER_TARGET_ARCH),intel64)
   CXXFLAGS += -fPIC -DTARGET_INTEL64
   LD_FLAGS +=
 endif
@@ -30,14 +30,14 @@ ifneq ($(BOOST_INCLUDE),)
 	CPPFLAGS += -I$(BOOST_INCLUDE)
 endif
 
-LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/lib -lpython2.7 -lrt -lz -lsqlite3
+LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(SNIPER_TARGET_ARCH)/lib -lpython2.7 -lrt -lz -lsqlite3
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 
 # Include paths
 CPPFLAGS+=$(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
-          -I$(SIM_ROOT)/python_kit/$(TARGET_ARCH)/include/python2.7
+          -I$(SIM_ROOT)/python_kit/$(SNIPER_TARGET_ARCH)/include/python2.7
 
 CXXFLAGS+=-c \
           -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++0x -fno-strict-aliasing $(OPT_CFLAGS) #-Werror

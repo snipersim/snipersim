@@ -45,19 +45,19 @@ ifeq ($(CLEAN),)
 include $(SIM_ROOT)/common/Makefile.common
 endif
 
-ifeq ($(TARGET_ARCH),intel64)
+ifeq ($(SNIPER_TARGET_ARCH),intel64)
    CXXFLAGS_ARCH=
 else
-   ifeq ($(TARGET_ARCH),ia32)
+   ifeq ($(SNIPER_TARGET_ARCH),ia32)
       CXXFLAGS_ARCH=-m32
    else
-      $(error unknown TARGET_ARCH $(TARGET_ARCH))
+      $(error unknown SNIPER_TARGET_ARCH $(SNIPER_TARGET_ARCH))
    endif
 endif
 
 # These libraries are used by libcarbon, so add them to the end
 LD_LIBS += -lxed
-LD_FLAGS += -L$(PIN_HOME)/extras/xed2-$(TARGET_ARCH)/lib
+LD_FLAGS += -L$(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)/lib
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))

@@ -9,15 +9,15 @@ default: sift_recorder
 include $(SIM_ROOT)/common/Makefile.common
 
 # Translate Sniper's target names into Pin target name
-ifeq ($(TARGET_ARCH),intel64)
+ifeq ($(SNIPER_TARGET_ARCH),intel64)
    override TARGET:=intel64
    CXXFLAGS_ARCH=
 else
-   ifeq ($(TARGET_ARCH),ia32)
+   ifeq ($(SNIPER_TARGET_ARCH),ia32)
       override TARGET:=ia32
       CXXFLAGS_ARCH=-m32
    else
-      $(error unknown TARGET_ARCH $(TARGET_ARCH))
+      $(error unknown SNIPER_TARGET_ARCH $(SNIPER_TARGET_ARCH))
    endif
 endif
 
@@ -39,7 +39,7 @@ LDFLAGS += -L.. -L ../../lib -lsift -lcarbon_sim -lz -lrt
 PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
 ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
 CXXFLAGS += -DPINPLAY_SUPPORTED -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_HOME)/include
-LDFLAGS += -L$(PINPLAY_HOME)/lib/$(TARGET_ARCH) -lsift -lpinplay -lbz2 -lz
+LDFLAGS += -L$(PINPLAY_HOME)/lib/$(SNIPER_TARGET_ARCH) -lsift -lpinplay -lbz2 -lz
 endif
 
 SOURCES=$(wildcard *.cc)
