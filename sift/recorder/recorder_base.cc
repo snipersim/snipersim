@@ -143,7 +143,13 @@ static VOID traceCallback(TRACE trace, void *v)
          // Simics-style magic instruction: xchg bx, bx
          if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
          {
-            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_RETURN_REGS, REG_GAX, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX, IARG_REG_VALUE, REG_GBX, IARG_REG_VALUE, REG_GCX, IARG_END);
+            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_RETURN_REGS, REG_GAX, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX,
+#ifdef TARGET_IA32
+                                     IARG_REG_VALUE, REG_GDX,
+#else
+                                     IARG_REG_VALUE, REG_GBX,
+#endif
+                                     IARG_REG_VALUE, REG_GCX, IARG_END);
          }
 
          // Handle emulated syscalls
