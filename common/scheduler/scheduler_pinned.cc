@@ -16,23 +16,40 @@ SchedulerPinned::SchedulerPinned(ThreadManager *thread_manager)
 
 core_id_t SchedulerPinned::getNextCore(core_id_t core_id)
 {
-   core_id += m_interleaving;
-   if (core_id >= (core_id_t)Sim()->getConfig()->getApplicationCores())
+   while(true)
    {
-      core_id %= Sim()->getConfig()->getApplicationCores();
-      core_id += 1;
-      core_id %= m_interleaving;
+      core_id += m_interleaving;
+      if (core_id >= (core_id_t)Sim()->getConfig()->getApplicationCores())
+      {
+         core_id %= Sim()->getConfig()->getApplicationCores();
+         core_id += 1;
+         core_id %= m_interleaving;
+      }
+      if (m_core_mask[core_id])
+         return core_id;
    }
-   return core_id;
+}
+
+core_id_t SchedulerPinned::getFreeCore(core_id_t core_first)
+{
+   core_id_t core_next = core_first;
+
+   do
+   {
+      if (m_core_thread_running[core_next] == INVALID_THREAD_ID)
+         return core_next;
+
+      core_next = getNextCore(core_next);
+   }
+   while(core_next != core_first);
+
+   return core_first;
 }
 
 void SchedulerPinned::threadSetInitialAffinity(thread_id_t thread_id)
 {
-   while(!m_core_mask[m_next_core])
-      m_next_core = getNextCore(m_next_core);
+   core_id_t core_id = getFreeCore(m_next_core);
+   m_next_core = getNextCore(core_id);
 
-   core_id_t core_id = m_next_core;
    m_thread_info[thread_id].setAffinitySingle(core_id);
-
-   m_next_core = getNextCore(m_next_core);
 }

@@ -11,7 +11,8 @@ class SchedulerPinned : public SchedulerPinnedBase
       virtual void threadSetInitialAffinity(thread_id_t thread_id);
 
    private:
-      core_id_t getNextCore(core_id_t core_id);
+      core_id_t getNextCore(core_id_t core_first);
+      core_id_t getFreeCore(core_id_t core_first);
 
       const int m_interleaving;
       std::vector<bool> m_core_mask;
