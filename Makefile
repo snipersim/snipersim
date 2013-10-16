@@ -54,16 +54,16 @@ $(PIN_HOME)/intel64/bin/pinbin:
 endif
 
 ifneq ($(NO_PYTHON_DOWNLOAD),1)
-PYTHON_DEP=python_kit/$(TARGET_ARCH)/lib/python2.7/lib-dynload/_sqlite3.so
+PYTHON_DEP=python_kit/$(SNIPER_TARGET_ARCH)/lib/python2.7/lib-dynload/_sqlite3.so
 python: $(PYTHON_DEP)
 $(PYTHON_DEP):
 ifeq ($(SHOW_COMPILE),)
-	@echo '[DOWNLO] Python $(TARGET_ARCH)'
-	@mkdir -p python_kit/$(TARGET_ARCH)
-	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(TARGET_ARCH)
+	@echo '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
+	@mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
+	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
 else
-	mkdir -p python_kit/$(TARGET_ARCH)
-	wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(TARGET_ARCH)
+	mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
+	wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
 endif
 endif
 
@@ -102,10 +102,10 @@ configscripts: dependencies
 	@mkdir -p config
 	@> config/sniper.py
 	@echo '# This file is auto-generated, changes made to it will be lost. Please edit Makefile instead.' >> config/sniper.py
-	@echo "target=\"$(TARGET_ARCH)\"" >> config/sniper.py
+	@echo "target=\"$(SNIPER_TARGET_ARCH)\"" >> config/sniper.py
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
 	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
-	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(TARGET_ARCH)"
+	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
 
 empty_config:
 ifeq ($(SHOW_COMPILE),)
