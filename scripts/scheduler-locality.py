@@ -49,12 +49,18 @@ class SchedulerLocality:
     args = dict(enumerate((args or '').split(':')))
     interval_ns = long(args.get(0, None) or 10000000)
     scheduler_type = args.get(1, 'equal_time')
+    core_mask = args.get(2, '')
     if scheduler_type == 'equal_time':
       self.getScoreMetric = getScoreMetricTime
     elif scheduler_type == 'equal_instructions':
       self.getScoreMetric = getScoreMetricInstructions
     else:
       raise ValueError('Invalid scheduler type %s' % scheduler_type)
+    if core_mask:
+      core_mask = map(int, core_mask.split(',')) + [0]*sim.config.ncores
+      self.cores = [ core for core in range(sim.config.ncores) if core_mask[core] ]
+    else:
+      self.cores = range(sim.config.ncores)
     sim.util.Every(interval_ns * sim.util.Time.NS, self.periodic)
     self.threads = {}
     self.last_core = 0
@@ -63,8 +69,8 @@ class SchedulerLocality:
     self.threads[thread_id] = Thread(thread_id, self.getScoreMetric)
     self.threads[thread_id].runnable = True
     # Initial assignment: one thread per core until cores are exhausted
-    if self.last_core < sim.config.ncores:
-      self.threads[thread_id].setCore(self.last_core, sim.stats.time())
+    if self.last_core < len(self.cores):
+      self.threads[thread_id].setCore(self.cores[self.last_core], sim.stats.time())
       self.last_core += 1
     else:
       self.threads[thread_id].setCore(None, sim.stats.time())
@@ -97,7 +103,7 @@ class SchedulerLocality:
       self.threads[thread_id].runnable = True
       # If there is a free core, move us there now
       used_cores = set([ thread.core for thread in self.threads.values() if thread.core is not None ])
-      free_cores = set(range(sim.config.ncores)) - used_cores
+      free_cores = set(self.cores) - used_cores
       if len(free_cores):
         self.threads[thread_id].setCore(list(free_cores)[0], time)
 
@@ -110,7 +116,7 @@ class SchedulerLocality:
     # Order by score
     threads.sort(key = lambda thread: thread.score)
     # Select threads to run now, one per core
-    threads = threads[:sim.config.ncores]
+    threads = threads[:len(self.cores)]
     #print ', '.join(map(repr, threads))
 
     # Filter out threads that are already running, and keep them on their current core
@@ -118,7 +124,7 @@ class SchedulerLocality:
     used_cores = set([ thread.core for thread in keep_threads ])
 
     # Move new threads to free cores
-    free_cores = set(range(sim.config.ncores)) - used_cores
+    free_cores = set(self.cores) - used_cores
     threads = [ thread for thread in threads if thread.core is None ]
     assert(len(free_cores) >= len(threads))
 
