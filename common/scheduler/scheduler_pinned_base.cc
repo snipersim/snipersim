@@ -51,8 +51,6 @@ core_id_t SchedulerPinnedBase::threadCreate(thread_id_t thread_id)
    if (free_core_id != INVALID_CORE_ID)
    {
       m_thread_info[thread_id].setCoreRunning(free_core_id);
-      // Make sure last scheduled time is different from 0, which is the value for threads that have never been scheduled
-      m_thread_info[thread_id].setLastScheduled(Sim()->getClockSkewMinimizationServer()->getGlobalTime() + SubsecondTime::FS(1));
       m_core_thread_running[free_core_id] = thread_id;
       m_quantum_left[free_core_id] = m_quantum;
       return free_core_id;
@@ -229,7 +227,7 @@ void SchedulerPinnedBase::reschedule(SubsecondTime time, core_id_t core_id, bool
    }
 
    thread_id_t new_thread_id = INVALID_THREAD_ID;
-   SubsecondTime min_last_scheduled = SubsecondTime::MaxTime();
+   SInt64 max_score = INT64_MIN;
 
    for(thread_id_t thread_id = 0; thread_id < (thread_id_t)m_threads_runnable.size(); ++thread_id)
    {
@@ -239,11 +237,19 @@ void SchedulerPinnedBase::reschedule(SubsecondTime time, core_id_t core_id, bool
               || m_thread_info[thread_id].getCoreRunning() == core_id)
       )
       {
+         SInt64 score;
+         if (m_thread_info[thread_id].isRunning())
+            // Thread is currently running: negative score depending on how long it's already running
+            score = SInt64(m_thread_info[thread_id].getLastScheduledIn().getPS()) - time.getPS();
+         else
+            // Thread is not currently running: positive score depending on how long we have been waiting
+            score = time.getPS() - SInt64(m_thread_info[thread_id].getLastScheduledOut().getPS());
+
          // Find thread that was scheduled the longest time ago
-         if (m_thread_info[thread_id].getLastScheduled() < min_last_scheduled)
+         if (score > max_score)
          {
             new_thread_id = thread_id;
-            min_last_scheduled = m_thread_info[thread_id].getLastScheduled();
+            max_score = score;
          }
       }
    }
@@ -254,6 +260,9 @@ void SchedulerPinnedBase::reschedule(SubsecondTime time, core_id_t core_id, bool
       if (current_thread_id != INVALID_THREAD_ID)
       {
          m_thread_info[current_thread_id].setCoreRunning(INVALID_CORE_ID);
+         // Update last scheduled out time, with a small extra penalty to make sure we don't
+         // reconsider this thread in the same periodic() call but for a next core
+         m_thread_info[current_thread_id].setLastScheduledOut(time + SubsecondTime::PS(core_id));
          moveThread(current_thread_id, INVALID_CORE_ID, time);
       }
 
@@ -269,9 +278,7 @@ void SchedulerPinnedBase::reschedule(SubsecondTime time, core_id_t core_id, bool
             m_core_thread_running[m_thread_info[new_thread_id].getCoreRunning()] = INVALID_THREAD_ID;
          // Move thread to this core
          m_thread_info[new_thread_id].setCoreRunning(core_id);
-         // Update time when thread was last scheduled in, adding a delta time to make sure threads on cores with high ids
-         // (which are considered later in the periodic() loop) are also replaced.
-         m_thread_info[new_thread_id].setLastScheduled(time + SubsecondTime::FS(core_id + 1));
+         m_thread_info[new_thread_id].setLastScheduledIn(time);
          moveThread(new_thread_id, core_id, time);
       }
    }
