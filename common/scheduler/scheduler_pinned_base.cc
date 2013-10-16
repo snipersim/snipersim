@@ -115,7 +115,7 @@ bool SchedulerPinnedBase::threadSetAffinity(thread_id_t calling_thread_id, threa
          }
       }
 
-      LOG_ASSERT_ERROR(any, "No valid core found in sched_setaffinity() mask");
+      //LOG_ASSERT_ERROR(any, "No valid core found in sched_setaffinity() mask");
    }
 
    // We're setting the affinity of a thread that isn't yet created. Do nothing else for now.
