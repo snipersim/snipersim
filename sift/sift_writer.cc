@@ -755,7 +755,7 @@ void Sift::Writer::send_va2pa(uint64_t va)
 {
    if (m_send_va2pa_mapping)
    {
-      intptr_t vp = va / PAGE_SIZE;
+      uint64_t vp = static_cast<uintptr_t>(va) / PAGE_SIZE;
       if (m_va2pa.count(vp) == 0)
       {
          uint64_t pp = va2pa_lookup(vp);
