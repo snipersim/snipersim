@@ -76,8 +76,7 @@ class SchedulerLocality:
       self.threads[thread_id].setCore(None, sim.stats.time())
 
   def hook_thread_exit(self, thread_id, time):
-    self.threads[thread_id].setCore(None, time)
-    self.threads[thread_id].runnable = False
+    self.hook_thread_stall(thread_id, 'exit', time)
 
   def hook_thread_stall(self, thread_id, reason, time):
     if reason == 'unscheduled':
