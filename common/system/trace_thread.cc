@@ -504,9 +504,6 @@ void TraceThread::run()
          m_blocked = false;
       }
 
-      // We may have been rescheduled to a different core
-      // by prfmdl->iterate (at the end of the last iteration),
-      // or a system call (handled out-of-band by m_trace.Read)
       core = m_thread->getCore();
       prfmdl = core->getPerformanceModel();
 
@@ -551,6 +548,17 @@ void TraceThread::run()
 
          default:
             LOG_PRINT_ERROR("Unknown instrumentation mode");
+      }
+
+
+      // We may have been rescheduled to a different core
+      // by prfmdl->iterate (in handleInstructionDetailed),
+      // or core->countInstructions (when using a fast-forward performance model)
+      SubsecondTime time = prfmdl->getElapsedTime();
+      if (m_thread->reschedule(time, core))
+      {
+         core = m_thread->getCore();
+         prfmdl = core->getPerformanceModel();
       }
 
 
