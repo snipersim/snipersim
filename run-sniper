@@ -459,7 +459,7 @@ if traces:
     sniperoptions.append('-g --traceinput/num_apps=1')
   else:
     sniperoptions.append('-g --traceinput/emulate_syscalls=false')
-    sniperoptions.append('-g --traceinput/mirror_output=true') # Stored traces: mirror output
+    sniperoptions = ['-g --traceinput/mirror_output=true'] + sniperoptions # Stored traces: mirror output by default, overridable on command line
     sniperoptions.append('-g --traceinput/num_apps=%u' % len(traces))
   for thread_id, trace in enumerate(traces):
     filename = findtrace(trace, suffix='.sift')
