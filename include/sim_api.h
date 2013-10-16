@@ -1,11 +1,6 @@
 #ifndef __SIM_API
 #define __SIM_API
 
-#ifndef __STDC_LIMIT_MACROS
-#  define __STDC_LIMIT_MACROS
-#endif
-#include <stdint.h>
-
 
 #define SIM_CMD_ROI_TOGGLE      0  // Deprecated, for compatibility with programs compiled long ago
 #define SIM_CMD_ROI_START       1
@@ -29,7 +24,7 @@
 
 #if defined(__i386)
    #define MAGIC_REG_A "a"
-   #define MAGIC_REG_B "d"
+   #define MAGIC_REG_B "d" // Required for -fPIC support
    #define MAGIC_REG_C "c"
 #else
    #define MAGIC_REG_A "a"
@@ -81,9 +76,9 @@
 #define SimGetNumProcs()          SimMagic0(SIM_CMD_NUM_PROCS)
 #define SimGetNumThreads()        SimMagic0(SIM_CMD_NUM_THREADS)
 #define SimSetFreqMHz(proc, mhz)  SimMagic2(SIM_CMD_MHZ_SET, proc, mhz)
-#define SimSetOwnFreqMHz(mhz)     SimSetFreqMHz(UINT64_MAX, mhz)
+#define SimSetOwnFreqMHz(mhz)     SimSetFreqMHz(SimGetProcId(), mhz)
 #define SimGetFreqMHz(proc)       SimMagic1(SIM_CMD_MHZ_GET, proc)
-#define SimGetOwnFreqMHz()        SimGetFreqMHz(UINT64_MAX)
+#define SimGetOwnFreqMHz()        SimGetFreqMHz(SimGetProcId())
 #define SimMarker(arg0, arg1)     SimMagic2(SIM_CMD_MARKER, arg0, arg1)
 #define SimNamedMarker(arg0, str) SimMagic2(SIM_CMD_NAMED_MARKER, arg0, (unsigned long)(str))
 #define SimUser(cmd, arg)         SimMagic2(SIM_CMD_USER, cmd, arg)

@@ -184,7 +184,7 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
    {
       INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX,
          #ifdef TARGET_IA32
-            IARG_REG_VALUE, REG_GBX,
+            IARG_REG_VALUE, REG_GDX,
          #else
             IARG_REG_VALUE, REG_GBX,
          #endif

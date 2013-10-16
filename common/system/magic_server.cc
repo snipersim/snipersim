@@ -60,7 +60,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             return 0;
          }
       case SIM_CMD_MHZ_SET:
-         return setFrequency(arg0 == UINT64_MAX ? core_id : arg0, arg1);
+         return setFrequency(arg0, arg1);
       case SIM_CMD_NAMED_MARKER:
       {
          char str[256];
@@ -86,7 +86,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
       case SIM_CMD_INSTRUMENT_MODE:
          return setInstrumentationMode(arg0);
       case SIM_CMD_MHZ_GET:
-         return getFrequency(arg0 == UINT64_MAX ? core_id : arg0);
+         return getFrequency(arg0);
       default:
          LOG_ASSERT_ERROR(false, "Got invalid Magic %lu, arg0(%lu) arg1(%lu)", cmd, arg0, arg1);
    }
