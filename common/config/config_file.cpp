@@ -55,7 +55,9 @@ namespace config
 
         //Make sure the file exists
         if(access(filename.c_str(), R_OK) != 0)
-            throw FileNotFound();
+        {
+            throw FileNotFound(filename);
+        }
 
         //Read the data in from the file
         String data;

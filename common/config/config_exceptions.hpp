@@ -45,10 +45,16 @@ class KeyNotFound: public std::exception
 class FileNotFound: public std::exception
 {
 public:
+    FileNotFound(const String &filename)
+    {
+        m_filename = String("File not found: [") + filename + String("]");
+    }
     virtual const char* what() const throw()
     {
-        return "File not found.";
+        return m_filename.c_str();
     }
+private:
+    String m_filename;
 };
 
 
