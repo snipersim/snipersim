@@ -315,18 +315,18 @@ MemoryManager::MemoryManager(Core* core,
       );
 
 
-   if (m_tag_directory_present)
-      LOG_ASSERT_ERROR(m_cache_cntlrs[m_last_level_cache]->isMasterCache() == true,
-                       "Tag directories may only be at 'master' node of shared caches\n"
-                       "\n"
-                       "Make sure perf_model/dram_directory/interleaving is a multiple of perf_model/l%d_cache/shared_cores\n",
-                       Sim()->getCfg()->getInt("perf_model/cache/levels")
-                      );
    if (m_dram_cntlr_present)
       LOG_ASSERT_ERROR(m_cache_cntlrs[m_last_level_cache]->isMasterCache() == true,
                        "DRAM controllers may only be at 'master' node of shared caches\n"
                        "\n"
                        "Make sure perf_model/dram/controllers_interleaving is a multiple of perf_model/l%d_cache/shared_cores\n",
+                       Sim()->getCfg()->getInt("perf_model/cache/levels")
+                      );
+   if (m_tag_directory_present)
+      LOG_ASSERT_ERROR(m_cache_cntlrs[m_last_level_cache]->isMasterCache() == true,
+                       "Tag directories may only be at 'master' node of shared caches\n"
+                       "\n"
+                       "Make sure perf_model/dram_directory/interleaving is a multiple of perf_model/l%d_cache/shared_cores\n",
                        Sim()->getCfg()->getInt("perf_model/cache/levels")
                       );
 
