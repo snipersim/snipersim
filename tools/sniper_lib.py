@@ -201,6 +201,31 @@ def format_size(size, digits = 1):
   return '%.*f%sB' % (digits, size, [' ', 'K', 'M', 'G', 'T', 'P', 'E'][i])
 
 
+def sign(x):
+  if x > 0:
+    return 1
+  elif x < 0:
+    return -1
+  else:
+    return 0
+
+
+def scale_sci(value):
+  i = 0
+  s = sign(value)
+  value = abs(value)
+  if value < 1:
+    while value <= .01:
+      value *= 1000.
+      i += 1
+    return (s * value, ' munf'[i])
+  else:
+    while value >= 1000:
+      value /= 1000.
+      i += 1
+    return (s * value, ' kMGTPE'[i])
+
+
 def find_children(pid):
   # build list of all children per ppid
   children = {}

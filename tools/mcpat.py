@@ -205,21 +205,24 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
         print '  %-12s    %6.2f mm^2   %6.2f%%' % ('total', float(total), 100 * float(total) / total)
   else:
     if print_stack:
-      print '                     Power     Energy   Energy %'
+      print '                     Power     Energy    Energy %'
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
       total_core = 0.
       for name, value in res:
         if print_stack:
-          print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % (name, float(value), float(value) * seconds, 100 * float(value) / total)
+          energy, energy_scale = sniper_lib.scale_sci(float(value) * seconds)
+          print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % (name, float(value), energy, energy_scale, 100 * float(value) / total)
         if name.startswith('core'):
           total_core += float(value)
         plot_labels.append(name)
         plot_data[core][name] = float(value) * seconds
       if print_stack:
         print
-        print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % ('core', float(total_core), float(total_core) * seconds, 100 * float(total_core) / total)
-        print '  %-12s    %6.2f W   %6.2f J    %6.2f%%' % ('total', float(total), float(total) * seconds, 100 * float(total) / total)
+        energy, energy_scale = sniper_lib.scale_sci(float(total_core) * seconds)
+        print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('core', float(total_core), energy, energy_scale, 100 * float(total_core) / total)
+        energy, energy_scale = sniper_lib.scale_sci(float(total) * seconds)
+        print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('total', float(total), energy, energy_scale, 100 * float(total) / total)
 
   if not no_graph:
     # Use Gnuplot to make a stacked bargraphs of these cpi-stacks
