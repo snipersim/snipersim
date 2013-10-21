@@ -35,6 +35,30 @@ getThreadAppid(PyObject *self, PyObject *args)
 }
 
 static PyObject *
+getThreadName(PyObject *self, PyObject *args)
+{
+   unsigned long thread_id = INVALID_THREAD_ID;
+
+   if (!PyArg_ParseTuple(args, "l", &thread_id))
+      return NULL;
+
+   if (thread_id >= Sim()->getThreadManager()->getNumThreads())
+   {
+      PyErr_SetString(PyExc_ValueError, "Invalid thread id");
+      return NULL;
+   }
+
+   Thread *thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
+   if (!thread)
+   {
+      PyErr_SetString(PyExc_ValueError, "Invalid thread id");
+      return NULL;
+   }
+
+   return Py_BuildValue("s", thread->getName().c_str());
+}
+
+static PyObject *
 getThreadAffinity(PyObject *self, PyObject *args)
 {
    unsigned long thread_id = INVALID_THREAD_ID;
@@ -115,6 +139,7 @@ setThreadAffinity(PyObject *self, PyObject *args)
 static PyMethodDef PyThreadMethods[] = {
    { "get_nthreads", getNthreads, METH_VARARGS, "Get number of threads" },
    { "get_thread_appid", getThreadAppid, METH_VARARGS, "Get application ID for a thread" },
+   { "get_thread_name", getThreadName, METH_VARARGS, "Get thread name" },
    { "get_thread_affinity", getThreadAffinity, METH_VARARGS, "Get thread affinity" },
    { "set_thread_affinity", setThreadAffinity, METH_VARARGS, "Set thread affinity" },
    { NULL, NULL, 0, NULL } /* Sentinel */

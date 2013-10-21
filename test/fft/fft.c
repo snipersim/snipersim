@@ -67,8 +67,6 @@ pthread_t ParmacsThreads[PARMACS_MAX_THREADS];
 #include "sim_api.h"
 
 struct GlobalMemory {
-  int id;
-  pthread_mutex_t (idlock);
 
 struct {
   pthread_mutex_t mutex;
@@ -147,6 +145,8 @@ char *argv;
   gettimeofday(&FullTime, NULL);
   (start) = (unsigned long)(FullTime.tv_usec + FullTime.tv_sec * 1000000);
 };
+
+  SimSetThreadName("main");
 
   while ((c = getopt(argc, argv, "p:m:n:l:stoh")) != -1) {
     switch(c) {
@@ -335,8 +335,6 @@ char *argv;
   (Global->start).counter = 0;
   (Global->start).cycle = 0;
 };
-  {pthread_mutex_init(&(Global->idlock), NULL);};
-  Global->id = 0;
   InitX(N, x);                  /* place random values in x */
 
   if (test_result) {
@@ -360,10 +358,10 @@ char *argv;
     printf("Increase PARMACS_MAX_THREADS(%u) !\n", PARMACS_MAX_THREADS);
     exit(-1);
   }
-  pthread_create(&ParmacsThreads[ParmacsThreadNum++], NULL, (void * (*)(void *))SlaveStart, NULL);
+  pthread_create(&ParmacsThreads[ParmacsThreadNum++], NULL, (void * (*)(void *))SlaveStart, (void*)i);
 };
   }
-  SlaveStart();
+  SlaveStart(0);
 
   {
   unsigned long i, Error;
@@ -473,11 +471,10 @@ char *argv;
 }
 
 
-void SlaveStart()
+void SlaveStart(int MyNum)
 {
   int i;
   int j;
-  int MyNum;
   double error;
   double *upriv;
   int initdone;
@@ -486,10 +483,12 @@ void SlaveStart()
   int MyFirst;
   int MyLast;
 
-  {pthread_mutex_lock(&(Global->idlock));};
-    MyNum = Global->id;
-    Global->id++;
-  {pthread_mutex_unlock(&(Global->idlock));};
+  if (MyNum > 0)
+  {
+    char name[10];
+    sprintf(name, "worker-%d", MyNum);
+    SimSetThreadName(name);
+  }
 
 /* POSSIBLE ENHANCEMENT:  Here is where one might pin processes to
    processors to avoid migration */

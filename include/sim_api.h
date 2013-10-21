@@ -16,6 +16,7 @@
 #define SIM_CMD_NUM_PROCS       11
 #define SIM_CMD_NUM_THREADS     12
 #define SIM_CMD_NAMED_MARKER    13
+#define SIM_CMD_SET_THREAD_NAME 14
 
 #define SIM_OPT_INSTRUMENT_DETAILED    0
 #define SIM_OPT_INSTRUMENT_WARMUP      1
@@ -73,6 +74,7 @@
 #define SimRoiEnd()               SimMagic0(SIM_CMD_ROI_END)
 #define SimGetProcId()            SimMagic0(SIM_CMD_PROC_ID)
 #define SimGetThreadId()          SimMagic0(SIM_CMD_THREAD_ID)
+#define SimSetThreadName(name)    SimMagic1(SIM_CMD_SET_THREAD_NAME, (unsigned long)(name))
 #define SimGetNumProcs()          SimMagic0(SIM_CMD_NUM_PROCS)
 #define SimGetNumThreads()        SimMagic0(SIM_CMD_NUM_THREADS)
 #define SimSetFreqMHz(proc, mhz)  SimMagic2(SIM_CMD_MHZ_SET, proc, mhz)

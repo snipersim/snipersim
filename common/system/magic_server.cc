@@ -10,6 +10,7 @@
 #include "hooks_manager.h"
 #include "stats.h"
 #include "timer.h"
+#include "thread.h"
 
 MagicServer::MagicServer()
       : m_performance_enabled(false)
@@ -70,6 +71,16 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
 
          MagicMarkerType args = { thread_id: thread_id, core_id: core_id, arg0: arg0, arg1: 0, str: str };
          Sim()->getHooksManager()->callHooks(HookType::HOOK_MAGIC_MARKER, (UInt64)&args);
+         return 0;
+      }
+      case SIM_CMD_SET_THREAD_NAME:
+      {
+         char str[256];
+         Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
+         core->accessMemory(Core::NONE, Core::READ, arg0, str, 256, Core::MEM_MODELED_NONE);
+         str[255] = '\0';
+
+         Sim()->getThreadManager()->getThreadFromID(thread_id)->setName(str);
          return 0;
       }
       case SIM_CMD_MARKER:

@@ -17,6 +17,8 @@ class Thread
    private:
       thread_id_t m_thread_id;
       app_id_t m_app_id;
+      String m_name;
+
       ConditionVariable m_cond;
       SubsecondTime m_wakeup_time;
       void *m_wakeup_msg;
@@ -39,6 +41,10 @@ class Thread
 
       thread_id_t getId() const { return m_thread_id; }
       app_id_t getAppId() const { return m_app_id; }
+
+      String getName() const { return m_name; }
+      void setName(String name) { m_name = name; }
+
       SyncClient *getSyncClient() const { return m_sync_client; }
       RoutineTracerThread* getRoutineTracer() const { return m_rtn_tracer; }
 
