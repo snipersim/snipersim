@@ -92,6 +92,7 @@ class EnergyStats:
         sim.util.db_delete(self.name_last)
       #   Update new last
       self.name_last = current
+      self.time_last_power = sim.stats.time()
     # Increment energy
     self.update_energy()
 
