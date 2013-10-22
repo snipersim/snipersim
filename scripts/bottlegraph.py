@@ -1,5 +1,8 @@
 import sim, os, collections
 
+# On-line collection of bottle graphs [Du Bois, OOSPLA 2013]
+# See tools/bottlegraph.py for a version that works on off-line data
+
 class BottleGraph:
   def setup(self, args):
     self.total_runtime = 0

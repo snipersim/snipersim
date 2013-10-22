@@ -12,6 +12,7 @@ ThreadStatsManager::ThreadStatsManager()
    , m_thread_stat_types()
    , m_thread_stat_callbacks()
    , m_next_dynamic_type(DYNAMIC)
+   , m_bottlegraphs(MAX_THREADS)
 {
    // Order our hooks to occur before possible reschedulings (which are done with ORDER_ACTION), so the scheduler can use up-to-date information
    Sim()->getHooksManager()->registerHook(HookType::HOOK_PRE_STAT_WRITE, hook_pre_stat_write, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
@@ -83,6 +84,7 @@ UInt64 ThreadStatsManager::metricCallback(ThreadStatType type, thread_id_t threa
 
 void ThreadStatsManager::pre_stat_write()
 {
+   m_bottlegraphs.update(Sim()->getClockSkewMinimizationServer()->getGlobalTime(), INVALID_THREAD_ID, false);
    update();
 }
 
@@ -91,21 +93,27 @@ void ThreadStatsManager::threadStart(thread_id_t thread_id, SubsecondTime time)
    LOG_ASSERT_ERROR(thread_id < MAX_THREADS, "Too many application threads, increase MAX_THREADS");
    m_threads_stats[thread_id] = new ThreadStats(thread_id, time);
    m_threads_stats[thread_id]->update(time); // initialize statistic counters
+   m_bottlegraphs.threadStart(thread_id);
+   m_bottlegraphs.update(time, thread_id, true);
 }
 
 void ThreadStatsManager::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
 {
    m_threads_stats[thread_id]->update(time);
+   if (reason != ThreadManager::STALL_UNSCHEDULED)
+      m_bottlegraphs.update(time, thread_id, false);
 }
 
 void ThreadStatsManager::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
 {
    m_threads_stats[thread_id]->update(time);
+   m_bottlegraphs.update(time, thread_id, true);
 }
 
 void ThreadStatsManager::threadExit(thread_id_t thread_id, SubsecondTime time)
 {
    m_threads_stats[thread_id]->update(time);
+   m_bottlegraphs.update(time, thread_id, false);
 }
 
 ThreadStatsManager::ThreadStats::ThreadStats(thread_id_t thread_id, SubsecondTime time)

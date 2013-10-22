@@ -4,6 +4,7 @@
 #include "fixed_types.h"
 #include "subsecond_time.h"
 #include "hooks_manager.h"
+#include "bottlegraph.h"
 
 class StatsMetricBase;
 
@@ -73,6 +74,7 @@ private:
       ThreadStatTypeList m_thread_stat_types;
       std::unordered_map<ThreadStatType, StatCallback> m_thread_stat_callbacks;
       ThreadStatType m_next_dynamic_type;
+      BottleGraphManager m_bottlegraphs;
 
       static UInt64 metricCallback(ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user);
       UInt64 callThreadStatCallback(ThreadStatType type, thread_id_t thread_id, Core *core);
