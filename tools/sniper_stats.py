@@ -30,6 +30,13 @@ class SniperStatsBase:
   def get_markers(self):
     raise ValueError("Marker information not available from statistics of this type")
 
+  def get_thread_names(self):
+    names = {}
+    for time, core, thread, arg0, arg1, s in self.get_markers():
+      if arg0 == 0xff00ff00000001:
+        names[thread] = s
+    return names
+
 
 def SniperStats(resultsdir = '.', jobid = None):
   if jobid:
