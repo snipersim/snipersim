@@ -40,7 +40,6 @@ class EnergyStats:
     self.dvfs_table = build_dvfs_table(int(sim.config.get('power/technology_node')))
     #
     self.name_last = None
-    self.prefix_last = None
     self.time_last_power = 0
     self.time_last_energy = 0
     self.in_stats_write = False
@@ -65,7 +64,6 @@ class EnergyStats:
   def hook_pre_stat_write(self, prefix):
     if not self.in_stats_write:
       self.update()
-      self.prefix_last = prefix
 
   def hook_sim_end(self):
     if self.name_last:
@@ -83,9 +81,8 @@ class EnergyStats:
       sim.stats.write(current)
       self.in_stats_write = False
       #   If we also have a previous snapshot: update power
-      last = self.name_last or self.prefix_last
-      if last:
-        power = self.run_power(last, current)
+      if self.name_last:
+        power = self.run_power(self.name_last, current)
         self.update_power(power)
       #   Clean up previous last
       if self.name_last:
@@ -97,7 +94,8 @@ class EnergyStats:
     self.update_energy()
 
   def get_stat(self, objectName, index, metricName):
-    self.update_energy()
+    if not self.in_stats_write:
+      self.update()
     return self.energy.get((objectName, index, metricName), 0L)
 
   def update_power(self, power):
