@@ -7,7 +7,7 @@ import sys, os, getopt, sniper_lib, sniper_stats
 
 def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', partial = None):
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
-  results = sniper_lib.get_results(jobid, resultsdir, partial = partial)['results']
+  results = stats.get_results(partial = partial)['results']
 
   thread_names = stats.get_thread_names()
 

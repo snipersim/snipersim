@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, sniper_lib
 
 class SniperStatsBase:
   def parse_stats(self, (k1, k2), ncores, metrics = None):
@@ -37,17 +37,22 @@ class SniperStatsBase:
         names[thread] = s
     return names
 
+  def get_results(self, **kwds):
+    return sniper_lib.get_results(stats = self, **kwds)
+
 
 def SniperStats(resultsdir = '.', jobid = None):
   if jobid:
     import sniper_stats_jobid
-    return sniper_stats_jobid.SniperStatsJobid(jobid)
+    stats = sniper_stats_jobid.SniperStatsJobid(jobid)
   if os.path.exists(os.path.join(resultsdir, 'sim.stats.sqlite3')):
     import sniper_stats_sqlite
-    return sniper_stats_sqlite.SniperStatsSqlite(os.path.join(resultsdir, 'sim.stats.sqlite3'))
+    stats = sniper_stats_sqlite.SniperStatsSqlite(os.path.join(resultsdir, 'sim.stats.sqlite3'))
   elif os.path.exists(os.path.join(resultsdir, 'sim.stats.db')):
     import sniper_stats_db
-    return sniper_stats_db.SniperStatsDb(os.path.join(resultsdir, 'sim.stats.db'))
+    stats = sniper_stats_db.SniperStatsDb(os.path.join(resultsdir, 'sim.stats.db'))
   else:
     import sniper_stats_compat
-    return sniper_stats_compat.SniperStatsCompat(resultsdir)
+    stats = sniper_stats_compat.SniperStatsCompat(resultsdir)
+  stats.config = sniper_lib.get_config(jobid, resultsdir)
+  return stats

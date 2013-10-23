@@ -46,7 +46,8 @@ def get_results(jobid = None, resultsdir = None, config = None, stats = None, pa
   elif resultsdir:
     results = parse_results_from_dir(resultsdir, partial = partial, metrics = metrics)
     config = get_config(resultsdir = resultsdir)
-  elif stats and config:
+  elif stats:
+    config = config or stats.config
     results = stats.parse_stats(partial or ('roi-begin', 'roi-end'), int(config['general/total_cores']), metrics = metrics)
   else:
     raise ValueError('Need either jobid or resultsdir')
