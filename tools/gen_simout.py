@@ -17,6 +17,8 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   ncores = int(config['general/total_cores'])
 
   format_int = lambda v: str(long(v))
+  def format_float(digits):
+    return lambda v: ('%%.%uf' % digits) % v
   def format_ns(digits):
     return lambda v: ('%%.%uf' % digits) % (v/1e6)
 
@@ -40,10 +42,15 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     results['performance_model.elapsed_time_fixed'][c] * results['fs_to_cycles_cores'][c]
     for c in range(ncores)
   ]
+  results['performance_model.ipc'] = [
+    i / (c or 1)
+    for i, c in zip(results['performance_model.instruction_count'], results['performance_model.cycle_count_fixed'])
+  ]
 
   template = [
     ('  Instructions', 'performance_model.instruction_count', str),
     ('  Cycles',       'performance_model.cycle_count_fixed', format_int),
+    ('  IPC',          'performance_model.ipc', format_float(2)),
     ('  Time (ns)',    'performance_model.elapsed_time_fixed', format_ns(0)),
   ]
 
