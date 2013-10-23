@@ -89,6 +89,22 @@ class StatsDelta:
         self.delta = now - self.last
       self.last = now
 
+  class StatsDeltaMetricGet:
+    """Internal object to store current, last and delta stats value.
+    This version is an uncached version of StatsDeltaMetric.
+
+    Do not instantiate directly, use StatsDelta.get() instead."""
+    def __init__(self, objectName, index, metricName):
+      self.get = lambda:sim.stats.get(objectName, index, metricName)
+      self.last = None
+      self.delta = None
+
+    def update(self):
+      now = float(self.get())
+      if self.last is not None:
+        self.delta = now - self.last
+      self.last = now
+
   def __init__(self):
     self.isFirst = True
     self.members = []
@@ -97,6 +113,12 @@ class StatsDelta:
     getter = self.StatsDeltaMetric(objectName, index, metricName)
     self.members.append(getter)
     return getter
+
+  # Uncached version of getter(). Can be used if a statistic hasn't been registered yet.
+  def get(self, objectName, index, metricName):
+    get = self.StatsDeltaMetricGet(objectName, index, metricName)
+    self.members.append(get)
+    return get
 
   def update(self):
     for member in self.members:
