@@ -540,6 +540,23 @@ public:
       m_time += rhs.m_time;
       return *this;
    }
+   ComponentTime& operator+=(const SubsecondTime& rhs)
+   {
+      m_time += rhs;
+      return *this;
+   }
+   ComponentTime operator+(const SubsecondTime& rhs)
+   {
+      ComponentTime result(*this);
+      result.addLatency(rhs);
+      return result;
+   }
+   ComponentTime operator+(uint64_t rhs)
+   {
+      ComponentTime result(*this);
+      result.addCycleLatency(rhs);
+      return result;
+   }
 
    void reset()
    {
@@ -578,6 +595,13 @@ public:
    operator const ComponentPeriod*() const
    {
       return m_period;
+   }
+
+   // Implicit conversion operator from ComponentTime to SubsecondTime
+   //  to allow comparisons between them
+   operator const SubsecondTime() const
+   {
+      return m_time;
    }
 
    friend inline std::ostream &operator<<(std::ostream &os, const ComponentTime &time);
