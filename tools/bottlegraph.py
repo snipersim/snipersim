@@ -5,7 +5,7 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 
-def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', partial = None):
+def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', partial = None, no_text = False):
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
   results = stats.get_results(partial = partial)['results']
 
@@ -20,8 +20,10 @@ def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', p
   # Threads in descending order of parallelism
   threads = sorted(xs.keys(), key = lambda thread: xs[thread], reverse = True)
 
-  #for thread in threads:
-  #  print '[BOTTLEGRAPH]', thread, '%.5f' % ys[thread], '%.5f' % xs[thread], sim.thread.get_thread_name(thread)
+  if not no_text:
+    print 'Runtime (s)   Parallelism   Thread name'
+    for thread in threads:
+      print '%11.5f' % ys[thread], '%13.2f' % xs[thread], ' '*3, thread_names[thread] or 'Thread-%d' % thread
 
   max_x = int(max(xs.values()) + 1.2)
   max_y = total_runtime * 1.1
@@ -68,9 +70,10 @@ if __name__ == '__main__':
   resultsdir = '.'
   outputfile = './bottlegraph'
   partial = None
+  no_text = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ 'partial=' ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ 'partial=', 'no-text' ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -90,9 +93,11 @@ if __name__ == '__main__':
         sys.stderr.write('--partial=<from>:<to>\n')
         usage()
       partial = a.split(':')
+    if o == '--no-text':
+      no_text = True
 
   if args:
     usage()
     sys.exit(-1)
 
-  bottlegraph(jobid, resultsdir, outputfile, partial)
+  bottlegraph(jobid, resultsdir, outputfile, partial = partial, no_text = no_text)
