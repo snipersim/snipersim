@@ -134,8 +134,14 @@ void MagicServer::disablePerformance()
 
    float seconds = t_start.getTime() / 1e9;
    UInt64 ninstrs = getGlobalInstructionCount() - ninstrs_start;
-   printf("[SNIPER] Simulated %.1fM instructions @ %.1f KIPS (%.1f KIPS / target core - %.1fns/instr)\n",
-      ninstrs / 1e6, ninstrs / seconds / 1e3,
+   UInt64 cycles = SubsecondTime::divideRounded(Sim()->getClockSkewMinimizationServer()->getGlobalTime(),
+                                                Sim()->getCoreManager()->getCoreFromID(0)->getDvfsDomain()->getPeriod());
+   printf("[SNIPER] Simulated %.1fM instructions, %.1fM cycles, %.2f IPC\n",
+      ninstrs / 1e6,
+      cycles / 1e6,
+      float(ninstrs) / (cycles ? cycles : 1));
+   printf("[SNIPER] Simulation speed %.1f KIPS (%.1f KIPS / target core - %.1fns/instr)\n",
+      ninstrs / seconds / 1e3,
       ninstrs / seconds / 1e3 / Sim()->getConfig()->getApplicationCores(),
       seconds * 1e9 / (float(ninstrs ? ninstrs : 1.) / Sim()->getConfig()->getApplicationCores()));
 
