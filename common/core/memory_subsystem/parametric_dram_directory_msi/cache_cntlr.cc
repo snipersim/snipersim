@@ -363,7 +363,10 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
       if (cache_block_info)
          cache_block_info->setCState(CacheState::MODIFIED);
       else
+      {
          insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, ShmemPerfModel::_USER_THREAD);
+         cache_block_info = getCacheBlockInfo(ca_address);
+      }
    }
 
    if (count)
