@@ -16,6 +16,7 @@ ThreadStatsManager::ThreadStatsManager()
 {
    // Order our hooks to occur before possible reschedulings (which are done with ORDER_ACTION), so the scheduler can use up-to-date information
    Sim()->getHooksManager()->registerHook(HookType::HOOK_PRE_STAT_WRITE, hook_pre_stat_write, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_CREATE, hook_thread_create, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_START, hook_thread_start, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_STALL, hook_thread_stall, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_RESUME, hook_thread_resume, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
@@ -88,11 +89,15 @@ void ThreadStatsManager::pre_stat_write()
    update();
 }
 
-void ThreadStatsManager::threadStart(thread_id_t thread_id, SubsecondTime time)
+void ThreadStatsManager::threadCreate(thread_id_t thread_id)
 {
    LOG_ASSERT_ERROR(thread_id < MAX_THREADS, "Too many application threads, increase MAX_THREADS");
-   m_threads_stats[thread_id] = new ThreadStats(thread_id, time);
-   m_threads_stats[thread_id]->update(time); // initialize statistic counters
+   m_threads_stats[thread_id] = new ThreadStats(thread_id);
+}
+
+void ThreadStatsManager::threadStart(thread_id_t thread_id, SubsecondTime time)
+{
+   m_threads_stats[thread_id]->update(time, true);
    m_bottlegraphs.threadStart(thread_id);
    m_bottlegraphs.update(time, thread_id, true);
 }
@@ -116,12 +121,12 @@ void ThreadStatsManager::threadExit(thread_id_t thread_id, SubsecondTime time)
    m_bottlegraphs.update(time, thread_id, false);
 }
 
-ThreadStatsManager::ThreadStats::ThreadStats(thread_id_t thread_id, SubsecondTime time)
+ThreadStatsManager::ThreadStats::ThreadStats(thread_id_t thread_id)
    : m_thread(Sim()->getThreadManager()->getThreadFromID(thread_id))
    , m_core_id(INVALID_CORE_ID)
    , time_by_core(Sim()->getConfig()->getApplicationCores())
    , insn_by_core(Sim()->getConfig()->getApplicationCores())
-   , m_time_last(time)
+   , m_time_last(SubsecondTime::Zero())
    , m_counts()
    , m_last()
 {
@@ -141,10 +146,10 @@ ThreadStatsManager::ThreadStats::ThreadStats(thread_id_t thread_id, SubsecondTim
    }
 }
 
-void ThreadStatsManager::ThreadStats::update(SubsecondTime time)
+void ThreadStatsManager::ThreadStats::update(SubsecondTime time, bool init)
 {
    // Increment per-thread statistics based on the progress our core has made since last time
-   SubsecondTime time_delta = time - m_time_last;
+   SubsecondTime time_delta = init ? SubsecondTime::Zero() : time - m_time_last;
    if (m_core_id == INVALID_CORE_ID)
    {
       m_elapsed_time += time_delta;
