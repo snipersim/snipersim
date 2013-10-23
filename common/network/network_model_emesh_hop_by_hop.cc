@@ -26,7 +26,7 @@ const char* OutputDirectionString(NetworkModelEMeshHopByHop::OutputDirection dir
 }
 
 NetworkModelEMeshHopByHop::NetworkModelEMeshHopByHop(Network* net, EStaticNetwork net_type):
-   NetworkModel(net),
+   NetworkModel(net, net_type),
    m_enabled(false),
    m_total_bytes_sent(0),
    m_total_packets_sent(0),

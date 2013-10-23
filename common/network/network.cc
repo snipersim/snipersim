@@ -152,6 +152,8 @@ SInt32 Network::netSend(NetPacket& packet)
 
    NetworkModel *model = _models[g_type_to_static_network_map[packet.type]];
 
+   model->countPacket(packet);
+
    std::vector<NetworkModel::Hop> hopVec;
    model->routePacket(packet, hopVec);
 

@@ -19,7 +19,7 @@ class NetworkModelMagic : public NetworkModel
       ComponentLatency _latency;
 
    public:
-      NetworkModelMagic(Network *net);
+      NetworkModelMagic(Network *net, EStaticNetwork net_type);
       ~NetworkModelMagic() { }
 
       void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops);

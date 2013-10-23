@@ -51,7 +51,7 @@ NetworkModelBusGlobal::useBus(SubsecondTime t_start, UInt32 length, subsecond_ti
 }
 
 NetworkModelBus::NetworkModelBus(Network *net, EStaticNetwork net_type)
-   : NetworkModel(net)
+   : NetworkModel(net, net_type)
    , _enabled(false)
    , _ignore_local(Sim()->getCfg()->getBool("network/bus/ignore_local_traffic"))
 {

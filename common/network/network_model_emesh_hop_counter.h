@@ -8,7 +8,7 @@
 class NetworkModelEMeshHopCounter : public NetworkModel
 {
 public:
-   NetworkModelEMeshHopCounter(Network *net);
+   NetworkModelEMeshHopCounter(Network *net, EStaticNetwork net_type);
    ~NetworkModelEMeshHopCounter();
 
    void routePacket(const NetPacket &pkt,

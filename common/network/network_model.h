@@ -25,8 +25,10 @@ class Network;
 class NetworkModel
 {
    public:
-      NetworkModel(Network *network);
+      NetworkModel(Network *network, EStaticNetwork net_type);
       virtual ~NetworkModel() { }
+
+      void countPacket(const NetPacket &packet);
 
       struct Hop
       {
@@ -54,6 +56,9 @@ class NetworkModel
    private:
       Network *_network;
 
+      const bool m_collect_traffic_matrix;
+      std::vector<uint64_t> m_matrix_packets;
+      std::vector<uint64_t> m_matrix_bytes;
 };
 
 #endif // NETWORK_MODEL_H

@@ -7,11 +7,39 @@
 #include "network_model_emesh_hop_counter.h"
 #include "network_model_emesh_hop_by_hop.h"
 #include "network_model_bus.h"
+#include "stats.h"
 #include "log.h"
+#include "config.hpp"
 
-NetworkModel::NetworkModel(Network *network) :
-   _network(network)
-{}
+NetworkModel::NetworkModel(Network *network, EStaticNetwork net_type)
+   : _network(network)
+   , m_collect_traffic_matrix(Sim()->getCfg()->getBool("network/collect_traffic_matrix"))
+{
+   UInt32 ncores = Sim()->getConfig()->getTotalCores();
+
+   if (m_collect_traffic_matrix)
+   {
+      String netName = String("network.")+EStaticNetworkStrings[net_type];
+      m_matrix_packets.resize(ncores+1);
+      m_matrix_bytes.resize(ncores+1);
+      for(UInt32 dst = 0; dst < ncores+1; ++dst)
+      {
+         String dstName = dst < ncores ? itostr(dst) : "broadcast";
+         registerStatsMetric(netName, _network->getCore()->getId(), "packets-to-" + dstName, &m_matrix_packets[dst]);
+         registerStatsMetric(netName, _network->getCore()->getId(), "bytes-to-" + dstName, &m_matrix_bytes[dst]);
+      }
+   }
+}
+
+void NetworkModel::countPacket(const NetPacket &packet)
+{
+   if (m_collect_traffic_matrix)
+   {
+      SInt32 dst = packet.receiver == NetPacket::BROADCAST ? m_matrix_bytes.size() - 1 : packet.receiver;
+      m_matrix_packets[dst]++;
+      m_matrix_bytes[dst] += getNetwork()->getModeledLength(packet);
+   }
+}
 
 NetworkModel*
 NetworkModel::createModel(Network *net, UInt32 model_type, EStaticNetwork net_type)
@@ -19,10 +47,10 @@ NetworkModel::createModel(Network *net, UInt32 model_type, EStaticNetwork net_ty
    switch (model_type)
    {
    case NETWORK_MAGIC:
-      return new NetworkModelMagic(net);
+      return new NetworkModelMagic(net, net_type);
 
    case NETWORK_EMESH_HOP_COUNTER:
-      return new NetworkModelEMeshHopCounter(net);
+      return new NetworkModelEMeshHopCounter(net, net_type);
 
    case NETWORK_EMESH_HOP_BY_HOP:
       return new NetworkModelEMeshHopByHop(net, net_type);

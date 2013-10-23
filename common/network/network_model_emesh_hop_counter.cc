@@ -10,8 +10,8 @@
 #include "dvfs_manager.h"
 #include "config.hpp"
 
-NetworkModelEMeshHopCounter::NetworkModelEMeshHopCounter(Network *net)
-   : NetworkModel(net)
+NetworkModelEMeshHopCounter::NetworkModelEMeshHopCounter(Network *net, EStaticNetwork net_type)
+   : NetworkModel(net, net_type)
    , _hopLatency(NULL,0)
    , _enabled(false)
    , _num_packets(0)
