@@ -49,6 +49,7 @@ public:
     {
         m_filename = String("File not found: [") + filename + String("]");
     }
+    virtual ~FileNotFound() throw() {}
     virtual const char* what() const throw()
     {
         return m_filename.c_str();
