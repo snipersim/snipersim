@@ -23,7 +23,6 @@ ThreadStatsManager::ThreadStatsManager()
    Sim()->getHooksManager()->registerHook(HookType::HOOK_THREAD_EXIT, hook_thread_exit, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
 
    registerThreadStatMetric(INSTRUCTIONS, "instruction_count", metricCallback, 0);
-   registerThreadStatMetric(ELAPSED_TIME, "core_elapsed_time", metricCallback, 0);
    registerThreadStatMetric(ELAPSED_NONIDLE_TIME, "nonidle_elapsed_time", metricCallback, 0);
 }
 
@@ -74,8 +73,6 @@ UInt64 ThreadStatsManager::metricCallback(ThreadStatType type, thread_id_t threa
    {
       case INSTRUCTIONS:
          return core->getPerformanceModel()->getInstructionCount();
-      case ELAPSED_TIME:
-         return core->getPerformanceModel()->getElapsedTime().getFS();
       case ELAPSED_NONIDLE_TIME:
          return core->getPerformanceModel()->getNonIdleElapsedTime().getFS();
       default:
@@ -148,8 +145,12 @@ ThreadStatsManager::ThreadStats::ThreadStats(thread_id_t thread_id)
 
 void ThreadStatsManager::ThreadStats::update(SubsecondTime time, bool init)
 {
+   if (Sim()->getThreadManager()->getThreadState(m_thread->getId()) == Core::IDLE
+       || Sim()->getThreadManager()->getThreadState(m_thread->getId()) == Core::INITIALIZING)
+      return;
+
    // Increment per-thread statistics based on the progress our core has made since last time
-   SubsecondTime time_delta = init ? SubsecondTime::Zero() : time - m_time_last;
+   SubsecondTime time_delta = init || m_time_last > time ? SubsecondTime::Zero() : time - m_time_last;
    if (m_core_id == INVALID_CORE_ID)
    {
       m_elapsed_time += time_delta;
@@ -159,7 +160,7 @@ void ThreadStatsManager::ThreadStats::update(SubsecondTime time, bool init)
    {
       Core *core = Sim()->getCoreManager()->getCoreFromID(m_core_id);
       m_elapsed_time += time_delta;
-      time_by_core[core->getId()] += core->getPerformanceModel()->getElapsedTime().getFS() - m_last[ELAPSED_TIME];
+      time_by_core[core->getId()] += core->getPerformanceModel()->getNonIdleElapsedTime().getFS() - m_last[ELAPSED_NONIDLE_TIME];
       insn_by_core[core->getId()] += core->getPerformanceModel()->getInstructionCount() - m_last[INSTRUCTIONS];
       for(std::unordered_map<ThreadStatType, UInt64>::iterator it = m_counts.begin(); it != m_counts.end(); ++it)
       {
@@ -179,7 +180,8 @@ void ThreadStatsManager::ThreadStats::update(SubsecondTime time, bool init)
    else
       m_core_id = INVALID_CORE_ID;
 
-   m_time_last = time;
+   if (time > m_time_last)
+      m_time_last = time;
 }
 
 ThreadStatsManager::ThreadStatType ThreadStatNamedStat::registerStat(const char* name, String objectName, String metricName)
