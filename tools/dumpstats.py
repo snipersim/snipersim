@@ -13,10 +13,11 @@ through_time = None
 do_list = False
 do_topo = False
 do_markers = False
+do_events = False
 do_stats = True
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmt", [ 'list', 'markers', 'topology', 'partial=', 'tt=', 'through-time=' ])
+  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmte", [ 'list', 'markers', 'topology', 'events', 'partial=', 'tt=', 'through-time=' ])
 except getopt.GetoptError, e:
   print e
   usage()
@@ -45,10 +46,24 @@ for o, a in opts:
   if o in ('-m', '--markers'):
     do_markers = True
     do_stats = False
+  if o in ('-e', '--events'):
+    do_events = True
+    do_stats = False
 
 if args:
   usage()
   sys.exit(-1)
+
+
+
+def format_event(timestamp, core, thread, message):
+  return '%9ld ns: core(%2d) thread(%2d)  %s' % (timestamp / 1e6, core, thread, message)
+
+def format_marker(value0, value1, description):
+  if description:
+    return 'a = %3d,  str = "%s"' % (value0, description)
+  else:
+    return 'a = %3d,  b = %3d' % (value0, value1)
 
 
 if do_list:
@@ -73,11 +88,29 @@ if do_markers:
     sys.exit(1)
 
   for timestamp, core, thread, value0, value1, description in markers:
-    if description:
-      marker = 'a = %3d,  str = "%s"' % (value0, description)
+    print format_event(timestamp, core, thread, format_marker(value0, value1, description))
+
+if do_events:
+  import sniper_stats
+  stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+  try:
+    events = stats.get_events()
+  except Exception, e:
+    print >> sys.stderr, e
+    print >> sys.stderr, "--events could not be fetched"
+    sys.exit(1)
+
+  for event, timestamp, core, thread, value0, value1, description in events:
+    if event == sniper_stats.EVENT_MARKER:
+      print format_event(timestamp, core, thread, 'Marker: %s' % format_marker(value0, value1, description))
+    elif event == sniper_stats.EVENT_THREAD_NAME:
+      print format_event(timestamp, core, thread, 'Thread name: %s' % description)
+    elif event == sniper_stats.EVENT_APP_START:
+      print format_event(timestamp, core, thread, 'Application %d start' % value0)
+    elif event == sniper_stats.EVENT_APP_EXIT:
+      print format_event(timestamp, core, thread, 'Application %d exit' % value0)
     else:
-      marker = 'a = %3d,  b = %3d' % (value0, value1)
-    print '%9ld ns: core(%2d) thread(%2d)  %s' % (timestamp / 1e6, core, thread, marker)
+      print format_event(timestamp, core, thread, 'Unknown event %d (%d, %d, %s)' % (event, value0, value1, description))
 
 
 if do_stats:

@@ -1,5 +1,7 @@
 import sys, os, sniper_lib
 
+_, EVENT_MARKER, EVENT_THREAD_NAME, EVENT_APP_START, EVENT_APP_EXIT = range(5)
+
 class SniperStatsBase:
   def parse_stats(self, (k1, k2), ncores, metrics = None):
     v1 = self.read_snapshot(k1, metrics = metrics)
@@ -30,10 +32,13 @@ class SniperStatsBase:
   def get_markers(self):
     raise ValueError("Marker information not available from statistics of this type")
 
+  def get_events(self):
+    raise ValueError("Marker information not available from statistics of this type")
+
   def get_thread_names(self):
     names = {}
-    for time, core, thread, arg0, arg1, s in self.get_markers():
-      if arg0 == 0xff00ff00000001:
+    for event, time, core, thread, arg0, arg1, s in self.get_events():
+      if event == EVENT_THREAD_NAME:
         names[thread] = s
     return names
 

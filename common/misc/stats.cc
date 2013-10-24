@@ -26,7 +26,7 @@ const char* db_create_stmts[] = {
    "CREATE INDEX `idx_value_prefix` ON `values`(`prefixid`);",
    // Other users
    "CREATE TABLE `topology` (componentname TEXT, coreid INTEGER, masterid INTEGER);",
-   "CREATE TABLE `marker` (time INTEGER, core INTEGER, thread INTEGER, value0 INTEGER, value1 INTEGER, description TEXT);",
+   "CREATE TABLE `event` (event INTEGER, time INTEGER, core INTEGER, thread INTEGER, value0 INTEGER, value1 INTEGER, description TEXT);",
 };
 const char db_insert_stmt_name[] = "INSERT INTO `names` (nameid, objectname, metricname) VALUES (?, ?, ?);";
 const char db_insert_stmt_prefix[] = "INSERT INTO `prefixes` (prefixid, prefixname) VALUES (?, ?);";
@@ -215,16 +215,20 @@ StatsManager::logTopology(String component, core_id_t core_id, core_id_t master_
 }
 
 void
-StatsManager::logMarker(SubsecondTime time, core_id_t core_id, thread_id_t thread_id, UInt64 value0, UInt64 value1, const char * description)
+StatsManager::logEvent(event_type_t event, SubsecondTime time, core_id_t core_id, thread_id_t thread_id, UInt64 value0, UInt64 value1, const char * description)
 {
+   if (time == SubsecondTime::MaxTime())
+      time = Sim()->getClockSkewMinimizationServer()->getGlobalTime();
+
    sqlite3_stmt *stmt;
-   sqlite3_prepare(m_db, "INSERT INTO marker (time, core, thread, value0, value1, description) VALUES (?, ?, ?, ?, ?, ?);", -1, &stmt, NULL);
-   sqlite3_bind_int64(stmt, 1, time.getFS());
-   sqlite3_bind_int(stmt, 2, core_id);
-   sqlite3_bind_int(stmt, 3, thread_id);
-   sqlite3_bind_int64(stmt, 4, value0);
-   sqlite3_bind_int64(stmt, 5, value1);
-   sqlite3_bind_text(stmt, 6, description ? description : "", -1, SQLITE_STATIC);
+   sqlite3_prepare(m_db, "INSERT INTO event (event, time, core, thread, value0, value1, description) VALUES (?, ?, ?, ?, ?, ?, ?);", -1, &stmt, NULL);
+   sqlite3_bind_int(stmt, 1, event);
+   sqlite3_bind_int64(stmt, 2, time.getFS());
+   sqlite3_bind_int(stmt, 3, core_id);
+   sqlite3_bind_int(stmt, 4, thread_id);
+   sqlite3_bind_int64(stmt, 5, value0);
+   sqlite3_bind_int64(stmt, 6, value1);
+   sqlite3_bind_text(stmt, 7, description ? description : "", -1, SQLITE_STATIC);
    int res = sqlite3_step(stmt);
    LOG_ASSERT_ERROR(res == SQLITE_DONE, "Error executing SQL statement: %s", sqlite3_errmsg(m_db));
    sqlite3_finalize(stmt);

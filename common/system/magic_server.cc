@@ -80,7 +80,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          core->accessMemory(Core::NONE, Core::READ, arg0, str, 256, Core::MEM_MODELED_NONE);
          str[255] = '\0';
 
-         Sim()->getStatsManager()->logMarker(Sim()->getClockSkewMinimizationServer()->getGlobalTime(), core_id, thread_id, 0xff00ff00000001, 0, str);
+         Sim()->getStatsManager()->logEvent(StatsManager::EVENT_THREAD_NAME, SubsecondTime::MaxTime(), core_id, thread_id, 0, 0, str);
          Sim()->getThreadManager()->getThreadFromID(thread_id)->setName(str);
          return 0;
       }

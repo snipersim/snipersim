@@ -5,6 +5,7 @@
 #include "hooks_manager.h"
 #include "config.hpp"
 #include "sim_api.h"
+#include "stats.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -88,6 +89,7 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool init_fifo,
       m_app_info[app_id].num_threads = 1;
       m_app_info[app_id].thread_count = 1;
       Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_START, (UInt64)app_id);
+      Sim()->getStatsManager()->logEvent(StatsManager::EVENT_APP_START, SubsecondTime::MaxTime(), INVALID_CORE_ID, INVALID_THREAD_ID, (UInt64)app_id, 0, "");
       thread_num = 0;
 
       if (!init_fifo)
@@ -168,6 +170,7 @@ void TraceManager::signalDone(TraceThread *thread, SubsecondTime time, bool abor
       {
          m_app_info[app_id].num_runs++;
          Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_EXIT, (UInt64)app_id);
+         Sim()->getStatsManager()->logEvent(StatsManager::EVENT_APP_EXIT, SubsecondTime::MaxTime(), INVALID_CORE_ID, INVALID_THREAD_ID, (UInt64)app_id, 0, "");
 
          if (m_app_info[app_id].num_runs == 1)
             m_num_apps_nonfinish--;

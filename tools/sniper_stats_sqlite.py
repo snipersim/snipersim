@@ -48,8 +48,14 @@ class SniperStatsSqlite(sniper_stats.SniperStatsBase):
 
   def get_markers(self):
     c = self.db.cursor()
-    return c.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall()
+    if c.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="marker"').fetchall():
+      return c.execute('SELECT time, core, thread, value0, value1, description FROM marker').fetchall()
+    else:
+      return [ (timestamp, core, thread, value0, value1, description) for event, timestamp, core, thread, value0, value1, description in self.get_events() if event == sniper_stats.EVENT_MARKER ]
 
+  def get_events(self):
+    c = self.db.cursor()
+    return c.execute('SELECT event, time, core, thread, value0, value1, description FROM event').fetchall()
 
 if __name__ == '__main__':
   stats = SniperStatsSqlite()
