@@ -18,5 +18,5 @@ class SniperStatsJobid(sniper_stats.SniperStatsBase):
   def get_topology(self):
     return self.ic.graphite_dbresults(self.jobid, 'get_topology')
 
-  def get_markers(self):
-    return self.ic.graphite_dbresults(self.jobid, 'get_markers')
+  def get_events(self):
+    return self.ic.graphite_dbresults(self.jobid, 'get_events')

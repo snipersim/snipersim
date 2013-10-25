@@ -29,11 +29,15 @@ class SniperStatsBase:
   def get_topology(self):
     raise ValueError("Topology information not available from statistics of this type")
 
-  def get_markers(self):
-    raise ValueError("Marker information not available from statistics of this type")
-
   def get_events(self):
-    raise ValueError("Marker information not available from statistics of this type")
+    raise ValueError("Event information not available from statistics of this type")
+
+  def get_markers(self):
+    markers = {}
+    for event, time, core, thread, arg0, arg1, s in self.get_events():
+      if event == EVENT_MARKER:
+        markers.append((time, core, thread, arg0, arg1, s))
+    return markers
 
   def get_thread_names(self):
     names = {}
@@ -50,7 +54,7 @@ def SniperStats(resultsdir = '.', jobid = None):
   if jobid:
     import sniper_stats_jobid
     stats = sniper_stats_jobid.SniperStatsJobid(jobid)
-  if os.path.exists(os.path.join(resultsdir, 'sim.stats.sqlite3')):
+  elif os.path.exists(os.path.join(resultsdir, 'sim.stats.sqlite3')):
     import sniper_stats_sqlite
     stats = sniper_stats_sqlite.SniperStatsSqlite(os.path.join(resultsdir, 'sim.stats.sqlite3'))
   elif os.path.exists(os.path.join(resultsdir, 'sim.stats.db')):
