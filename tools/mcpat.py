@@ -84,12 +84,13 @@ def mcpat_run(inputfile, outputfile):
 
 all_items = [
   [ 'core',     .01,    [
-    [ 'core',     .01,    ('core', 'core-other') ],
+    [ 'core',     .01,    'core' ],
     [ 'ifetch',   .01,    'core-ifetch' ],
     [ 'alu',      .01,    'core-alu-complex' ],
     [ 'int',      .01,    'core-alu-int' ],
     [ 'fp',       .01,    'core-alu-fp' ],
     [ 'mem',      .01,    'core-mem' ],
+    [ 'other',    .01,    'core-other' ],
   ] ],
   [ 'icache',   .01,    'icache' ],
   [ 'dcache',   .01,    'dcache' ],
@@ -191,36 +192,43 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
       print '                         Area    Area %'
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
-      total_core = 0.
+      total_core = 0.; total_cache = 0.
       for name, value in res:
         if print_stack:
           print '  %-12s    %6.2f mm^2   %6.2f%%' % (name, float(value), 100 * float(value) / total)
         if name.startswith('core'):
           total_core += float(value)
+        elif name in ('icache', 'dcache', 'l2', 'l3', 'nuca'):
+          total_cache += float(value)
         plot_labels.append(name)
         plot_data[core][name] = float(value)
       if print_stack:
         print
         print '  %-12s    %6.2f mm^2   %6.2f%%' % ('core', float(total_core), 100 * float(total_core) / total)
+        print '  %-12s    %6.2f mm^2   %6.2f%%' % ('cache', float(total_cache), 100 * float(total_cache) / total)
         print '  %-12s    %6.2f mm^2   %6.2f%%' % ('total', float(total), 100 * float(total) / total)
   else:
     if print_stack:
       print '                     Power     Energy    Energy %'
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
-      total_core = 0.
+      total_core = 0.; total_cache = 0.
       for name, value in res:
         if print_stack:
           energy, energy_scale = sniper_lib.scale_sci(float(value) * seconds)
           print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % (name, float(value), energy, energy_scale, 100 * float(value) / total)
         if name.startswith('core'):
           total_core += float(value)
+        elif name in ('icache', 'dcache', 'l2', 'l3', 'nuca'):
+          total_cache += float(value)
         plot_labels.append(name)
         plot_data[core][name] = float(value) * seconds
       if print_stack:
         print
         energy, energy_scale = sniper_lib.scale_sci(float(total_core) * seconds)
         print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('core', float(total_core), energy, energy_scale, 100 * float(total_core) / total)
+        energy, energy_scale = sniper_lib.scale_sci(float(total_cache) * seconds)
+        print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('cache', float(total_cache), energy, energy_scale, 100 * float(total_cache) / total)
         energy, energy_scale = sniper_lib.scale_sci(float(total) * seconds)
         print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('total', float(total), energy, energy_scale, 100 * float(total) / total)
 
@@ -255,7 +263,7 @@ def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
     else:
       raise ValueError('Unknown powertype %s' % powertype)
   data = {
-    'l2':               sum([ getpower(cache) for cache in power_dat.get('L2', []) ]),
+    'l2':               sum([ getpower(core, 'L2') for core in power_dat['Core'] ]),
     'l3':               sum([ getpower(cache) for cache in power_dat.get('L3', []) ]),
     'nuca':             sum([ getpower(cache) for cache in power_dat.get('NUCA', []) ]),
     'noc':              getpower(power_dat['Processor'], 'Total NoCs'),
@@ -283,8 +291,7 @@ def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
                               for core in power_dat['Core']
                             ]),
   }
-  data['core-other'] = getpower(power_dat['Processor'], 'Total Cores') \
-                     - sum(data.values()) + sum([ data[key] for key in ('l2', 'l3', 'nuca', 'noc', 'dram') ])
+  data['core-other'] = getpower(power_dat['Processor']) - (sum(data.values()) - data['dram'])
   return buildstack.merge_items({ 0: data }, all_items, nocollapse = nocollapse)
 
 
