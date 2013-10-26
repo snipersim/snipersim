@@ -870,7 +870,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t<!-- By default, in-order cores do not have load buffers -->",""])
     template.append(["\t\t\t<param name=\"load_buffer_size\" value=\"48\"/>",""])
     template.append(["\t\t\t<!-- number of ports refer to sustainable concurrent memory accesses -->",""])
-    template.append(["\t\t\t<param name=\"memory_ports\" value=\"2\"/>",""])      #Would this be 1 or 2
+    template.append(["\t\t\t<param name=\"memory_ports\" value=\"1\"/>",""])      #Would this be 1 or 2
     template.append(["\t\t\t<!-- max_allowed_in_flight_memo_instructions determins the # of ports of load and store buffer",""])
     template.append(["\t\t\tas well as the ports of Dcache which is connected to LSU -->",""])
     template.append(["\t\t\t<!-- dual-pumped Dcache can be used to save the extra read/write ports -->",""])
