@@ -245,19 +245,21 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
 
 
 
-def power_stack(power_dat, powertype = 'dynamic', nocollapse = False):
+def power_stack(power_dat, powertype = 'total', nocollapse = False):
   def getpower(powers, key = None):
     def getcomponent(suffix):
       if key: return powers.get(key+'/'+suffix, 0)
       else: return powers.get(suffix, 0)
     if powertype == 'dynamic':
-      return getcomponent('Peak Dynamic')
-    if powertype == 'rundynamic':
       return getcomponent('Runtime Dynamic')
     elif powertype == 'static':
       return getcomponent('Subthreshold Leakage') + getcomponent('Gate Leakage')
     elif powertype == 'total':
+      return getcomponent('Runtime Dynamic') + getcomponent('Subthreshold Leakage') + getcomponent('Gate Leakage')
+    elif powertype == 'peak':
       return getcomponent('Peak Dynamic') + getcomponent('Subthreshold Leakage') + getcomponent('Gate Leakage')
+    elif powertype == 'peakdynamic':
+      return getcomponent('Peak Dynamic')
     elif powertype == 'area':
       return getcomponent('Area') + getcomponent('Area Overhead')
     else:
@@ -1224,8 +1226,8 @@ if __name__ == '__main__':
 
   jobid = 0
   resultsdir = '.'
-  powertypes = ['dynamic', 'rundynamic', 'static', 'total', 'area']
-  powertype = 'dynamic'
+  powertypes = ['total', 'dynamic', 'static', 'peak', 'peakdynamic', 'area']
+  powertype = 'total'
   config = None
   outputfile = 'power'
   no_graph = False
