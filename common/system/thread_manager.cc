@@ -4,6 +4,7 @@
 #include "hooks_manager.h"
 #include "config.h"
 #include "log.h"
+#include "stats.h"
 #include "transport.h"
 #include "simulator.h"
 #include "clock_skew_minimization_object.h"
@@ -83,6 +84,8 @@ Thread* ThreadManager::createThread_unlocked(app_id_t app_id, thread_id_t creato
       thread->setCore(core);
       core->setState(Core::INITIALIZING);
    }
+
+   Sim()->getStatsManager()->logEvent(StatsManager::EVENT_THREAD_CREATE, SubsecondTime::MaxTime(), core_id, thread_id, app_id, creator_thread_id, "");
 
    HooksManager::ThreadCreate args = { thread_id: thread_id, creator_thread_id: creator_thread_id };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_CREATE, (UInt64)&args);
@@ -172,6 +175,8 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    m_thread_tls->set(NULL);
    thread->setCore(NULL);
    thread->updateCoreTLS();
+
+   Sim()->getStatsManager()->logEvent(StatsManager::EVENT_THREAD_EXIT, SubsecondTime::MaxTime(), core->getId(), thread_id, 0, 0, "");
 
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);

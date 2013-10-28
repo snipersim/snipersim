@@ -1,6 +1,6 @@
 import sys, os, sniper_lib
 
-_, EVENT_MARKER, EVENT_THREAD_NAME, EVENT_APP_START, EVENT_APP_EXIT = range(5)
+_, EVENT_MARKER, EVENT_THREAD_NAME, EVENT_APP_START, EVENT_APP_EXIT, EVENT_THREAD_CREATE, EVENT_THREAD_EXIT = range(7)
 
 class SniperStatsBase:
   def parse_stats(self, (k1, k2), ncores, metrics = None):

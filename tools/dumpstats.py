@@ -109,6 +109,10 @@ if do_events:
       print format_event(timestamp, core, thread, 'Application %d start' % value0)
     elif event == sniper_stats.EVENT_APP_EXIT:
       print format_event(timestamp, core, thread, 'Application %d exit' % value0)
+    elif event == sniper_stats.EVENT_THREAD_CREATE:
+      print format_event(timestamp, core, thread, 'Thread created: application %d by thread %d' % (value0, value1))
+    elif event == sniper_stats.EVENT_THREAD_EXIT:
+      print format_event(timestamp, core, thread, 'Thread exit')
     else:
       print format_event(timestamp, core, thread, 'Unknown event %d (%d, %d, %s)' % (event, value0, value1, description))
 

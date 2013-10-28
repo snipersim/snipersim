@@ -58,11 +58,14 @@ class StatsMetricCallback : public StatsMetricBase
 class StatsManager
 {
    public:
+      // Event type                 core              thread            arg0           arg1              description
       typedef enum {
-         EVENT_MARKER = 1,
-         EVENT_THREAD_NAME,
-         EVENT_APP_START,
-         EVENT_APP_EXIT,
+         EVENT_MARKER = 1,       // calling core      calling thread    magic arg0     magic arg1        str (SimMarker/SimNamedMarker)
+         EVENT_THREAD_NAME,      // calling core      calling thread    0              0                 thread name (SimSetThreadName)
+         EVENT_APP_START,        // -1                -1                app id         0                 ""
+         EVENT_APP_EXIT,         // -1                -1                app id         0                 ""
+         EVENT_THREAD_CREATE,    // initial core      created thread    app id         creator thread    ""
+         EVENT_THREAD_EXIT,      // current core      exiting thread    0              0                 ""
       } event_type_t;
 
       StatsManager();
