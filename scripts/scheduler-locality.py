@@ -2,7 +2,7 @@ import sim
 
 
 def getScoreMetricTime(thread_id):
-  return long(sim.stats.get('thread', thread_id, 'core_elapsed_time'))
+  return long(sim.stats.get('thread', thread_id, 'nonidle_elapsed_time'))
 
 def getScoreMetricInstructions(thread_id):
   return long(sim.stats.get('thread', thread_id, 'instruction_count'))
