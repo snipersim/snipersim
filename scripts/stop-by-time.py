@@ -7,11 +7,13 @@ class StopByTime:
 
   def setup(self, args):
     args = dict(enumerate((args or '').split(':')))
-    self.time = long(args.get(0, 1e6))
+    self.time = long(args.get(0, 1e6)) * 1e6 # ns to fs
     self.done = False
-    sim.util.Every(self.time * sim.util.Time.NS, self.periodic, roi_only = True)
+    sim.util.Every(sim.util.Time.US, self.periodic, roi_only = True)
 
   def periodic(self, time, time_delta):
+    if time < self.time:
+      sim.control.set_progress(time / float(self.time or 1))
     if self.done:
       return
     elif time >= self.time:

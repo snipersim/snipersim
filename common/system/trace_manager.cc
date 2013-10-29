@@ -276,7 +276,16 @@ UInt64 TraceManager::getProgressValue()
    {
       uint64_t expect = (*it)->getProgressExpect();
       if (expect)
-         value = std::max(value, 1000000 * (*it)->getProgressValue() / expect);
+      {
+         UInt64 this_value = 1000000 * (*it)->getProgressValue() / expect;
+
+         if (m_stop_with_first_app)
+            // Stop with first app
+            value = std::max(value, this_value);
+         else
+            // Stop with last app
+            value = std::min(value, this_value);
+      }
    }
    return value;
 }

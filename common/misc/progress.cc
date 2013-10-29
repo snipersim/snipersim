@@ -6,42 +6,55 @@
 #include "trace_manager.h"
 #include "magic_server.h"
 
-bool progress_enabled = false;
-FILE * progress_fp;
-time_t progress_t_last = 0;
-const time_t progress_interval = 2;
-
-void Progress::init(void)
+Progress::Progress()
+   : m_enabled(false)
+   , m_t_last(0)
+   , m_manual(false)
+   , m_manual_value(0.f)
 {
-   String progress_file = Sim()->getCfg()->getString("progress_trace/filename");
-   if (!progress_file.empty()) {
-      progress_fp = fopen(progress_file.c_str(), "w");
-      progress_enabled = true;
-      Progress::record(true, 0);
+   String filename = Sim()->getCfg()->getString("progress_trace/filename");
 
-      Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC_INS, Progress::record, (UInt64)false);
+   if (!filename.empty())
+   {
+      m_fp = fopen(filename.c_str(), "w");
+      m_enabled = true;
+
+      Sim()->getHooksManager()->registerHook(HookType::HOOK_PERIODIC_INS, __record, (UInt64)this);
    }
 }
 
-void Progress::fini(void)
+Progress::~Progress(void)
 {
-   if (progress_enabled) {
-      Progress::record(false, 0);
-      fclose(progress_fp);
+   if (m_enabled)
+   {
+      record(0);
+      fclose(m_fp);
    }
 }
 
-SInt64 Progress::record(UInt64 init, UInt64 simtime)
+void Progress::setProgress(float progress)
 {
-   if (progress_t_last + progress_interval < time(NULL)) {
-      progress_t_last = time(NULL);
+   m_manual = true;
+   m_manual_value = progress;
+}
+
+void Progress::record(UInt64 simtime)
+{
+   if (m_t_last + m_interval < time(NULL))
+   {
+      m_t_last = time(NULL);
 
       UInt64 expect = 0;
 
       // Always return global instruction count, so MIPS number as reported by job infrastructure is correct
       UInt64 progress = MagicServer::getGlobalInstructionCount();
 
-      if (Sim()->getTraceManager())
+      if (m_manual && m_manual_value > 0)
+      {
+         // Re-compute expected completion based on current progress
+         expect = progress / m_manual_value;
+      }
+      else if (Sim()->getTraceManager())
       {
          UInt64 _expect = Sim()->getTraceManager()->getProgressExpect();
          UInt64 _progress = Sim()->getTraceManager()->getProgressValue();
@@ -54,10 +67,8 @@ SInt64 Progress::record(UInt64 init, UInt64 simtime)
             expect = 100000 * progress;
       }
 
-      rewind(progress_fp);
-      fprintf(progress_fp, "%u %" PRId64 " %" PRId64, unsigned(time(NULL)), progress, expect);
-      fflush(progress_fp);
+      rewind(m_fp);
+      fprintf(m_fp, "%u %" PRId64 " %" PRId64, unsigned(time(NULL)), progress, expect);
+      fflush(m_fp);
    }
-
-   return 0;
 }

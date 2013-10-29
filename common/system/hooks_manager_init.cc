@@ -1,7 +1,6 @@
 #include "hooks_manager.h"
 
 #include "hooks_py.h"
-#include "progress.h"
 
 #include "subsecond_time.h"
 #include "fixed_point.h"
@@ -45,12 +44,10 @@ void hook_print_core0_ipc(void*, subsecond_time_t _time)
 void HooksManager::init(void)
 {
    HooksPy::init();
-   Progress::init();
    //registerHook(HookType::HOOK_PERIODIC, (HookCallbackFunc)hook_print_core0_ipc, NULL);
 }
 
 void HooksManager::fini(void)
 {
-   Progress::fini();
    HooksPy::fini();
 }

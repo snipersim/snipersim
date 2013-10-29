@@ -40,6 +40,19 @@ setInstrumentationMode(PyObject *self, PyObject *args)
 }
 
 static PyObject *
+setProgress(PyObject *self, PyObject *args)
+{
+   float progress = 0;
+
+   if (!PyArg_ParseTuple(args, "f", &progress))
+      return NULL;
+
+   Sim()->getMagicServer()->setProgress(progress);
+
+   Py_RETURN_NONE;
+}
+
+static PyObject *
 simulatorAbort(PyObject *self, PyObject *args)
 {
    // Exit now, cleaning up as best as possible
@@ -57,6 +70,7 @@ simulatorAbort(PyObject *self, PyObject *args)
 static PyMethodDef PyControlMethods[] = {
    { "set_roi", setROI, METH_VARARGS, "Set whether or not we are in the ROI" },
    { "set_instrumentation_mode", setInstrumentationMode, METH_VARARGS, "Set instrumentation mode" },
+   { "set_progress", setProgress, METH_VARARGS, "Set simulation progress indicator (0..1)" },
    { "abort", simulatorAbort, METH_VARARGS, "Stop simulation now" },
    { NULL, NULL, 0, NULL } /* Sentinel */
 };

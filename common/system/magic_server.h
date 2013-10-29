@@ -2,6 +2,7 @@
 #define MAGIC_SERVER_H
 
 #include "fixed_types.h"
+#include "progress.h"
 
 class MagicServer
 {
@@ -32,8 +33,11 @@ class MagicServer
 
       UInt64 setInstrumentationMode(UInt64 sim_api_opt);
 
+      void setProgress(float progress) { m_progress.setProgress(progress); }
+
    private:
       bool m_performance_enabled;
+      Progress m_progress;
 };
 
 #endif // SYNC_SERVER_H
