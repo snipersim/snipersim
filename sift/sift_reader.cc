@@ -148,6 +148,7 @@ bool Sift::Reader::Read(Instruction &inst)
    {
       Record rec;
       uint8_t byte = input->peek();
+      assert(!input->fail());
 
       if (byte == 0)
       {
