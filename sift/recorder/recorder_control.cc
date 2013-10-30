@@ -145,7 +145,7 @@ static void routineCallback(RTN rtn, void* v)
          RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_BOOL, true, IARG_END);
          RTN_Close(rtn);
       }
-      if (rtn_name == "MPI_Finalize")
+      if (rtn_name.find("MPI_Finalize") != string::npos)
       {
          RTN_Open(rtn);
          RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_BOOL, false, IARG_END);
