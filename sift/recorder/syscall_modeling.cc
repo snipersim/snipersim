@@ -86,7 +86,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          // then when the thread ends, write 0 to the tid mutex and futex_wake it
          case SYS_clone:
          {
-            if (args[1] & CLONE_THREAD)
+            if (args[0] & CLONE_THREAD)
             {
                /* New thread */
                thread_data[threadid].output->NewThread();
