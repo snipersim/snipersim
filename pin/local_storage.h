@@ -26,6 +26,12 @@ struct ThreadLocalStorage
    } pthread_create;
    // State used by spin loop detection
    SpinLoopDetectionState sld;
+   // Malloc tracker
+   struct
+   {
+      ADDRINT eip;
+      size_t size;
+   } malloc;
 };
 // Keep track of THREADID to Thread* pointers (and some other stuff), way faster than a PinTLS lookup
 extern std::vector<ThreadLocalStorage> localStore;

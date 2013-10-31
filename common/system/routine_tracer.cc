@@ -113,7 +113,7 @@ void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
 
 bool RoutineTracerThread::unwindTo(IntPtr eip)
 {
-   for(std::deque<IntPtr>::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
+   for(CallStack::reverse_iterator it = m_stack.rbegin(); it != m_stack.rend(); ++it)
    {
       if (*it == eip)
       {
@@ -137,7 +137,7 @@ void RoutineTracerThread::hookRoiBegin()
    ScopedLock sl(m_lock);
 
    IntPtr eip_parent = 0;
-   for(std::deque<IntPtr>::iterator it = m_stack.begin(); it != m_stack.end(); ++it)
+   for(CallStack::iterator it = m_stack.begin(); it != m_stack.end(); ++it)
    {
       if (eip_parent)
          functionChildEnter(eip_parent, *it);
@@ -153,7 +153,7 @@ void RoutineTracerThread::hookRoiEnd()
    // Call functionExit for all functions that are left on the stack.
    // Since functionExit might use m_stack we need to keep it up-to-date by popping items off,
    // we'll use stack_save to remember them and restore m_stack to its original state on exit.
-   std::deque<IntPtr> stack_save;
+   CallStack stack_save;
    IntPtr eip_child = 0;
 
    while(m_stack.size())

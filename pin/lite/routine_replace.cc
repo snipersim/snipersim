@@ -14,6 +14,7 @@
 #include "magic_client.h"
 #include "local_storage.h"
 #include "trace_rtn.h"
+#include "memory_tracker.h"
 
 #include <map>
 #include <cerrno>
@@ -269,6 +270,23 @@ void routineCallback(RTN rtn, void* v)
                               IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
    }
 
+   if (rtn_name == "malloc" || rtn_name == "_int_malloc")
+   {
+      int size_pos = 0;
+      if (rtn_name == "_int_malloc") size_pos = 1;
+
+      RTN_Open(rtn);
+      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(mallocBefore), IARG_THREAD_ID, IARG_RETURN_IP, IARG_FUNCARG_ENTRYPOINT_VALUE, size_pos, IARG_END);
+      RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(mallocAfter), IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_END);
+      RTN_Close(rtn);
+   }
+   if (rtn_name == "free")
+   {
+      RTN_Open(rtn);
+      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(freeBefore), IARG_THREAD_ID, IARG_RETURN_IP, IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
+      RTN_Close(rtn);
+   }
+
    // save pointers to some functions we'll want to call through PIN_CallApplicationFunction
    if (rtn_name == "exit")                   ptr_exit = RTN_Funptr(rtn);
 
@@ -395,6 +413,22 @@ void pthreadAfter(THREADID thread_id, ADDRINT type_id, ADDRINT retval)
       new_state = pthread_functions[type_id].state_after;
    updateState(core, new_state);
    pthreadCount(pthread_functions[type_id].function, core, core->getPerformanceModel()->getElapsedTime() - pthread_t_start[thread_id], SubsecondTime::Zero());
+}
+
+void mallocBefore(THREADID thread_id, ADDRINT eip, ADDRINT size)
+{
+   localStore[thread_id].malloc.eip = eip;
+   localStore[thread_id].malloc.size = size;
+}
+
+void mallocAfter(THREADID thread_id, ADDRINT address)
+{
+   Sim()->getMemoryTracker()->logMalloc(localStore[thread_id].thread->getId(), localStore[thread_id].malloc.eip, address, localStore[thread_id].malloc.size);
+}
+
+void freeBefore(THREADID thread_id, ADDRINT eip, ADDRINT address)
+{
+   Sim()->getMemoryTracker()->logFree(localStore[thread_id].thread->getId(), eip, address);
 }
 
 IntPtr emuGetNprocs()

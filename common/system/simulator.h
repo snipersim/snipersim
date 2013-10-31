@@ -27,6 +27,7 @@ class SamplingManager;
 class FaultinjectionManager;
 class TagsManager;
 class RoutineTracer;
+class MemoryTracker;
 namespace config { class Config; }
 
 class Simulator
@@ -67,6 +68,7 @@ public:
    TraceManager *getTraceManager() { return m_trace_manager; }
    TagsManager *getTagsManager() { return m_tags_manager; }
    RoutineTracer *getRoutineTracer() { return m_rtn_tracer; }
+   MemoryTracker *getMemoryTracker() { return m_memory_tracker; }
 
    bool isRunning() { return m_running; }
    static void enablePerformanceModels();
@@ -97,6 +99,7 @@ private:
    SamplingManager *m_sampling_manager;
    FaultinjectionManager *m_faultinjection_manager;
    RoutineTracer *m_rtn_tracer;
+   MemoryTracker *m_memory_tracker;
 
    bool m_running;
    bool m_inst_mode_output;

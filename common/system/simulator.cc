@@ -25,6 +25,7 @@
 #include "magic_client.h"
 #include "tags.h"
 #include "instruction_tracer.h"
+#include "memory_tracker.h"
 
 #include <sstream>
 
@@ -96,6 +97,7 @@ void Simulator::start()
    m_sampling_manager = new SamplingManager();
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
    m_rtn_tracer = RoutineTracer::create();
+   m_memory_tracker = new MemoryTracker();
 
    if (Sim()->getCfg()->getBool("traceinput/enabled"))
       m_trace_manager = new TraceManager();
@@ -175,6 +177,7 @@ Simulator::~Simulator()
 
    m_transport->barrier();
 
+   delete m_memory_tracker;
    if (m_rtn_tracer)
       delete m_rtn_tracer;
    delete m_trace_manager;

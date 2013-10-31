@@ -20,6 +20,10 @@ IntPtr nullFunction();
 void pthreadBefore(THREADID thread_id);
 void pthreadAfter(THREADID thread_id, ADDRINT type_id, ADDRINT retval);
 
+void mallocBefore(THREADID thread_id, ADDRINT eip, ADDRINT size);
+void mallocAfter(THREADID thread_id, ADDRINT address);
+void freeBefore(THREADID thread_id, ADDRINT eip, ADDRINT address);
+
 // os emulation
 IntPtr emuGetNprocs();
 IntPtr emuGetCPU(THREADID thread_id);

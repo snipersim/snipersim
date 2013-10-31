@@ -5,8 +5,24 @@
 #include "subsecond_time.h"
 
 #include <deque>
+#include <boost/functional/hash.hpp>
+
+// From http://stackoverflow.com/questions/8027368/are-there-no-specializations-of-stdhash-for-standard-containers
+namespace std
+{
+   template<typename T>
+   struct hash<std::deque<T> >
+   {
+      size_t operator()(const std::deque<T>& a) const
+      {
+         return boost::hash_range(a.begin(), a.end());
+      }
+   };
+}
 
 class Thread;
+
+typedef std::deque<IntPtr> CallStack;
 
 class RoutineTracerThread
 {
@@ -18,10 +34,12 @@ class RoutineTracerThread
       void routineExit(IntPtr eip, IntPtr esp);
       void routineAssert(IntPtr eip, IntPtr esp);
 
+      const CallStack& getCallStack() const { return m_stack; }
+
    protected:
       Lock m_lock;
       Thread *m_thread;
-      std::deque<IntPtr> m_stack;
+      CallStack m_stack;
       IntPtr m_last_esp;
 
    private:
@@ -62,6 +80,8 @@ class RoutineTracer
       virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename) = 0;
       virtual bool hasRoutine(IntPtr eip) = 0;
       virtual RoutineTracerThread* getThreadHandler(Thread *thread) = 0;
+
+      virtual const Routine* getRoutineInfo(IntPtr eip) { return NULL; }
 };
 
 #endif // __ROUTINE_TRACER_H

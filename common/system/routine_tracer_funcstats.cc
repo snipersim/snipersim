@@ -59,7 +59,7 @@ void RoutineTracerFunctionStats::RtnThread::functionEndHelper(IntPtr eip, UInt64
    m_master->updateRoutine(eip, count, values);
 }
 
-void RoutineTracerFunctionStats::RtnThread::functionEndFullHelper(const std::deque<IntPtr> &stack, UInt64 count)
+void RoutineTracerFunctionStats::RtnThread::functionEndFullHelper(const CallStack &stack, UInt64 count)
 {
    RtnValues values;
    const ThreadStatsManager::ThreadStatTypeList& types = Sim()->getThreadStatsManager()->getThreadStatTypes();
@@ -201,7 +201,7 @@ void RoutineTracerFunctionStats::RtnMaster::updateRoutine(IntPtr eip, UInt64 cal
    }
 }
 
-RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const std::deque<IntPtr>& stack)
+RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getRoutineFullPtr(const CallStack& stack)
 {
    ScopedLock sl(m_lock);
 
@@ -219,7 +219,7 @@ RoutineTracerFunctionStats::Routine* RoutineTracerFunctionStats::RtnMaster::getR
    return m_callstack_routines[stack];
 }
 
-void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const std::deque<IntPtr>& stack, UInt64 calls, RtnValues values)
+void RoutineTracerFunctionStats::RtnMaster::updateRoutineFull(const CallStack& stack, UInt64 calls, RtnValues values)
 {
    updateRoutineFull(getRoutineFullPtr(stack), calls, values);
 }
