@@ -61,9 +61,9 @@ class Category(Call):
     self.stack = ''
     self.data = {}
   def printLine(self, prof, obj):
-    print >> obj, '%6.2f%%\t' % (100 * self.data['core_elapsed_time'] / float(prof.totals['core_elapsed_time'])) + \
+    print >> obj, '%6.2f%%\t' % (100 * self.data['nonidle_elapsed_time'] / float(prof.totals['nonidle_elapsed_time'])) + \
                   '%6.2f%%\t' % (100 * self.data['instruction_count'] / float(prof.totals['instruction_count'])) + \
-                  '%7.2f\t' % (self.data['instruction_count'] / (prof.fs_to_cycles * float(self.data['core_elapsed_time']))) + \
+                  '%7.2f\t' % (self.data['instruction_count'] / (prof.fs_to_cycles * float(self.data['nonidle_elapsed_time']))) + \
                   '%7.2f\t' % (1000 * self.data['l2miss'] / float(self.data['instruction_count'])) + \
                   self.name
 
@@ -76,8 +76,8 @@ class CallPrinter:
   def printTree(self, stack, offset = 0):
     call = self.prof.calls[stack]
     self.printLine(call, offset = offset)
-    for child in sorted(call.children, key = lambda stack: self.prof.calls[stack].total['core_elapsed_time'], reverse = True):
-      if self.prof.calls[child].total['core_elapsed_time'] / float(self.prof.totals['core_elapsed_time']) < self.opt_cutoff:
+    for child in sorted(call.children, key = lambda stack: self.prof.calls[stack].total['nonidle_elapsed_time'], reverse = True):
+      if self.prof.calls[child].total['nonidle_elapsed_time'] / float(self.prof.totals['nonidle_elapsed_time']) < self.opt_cutoff:
         break
       self.printTree(child, offset = offset + 1)
 
@@ -87,10 +87,10 @@ class CallPrinterDefault(CallPrinter):
     print >> self.obj, '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
   def printLine(self, call, offset):
     print >> self.obj, '%7d\t' % call.data['calls'] + \
-                       '%6.2f%%\t' % (100 * call.total['core_elapsed_time'] / float(self.prof.totals['core_elapsed_time'] or 1)) + \
-                       '%6.2f%%\t' % (100 * call.data['core_elapsed_time'] / float(self.prof.totals['core_elapsed_time'] or 1)) + \
+                       '%6.2f%%\t' % (100 * call.total['nonidle_elapsed_time'] / float(self.prof.totals['nonidle_elapsed_time'] or 1)) + \
+                       '%6.2f%%\t' % (100 * call.data['nonidle_elapsed_time'] / float(self.prof.totals['nonidle_elapsed_time'] or 1)) + \
                        '%6.2f%%\t' % (100 * call.total['instruction_count'] / float(self.prof.totals['instruction_count'] or 1)) + \
-                       '%7.2f\t' % (call.total['instruction_count'] / (self.prof.fs_to_cycles * float(call.total['core_elapsed_time'] or 1))) + \
+                       '%7.2f\t' % (call.total['instruction_count'] / (self.prof.fs_to_cycles * float(call.total['nonidle_elapsed_time'] or 1))) + \
                        '%7.2f\t' % (1000 * call.total['l2miss'] / float(call.total['instruction_count'] or 1)) + \
                        '  ' * offset + call.name
 
@@ -100,8 +100,8 @@ class CallPrinterAbsolute(CallPrinter):
     print >> self.obj, '%7s\t%9s\t%9s\t%9s\t%9s\t%9s\t%s' % ('calls', 'cycles', 'c.self', 'icount', 'i.self', 'l2miss', 'name')
   def printLine(self, call, offset):
     print >> self.obj, '%7d\t' % call.data['calls'] + \
-                       '%9d\t' % (self.prof.fs_to_cycles * float(call.total['core_elapsed_time'])) + \
-                       '%9d\t' % (self.prof.fs_to_cycles * float(call.data['core_elapsed_time'])) + \
+                       '%9d\t' % (self.prof.fs_to_cycles * float(call.total['nonidle_elapsed_time'])) + \
+                       '%9d\t' % (self.prof.fs_to_cycles * float(call.data['nonidle_elapsed_time'])) + \
                        '%9d\t' % call.total['instruction_count'] + \
                        '%9d\t' % call.data['instruction_count'] + \
                        '%9d\t' % call.total['l2miss'] + \
@@ -181,7 +181,7 @@ class Profile:
     else:
       printer = CallPrinterDefault(self, obj, opt_cutoff = opt_cutoff)
     printer.printHeader()
-    for stack in sorted(self.roots, key = lambda stack: self.calls[stack].total['core_elapsed_time'], reverse = True):
+    for stack in sorted(self.roots, key = lambda stack: self.calls[stack].total['nonidle_elapsed_time'], reverse = True):
       printer.printTree(stack)
 
   def writeCallgrind(self, obj):
@@ -199,7 +199,7 @@ class Profile:
       bystatic[fn.ieip].children = children
 
     costs = (
-      ('Cycles', 'Cycles',               lambda data: long(self.fs_to_cycles * data['core_elapsed_time'])),
+      ('Cycles', 'Cycles',               lambda data: long(self.fs_to_cycles * data['nonidle_elapsed_time'])),
       ('Calls',  'Calls',                lambda data: data['calls']),
       ('Icount', 'Instruction count',    lambda data: data['instruction_count']),
       ('L2',     'L2 load misses',       lambda data: data['l2miss']),
