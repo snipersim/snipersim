@@ -3,6 +3,8 @@
 #include "thread_manager.h"
 #include "thread.h"
 
+#include <unordered_set>
+
 MemoryTracker::MemoryTracker()
 {
    Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, __ce_notify_access, __ce_notify_evict, (UInt64)this);
@@ -10,7 +12,14 @@ MemoryTracker::MemoryTracker()
 
 MemoryTracker::~MemoryTracker()
 {
-   FILE *fp = fopen(Sim()->getConfig()->formatOutputFileName("memory_tracker.log").c_str(), "w");
+   FILE *fp = fopen(Sim()->getConfig()->formatOutputFileName("sim.memorytracker").c_str(), "w");
+   std::unordered_set<UInt64> sites_printed;
+
+   fprintf(fp, "W\t");
+   for(int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
+      if (HitWhereIsValid((HitWhere::where_t)h))
+         fprintf(fp, "%s,", HitWhereString((HitWhere::where_t)h));
+   fprintf(fp, "\n");
 
    for(auto it = m_allocation_sites.begin(); it != m_allocation_sites.end(); ++it)
    {
@@ -19,31 +28,36 @@ MemoryTracker::~MemoryTracker()
 
       if (site->total_accesses)
       {
-         fprintf(fp, "Allocation site %p:\n", site);
-         fprintf(fp, "\tCall stack:\n");
          for(auto jt = stack.begin(); jt != stack.end(); ++jt)
          {
-            const RoutineTracer::Routine *rtn = Sim()->getRoutineTracer()->getRoutineInfo(*jt);
-            if (rtn)
-               fprintf(fp, "\t\t[%lx] %s (%s)\n", *jt, rtn->m_name, rtn->m_location);
-            else
-               fprintf(fp, "\t\t[%lx] ???\n", *jt);
+            if (sites_printed.count(*jt) == 0)
+            {
+               const RoutineTracer::Routine *rtn = Sim()->getRoutineTracer()->getRoutineInfo(*jt);
+               if (rtn)
+                  fprintf(fp, "F\t%lx\t%s\t%s\n", *jt, rtn->m_name, rtn->m_location);
+               sites_printed.insert(*jt);
+            }
          }
-         fprintf(fp, "\tTotal allocated: %ld bytes\n", site->total_size);
-         fprintf(fp, "\tHit-Where:\n");
+         fprintf(fp, "S\t%lx\t", (unsigned long)site);
+         for(auto jt = stack.begin(); jt != stack.end(); ++jt)
+            fprintf(fp, ":%lx", *jt);
+         fprintf(fp, "\tnum-allocations=%ld", site->num_allocations);
+         fprintf(fp, "\ttotal-allocated=%ld", site->total_size);
+         fprintf(fp, "\thit-where=");
          for(int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
          {
             if (HitWhereIsValid((HitWhere::where_t)h) && site->hit_where[h] > 0)
             {
-               fprintf(fp, "\t\t%-20s: %ld\n", HitWhereString((HitWhere::where_t)h), site->hit_where[h]);
+               fprintf(fp, "%s:%ld,", HitWhereString((HitWhere::where_t)h), site->hit_where[h]);
             }
          }
          if (site->evicted_by.size())
          {
-            fprintf(fp, "\tEvicted by:\n");
+            fprintf(fp, "\tevicted-by=");
             for(auto it = site->evicted_by.begin(); it != site->evicted_by.end(); ++it)
-               fprintf(fp, "\t\t%20p: %ld\n", it->first, it->second);
+               fprintf(fp, "%lx:%ld,", (unsigned long)it->first, it->second);
          }
+         fprintf(fp, "\n");
       }
    }
 }
@@ -97,6 +111,7 @@ void MemoryTracker::logMalloc(thread_id_t thread_id, UInt64 eip, UInt64 address,
          m_allocations_slow[addr] = site;
    #endif
 
+   m_allocation_sites[stack]->num_allocations++;
    m_allocation_sites[stack]->total_size += size;
 }
 
