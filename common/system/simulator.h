@@ -69,6 +69,7 @@ public:
    TagsManager *getTagsManager() { return m_tags_manager; }
    RoutineTracer *getRoutineTracer() { return m_rtn_tracer; }
    MemoryTracker *getMemoryTracker() { return m_memory_tracker; }
+   void setMemoryTracker(MemoryTracker *memory_tracker) { m_memory_tracker = memory_tracker; }
 
    bool isRunning() { return m_running; }
    static void enablePerformanceModels();

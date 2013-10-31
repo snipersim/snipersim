@@ -13,6 +13,25 @@
 class MemoryTracker
 {
    public:
+      // A light routine tracer that will activate the RoutineTracer infrastructure and allow us to get call stacks
+      class RoutineTracer : public ::RoutineTracer
+      {
+         public:
+            RoutineTracer();
+            virtual ~RoutineTracer();
+
+            virtual RoutineTracerThread* getThreadHandler(Thread *thread) { return new RoutineTracerThread(thread); }
+            virtual void addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);
+            virtual bool hasRoutine(IntPtr eip);
+
+            virtual const Routine* getRoutineInfo(IntPtr eip) { return m_routines.count(eip) ? m_routines[eip] : NULL; }
+
+         private:
+            Lock m_lock;
+            typedef std::unordered_map<IntPtr, RoutineTracer::Routine*> RoutineMap;
+            RoutineMap m_routines;
+      };
+
       MemoryTracker();
       ~MemoryTracker();
 

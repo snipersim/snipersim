@@ -5,8 +5,6 @@
 
 MemoryTracker::MemoryTracker()
 {
-   LOG_ASSERT_ERROR(Sim()->getRoutineTracer() != NULL, "MemoryTracker needs a routine tracer to be active");
-
    Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, __ce_notify_access, __ce_notify_evict, (UInt64)this);
 }
 
@@ -109,4 +107,31 @@ void MemoryTracker::ce_notify_evict(bool on_roi_end, UInt64 owner, UInt64 evicto
          site->evicted_by[evictor_site] = 0;
       site->evicted_by[evictor_site]++;
    }
+}
+
+MemoryTracker::RoutineTracer::RoutineTracer()
+{
+   Sim()->setMemoryTracker(new MemoryTracker());
+}
+
+MemoryTracker::RoutineTracer::~RoutineTracer()
+{
+   delete Sim()->getMemoryTracker();
+}
+
+void MemoryTracker::RoutineTracer::addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)
+{
+   ScopedLock sl(m_lock);
+
+   if (m_routines.count(eip) == 0)
+   {
+      m_routines[eip] = new RoutineTracer::Routine(eip, name, imgname, offset, column, line, filename);
+   }
+}
+
+bool MemoryTracker::RoutineTracer::hasRoutine(IntPtr eip)
+{
+   ScopedLock sl(m_lock);
+
+   return m_routines.count(eip) > 0;
 }

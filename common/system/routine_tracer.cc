@@ -5,6 +5,7 @@
 #include "routine_tracer_print.h"
 #include "routine_tracer_ondemand.h"
 #include "routine_tracer_funcstats.h"
+#include "memory_tracker.h"
 
 #include <cstring>
 
@@ -214,6 +215,8 @@ RoutineTracer* RoutineTracer::create()
       return new RoutineTracerOndemand::RtnMaster();
    else if (type == "funcstats")
       return new RoutineTracerFunctionStats::RtnMaster();
+   else if (type == "memory_tracker")
+      return new MemoryTracker::RoutineTracer();
    else
       LOG_PRINT_ERROR("Unknown routine tracer type %s", type.c_str());
 }

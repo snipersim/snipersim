@@ -52,8 +52,6 @@ class RoutineTracerFunctionStats
             void updateRoutineFull(RoutineTracerFunctionStats::Routine* rtn, UInt64 calls, RtnValues values);
             RoutineTracerFunctionStats::Routine* getRoutineFullPtr(const CallStack& stack);
 
-            virtual const Routine* getRoutineInfo(IntPtr eip) { return m_routines.count(eip) ? m_routines[eip] : NULL; }
-
          private:
             Lock m_lock;
             // Flat-profile per-thread statistics (excludes statistics from child calls).

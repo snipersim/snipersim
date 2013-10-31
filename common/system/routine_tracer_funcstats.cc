@@ -114,7 +114,7 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
    ThreadStatNamedStat::registerStat("cpiBase", "interval_timer", "cpiBase");
    ThreadStatNamedStat::registerStat("cpiBranchPredictor", "interval_timer", "cpiBranchPredictor");
    ThreadStatCpiMem::registerStat();
-//   Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, NULL, __ce_notify_evict, (UInt64)this);
+   Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, NULL, __ce_notify_evict, (UInt64)this);
 }
 
 RoutineTracerFunctionStats::RtnMaster::~RtnMaster()

@@ -72,6 +72,7 @@ Simulator::Simulator()
    , m_sampling_manager(NULL)
    , m_faultinjection_manager(NULL)
    , m_rtn_tracer(NULL)
+   , m_memory_tracker(NULL)
    , m_running(false)
    , m_inst_mode_output(true)
 {
@@ -97,7 +98,6 @@ void Simulator::start()
    m_sampling_manager = new SamplingManager();
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
    m_rtn_tracer = RoutineTracer::create();
-   m_memory_tracker = new MemoryTracker();
 
    if (Sim()->getCfg()->getBool("traceinput/enabled"))
       m_trace_manager = new TraceManager();
@@ -177,7 +177,6 @@ Simulator::~Simulator()
 
    m_transport->barrier();
 
-   delete m_memory_tracker;
    if (m_rtn_tracer)
       delete m_rtn_tracer;
    delete m_trace_manager;

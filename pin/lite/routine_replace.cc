@@ -270,21 +270,24 @@ void routineCallback(RTN rtn, void* v)
                               IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
    }
 
-   if (rtn_name == "malloc" || rtn_name == "_int_malloc")
+   if (Sim()->getMemoryTracker())
    {
-      int size_pos = 0;
-      if (rtn_name == "_int_malloc") size_pos = 1;
+      if (rtn_name == "malloc" || rtn_name == "_int_malloc")
+      {
+         int size_pos = 0;
+         if (rtn_name == "_int_malloc") size_pos = 1;
 
-      RTN_Open(rtn);
-      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(mallocBefore), IARG_THREAD_ID, IARG_RETURN_IP, IARG_FUNCARG_ENTRYPOINT_VALUE, size_pos, IARG_END);
-      RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(mallocAfter), IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_END);
-      RTN_Close(rtn);
-   }
-   if (rtn_name == "free")
-   {
-      RTN_Open(rtn);
-      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(freeBefore), IARG_THREAD_ID, IARG_RETURN_IP, IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
-      RTN_Close(rtn);
+         RTN_Open(rtn);
+         RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(mallocBefore), IARG_THREAD_ID, IARG_RETURN_IP, IARG_FUNCARG_ENTRYPOINT_VALUE, size_pos, IARG_END);
+         RTN_InsertCall(rtn, IPOINT_AFTER,  AFUNPTR(mallocAfter), IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_END);
+         RTN_Close(rtn);
+      }
+      if (rtn_name == "free")
+      {
+         RTN_Open(rtn);
+         RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(freeBefore), IARG_THREAD_ID, IARG_RETURN_IP, IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
+         RTN_Close(rtn);
+      }
    }
 
    // save pointers to some functions we'll want to call through PIN_CallApplicationFunction
