@@ -10,32 +10,34 @@ MemoryTracker::MemoryTracker()
 
 MemoryTracker::~MemoryTracker()
 {
+   FILE *fp = fopen(Sim()->getConfig()->formatOutputFileName("memory_tracker.log").c_str(), "w");
+
    for(auto it = m_allocation_sites.begin(); it != m_allocation_sites.end(); ++it)
    {
       const CallStack &stack = it->first;
       const AllocationSite *site = it->second;
-      printf("Allocation site %p:\n", site);
-      printf("\tCall stack:");
+      fprintf(fp, "Allocation site %p:\n", site);
+      fprintf(fp, "\tCall stack:");
       for(auto jt = stack.begin(); jt != stack.end(); ++jt)
       {
          const RoutineTracer::Routine *rtn = Sim()->getRoutineTracer()->getRoutineInfo(*jt);
          if (rtn)
-            printf("\t\t[%lx] %s\n", *jt, rtn->m_name);
+            fprintf(fp, "\t\t[%lx] %s\n", *jt, rtn->m_name);
          else
-            printf("\t\t[%lx] ???\n", *jt);
+            fprintf(fp, "\t\t[%lx] ???\n", *jt);
       }
-      printf("\tTotal allocated: %ld bytes\n", site->total_size);
-      printf("\tHit-Where:\n");
+      fprintf(fp, "\tTotal allocated: %ld bytes\n", site->total_size);
+      fprintf(fp, "\tHit-Where:\n");
       for(int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
       {
          if (HitWhereIsValid((HitWhere::where_t)h) && site->hit_where[h] > 0)
          {
-            printf("\t\t%-20s: %ld\n", HitWhereString((HitWhere::where_t)h), site->hit_where[h]);
+            fprintf(fp, "\t\t%-20s: %ld\n", HitWhereString((HitWhere::where_t)h), site->hit_where[h]);
          }
       }
-      printf("\tEvicted by:\n");
+      fprintf(fp, "\tEvicted by:\n");
       for(auto it = site->evicted_by.begin(); it != site->evicted_by.end(); ++it)
-         printf("\t\t%20p: %ld\n", it->first, it->second);
+         fprintf(fp, "\t\t%20p: %ld\n", it->first, it->second);
    }
 }
 
