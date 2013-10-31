@@ -114,7 +114,7 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
    ThreadStatNamedStat::registerStat("cpiBase", "interval_timer", "cpiBase");
    ThreadStatNamedStat::registerStat("cpiBranchPredictor", "interval_timer", "cpiBranchPredictor");
    ThreadStatCpiMem::registerStat();
-   Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, __ce_notify, (UInt64)this);
+//   Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, NULL, __ce_notify_evict, (UInt64)this);
 }
 
 RoutineTracerFunctionStats::RtnMaster::~RtnMaster()
@@ -123,7 +123,7 @@ RoutineTracerFunctionStats::RtnMaster::~RtnMaster()
    writeResultsFull(Sim()->getConfig()->formatOutputFileName("sim.rtntracefull").c_str());
 }
 
-UInt64 RoutineTracerFunctionStats::RtnMaster::ce_get_owner(core_id_t core_id)
+UInt64 RoutineTracerFunctionStats::RtnMaster::ce_get_owner(core_id_t core_id, UInt64 address)
 {
    Thread *thread = Sim()->getCoreManager()->getCoreFromID(core_id)->getThread();
    if (thread && m_threads.count(thread->getId()))
@@ -132,7 +132,7 @@ UInt64 RoutineTracerFunctionStats::RtnMaster::ce_get_owner(core_id_t core_id)
       return 0;
 }
 
-void RoutineTracerFunctionStats::RtnMaster::ce_notify(bool on_roi_end, UInt64 owner, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total)
+void RoutineTracerFunctionStats::RtnMaster::ce_notify_evict(bool on_roi_end, UInt64 owner, UInt64 evictor, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total)
 {
    if (owner == 0)
       return;

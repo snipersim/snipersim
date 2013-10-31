@@ -63,13 +63,13 @@ class RoutineTracerFunctionStats
             typedef std::unordered_map<CallStack, RoutineTracerFunctionStats::Routine*> RoutineMapFull;
             RoutineMapFull m_callstack_routines;
 
-            UInt64 ce_get_owner(core_id_t core_id);
-            void ce_notify(bool on_roi_end, UInt64 owner, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total);
+            UInt64 ce_get_owner(core_id_t core_id, UInt64 address);
+            void ce_notify_evict(bool on_roi_end, UInt64 owner, UInt64 evictor, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total);
 
-            static UInt64 __ce_get_owner(UInt64 user, core_id_t core_id)
-            { return ((RtnMaster*)user)->ce_get_owner(core_id); }
-            static void __ce_notify(UInt64 user, bool on_roi_end, UInt64 owner, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total)
-            { ((RtnMaster*)user)->ce_notify(on_roi_end, owner, bits_used, bits_total); }
+            static UInt64 __ce_get_owner(UInt64 user, core_id_t core_id, UInt64 address)
+            { return ((RtnMaster*)user)->ce_get_owner(core_id, address); }
+            static void __ce_notify_evict(UInt64 user, bool on_roi_end, UInt64 owner, UInt64 evictor, CacheBlockInfo::BitsUsedType bits_used, UInt32 bits_total)
+            { ((RtnMaster*)user)->ce_notify_evict(on_roi_end, owner, evictor, bits_used, bits_total); }
 
             void writeResults(const char *filename);
             void writeResultsFull(const char *filename);

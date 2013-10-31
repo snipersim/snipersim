@@ -213,12 +213,13 @@ UInt32 Config::getNearestAcceptableCoreCount(UInt32 core_count)
    return nearest_acceptable_core_count;
 }
 
-void Config::setCacheEfficiencyCallbacks(CacheEfficiencyTracker::CallbackGetOwner get_owner_func, CacheEfficiencyTracker::CallbackNotify notify_func, UInt64 user_arg)
+void Config::setCacheEfficiencyCallbacks(CacheEfficiencyTracker::CallbackGetOwner get_owner_func, CacheEfficiencyTracker::CallbackNotifyAccess notify_access_func, CacheEfficiencyTracker::CallbackNotifyEvict notify_evict_func, UInt64 user_arg)
 {
-   if (m_cache_efficiency_callbacks.notify_func != NULL)
+   if (m_cache_efficiency_callbacks.notify_evict_func != NULL)
       config::Error("Cannot register more than one CacheEfficiencyTracker user");
 
    m_cache_efficiency_callbacks.get_owner_func = get_owner_func;
-   m_cache_efficiency_callbacks.notify_func = notify_func;
+   m_cache_efficiency_callbacks.notify_access_func = notify_access_func;
+   m_cache_efficiency_callbacks.notify_evict_func = notify_evict_func;
    m_cache_efficiency_callbacks.user_arg = user_arg;
 }

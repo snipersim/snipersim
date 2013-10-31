@@ -586,6 +586,8 @@ MYLOG("access done");
       Prefetch(t_start);
    }
 
+   if (Sim()->getConfig()->getCacheEfficiencyCallbacks().notify_access_func)
+      Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify_access(cache_block_info->getOwner(), hit_where);
 
    MYLOG("returning %s, latency %lu ns", HitWhereString(hit_where), total_latency.getNS());
    return hit_where;
@@ -1060,7 +1062,7 @@ CacheCntlr::walkUsageBits()
             CacheBlockInfo *block_info = m_master->m_cache->peekBlock(set_index, way);
             if (block_info->isValid() && !block_info->hasOption(CacheBlockInfo::WARMUP))
             {
-               Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify(true, block_info->getOwner(), block_info->getUsage(), getCacheBlockSize() >> CacheBlockInfo::BitsUsedOffset);
+               Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify_evict(true, block_info->getOwner(), 0, block_info->getUsage(), getCacheBlockSize() >> CacheBlockInfo::BitsUsedOffset);
             }
          }
       }
@@ -1358,7 +1360,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
       cache_block_info->setOption(CacheBlockInfo::WARMUP);
 
    if (Sim()->getConfig()->hasCacheEfficiencyCallbacks())
-      cache_block_info->setOwner(Sim()->getConfig()->getCacheEfficiencyCallbacks().call_get_owner(m_core_id));
+      cache_block_info->setOwner(Sim()->getConfig()->getCacheEfficiencyCallbacks().call_get_owner(m_core_id, address));
 
    if (m_next_cache_cntlr && !m_perfect)
       m_next_cache_cntlr->notifyPrevLevelInsert(m_core_id_master, m_mem_component, address);
@@ -1375,7 +1377,7 @@ MYLOG("evicting @%lx", evict_address);
          && Sim()->getConfig()->hasCacheEfficiencyCallbacks()
       )
       {
-         Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify(false, evict_block_info.getOwner(), evict_block_info.getUsage(), getCacheBlockSize() >> CacheBlockInfo::BitsUsedOffset);
+         Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify_evict(false, evict_block_info.getOwner(), cache_block_info->getOwner(), evict_block_info.getUsage(), getCacheBlockSize() >> CacheBlockInfo::BitsUsedOffset);
       }
 
       CacheState::cstate_t old_state = evict_block_info.getCState();

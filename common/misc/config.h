@@ -92,8 +92,8 @@ public:
    void setBBVsEnabled(bool enable) { m_knob_bbvs = enable; }
 
    const CacheEfficiencyTracker::Callbacks& getCacheEfficiencyCallbacks() const { return m_cache_efficiency_callbacks; }
-   bool hasCacheEfficiencyCallbacks() const { return m_cache_efficiency_callbacks.notify_func != NULL; }
-   void setCacheEfficiencyCallbacks(CacheEfficiencyTracker::CallbackGetOwner get_owner_func, CacheEfficiencyTracker::CallbackNotify notify_func, UInt64 user_arg);
+   bool hasCacheEfficiencyCallbacks() const { return m_cache_efficiency_callbacks.notify_evict_func != NULL; }
+   void setCacheEfficiencyCallbacks(CacheEfficiencyTracker::CallbackGetOwner get_owner_func, CacheEfficiencyTracker::CallbackNotifyAccess notify_access_func, CacheEfficiencyTracker::CallbackNotifyEvict notify_evict_func, UInt64 user_arg);
 
    // Logging
    String getOutputDirectory() const;
