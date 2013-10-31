@@ -16,28 +16,35 @@ MemoryTracker::~MemoryTracker()
    {
       const CallStack &stack = it->first;
       const AllocationSite *site = it->second;
-      fprintf(fp, "Allocation site %p:\n", site);
-      fprintf(fp, "\tCall stack:");
-      for(auto jt = stack.begin(); jt != stack.end(); ++jt)
+
+      if (site->total_accesses)
       {
-         const RoutineTracer::Routine *rtn = Sim()->getRoutineTracer()->getRoutineInfo(*jt);
-         if (rtn)
-            fprintf(fp, "\t\t[%lx] %s\n", *jt, rtn->m_name);
-         else
-            fprintf(fp, "\t\t[%lx] ???\n", *jt);
-      }
-      fprintf(fp, "\tTotal allocated: %ld bytes\n", site->total_size);
-      fprintf(fp, "\tHit-Where:\n");
-      for(int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
-      {
-         if (HitWhereIsValid((HitWhere::where_t)h) && site->hit_where[h] > 0)
+         fprintf(fp, "Allocation site %p:\n", site);
+         fprintf(fp, "\tCall stack:\n");
+         for(auto jt = stack.begin(); jt != stack.end(); ++jt)
          {
-            fprintf(fp, "\t\t%-20s: %ld\n", HitWhereString((HitWhere::where_t)h), site->hit_where[h]);
+            const RoutineTracer::Routine *rtn = Sim()->getRoutineTracer()->getRoutineInfo(*jt);
+            if (rtn)
+               fprintf(fp, "\t\t[%lx] %s (%s)\n", *jt, rtn->m_name, rtn->m_location);
+            else
+               fprintf(fp, "\t\t[%lx] ???\n", *jt);
+         }
+         fprintf(fp, "\tTotal allocated: %ld bytes\n", site->total_size);
+         fprintf(fp, "\tHit-Where:\n");
+         for(int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
+         {
+            if (HitWhereIsValid((HitWhere::where_t)h) && site->hit_where[h] > 0)
+            {
+               fprintf(fp, "\t\t%-20s: %ld\n", HitWhereString((HitWhere::where_t)h), site->hit_where[h]);
+            }
+         }
+         if (site->evicted_by.size())
+         {
+            fprintf(fp, "\tEvicted by:\n");
+            for(auto it = site->evicted_by.begin(); it != site->evicted_by.end(); ++it)
+               fprintf(fp, "\t\t%20p: %ld\n", it->first, it->second);
          }
       }
-      fprintf(fp, "\tEvicted by:\n");
-      for(auto it = site->evicted_by.begin(); it != site->evicted_by.end(); ++it)
-         fprintf(fp, "\t\t%20p: %ld\n", it->first, it->second);
    }
 }
 
@@ -125,6 +132,7 @@ void MemoryTracker::ce_notify_access(UInt64 owner, HitWhere::where_t hit_where)
    if (owner)
    {
       AllocationSite *site = (AllocationSite*)owner;
+      site->total_accesses++;
       site->hit_where[hit_where]++;
    }
 }

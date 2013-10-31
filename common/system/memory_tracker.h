@@ -44,8 +44,9 @@ class MemoryTracker
    private:
       struct AllocationSite
       {
-         AllocationSite() : total_size(0), hit_where(HitWhere::NUM_HITWHERES, 0) {}
+         AllocationSite() : total_size(0), total_accesses(0), hit_where(HitWhere::NUM_HITWHERES, 0) {}
          UInt64 total_size;
+         UInt64 total_accesses;
          std::vector<UInt64> hit_where;
          std::unordered_map<AllocationSite*, UInt64> evicted_by;
       };
