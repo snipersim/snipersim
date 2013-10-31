@@ -10,6 +10,9 @@
 #include <map>
 #include <unordered_map>
 
+// Define to add a slow checker for finding allocation sites by address
+//#define ASSERT_FIND_OWNER
+
 class MemoryTracker
 {
    public:
@@ -60,6 +63,10 @@ class MemoryTracker
       Lock m_lock;
       Allocations m_allocations;
       AllocationSites m_allocation_sites;
+
+      #ifdef ASSERT_FIND_OWNER
+         std::unordered_map<UInt64, AllocationSite*> m_allocations_slow;
+      #endif
 
       UInt64 ce_get_owner(core_id_t core_id, UInt64 address);
       void ce_notify_access(UInt64 owner, HitWhere::where_t hit_where);

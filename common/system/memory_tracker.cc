@@ -57,12 +57,40 @@ void MemoryTracker::logMalloc(thread_id_t thread_id, UInt64 eip, UInt64 address,
       m_allocation_sites[stack] = site;
    }
 
-   //printf("memtracker: site %p(%lx) malloc %lx + %lx\n", site, eip, address, size);
-
-   m_allocation_sites[stack]->total_size += size;
    // Store the first address of the first cache line that no longer belongs to the allocation
    UInt64 lower = address & ~63, upper = (address + size + 63) & ~63;
+
+   //printf("memtracker: site %p(%lx) malloc %lx + %10lx (%lx .. %lx)\n", site, eip, address, size, lower, upper);
+
+   auto previous = m_allocations.upper_bound(lower);
+   if (previous != m_allocations.end() && lower >= previous->first - previous->second.size)
+   {
+      //printf("\t%p overwriting %p\n", site, previous->second.site);
+      if (previous->first - previous->second.size < lower)
+      {
+         UInt64 start = previous->first - previous->second.size;
+         m_allocations[lower] = Allocation(lower - start, previous->second.site);
+         //printf("\tremain %p %lx .. %lx\n", previous->second.site, start, lower);
+      }
+      if (previous->first > upper)
+      {
+         m_allocations[previous->first] = Allocation(previous->first - upper, previous->second.site);
+         //printf("\tremain %p %lx .. %lx\n", previous->second.site, upper, previous->first);
+      }
+      else
+      {
+         m_allocations.erase(previous);
+      }
+   }
+
    m_allocations[upper] = Allocation(upper - lower, site);
+
+   #ifdef ASSERT_FIND_OWNER
+      for(UInt64 addr = lower; addr < upper; addr += 64)
+         m_allocations_slow[addr] = site;
+   #endif
+
+   m_allocation_sites[stack]->total_size += size;
 }
 
 void MemoryTracker::logFree(thread_id_t thread_id, UInt64 eip, UInt64 address)
@@ -70,24 +98,26 @@ void MemoryTracker::logFree(thread_id_t thread_id, UInt64 eip, UInt64 address)
    ScopedLock sl(m_lock);
 
    //printf("memtracker: free %lx\n", address);
-
-   auto it = m_allocations.find(address);
-   if (it != m_allocations.end())
-      m_allocations.erase(it);
 }
 
 UInt64 MemoryTracker::ce_get_owner(core_id_t core_id, UInt64 address)
 {
    ScopedLock sl(m_lock);
+   AllocationSite *owner = NULL;
 
    // upper_bound returns the first entry greater than address
    // Because the key in m_allocations is the first cache line that no longer falls into the range,
    // we will find the correct alloction *if* address falls within it
    auto upper = m_allocations.upper_bound(address);
    if (upper != m_allocations.end() && address >= upper->first - upper->second.size)
-      return (UInt64)upper->second.site;
-   else
-      return 0;
+      owner = upper->second.site;
+
+   #ifdef ASSERT_FIND_OWNER
+      AllocationSite *owner_slow = (m_allocations_slow.count(address & ~63) == 0) ? NULL : m_allocations_slow[address & ~63];
+      LOG_ASSERT_WARNING(owner == owner_slow, "ASSERT_FIND_OWNER: owners for %lx don't match (fast %p != slow %p)", address, owner, owner_slow);
+   #endif
+
+   return (UInt64)owner;
 }
 
 void MemoryTracker::ce_notify_access(UInt64 owner, HitWhere::where_t hit_where)
