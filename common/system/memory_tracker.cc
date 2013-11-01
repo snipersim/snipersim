@@ -142,7 +142,7 @@ UInt64 MemoryTracker::ce_get_owner(core_id_t core_id, UInt64 address)
    return (UInt64)owner;
 }
 
-void MemoryTracker::ce_notify_access(UInt64 owner, HitWhere::where_t hit_where)
+void MemoryTracker::ce_notify_access(UInt64 owner, Core::mem_op_t mem_op_type, HitWhere::where_t hit_where)
 {
    if (owner)
    {

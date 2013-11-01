@@ -3,6 +3,7 @@
 
 #include "routine_tracer.h"
 #include "thread_stats_manager.h"
+#include "cache_efficiency_tracker.h"
 
 #include <unordered_map>
 

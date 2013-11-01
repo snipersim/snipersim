@@ -6,6 +6,8 @@
 #include "cache_set.h"
 #include "core.h"
 
+#include <unordered_map>
+
 class CacheSet;
 
 class ATD

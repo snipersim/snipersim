@@ -587,7 +587,7 @@ MYLOG("access done");
    }
 
    if (Sim()->getConfig()->getCacheEfficiencyCallbacks().notify_access_func)
-      Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify_access(cache_block_info->getOwner(), hit_where);
+      Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify_access(cache_block_info->getOwner(), mem_op_type, hit_where);
 
    MYLOG("returning %s, latency %lu ns", HitWhereString(hit_where), total_latency.getNS());
    return hit_where;

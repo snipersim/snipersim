@@ -15,7 +15,6 @@ class PinMemoryManager;
 
 #include "mem_component.h"
 #include "fixed_types.h"
-#include "config.h"
 #include "lock.h"
 #include "packet_type.h"
 #include "dynamic_instruction_info.h"
