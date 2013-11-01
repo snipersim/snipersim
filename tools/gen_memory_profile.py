@@ -98,8 +98,10 @@ class MemoryTracker:
     #print evicts_global, evicts_unknown
 
   def write(self, obj):
-    for siteid, site in sorted(self.sites.items(), key = lambda (k, v): v.totalloads + v.totalstores, reverse = True):
-      print >> obj, 'Site %s:' % siteid
+    sites_sorted = sorted(self.sites.items(), key = lambda (k, v): v.totalloads + v.totalstores, reverse = True)
+    site_names = dict([ (siteid, '#%d' % (idx+1)) for idx, (siteid, site) in enumerate(sites_sorted) ])
+    for siteid, site in sites_sorted:
+      print >> obj, 'Site %s:' % site_names[siteid]
       print >> obj, '\tCall stack:'
       for eip in site.stack:
         print >> obj, '\t\t%s' % self.functions[eip]
@@ -111,9 +113,9 @@ class MemoryTracker:
       for hitwhere in self.hitwheres:
         if site.hitwhereload.get(hitwhere) or site.hitwherestore.get(hitwhere):
           cnt = site.hitwhereload[hitwhere]
-          print >> obj, '\t\t%-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalloads)),
+          print >> obj, '\t\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalloads)),
           cnt = site.hitwherestore[hitwhere]
-          print >> obj, '\t%-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores))
+          print >> obj, '\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores))
       print >> obj
 
     print >> obj, 'By hit-where:'
@@ -128,8 +130,8 @@ class MemoryTracker:
         print >> obj, '\t%-15s: %s' % ('Stores', format_abs_ratio(totalstorehere, totalstores))
         for siteid, site in sorted(self.sites.items(), key = lambda (k, v): v.hitwhereload.get(hitwhere, 0) + v.hitwherestore.get(hitwhere, 0), reverse = True):
           if site.hitwhereload.get(hitwhere) > .001 * totalloadhere or site.hitwherestore.get(hitwhere) > .001 * totalstorehere:
-            print >> obj, '\t\t  %-15s: %s' % (siteid, format_abs_ratio(site.hitwhereload.get(hitwhere), totalloadhere)),
-            print >> obj, '\t  %-15s: %s' % (siteid, format_abs_ratio(site.hitwherestore.get(hitwhere), totalstorehere))
+            print >> obj, '\t\t  %-15s: %s' % (site_names[siteid], format_abs_ratio(site.hitwhereload.get(hitwhere), totalloadhere)),
+            print >> obj, '\t  %-15s: %s' % (site_names[siteid], format_abs_ratio(site.hitwherestore.get(hitwhere), totalstorehere))
         if self.hitwhere_load_unknown.get(hitwhere) > .001 * totalloadhere or self.hitwhere_store_unknown.get(hitwhere) > .001 * totalstorehere:
           print >> obj, '\t\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_load_unknown.get(hitwhere), totalloadhere)),
           print >> obj, '\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_store_unknown.get(hitwhere), totalstorehere))
