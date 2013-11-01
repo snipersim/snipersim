@@ -141,4 +141,4 @@ if __name__ == '__main__':
       outputdir = a
 
   result = MemoryTracker(resultsdir)
-  result.write(file(os.path.join(outputdir, 'sim.memprofile'), 'w') if outputdir else sys.stdout)
+  result.write(file(os.path.join(outputdir, 'sim.memoryprofile'), 'w') if outputdir else sys.stdout)

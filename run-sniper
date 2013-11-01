@@ -23,6 +23,7 @@ def usage():
         '  [--viz]' + \
         '  [--viz-aso]' + \
         '  [--profile]' + \
+        '  [--memory-profile]' + \
         '  [--perf]' + \
         '  [--gdb]' + \
         '  [--gdb-wait]' + \
@@ -64,6 +65,7 @@ use_viz_profile = ''
 use_viz_aso = ''
 use_viz_mcpat = ''
 use_profile = False
+use_memory_profile = False
 use_perf = False
 use_wrap_sim = None
 use_gdb = False
@@ -182,7 +184,7 @@ try:
     [
       "roi", "roi-script",
       "viz", "viz-aso",
-      "profile",
+      "profile", "memory-profile",
       "perf", "valgrind", "wrap-sim=",
       "gdb", "gdb-wait", "gdb-quit",
       "appdebug", "appdebug-manual", "appdebug-enable",
@@ -243,6 +245,8 @@ for o, a in opts:
   if o == '--profile':
     use_profile = True
     use_viz_profile = '--add-level=profile'
+  if o == '--memory-profile':
+    use_memory_profile = True
   if o == '--perf':
     use_perf = True
   if o == '--valgrind':
@@ -376,6 +380,10 @@ else:
     print >> sys.stderr, 'Cannot use both --follow-execv and --gdb at the same time'
     sys.exit(-1)
 
+if use_profile and use_memory_profile:
+  print >> sys.stderr, 'Cannot use both --profile and --memory-profile at the same time'
+  sys.exit(-1)
+
 yama_ptrace_file = '/proc/sys/kernel/yama/ptrace_scope'
 if use_gdb and os.path.isfile(yama_ptrace_file):
   y_pt = int(open(yama_ptrace_file).readline())
@@ -428,6 +436,8 @@ if use_viz:
 if use_viz_aso or use_profile:
   sniperoptions.append('-g --instruction_tracer/type=fpstats')
   sniperoptions.append('-g --routine_tracer/type=funcstats')
+if use_memory_profile:
+  sniperoptions.append('-g --routine_tracer/type=memory_tracker')
 
 if scripts:
   scriptname = os.path.join(outputdir, 'sim.scripts.py')
@@ -803,6 +813,9 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
   if use_profile:
     os.system('%(sim_root)s/tools/gen_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
+
+  if use_memory_profile:
+    os.system('%(sim_root)s/tools/gen_memory_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
 
   if run_power:
     print '[SNIPER] Running McPAT'
