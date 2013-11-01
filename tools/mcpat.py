@@ -265,7 +265,8 @@ def power_stack(power_dat, powertype = 'total', nocollapse = False):
     else:
       raise ValueError('Unknown powertype %s' % powertype)
   data = {
-    'l2':               sum([ getpower(core, 'L2') for core in power_dat['Core'] ]),
+    'l2':               sum([ getpower(cache) for cache in power_dat.get('L2', []) ])  # shared L2
+                        + sum([ getpower(core, 'L2') for core in power_dat['Core'] ]), # private L2
     'l3':               sum([ getpower(cache) for cache in power_dat.get('L3', []) ]),
     'nuca':             sum([ getpower(cache) for cache in power_dat.get('NUCA', []) ]),
     'noc':              getpower(power_dat['Processor'], 'Total NoCs'),
