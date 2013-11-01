@@ -21,17 +21,22 @@ class Function:
 
 
 class AllocationSite:
-  def __init__(self, stack, numallocations, totalallocated, hitwhere, evictedby):
+  def __init__(self, stack, numallocations, totalallocated, hitwhereload, hitwherestore, evictedby):
     self.stack = stack
     self.numallocations = numallocations
     self.totalallocated = totalallocated
-    self.totalaccesses = sum(hitwhere.values())
-    self.hitwhere = hitwhere
+    self.totalloads = sum(hitwhereload.values())
+    self.hitwhereload = hitwhereload
+    self.totalstores = sum(hitwherestore.values())
+    self.hitwherestore = hitwherestore
     self.evictedby = evictedby
 
 
 def format_abs_ratio(val, tot):
-  return '%12d  (%5.1f%%)' % (val, (100. * val) / tot)
+  if tot:
+    return '%12d  (%5.1f%%)' % (val, (100. * val) / tot)
+  else:
+    return '%12d          ' % val
 
 
 class MemoryTracker:
@@ -44,8 +49,10 @@ class MemoryTracker:
     config = results['config']
     stats = results['results']
 
-    self.hitwhere_global = dict([ (k.split('-', 3)[3], sum(v)) for k, v in stats.items() if k.startswith('L1-D.loads-where-') ])
-    self.hitwhere_unknown = self.hitwhere_global.copy()
+    self.hitwhere_load_global = dict([ (k.split('-', 3)[3], sum(v)) for k, v in stats.items() if k.startswith('L1-D.loads-where-') ])
+    self.hitwhere_load_unknown = self.hitwhere_load_global.copy()
+    self.hitwhere_store_global = dict([ (k.split('-', 3)[3], sum(v)) for k, v in stats.items() if k.startswith('L1-D.stores-where-') ])
+    self.hitwhere_store_unknown = self.hitwhere_store_global.copy()
 
     llc_level = int(sniper_config.get_config(config, 'perf_model/cache/levels'))
     self.evicts_global = sum([ sum(v) for k, v in stats.items() if re.match('L%d.evict-.$' % llc_level, k) ])
@@ -65,7 +72,7 @@ class MemoryTracker:
         line = line.strip().split('\t')
         siteid = line[1]
         stack = line[2].strip(':').split(':')
-        results = { 'numallocations': 0, 'totalallocated': 0, 'hitwhere': {}, 'evictedby': {} }
+        results = { 'numallocations': 0, 'totalallocated': 0, 'hitwhereload': {}, 'hitwherestore': {}, 'evictedby': {} }
         for data in line[3:]:
           key, value = data.split('=')
           if key == 'num-allocations':
@@ -73,9 +80,13 @@ class MemoryTracker:
           if key == 'total-allocated':
             results['totalallocated'] = long(value)
           elif key == 'hit-where':
-            results['hitwhere'] = dict(map(lambda (s, v): (s, long(v)), map(lambda s: s.split(':'), value.strip(',').split(','))))
-            for k, v in results['hitwhere'].items():
-              self.hitwhere_unknown[k] -= v
+            entries = map(lambda s: s.split(':'), value.strip(',').split(','))
+            results['hitwhereload'] = dict([ (s[1:], long(v)) for s, v in entries if s.startswith('L') ])
+            for k, v in results['hitwhereload'].items():
+              self.hitwhere_load_unknown[k] -= v
+            results['hitwherestore'] = dict([ (s[1:], long(v)) for s, v in entries if s.startswith('S') ])
+            for k, v in results['hitwherestore'].items():
+              self.hitwhere_store_unknown[k] -= v
           elif key == 'evicted-by':
             results['evictedby'] = dict(map(lambda (s, v): (s, long(v)), map(lambda s: s.split(':'), value.strip(',').split(','))))
             self.evicts_unknown -= sum(results['evictedby'].values())
@@ -87,7 +98,7 @@ class MemoryTracker:
     #print evicts_global, evicts_unknown
 
   def write(self, obj):
-    for siteid, site in sorted(self.sites.items(), key = lambda (k, v): v.totalaccesses, reverse = True):
+    for siteid, site in sorted(self.sites.items(), key = lambda (k, v): v.totalloads + v.totalstores, reverse = True):
       print >> obj, 'Site %s:' % siteid
       print >> obj, '\tCall stack:'
       for eip in site.stack:
@@ -95,23 +106,33 @@ class MemoryTracker:
       print >> obj, '\tAllocations: %d' % site.numallocations
       print >> obj, '\tTotal allocated: %d' % site.totalallocated
       print >> obj, '\tHit-where:'
+      print >> obj, '\t\t%-15s: %12d          ' % ('Loads', site.totalloads),
+      print >> obj, '\t%-15s: %12d' % ('Stores', site.totalstores)
       for hitwhere in self.hitwheres:
-        if site.hitwhere.get(hitwhere):
-          cnt = site.hitwhere[hitwhere]
-          print >> obj, '\t\t%-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalaccesses))
+        if site.hitwhereload.get(hitwhere) or site.hitwherestore.get(hitwhere):
+          cnt = site.hitwhereload[hitwhere]
+          print >> obj, '\t\t%-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalloads)),
+          cnt = site.hitwherestore[hitwhere]
+          print >> obj, '\t%-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores))
       print >> obj
 
     print >> obj, 'By hit-where:'
-    totalaccesses = sum(self.hitwhere_global.values())
+    totalloads = sum(self.hitwhere_load_global.values())
+    totalstores = sum(self.hitwhere_store_global.values())
     for hitwhere in self.hitwheres:
-      if self.hitwhere_global[hitwhere]:
-        totalhere = self.hitwhere_global[hitwhere]
-        print >> obj, '\t%-15s:  %s' % (hitwhere, format_abs_ratio(totalhere, totalaccesses))
-        for siteid, site in sorted(self.sites.items(), key = lambda (k, v): v.hitwhere.get(hitwhere, 0), reverse = True):
-          if site.hitwhere.get(hitwhere) > .001 * totalhere:
-            print >> obj, '\t\t%12s: %s' % (siteid, format_abs_ratio(site.hitwhere.get(hitwhere), totalhere))
-        if self.hitwhere_unknown.get(hitwhere) > .001 * totalhere:
-          print >> obj, '\t\t%12s: %s' % ('other', format_abs_ratio(self.hitwhere_unknown.get(hitwhere), totalhere))
+      if self.hitwhere_load_global[hitwhere] + self.hitwhere_store_global[hitwhere]:
+        totalloadhere = self.hitwhere_load_global[hitwhere]
+        totalstorehere = self.hitwhere_store_global[hitwhere]
+        print >> obj, '\t%s:' % hitwhere
+        print >> obj, '\t\t%-15s: %s' % ('Loads', format_abs_ratio(totalloadhere, totalloads)),
+        print >> obj, '\t%-15s: %s' % ('Stores', format_abs_ratio(totalstorehere, totalstores))
+        for siteid, site in sorted(self.sites.items(), key = lambda (k, v): v.hitwhereload.get(hitwhere, 0) + v.hitwherestore.get(hitwhere, 0), reverse = True):
+          if site.hitwhereload.get(hitwhere) > .001 * totalloadhere or site.hitwherestore.get(hitwhere) > .001 * totalstorehere:
+            print >> obj, '\t\t  %-15s: %s' % (siteid, format_abs_ratio(site.hitwhereload.get(hitwhere), totalloadhere)),
+            print >> obj, '\t  %-15s: %s' % (siteid, format_abs_ratio(site.hitwherestore.get(hitwhere), totalstorehere))
+        if self.hitwhere_load_unknown.get(hitwhere) > .001 * totalloadhere or self.hitwhere_store_unknown.get(hitwhere) > .001 * totalstorehere:
+          print >> obj, '\t\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_load_unknown.get(hitwhere), totalloadhere)),
+          print >> obj, '\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_store_unknown.get(hitwhere), totalstorehere))
 
 if __name__ == '__main__':
 

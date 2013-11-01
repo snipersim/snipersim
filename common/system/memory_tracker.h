@@ -44,11 +44,15 @@ class MemoryTracker
    private:
       struct AllocationSite
       {
-         AllocationSite() : num_allocations(0), total_size(0), total_accesses(0), hit_where(HitWhere::NUM_HITWHERES, 0) {}
+         AllocationSite()
+            : num_allocations(0), total_size(0), total_loads(0), total_stores(0)
+            , hit_where_load(HitWhere::NUM_HITWHERES, 0)
+            , hit_where_store(HitWhere::NUM_HITWHERES, 0)
+         {}
          UInt64 num_allocations;
          UInt64 total_size;
-         UInt64 total_accesses;
-         std::vector<UInt64> hit_where;
+         UInt64 total_loads, total_stores;
+         std::vector<UInt64> hit_where_load, hit_where_store;
          std::unordered_map<AllocationSite*, UInt64> evicted_by;
       };
       typedef std::unordered_map<CallStack, AllocationSite*> AllocationSites;

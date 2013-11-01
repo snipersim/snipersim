@@ -26,7 +26,7 @@ MemoryTracker::~MemoryTracker()
       const CallStack &stack = it->first;
       const AllocationSite *site = it->second;
 
-      if (site->total_accesses)
+      if (site->total_loads + site->total_stores)
       {
          for(auto jt = stack.begin(); jt != stack.end(); ++jt)
          {
@@ -46,9 +46,10 @@ MemoryTracker::~MemoryTracker()
          fprintf(fp, "\thit-where=");
          for(int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
          {
-            if (HitWhereIsValid((HitWhere::where_t)h) && site->hit_where[h] > 0)
+            if (HitWhereIsValid((HitWhere::where_t)h) && site->hit_where_load[h] + site->hit_where_store[h] > 0)
             {
-               fprintf(fp, "%s:%ld,", HitWhereString((HitWhere::where_t)h), site->hit_where[h]);
+               fprintf(fp, "L%s:%ld,", HitWhereString((HitWhere::where_t)h), site->hit_where_load[h]);
+               fprintf(fp, "S%s:%ld,", HitWhereString((HitWhere::where_t)h), site->hit_where_store[h]);
             }
          }
          if (site->evicted_by.size())
@@ -147,8 +148,16 @@ void MemoryTracker::ce_notify_access(UInt64 owner, Core::mem_op_t mem_op_type, H
    if (owner)
    {
       AllocationSite *site = (AllocationSite*)owner;
-      site->total_accesses++;
-      site->hit_where[hit_where]++;
+      if (mem_op_type == Core::WRITE)
+      {
+         site->total_stores++;
+         site->hit_where_store[hit_where]++;
+      }
+      else
+      {
+         site->total_loads++;
+         site->hit_where_load[hit_where]++;
+      }
    }
 }
 
