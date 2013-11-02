@@ -116,6 +116,10 @@ class MemoryTracker:
           print >> obj, '\t\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalloads)),
           cnt = site.hitwherestore[hitwhere]
           print >> obj, '\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores))
+      print >> obj, '\tEvicted-by:'
+      evicts = sorted(filter(lambda (siteid, cnt): cnt > 10, site.evictedby.items()), key = lambda (siteid, cnt): cnt, reverse = True)
+      for siteid, cnt in evicts[:10]:
+        print >> obj, '\t\t%-15s: %12d' % (site_names.get(siteid, 'other'), cnt)
       print >> obj
 
     print >> obj, 'By hit-where:'
