@@ -20,6 +20,12 @@ class Function:
     return '[%12s]  %-20s %s' % (self.eip, self.name, ':'.join(self.location))
 
 
+def dirSum(a, b):
+  for k, v in b.items():
+    a[k] = a.get(k, 0) + v
+  return a
+
+
 class AllocationSite:
   def __init__(self, stack, numallocations, totalallocated, hitwhereload, hitwherestore, evictedby):
     self.stack = stack
@@ -30,7 +36,14 @@ class AllocationSite:
     self.totalstores = sum(hitwherestore.values())
     self.hitwherestore = hitwherestore
     self.evictedby = evictedby
-
+  def update(self, numallocations, totalallocated, hitwhereload, hitwherestore, evictedby):
+    self.numallocations += numallocations
+    self.totalallocated += totalallocated
+    self.totalloads += sum(hitwhereload.values())
+    self.hitwhereload = dirSum(self.hitwhereload, hitwhereload)
+    self.totalstores += sum(hitwherestore.values())
+    self.hitwherestore = dirSum(self.hitwherestore, hitwherestore)
+    self.evictedby = dirSum(self.evictedby, evictedby)
 
 def format_abs_ratio(val, tot):
   if tot:
@@ -60,6 +73,7 @@ class MemoryTracker:
 
     self.functions = {}
     self.sites = {}
+    self.siteids = {}
 
     fp = open(filename)
     for line in fp:
@@ -72,6 +86,7 @@ class MemoryTracker:
         line = line.strip().split('\t')
         siteid = line[1]
         stack = line[2].strip(':').split(':')
+        stack = self.collapseStack(stack)
         results = { 'numallocations': 0, 'totalallocated': 0, 'hitwhereload': {}, 'hitwherestore': {}, 'evictedby': {} }
         for data in line[3:]:
           key, value = data.split('=')
@@ -90,18 +105,32 @@ class MemoryTracker:
           elif key == 'evicted-by':
             results['evictedby'] = dict(map(lambda (s, v): (s, long(v)), map(lambda s: s.split(':'), value.strip(',').split(','))))
             self.evicts_unknown -= sum(results['evictedby'].values())
-        self.sites[siteid] = AllocationSite(stack, **results)
+        self.siteids[siteid] = stack
+        if stack in self.sites:
+          self.sites[stack].update(**results)
+        else:
+          self.sites[stack] = AllocationSite(stack, **results)
       else:
         raise ValueError('Invalid format %s' % line)
     #print ', '.join([ '%s:%d' % (k, v) for k, v in hitwhere_global.items() if v ])
     #print ', '.join([ '%s:%d' % (k, v) for k, v in hitwhere_unknown.items() if v ])
     #print evicts_global, evicts_unknown
 
+  def collapseStack(self, stack):
+    _stack = []
+    for eip in stack:
+      if self.functions[eip].name in ('.plt',):
+        continue
+      if self.functions[eip].name.startswith('_dl_'):
+        continue
+      _stack.append(eip)
+    return tuple(_stack)
+
   def write(self, obj):
     sites_sorted = sorted(self.sites.items(), key = lambda (k, v): v.totalloads + v.totalstores, reverse = True)
-    site_names = dict([ (siteid, '#%d' % (idx+1)) for idx, (siteid, site) in enumerate(sites_sorted) ])
-    for siteid, site in sites_sorted:
-      print >> obj, 'Site %s:' % site_names[siteid]
+    site_names = dict([ (stack, '#%d' % (idx+1)) for idx, (stack, site) in enumerate(sites_sorted) ])
+    for stack, site in sites_sorted:
+      print >> obj, 'Site %s:' % site_names[stack]
       print >> obj, '\tCall stack:'
       for eip in site.stack:
         print >> obj, '\t\t%s' % self.functions[eip]
@@ -117,9 +146,14 @@ class MemoryTracker:
           cnt = site.hitwherestore[hitwhere]
           print >> obj, '\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores))
       print >> obj, '\tEvicted-by:'
-      evicts = sorted(filter(lambda (siteid, cnt): cnt > 10, site.evictedby.items()), key = lambda (siteid, cnt): cnt, reverse = True)
-      for siteid, cnt in evicts[:10]:
-        print >> obj, '\t\t%-15s: %12d' % (site_names.get(siteid, 'other'), cnt)
+      evicts = {}
+      for siteid, cnt in site.evictedby.items():
+        _stack = self.siteids[siteid] if siteid != '0' else 'other'
+        evicts[_stack] = evicts.get(_stack, 0) + cnt
+      evicts = sorted(evicts.items(), key = lambda (stack, cnt): cnt, reverse = True)
+      for _stack, cnt in evicts[:10]:
+        name = site_names.get(_stack, 'other') if _stack != stack else 'self'
+        print >> obj, '\t\t%-15s: %12d' % (name, cnt)
       print >> obj
 
     print >> obj, 'By hit-where:'
@@ -132,10 +166,10 @@ class MemoryTracker:
         print >> obj, '\t%s:' % hitwhere
         print >> obj, '\t\t%-15s: %s' % ('Loads', format_abs_ratio(totalloadhere, totalloads)),
         print >> obj, '\t%-15s: %s' % ('Stores', format_abs_ratio(totalstorehere, totalstores))
-        for siteid, site in sorted(self.sites.items(), key = lambda (k, v): v.hitwhereload.get(hitwhere, 0) + v.hitwherestore.get(hitwhere, 0), reverse = True):
+        for stack, site in sorted(self.sites.items(), key = lambda (k, v): v.hitwhereload.get(hitwhere, 0) + v.hitwherestore.get(hitwhere, 0), reverse = True):
           if site.hitwhereload.get(hitwhere) > .001 * totalloadhere or site.hitwherestore.get(hitwhere) > .001 * totalstorehere:
-            print >> obj, '\t\t  %-15s: %s' % (site_names[siteid], format_abs_ratio(site.hitwhereload.get(hitwhere), totalloadhere)),
-            print >> obj, '\t  %-15s: %s' % (site_names[siteid], format_abs_ratio(site.hitwherestore.get(hitwhere), totalstorehere))
+            print >> obj, '\t\t  %-15s: %s' % (site_names[stack], format_abs_ratio(site.hitwhereload.get(hitwhere), totalloadhere)),
+            print >> obj, '\t  %-15s: %s' % (site_names[stack], format_abs_ratio(site.hitwherestore.get(hitwhere), totalstorehere))
         if self.hitwhere_load_unknown.get(hitwhere) > .001 * totalloadhere or self.hitwhere_store_unknown.get(hitwhere) > .001 * totalstorehere:
           print >> obj, '\t\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_load_unknown.get(hitwhere), totalloadhere)),
           print >> obj, '\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_store_unknown.get(hitwhere), totalstorehere))
