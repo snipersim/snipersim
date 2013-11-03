@@ -20,14 +20,14 @@ RoutineTracerThread::~RoutineTracerThread()
 {
 }
 
-void RoutineTracerThread::routineEnter(IntPtr eip, IntPtr esp)
+void RoutineTracerThread::routineEnter(IntPtr eip, IntPtr esp, IntPtr callEip)
 {
    ScopedLock sl(m_lock);
 
-   routineEnter_unlocked(eip, esp);
+   routineEnter_unlocked(eip, esp, callEip);
 }
 
-void RoutineTracerThread::routineEnter_unlocked(IntPtr eip, IntPtr esp)
+void RoutineTracerThread::routineEnter_unlocked(IntPtr eip, IntPtr esp, IntPtr callEip)
 {
    if (m_stack.size())
       if (Sim()->getMagicServer()->inROI())
@@ -37,7 +37,7 @@ void RoutineTracerThread::routineEnter_unlocked(IntPtr eip, IntPtr esp)
    m_last_esp = esp;
 
    if (Sim()->getMagicServer()->inROI())
-      functionEnter(eip);
+      functionEnter(eip, callEip);
 }
 
 void RoutineTracerThread::routineExit(IntPtr eip, IntPtr esp)
@@ -80,7 +80,7 @@ void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
    if (m_stack.size() == 0)
    {
       // Newly created thread just jumps into the first routine
-      routineEnter_unlocked(eip, esp);
+      routineEnter_unlocked(eip, esp, 0);
    }
    else if (m_stack.back() == eip)
    {
@@ -89,7 +89,7 @@ void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
    else if (esp <= m_last_esp)
    {
       // Stack grew (downwards), or stayed constant (tail call): we entered a new function
-      routineEnter_unlocked(eip, esp);
+      routineEnter_unlocked(eip, esp, 0);
    }
    else
    {
@@ -98,7 +98,7 @@ void RoutineTracerThread::routineAssert(IntPtr eip, IntPtr esp)
       if (!found)
       {
          // We now seem to be in a function we haven't been before, enter it (tail call elimination?)
-         routineEnter_unlocked(eip, esp);
+         routineEnter_unlocked(eip, esp, 0);
       }
       else
       {
@@ -142,7 +142,7 @@ void RoutineTracerThread::hookRoiBegin()
    {
       if (eip_parent)
          functionChildEnter(eip_parent, *it);
-      functionEnter(*it);
+      functionEnter(*it, 0);
       eip_parent = *it;
    }
 }
@@ -176,6 +176,8 @@ void RoutineTracerThread::hookRoiEnd()
 RoutineTracer::Routine::Routine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)
    : m_eip(eip)
    , m_name(NULL)
+   , m_imgname(NULL)
+   , m_filename(NULL)
    , m_location(NULL)
 {
    updateLocation(name, imgname, offset, column, line, filename);
@@ -185,10 +187,21 @@ void RoutineTracer::Routine::updateLocation(const char *name, const char *imgnam
 {
    if (m_name)
       free(m_name);
+   if (m_imgname)
+      free(m_imgname);
+   if (m_filename)
+      free(m_filename);
    if (m_location)
       free(m_location);
 
    m_name = strdup(name);
+   m_imgname = strdup(imgname);
+   m_filename = strdup(filename);
+
+   m_offset = offset;
+   m_column = column;
+   m_line = line;
+
    char location[4096];
    snprintf(location, 4095, "%s:%" PRIdPTR ":%s:%d:%d", imgname, offset, filename, line, column);
    location[4095] = '\0';

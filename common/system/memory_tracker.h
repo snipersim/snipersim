@@ -17,6 +17,16 @@ class MemoryTracker
 {
    public:
       // A light routine tracer that will activate the RoutineTracer infrastructure and allow us to get call stacks
+      class RoutineTracerThread : public ::RoutineTracerThread
+      {
+         public:
+            RoutineTracerThread(Thread *thread) : ::RoutineTracerThread(thread) {}
+         protected:
+            virtual void functionEnter(IntPtr eip, IntPtr callEip) {}
+            virtual void functionExit(IntPtr eip) {}
+            virtual void functionChildEnter(IntPtr eip, IntPtr eip_child) {}
+            virtual void functionChildExit(IntPtr eip, IntPtr eip_child) {}
+      };
       class RoutineTracer : public ::RoutineTracer
       {
          public:

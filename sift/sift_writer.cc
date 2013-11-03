@@ -610,17 +610,18 @@ bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuR
    sift_assert(false);
 }
 
-void Sift::Writer::RoutineChange(uint64_t eip, uint64_t esp, Sift::RoutineOpType event)
+void Sift::Writer::RoutineChange(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip)
 {
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherRoutineChange;
-   rec.Other.size = 2*sizeof(uint64_t) + sizeof(uint8_t);
+   rec.Other.size = sizeof(uint8_t) + 3 * sizeof(uint64_t);
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
-   output->write(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
-   output->write(reinterpret_cast<char*>(&esp), sizeof(uint64_t));
    uint8_t _event = (uint8_t)event;
    output->write(reinterpret_cast<char*>(&_event), sizeof(uint8_t));
+   output->write(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
+   output->write(reinterpret_cast<char*>(&esp), sizeof(uint64_t));
+   output->write(reinterpret_cast<char*>(&callEip), sizeof(uint64_t));
 }
 
 void Sift::Writer::RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)

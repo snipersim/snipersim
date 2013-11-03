@@ -47,7 +47,7 @@ namespace Sift
       typedef int32_t (*HandleJoinFunc)(void* arg, int32_t thread);
       typedef uint64_t (*HandleMagicFunc)(void* arg, uint64_t a, uint64_t b, uint64_t c);
       typedef bool (*HandleEmuFunc)(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
-      typedef void (*HandleRoutineChange)(void* arg, uint64_t eip, uint64_t esp, Sift::RoutineOpType event);
+      typedef void (*HandleRoutineChange)(void* arg, Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip);
       typedef void (*HandleRoutineAnnounce)(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
       typedef int32_t (*HandleForkFunc)(void* arg);
 

@@ -30,7 +30,7 @@ class RoutineTracerThread
       RoutineTracerThread(Thread *thread);
       virtual ~RoutineTracerThread();
 
-      void routineEnter(IntPtr eip, IntPtr esp);
+      void routineEnter(IntPtr eip, IntPtr esp, IntPtr returnEip);
       void routineExit(IntPtr eip, IntPtr esp);
       void routineAssert(IntPtr eip, IntPtr esp);
 
@@ -45,12 +45,12 @@ class RoutineTracerThread
    private:
       bool unwindTo(IntPtr eip);
 
-      void routineEnter_unlocked(IntPtr eip, IntPtr esp);
+      void routineEnter_unlocked(IntPtr eip, IntPtr esp, IntPtr callEip);
 
-      virtual void functionEnter(IntPtr eip) {}
-      virtual void functionExit(IntPtr eip) {}
-      virtual void functionChildEnter(IntPtr eip, IntPtr eip_child) {}
-      virtual void functionChildExit(IntPtr eip, IntPtr eip_child) {}
+      virtual void functionEnter(IntPtr eip, IntPtr callEip) = 0;
+      virtual void functionExit(IntPtr eip) = 0;
+      virtual void functionChildEnter(IntPtr eip, IntPtr eip_child) = 0;
+      virtual void functionChildExit(IntPtr eip, IntPtr eip_child) = 0;
 
       void hookRoiBegin();
       void hookRoiEnd();
@@ -65,8 +65,9 @@ class RoutineTracer
       {
          public:
             const IntPtr m_eip;
-            char *m_name;
-            char *m_location;
+            char *m_name, *m_imgname, *m_filename, *m_location;
+            IntPtr m_offset;
+            int m_column, m_line;
 
             Routine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);
             void updateLocation(const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename);

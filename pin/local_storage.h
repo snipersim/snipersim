@@ -32,6 +32,7 @@ struct ThreadLocalStorage
       ADDRINT eip;
       size_t size;
    } malloc;
+   ADDRINT lastCallSite;
 };
 // Keep track of THREADID to Thread* pointers (and some other stuff), way faster than a PinTLS lookup
 extern std::vector<ThreadLocalStorage> localStore;

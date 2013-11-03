@@ -356,14 +356,15 @@ bool Sift::Reader::Read(Instruction &inst)
             }
             case RecOtherRoutineChange:
             {
-               assert(rec.Other.size == 2*sizeof(uint64_t) + sizeof(uint8_t));
-               uint64_t eip, esp;
+               assert(rec.Other.size == sizeof(uint8_t) + 3 * sizeof(uint64_t));
                uint8_t event;
+               uint64_t eip, esp, callEip;
+               input->read(reinterpret_cast<char*>(&event), sizeof(uint8_t));
                input->read(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&esp), sizeof(uint64_t));
-               input->read(reinterpret_cast<char*>(&event), sizeof(uint8_t));
+               input->read(reinterpret_cast<char*>(&callEip), sizeof(uint64_t));
                if (handleRoutineChangeFunc)
-                  handleRoutineChangeFunc(handleRoutineArg, eip, esp, Sift::RoutineOpType(event));
+                  handleRoutineChangeFunc(handleRoutineArg, Sift::RoutineOpType(event), eip, esp, callEip);
                break;
             }
             case RecOtherRoutineAnnounce:

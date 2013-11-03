@@ -18,7 +18,7 @@ RoutineTracerFunctionStats::RtnThread::RtnThread(RoutineTracerFunctionStats::Rtn
 {
 }
 
-void RoutineTracerFunctionStats::RtnThread::functionEnter(IntPtr eip)
+void RoutineTracerFunctionStats::RtnThread::functionEnter(IntPtr eip, IntPtr callEip)
 {
    functionBegin(eip);
 }

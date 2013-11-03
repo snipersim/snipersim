@@ -51,7 +51,7 @@ namespace Sift
          uint64_t Magic(uint64_t a, uint64_t b, uint64_t c);
          bool Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
          int32_t Fork();
-         void RoutineChange(uint64_t eip, uint64_t esp, Sift::RoutineOpType event);
+         void RoutineChange(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip = 0);
          void RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }

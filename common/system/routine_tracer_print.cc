@@ -8,12 +8,16 @@ RoutineTracerPrint::RtnThread::RtnThread(RoutineTracerPrint::RtnMaster *master, 
 {
 }
 
-void RoutineTracerPrint::RtnThread::functionEnter(IntPtr eip)
+void RoutineTracerPrint::RtnThread::functionEnter(IntPtr eip, IntPtr callEip)
 {
    printf("[%2d] ", m_thread->getId());
    for(unsigned int i = 0; i < m_depth; ++i)
      printf("  ");
-   printf("(%8" PRIxPTR ") %s\n", eip, m_master->getRoutine(eip) ? m_master->getRoutine(eip)->m_name : "(unknown)");
+   printf("(%8" PRIxPTR ") %s", eip, m_master->getRoutine(eip) ? m_master->getRoutine(eip)->m_name : "(unknown)");
+   RoutineTracer::Routine *rtn = m_master->getRoutine(callEip);
+   if (callEip && rtn)
+      printf(" [from: %s:%d]", rtn->m_name, rtn->m_line);
+   printf("\n");
    ++m_depth;
 }
 

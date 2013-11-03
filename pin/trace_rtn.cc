@@ -5,7 +5,8 @@
 
 void routineEnter(THREADID threadIndex, IntPtr eip, IntPtr esp)
 {
-   localStore[threadIndex].thread->getRoutineTracer()->routineEnter(eip, esp);
+   localStore[threadIndex].thread->getRoutineTracer()->routineEnter(eip, esp, localStore[threadIndex].lastCallSite);
+   localStore[threadIndex].lastCallSite = 0;
 }
 
 void routineExit(THREADID threadIndex, IntPtr eip, IntPtr esp)
@@ -18,18 +19,32 @@ void routineAssert(THREADID threadIndex, IntPtr eip, IntPtr esp)
    localStore[threadIndex].thread->getRoutineTracer()->routineAssert(eip, esp);
 }
 
-void announceRoutine(RTN rtn)
+void routineCallSite(THREADID threadIndex, IntPtr eip)
 {
+   localStore[threadIndex].lastCallSite = eip;
+}
+
+void announceRoutine(INS ins)
+{
+   ADDRINT eip = INS_Address(ins);
+   RTN rtn = INS_Rtn(ins);
+   IMG img = IMG_FindByAddress(eip);
+
    INT32 column = 0, line = 0;
    std::string filename = "??";
-   PIN_GetSourceLocation(RTN_Address(rtn), &column, &line, &filename);
-   IMG img = IMG_FindByAddress(RTN_Address(rtn));
+   PIN_GetSourceLocation(eip, &column, &line, &filename);
+
    Sim()->getRoutineTracer()->addRoutine(
-      RTN_Address(rtn),
+      eip,
       RTN_Name(rtn).c_str(),
       IMG_Valid(img) ? IMG_Name(img).c_str() : "??",
       IMG_Valid(img) ? IMG_LoadOffset(img) : 0,
       column, line, filename.c_str());
+}
+
+void announceRoutine(RTN rtn)
+{
+   announceRoutine(RTN_InsHeadOnly(rtn));
 }
 
 void announceInvalidRoutine()
@@ -74,5 +89,16 @@ void addRtnTracer(TRACE trace)
 
          TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, 0, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
       }
+
+      // Call site identification
+      for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl))
+         for(INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins))
+         {
+            if (INS_IsProcedureCall(ins))
+            {
+               announceRoutine(ins);
+               INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR (routineCallSite), IARG_THREAD_ID, IARG_INST_PTR, IARG_END);
+            }
+         }
    }
 }

@@ -25,12 +25,13 @@ typedef struct {
    UINT64 flowcontrol_target;
    ADDRINT tid_ptr;
    ADDRINT last_routine;
+   ADDRINT last_call_site;
    BOOL last_syscall_emulated;
    BOOL running;
    #if defined(TARGET_IA32)
-      uint8_t __pad[41];
+      uint8_t __pad[37];
    #elif defined(TARGET_INTEL64)
-      uint8_t __pad[5];
+      uint8_t __pad[61];
    #endif
 } __attribute__((packed)) thread_data_t;
 

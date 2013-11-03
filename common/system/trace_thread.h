@@ -67,8 +67,8 @@ class TraceThread : public Runnable
       { return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
       static bool __handleEmuFunc(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
       { return ((TraceThread*)arg)->handleEmuFunc(type, req, res); }
-      static void __handleRoutineChangeFunc(void* arg, uint64_t eip, uint64_t esp, Sift::RoutineOpType event)
-      { ((TraceThread*)arg)->handleRoutineChangeFunc(eip, esp, event); }
+      static void __handleRoutineChangeFunc(void* arg, Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip)
+      { ((TraceThread*)arg)->handleRoutineChangeFunc(event, eip, esp, callEip); }
       static void __handleRoutineAnnounceFunc(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
       { ((TraceThread*)arg)->handleRoutineAnnounceFunc(eip, name, imgname, offset, line, column, filename); }
       static int32_t __handleForkFunc(void* arg)
@@ -81,8 +81,8 @@ class TraceThread : public Runnable
       int32_t handleJoinFunc(int32_t thread);
       uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c);
       bool handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
-      void handleRoutineChangeFunc(int64_t eip, int64_t esp, Sift::RoutineOpType event);
-      void handleRoutineAnnounceFunc(int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
+      void handleRoutineChangeFunc(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip);
+      void handleRoutineAnnounceFunc(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 
       BasicBlock* decode(Sift::Instruction &inst);
       void handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);

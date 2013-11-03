@@ -34,7 +34,7 @@ class RoutineTracerPrint
             UInt64 m_depth;
 
          protected:
-            virtual void functionEnter(IntPtr eip);
+            virtual void functionEnter(IntPtr eip, IntPtr callEip);
             virtual void functionExit(IntPtr eip);
             virtual void functionChildEnter(IntPtr eip, IntPtr eip_child) {}
             virtual void functionChildExit(IntPtr eip, IntPtr eip_child) {}

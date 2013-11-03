@@ -225,12 +225,12 @@ uint64_t TraceThread::handleMagicFunc(uint64_t a, uint64_t b, uint64_t c)
    return handleMagicInstruction(m_thread->getId(), a, b, c);
 }
 
-void TraceThread::handleRoutineChangeFunc(int64_t eip, int64_t esp, Sift::RoutineOpType event)
+void TraceThread::handleRoutineChangeFunc(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip)
 {
    switch(event)
    {
       case Sift::RoutineEnter:
-         m_thread->getRoutineTracer()->routineEnter(eip, esp);
+         m_thread->getRoutineTracer()->routineEnter(eip, esp, callEip);
          break;
       case Sift::RoutineExit:
          m_thread->getRoutineTracer()->routineExit(eip, esp);
@@ -291,7 +291,7 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
    }
 }
 
-void TraceThread::handleRoutineAnnounceFunc(int64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
+void TraceThread::handleRoutineAnnounceFunc(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
 {
    Sim()->getRoutineTracer()->addRoutine(eip, name, imgname, offset, column, line, filename);
 }
