@@ -9,6 +9,13 @@ def cppfilt(name):
   return ex_ret([ 'c++filt', name ])
 
 
+def get_source_line(filename, linenr):
+  for linenum, line in enumerate(file(filename)):
+    if linenum+1 == linenr:
+      return line.strip()
+  return ''
+
+
 class Function:
   def __init__(self, eip, name, location):
     self.eip = eip
@@ -19,6 +26,8 @@ class Function:
     self.sourceline = long(self.location[3])
     if self.sourceline:
       self.locationshort = '%s:%d' % (os.path.basename(self.sourcefile), self.sourceline)
+      if os.path.exists(self.sourcefile):
+        self.locationshort += '  { %s }' % get_source_line(self.sourcefile, self.sourceline)
     else:
       self.locationshort = os.path.basename(self.imgname)
   def __str__(self):
@@ -126,9 +135,10 @@ class MemoryTracker:
     for eip in stack:
       if eip == '0':
         continue
-      if self.functions[eip].name in ('.plt',):
+      name = self.functions[eip].name if eip in self.functions else '(unknown)'
+      if name in ('.plt',):
         continue
-      if self.functions[eip].name.startswith('_dl_'):
+      if name.startswith('_dl_'):
         continue
       _stack.append(eip)
     return tuple(_stack)
@@ -143,7 +153,7 @@ class MemoryTracker:
       print >> obj, 'Site %s:' % site_names[stack]
       print >> obj, '\tCall stack:'
       for eip in site.stack:
-        print >> obj, '\t\t%s' % self.functions[eip]
+        print >> obj, '\t\t%s' % (self.functions[eip] if eip in self.functions else '(unknown)')
       print >> obj, '\tAllocations: %d' % site.numallocations
       print >> obj, '\tTotal allocated: %s (%s average)' % (sniper_lib.format_size(site.totalallocated), sniper_lib.format_size(site.totalallocated / site.numallocations))
       print >> obj, '\tHit-where:'
