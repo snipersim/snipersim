@@ -420,13 +420,17 @@ void pthreadAfter(THREADID thread_id, ADDRINT type_id, ADDRINT retval)
 
 void mallocBefore(THREADID thread_id, ADDRINT eip, ADDRINT size)
 {
-   localStore[thread_id].malloc.eip = eip;
+   localStore[thread_id].malloc.eip = localStore[thread_id].lastCallSite;
    localStore[thread_id].malloc.size = size;
 }
 
 void mallocAfter(THREADID thread_id, ADDRINT address)
 {
-   Sim()->getMemoryTracker()->logMalloc(localStore[thread_id].thread->getId(), localStore[thread_id].malloc.eip, address, localStore[thread_id].malloc.size);
+   if (localStore[thread_id].malloc.size)
+   {
+      Sim()->getMemoryTracker()->logMalloc(localStore[thread_id].thread->getId(), localStore[thread_id].malloc.eip, address, localStore[thread_id].malloc.size);
+      localStore[thread_id].malloc.size = 0;
+   }
 }
 
 void freeBefore(THREADID thread_id, ADDRINT eip, ADDRINT address)
