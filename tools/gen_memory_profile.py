@@ -14,10 +14,15 @@ class Function:
     self.eip = eip
     self.name = cppfilt(name).strip()
     self.location = location.split(':')
-    self.img = self.location[0]
-    self.offset = long(self.location[1])
+    self.imgname = self.location[0]
+    self.sourcefile = self.location[2]
+    self.sourceline = long(self.location[3])
+    if self.sourceline:
+      self.locationshort = '%s:%d' % (os.path.basename(self.sourcefile), self.sourceline)
+    else:
+      self.locationshort = os.path.basename(self.imgname)
   def __str__(self):
-    return '[%12s]  %-20s %s' % (self.eip, self.name, ':'.join(self.location))
+    return '[%12s]  %-20s %s' % (self.eip, self.name, self.locationshort)
 
 
 def dirSum(a, b):
@@ -119,6 +124,8 @@ class MemoryTracker:
   def collapseStack(self, stack):
     _stack = []
     for eip in stack:
+      if eip == '0':
+        continue
       if self.functions[eip].name in ('.plt',):
         continue
       if self.functions[eip].name.startswith('_dl_'):

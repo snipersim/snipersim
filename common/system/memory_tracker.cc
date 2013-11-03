@@ -67,7 +67,8 @@ void MemoryTracker::logMalloc(thread_id_t thread_id, UInt64 eip, UInt64 address,
 {
    ScopedLock sl(m_lock);
 
-   const CallStack stack = Sim()->getThreadManager()->getThreadFromID(thread_id)->getRoutineTracer()->getCallStack();
+   ::RoutineTracerThread *tracer = Sim()->getThreadManager()->getThreadFromID(thread_id)->getRoutineTracer();
+   const CallStack stack = dynamic_cast<MemoryTracker::RoutineTracerThread*>(tracer)->getCallsiteStack();
 
    AllocationSite *site = NULL;
    AllocationSites::iterator it = m_allocation_sites.find(stack);
@@ -198,4 +199,14 @@ bool MemoryTracker::RoutineTracer::hasRoutine(IntPtr eip)
    ScopedLock sl(m_lock);
 
    return m_routines.count(eip) > 0;
+}
+
+void MemoryTracker::RoutineTracerThread::functionEnter(IntPtr eip, IntPtr callEip)
+{
+   m_callsite_stack.push_back(callEip);
+}
+
+void MemoryTracker::RoutineTracerThread::functionExit(IntPtr eip)
+{
+   m_callsite_stack.pop_back();
 }
