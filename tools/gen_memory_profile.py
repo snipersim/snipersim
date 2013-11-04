@@ -156,6 +156,7 @@ class MemoryTracker:
         print >> obj, '\t\t%s' % (self.functions[eip] if eip in self.functions else '(unknown)')
       print >> obj, '\tAllocations: %d' % site.numallocations
       print >> obj, '\tTotal allocated: %s (%s average)' % (sniper_lib.format_size(site.totalallocated), sniper_lib.format_size(site.totalallocated / site.numallocations))
+
       print >> obj, '\tHit-where:'
       print >> obj, '\t\t%-15s: %s' % ('Loads', format_abs_ratio(site.totalloads, totalloads)),
       print >> obj, '\t%-15s: %s' % ('Stores', format_abs_ratio(site.totalstores, totalstores))
@@ -165,6 +166,18 @@ class MemoryTracker:
           print >> obj, '\t\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalloads)),
           cnt = site.hitwherestore[hitwhere]
           print >> obj, '\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores))
+
+      print >> obj, '\tEvicts:'
+      evicts = {}
+      for _stack, _site in self.sites.items():
+        for _siteid, _cnt in _site.evictedby.items():
+          if self.siteids.get(_siteid) == stack:
+            evicts[_stack] = evicts.get(_stack, 0) + _cnt
+      evicts = sorted(evicts.items(), key = lambda (_stack, _cnt): _cnt, reverse = True)
+      for _stack, cnt in evicts[:10]:
+        name = site_names.get(_stack, 'other') if _stack != stack else 'self'
+        print >> obj, '\t\t%-15s: %12d' % (name, cnt)
+
       print >> obj, '\tEvicted-by:'
       evicts = {}
       for siteid, cnt in site.evictedby.items():
