@@ -81,11 +81,14 @@ void DvfsManager::setCoreDomain(UInt32 core_id, ComponentPeriod new_freq)
 {
    if (core_id < m_num_app_cores)
    {
-      app_proc_domains[getCoreDomainId(core_id)] = new_freq;
+      if (new_freq.getPeriod() != app_proc_domains[getCoreDomainId(core_id)].getPeriod())
+      {
+         /* queue a fake instruction that will account for the transition latency */
+         Instruction *i = new DelayInstruction(m_transition_latency, DelayInstruction::DVFS_TRANSITION);
+         Sim()->getCoreManager()->getCoreFromID(core_id)->getPerformanceModel()->queueDynamicInstruction(i);
+      }
 
-      /* queue a fake instruction that will account for the transition latency */
-      Instruction *i = new DelayInstruction(m_transition_latency, DelayInstruction::DVFS_TRANSITION);
-      Sim()->getCoreManager()->getCoreFromID(core_id)->getPerformanceModel()->queueDynamicInstruction(i);
+      app_proc_domains[getCoreDomainId(core_id)] = new_freq;
    }
    else
    {
