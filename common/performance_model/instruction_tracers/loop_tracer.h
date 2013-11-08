@@ -1,7 +1,7 @@
 #ifndef __LOOP_TRACER_H
 #define __LOOP_TRACER_H
 
-#include "fixed_types.h"
+#include "instruction_tracer.h"
 
 #include <map>
 
@@ -10,10 +10,11 @@ class Instruction;
 class MicroOp;
 class DynamicMicroOp;
 
-class LoopTracer
+class LoopTracer : public InstructionTracer
 {
    private:
       const Core *m_core;
+
       const IntPtr m_address_base;
       const SInt64 m_iter_start;
       const SInt64 m_iter_count;
@@ -38,11 +39,10 @@ class LoopTracer
       Instructions m_instructions;
 
    public:
-      static LoopTracer* createLoopTracer(const Core *core);
       LoopTracer(const Core *core);
-      ~LoopTracer();
+      virtual ~LoopTracer();
 
-      void issue(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done);
+      virtual void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done);
 };
 
 #endif // __LOOP_TRACER_H

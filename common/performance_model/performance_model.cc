@@ -66,7 +66,7 @@ PerformanceModel::PerformanceModel(Core *core)
 {
    m_bp = BranchPredictor::create(core->getId());
 
-   m_instruction_tracer = InstructionTracer::create(core->getId());
+   m_instruction_tracer = InstructionTracer::create(core);
 
    registerStatsMetric("performance_model", core->getId(), "instruction_count", &m_instruction_count);
 
@@ -93,6 +93,8 @@ PerformanceModel::~PerformanceModel()
 {
    delete m_bp;
    delete m_fastforward_model;
+   if (m_instruction_tracer)
+      delete m_instruction_tracer;
 }
 
 void PerformanceModel::enable()
@@ -299,8 +301,6 @@ void PerformanceModel::iterate()
          Instruction *ins = current_bb->at(m_current_ins_index);
          LOG_ASSERT_ERROR(!ins->isIdle(), "Idle instructions should not make it here!");
 
-         if (m_instruction_tracer)
-            m_instruction_tracer->handleInstruction(ins);
          bool res = handleInstruction(ins);
          if (!res)
             // DynamicInstructionInfo not available

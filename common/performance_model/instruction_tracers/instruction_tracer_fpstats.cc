@@ -4,8 +4,7 @@
 #include "thread_stats_manager.h"
 #include "instruction.h"
 #include "micro_op.h"
-
-#include <vector>
+#include "dynamic_micro_op.h"
 
 const char* const fp_iclasses[] = {
    "ADDPD", "ADDSD", "ADDSS", "ADDPS",
@@ -14,8 +13,8 @@ const char* const fp_iclasses[] = {
    "DIVPD", "DIVSD", "DIVSS", "DIVPS",
 };
 
-InstructionTracerFPStats::InstructionTracerFPStats(int core_id)
-   : m_id(core_id)
+InstructionTracerFPStats::InstructionTracerFPStats(const Core *core)
+   : m_core(core)
 {
    std::unordered_map<int, int> iclass2index;
    for (unsigned int i = 0 ; i < (sizeof(fp_iclasses) / sizeof(fp_iclasses[0])); i++)
@@ -26,7 +25,7 @@ InstructionTracerFPStats::InstructionTracerFPStats(int core_id)
    }
    for (std::unordered_map<int, uint64_t>::iterator iclass = m_iclasses.begin() ; iclass != m_iclasses.end() ; ++iclass)
    {
-      registerStatsMetric("instruction_tracer", core_id, fp_iclasses[iclass2index[iclass->first]], &(iclass->second));
+      registerStatsMetric("instruction_tracer", core->getId(), fp_iclasses[iclass2index[iclass->first]], &(iclass->second));
    }
 }
 
@@ -39,19 +38,14 @@ void InstructionTracerFPStats::init()
    }
 }
 
-void InstructionTracerFPStats::handleInstruction(Instruction const* instruction)
+void InstructionTracerFPStats::traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done)
 {
-   if (instruction->getMicroOps())
+   if (uop->getMicroOp()->isFirst())
    {
-      for (std::vector<const MicroOp *>::const_iterator uop = instruction->getMicroOps()->begin() ; uop != instruction->getMicroOps()->end() ; ++uop)
+      int iclass = static_cast<int>(uop->getMicroOp()->getInstructionOpcode());
+      if (m_iclasses.count(iclass))
       {
-         int iclass = static_cast<int>((*uop)->getInstructionOpcode());
-         if (m_iclasses.count(iclass))
-         {
-            m_iclasses[iclass]++;
-         }
-         // The opcode data from the first micro-op is enough
-         break;
+         m_iclasses[iclass]++;
       }
    }
 }

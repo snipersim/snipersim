@@ -12,12 +12,12 @@ extern "C" {
 class InstructionTracerFPStats : public InstructionTracer
 {
    public:
-      InstructionTracerFPStats(int core_id);
+      InstructionTracerFPStats(const Core *core);
       static void init();
-      virtual void handleInstruction(Instruction const* instruction);
+      virtual void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done);
 
    private:
-      int m_id;
+      const Core *m_core;
       std::unordered_map<int, uint64_t> m_iclasses;
 };
 

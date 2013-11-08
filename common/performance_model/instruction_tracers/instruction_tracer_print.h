@@ -6,14 +6,13 @@
 class InstructionTracerPrint : public InstructionTracer
 {
    public:
-      InstructionTracerPrint(int core_id)
-         : m_id(core_id)
+      InstructionTracerPrint(const Core *core)
+         : m_core(core)
       {}
-      static void init() {}
-      virtual void handleInstruction(Instruction const* instruction);
+      virtual void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done);
 
    private:
-      int m_id;
+      const Core *m_core;
 };
 
 #endif /* __INSTRUCTION_TRACER_PRINT_H */

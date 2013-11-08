@@ -9,6 +9,7 @@
 #include "lock.h"
 #include "dynamic_instruction_info.h"
 #include "subsecond_time.h"
+#include "instruction_tracer.h"
 
 #include <queue>
 #include <iostream>
@@ -17,7 +18,6 @@
 class Core;
 class BranchPredictor;
 class FastforwardPerformanceModel;
-class InstructionTracer;
 
 class PerformanceModel
 {
@@ -53,6 +53,12 @@ public:
 
    FastforwardPerformanceModel *getFastforwardPerformanceModel() { return m_fastforward_model; }
    FastforwardPerformanceModel const* getFastforwardPerformanceModel() const { return m_fastforward_model; }
+
+   void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done)
+   {
+      if (m_instruction_tracer)
+         m_instruction_tracer->traceInstruction(uop, cycle_issue, cycle_done);
+   }
 
    virtual void barrierEnter() { }
    virtual void barrierExit() { }

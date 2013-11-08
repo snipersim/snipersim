@@ -8,12 +8,11 @@
 #include "stats.h"
 #include "core_manager.h"
 #include "itostr.h"
+#include "performance_model.h"
 #if DEBUG_IT_INSN_PRINT
-# include "performance_model.h"
 # include "micro_op.h"
 #endif
 #include "instruction.h"
-#include "loop_tracer.h"
 #include "config.hpp"
 #include "utils.h"
 
@@ -39,7 +38,6 @@ IntervalTimer::IntervalTimer(
       , m_windows(new Windows(window_size, do_functional_unit_contention, core, core_model))
       , m_perf_model(_perf)
       , m_frequency_domain(core->getDvfsDomain())
-      , m_loop_tracer(LoopTracer::createLoopTracer(core))
 {
 
    // Granularity of memory dependencies, in bytes
@@ -168,10 +166,6 @@ void IntervalTimer::free()
    if (m_windows)
    {
       delete m_windows;
-      if (m_loop_tracer)
-      {
-         delete m_loop_tracer;
-      }
 #if DEBUG_IT_INSN_PRINT
       if (m_insn_log)
       {
@@ -255,10 +249,7 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
          instructions_executed++;
       }
 
-      if (m_loop_tracer)
-      {
-         m_loop_tracer->issue(micro_op.getDynMicroOp(), micro_op.getExecTime(), micro_op.getExecTime());
-      }
+      m_core->getPerformanceModel()->traceInstruction(micro_op.getDynMicroOp(), micro_op.getExecTime(), micro_op.getExecTime());
 
 #if DEBUG_IT_INSN_PRINT
       if (latency > 16)

@@ -32,7 +32,6 @@ String StopDispatchReasonStringHelper(StopDispatchReason r);
 String StopDispatchReasonString(StopDispatchReason r);
 
 class CoreModel;
-class LoopTracer;
 
 class IntervalTimer {
 public:
@@ -87,8 +86,6 @@ private:
    Windows *m_windows;
    PerformanceModel *m_perf_model;
    const ComponentPeriod *m_frequency_domain;
-
-   LoopTracer *m_loop_tracer;
 
 #if DEBUG_IT_INSN_PRINT
    FILE *m_insn_log;

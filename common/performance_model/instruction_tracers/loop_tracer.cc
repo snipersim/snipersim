@@ -5,17 +5,6 @@
 #include "instruction.h"
 #include "core.h"
 
-LoopTracer*
-LoopTracer::createLoopTracer(const Core *core)
-{
-   if (core->getId() >= core_id_t(Sim()->getConfig()->getApplicationCores()))
-      return NULL;
-   if (Sim()->getCfg()->getBoolArray("loop_tracer/enabled", core->getId()))
-      return new LoopTracer(core);
-   else
-      return NULL;
-}
-
 LoopTracer::LoopTracer(const Core *core)
    : m_core(core)
    , m_address_base(strtol(Sim()->getCfg()->getStringArray("loop_tracer/base_address", core->getId()).c_str(), NULL, 16))
@@ -66,7 +55,7 @@ LoopTracer::~LoopTracer()
 }
 
 void
-LoopTracer::issue(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done)
+LoopTracer::traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done)
 {
    // Ignore dynamic (fake) instructions
    if (!uop->getMicroOp()->getInstruction())
