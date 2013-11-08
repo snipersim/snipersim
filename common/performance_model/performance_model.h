@@ -54,10 +54,10 @@ public:
    FastforwardPerformanceModel *getFastforwardPerformanceModel() { return m_fastforward_model; }
    FastforwardPerformanceModel const* getFastforwardPerformanceModel() const { return m_fastforward_model; }
 
-   void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done)
+   void traceInstruction(const DynamicMicroOp *uop, InstructionTracer::uop_times_t *times)
    {
       if (m_instruction_tracer)
-         m_instruction_tracer->traceInstruction(uop, cycle_issue, cycle_done);
+         m_instruction_tracer->traceInstruction(uop, times);
    }
 
    virtual void barrierEnter() { }

@@ -14,7 +14,7 @@ class InstructionTracerFPStats : public InstructionTracer
    public:
       InstructionTracerFPStats(const Core *core);
       static void init();
-      virtual void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done);
+      virtual void traceInstruction(const DynamicMicroOp *uop, uop_times_t *times);
 
    private:
       const Core *m_core;

@@ -2,6 +2,7 @@
 #define __INSTRUCTION_TRACER_H
 
 #include "fixed_types.h"
+#include "subsecond_time.h"
 
 class Core;
 class DynamicMicroOp;
@@ -14,7 +15,11 @@ class InstructionTracer
 
       virtual ~InstructionTracer() {}
 
-      virtual void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done) = 0;
+      typedef struct {
+         SubsecondTime dispatch, issue, done, commit;
+      } uop_times_t;
+
+      virtual void traceInstruction(const DynamicMicroOp *uop, uop_times_t *times) = 0;
 };
 
 #endif // __INSTRUCTION_TRACER_H

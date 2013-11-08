@@ -42,7 +42,7 @@ class LoopTracer : public InstructionTracer
       LoopTracer(const Core *core);
       virtual ~LoopTracer();
 
-      virtual void traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done);
+      virtual void traceInstruction(const DynamicMicroOp *uop, uop_times_t *times);
 };
 
 #endif // __LOOP_TRACER_H

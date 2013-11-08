@@ -55,11 +55,18 @@ LoopTracer::~LoopTracer()
 }
 
 void
-LoopTracer::traceInstruction(const DynamicMicroOp *uop, uint64_t cycle_issue, uint64_t cycle_done)
+LoopTracer::traceInstruction(const DynamicMicroOp *uop, uop_times_t *times)
 {
    // Ignore dynamic (fake) instructions
    if (!uop->getMicroOp()->getInstruction())
       return;
+
+   uint64_t cycle_issue = 0, cycle_done = 0;
+   if (times)
+   {
+      cycle_issue = SubsecondTime::divideRounded(times->issue, m_core->getDvfsDomain()->getPeriod());
+      cycle_done  = SubsecondTime::divideRounded(times->done , m_core->getDvfsDomain()->getPeriod());
+   }
 
    Instruction *inst = uop->getMicroOp()->getInstruction();
    IntPtr address = inst->getAddress();

@@ -249,7 +249,7 @@ boost::tuple<uint64_t, uint64_t> IntervalTimer::dispatchWindow() {
          instructions_executed++;
       }
 
-      m_core->getPerformanceModel()->traceInstruction(micro_op.getDynMicroOp(), micro_op.getExecTime(), micro_op.getExecTime());
+      m_core->getPerformanceModel()->traceInstruction(micro_op.getDynMicroOp(), NULL);
 
 #if DEBUG_IT_INSN_PRINT
       if (latency > 16)
