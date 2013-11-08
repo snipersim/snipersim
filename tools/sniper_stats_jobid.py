@@ -5,6 +5,7 @@ class SniperStatsJobid(sniper_stats.SniperStatsBase):
   def __init__(self, jobid):
     self.jobid = jobid
     self.ic = iqclient.IntelClient()
+    self.names = self.read_metricnames()
 
   def read_metricnames(self):
     return self.ic.graphite_dbresults(self.jobid, 'read_metricnames')
