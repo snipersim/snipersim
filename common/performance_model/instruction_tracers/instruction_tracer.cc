@@ -4,6 +4,7 @@
 #include "instruction_tracer_fpstats.h"
 #include "instruction_tracer_print.h"
 #include "loop_tracer.h"
+#include "loop_profiler.h"
 
 void
 InstructionTracer::init()
@@ -27,6 +28,8 @@ InstructionTracer::create(const Core *core)
       return new InstructionTracerFPStats(core);
    else if (type == "loop_tracer")
       return new LoopTracer(core);
+   else if (type == "loop_profiler")
+      return new LoopProfiler(core);
    else
       LOG_PRINT_ERROR("Unknown instruction tracer type %s", type.c_str());
 }
