@@ -41,22 +41,22 @@ MemoryTracker::~MemoryTracker()
          fprintf(fp, "S\t%lx\t", (unsigned long)site);
          for(auto jt = stack.begin(); jt != stack.end(); ++jt)
             fprintf(fp, ":%lx", *jt);
-         fprintf(fp, "\tnum-allocations=%ld", site->num_allocations);
-         fprintf(fp, "\ttotal-allocated=%ld", site->total_size);
+         fprintf(fp, "\tnum-allocations=%" PRId64, site->num_allocations);
+         fprintf(fp, "\ttotal-allocated=%" PRId64, site->total_size);
          fprintf(fp, "\thit-where=");
          for(int h = HitWhere::WHERE_FIRST ; h < HitWhere::NUM_HITWHERES ; h++)
          {
             if (HitWhereIsValid((HitWhere::where_t)h) && site->hit_where_load[h] + site->hit_where_store[h] > 0)
             {
-               fprintf(fp, "L%s:%ld,", HitWhereString((HitWhere::where_t)h), site->hit_where_load[h]);
-               fprintf(fp, "S%s:%ld,", HitWhereString((HitWhere::where_t)h), site->hit_where_store[h]);
+               fprintf(fp, "L%s:%" PRId64 ",", HitWhereString((HitWhere::where_t)h), site->hit_where_load[h]);
+               fprintf(fp, "S%s:%" PRId64 ",", HitWhereString((HitWhere::where_t)h), site->hit_where_store[h]);
             }
          }
          if (site->evicted_by.size())
          {
             fprintf(fp, "\tevicted-by=");
             for(auto it = site->evicted_by.begin(); it != site->evicted_by.end(); ++it)
-               fprintf(fp, "%lx:%ld,", (unsigned long)it->first, it->second);
+               fprintf(fp, "%lx:%" PRId64 ",", (unsigned long)it->first, it->second);
          }
          fprintf(fp, "\n");
       }
