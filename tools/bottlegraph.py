@@ -5,11 +5,19 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 
-def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', partial = None, no_text = False):
+def translateThreadNameJikes(name):
+  name = name.replace('org.mmtk.plan.generational.immix.GenImmixCollector', 'GcThread')
+  name = name.replace('org.mmtk.plan.ControllerCollectorContext', 'ControllerThread')
+  return name
+
+
+def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', partial = None, no_text = False, thread_names_translate = translateThreadNameJikes):
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
   results = stats.get_results(partial = partial)['results']
 
-  thread_names = stats.get_thread_names()
+  thread_names = {}
+  for threadid, name in stats.get_thread_names().items():
+    thread_names[threadid] = thread_names_translate(name)
 
   runtime = dict(enumerate(results['thread.bottle_runtime_time']))
   contrib = dict(enumerate(results['thread.bottle_contrib_time']))
