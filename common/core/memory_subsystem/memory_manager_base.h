@@ -51,7 +51,7 @@ class MemoryManagerBase
       virtual void handleMsgFromNetwork(NetPacket& packet) = 0;
 
       // FIXME: Take this out of here
-      virtual UInt32 getCacheBlockSize() = 0;
+      virtual UInt64 getCacheBlockSize() = 0;
 
       virtual SubsecondTime getL1HitLatency(void) = 0;
       virtual void addL1Hits(bool icache, Core::mem_op_t mem_op_type, UInt64 hits) = 0;

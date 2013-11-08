@@ -64,7 +64,7 @@ namespace ParametricDramDirectoryMSI
          MemoryManager(Core* core, Network* network, ShmemPerfModel* shmem_perf_model);
          ~MemoryManager();
 
-         UInt32 getCacheBlockSize() { return m_cache_block_size; }
+         UInt64 getCacheBlockSize() { return m_cache_block_size; }
 
          Cache* getCache(MemComponent::component_t mem_component) {
               return m_cache_cntlrs[mem_component == MemComponent::LAST_LEVEL_CACHE ? MemComponent::component_t(m_last_level_cache) : mem_component]->getCache();

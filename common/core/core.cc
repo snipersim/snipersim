@@ -217,7 +217,7 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
    LOG_PRINT("Instruction: Address(0x%x), Size(%u), Start READ",
            address, instruction_size);
 
-   UInt32 blockmask = ~(getMemoryManager()->getCacheBlockSize() - 1);
+   UInt64 blockmask = ~(getMemoryManager()->getCacheBlockSize() - 1);
    bool single_cache_line = ((address & blockmask) == ((address + instruction_size - 1) & blockmask));
 
    // Assume the core reads full instruction cache lines and caches them internally for subsequent instructions.
