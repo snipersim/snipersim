@@ -427,6 +427,7 @@ int32_t Sift::Writer::Join(int32_t thread)
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
+     sift_assert(!response->fail());
    }
 
    int32_t retcode = 0;
@@ -471,14 +472,36 @@ void Sift::Writer::Sync()
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
      response = new std::ifstream(m_response_filename, std::ios::in);
+     sift_assert(!response->fail());
    }
 
-   // wait for reply
-   Record respRec;
-   response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-   sift_assert(respRec.Other.zero == 0);
-   sift_assert(respRec.Other.type == RecOtherSyncResponse);
-   sift_assert(respRec.Other.size == 0);
+   while (true)
+   {
+      Record respRec;
+      response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      sift_assert(!response->fail());
+      sift_assert(respRec.Other.zero == 0);
+
+      switch(respRec.Other.type)
+      {
+         case RecOtherSyncResponse:
+            #if VERBOSE > 0
+            std::cerr << "[DEBUG:" << m_id << "] Read SyncResponse" << std::endl;
+            #endif
+            sift_assert(respRec.Other.size == 0);
+            return;
+            break;
+         case RecOtherMemoryRequest:
+            handleMemoryRequest(respRec);
+            break;
+         default:
+            sift_assert(false);
+            break;
+      }
+   }
+
+   // We should not get here
+   sift_assert(false);
 }
 
 int32_t Sift::Writer::Fork()
