@@ -7,6 +7,14 @@
 #include <syscall.h>
 #include <linux/futex.h>
 
+// Enable the below to print out sizeof(thread_data_t) at compile time
+#if 0
+// http://stackoverflow.com/questions/7931358/printing-sizeoft-at-compile-time
+template<int N>
+struct _{ operator char() { return N+ 256; } }; //always overflow
+void print_size() { char(_<sizeof(thread_data_t)>()); }
+#endif
+
 static_assert((sizeof(thread_data_t) % LINE_SIZE_BYTES) == 0, "Error: Thread data should be a multiple of the line size to prevent false sharing");
 
 thread_data_t *thread_data;
