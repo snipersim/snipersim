@@ -97,7 +97,7 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
          endROI(threadid);
    }
 
-   return gax;
+   return res;
 }
 
 void findMyAppId()
