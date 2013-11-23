@@ -5,7 +5,7 @@ import os, sys, getopt, re, math, subprocess,json,copy
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend( [os.path.abspath(os.path.join(HOME, '..'))] )
 import sniper_lib, sniper_config, sniper_stats
-import functionparser, aso
+import functionparser, aso, asohelper
 
 #This script generates data for the function-based visualizations.
 #These visualizations contain:
@@ -27,8 +27,6 @@ total = dict(
   icount 	= 0,
   core_time 	= 0,
   nonidle_time 	= 0,
-  fp_addsub 	= 0,
-  fp_muldiv 	= 0,
   l3miss 	= 0
 )
 
@@ -107,8 +105,6 @@ def writeiptstats(outputfile):
       calls			=float(data["calls"]/total["calls"]),
       icount			=float(data["instruction_count"]/total["instruction_count"]),
       nonidle_elapsed_time	=float(data["nonidle_elapsed_time"]/total["nonidle_elapsed_time"]),
-      fp_addsub			=float(data["fp_addsub"]/total["fp_addsub"]),
-      fp_muldiv			=float(data["fp_muldiv"]/total["fp_muldiv"]),
       l3miss			=float(data["l3miss"]/total["l3miss"]),
     ))
   output["functionpercentages"]	=functionpercentages
@@ -134,7 +130,7 @@ def writerooflinestats(outputfile):
   for data in functiondata:
     x=0
     y=0
-    fpinstr = (data["fp_addsub"]+data["fp_muldiv"])
+    fpinstr = (asohelper.get_fp_addsub(data)+asohelper.get_fp_muldiv(data))
     if (data["l3miss"]) > 0:
       x = float((fpinstr/data["l3miss"])/64) #per byte, so division by 64
     if (data["nonidle_elapsed_time"]) > 0:

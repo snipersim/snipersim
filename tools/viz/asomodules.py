@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import copy
+import copy, asohelper
 
 #This module contains all the optimization modules.
 #Each module takes a function (and some the config file), copies the function
@@ -52,8 +52,8 @@ def BranchModule(function):
 def NonFPModule(function):
   instruction_count     = function["instruction_count"]
   nonidle_elapsed_time  = function["nonidle_elapsed_time"]
-  fp_addsub             = function["fp_addsub"]
-  fp_muldiv             = function["fp_muldiv"]
+  fp_addsub             = asohelper.get_fp_addsub(function)
+  fp_muldiv             = asohelper.get_fp_muldiv(function)
   cpiBase               = function["cpiBase"]
   cpiMem                = function["cpiMem"]
   cpiBranchPredictor    = function["cpiBranchPredictor"]
@@ -87,8 +87,8 @@ def VectorizationModule(function):
   optimizedfunction             = copy.deepcopy(function)
   instruction_count             = function["instruction_count"]
   nonidle_elapsed_time          = function["nonidle_elapsed_time"]
-  fp_addsub                     = function["fp_addsub"]
-  fp_muldiv                     = function["fp_muldiv"]
+  fp_addsub                     = asohelper.get_fp_addsub(function)
+  fp_muldiv                     = asohelper.get_fp_muldiv(function)
   cpiBase                       = function["cpiBase"]
   cpiMem                        = function["cpiMem"]
   cpiBranchPredictor            = function["cpiBranchPredictor"]
