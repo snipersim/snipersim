@@ -25,7 +25,6 @@ def ILPModule(function, config):
     #changing properties of function
     optimizedfunction["cpiBase"]                = new_cpiBase
     optimizedfunction["time_won_back"]          += time_gain
-    optimizedfunction["core_elapsed_time"]      -= time_gain
     optimizedfunction["nonidle_elapsed_time"]   -= time_gain
     optimizedfunction["optimizations"].append(dict(optimization="ILP",timegain=time_gain))
     optimizedfunction["originalfunction"]       = function
@@ -42,7 +41,6 @@ def BranchModule(function):
   #we can now remove the branchPredictor cpicomponent
   optimizedfunction["cpiBranchPredictor"]       = 0
   optimizedfunction["time_won_back"]            += cpiBranchPredictor
-  optimizedfunction["core_elapsed_time"]        -= cpiBranchPredictor
   optimizedfunction["nonidle_elapsed_time"]     -= cpiBranchPredictor
   optimizedfunction["optimizations"].append(dict(optimization="Branch", timegain=cpiBranchPredictor))
   optimizedfunction["originalfunction"]         = function
@@ -72,7 +70,6 @@ def NonFPModule(function):
     #changing properties of function
     optimizedfunction["instruction_count"]      -=non_fp_instructions
     optimizedfunction["time_won_back"]          +=non_fp_time
-    optimizedfunction["core_elapsed_time"]      -=non_fp_time
     optimizedfunction["nonidle_elapsed_time"]   -=non_fp_time
     optimizedfunction["cpiBase"]                -=non_fp_fraction*cpiBase
     optimizedfunction["cpiMem"]                 -=non_fp_fraction*cpiMem
@@ -89,7 +86,6 @@ def NonFPModule(function):
 def VectorizationModule(function):
   optimizedfunction             = copy.deepcopy(function)
   instruction_count             = function["instruction_count"]
-  core_elapsed__time            = function["core_elapsed_time"]
   nonidle_elapsed_time          = function["nonidle_elapsed_time"]
   fp_addsub                     = function["fp_addsub"]
   fp_muldiv                     = function["fp_muldiv"]
@@ -167,7 +163,6 @@ def VectorizationModule(function):
     if time_gain > 0:
       #changing properties of function
       optimizedfunction["time_won_back"]        += time_gain
-      optimizedfunction["core_elapsed_time"]    -= time_gain
       optimizedfunction["nonidle_elapsed_time"] -= time_gain
       optimizedfunction["cpiBase"]              = new_cpiBase
       optimizedfunction["optimizations"].append(dict(optimization="Vectorization", timegain=time_gain))
@@ -191,7 +186,6 @@ def MemoryModule(function):
   #we remove the memory component
   optimizedfunction["cpiMem"]                   = 0
   optimizedfunction["time_won_back"]            += cpiMem
-  optimizedfunction["core_elapsed_time"]        -= cpiMem
   optimizedfunction["nonidle_elapsed_time"]     -= cpiMem
   optimizedfunction["bits_used"]                = 0
   optimizedfunction["bits_total"]               = 0
@@ -215,7 +209,6 @@ def TLPModule(function, config):
   if time_gain > 0:
     #change properties of function
     optimizedfunction["time_won_back"]          += time_gain
-    optimizedfunction["core_elapsed_time"]      -= time_gain
     optimizedfunction["nonidle_elapsed_time"]   -= time_gain
     optimizedfunction["cpiBase"]                -= time_gain
     optimizedfunction["optimizations"].append(dict(optimization="TLP", timegain=time_gain))
@@ -252,7 +245,6 @@ def PercentOfDataUtilizedModule(function):
   if time_gain > 0:
     #change properties of function
     optimizedfunction["time_won_back"]          += time_gain
-    optimizedfunction["core_elapsed_time"]      -= time_gain
     optimizedfunction["nonidle_elapsed_time"]   -= time_gain
     optimizedfunction["bits_total"]             = bits_used
     optimizedfunction["optimizations"].append(dict(optimization="PercentOfDataUtilized", timegain=time_gain, detail={'bits_used':bits_used,'bits_total':bits_total}))

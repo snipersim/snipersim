@@ -6,7 +6,7 @@ import subprocess, cStringIO
 
 #format of inputdata:
 
-#example : eip  name	source	calls	bits_used	bits_total	instruction_count	core_elapsed_time	nonidle_elapsed_time	fp_addsub	fp_muldiv	l2miss	l3miss	global_instructions	global_nonidle_elapsed_time	cpiBase	cpiBranchPredictor	cpiMem	ADDPD	ADDSD	ADDSS	ADDPS	SUBPD	SUBSD	SUBSS	SUBPS	MULPD	MULSD	MULSS	MULPS	DIVPD	DIVSD	DIVSS	DIVPS
+#example : eip  name	source	calls	bits_used	bits_total	instruction_count	nonidle_elapsed_time	fp_addsub	fp_muldiv	l2miss	l3miss	global_instructions	global_nonidle_elapsed_time	cpiBase	cpiBranchPredictor	cpiMem	ADDPD	ADDSD	ADDSS	ADDPS	SUBPD	SUBSD	SUBSS	SUBPS	MULPD	MULSD	MULSS	MULPS	DIVPD	DIVSD	DIVSS	DIVPS
 
 #Demangle C++ names:
 
@@ -24,7 +24,6 @@ def parseFunctions(inputfile = None, inputdata = None):
   total = dict(
     calls = 0,
     instruction_count = 0,
-    core_elapsed_time = 0,
     nonidle_elapsed_time = 0,
     fp_addsub = 0,
     fp_muldiv = 0,
@@ -54,7 +53,6 @@ def parseFunctions(inputfile = None, inputdata = None):
         bits_used			=float(output[name2idx['bits_used']]),
         bits_total			=float(output[name2idx['bits_total']]),
 	instruction_count		=float(output[name2idx['instruction_count']]), 
-	core_elapsed_time		=float(output[name2idx['core_elapsed_time']]),
         nonidle_elapsed_time 		=float(output[name2idx['nonidle_elapsed_time']]),
 	fp_addsub			=float(output[name2idx['fp_addsub']]),
         fp_muldiv			=float(output[name2idx['fp_muldiv']]), 
@@ -92,7 +90,6 @@ def parseFunctions(inputfile = None, inputdata = None):
 
       total["calls"]+=float(output[name2idx['calls']])
       total["instruction_count"]+=float(output[name2idx['instruction_count']])
-      total["core_elapsed_time"]+=(float(output[name2idx['core_elapsed_time']]))
       total["nonidle_elapsed_time"]+=(float(output[name2idx['nonidle_elapsed_time']]))
       total["fp_addsub"]+=float(output[name2idx['fp_addsub']])
       total["fp_muldiv"]+=float(output[name2idx['fp_muldiv']])

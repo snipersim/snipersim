@@ -248,7 +248,7 @@ if __name__ == '__main__':
       break
   functions,total=functionparser.parseFunctions(inputdata = rtntrace)
   optimizationlist = runModules(functions,config)
-  totaltime = total["core_elapsed_time"]
+  totaltime = total["nonidle_elapsed_time"]
   print
   print "Overall best optimizations"
   printResult(optimizationlist,totaltime,numberofresults,functions)

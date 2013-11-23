@@ -56,13 +56,13 @@ def getOptimizationInfo():
   global functiondata, config
   optimizationinfo={}
   optimizationlist 			= aso.runModules(functiondata,config)
-  optimizationinfo["top_optimizations"] = aso.getTopOptimizations(optimizationlist, total["core_elapsed_time"],10,functiondata)
-  optimizationinfo["per_function"] 	= aso.getOptimizationsPerFunction(optimizationlist,functiondata,total["core_elapsed_time"])
-  optimizationinfo["per_module"]	= aso.getTopOptimizationsPerModule(optimizationlist,total["core_elapsed_time"],10, functiondata)
+  optimizationinfo["top_optimizations"] = aso.getTopOptimizations(optimizationlist, total["nonidle_elapsed_time"],10,functiondata)
+  optimizationinfo["per_function"] 	= aso.getOptimizationsPerFunction(optimizationlist,functiondata,total["nonidle_elapsed_time"])
+  optimizationinfo["per_module"]	= aso.getTopOptimizationsPerModule(optimizationlist,total["nonidle_elapsed_time"],10, functiondata)
   optimizationinfo["optimization_names"]= aso.getOptimizationNames()
   optimizationinfo["summary"]		= aso.getOptimizationSummary()
   combinedlist				= aso.runCombinedModules(functiondata,config)
-  optimizationinfo["combined"]		= aso.getTopOptimizations(combinedlist, total["core_elapsed_time"],10,functiondata)
+  optimizationinfo["combined"]		= aso.getTopOptimizations(combinedlist, total["nonidle_elapsed_time"],10,functiondata)
   return optimizationinfo
 
 #calculate Peak Floating Point Performance in GFlops/s
@@ -102,11 +102,10 @@ def writeiptstats(outputfile):
   output={}
   output["iptdata"]=[]
   for data in functiondata:
-    output["iptdata"].append([data["core_elapsed_time"]/1e6,[data["instruction_count"]]])
+    output["iptdata"].append([data["nonidle_elapsed_time"]/1e6,[data["instruction_count"]]])
     functionpercentages.append(dict(
       calls			=float(data["calls"]/total["calls"]),
       icount			=float(data["instruction_count"]/total["instruction_count"]),
-      core_elapsed_time		=float(data["core_elapsed_time"]/total["core_elapsed_time"]),
       nonidle_elapsed_time	=float(data["nonidle_elapsed_time"]/total["nonidle_elapsed_time"]),
       fp_addsub			=float(data["fp_addsub"]/total["fp_addsub"]),
       fp_muldiv			=float(data["fp_muldiv"]/total["fp_muldiv"]),
@@ -117,7 +116,6 @@ def writeiptstats(outputfile):
   #convert femtoseconds to nanoseconds:
   for function in functioninfo:
     function["cpi"]=getCPI(function)
-    function["core_elapsed_time"]/=1e6
     function["nonidle_elapsed_time"]/=1e6
 
 
@@ -139,13 +137,12 @@ def writerooflinestats(outputfile):
     fpinstr = (data["fp_addsub"]+data["fp_muldiv"])
     if (data["l3miss"]) > 0:
       x = float((fpinstr/data["l3miss"])/64) #per byte, so division by 64
-    if (data["core_elapsed_time"]) > 0:
-      y = float(fpinstr/data["core_elapsed_time"]*1e6) #GFLOPS
+    if (data["nonidle_elapsed_time"]) > 0:
+      y = float(fpinstr/data["nonidle_elapsed_time"]*1e6) #GFLOPS
     output["rooflinedata"].append([x,y])
   
   functioninfo = copy.deepcopy(functiondata)
   for function in functioninfo:
-    function["core_elapsed_time"]/=1e6
     function["nonidle_elapsed_time"]/=1e6
     function["cpi"]=getCPI(function)
   output["functioninfo"]=functioninfo
