@@ -171,6 +171,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
     'Peak Dynamic': dram_dyn,
     'Runtime Dynamic': 0,
     'Subthreshold Leakage': dram_stat,
+    'Subthreshold Leakage with power gating': dram_stat,
     'Gate Leakage': 0,
     'Area': 0,
   }
@@ -253,11 +254,11 @@ def power_stack(power_dat, powertype = 'total', nocollapse = False):
     if powertype == 'dynamic':
       return getcomponent('Runtime Dynamic')
     elif powertype == 'static':
-      return getcomponent('Subthreshold Leakage') + getcomponent('Gate Leakage')
+      return getcomponent('Subthreshold Leakage with power gating') + getcomponent('Gate Leakage')
     elif powertype == 'total':
-      return getcomponent('Runtime Dynamic') + getcomponent('Subthreshold Leakage') + getcomponent('Gate Leakage')
+      return getcomponent('Runtime Dynamic') + getcomponent('Subthreshold Leakage with power gating') + getcomponent('Gate Leakage')
     elif powertype == 'peak':
-      return getcomponent('Peak Dynamic') + getcomponent('Subthreshold Leakage') + getcomponent('Gate Leakage')
+      return getcomponent('Peak Dynamic') + getcomponent('Subthreshold Leakage with power gating') + getcomponent('Gate Leakage')
     elif powertype == 'peakdynamic':
       return getcomponent('Peak Dynamic')
     elif powertype == 'area':
@@ -782,6 +783,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
   template.append(["\t\t<param name=\"interconnect_projection_type\" value=\"0\"/><!--0: agressive wire technology; 1: conservative wire technology -->",""])
   template.append(["\t\t<param name=\"device_type\" value=\"0\"/><!--0: HP(High Performance Type); 1: LSTP(Low standby power) 2: LOP (Low Operating Power)  -->",""])
   template.append(["\t\t<param name=\"longer_channel_device\" value=\"1\"/><!-- 0 no use; 1 use when approperiate -->",""])
+  template.append(["\t\t<param name=\"power_gating\" value=\"1\"/><!-- 0 not enabled; 1 enabled -->",""])
   template.append(["\t\t<param name=\"machine_bits\" value=\"64\"/>",""])
   template.append(["\t\t<param name=\"virtual_address_width\" value=\"64\"/>",""])
   template.append(["\t\t<param name=\"physical_address_width\" value=\"52\"/>",""])     #
