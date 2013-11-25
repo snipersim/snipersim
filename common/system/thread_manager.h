@@ -29,6 +29,7 @@ public:
       STALL_FUTEX,            // Thread is calling syscall(SYS_futex, FUTEX_WAIT)
       STALL_PAUSE,            // pause system call
       STALL_SLEEP,            // sleep system call
+      STALL_SYSCALL,          // blocking system call
       STALL_TYPES_MAX,
    };
    static const char* stall_type_names[];

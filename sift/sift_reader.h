@@ -49,6 +49,7 @@ namespace Sift
       typedef bool (*HandleEmuFunc)(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
       typedef void (*HandleRoutineChange)(void* arg, uint64_t eip, uint64_t esp, Sift::RoutineOpType event);
       typedef void (*HandleRoutineAnnounce)(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
+      typedef int32_t (*HandleForkFunc)(void* arg);
 
       private:
          vistream *input;
@@ -59,6 +60,8 @@ namespace Sift
          void *handleSyscallArg;
          HandleNewThreadFunc handleNewThreadFunc;
          void *handleNewThreadArg;
+         HandleForkFunc handleForkFunc;
+         void *handleForkArg;
          HandleJoinFunc handleJoinFunc;
          void *handleJoinArg;
          HandleMagicFunc handleMagicFunc;
@@ -108,6 +111,7 @@ namespace Sift
          void setHandleMagicFunc(HandleMagicFunc func, void* arg = NULL) { assert(func); handleMagicFunc = func; handleMagicArg = arg; }
          void setHandleEmuFunc(HandleEmuFunc func, void* arg = NULL) { assert(func); handleEmuFunc = func; handleEmuArg = arg; }
          void setHandleRoutineFunc(HandleRoutineChange funcChange, HandleRoutineAnnounce funcAnnounce, void* arg = NULL) { assert(funcChange); assert(funcAnnounce); handleRoutineChangeFunc = funcChange; handleRoutineAnnounceFunc = funcAnnounce; handleRoutineArg = arg; }
+         void setHandleForkFunc(HandleForkFunc func, void* arg = NULL) { assert(func); handleForkFunc = func; handleForkArg = arg;}
 
          uint64_t getPosition();
          uint64_t getLength();

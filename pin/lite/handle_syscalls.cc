@@ -55,6 +55,10 @@ void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
       #endif
       localStore[threadIndex].pthread_create.clear_tid = args.arg0 & CLONE_CHILD_CLEARTID ? true : false;
    }
+   else if (syscall_number == SYS_execve)
+   {
+      LOG_PRINT_ERROR("execv system call not supported in Pin mode, use SIFT mode instead (--sift)");
+   }
 
    Thread* thread = Sim()->getThreadManager()->getCurrentThread(threadIndex);
    LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");

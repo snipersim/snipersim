@@ -51,6 +51,7 @@ extern UINT64 detailed_target;
 extern PIN_LOCK access_memory_lock;
 extern PIN_LOCK new_threadid_lock;
 extern std::deque<ADDRINT> tidptrs;
+extern INT32 child_app_id;
 extern BOOL any_thread_in_detail;
 extern const bool verbose;
 extern std::unordered_map<ADDRINT, bool> routines;

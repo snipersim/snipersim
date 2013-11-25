@@ -54,7 +54,7 @@ class TraceManager
       Lock m_lock;
 
       String getFifoName(app_id_t app_id, UInt64 thread_num, bool response, bool create);
-      thread_id_t newThread(app_id_t app_id, bool first, bool spawn, SubsecondTime time, thread_id_t creator_thread_id);
+      thread_id_t newThread(app_id_t app_id, bool first, bool init_fifo, bool spawn, SubsecondTime time, thread_id_t creator_thread_id);
 
       friend class Monitor;
 
@@ -68,6 +68,7 @@ class TraceManager
       void wait();
       void run();
       thread_id_t createThread(app_id_t app_id, SubsecondTime time, thread_id_t creator_thread_id);
+      app_id_t createApplication(SubsecondTime time, thread_id_t creator_thread_id);
       void signalStarted();
       void signalDone(TraceThread *thread, SubsecondTime time, bool aborted);
       void endApplication(TraceThread *thread, SubsecondTime time);

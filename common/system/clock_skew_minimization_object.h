@@ -61,7 +61,7 @@ public:
    virtual void setDisable(bool disable) { }
    virtual void setGroup(core_id_t core_id, core_id_t master_core_id) = 0;
    virtual void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime()) = 0;
-   virtual SubsecondTime getGlobalTime();
+   virtual SubsecondTime getGlobalTime(bool upper_bound = false);
 
    virtual void printState(void) {}
 };

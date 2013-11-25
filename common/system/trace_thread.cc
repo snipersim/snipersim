@@ -36,6 +36,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_tracefile(tracefile)
    , m_responsefile(responsefile)
    , m_app_id(app_id)
+   , m_blocked(false)
    , m_cleanup(cleanup)
    , m_stopped(false)
 {
@@ -46,6 +47,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    m_trace.setHandleJoinFunc(TraceThread::__handleJoinFunc, this);
    m_trace.setHandleMagicFunc(TraceThread::__handleMagicFunc, this);
    m_trace.setHandleEmuFunc(TraceThread::__handleEmuFunc, this);
+   m_trace.setHandleForkFunc(TraceThread::__handleForkFunc, this);
    if (Sim()->getRoutineTracer())
       m_trace.setHandleRoutineFunc(TraceThread::__handleRoutineChangeFunc, TraceThread::__handleRoutineAnnounceFunc, this);
 
@@ -189,6 +191,14 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
          ret = m_thread->getSyscallMdl()->runExit(ret);
          break;
       }
+
+      case SYS_wait4:
+      {
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         // Let the thread manager know we are blocked on this system call
+         Sim()->getThreadManager()->stallThread_async(m_thread->getId(), ThreadManager::STALL_SYSCALL, getCurrentTime());
+         m_blocked = true;
+      }
    }
 
    return ret;
@@ -197,6 +207,11 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 int32_t TraceThread::handleNewThreadFunc()
 {
    return Sim()->getTraceManager()->createThread(m_app_id, getCurrentTime(), m_thread->getId());
+}
+
+int32_t TraceThread::handleForkFunc()
+{
+   return Sim()->getTraceManager()->createApplication(getCurrentTime(), m_thread->getId());
 }
 
 int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)
@@ -479,6 +494,19 @@ void TraceThread::run()
 
    while(have_first && m_trace.Read(next_inst))
    {
+      if (m_blocked)
+      {
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         // We were blocked on a system call, but started executing instructions again.
+         // This means we woke up. Since there is no explicit wakeup nor an associated time,
+         // use global time.
+         SubsecondTime end_time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
+         Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, end_time, NULL);
+         // We may have been rescheduled to a different core
+         m_thread->getCore()->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
+         m_blocked = false;
+      }
+
       // We may have been rescheduled to a different core
       // by prfmdl->iterate (at the end of the last iteration),
       // or a system call (handled out-of-band by m_trace.Read)

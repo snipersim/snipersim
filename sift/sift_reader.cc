@@ -33,6 +33,8 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , handleMagicArg(NULL)
    , handleEmuFunc(NULL)
    , handleEmuArg(NULL)
+   , handleForkFunc(NULL)
+   , handleForkArg(NULL)
    , handleRoutineChangeFunc(NULL)
    , handleRoutineAnnounceFunc(NULL)
    , handleRoutineArg(NULL)
@@ -299,6 +301,23 @@ bool Sift::Reader::Read(Instruction &inst)
             {
                assert(rec.Other.size == 0);
                sendSimpleResponse(RecOtherSyncResponse, NULL, 0);
+               break;
+            }
+            case RecOtherFork:
+            {
+               assert(rec.Other.size == 0);
+               assert(handleForkFunc);
+               if(handleForkFunc)
+               {
+                  #if VERBOSE > 0
+                  std::cerr << "[DEBUG:" << m_id << "] HandleFork" << std::endl;
+                  #endif
+                  int32_t ret = handleForkFunc(handleForkArg);
+                  sendSimpleResponse(RecOtherForkResponse, &ret, sizeof(ret));
+                  #if VERBOSE > 0
+                  std::cerr << "[DEBUG:" << m_id << "] HandleFork Done" << std::endl;
+                  #endif
+               }
                break;
             }
             case RecOtherMagicInstruction:

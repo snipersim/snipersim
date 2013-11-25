@@ -41,7 +41,7 @@ def usage():
         '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec="<mpiexec -mpiarg...>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
-        '  |  -- <cmdline> }'
+        '  |  [--sift] -- <cmdline> }'
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -88,6 +88,7 @@ trace_manual = False
 heteroconfig = None
 pinballs = None
 pinball_sift = True
+use_sift = False
 tracegen = None
 trace_extra_args = []
 verbose = False
@@ -194,7 +195,8 @@ try:
       "traces=", "response-traces=", "trace-manual", "trace-args=",
       "sim-end=",
       "mpi", "mpi-ranks=", "mpi-exec=",
-      "pinballs=", "pinball-non-sift"
+      "pinballs=", "pinball-non-sift",
+      "sift",
     ]
   )
 except getopt.GetoptError, e:
@@ -305,10 +307,12 @@ for o, a in opts:
     pinballs = a.split(',')
   if o == '--pinball-non-sift':
     pinball_sift = False
+  if o == '--sift':
+    use_sift = True
 
 
 if cmdline:
-  if use_mpi:
+  if use_mpi or use_sift:
     standalone = True
   else:
     standalone = False
@@ -490,6 +494,16 @@ elif use_mpi:
   mpiexec.extend(['-np', str(mpi_ranks)])
   applications = [
     (mpiexec, [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+  ]
+elif use_sift:
+  tracegen = {}
+  tracegen['enabled'] = 'true'
+  tracegen['emulate_syscalls'] = 'true'
+  tracegen['num_apps'] = 1
+  tracegen['redirect'] = False
+  sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all processes have completed
+  applications = [
+    ([], ['-e', '1', '-s', '0', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
   ]
 elif pinballs and pinball_sift:
   tracegen = {}

@@ -31,5 +31,6 @@ UINT64 detailed_target = 0;
 PIN_LOCK access_memory_lock;
 PIN_LOCK new_threadid_lock;
 std::deque<ADDRINT> tidptrs;
+INT32 child_app_id = -1;
 BOOL any_thread_in_detail = false;
 std::unordered_map<ADDRINT, bool> routines;

@@ -83,6 +83,7 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'join',     .01, 'SyncJoin' ],
       [ 'pause',    .01, 'SyncPause' ],
       [ 'sleep',    .01, 'SyncSleep' ],
+      [ 'syscall',  .01, 'SyncSyscall' ],
       [ 'unscheduled', .01, 'SyncUnscheduled' ],
       [ 'memaccess',.01, 'SyncMemAccess' ],
       [ 'recv',     .01, 'Recv' ],

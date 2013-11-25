@@ -86,21 +86,31 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          // then when the thread ends, write 0 to the tid mutex and futex_wake it
          case SYS_clone:
          {
-            thread_data[threadid].output->NewThread();
-            // Store the thread's tid ptr for later use
-            #if defined(TARGET_IA32)
-               ADDRINT tidptr = args[2];
-            #elif defined(TARGET_INTEL64)
-               ADDRINT tidptr = args[3];
-            #endif
-            PIN_GetLock(&new_threadid_lock, threadid);
-            tidptrs.push_back(tidptr);
-            PIN_ReleaseLock(&new_threadid_lock);
+            if (args[1] & CLONE_THREAD)
+            {
+               /* New thread */
+               thread_data[threadid].output->NewThread();
+               // Store the thread's tid ptr for later use
+               #if defined(TARGET_IA32)
+                  ADDRINT tidptr = args[2];
+               #elif defined(TARGET_INTEL64)
+                  ADDRINT tidptr = args[3];
+               #endif
+               PIN_GetLock(&new_threadid_lock, threadid);
+               tidptrs.push_back(tidptr);
+               PIN_ReleaseLock(&new_threadid_lock);
+            }
+            else
+            {
+               /* New process */
+               // Nothing to do there, handled in fork()
+            }
             break;
          }
 
          // System calls not emulated (passed through to OS)
          case SYS_write:
+         case SYS_wait4:
             thread_data[threadid].last_syscall_number = syscall_number;
             thread_data[threadid].last_syscall_emulated = false;
             thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
