@@ -91,5 +91,5 @@ endif
 
 ifneq ($(CLEAN),)
 clean:
-	-rm -f $(TARGET_LIB) $(OBJECTS) $(OBJECTS:%.o=%.d)
+	-rm -f $(TARGET_LIB) $(OBJECTS) $(OBJECTS:%.o=%.d) follow_execv/follow_execv.o
 endif
