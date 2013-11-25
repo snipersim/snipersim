@@ -53,8 +53,11 @@ class TraceThread : public Runnable
       app_id_t m_app_id;
       bool m_blocked;
       bool m_cleanup;
+      bool m_started;
 
       void run();
+      static void __handleInstructionCountFunc(void* arg, uint32_t icount)
+      { ((TraceThread*)arg)->handleInstructionCountFunc(icount); }
       static void __handleOutputFunc(void* arg, uint8_t fd, const uint8_t *data, uint32_t size)
       { ((TraceThread*)arg)->handleOutputFunc(fd, data, size); }
       static uint64_t __handleSyscallFunc(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size)
@@ -74,6 +77,7 @@ class TraceThread : public Runnable
       static int32_t __handleForkFunc(void* arg)
       { return ((TraceThread*)arg)->handleForkFunc();}
 
+      void handleInstructionCountFunc(uint32_t icount);
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
       uint64_t handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size);
       int32_t handleNewThreadFunc();
@@ -87,6 +91,7 @@ class TraceThread : public Runnable
       BasicBlock* decode(Sift::Instruction &inst);
       void handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);
       void handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl);
+      void unblock();
 
       SubsecondTime getCurrentTime() const;
 

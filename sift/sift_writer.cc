@@ -257,6 +257,40 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
       npredicate++;
 }
 
+void Sift::Writer::InstructionCount(uint32_t icount)
+{
+   #if VERBOSE > 1
+   std::cerr << "[DEBUG:" << m_id << "] Write InstructionCount" << std::endl;
+   #endif
+
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherInstructionCount;
+   rec.Other.size = sizeof(uint32_t);
+
+   #if VERBOSE_HEX > 1
+   hexdump((char*)&rec, sizeof(rec.Other));
+   hexdump((char*)&icount, sizeof(icount));
+   #endif
+
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<char*>(&icount), sizeof(icount));
+   output->flush();
+
+   if (!response)
+   {
+     sift_assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+   }
+
+   // wait for reply
+   Record respRec;
+   response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+   sift_assert(respRec.Other.zero == 0);
+   sift_assert(respRec.Other.type == RecOtherSyncResponse);
+   sift_assert(respRec.Other.size == 0);
+}
+
 void Sift::Writer::Output(uint8_t fd, const char *data, uint32_t size)
 {
    #if VERBOSE > 1

@@ -21,6 +21,8 @@ bool Sift::Reader::xed_initialized = false;
 Sift::Reader::Reader(const char *filename, const char *response_filename, uint32_t id)
    : input(NULL)
    , response(NULL)
+   , handleInstructionCountFunc(NULL)
+   , handleInstructionCountArg(NULL)
    , handleOutputFunc(NULL)
    , handleOutputArg(NULL)
    , handleSyscallFunc(NULL)
@@ -209,6 +211,19 @@ bool Sift::Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
                vcache[vp] = pp;
+               break;
+            }
+            case RecOtherInstructionCount:
+            {
+               #if VERBOSE > 0
+               std::cerr << "[DEBUG:" << m_id << "] Read InstructionCount" << std::endl;
+               #endif
+               assert(rec.Other.size == sizeof(uint32_t));
+               uint32_t icount;
+               input->read(reinterpret_cast<char*>(&icount), sizeof(icount));
+               if (handleInstructionCountFunc)
+                  handleInstructionCountFunc(handleInstructionCountArg, icount);
+               sendSimpleResponse(RecOtherSyncResponse, NULL, 0);
                break;
             }
             case RecOtherOutput:

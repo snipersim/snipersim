@@ -42,7 +42,7 @@ class SyscallMdl
       SyscallMdl(Thread *thread);
       ~SyscallMdl();
 
-      void runEnter(IntPtr syscall_number, syscall_args_t &args);
+      bool runEnter(IntPtr syscall_number, syscall_args_t &args);
       IntPtr runExit(IntPtr old_return);
       bool isEmulated() const { return m_emulated; }
       bool inSyscall() const { return m_in_syscall; }

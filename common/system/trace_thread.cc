@@ -38,8 +38,10 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_app_id(app_id)
    , m_blocked(false)
    , m_cleanup(cleanup)
+   , m_started(false)
    , m_stopped(false)
 {
+   m_trace.setHandleInstructionCountFunc(TraceThread::__handleInstructionCountFunc, this);
    if (Sim()->getCfg()->getBool("traceinput/mirror_output"))
       m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
    m_trace.setHandleSyscallFunc(TraceThread::__handleSyscallFunc, this);
@@ -173,6 +175,13 @@ void TraceThread::handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t siz
 
 uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size)
 {
+   // We may have been blocked in a system call, if we start executing instructions again that means we're continuing
+   if (m_blocked)
+   {
+      unblock();
+   }
+
+   LOG_ASSERT_ERROR(m_thread->getCore(), "Cannot execute while not on a core");
    uint64_t ret = 0;
 
    switch(syscall_number)
@@ -187,8 +196,11 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 
          SyscallMdl::syscall_args_t *args = (SyscallMdl::syscall_args_t *) data;
 
-         m_thread->getSyscallMdl()->runEnter(syscall_number, *args);
-         ret = m_thread->getSyscallMdl()->runExit(ret);
+         m_blocked = m_thread->getSyscallMdl()->runEnter(syscall_number, *args);
+         if (m_blocked == false)
+         {
+            ret = m_thread->getSyscallMdl()->runExit(ret);
+         }
          break;
       }
 
@@ -245,6 +257,14 @@ void TraceThread::handleRoutineChangeFunc(Sift::RoutineOpType event, uint64_t ei
 
 bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
 {
+   // We may have been blocked in a system call, if we start executing instructions again that means we're continuing
+   if (m_blocked)
+   {
+      unblock();
+   }
+
+   LOG_ASSERT_ERROR(m_thread->getCore(), "Cannot execute while not on a core");
+
    switch(type)
    {
       case Sift::EmuTypeRdtsc:
@@ -340,6 +360,42 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
    basic_block->push_back(instruction);
 
    return basic_block;
+}
+
+void TraceThread::handleInstructionCountFunc(uint32_t icount)
+{
+   if (!m_started)
+   {
+      // Received first instruction, let TraceManager know our SIFT connection is up and running
+      Sim()->getTraceManager()->signalStarted();
+      m_started = true;
+   }
+
+   // We may have been blocked in a system call, if we start executing instructions again that means we're continuing
+   if (m_blocked)
+   {
+      unblock();
+   }
+
+   Core *core = m_thread->getCore();
+   LOG_ASSERT_ERROR(core, "We cannot execute instructions while not on a core");
+   SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
+   core->countInstructions(0, icount);
+
+   if (Sim()->getInstrumentationMode() == InstMode::DETAILED)
+   {
+      // We're in detailed mode, but our SIFT recorder doesn't know it yet
+      // Do something to advance time
+      core->getPerformanceModel()->queueDynamicInstruction(new UnknownInstruction(icount * core->getDvfsDomain()->getPeriod()));
+      core->getPerformanceModel()->iterate();
+   }
+
+   // We may have been rescheduled
+   if (m_thread->reschedule(time, core))
+   {
+      core = m_thread->getCore();
+      core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+   }
 }
 
 void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)
@@ -465,6 +521,34 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    prfmdl->iterate();
 }
 
+void TraceThread::unblock()
+{
+   LOG_ASSERT_ERROR(m_blocked == true, "Must call only when m_blocked == true");
+
+   SubsecondTime end_time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
+   m_thread->getSyscallMdl()->runExit(0);
+   {
+      ScopedLock sl(Sim()->getThreadManager()->getLock());
+      // We were blocked on a system call, but started executing instructions again.
+      // This means we woke up. Since there is no explicit wakeup nor an associated time,
+      // use global time.
+      Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, end_time, NULL);
+   }
+
+   if (m_thread->getCore())
+   {
+      m_thread->getCore()->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
+   }
+   else
+   {
+      // We were scheduled out during the system call
+      m_thread->reschedule(end_time, NULL);
+      m_thread->getCore()->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::UNSCHEDULED));
+   }
+
+   m_blocked = false;
+}
+
 void TraceThread::run()
 {
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
@@ -486,22 +570,15 @@ void TraceThread::run()
    Sift::Instruction inst, next_inst;
 
    bool have_first = m_trace.Read(inst);
-   // Recieved first instruction, let TraceManager know our SIFT connection is up and running
+   // Received first instruction, let TraceManager know our SIFT connection is up and running
    Sim()->getTraceManager()->signalStarted();
+   m_started = true;
 
    while(have_first && m_trace.Read(next_inst))
    {
       if (m_blocked)
       {
-         ScopedLock sl(Sim()->getThreadManager()->getLock());
-         // We were blocked on a system call, but started executing instructions again.
-         // This means we woke up. Since there is no explicit wakeup nor an associated time,
-         // use global time.
-         SubsecondTime end_time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
-         Sim()->getThreadManager()->resumeThread_async(m_thread->getId(), INVALID_THREAD_ID, end_time, NULL);
-         // We may have been rescheduled to a different core
-         m_thread->getCore()->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
-         m_blocked = false;
+         unblock();
       }
 
       core = m_thread->getCore();

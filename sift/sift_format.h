@@ -101,6 +101,7 @@ namespace Sift
       RecOtherEmuResponse,
       RecOtherFork,
       RecOtherForkResponse,
+      RecOtherInstructionCount,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

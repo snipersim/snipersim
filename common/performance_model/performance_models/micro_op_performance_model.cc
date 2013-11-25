@@ -62,6 +62,9 @@ MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
    registerStatsMetric("performance_model", core->getId(), "cpiITLBMiss", &m_cpiITLBMiss);
    registerStatsMetric("performance_model", core->getId(), "cpiDTLBMiss", &m_cpiDTLBMiss);
 
+   m_cpiUnknown = SubsecondTime::Zero();
+   registerStatsMetric("performance_model", core->getId(), "cpiUnknown", &m_cpiUnknown);
+
    m_cpiMemAccess = SubsecondTime::Zero();
    registerStatsMetric("performance_model", core->getId(), "cpiSyncMemAccess", &m_cpiMemAccess);
 
@@ -464,6 +467,10 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
             m_cpiITLBMiss += insn_cost;
          else
             m_cpiDTLBMiss += insn_cost;
+      }
+      else if (instruction->getType() == INST_UNKNOWN)
+      {
+         m_cpiUnknown += insn_cost;
       }
       else if ((instruction->getType() == INST_SYNC) || (instruction->getType() == INST_RECV))
       {

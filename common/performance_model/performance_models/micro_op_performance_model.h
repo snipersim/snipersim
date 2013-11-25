@@ -69,6 +69,7 @@ private:
 
    SubsecondTime m_cpiITLBMiss;
    SubsecondTime m_cpiDTLBMiss;
+   SubsecondTime m_cpiUnknown;
    SubsecondTime m_cpiMemAccess;
 };
 

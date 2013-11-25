@@ -93,7 +93,7 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
   items += [
     [ 'dvfs-transition', 0.01, 'SyncDvfsTransition' ],
     [ 'imbalance', 0.01, [
-      [ 'start', 0.01, 'StartTime' ],
+      [ 'start', 0.01, ('StartTime', 'Unknown') ],
       [ 'end',   0.01, 'Imbalance' ],
     ] ],
   ]

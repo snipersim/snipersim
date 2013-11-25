@@ -58,7 +58,7 @@ SyscallMdl::~SyscallMdl()
    free(futex_counters);
 }
 
-void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
+bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 {
    Core *core = m_thread->getCore();
 
@@ -118,9 +118,11 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          Core *core = m_thread->getCore();
          SubsecondTime start_time = core->getPerformanceModel()->getElapsedTime();
 
-         SubsecondTime time_wake = start_time + SubsecondTime::SEC(req->tv_sec) + SubsecondTime::NS(req->tv_nsec);
-         SubsecondTime end_time;
+         struct timespec local_req;
+         core->accessMemory(Core::NONE, Core::READ, (IntPtr) req, (char*) &local_req, sizeof(local_req));
 
+         SubsecondTime time_wake = start_time + SubsecondTime::SEC(local_req.tv_sec) + SubsecondTime::NS(local_req.tv_nsec);
+         SubsecondTime end_time;
          Sim()->getSyscallServer()->handleSleepCall(m_thread->getId(), time_wake, start_time, end_time);
 
          if (m_thread->reschedule(end_time, core))
@@ -131,8 +133,10 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          if (rem)
          {
             // Interruption not supported, always return 0 remaining time
-            rem->tv_sec = 0;
-            rem->tv_nsec = 0;
+            struct timespec local_rem;
+            local_rem.tv_sec = 0;
+            local_rem.tv_nsec = 0;
+            core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) rem, (char*) &local_rem, sizeof(local_rem));
          }
 
          // Always succeeds
@@ -142,9 +146,11 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          break;
       }
 
+      case SYS_read:
       case SYS_pause:
       case SYS_select:
       case SYS_poll:
+      case SYS_wait4:
       {
          // System call is blocking, mark thread as asleep
          ScopedLock sl(Sim()->getThreadManager()->getLock());
@@ -284,6 +290,8 @@ void SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
    }
 
    LOG_PRINT("Syscall finished");
+
+   return m_stalled;
 }
 
 IntPtr SyscallMdl::runExit(IntPtr old_return)
