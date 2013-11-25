@@ -20,12 +20,14 @@ DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
    , m_dram_cntlr(dram_cntlr)
    , m_queue_model(NULL)
    , m_prefetcher(NULL)
+   , m_prefetch_mshr("dram-cache.prefetch-mshr", m_core_id, 16)
    , m_reads(0)
    , m_writes(0)
    , m_read_misses(0)
    , m_write_misses(0)
    , m_hits_prefetch(0)
    , m_prefetches(0)
+   , m_prefetch_mshr_delay(SubsecondTime::Zero())
 {
    UInt32 cache_size = Sim()->getCfg()->getIntArray("perf_model/dram/cache/cache_size", m_core_id);
    UInt32 associativity = Sim()->getCfg()->getIntArray("perf_model/dram/cache/associativity", m_core_id);
@@ -60,6 +62,7 @@ DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
    registerStatsMetric("dram-cache", m_core_id, "write-misses", &m_write_misses);
    registerStatsMetric("dram-cache", m_core_id, "hits-prefetch", &m_hits_prefetch);
    registerStatsMetric("dram-cache", m_core_id, "prefetches", &m_prefetches);
+   registerStatsMetric("dram-cache", m_core_id, "prefetch-mshr-delay", &m_prefetch_mshr_delay);
 }
 
 DramCache::~DramCache()
@@ -112,6 +115,14 @@ DramCache::doAccess(Cache::access_t access, IntPtr address, core_id_t requester,
          m_hits_prefetch++;
          prefetch_hit = true;
          block_info->clearOption(CacheBlockInfo::PREFETCH);
+
+         // If prefetch is still in progress: delay
+         SubsecondTime t_completed = m_prefetch_mshr.getTagCompletionTime(address);
+         if (t_completed != SubsecondTime::MaxTime() && t_completed > now + latency)
+         {
+            m_prefetch_mshr_delay += t_completed - (now + latency);
+            latency = t_completed - now;
+         }
       }
 
       m_cache->accessSingleLine(address, access, data_buf, m_cache_block_size, now + latency, true);
@@ -209,9 +220,11 @@ DramCache::callPrefetcher(IntPtr train_address, bool cache_hit, bool prefetch_hi
             boost::tie(dram_latency, hit_where) = m_dram_cntlr->getDataFromDram(prefetch_address, m_core_id, data_buf, t_issue, NULL);
             // Insert into data array
             insertLine(Cache::LOAD, prefetch_address, m_core_id, data_buf, t_issue + dram_latency);
-            // set prefetched bit
+            // Set prefetched bit
             PrL1CacheBlockInfo* block_info = (PrL1CacheBlockInfo*)m_cache->peekSingleLine(prefetch_address);
             block_info->setOption(CacheBlockInfo::PREFETCH);
+            // Update completion time
+            m_prefetch_mshr.getCompletionTime(t_issue, dram_latency, prefetch_address);
 
             ++m_prefetches;
          }

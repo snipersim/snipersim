@@ -4,6 +4,7 @@
 #include "dram_cntlr_interface.h"
 #include "subsecond_time.h"
 #include "cache.h"
+#include "contention_model.h"
 
 class QueueModel;
 class Prefetcher;
@@ -30,10 +31,12 @@ class DramCache : public DramCntlrInterface
       QueueModel* m_queue_model;
       Prefetcher* m_prefetcher;
       bool m_prefetch_on_prefetch_hit;
+      ContentionModel m_prefetch_mshr;
 
       UInt64 m_reads, m_writes;
       UInt64 m_read_misses, m_write_misses;
       UInt64 m_hits_prefetch, m_prefetches;
+      SubsecondTime m_prefetch_mshr_delay;
 
       std::pair<bool, SubsecondTime> doAccess(Cache::access_t access, IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemPerf *perf);
       void insertLine(Cache::access_t access, IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
