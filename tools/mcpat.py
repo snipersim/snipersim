@@ -134,10 +134,19 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
       if not line.strip():
         continue
       elif '=' in line:
-        res = re.match(' *([^=]+)= *([-+0-9.e]+)', line)
+        res = re.match(' *([^=]+)= *([-+0-9.e]+)(nan)?', line)
         if res:
           name = ('/'.join(prefix + [res.group(1)])).strip()
-          value = float(res.group(2))
+          if res.groups()[-1] == 'nan':
+            # Result is -nan. Happens for instance with 'Subthreshold Leakage with power gating'
+            # on components with 0 area, such as the Instruction Scheduler for in-order cores
+            value = 0.
+          else:
+            try:
+              value = float(res.group(2))
+            except:
+              print >> sys.stderr, 'Invalid float:', line, res.groups()
+              raise
           values[name] = value
       else:
         res = re.match('^( *)([^:(]*)', line)
