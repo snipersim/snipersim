@@ -148,9 +148,10 @@ static UInt64 statsCallback(String objectName, UInt32 index, String metricName, 
    PyObject *pFunc = (PyObject*)_pFunc;
    PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(sls)", objectName.c_str(), index, metricName.c_str()));
 
-   if (!PyLong_Check(pResult)) {
-      fprintf(stderr, "Stats callback: return value must be (convertable into) 64-bit unsigned integer\n");
-      Py_XDECREF(pResult);
+   if (!pResult || !PyLong_Check(pResult)) {
+      LOG_PRINT_WARNING("Stats callback: return value must be (convertable into) 64-bit unsigned integer");
+      if (pResult)
+         Py_XDECREF(pResult);
       return 0;
    }
 
