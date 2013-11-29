@@ -34,13 +34,13 @@ MemoryTracker::~MemoryTracker()
             {
                const RoutineTracer::Routine *rtn = Sim()->getRoutineTracer()->getRoutineInfo(*jt);
                if (rtn)
-                  fprintf(fp, "F\t%lx\t%s\t%s\n", *jt, rtn->m_name, rtn->m_location);
+                  fprintf(fp, "F\t%" PRIxPTR "\t%s\t%s\n", *jt, rtn->m_name, rtn->m_location);
                sites_printed.insert(*jt);
             }
          }
          fprintf(fp, "S\t%lx\t", (unsigned long)site);
          for(auto jt = stack.begin(); jt != stack.end(); ++jt)
-            fprintf(fp, ":%lx", *jt);
+            fprintf(fp, ":%" PRIxPTR, *jt);
          fprintf(fp, "\tnum-allocations=%" PRId64, site->num_allocations);
          fprintf(fp, "\ttotal-allocated=%" PRId64, site->total_size);
          fprintf(fp, "\thit-where=");
