@@ -24,24 +24,23 @@
 
 
 #if defined(__i386)
-   #define MAGIC_REG_A "a"
-   #define MAGIC_REG_B "d" // Required for -fPIC support
-   #define MAGIC_REG_C "c"
+   #define MAGIC_REG_A "eax"
+   #define MAGIC_REG_B "edx" // Required for -fPIC support
+   #define MAGIC_REG_C "ecx"
 #else
-   #define MAGIC_REG_A "a"
-   #define MAGIC_REG_B "b"
-   #define MAGIC_REG_C "c"
+   #define MAGIC_REG_A "rax"
+   #define MAGIC_REG_B "rbx"
+   #define MAGIC_REG_C "rcx"
 #endif
 
 
-// long is guaranteed to be the pointer type of the system,
-// which is usually the largest integer variable size
 #define SimMagic0(cmd) ({                    \
    unsigned long _cmd = (cmd), _res;         \
    __asm__ __volatile__ (                    \
-   "xchg %%bx, %%bx\n"                       \
+   "mov %0, %%" MAGIC_REG_A "\n"             \
+   "\txchg %%bx, %%bx\n"                     \
    : "=a" (_res)           /* output    */   \
-   : MAGIC_REG_A (_cmd)    /* input     */   \
+   : "g"(_cmd)             /* input     */   \
       );                   /* clobbered */   \
    _res;                                     \
 })
@@ -49,10 +48,12 @@
 #define SimMagic1(cmd, arg0) ({              \
    unsigned long _cmd = (cmd), _arg0 = (arg0), _res; \
    __asm__ __volatile__ (                    \
-   "xchg %%bx, %%bx\n"                       \
+   "mov %0, %%" MAGIC_REG_A "\n"             \
+   "\tmov %1, %%" MAGIC_REG_B "\n"           \
+   "\txchg %%bx, %%bx\n"                     \
    : "=a" (_res)           /* output    */   \
-   : MAGIC_REG_A (_cmd),                     \
-     MAGIC_REG_B (_arg0)   /* input     */   \
+   : "g"(_cmd),                              \
+     "g"(_arg0)            /* input     */   \
       );                   /* clobbered */   \
    _res;                                     \
 })
@@ -60,11 +61,14 @@
 #define SimMagic2(cmd, arg0, arg1) ({        \
    unsigned long _cmd = (cmd), _arg0 = (arg0), _arg1 = (arg1), _res; \
    __asm__ __volatile__ (                    \
-   "xchg %%bx, %%bx\n"                       \
+   "mov %0, %%" MAGIC_REG_A "\n"             \
+   "\tmov %1, %%" MAGIC_REG_B "\n"           \
+   "\tmov %2, %%" MAGIC_REG_C "\n"           \
+   "\txchg %%bx, %%bx\n"                     \
    : "=a" (_res)           /* output    */   \
-   : MAGIC_REG_A (_cmd),                     \
-     MAGIC_REG_B (_arg0),                    \
-     MAGIC_REG_C (_arg1)   /* input     */   \
+   : "g"(_cmd),                              \
+     "g"(_arg0),                             \
+     "g"(_arg1)            /* input     */   \
       );                   /* clobbered */   \
    _res;                                     \
 })
