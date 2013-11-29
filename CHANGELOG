@@ -1,3 +1,13 @@
+Version 5.3
+  * Fast, cache-only one-IPC timing model (-c cacheonly)
+  * Add energystats script to provide runtime energy counters
+  * Add Python-based thread scheduler infrastructure and example
+  * Add support for Query-Based Selection (Jaleel, MICRO 2010)
+  * Add support for plotting Bottle graphs (Du Bois, OOPSLA 2013)
+  * Memory tracker infrastructure to measure cache hit rates by allocation site
+  * Support for McPAT 1.0
+  * Various bug fixes and improvements
+
 Version 5.2
   * Configurable coherency protocol (MSI/MESI/MESIF), made MESI the default
   * Add more cache statistics: LRU stack distance historgram, LLC miss latency breakdown
