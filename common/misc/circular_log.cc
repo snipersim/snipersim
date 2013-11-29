@@ -12,8 +12,11 @@ void CircularLog::init(String filename)
 
 void CircularLog::fini()
 {
-   delete g_singleton;
-   g_singleton = NULL;
+   if (g_singleton)
+   {
+      delete g_singleton;
+      g_singleton = NULL;
+   }
 }
 
 CircularLog::CircularLog(String filename)

@@ -48,6 +48,9 @@ class CircularLog
       UInt64 m_time_zero;
 };
 
-#define CLOG(type, msg, ...) CircularLog::g_singleton->insert(type, msg, __VA_ARGS__)
+#define CLOG(type, msg, ...) do { \
+      if (CircularLog::g_singleton) \
+         CircularLog::g_singleton->insert(type, msg, __VA_ARGS__); \
+   } while(0)
 
 #endif // __CIRCULAR_LOG_H
