@@ -11,6 +11,7 @@
 #include "log.h"
 #include "stats.h"
 #include "config.hpp"
+#include "circular_log.h"
 
 BarrierSyncServer::BarrierSyncServer()
    : m_local_clock_list(Sim()->getConfig()->getApplicationCores(), SubsecondTime::Zero())
@@ -67,10 +68,13 @@ BarrierSyncServer::synchronize(core_id_t core_id, SubsecondTime time)
    LOG_ASSERT_ERROR(core->getState() == Core::RUNNING || core->getState() == Core::INITIALIZING, "Core(%i) is not running or initializing at time(%s)", core_id, itostr(time).c_str());
    LOG_ASSERT_ERROR(m_barrier_acquire_list[master_core_id] == false, "Core(%i) or its sibling is already in the barrier (this is thread %d, we have thread %d)", master_core_id, thread_me, m_core_thread[master_core_id]);
 
+   CLOG("barrier", "Core %d entry (master core %d, thread %d)", core_id, master_core_id, thread_me);
+
    if (time < m_next_barrier_time && !m_fastforward)
    {
       LOG_PRINT("Sent 'SIM_BARRIER_RELEASE' immediately time(%s), m_next_barrier_time(%s)", itostr(time).c_str(), itostr(m_next_barrier_time).c_str());
       // LOG_PRINT_WARNING("core_id(%i), local_clock(%llu), m_next_barrier_time(%llu), m_barrier_interval(%llu)", core_id, time, m_next_barrier_time, m_barrier_interval);
+      CLOG("barrier", "Core %d exit", core_id);
       return;
    }
 
@@ -88,6 +92,8 @@ BarrierSyncServer::synchronize(core_id_t core_id, SubsecondTime time)
       m_core_cond[master_core_id]->wait(Sim()->getThreadManager()->getLock());
    else
       master_core->getPerformanceModel()->barrierExit();
+
+   CLOG("barrier", "Core %d exit", core_id);
 }
 
 void
@@ -247,6 +253,7 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id, bool continue_until_rel
    while (!core_resumed)
    {
       m_global_time = m_next_barrier_time;
+      CLOG("barrier", "Barrier %" PRId64 "ns", m_next_barrier_time.getNS());
       Sim()->getHooksManager()->callHooks(HookType::HOOK_PERIODIC, static_cast<subsecond_time_t>(m_next_barrier_time).m_time);
 
       if (continue_until_release)

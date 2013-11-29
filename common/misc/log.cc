@@ -10,6 +10,7 @@
 #include "simulator.h"
 #include "core_manager.h"
 #include "config.hpp"
+#include "circular_log.h"
 
 // When debugging, it helps to be able to attach to the thread you would like to investigate directly,
 // instead of running the program from the beginning in GDB.
@@ -37,6 +38,8 @@ Log::Log(Config &config)
 
    assert(_singleton == NULL);
    _singleton = this;
+
+   CircularLog::init(formatFileName("sim.clog"));
 }
 
 Log::~Log()
@@ -58,6 +61,8 @@ Log::~Log()
 
    if (_systemFile)
       fclose(_systemFile);
+
+   CircularLog::fini();
 }
 
 Log* Log::getSingleton()
@@ -340,6 +345,7 @@ void Log::log(ErrorState err, const char* source_file, SInt32 source_line, const
    switch (err)
    {
    case Error:
+      CircularLog::fini();
       fflush(NULL);
       fputs(message, stderr);
 #ifndef LOG_SIGSTOP_ON_ERROR

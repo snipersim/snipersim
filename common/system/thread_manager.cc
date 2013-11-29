@@ -12,6 +12,7 @@
 #include "thread.h"
 #include "scheduler.h"
 #include "syscall_server.h"
+#include "circular_log.h"
 
 #include <sys/syscall.h>
 #include "os_compat.h"
@@ -89,6 +90,7 @@ Thread* ThreadManager::createThread_unlocked(app_id_t app_id, thread_id_t creato
 
    HooksManager::ThreadCreate args = { thread_id: thread_id, creator_thread_id: creator_thread_id };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_CREATE, (UInt64)&args);
+   CLOG("thread", "Create %d", thread_id);
 
    return thread;
 }
@@ -110,6 +112,7 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_START, (UInt64)&args);
    // Note: we may have been rescheduled during HOOK_THREAD_START
    // (Happens if core was occupied during our createThread() but became free since then)
+   CLOG("thread", "Start %d", thread_id);
 
    Core *core = thread->getCore();
    if (core)
@@ -180,6 +183,7 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
 
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);
+   CLOG("thread", "Exit %d", thread_id);
 }
 
 thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id, thread_func_t func, void *arg)
@@ -338,6 +342,7 @@ void ThreadManager::stallThread_async(thread_id_t thread_id, stall_type_t reason
 
    HooksManager::ThreadStall args = { thread_id: thread_id, reason: reason, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_STALL, (UInt64)&args);
+   CLOG("thread", "Stall %d (%s)", thread_id, ThreadManager::stall_type_names[reason]);
 }
 
 SubsecondTime ThreadManager::stallThread(thread_id_t thread_id, stall_type_t reason, SubsecondTime time)
@@ -365,6 +370,7 @@ void ThreadManager::resumeThread_async(thread_id_t thread_id, thread_id_t thread
 
    HooksManager::ThreadResume args = { thread_id: thread_id, thread_by: thread_by, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_RESUME, (UInt64)&args);
+   CLOG("thread", "Resume %d (by %d)", thread_id, thread_by);
 }
 
 void ThreadManager::resumeThread(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time, void *msg)
