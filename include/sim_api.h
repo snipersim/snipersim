@@ -37,7 +37,7 @@
 #define SimMagic0(cmd) ({                    \
    unsigned long _cmd = (cmd), _res;         \
    __asm__ __volatile__ (                    \
-   "mov %0, %%" MAGIC_REG_A "\n"             \
+   "mov %1, %%" MAGIC_REG_A "\n"             \
    "\txchg %%bx, %%bx\n"                     \
    : "=a" (_res)           /* output    */   \
    : "g"(_cmd)             /* input     */   \
@@ -48,8 +48,8 @@
 #define SimMagic1(cmd, arg0) ({              \
    unsigned long _cmd = (cmd), _arg0 = (arg0), _res; \
    __asm__ __volatile__ (                    \
-   "mov %0, %%" MAGIC_REG_A "\n"             \
-   "\tmov %1, %%" MAGIC_REG_B "\n"           \
+   "mov %1, %%" MAGIC_REG_A "\n"             \
+   "\tmov %2, %%" MAGIC_REG_B "\n"           \
    "\txchg %%bx, %%bx\n"                     \
    : "=a" (_res)           /* output    */   \
    : "g"(_cmd),                              \
@@ -61,9 +61,9 @@
 #define SimMagic2(cmd, arg0, arg1) ({        \
    unsigned long _cmd = (cmd), _arg0 = (arg0), _arg1 = (arg1), _res; \
    __asm__ __volatile__ (                    \
-   "mov %0, %%" MAGIC_REG_A "\n"             \
-   "\tmov %1, %%" MAGIC_REG_B "\n"           \
-   "\tmov %2, %%" MAGIC_REG_C "\n"           \
+   "mov %1, %%" MAGIC_REG_A "\n"             \
+   "\tmov %2, %%" MAGIC_REG_B "\n"           \
+   "\tmov %3, %%" MAGIC_REG_C "\n"           \
    "\txchg %%bx, %%bx\n"                     \
    : "=a" (_res)           /* output    */   \
    : "g"(_cmd),                              \
