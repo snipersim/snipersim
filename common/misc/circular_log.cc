@@ -19,6 +19,15 @@ void CircularLog::fini()
    }
 }
 
+void CircularLog::dump()
+{
+   if (g_singleton)
+   {
+      ScopedLock sl(g_singleton->m_lock);
+      g_singleton->writeLog();
+   }
+}
+
 CircularLog::CircularLog(String filename)
    : m_filename(filename)
    , m_buffer(new event_t[BUFFER_SIZE])
@@ -29,19 +38,7 @@ CircularLog::CircularLog(String filename)
 
 CircularLog::~CircularLog()
 {
-   FILE *fp = fopen(m_filename.c_str(), "w");
-
-   UInt64 head = m_eventnum % BUFFER_SIZE;
-   if (head != m_eventnum)
-   {
-      fprintf(fp, "... %ld prior events ...\n", m_eventnum - BUFFER_SIZE);
-      for(UInt64 idx = head; idx < BUFFER_SIZE; ++idx)
-         writeEntry(fp, idx);
-   }
-   for(UInt64 idx = 0; idx < head; ++idx)
-      writeEntry(fp, idx);
-
-   fclose(fp);
+   writeLog();
    delete m_buffer;
 }
 
@@ -58,6 +55,25 @@ void CircularLog::insert(const char* type, const char* msg, ...)
    for(int i = 0; i < 6; ++i)
       m_buffer[position].args[i] = va_arg(args, UInt64);
    va_end(args);
+}
+
+void CircularLog::writeLog()
+{
+   FILE *fp = fopen(m_filename.c_str(), "w");
+
+   UInt64 head = m_eventnum % BUFFER_SIZE;
+   if (head != m_eventnum)
+   {
+      fprintf(fp, "... %ld prior events ...\n", m_eventnum - BUFFER_SIZE);
+      for(UInt64 idx = head; idx < BUFFER_SIZE; ++idx)
+         writeEntry(fp, idx);
+   }
+   for(UInt64 idx = 0; idx < head; ++idx)
+      writeEntry(fp, idx);
+
+   fclose(fp);
+
+   printf("[LOG] Wrote %" PRId64 " out of %" PRId64 " events to sim.clog\n", head < m_eventnum ? BUFFER_SIZE : head, m_eventnum);
 }
 
 void CircularLog::writeEntry(FILE *fp, int idx)

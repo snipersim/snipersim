@@ -39,7 +39,7 @@ Log::Log(Config &config)
    assert(_singleton == NULL);
    _singleton = this;
 
-   if (Sim()->getCfg()->getBool("log/circular_log"))
+   if (Sim()->getConfig()->getCircularLogEnabled())
       CircularLog::init(formatFileName("sim.clog"));
 }
 

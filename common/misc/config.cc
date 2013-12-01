@@ -31,6 +31,7 @@ bool Config::m_knob_enable_spinloopdetection;
 CacheEfficiencyTracker::Callbacks Config::m_cache_efficiency_callbacks;
 bool Config::m_suppress_stdout;
 bool Config::m_suppress_stderr;
+bool Config::m_circular_log_enabled;
 
 Config *Config::m_singleton;
 
@@ -83,6 +84,8 @@ Config::Config(SimulationMode mode)
 
    m_suppress_stdout = Sim()->getCfg()->getBool("general/suppress_stdout");
    m_suppress_stderr = Sim()->getCfg()->getBool("general/suppress_stderr");
+
+   m_circular_log_enabled = Sim()->getCfg()->getBool("log/circular_log");
 
    m_knob_clock_skew_minimization_scheme = ClockSkewMinimizationObject::parseScheme(Sim()->getCfg()->getString("clock_skew_minimization/scheme"));
 

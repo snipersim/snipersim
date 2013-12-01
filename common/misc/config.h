@@ -99,6 +99,7 @@ public:
    String getOutputDirectory() const;
    String formatOutputFileName(String filename) const;
    void logCoreMap();
+   bool getCircularLogEnabled() const { return m_circular_log_enabled; }
 
    static Config *getSingleton();
 
@@ -133,6 +134,7 @@ private:
    static bool m_knob_enable_spinloopdetection;
    static bool m_suppress_stdout;
    static bool m_suppress_stderr;
+   static bool m_circular_log_enabled;
 
    static CacheEfficiencyTracker::Callbacks m_cache_efficiency_callbacks;
 

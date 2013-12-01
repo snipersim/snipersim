@@ -20,6 +20,7 @@ class CircularLog
    public:
       static void init(String filename);
       static void fini();
+      static void dump();
 
       static CircularLog *g_singleton;
 
@@ -37,6 +38,7 @@ class CircularLog
          UInt64 args[6];
       } event_t;
 
+      void writeLog();
       void writeEntry(FILE *fp, int idx);
 
       static const UInt64 BUFFER_SIZE = 1024*1024;
