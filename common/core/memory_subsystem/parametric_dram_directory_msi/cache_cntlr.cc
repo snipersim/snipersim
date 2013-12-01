@@ -364,7 +364,7 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
          cache_block_info->setCState(CacheState::MODIFIED);
       else
       {
-         insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, ShmemPerfModel::_USER_THREAD);
+         insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD);
          cache_block_info = getCacheBlockInfo(ca_address);
       }
    }
@@ -642,7 +642,7 @@ MYLOG("copyDataFromNextLevel l%d", m_mem_component);
    else
    {
       // Insert the Cache Block in our own cache
-      insertCacheBlock(address, cstate, data_buf, ShmemPerfModel::_USER_THREAD);
+      insertCacheBlock(address, cstate, data_buf, m_core_id, ShmemPerfModel::_USER_THREAD);
       MYLOG("copyDataFromNextLevel l%d done (inserted)", m_mem_component);
    }
 }
@@ -769,7 +769,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       if (cache_block_info)
          cache_block_info->setCState(CacheState::MODIFIED);
       else
-         cache_block_info = insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, ShmemPerfModel::_USER_THREAD);
+         cache_block_info = insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD);
    }
 
    if (count)
@@ -962,7 +962,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
 
                // Insert the line. Be sure to use SHARED/MODIFIED as appropriate (upgrades are free anyway), we don't want to have to write back clean lines
-               insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, data_buf, ShmemPerfModel::_USER_THREAD);
+               insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, data_buf, m_core_id, ShmemPerfModel::_USER_THREAD);
                if (isPrefetch != Prefetch::NONE)
                   getCacheBlockInfo(address)->setOption(CacheBlockInfo::PREFETCH);
 
@@ -1341,7 +1341,7 @@ CacheCntlr::retrieveCacheBlock(IntPtr address, Byte* data_buf, ShmemPerfModel::T
  *****************************************************************************/
 
 SharedCacheBlockInfo*
-CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, ShmemPerfModel::Thread_t thread_num)
+CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, core_id_t requester, ShmemPerfModel::Thread_t thread_num)
 {
 MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    bool eviction;
@@ -1360,7 +1360,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
       cache_block_info->setOption(CacheBlockInfo::WARMUP);
 
    if (Sim()->getConfig()->hasCacheEfficiencyCallbacks())
-      cache_block_info->setOwner(Sim()->getConfig()->getCacheEfficiencyCallbacks().call_get_owner(m_core_id, address));
+      cache_block_info->setOwner(Sim()->getConfig()->getCacheEfficiencyCallbacks().call_get_owner(requester, address));
 
    if (m_next_cache_cntlr && !m_perfect)
       m_next_cache_cntlr->notifyPrevLevelInsert(m_core_id_master, m_mem_component, address);
@@ -1735,6 +1735,14 @@ CacheCntlr::handleMsgFromDramDirectory(
 {
    PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    IntPtr address = shmem_msg->getAddress();
+   core_id_t requester = INVALID_CORE_ID;
+   if ((shmem_msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::EX_REP) || (shmem_msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REP)
+         || (shmem_msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::UPGRADE_REP) )
+   {
+      ScopedLock sl(getLock()); // Keep lock when handling m_directory_waiters
+      CacheDirectoryWaiter* request = m_master->m_directory_waiters.front(address);
+      requester = request->cache_cntlr->m_core_id;
+   }
 
    acquireStackLock(address);
 MYLOG("begin");
@@ -1743,11 +1751,15 @@ MYLOG("begin");
    {
       case PrL1PrL2DramDirectoryMSI::ShmemMsg::EX_REP:
 MYLOG("EX REP<%u @ %lx", sender, address);
-         processExRepFromDramDirectory(sender, shmem_msg);
+         processExRepFromDramDirectory(sender, requester, shmem_msg);
          break;
       case PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REP:
 MYLOG("SH REP<%u @ %lx", sender, address);
-         processShRepFromDramDirectory(sender, shmem_msg);
+         processShRepFromDramDirectory(sender, requester, shmem_msg);
+         break;
+      case PrL1PrL2DramDirectoryMSI::ShmemMsg::UPGRADE_REP:
+MYLOG("UPGR REP<%u @ %lx", sender, address);
+         processUpgradeRepFromDramDirectory(sender, requester, shmem_msg);
          break;
       case PrL1PrL2DramDirectoryMSI::ShmemMsg::INV_REQ:
 MYLOG("INV REQ<%u @ %lx", sender, address);
@@ -1760,10 +1772,6 @@ MYLOG("FLUSH REQ<%u @ %lx", sender, address);
       case PrL1PrL2DramDirectoryMSI::ShmemMsg::WB_REQ:
 MYLOG("WB REQ<%u @ %lx", sender, address);
          processWbReqFromDramDirectory(sender, shmem_msg);
-         break;
-      case PrL1PrL2DramDirectoryMSI::ShmemMsg::UPGRADE_REP:
-MYLOG("UPGR REP<%u @ %lx", sender, address);
-         processUpgradeRepFromDramDirectory(sender, shmem_msg);
          break;
       default:
          LOG_PRINT_ERROR("Unrecognized msg type: %u", shmem_msg_type);
@@ -1835,7 +1843,7 @@ MYLOG("done");
 }
 
 void
-CacheCntlr::processExRepFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
+CacheCntlr::processExRepFromDramDirectory(core_id_t sender, core_id_t requester, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {
    // Forward data from message to LLC, don't incur LLC data access time (writeback will be done asynchronously)
    //getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
@@ -1844,12 +1852,12 @@ MYLOG("processExRepFromDramDirectory l%d", m_mem_component);
    IntPtr address = shmem_msg->getAddress();
    Byte* data_buf = shmem_msg->getDataBuf();
 
-   insertCacheBlock(address, CacheState::EXCLUSIVE, data_buf, ShmemPerfModel::_SIM_THREAD);
+   insertCacheBlock(address, CacheState::EXCLUSIVE, data_buf, requester, ShmemPerfModel::_SIM_THREAD);
 MYLOG("processExRepFromDramDirectory l%d end", m_mem_component);
 }
 
 void
-CacheCntlr::processShRepFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
+CacheCntlr::processShRepFromDramDirectory(core_id_t sender, core_id_t requester, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {
    // Forward data from message to LLC, don't incur LLC data access time (writeback will be done asynchronously)
    //getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
@@ -1859,11 +1867,11 @@ MYLOG("processShRepFromDramDirectory l%d", m_mem_component);
    Byte* data_buf = shmem_msg->getDataBuf();
 
    // Insert Cache Block in L2 Cache
-   insertCacheBlock(address, CacheState::SHARED, data_buf, ShmemPerfModel::_SIM_THREAD);
+   insertCacheBlock(address, CacheState::SHARED, data_buf, requester, ShmemPerfModel::_SIM_THREAD);
 }
 
 void
-CacheCntlr::processUpgradeRepFromDramDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
+CacheCntlr::processUpgradeRepFromDramDirectory(core_id_t sender, core_id_t requester, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {
 MYLOG("processShRepFromDramDirectory l%d", m_mem_component);
    // We now have the only copy. Change to a writeable state.
