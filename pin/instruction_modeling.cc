@@ -326,6 +326,15 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
 VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address, INT32 count)
 {
+   if (!Sim()->isRunning())
+   {
+      // Main thread has exited, but we still seem to be running.
+      // Don't touch any more simulator structure as they're being deallocated right now.
+      // Just wait here until the whole application terminates us.
+      while(1)
+         sched_yield();
+   }
+
    Core* core = localStore[thread_id].thread->getCore();
    assert(core);
    bool check_rescheduled = core->countInstructions(address, count);
