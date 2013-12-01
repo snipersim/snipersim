@@ -440,7 +440,6 @@ VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, 
 
 bool handleSigUsr1(THREADID threadIndex, INT32 signal, CONTEXT *ctx, BOOL hasHandler, const EXCEPTION_INFO *pExceptInfo, void* v)
 {
-   ScopedLock sl(Sim()->getThreadManager()->getLock());
    Sim()->getHooksManager()->callHooks(HookType::HOOK_SIGUSR1, 0);
    return false;
 }

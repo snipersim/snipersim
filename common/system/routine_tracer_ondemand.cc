@@ -32,6 +32,8 @@ RoutineTracerOndemand::RtnMaster::RtnMaster()
 
 SInt64 RoutineTracerOndemand::RtnMaster::signalHandler(UInt64, UInt64)
 {
+   ScopedLock sl(Sim()->getThreadManager()->getLock());
+
    for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
    {
       Thread *thread = Sim()->getThreadManager()->getThreadFromID(thread_id);

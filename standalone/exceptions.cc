@@ -52,7 +52,6 @@ static void exceptionHandler(int sig, siginfo_t *scp, void *ctxt)
 
 static void handleSigUsr1(int sig, siginfo_t *scp, void *ctxt)
 {
-   ScopedLock sl(Sim()->getThreadManager()->getLock());
    Sim()->getHooksManager()->callHooks(HookType::HOOK_SIGUSR1, 0);
 }
 
