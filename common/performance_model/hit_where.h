@@ -28,6 +28,7 @@ class HitWhere
          L4_SIBLING = MemComponent::L4_CACHE + SIBLING,
          UNKNOWN,
          PREDICATE_FALSE, // CMOV for which the predicate was false, did not actually execute
+         PREFETCH_NO_MAPPING,
          NUM_HITWHERES
       };
 };

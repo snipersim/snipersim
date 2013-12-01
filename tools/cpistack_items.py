@@ -35,7 +35,7 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
           'InstructionCacheL4',  'InstructionCacheL4_S', 'InstructionCachemiss', 'InstructionCache????',
           'InstructionCachenuca-cache', 'InstructionCachedram-cache', 'InstructionCachedram',
           'InstructionCachedram-remote', 'InstructionCachecache-remote', 'InstructionCachedram-local',
-          'InstructionCachepredicate-false', 'InstructionCacheunknown') ],
+          'InstructionCachepredicate-false', 'InstructionCacheprefetch-no-mapping', 'InstructionCacheunknown') ],
   ]
   if use_simple_mem:
     items += [
@@ -48,7 +48,7 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'nuca',     .01, 'DataCachenuca-cache' ],
       [ 'dram-cache', .01, 'DataCachedram-cache' ],
       [ 'dram',     .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote',
-                          'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
+                          'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheprefetch-no-mapping', 'DataCacheunknown') ],
     ] ],
   ]
   else:

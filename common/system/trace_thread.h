@@ -29,7 +29,7 @@ class TraceThread : public Runnable
       static const UInt64 va_page_mask = (UInt64(1) << va_page_shift) - 1;
 
       static UInt64 _va2pa(UInt64 self, UInt64 va) { return ((TraceThread*)self)->va2pa(va); }
-      UInt64 va2pa(UInt64 va);
+      UInt64 va2pa(UInt64 va, bool *noMapping = NULL);
       UInt64 remapAddress(UInt64 va_page);
 
       _Thread *m__thread;
@@ -91,6 +91,7 @@ class TraceThread : public Runnable
       BasicBlock* decode(Sift::Instruction &inst);
       void handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);
       void handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl);
+      void pushDetailedMemoryInfo(Sift::Instruction &inst, const xed_decoded_inst_t &xed_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_pretetch, PerformanceModel *prfmdl);
       void unblock();
 
       SubsecondTime getCurrentTime() const;

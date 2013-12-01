@@ -91,7 +91,7 @@ TraceThread::~TraceThread()
    }
 }
 
-UInt64 TraceThread::va2pa(UInt64 va)
+UInt64 TraceThread::va2pa(UInt64 va, bool *noMapping)
 {
    if (m_trace_has_pa)
    {
@@ -102,7 +102,10 @@ UInt64 TraceThread::va2pa(UInt64 va)
       }
       else
       {
-         LOG_PRINT_WARNING("No mapping found for logical address %lx", va);
+         if (noMapping)
+            *noMapping = true;
+         else
+            LOG_PRINT_ERROR("No mapping found for logical address %lx", va);
          // Fall through to construct an address with our thread id in the upper bits (assume address is private)
       }
    }
@@ -430,6 +433,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
    if (inst.executed)
    {
       const bool is_atomic_update = xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst));
+      const bool is_prefetch = xed_decoded_inst_is_prefetch(&xed_inst);
 
       // Ignore memory-referencing operands in NOP instructions
       if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
@@ -439,10 +443,16 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
             if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
             {
                LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
+
+               bool no_mapping = false;
+               UInt64 pa = va2pa(inst.addresses[mem_idx], is_prefetch ? &no_mapping : NULL);
+               if (no_mapping)
+                  continue;
+
                core->accessMemory(
                      /*(is_atomic_update) ? Core::LOCK :*/ Core::NONE,
                      (is_atomic_update) ? Core::READ_EX : Core::READ,
-                     va2pa(inst.addresses[mem_idx]),
+                     pa,
                      NULL,
                      xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
                      Core::MEM_MODELED_COUNT,
@@ -455,13 +465,19 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
             if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
             {
                LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
+
+               bool no_mapping = false;
+               UInt64 pa = va2pa(inst.addresses[mem_idx], is_prefetch ? &no_mapping : NULL);
+               if (no_mapping)
+                  continue;
+
                if (is_atomic_update)
-                  core->logMemoryHit(false, Core::WRITE, va2pa(inst.addresses[mem_idx]), Core::MEM_MODELED_COUNT, va2pa(inst.sinst->addr));
+                  core->logMemoryHit(false, Core::WRITE, pa, Core::MEM_MODELED_COUNT, va2pa(inst.sinst->addr));
                else
                   core->accessMemory(
                         /*(is_atomic_update) ? Core::UNLOCK :*/ Core::NONE,
                         Core::WRITE,
-                        va2pa(inst.addresses[mem_idx]),
+                        pa,
                         NULL,
                         xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
                         Core::MEM_MODELED_COUNT,
@@ -495,13 +511,13 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    // Ignore memory-referencing operands in NOP instructions
    if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
    {
+      const bool is_prefetch = xed_decoded_inst_is_prefetch(&xed_inst);
+
       for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
       {
          if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
          {
-            assert(mem_idx < inst.num_addresses);
-            DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::READ, 0, HitWhere::UNKNOWN);
-            prfmdl->pushDynamicInstructionInfo(info);
+            pushDetailedMemoryInfo(inst, xed_inst, mem_idx, Operand::READ, is_prefetch, prfmdl);
          }
       }
 
@@ -509,9 +525,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
       {
          if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
          {
-            assert(mem_idx < inst.num_addresses);
-            DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(va2pa(inst.sinst->addr), inst.executed, SubsecondTime::Zero(), va2pa(inst.addresses[mem_idx]), xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx), Operand::WRITE, 0, HitWhere::UNKNOWN);
-            prfmdl->pushDynamicInstructionInfo(info);
+            pushDetailedMemoryInfo(inst, xed_inst, mem_idx, Operand::WRITE, is_prefetch, prfmdl);
          }
       }
    }
@@ -519,6 +533,40 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    // simulate
 
    prfmdl->iterate();
+}
+
+void TraceThread::pushDetailedMemoryInfo(Sift::Instruction &inst, const xed_decoded_inst_t &xed_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_prefetch, PerformanceModel *prfmdl)
+{
+   assert(mem_idx < inst.num_addresses);
+
+   bool no_mapping = false;
+   UInt64 pa = va2pa(inst.addresses[mem_idx], is_prefetch ? &no_mapping : NULL);
+   if (no_mapping)
+   {
+      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(
+         va2pa(inst.sinst->addr),
+         inst.executed,
+         SubsecondTime::Zero(),
+         0,
+         xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+         op_type,
+         0,
+         HitWhere::PREFETCH_NO_MAPPING);
+      prfmdl->pushDynamicInstructionInfo(info);
+   }
+   else
+   {
+      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(
+         va2pa(inst.sinst->addr),
+         inst.executed,
+         SubsecondTime::Zero(),
+         pa,
+         xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+         op_type,
+         0,
+         HitWhere::UNKNOWN);
+      prfmdl->pushDynamicInstructionInfo(info);
+   }
 }
 
 void TraceThread::unblock()

@@ -21,6 +21,7 @@ const char * HitWhereString(HitWhere::where_t where) {
       case HitWhere::CACHE_REMOTE:    return "cache-remote";
       case HitWhere::UNKNOWN:         return "unknown";
       case HitWhere::PREDICATE_FALSE: return "predicate-false";
+      case HitWhere::PREFETCH_NO_MAPPING: return "prefetch-no-mapping";
       default:                        return "????";
    }
 }
