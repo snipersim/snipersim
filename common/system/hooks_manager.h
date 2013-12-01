@@ -37,6 +37,7 @@ public:
       HOOK_APPLICATION_EXIT,    // app_id_t                          Application exit
       HOOK_APPLICATION_ROI_BEGIN, // none                            ROI begin, always triggers
       HOOK_APPLICATION_ROI_END,   // none                            ROI end, always triggers
+      HOOK_SIGUSR1,             // none                              Sniper process received SIGUSR1
       HOOK_TYPES_MAX
    };
    static const char* hook_type_names[];

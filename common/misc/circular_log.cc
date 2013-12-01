@@ -1,5 +1,7 @@
 #include "circular_log.h"
 #include "log.h"
+#include "simulator.h"
+#include "hooks_manager.h"
 
 #include <stdarg.h>
 
@@ -8,6 +10,12 @@ CircularLog* CircularLog::g_singleton = NULL;
 void CircularLog::init(String filename)
 {
    g_singleton = new CircularLog(filename);
+}
+
+void CircularLog::enableCallbacks()
+{
+   if (g_singleton)
+      Sim()->getHooksManager()->registerHook(HookType::HOOK_SIGUSR1, CircularLog::hook_sigusr1, 0);
 }
 
 void CircularLog::fini()

@@ -1,6 +1,7 @@
 #include "exceptions.h"
 #include "simulator.h"
 #include "trace_manager.h"
+#include "hooks_manager.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -49,6 +50,12 @@ static void exceptionHandler(int sig, siginfo_t *scp, void *ctxt)
    raise(sig);
 }
 
+static void handleSigUsr1(int sig, siginfo_t *scp, void *ctxt)
+{
+   ScopedLock sl(Sim()->getThreadManager()->getLock());
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_SIGUSR1, 0);
+}
+
 void registerExceptionHandler()
 {
    struct sigaction sa;
@@ -60,4 +67,7 @@ void registerExceptionHandler()
    sigaction(SIGILL, &sa, NULL);
    sigaction(SIGPIPE, &sa, NULL);
    sigaction(SIGSEGV, &sa, NULL);
+
+   sa.sa_sigaction = handleSigUsr1;
+   sigaction(SIGUSR1, &sa, NULL);
 }

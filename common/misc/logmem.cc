@@ -2,6 +2,7 @@
 #include "simulator.h"
 #include "lock.h"
 #include "timer.h"
+#include "hooks_manager.h"
 
 #include <cstdio>
 
@@ -129,6 +130,13 @@ void logmem_write_allocations()
    fclose(fp);
 }
 
+SInt64 logmem_trigger(UInt64, UInt64)
+{
+   printf("[SNIPER] Writing logmem allocations\n");
+   logmem_write_allocations();
+   return 0;
+}
+
 void logmem_enable(bool enabled)
 {
    if (!logmem_enabled)
@@ -143,6 +151,8 @@ void logmem_enable(bool enabled)
       {
          LOG_ASSERT_ERROR(i < callstack_n && backtrace_buffer[i] == callstack_buffer[i], "Fast backtrace() not working");
       }
+
+      Sim()->getHooksManager()->registerHook(HookType::HOOK_SIGUSR1, logmem_trigger, 0);
    }
    logmem_enabled = enabled;
 }

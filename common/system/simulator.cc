@@ -26,6 +26,7 @@
 #include "tags.h"
 #include "instruction_tracer.h"
 #include "memory_tracker.h"
+#include "circular_log.h"
 
 #include <sstream>
 
@@ -103,6 +104,8 @@ void Simulator::start()
       m_trace_manager = new TraceManager();
    else
       m_trace_manager = NULL;
+
+   CircularLog::enableCallbacks();
 
    InstructionTracer::init();
 

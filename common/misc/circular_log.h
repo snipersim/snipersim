@@ -19,6 +19,7 @@ class CircularLog
 {
    public:
       static void init(String filename);
+      static void enableCallbacks();
       static void fini();
       static void dump();
 
@@ -37,6 +38,8 @@ class CircularLog
          const char* msg;
          UInt64 args[6];
       } event_t;
+
+      static SInt64 hook_sigusr1(UInt64, UInt64) { dump(); return 0; }
 
       void writeLog();
       void writeEntry(FILE *fp, int idx);

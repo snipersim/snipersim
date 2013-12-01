@@ -20,7 +20,7 @@ class RoutineTracerOndemand
             RoutineTracer::Routine* getRoutine(IntPtr eip);
 
          private:
-            static void signalHandler(int);
+            static SInt64 signalHandler(UInt64, UInt64);
 
             Lock m_lock;
             std::unordered_map<IntPtr, RoutineTracer::Routine*> m_routines;

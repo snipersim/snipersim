@@ -38,6 +38,7 @@
 #include "performance_model.h"
 #include "timer.h"
 #include "logmem.h"
+#include "circular_log.h"
 
 #include "codecache_trace.h"
 #include "local_storage.h"
@@ -437,12 +438,10 @@ VOID threadFiniCallback(THREADID threadIndex, const CONTEXT *ctxt, INT32 flags, 
          Sim()->getTraceManager()->stop();
 }
 
-bool dumpLogmem(THREADID threadIndex, INT32 signal, CONTEXT *ctx, BOOL hasHandler, const EXCEPTION_INFO *pExceptInfo, void* v)
+bool handleSigUsr1(THREADID threadIndex, INT32 signal, CONTEXT *ctx, BOOL hasHandler, const EXCEPTION_INFO *pExceptInfo, void* v)
 {
    ScopedLock sl(Sim()->getThreadManager()->getLock());
-
-   printf("[SNIPER] Writing logmem allocations\n");
-   logmem_write_allocations();
+   Sim()->getHooksManager()->callHooks(HookType::HOOK_SIGUSR1, 0);
    return false;
 }
 
@@ -527,9 +526,7 @@ int main(int argc, char *argv[])
       PIN_InterceptSignal(SIGFPE, lite::interceptSignal, NULL);
       PIN_InterceptSignal(SIGSEGV, lite::interceptSignal, NULL);
    }
-   #ifdef LOGMEM_ENABLED
-      PIN_InterceptSignal(SIGUSR1, dumpLogmem, NULL);
-   #endif
+   PIN_InterceptSignal(SIGUSR1, handleSigUsr1, NULL);
    PIN_AddInternalExceptionHandler(exceptionHandler, NULL);
 
    RTN_AddInstrumentFunction(lite::routineCallback, 0);

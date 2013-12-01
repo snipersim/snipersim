@@ -140,6 +140,7 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_ROI_END:
       case HookType::HOOK_APPLICATION_ROI_BEGIN:
       case HookType::HOOK_APPLICATION_ROI_END:
+      case HookType::HOOK_SIGUSR1:
          Sim()->getHooksManager()->registerHook(type, hookCallbackNone, (UInt64)pFunc);
          break;
       case HookType::HOOK_PERIODIC_INS:

@@ -3,6 +3,7 @@
 #include "thread_manager.h"
 #include "thread.h"
 #include "syscall_model.h"
+#include "hooks_manager.h"
 
 #include <signal.h>
 
@@ -26,13 +27,11 @@ void RoutineTracerOndemand::RtnThread::printStack()
 
 RoutineTracerOndemand::RtnMaster::RtnMaster()
 {
-   signal(SIGUSR1, signalHandler);
+   Sim()->getHooksManager()->registerHook(HookType::HOOK_SIGUSR1, signalHandler, 0);
 }
 
-void RoutineTracerOndemand::RtnMaster::signalHandler(int signal)
+SInt64 RoutineTracerOndemand::RtnMaster::signalHandler(UInt64, UInt64)
 {
-   ScopedLock sl(Sim()->getThreadManager()->getLock());
-
    for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
    {
       Thread *thread = Sim()->getThreadManager()->getThreadFromID(thread_id);
@@ -42,6 +41,8 @@ void RoutineTracerOndemand::RtnMaster::signalHandler(int signal)
 
       ondemand_tracer->printStack();
    }
+
+   return 0;
 }
 
 void RoutineTracerOndemand::RtnMaster::addRoutine(IntPtr eip, const char *name, const char *imgname, IntPtr offset, int column, int line, const char *filename)

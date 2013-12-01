@@ -6,15 +6,6 @@
 #include "logmem.h"
 #include "exceptions.h"
 
-#include <signal.h>
-
-void dumpLogmem(int sig)
-{
-   printf("[SNIPER] Writing logmem allocations\n");
-   logmem_write_allocations();
-}
-
-
 int main(int argc, char* argv[])
 {
    // To make sure output shows up immediately, make stdout and stderr line buffered
@@ -25,10 +16,6 @@ int main(int argc, char* argv[])
    const char *ld_orig = getenv("SNIPER_SCRIPT_LD_LIBRARY_PATH");
    if (ld_orig)
       setenv("LD_LIBRARY_PATH", ld_orig, 1);
-
-   #ifdef LOGMEM_ENABLED
-   signal(SIGUSR1, dumpLogmem);
-   #endif
 
    registerExceptionHandler();
 
