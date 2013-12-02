@@ -8,6 +8,7 @@
 #include "thread.h"
 #include "core_manager.h"
 #include "log.h"
+#include "circular_log.h"
 
 #include <sys/syscall.h>
 #include "os_compat.h"
@@ -34,6 +35,7 @@ void SyscallServer::handleSleepCall(thread_id_t thread_id, SubsecondTime wake_ti
 IntPtr SyscallServer::handleFutexCall(thread_id_t thread_id, futex_args_t &args, SubsecondTime curr_time, SubsecondTime &end_time)
 {
    ScopedLock sl(Sim()->getThreadManager()->getLock());
+   CLOG("futex", "Futex enter thread %d", thread_id);
 
    int cmd = (args.op & FUTEX_CMD_MASK) & ~FUTEX_PRIVATE_FLAG;
    SubsecondTime timeout_time = SubsecondTime::MaxTime();
@@ -73,30 +75,34 @@ IntPtr SyscallServer::handleFutexCall(thread_id_t thread_id, futex_args_t &args,
    }
 
    int act_val;
+   IntPtr res;
 
    core->accessMemory(Core::NONE, Core::READ, (IntPtr) args.uaddr, (char*) &act_val, sizeof(act_val));
 
    if (cmd == FUTEX_WAIT || cmd == FUTEX_WAIT_BITSET)
    {
-      return futexWait(thread_id, args.uaddr, args.val, act_val, cmd == FUTEX_WAIT_BITSET ? args.val3 : FUTEX_BITSET_MATCH_ANY, curr_time, timeout_time, end_time);
+      res = futexWait(thread_id, args.uaddr, args.val, act_val, cmd == FUTEX_WAIT_BITSET ? args.val3 : FUTEX_BITSET_MATCH_ANY, curr_time, timeout_time, end_time);
    }
    else if (cmd == FUTEX_WAKE || cmd == FUTEX_WAKE_BITSET)
    {
-      return futexWake(thread_id, args.uaddr, args.val, cmd == FUTEX_WAIT_BITSET ? args.val3 : FUTEX_BITSET_MATCH_ANY, curr_time, end_time);
+      res = futexWake(thread_id, args.uaddr, args.val, cmd == FUTEX_WAIT_BITSET ? args.val3 : FUTEX_BITSET_MATCH_ANY, curr_time, end_time);
    }
    else if (cmd == FUTEX_WAKE_OP)
    {
-      return futexWakeOp(thread_id, args.uaddr, args.uaddr2, args.val, args.val2, args.val3, curr_time, end_time);
+      res = futexWakeOp(thread_id, args.uaddr, args.uaddr2, args.val, args.val2, args.val3, curr_time, end_time);
    }
    else if(cmd == FUTEX_CMP_REQUEUE)
    {
       LOG_ASSERT_ERROR(args.uaddr != args.uaddr2, "FUTEX_CMP_REQUEUE: uaddr == uaddr2 == %p", args.uaddr);
-      return futexCmpRequeue(thread_id, args.uaddr, args.val, args.uaddr2, args.val3, act_val, curr_time, end_time);
+      res = futexCmpRequeue(thread_id, args.uaddr, args.val, args.uaddr2, args.val3, act_val, curr_time, end_time);
    }
    else
    {
       LOG_PRINT_ERROR("Unknown SYS_futex cmd %d", cmd);
    }
+
+   CLOG("futex", "Futex leave thread %d", thread_id);
+   return res;
 }
 
 

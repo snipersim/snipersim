@@ -12,6 +12,7 @@
 #include "hooks_manager.h"
 #include "stats.h"
 #include "syscall_strings.h"
+#include "circular_log.h"
 
 #include <errno.h>
 #include <sys/syscall.h>
@@ -61,8 +62,10 @@ SyscallMdl::~SyscallMdl()
 bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 {
    Core *core = m_thread->getCore();
+   LOG_ASSERT_ERROR(core != NULL, "Syscall by thread %d: core should not be null", m_thread->getId());
 
    LOG_PRINT("Got Syscall: %i", syscall_number);
+   CLOG("syscall", "Enter thread %d core %d syscall %" PRIdPTR, m_thread->getId(), core->getId(), syscall_number);
 
    m_syscall_number = syscall_number;
    m_in_syscall = true;
@@ -70,7 +73,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
    HookSyscallEnter hook_args;
    hook_args.thread_id = m_thread->getId();
-   hook_args.core_id =core->getId();
+   hook_args.core_id = core->getId();
    hook_args.time = core->getPerformanceModel()->getElapsedTime();
    hook_args.syscall_number = syscall_number;
    hook_args.args = args;
@@ -290,12 +293,15 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
    }
 
    LOG_PRINT("Syscall finished");
+   CLOG("syscall", "Finished thread %d", m_thread->getId());
 
    return m_stalled;
 }
 
 IntPtr SyscallMdl::runExit(IntPtr old_return)
 {
+   CLOG("syscall", "Exit thread %d", m_thread->getId());
+
    if (m_stalled)
    {
       SubsecondTime time_wake = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
@@ -359,7 +365,7 @@ IntPtr SyscallMdl::handleFutexCall(syscall_args_t &args)
    int cmd = (fargs.op & FUTEX_CMD_MASK) & ~FUTEX_PRIVATE_FLAG;
 
    Core *core = m_thread->getCore();
-   LOG_ASSERT_ERROR(core != NULL, "Core should not be null");
+   LOG_ASSERT_ERROR(core != NULL, "Syscall by thread %d: core should not be null", m_thread->getId());
 
    SubsecondTime start_time;
    SubsecondTime end_time;

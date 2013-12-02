@@ -240,6 +240,7 @@ void ThreadManager::waitForThreadStart(thread_id_t thread_id, thread_id_t wait_t
 void ThreadManager::moveThread(thread_id_t thread_id, core_id_t core_id, SubsecondTime time)
 {
    Thread *thread = getThreadFromID(thread_id);
+   CLOG("thread", "Move %d from %d to %d", thread_id, thread->getCore() ? thread->getCore()->getId() : -1, core_id);
 
    if (Core *core = thread->getCore())
       core->setState(Core::IDLE);
