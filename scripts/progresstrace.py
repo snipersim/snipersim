@@ -3,7 +3,7 @@ import sim, time
 class ProgressTrace:
   def setup(self, args):
     self.last_ins = 0
-    self.last_time = 0
+    self.last_time = time.time()
     sim.util.EveryIns(1000000, self.periodic, roi_only = False)
     self.sd = sim.util.StatsDelta()
     self.stats = {
