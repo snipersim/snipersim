@@ -3,7 +3,7 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
-  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [--through-time|tt <statname>]  [-d <resultsdir (default: .)>]'
+  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers | -e|--events] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [--through-time|tt <statname>]  [-d <resultsdir (default: .)>]'
 
 
 jobid = 0
