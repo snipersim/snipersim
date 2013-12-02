@@ -119,6 +119,8 @@ def stats_process(config, results):
   # DVFS-enabled runs: emulate cycle_count asuming constant (initial) frequency
   if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
     stats['performance_model.cycle_count'] = [ stats['fs_to_cycles_cores'][idx] * stats['performance_model.elapsed_time'][idx] for idx in range(ncores) ]
+  if 'thread.nonidle_elapsed_time' in stats and 'thread.nonidle_cycle_count' not in stats:
+    stats['thread.nonidle_cycle_count'] = [ long(stats['fs_to_cycles'] * t) for t in stats['thread.nonidle_elapsed_time'] ]
   # IPC
   stats['ipc'] = sum(stats.get('performance_model.instruction_count', [0])) / float(sum(stats.get('performance_model.cycle_count', [0])) or 1e16)
 
