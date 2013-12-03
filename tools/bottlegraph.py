@@ -2,7 +2,7 @@
 
 # Generation of bottle graphs [Du Bois, OOSPLA 2013]
 
-import sys, os, getopt, sniper_lib, sniper_stats
+import sys, os, collections, getopt, sniper_lib, sniper_stats
 
 
 def translateThreadNameJikes(name):
@@ -15,7 +15,7 @@ def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', p
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
   results = stats.get_results(partial = partial)['results']
 
-  thread_names = {}
+  thread_names = dict([ (threadid, 'Thread-%d' % threadid) for threadid in range(len(results['thread.bottle_runtime_time'])) ])
   for threadid, name in stats.get_thread_names().items():
     thread_names[threadid] = thread_names_translate(name)
 
@@ -31,7 +31,7 @@ def bottlegraph(jobid = None, resultsdir = None, outputfile = './bottlegraph', p
   if not no_text:
     print 'Runtime (s)   Parallelism   Thread name'
     for thread in threads:
-      print '%11.5f' % ys[thread], '%13.2f' % xs[thread], ' '*3, thread_names[thread] or 'Thread-%d' % thread
+      print '%11.5f' % ys[thread], '%13.2f' % xs[thread], ' '*3, thread_names[thread]
 
   max_x = int(max(xs.values()) + 1.2)
   max_y = total_runtime * 1.1
@@ -58,7 +58,7 @@ set xtics (%s) nomirror
     y += ys[thread]
 
   print >> fd, 'plot %s' % ', '.join([
-    '-1 with boxes title "%s" lc rgb "%s"' % (thread_names[thread] or 'Thread-%d' % thread, color(i))
+    '-1 with boxes title "%s" lc rgb "%s"' % (thread_names[thread], color(i))
     for i, thread in reversed(list(enumerate(threads)))
     if ys[thread] > .01 * total_runtime
   ])
