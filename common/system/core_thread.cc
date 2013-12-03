@@ -5,6 +5,7 @@
 #include "simulator.h"
 #include "core.h"
 #include "sim_thread_manager.h"
+#include "sim_api.h"
 
 #include <unistd.h>
 
@@ -21,6 +22,10 @@ CoreThread::~CoreThread()
 void CoreThread::run()
 {
    core_id_t core_id = Sim()->getCoreManager()->registerSimThread(CoreManager::CORE_THREAD);
+
+   // Set thread name for Sniper-in-Sniper simulations
+   String threadName = String("core-") + itostr(core_id);
+   SimSetThreadName(threadName.c_str());
 
    LOG_PRINT("Core thread starting...");
 

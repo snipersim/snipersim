@@ -324,6 +324,10 @@ TraceManager::Monitor::~Monitor()
 
 void TraceManager::Monitor::run()
 {
+   // Set thread name for Sniper-in-Sniper simulations
+   String threadName("trace-monitor");
+   SimSetThreadName(threadName.c_str());
+
    UInt64 n = 0;
    while(true)
    {

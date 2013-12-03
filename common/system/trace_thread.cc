@@ -16,6 +16,7 @@
 #include "branch_predictor.h"
 #include "rng.h"
 #include "routine_tracer.h"
+#include "sim_api.h"
 
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -599,6 +600,10 @@ void TraceThread::unblock()
 
 void TraceThread::run()
 {
+   // Set thread name for Sniper-in-Sniper simulations
+   String threadName = String("trace-") + itostr(m_thread->getId());
+   SimSetThreadName(threadName.c_str());
+
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
 
    // Open the trace (be sure to do this before potentially blocking on reschedule() as this causes deadlock)

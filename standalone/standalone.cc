@@ -5,9 +5,13 @@
 #include "magic_client.h"
 #include "logmem.h"
 #include "exceptions.h"
+#include "sim_api.h"
 
 int main(int argc, char* argv[])
 {
+   // Set thread name for Sniper-in-Sniper simulations
+   SimSetThreadName("main");
+
    // To make sure output shows up immediately, make stdout and stderr line buffered
    // (if we're writing into a pipe to run-graphite, or redirected to a file by the job runner, the default will be block buffered)
    setvbuf(stdout, NULL, _IOLBF, 0);

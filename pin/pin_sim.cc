@@ -51,6 +51,8 @@
 #include "lite/memory_modeling.h"
 #include "lite/handle_syscalls.h"
 
+#include "sim_api.h"
+
 #include "pin.H"
 #include "inst_mode_macros.h"
 #ifdef PINPLAY_SUPPORTED
@@ -413,6 +415,10 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
 
    SubsecondTime time;
    thread_id_t thread_id = Sim()->getThreadManager()->getThreadToSpawn(time);
+
+   // Set thread name for Sniper-in-Sniper simulations
+   String threadName = String("app-") + itostr(thread_id);
+   SimSetThreadName(threadName.c_str());
 
    Sim()->getThreadManager()->onThreadStart(thread_id, time);
 
