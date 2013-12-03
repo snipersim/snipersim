@@ -54,7 +54,7 @@
    : "=a" (_res)           /* output    */   \
    : "g"(_cmd),                              \
      "g"(_arg0)            /* input     */   \
-      );                   /* clobbered */   \
+   : "%" MAGIC_REG_B );    /* clobbered */   \
    _res;                                     \
 })
 
@@ -69,7 +69,7 @@
    : "g"(_cmd),                              \
      "g"(_arg0),                             \
      "g"(_arg1)            /* input     */   \
-      );                   /* clobbered */   \
+   : "%" MAGIC_REG_B, "%" MAGIC_REG_C ); /* clobbered */ \
    _res;                                     \
 })
 
