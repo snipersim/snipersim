@@ -53,7 +53,7 @@ DramCache::DramCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
       m_queue_model = QueueModel::create("dram-cache-queue", m_core_id, queue_model_type, m_data_array_bandwidth.getRoundedLatency(8 * m_cache_block_size)); // bytes to bits
    }
 
-   m_prefetcher = Prefetcher::createPrefetcher(Sim()->getCfg()->getString("perf_model/dram/cache/prefetcher"), "dram/cache", m_core_id);
+   m_prefetcher = Prefetcher::createPrefetcher(Sim()->getCfg()->getString("perf_model/dram/cache/prefetcher"), "dram/cache", m_core_id, 1);
    m_prefetch_on_prefetch_hit = Sim()->getCfg()->getBool("perf_model/dram/cache/prefetcher/prefetch_on_prefetch_hit");
 
    registerStatsMetric("dram-cache", m_core_id, "reads", &m_reads);
@@ -203,7 +203,7 @@ void
 DramCache::callPrefetcher(IntPtr train_address, bool cache_hit, bool prefetch_hit, SubsecondTime t_issue)
 {
    // Always train the prefetcher
-   std::vector<IntPtr> prefetchList = m_prefetcher->getNextAddress(train_address);
+   std::vector<IntPtr> prefetchList = m_prefetcher->getNextAddress(train_address, INVALID_CORE_ID);
 
    // Only do prefetches on misses, or on hits to lines previously brought in by the prefetcher (if enabled)
    if (!cache_hit || (m_prefetch_on_prefetch_hit && prefetch_hit))

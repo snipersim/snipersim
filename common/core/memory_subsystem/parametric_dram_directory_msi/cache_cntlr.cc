@@ -176,7 +176,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
             Sim()->getFaultinjectionManager()
                ? Sim()->getFaultinjectionManager()->getFaultInjector(m_core_id_master, mem_component)
                : NULL);
-      m_master->m_prefetcher = Prefetcher::createPrefetcher(cache_params.prefetcher, cache_params.configName, m_core_id);
+      m_master->m_prefetcher = Prefetcher::createPrefetcher(cache_params.prefetcher, cache_params.configName, m_core_id, m_shared_cores);
 
       if (Sim()->getCfg()->getBoolDefault("perf_model/" + cache_params.configName + "/atd/enabled", false))
       {
@@ -654,7 +654,7 @@ CacheCntlr::trainPrefetcher(IntPtr address, bool cache_hit, bool prefetch_hit, S
    ScopedLock sl(getLock());
 
    // Always train the prefetcher
-   std::vector<IntPtr> prefetchList = m_master->m_prefetcher->getNextAddress(address);
+   std::vector<IntPtr> prefetchList = m_master->m_prefetcher->getNextAddress(address, m_core_id);
 
    // Only do prefetches on misses, or on hits to lines previously brought in by the prefetcher (if enabled)
    if (!cache_hit || (m_prefetch_on_prefetch_hit && prefetch_hit))

@@ -7,7 +7,7 @@ class GhbPrefetcher : public Prefetcher
 {
    public:
       GhbPrefetcher(String configName, core_id_t core_id);
-      std::vector<IntPtr> getNextAddress(IntPtr currentAddress);
+      std::vector<IntPtr> getNextAddress(IntPtr currentAddress, core_id_t core_id);
 
       ~GhbPrefetcher();
 
