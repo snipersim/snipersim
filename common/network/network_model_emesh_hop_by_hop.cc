@@ -478,7 +478,7 @@ NetworkModelEMeshHopByHop::computeMeshDimensions(SInt32 &mesh_width, SInt32 &mes
             LOG_PRINT_ERROR("Invalid value %d for dimensions, only 1 (line/ring) and 2 (mesh/torus) are currently supported", dimensions);
       }
 
-      LOG_ASSERT_ERROR(core_count == (concentration * mesh_height * mesh_width), "Cannot build a mesh with %d cores (concentration %d), increase NumApplicationCores to %d for a %d x %d mesh", core_count, concentration, concentration * mesh_width * mesh_height, mesh_width, mesh_height);
+      LOG_ASSERT_ERROR(core_count == (concentration * mesh_height * mesh_width), "Cannot build a mesh with %d cores (concentration %d), increase NumApplicationCores to %d for a %d x %d mesh or configure network/emesh_hop_by_hop/size=WIDTH:HEIGHT to manually specify mesh dimensions", core_count, concentration, concentration * mesh_width * mesh_height, mesh_width, mesh_height);
    }
    else
    {
