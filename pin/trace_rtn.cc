@@ -36,7 +36,7 @@ void announceRoutine(INS ins)
 
    Sim()->getRoutineTracer()->addRoutine(
       eip,
-      RTN_Name(rtn).c_str(),
+      RTN_Valid(rtn) ? RTN_Name(rtn).c_str() : "??",
       IMG_Valid(img) ? IMG_Name(img).c_str() : "??",
       IMG_Valid(img) ? IMG_LoadOffset(img) : 0,
       column, line, filename.c_str());
