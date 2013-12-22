@@ -178,7 +178,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
   dram_dyn, dram_stat = dram_power(results['results'], results['config'])
   power_dat['DRAM'] = {
     'Peak Dynamic': dram_dyn,
-    'Runtime Dynamic': 0,
+    'Runtime Dynamic': dram_dyn,
     'Subthreshold Leakage': dram_stat,
     'Subthreshold Leakage with power gating': dram_stat,
     'Gate Leakage': 0,
