@@ -522,6 +522,12 @@ Core::emulateCpuid(UInt32 eax, UInt32 ecx, cpuid_result_t &res) const
 {
    switch(eax)
    {
+      case 0x0:
+      {
+         cpuid(0, 0, res);
+         res.eax = std::max(UInt32(0xb), res.eax); // Maximum input eax: make sure 0xb is included
+         break;
+      }
       case 0x1:
       {
          // Return native results, except for CPU id
