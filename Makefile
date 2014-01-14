@@ -39,7 +39,7 @@ $(LIB_SIFT): $(LIB_CARBON)
 ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=61206
 pin: $(PIN_HOME)/source/tools/Config/makefile.config $(PIN_HOME)/intel64/bin/pinbin package_deps
-	@if [ "$$(tools/pinversion.py $(PIN_HOME) | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo; echo "Found Pin version $$(tools/pinversion) in $(PIN_HOME)"; echo "but at least revision $(PIN_REV_MINIMUM) is required."; echo; false; fi
+	@if [ "$$(tools/pinversion.py $(PIN_HOME) | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo; echo "Found Pin version $$(tools/pinversion.py $(PIN_HOME)) in $(PIN_HOME)"; echo "but at least revision $(PIN_REV_MINIMUM) is required."; echo; false; fi
 $(PIN_HOME)/source/tools/Config/makefile.config:
 	@echo
 	@echo "Old Pin version found in $(PIN_HOME), Sniper requires Pin version $(PIN_REV_MINIMUM) or newer."
