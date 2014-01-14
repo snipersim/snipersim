@@ -4,6 +4,9 @@
 
 extern "C" {
 #include <xed-reg-class.h>
+#if PIN_REV >= 62732
+# include <xed-decoded-inst-api.h>
+#endif
 }
 
 

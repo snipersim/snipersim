@@ -24,6 +24,8 @@ ifeq ($(SNIPER_TARGET_ARCH),intel64)
   LD_FLAGS +=
 endif
 
+CXXFLAGS += -DPIN_REV=$(shell $(SIM_ROOT)/tools/pinversion.py $(PIN_HOME) | cut -d. -f3)
+
 include $(SIM_ROOT)/Makefile.config
 
 ifneq ($(BOOST_INCLUDE),)
