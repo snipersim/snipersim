@@ -217,7 +217,7 @@ def scale_sci(value):
   i = 0
   s = sign(value)
   value = abs(value)
-  if value < 1:
+  if value < 1 and value > 1e-12:
     while value <= .01:
       value *= 1000.
       i += 1
