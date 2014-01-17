@@ -91,6 +91,8 @@ bool SchedulerPinnedBase::threadSetAffinity(thread_id_t calling_thread_id, threa
    if (m_thread_info.size() <= (size_t)thread_id)
       m_thread_info.resize(thread_id + 16);
 
+   m_thread_info[thread_id].setExplicitAffinity();
+
    if (!mask)
    {
       // No mask given: free to schedule anywhere.
@@ -155,7 +157,12 @@ bool SchedulerPinnedBase::threadGetAffinity(thread_id_t thread_id, size_t cpuset
    CPU_ZERO_S(cpusetsize, mask);
    for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
    {
-      if (m_thread_info[thread_id].hasAffinity(core_id))
+      if (
+         m_thread_info[thread_id].hasAffinity(core_id)
+         // When application has not yet done any sched_setaffinity calls, lie and return a fully populated affinity bitset.
+         // This makes libiomp5 use all available cores.
+         || !m_thread_info[thread_id].hasExplicitAffinity()
+      )
          CPU_SET_S(core_id, cpusetsize, mask);
    }
 
