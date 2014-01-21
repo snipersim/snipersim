@@ -238,7 +238,7 @@ namespace ParametricDramDirectoryMSI
            UInt64 prefetches;
            UInt64 coherency_downgrades, coherency_upgrades, coherency_invalidates, coherency_writebacks;
            #ifdef ENABLE_TRANSITIONS
-           UInt64 transitions[CacheState::NUM_CSTATE_STATES][CacheState::NUM_CSTATE_STATES];
+           UInt64 transitions[CacheState::NUM_CSTATE_SPECIAL_STATES][CacheState::NUM_CSTATE_SPECIAL_STATES];
            UInt64 transition_reasons[Transition::NUM_REASONS][CacheState::NUM_CSTATE_SPECIAL_STATES][CacheState::NUM_CSTATE_SPECIAL_STATES];
            std::unordered_map<IntPtr, Transition::reason_t> seen;
            #endif

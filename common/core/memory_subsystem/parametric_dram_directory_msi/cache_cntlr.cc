@@ -552,7 +552,7 @@ MYLOG("access done");
 
       #ifdef TRACK_LATENCY_BY_HITWHERE
       if (count)
-         lat_by_where[hit_where].update(total_latency);
+         lat_by_where[hit_where].update(total_latency.getNS());
       #endif
 
       /* if this is the first part of an atomic operation: keep the lock(s) */
@@ -2103,15 +2103,15 @@ CacheCntlr::transition(IntPtr address, Transition::reason_t reason, CacheState::
 #ifdef ENABLE_TRANSITIONS
    stats.transitions[old_state][new_state]++;
    if (old_state == CacheState::INVALID) {
-      if (seen.count(address) == 0)
+      if (stats.seen.count(address) == 0)
          old_state = CacheState::INVALID_COLD;
-      else if (seen[address] == Transition::EVICT || seen[address] == Transition::BACK_INVAL)
+      else if (stats.seen[address] == Transition::EVICT || stats.seen[address] == Transition::BACK_INVAL)
          old_state = CacheState::INVALID_EVICT;
-      else if (seen[address] == Transition::COHERENCY)
+      else if (stats.seen[address] == Transition::COHERENCY)
          old_state = CacheState::INVALID_COHERENCY;
    }
    stats.transition_reasons[reason][old_state][new_state]++;
-   seen[address] = reason;
+   stats.seen[address] = reason;
 #endif
 }
 

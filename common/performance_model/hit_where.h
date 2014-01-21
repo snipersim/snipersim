@@ -3,6 +3,9 @@
 
 #include "mem_component.h"
 
+#include <cstddef>
+#include <functional>
+
 class HitWhere
 {
    public:
@@ -32,6 +35,15 @@ class HitWhere
          NUM_HITWHERES
       };
 };
+
+namespace std
+{
+   template <> struct hash<HitWhere::where_t> {
+      size_t operator()(const HitWhere::where_t & type) const {
+         return (int)type;
+      }
+   };
+}
 
 const char * HitWhereString(HitWhere::where_t where);
 bool HitWhereIsValid(HitWhere::where_t where);
