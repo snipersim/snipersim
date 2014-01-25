@@ -21,12 +21,8 @@ include $(SIM_ROOT)/common/Makefile.common
 #  - OBJECTS depends on DIRECTORIES which is in the Makefile.common make file
 #  - Therefore, we need to include the other makefile first before setting this target
 $(TARGET): $(OBJECTS)
-ifeq ($(SHOW_COMPILE),)
-	@echo '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@ar rcs $@ $^
-else
-	ar rcs $@ $^
-endif
+	$(_MSG) '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) ar rcs $@ $^
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(LIBCARBON_SOURCES))))

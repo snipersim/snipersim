@@ -63,20 +63,12 @@ $(SIM_ROOT)/lib/libcarbon_sim.a:
 
 $(TARGET_LIB): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
 $(TARGET_LIB): $(OBJECTS)
-ifeq ($(SHOW_COMPILE),)
-	@echo '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
-else
-	$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
-endif
+	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
 
 $(FOLLOW_LIB): follow_execv/follow_execv.o
-ifeq ($(SHOW_COMPILE),)
-	@echo '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
-else
-	$(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
-endif
+	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
 
 # This include must be here
 #  - The above targets need to be the default ones.  Makefile.common's would override it

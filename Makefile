@@ -57,37 +57,23 @@ ifneq ($(NO_PYTHON_DOWNLOAD),1)
 PYTHON_DEP=python_kit/$(SNIPER_TARGET_ARCH)/lib/python2.7/lib-dynload/_sqlite3.so
 python: $(PYTHON_DEP)
 $(PYTHON_DEP):
-ifeq ($(SHOW_COMPILE),)
-	@echo '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
-	@mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
-	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
-else
-	mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
-	wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
-endif
+	$(_MSG) '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
+	$(_CMD) mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
+	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
 mcpat: mcpat/mcpat-1.0
 mcpat/mcpat-1.0:
-ifeq ($(SHOW_COMPILE),)
-	@echo '[DOWNLO] McPAT'
-	@mkdir -p mcpat
-	@wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
-else
-	mkdir -p mcpat
-	wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
-endif
+	$(_MSG) '[DOWNLO] McPAT'
+	$(_CMD) mkdir -p mcpat
+	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 endif
 
 linux: include/linux/perf_event.h
 include/linux/perf_event.h:
-ifeq ($(SHOW_COMPILE),)
-	@echo '[INSTAL] perf_event.h'
-	@if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
-else
-	if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
-endif
+	$(_MSG) '[INSTAL] perf_event.h'
+	$(_CMD) if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
 
 builddir: lib
 lib:
@@ -108,55 +94,33 @@ configscripts: dependencies
 	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
 
 empty_config:
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CLEAN ] config'
-	@rm -f config/sniper.py config/buildconf.sh config/buildconf.makefile
-else
-	rm -f config/sniper.py config/buildconf.sh config/buildconf.makefile
-endif
+	$(_MSG) '[CLEAN ] config'
+	$(_CMD) rm -f config/sniper.py config/buildconf.sh config/buildconf.makefile
 
 clean: empty_config empty_deps
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CLEAN ] standalone'
-	@$(MAKE) $(MAKE_QUIET) -C standalone clean
-	@echo '[CLEAN ] pin'
-	@$(MAKE) $(MAKE_QUIET) -C pin clean
-	@echo '[CLEAN ] common'
-	@$(MAKE) $(MAKE_QUIET) -C common clean
-	@echo '[CLEAN ] sift'
-	@$(MAKE) $(MAKE_QUIET) -C sift clean
-	@rm -f .build_os
-else
-	$(MAKE) $(MAKE_QUIET) -C standalone clean
-	$(MAKE) $(MAKE_QUIET) -C pin clean
-	$(MAKE) $(MAKE_QUIET) -C common clean
-	$(MAKE) $(MAKE_QUIET) -C sift clean
-	rm -f .build_os
-endif
+	$(_MSG) '[CLEAN ] standalone'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C standalone clean
+	$(_MSG) '[CLEAN ] pin'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C pin clean
+	$(_MSG) '[CLEAN ] common'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C common clean
+	$(_MSG) '[CLEAN ] sift'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C sift clean
+	$(_CMD) rm -f .build_os
 
 distclean: clean
-ifeq ($(SHOW_COMPILE),)
-	@echo '[DISTCL] python_kit'
-	@rm -rf python_kit
-	@echo '[DISTCL] McPAT'
-	@rm -rf mcpat
-	@echo '[DISTCL] perf_event.h'
-	@rm -f include/linux/perf_event.h
-else
-	rm -rf python_kit
-	rm -rf mcpat
-	rm -f include/linux/perf_event.h
-endif
+	$(_MSG) '[DISTCL] python_kit'
+	$(_CMD) rm -rf python_kit
+	$(_MSG) '[DISTCL] McPAT'
+	$(_CMD) rm -rf mcpat
+	$(_MSG) '[DISTCL] perf_event.h'
+	$(_CMD) rm -f include/linux/perf_event.h
 
 regress_quick: regress_unit regress_apps
 
 empty_deps:
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CLEAN ] deps'
-	@find . -name \*.d -exec rm {} \;
-else
-	find . -name \*.d -exec rm {} \;
-endif
+	$(_MSG) '[CLEAN ] deps'
+	$(_CMD) find . -name \*.d -exec rm {} \;
 
 package_deps:
 	@BOOST_INCLUDE=$(BOOST_INCLUDE) ./tools/checkdependencies.py

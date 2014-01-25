@@ -25,41 +25,24 @@ XED_HOME=$(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)
 CXXFLAGS=$(OPT_CFLAGS) -fPIC -std=c++0x -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
 
 %.o : %.cc $(wildcard *.h) Makefile
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) -c -o $@ $< $(CXXFLAGS)
-else
-	$(CXX) -c -o $@ $< $(CXXFLAGS)
-endif
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(TARGET) : $(OBJECTS)
-ifeq ($(SHOW_COMPILE),)
-	@echo '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(AR) rcs $@ $^
-else
-	$(AR) rcs $@ $^
-endif
+	$(_MSG) '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(AR) rcs $@ $^
 
 siftdump : siftdump.o $(TARGET)
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz
-else
-	$(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz
-endif
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz
 
 recorder : $(TARGET)
 	@$(MAKE) $(MAKE_QUIET) -C recorder
 
 clean :
-ifeq ($(SHOW_COMPILE),)
-	@rm -f *.o *.d $(TARGET) siftdump
-	@echo '[CLEAN ] sift/recorder'
-	@$(MAKE) $(MAKE_QUIET) -C recorder clean
-else
-	rm -f *.o *.d $(TARGET) siftdump
-	$(MAKE) $(MAKE_QUIET) -C recorder clean
-endif
+	$(_CMD) rm -f *.o *.d $(TARGET) siftdump
+	$(_MSG) '[CLEAN ] sift/recorder'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C recorder clean
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cc,%.d,$(SOURCES))

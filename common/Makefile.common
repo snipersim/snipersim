@@ -53,50 +53,26 @@ CXXFLAGS+=-c \
 
 # Build rules for dependency generation
 %.d: %.cpp
-ifeq ($(SHOW_COMPILE),)
-	@echo '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
-else
-	$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
-endif
+	$(_MSG) '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
 
 %.d: %.cc
-ifeq ($(SHOW_COMPILE),)
-	@echo '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
-else
-	$(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
-endif
+	$(_MSG) '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) -MM -MG $(CPPFLAGS) $(CXXFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
 
 %.d: %.c
-ifeq ($(SHOW_COMPILE),)
-	@echo '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CC) -MM -MG $(CPPFLAGS) $(CFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
-else
-	$(CC) -MM -MG $(CPPFLAGS) $(CFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
-endif
+	$(_MSG) '[DEP   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CC) -MM -MG $(CPPFLAGS) $(CFLAGS) $< | sed -n "H;$$ {g;s@.*:\(.*\)@$*.o $@: \$$\(wildcard\1\)@;p}" >$@
 
 # Build rules for object generation
 %.o: %.cpp
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
-else
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
-endif
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 %.o : %.cc
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
-else
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
-endif
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 %.o : %.c
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CC    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
-else
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
-endif
+	$(_MSG) '[CC    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
