@@ -13,6 +13,7 @@
 String Config::m_knob_output_directory;
 UInt32 Config::m_knob_total_cores;
 bool Config::m_knob_enable_smc_support;
+bool Config::m_knob_issue_memops_at_functional;
 bool Config::m_knob_enable_icache_modeling;
 Config::SimulationROI Config::m_knob_roi;
 bool Config::m_knob_enable_progress_trace;
@@ -55,6 +56,7 @@ Config::Config(SimulationMode mode)
 
    m_knob_enable_smc_support = Sim()->getCfg()->getBool("general/enable_smc_support");
    m_knob_enable_icache_modeling = Sim()->getCfg()->getBool("general/enable_icache_modeling");
+   m_knob_issue_memops_at_functional = Sim()->getCfg()->getBool("general/issue_memops_at_functional");
 
    if (Sim()->getCfg()->getBool("general/roi_script"))
       m_knob_roi = ROI_SCRIPT;

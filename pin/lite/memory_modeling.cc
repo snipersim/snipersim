@@ -100,7 +100,7 @@ void addMemoryModeling(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
                INSTRUMENT(
                      INSTR_IF_DETAILED(inst_mode),
                      trace, ins, IPOINT_BEFORE,
-                     AFUNPTR(lite::handleMemoryReadDetailed),
+                     Sim()->getConfig()->getIssueMemopsAtFunctional() ? AFUNPTR(lite::handleMemoryReadDetailedIssue) : AFUNPTR(lite::handleMemoryReadDetailed),
                      IARG_THREAD_ID,
                      IARG_EXECUTING,
                      IARG_ADDRINT, INS_Address(ins),
@@ -161,7 +161,7 @@ void addMemoryModeling(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
                INSTRUMENT(
                      INSTR_IF_DETAILED(inst_mode),
                      trace, ins, IPOINT_BEFORE,
-                     AFUNPTR(lite::handleMemoryWriteDetailed),
+                     Sim()->getConfig()->getIssueMemopsAtFunctional() ? AFUNPTR(lite::handleMemoryWriteDetailedIssue) : AFUNPTR(lite::handleMemoryWriteDetailed),
                      IARG_THREAD_ID,
                      IARG_EXECUTING,
                      IARG_ADDRINT, INS_Address(ins),
@@ -198,6 +198,29 @@ void handleMemoryReadDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, b
    // Detailed mode: core model will do its own access, just push a dyninfo with the address
    DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, executing, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::UNKNOWN);
    core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+}
+
+void handleMemoryReadDetailedIssue(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size)
+{
+   Core *core = localStore[thread_id].thread->getCore();
+   assert(core);
+
+   if (executing)
+   {
+      core->accessMemory(
+            (is_atomic_update) ? Core::LOCK : Core::NONE,
+            (is_atomic_update) ? Core::READ_EX : Core::READ,
+            read_address,
+            NULL,
+            read_data_size,
+            eip ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT,
+            eip);
+   }
+   else
+   {
+      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::PREDICATE_FALSE);
+      core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+   }
 }
 
 ADDRINT handleMemoryReadFaultinjectionNondetailed(bool is_atomic_update, ADDRINT read_address, ADDRINT *save_ea)
@@ -294,6 +317,27 @@ void handleMemoryWriteDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, 
    else {
       // Detailed mode: core model will do its own access, just push a dyninfo with the address
       DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, executing, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::UNKNOWN);
+      core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+   }
+}
+
+void handleMemoryWriteDetailedIssue(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr write_address, UInt32 write_data_size)
+{
+   Core* core = localStore[thread_id].thread->getCore();
+   if (executing)
+   {
+      core->accessMemory(
+            (is_atomic_update) ? Core::UNLOCK : Core::NONE,
+            Core::WRITE,
+            write_address,
+            NULL,
+            write_data_size,
+            eip ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT,
+            eip);
+   }
+   else
+   {
+      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::PREDICATE_FALSE);
       core->getPerformanceModel()->pushDynamicInstructionInfo(info);
    }
 }

@@ -70,6 +70,7 @@ public:
    // Knobs
    bool getEnableSMCSupport() const { return m_knob_enable_smc_support; }
    void forceEnableSMCSupport() { m_knob_enable_smc_support = true; }
+   bool getIssueMemopsAtFunctional() const { return m_knob_issue_memops_at_functional; }
    bool getEnableICacheModeling() const { return m_knob_enable_icache_modeling; }
    SimulationROI getSimulationROI() const { return m_knob_roi; }
    bool getEnableProgressTrace() const { return m_knob_enable_progress_trace; }
@@ -117,6 +118,7 @@ private:
    static String m_knob_output_directory;
    static UInt32 m_knob_total_cores;
    static bool m_knob_enable_smc_support;
+   static bool m_knob_issue_memops_at_functional;
    static bool m_knob_enable_icache_modeling;
    static SimulationROI m_knob_roi;
    static bool m_knob_enable_progress_trace;
