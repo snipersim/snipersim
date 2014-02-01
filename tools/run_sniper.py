@@ -48,11 +48,17 @@ def run_multi(snipercmd, applications, repeat = False, outputdir = '.'):
 
 # Determine libstdc++.so used by default by pin_sim.so using ldd
 # Should take into account the current LD_LIBRARY_PATH
-def get_cxx_inuse(sim_root):
+def get_cxx_inuse(sim_root, clear_ldlibpath = False):
   pin_sim = '%s/lib/pin_sim.so' % sim_root
   try:
     ldd_out_name = tempfile.NamedTemporaryFile(delete = False).name
+    ldlpsave = None
+    if clear_ldlibpath:
+      ldlpsave = os.environ.get('LD_LIBRARY_PATH', None)
+      del os.environ['LD_LIBRARY_PATH']
     os.system('ldd %s > %s 2> /dev/null' % (pin_sim, ldd_out_name))
+    if ldlpsave:
+      os.environ['LD_LIBRARY_PATH'] = ldlpsave
     ldd_out = open(ldd_out_name).read()
     os.unlink(ldd_out_name)
     libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
@@ -76,8 +82,8 @@ def get_cxx_version(path):
     return 0
 
 def get_cxx_override(sim_root, pin_home, arch):
-  # Find which libstdc++.so is newer: either the system default one, or the Pin one
-  cxx_versions = [get_cxx_inuse(sim_root), '%s/%s/runtime/cpplibs' % (pin_home, arch)]
+  # Find which libstdc++.so is newer: either the system default one (with or without the LD_LIBRARY_PATH), or the Pin one
+  cxx_versions = [get_cxx_inuse(sim_root), get_cxx_inuse(sim_root, clear_ldlibpath = True), '%s/%s/runtime/cpplibs' % (pin_home, arch)]
   if 'BENCHMARKS_ROOT' in os.environ:
     cxx_versions.append('%s/libs' % os.environ['BENCHMARKS_ROOT'])
   cxx_override = sorted(map(lambda x:(get_cxx_version(x),x), cxx_versions), key=lambda x:x[0])[-1][1]
