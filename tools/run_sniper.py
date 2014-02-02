@@ -55,7 +55,8 @@ def get_cxx_inuse(sim_root, clear_ldlibpath = False):
     ldlpsave = None
     if clear_ldlibpath:
       ldlpsave = os.environ.get('LD_LIBRARY_PATH', None)
-      del os.environ['LD_LIBRARY_PATH']
+      if ldlpsave:
+        del os.environ['LD_LIBRARY_PATH']
     os.system('ldd %s > %s 2> /dev/null' % (pin_sim, ldd_out_name))
     if ldlpsave:
       os.environ['LD_LIBRARY_PATH'] = ldlpsave
