@@ -583,7 +583,7 @@ pin_version = 'unknown'
 pinoptions = ''
 if not standalone:
   try:
-    pin_version = subprocess.Popen(['%(HOME)s/tools/pinversion.py' % locals(), pin_home], stdout = subprocess.PIPE, env = env).communicate()[0]
+    pin_version = subprocess.Popen(['%(HOME)s/tools/pinversion.py' % locals(), pin_home], stdout = subprocess.PIPE).communicate()[0]
     pin_version = int(pin_version.split('.')[2])
     assert 10000 < pin_version < 1000000
   except Exception, e:
