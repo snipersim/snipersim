@@ -81,7 +81,7 @@ class SchedulerLocality:
   def hook_thread_stall(self, thread_id, reason, time):
     if reason == 'unscheduled':
       # Ignore calls due to the thread being scheduled out
-      self.unscheduled = True
+      self.threads[thread_id].unscheduled = True
     else:
       core = self.threads[thread_id].core
       self.threads[thread_id].setCore(None, time)
@@ -94,9 +94,9 @@ class SchedulerLocality:
         threads[0].setCore(core, time)
 
   def hook_thread_resume(self, thread_id, woken_by, time):
-    if self.unscheduled:
+    if self.threads[thread_id].unscheduled:
       # Ignore calls due to the thread being scheduled back in
-      self.unscheduled = False
+      self.threads[thread_id].unscheduled = False
     else:
       self.threads[thread_id].setScore(min([ thread.score for thread in self.threads.values() ]))
       self.threads[thread_id].runnable = True
