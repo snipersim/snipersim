@@ -137,12 +137,12 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
 
   results['L1-D.loads-where-dram'] = map(sum, zip(results['L1-D.loads-where-dram-local'], results['L1-D.loads-where-dram-remote']))
   results['L1-D.stores-where-dram'] = map(sum, zip(results['L1-D.stores-where-dram-local'], results['L1-D.stores-where-dram-remote']))
-  results['L1-D.loads-where-cache-remote'] = map(sum, zip(results['L1-D.loads-where-cache-remote'], results['L1-D.loads-where-dram-remote']))
-  results['L1-D.stores-where-cache-remote'] = map(sum, zip(results['L1-D.stores-where-cache-remote'], results['L1-D.stores-where-dram-remote']))
   template.extend([
       ('Coherency Traffic', '', ''),
       ('  num loads from dram', 'L1-D.loads-where-dram' , str),
       #('  num stores from dram', 'L1-D.stores-where-dram' , str),
+      ('  num loads from dram cache', 'L1-D.loads-where-dram-cache' , str),
+      #('  num stores from dram cache', 'L1-D.stores-where-dram-cache' , str),
       ('  num loads from remote cache', 'L1-D.loads-where-cache-remote' , str),
       #('  num stores from remote cache', 'L1-D.stores-where-cache-remote' , str),
     ])
