@@ -36,7 +36,7 @@ def power2up(num):
   if hob != orig_num:
     hob = hob << 1
     if orig_num not in power2up_warnings:
-      print '[mcpat.py] Warning: McPAT requires inputs that are powers of two. Increasing %d to %d.' % (orig_num, hob)
+      print '[mcpat.py] Warning: McPAT requires inputs that are powers of two for some parameters. Increasing %d to %d.' % (orig_num, hob)
       power2up_warnings[orig_num] = True
   return hob
 
@@ -459,22 +459,22 @@ def edit_XML(statsobj, stats, cfg):
       latency_l2 = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0, core))
       latency_l3 = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/data_access_time', 0, core))
       l1_dcacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/associativity', 0, core)))
-      l1_dcacheBlockSize = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_block_size', 0, core)))
-      l1_dcacheSize= power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_size', 0, core)))
+      l1_dcacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_block_size', 0, core))
+      l1_dcacheSize= long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_size', 0, core))
       l1_dcacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/shared_cores', 0, core))
       l1_dcacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/writeback_time', 0, core))
       l1_icacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/associativity', 0, core)))
-      l1_icacheBlockSize = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_block_size', 0, core)))
-      l1_icacheSize = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_size', 0, core)))
+      l1_icacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_block_size', 0, core))
+      l1_icacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_size', 0, core))
       l1_icacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/shared_cores', 0, core))
       l1_icacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/writeback_time', 0, core))
       l2_cacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/associativity', 0, core)))
-      l2_cacheSize = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_size', 0, core)))
-      l2_cacheBlockSize = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_block_size', 0, core)))
+      l2_cacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_size', 0, core))
+      l2_cacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_block_size', 0, core))
       l2_cacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/writeback_time', 0, core))
       l3_cacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/associativity', 0, core)))
-      l3_cacheBlockSize = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_block_size', 0, core)))
-      l3_cacheSize = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core)))
+      l3_cacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_block_size', 0, core))
+      l3_cacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core))
       l3_cacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/writeback_time', 0, core))
 
       if template[i][1]:
