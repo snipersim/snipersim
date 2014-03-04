@@ -27,7 +27,6 @@ Progress::~Progress(void)
 {
    if (m_enabled)
    {
-      record(0);
       fclose(m_fp);
    }
 }
