@@ -172,32 +172,40 @@ Simulator::~Simulator()
    m_hooks_manager->fini();
 
    if (m_clock_skew_minimization_manager)
-      delete m_clock_skew_minimization_manager;
+   {
+      delete m_clock_skew_minimization_manager; m_clock_skew_minimization_manager = NULL;
+   }
    if (m_clock_skew_minimization_server)
-      delete m_clock_skew_minimization_server;
+   {
+      delete m_clock_skew_minimization_server;  m_clock_skew_minimization_server = NULL;
+   }
 
    m_sim_thread_manager->quitSimThreads();
 
    m_transport->barrier();
 
    if (m_rtn_tracer)
-      delete m_rtn_tracer;
-   delete m_trace_manager;
-   delete m_sampling_manager;
+   {
+      delete m_rtn_tracer;             m_rtn_tracer = NULL;
+   }
+   delete m_trace_manager;             m_trace_manager = NULL;
+   delete m_sampling_manager;          m_sampling_manager = NULL;
    if (m_faultinjection_manager)
-      delete m_faultinjection_manager;
-   delete m_sim_thread_manager;
-   delete m_thread_manager;
-   delete m_thread_stats_manager;
-   delete m_core_manager;
-   delete m_dvfs_manager;
-   delete m_magic_server;
-   delete m_sync_server;
-   delete m_syscall_server;
-   delete m_hooks_manager;
-   delete m_tags_manager;
-   delete m_transport;
-   delete m_stats_manager;
+   {
+      delete m_faultinjection_manager; m_faultinjection_manager = NULL;
+   }
+   delete m_sim_thread_manager;        m_sim_thread_manager = NULL;
+   delete m_thread_manager;            m_thread_manager = NULL;
+   delete m_thread_stats_manager;      m_thread_stats_manager = NULL;
+   delete m_core_manager;              m_core_manager = NULL;
+   delete m_dvfs_manager;              m_dvfs_manager = NULL;
+   delete m_magic_server;              m_magic_server = NULL;
+   delete m_sync_server;               m_sync_server = NULL;
+   delete m_syscall_server;            m_syscall_server = NULL;
+   delete m_hooks_manager;             m_hooks_manager = NULL;
+   delete m_tags_manager;              m_tags_manager = NULL;
+   delete m_transport;                 m_transport = NULL;
+   delete m_stats_manager;             m_stats_manager = NULL;
 }
 
 void Simulator::enablePerformanceModels()
