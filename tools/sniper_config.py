@@ -21,8 +21,6 @@ def parse_config(simcfg, cfg = None):
       # Then cut off the [] array markers as they are only used to prevent duplicate option names which ConfigParser doesn't handle
       if key.endswith('[]'):
         key = key[:-2]
-      if len(value) > 2 and value[0] == '"' and value[-1] == '"':
-        value = value[1:-1]
       key = '/'.join((section, key))
       if key in cfg:
         if type(cfg[key]) is not collections.defaultdict:
@@ -30,15 +28,16 @@ def parse_config(simcfg, cfg = None):
           defval = cfg[key]
           cfg[key] = collections.defaultdict(DefaultValue(defval))
         for i, v in enumerate(value.split(',')):
+          v = v.strip('"')
           if v: # Only fill in entries that have been provided
             cfg[key][i] = v
       else: # If there has not been a default value provided, require all array data be populated
         if ',' in value:
           cfg[key] = []
           for i, v in enumerate(value.split(',')):
-            cfg[key].append(v)
+            cfg[key].append(v.strip('"'))
         else:
-          cfg[key] = value
+          cfg[key] = value.strip('"')
   return cfg
 
 
