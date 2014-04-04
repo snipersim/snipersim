@@ -3,6 +3,7 @@ import collections, sqlite3, sniper_stats
 class SniperStatsSqlite(sniper_stats.SniperStatsBase):
   def __init__(self, filename = 'sim.stats.sqlite3'):
     self.db = sqlite3.connect(filename)
+    self.db.text_factory = str # Don't try to convert database contents to UTF-8
     self.names = self.read_metricnames()
 
   def get_snapshots(self):
