@@ -25,8 +25,10 @@ def parse_config(simcfg, cfg = None):
         value = value[1:-1]
       key = '/'.join((section, key))
       if key in cfg:
-        defval = cfg[key]
-        cfg[key] = collections.defaultdict(DefaultValue(defval))
+        if type(cfg[key]) is not collections.defaultdict:
+          # Make value heterogeneous (unless it already was, and we're parsing a second, override config file)
+          defval = cfg[key]
+          cfg[key] = collections.defaultdict(DefaultValue(defval))
         for i, v in enumerate(value.split(',')):
           if v: # Only fill in entries that have been provided
             cfg[key][i] = v
