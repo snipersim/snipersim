@@ -221,7 +221,7 @@ void openFile(THREADID threadid)
       #else
          const bool arch32 = false;
       #endif
-      thread_data[threadid].output = new Sift::Writer(filename, getCode, false, response_filename, threadid, arch32, false, KnobSendPhysicalAddresses.Value());
+      thread_data[threadid].output = new Sift::Writer(filename, getCode, KnobUseResponseFiles.Value() ? false : true, response_filename, threadid, arch32, false, KnobSendPhysicalAddresses.Value());
    } catch (...) {
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);
