@@ -24,7 +24,6 @@ UInt32 Config::m_knob_osemu_nprocs;
 bool Config::m_knob_osemu_clock_replace;
 time_t Config::m_knob_osemu_time_start;
 bool Config::m_knob_bbvs;
-bool Config::m_knob_enable_perbasicblock;
 ClockSkewMinimizationObject::Scheme Config::m_knob_clock_skew_minimization_scheme;
 UInt64 Config::m_knob_hpi_percore;
 UInt64 Config::m_knob_hpi_global;

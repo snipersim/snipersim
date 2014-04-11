@@ -2,6 +2,8 @@
 #include "inst_mode_macros.h"
 #include "local_storage.h"
 #include "spin_loop_detection.h"
+#include "lite/memory_modeling.h"
+#include "lite/handle_syscalls.h"
 
 #include "simulator.h"
 #include "performance_model.h"
@@ -20,7 +22,15 @@
 
 #include <unordered_map>
 
-void InstructionModeling::handleBasicBlock(THREADID thread_id, BasicBlock *sim_basic_block)
+void InstructionModeling::handleInstruction(THREADID thread_id, Instruction *instruction)
+{
+   Thread *thread = localStore[thread_id].thread;
+   Core *core = thread->getCore();
+   PerformanceModel *prfmdl = core->getPerformanceModel();
+   prfmdl->queueInstruction(instruction);
+}
+
+void InstructionModeling::handleBasicBlock(THREADID thread_id)
 {
    Thread *thread = localStore[thread_id].thread;
    Core *core = thread->getCore();
@@ -36,8 +46,6 @@ void InstructionModeling::handleBasicBlock(THREADID thread_id, BasicBlock *sim_b
       prfmdl = core->getPerformanceModel();
    }
 #endif
-
-   prfmdl->queueBasicBlock(sim_basic_block);
 }
 
 static void handleBranch(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
@@ -158,7 +166,7 @@ static void fillOperandList(OperandList *list, INS ins)
 
 std::unordered_map<ADDRINT, const std::vector<const MicroOp *> *> instruction_cache;
 
-BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBlock *basic_block, InstMode::inst_mode_t inst_mode)
+VOID InstructionModeling::addInstructionModeling(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
 {
    // Functional modeling
 
@@ -175,7 +183,6 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
       // Stop the trace after MAGIC (Redmine #118), which has potentially changed the instrumentation mode,
       // so execution can resume in the correct instrumentation version
       INS_InsertDirectJump(ins, IPOINT_AFTER, INS_Address(ins) + INS_Size(ins));
-      return false;
    }
 
    if (INS_IsRDTSC(ins))
@@ -231,74 +238,73 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
          IARG_END);
    }
 
-
-   if (!basic_block)
-      return true;
-
+   if (INS_IsSyscall(ins))
+   {
+      INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
+            AFUNPTR(lite::handleSyscall),
+            IARG_THREAD_ID,
+            IARG_CONTEXT,
+            IARG_END);
+   }
+   else
+   {
+      // Instrument Memory Operations
+      lite::addMemoryModeling(trace, ins, inst_mode);
+   }
 
    // Spin loop detection
-
    if (Sim()->getConfig()->getEnableSpinLoopDetection())
       addSpinLoopDetection(trace, ins, inst_mode);
+}
 
-
+Instruction* InstructionModeling::decodeInstruction(INS ins)
+{
    // Timing modeling
 
    OperandList list;
    fillOperandList(&list, ins);
 
+   Instruction *inst;
+
    // branches
    if (INS_IsBranch(ins) && INS_HasFallThrough(ins))
    {
-      basic_block->push_back(new BranchInstruction(list));
+      inst = new BranchInstruction(list);
    }
-
    // Now handle instructions which have a static cost
    else
    {
       switch(INS_Opcode(ins))
       {
       case XED_ICLASS_DIV:
-         basic_block->push_back(new ArithInstruction(INST_DIV, list));
+         inst = new ArithInstruction(INST_DIV, list);
          break;
       case XED_ICLASS_MUL:
-         basic_block->push_back(new ArithInstruction(INST_MUL, list));
+         inst = new ArithInstruction(INST_MUL, list);
          break;
       case XED_ICLASS_FDIV:
-         basic_block->push_back(new ArithInstruction(INST_FDIV, list));
+         inst = new ArithInstruction(INST_FDIV, list);
          break;
       case XED_ICLASS_FMUL:
-         basic_block->push_back(new ArithInstruction(INST_FMUL, list));
+         inst = new ArithInstruction(INST_FMUL, list);
          break;
-
       default:
-         basic_block->push_back(new GenericInstruction(list));
+         inst = new GenericInstruction(list);
       }
    }
 
    ADDRINT addr = INS_Address(ins);
 
-   basic_block->back()->setAddress(addr);
-   basic_block->back()->setSize(INS_Size(ins));
-   basic_block->back()->setAtomic(INS_IsAtomicUpdate(ins));
-   basic_block->back()->setDisassembly(INS_Disassemble(ins).c_str());
+   inst->setAddress(addr);
+   inst->setSize(INS_Size(ins));
+   inst->setAtomic(INS_IsAtomicUpdate(ins));
+   inst->setDisassembly(INS_Disassemble(ins).c_str());
 
 
-   const std::vector<const MicroOp *> * inst = NULL;
-   if (!Sim()->getConfig()->getEnableSMCSupport()
-       && instruction_cache.count(addr) > 0)
-   {
-      inst = instruction_cache[addr];
-   }
-   else
-   {
-      inst = InstructionDecoder::decode(INS_Address(ins), INS_XedDec(ins), basic_block->back());
-      if (!Sim()->getConfig()->getEnableSMCSupport())
-         instruction_cache[addr] = inst;
-   }
-   basic_block->back()->setMicroOps(inst);
+   const std::vector<const MicroOp *> * uops = InstructionDecoder::decode(INS_Address(ins), INS_XedDec(ins), inst);
+   inst->setMicroOps(uops);
 
-   return true;
+   return inst;
 }
 
 VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address, INT32 count)

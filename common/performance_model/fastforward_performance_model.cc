@@ -85,8 +85,3 @@ FastforwardPerformanceModel::queueDynamicInstruction(Instruction *instr)
 
    notifyElapsedTimeUpdate();
 }
-
-void
-FastforwardPerformanceModel::queueBasicBlock(BasicBlock *basic_block)
-{
-}

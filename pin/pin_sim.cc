@@ -23,7 +23,6 @@
 #include "config.h"
 #include "core.h"
 #include "thread.h"
-#include "basic_block.h"
 #include "syscall_model.h"
 #include "thread_manager.h"
 #include "hooks_manager.h"
@@ -48,7 +47,6 @@
 
 // lite directories
 #include "lite/routine_replace.h"
-#include "lite/memory_modeling.h"
 #include "lite/handle_syscalls.h"
 
 #include "sim_api.h"
@@ -138,7 +136,7 @@ void showInstructionInfo(INS ins)
    printf("\n");
 }
 
-BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block, InstMode::inst_mode_t inst_mode)
+VOID instructionCallback(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
 {
    // Debugging Functions
    // showInstructionInfo(ins);
@@ -152,24 +150,7 @@ BOOL instructionCallback(TRACE trace, INS ins, BasicBlock *basic_block, InstMode
    }
 
    // Core Performance Modeling
-   bool ret = InstructionModeling::addInstructionModeling(trace, ins, basic_block, inst_mode);
-   if (ret == false)
-      return false;
 
-   if (INS_IsSyscall(ins))
-   {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
-            AFUNPTR(lite::handleSyscall),
-            IARG_THREAD_ID,
-            IARG_CONTEXT,
-            IARG_END);
-   }
-   else
-   {
-      // Instrument Memory Operations
-      lite::addMemoryModeling(trace, ins, inst_mode);
-   }
-   return true;
 }
 
 void handleCheckScheduled(THREADID threadIndex)
@@ -197,23 +178,6 @@ VOID addCheckScheduled(TRACE trace, INS ins_head)
 {
    INS_InsertCall(ins_head, IPOINT_BEFORE, AFUNPTR(handleCheckScheduled), IARG_THREAD_ID, IARG_END);
 }
-
-namespace std
-{
-   template <> struct hash<std::pair<ADDRINT, ADDRINT> > {
-      size_t operator()(const std::pair<ADDRINT, ADDRINT> & p) const {
-         #ifdef TARGET_INTEL64
-            return (p.first << 32) ^ (p.second);
-         #else
-            return (p.first << 24) ^ (p.second);
-         #endif
-      }
-   };
-}
-// Cache basic blocks across re-instrumentation.
-// Since Pin has it's own (non-unique) way of defining basic blocks,
-// key on both the start and the end address of the basic block.
-std::unordered_map<std::pair<ADDRINT, ADDRINT>, BasicBlock*> basicblock_cache;
 
 static int getInstMode()
 {
@@ -282,9 +246,6 @@ VOID traceCallback(TRACE trace, void *v)
             break;
       }
 
-      BasicBlock *basic_block = NULL;
-      bool basic_block_is_new = true;
-
       // I-cache modeling during warmup
       if (Sim()->getConfig()->getEnableICacheModeling()) {
          INSTRUMENT(
@@ -297,60 +258,24 @@ VOID traceCallback(TRACE trace, void *v)
             IARG_END);
       }
 
-      // Instruction modeling
-      if (Sim()->getConfig()->getEnablePerBasicblock()) {
-         std::pair<ADDRINT, ADDRINT> key(INS_Address(BBL_InsHead(bbl)), INS_Address(BBL_InsTail(bbl)));
-         if (Sim()->getConfig()->getEnableSMCSupport())
-         {
-            // SMC support enabled: never cache BasicBlocks
-            basic_block = new BasicBlock();
-            basic_block_is_new = true;
-         }
-         else if (basicblock_cache.count(key) == 0)
-         {
-            // BasicBlock cache miss
-            basic_block = new BasicBlock();
-            basic_block_is_new = true;
-            basicblock_cache[key] = basic_block;
-         }
-         else
-         {
-            // BasicBlock cache hit
-            basic_block = basicblock_cache[key];
-            basic_block_is_new = false;
-         }
-         // Insert the handleBasicBlock call, before possible rewrite* stuff. We'll fill in the basic_block later
-         INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, BBL_InsHead(bbl), IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
-      }
+      for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins))
+      {
+         // Instruction modelling
+         InstructionModeling::addInstructionModeling(trace, ins, inst_mode);
 
-      for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins)) {
-         if (!Sim()->getConfig()->getEnablePerBasicblock()) {
-            std::pair<ADDRINT, ADDRINT> key(INS_Address(ins), INS_Address(ins));
-            if (Sim()->getConfig()->getEnableSMCSupport())
-            {
-               // SMC support enabled: never cache BasicBlocks
-               basic_block = new BasicBlock();
-               basic_block_is_new = true;
-            }
-            else if (basicblock_cache.count(key) == 0)
-            {
-               // BasicBlock cache miss
-               basic_block = new BasicBlock();
-               basic_block_is_new = true;
-               basicblock_cache[key] = basic_block;
-            }
-            else
-            {
-               // BasicBlock cache hit
-               basic_block = basicblock_cache[key];
-               basic_block_is_new = false;
-            }
-            INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_PTR, basic_block, IARG_END);
+         if (INSTR_IF_DETAILED(inst_mode))
+         {
+            Instruction *inst = InstructionModeling::decodeInstruction(ins);
+            INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleInstruction), IARG_THREAD_ID, IARG_PTR, inst, IARG_END);
          }
 
-         bool res = instructionCallback(trace, ins, basic_block_is_new ? basic_block : NULL, inst_mode);
-         if (res == false)
-            return; // MAGIC instruction aborts trace
+         if (ins == BBL_InsTail(bbl))
+         {
+            if (INS_HasFallThrough(ins))
+               INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_AFTER, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_END);
+            if (INS_IsBranch(ins))
+               INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_TAKEN_BRANCH, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_END);
+         }
 
          if (ins == BBL_InsTail(bbl))
             break;
@@ -518,14 +443,9 @@ int main(int argc, char *argv[])
    PIN_AddThreadStartFunction (threadStartCallback, 0);
    PIN_AddThreadFiniFunction (threadFiniCallback, 0);
 
-   bool enable_signals = cfg->getBool("general/enable_signals");
-   if (enable_signals)
-      Sim()->getConfig()->setEnablePerBasicblock(false);
-   else
-      Sim()->getConfig()->setEnablePerBasicblock(true);
-
    PIN_AddSyscallEntryFunction(lite::syscallEnterRunModel, 0);
    PIN_AddSyscallExitFunction(lite::syscallExitRunModel, 0);
+   bool enable_signals = cfg->getBool("general/enable_signals");
    if (!enable_signals) {
       PIN_InterceptSignal(SIGILL, lite::interceptSignal, NULL);
       PIN_InterceptSignal(SIGFPE, lite::interceptSignal, NULL);

@@ -33,7 +33,7 @@ class FastforwardPerformanceModel
       void handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where);
       void handleBranchMispredict();
       void queueDynamicInstruction(Instruction *i);
-      void queueBasicBlock(BasicBlock *basic_block);
+      void queueInstruction(Instruction *ins) {}
 
       SubsecondTime getFastforwardedTime(void) const { return m_fastforwarded_time; }
 };

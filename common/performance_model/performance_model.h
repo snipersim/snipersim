@@ -3,7 +3,6 @@
 // This class represents the actual performance model for a given core
 
 #include "instruction.h"
-#include "basic_block.h"
 #include "fixed_types.h"
 #include "mt_circular_queue.h"
 #include "lock.h"
@@ -28,7 +27,7 @@ public:
    virtual ~PerformanceModel();
 
    void queueDynamicInstruction(Instruction *i);
-   void queueBasicBlock(BasicBlock *basic_block);
+   void queueInstruction(Instruction *i);
    void handleIdleInstruction(Instruction *instruction);
    void iterate();
    virtual void synchronize();
@@ -88,10 +87,10 @@ protected:
 
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
       typedef MTCircularQueue<DynamicInstructionInfo> DynamicInstructionInfoQueue;
-      typedef MTCircularQueue<BasicBlock *> BasicBlockQueue;
+      typedef MTCircularQueue<Instruction *> InstructionQueue;
    #else
       typedef CircularQueue<DynamicInstructionInfo> DynamicInstructionInfoQueue;
-      typedef CircularQueue<BasicBlock *> BasicBlockQueue;
+      typedef CircularQueue<Instruction *> InstructionQueue;
    #endif
 
    Core* getCore() { return m_core; }
@@ -138,7 +137,7 @@ private:
    SubsecondTime m_cpiSyncDvfsTransition;
    SubsecondTime m_cpiRecv;
 
-   BasicBlockQueue m_basic_block_queue;
+   InstructionQueue m_instruction_queue;
    DynamicInstructionInfoQueue m_dynamic_info_queue;
 
    UInt32 m_current_ins_index;

@@ -57,9 +57,9 @@ PerformanceModel::PerformanceModel(Core *core)
    , m_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
    , m_idle_elapsed_time(Sim()->getDvfsManager()->getCoreDomain(core->getId()))
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-   , m_basic_block_queue(64) // Reduce from default size to keep memory issue time more or less synchronized
+   , m_instruction_queue(256) // Reduce from default size to keep memory issue time more or less synchronized
    #else
-   , m_basic_block_queue(128) // Need a bit more space for when the dyninsninfo items aren't coming in yet, or for a boatload of TLBMissInstructions
+   , m_instruction_queue(1024) // Need a bit more space for when the dyninsninfo items aren't coming in yet, or for a boatload of TLBMissInstructions
    #endif
    , m_dynamic_info_queue(640) // Required for REPZ CMPSB instructions with max counts of 256 (256 * 2 memory accesses + space for other dynamic instructions)
    , m_current_ins_index(0)
@@ -144,7 +144,7 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
 
    if (!m_enabled)
    {
-      // queueBasicBlock and pushDynamicInstructionInfo are not being called in fast-forward by using instrumentation modes
+      // queueInstruction and pushDynamicInstructionInfo are not being called in fast-forward by using instrumentation modes
       // For queueDynamicInstruction, which are used all over the place, ignore them manually
       delete i;
       return;
@@ -163,23 +163,21 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
       }
       else
       {
-         BasicBlock *bb = new BasicBlock(true);
-         bb->push_back(i);
          #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-            m_basic_block_queue.push_wait(bb);
+            m_instruction_queue.push_wait(i);
          #else
-            m_basic_block_queue.push(bb);
+            m_instruction_queue.push(i);
          #endif
       }
    }
 }
 
-void PerformanceModel::queueBasicBlock(BasicBlock *basic_block)
+void PerformanceModel::queueInstruction(Instruction *ins)
 {
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-      m_basic_block_queue.push_wait(basic_block);
+      m_instruction_queue.push_wait(ins);
    #else
-      m_basic_block_queue.push(basic_block);
+      m_instruction_queue.push(ins);
    #endif
 }
 
@@ -276,17 +274,7 @@ void PerformanceModel::handleIdleInstruction(Instruction *instruction)
 
 void PerformanceModel::iterate()
 {
-   // Because we will sometimes not have info available (we will throw
-   // a DynamicInstructionInfoNotAvailable), we need to be able to
-   // continue from the middle of a basic block. m_current_ins_index
-   // tracks which instruction we are currently on within the basic
-   // block.
-
-   #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-   while (m_basic_block_queue.size() > 0)
-   #else
-   while (m_basic_block_queue.size() > 1)
-   #endif
+   while (m_instruction_queue.size() > 0)
    {
       // While the functional thread is waiting because of clock skew minimization, wait here as well
       #ifdef ENABLE_PERF_MODEL_OWN_THREAD
@@ -294,24 +282,19 @@ void PerformanceModel::iterate()
          sched_yield();
       #endif
 
-      BasicBlock *current_bb = m_basic_block_queue.front();
+      Instruction *ins = m_instruction_queue.front();
 
-      for( ; m_current_ins_index < current_bb->size(); m_current_ins_index++)
-      {
-         Instruction *ins = current_bb->at(m_current_ins_index);
-         LOG_ASSERT_ERROR(!ins->isIdle(), "Idle instructions should not make it here!");
+      LOG_ASSERT_ERROR(!ins->isIdle(), "Idle instructions should not make it here!");
 
-         bool res = handleInstruction(ins);
-         if (!res)
-            // DynamicInstructionInfo not available
-            return;
-      }
+      bool res = handleInstruction(ins);
+      if (!res)
+         // DynamicInstructionInfo not available
+         return;
 
-      if (current_bb->isDynamic())
-         delete current_bb;
+      if (ins->isDynamic())
+         delete ins;
 
-      m_basic_block_queue.pop();
-      m_current_ins_index = 0; // move to beginning of next bb
+      m_instruction_queue.pop();
    }
 
    synchronize();

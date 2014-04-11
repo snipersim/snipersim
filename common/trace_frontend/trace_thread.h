@@ -9,7 +9,7 @@
 
 #include <unordered_map>
 
-class BasicBlock;
+class Instruction;
 
 class TraceThread : public Runnable
 {
@@ -40,7 +40,7 @@ class TraceThread : public Runnable
       bool m_address_randomization;
       uint8_t m_address_randomization_table[256];
       bool m_stop;
-      std::unordered_map<IntPtr, BasicBlock *> m_icache;
+      std::unordered_map<IntPtr, Instruction *> m_icache;
       UInt64 m_bbv_base;
       UInt64 m_bbv_count;
       UInt64 m_bbv_last;
@@ -88,7 +88,7 @@ class TraceThread : public Runnable
       void handleRoutineChangeFunc(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip);
       void handleRoutineAnnounceFunc(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
 
-      BasicBlock* decode(Sift::Instruction &inst);
+      Instruction* decode(Sift::Instruction &inst);
       void handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size);
       void handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl);
       void pushDetailedMemoryInfo(Sift::Instruction &inst, const xed_decoded_inst_t &xed_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_pretetch, PerformanceModel *prfmdl);

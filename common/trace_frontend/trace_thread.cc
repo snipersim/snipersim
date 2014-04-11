@@ -6,7 +6,6 @@
 #include "thread.h"
 #include "dvfs_manager.h"
 #include "instruction.h"
-#include "basic_block.h"
 #include "performance_model.h"
 #include "instruction_decoder.h"
 #include "config.hpp"
@@ -326,7 +325,7 @@ SubsecondTime TraceThread::getCurrentTime() const
    return m_thread->getCore()->getPerformanceModel()->getElapsedTime();
 }
 
-BasicBlock* TraceThread::decode(Sift::Instruction &inst)
+Instruction* TraceThread::decode(Sift::Instruction &inst)
 {
    const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
 
@@ -360,10 +359,7 @@ BasicBlock* TraceThread::decode(Sift::Instruction &inst)
    const std::vector<const MicroOp*> *uops = InstructionDecoder::decode(inst.sinst->addr, &xed_inst, instruction);
    instruction->setMicroOps(uops);
 
-   BasicBlock *basic_block = new BasicBlock();
-   basic_block->push_back(instruction);
-
-   return basic_block;
+   return instruction;
 }
 
 void TraceThread::handleInstructionCountFunc(uint32_t icount)
@@ -493,13 +489,13 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
 {
    const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
 
-   // Push basic block containing this instruction
+   // Push instruction
 
    if (m_icache.count(inst.sinst->addr) == 0)
       m_icache[inst.sinst->addr] = decode(inst);
-   BasicBlock *basic_block = m_icache[inst.sinst->addr];
+   Instruction *ins = m_icache[inst.sinst->addr];
 
-   prfmdl->queueBasicBlock(basic_block);
+   prfmdl->queueInstruction(ins);
 
    // Push dynamic instruction info
 

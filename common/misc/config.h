@@ -80,8 +80,6 @@ public:
    UInt32 getOSEmuNprocs() const { return m_knob_osemu_nprocs; }
    bool getOSEmuClockReplace() const { return m_knob_osemu_clock_replace; }
    time_t getOSEmuTimeStart() const { return m_knob_osemu_time_start; }
-   bool getEnablePerBasicblock() const { return m_knob_enable_perbasicblock; }
-   void setEnablePerBasicblock(bool enable) { m_knob_enable_perbasicblock = enable; }
    ClockSkewMinimizationObject::Scheme getClockSkewMinimizationScheme() const { return m_knob_clock_skew_minimization_scheme; }
    UInt64 getHPIInstructionsPerCore() const { return m_knob_hpi_percore; }
    UInt64 getHPIInstructionsGlobal() const { return m_knob_hpi_global; }
@@ -129,7 +127,6 @@ private:
    static bool m_knob_osemu_clock_replace;
    static time_t m_knob_osemu_time_start;
    static bool m_knob_bbvs;
-   static bool m_knob_enable_perbasicblock;
    static ClockSkewMinimizationObject::Scheme m_knob_clock_skew_minimization_scheme;
    static UInt64 m_knob_hpi_percore;
    static UInt64 m_knob_hpi_global;
