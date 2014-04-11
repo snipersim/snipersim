@@ -4,6 +4,7 @@
 #include "core.h"
 #include "network.h"
 #include "mem_component.h"
+#include "performance_model.h"
 #include "shmem_perf_model.h"
 #include "pr_l1_pr_l2_dram_directory_msi/shmem_msg.h"
 
@@ -15,6 +16,7 @@ class MemoryManagerBase
       enum CachingProtocol_t
       {
          PARAMETRIC_DRAM_DIRECTORY_MSI,
+         FAST_NEHALEM,
          NUM_CACHING_PROTOCOL_TYPES
       };
 
@@ -47,11 +49,33 @@ class MemoryManagerBase
             IntPtr address, UInt32 offset,
             Byte* data_buf, UInt32 data_length,
             Core::MemModeled modeled) = 0;
+      virtual SubsecondTime coreInitiateMemoryAccessFast(
+            bool icache,
+            Core::mem_op_t mem_op_type,
+            IntPtr address)
+      {
+         // Emulate fast interface by calling into slow interface
+         SubsecondTime initial_time = getCore()->getPerformanceModel()->getElapsedTime();
+         getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, initial_time);
+
+         coreInitiateMemoryAccess(
+               icache ? MemComponent::L1_ICACHE : MemComponent::L1_DCACHE,
+               Core::NONE,
+               mem_op_type,
+               address - (address % getCacheBlockSize()), 0,
+               NULL, getCacheBlockSize(),
+               Core::MEM_MODELED_COUNT_TLBTIME);
+
+         // Get the final cycle time
+         SubsecondTime final_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+         SubsecondTime latency = final_time - initial_time;
+         return latency;
+      }
 
       virtual void handleMsgFromNetwork(NetPacket& packet) = 0;
 
       // FIXME: Take this out of here
-      virtual UInt64 getCacheBlockSize() = 0;
+      virtual UInt64 getCacheBlockSize() const = 0;
 
       virtual SubsecondTime getL1HitLatency(void) = 0;
       virtual void addL1Hits(bool icache, Core::mem_op_t mem_op_type, UInt64 hits) = 0;

@@ -2,6 +2,7 @@
 #include "config.h"
 #include "memory_manager_base.h"
 #include "parametric_dram_directory_msi/memory_manager.h"
+#include "fast_nehalem/memory_manager.h"
 #include "log.h"
 #include "config.hpp"
 
@@ -16,6 +17,9 @@ MemoryManagerBase::createMMU(String protocol_type,
       case PARAMETRIC_DRAM_DIRECTORY_MSI:
          return new ParametricDramDirectoryMSI::MemoryManager(core, network, shmem_perf_model);
 
+      case FAST_NEHALEM:
+         return new FastNehalem::MemoryManager(core, network, shmem_perf_model);
+
       default:
          LOG_PRINT_ERROR("Unsupported Caching Protocol (%u)", caching_protocol);
          return NULL;
@@ -27,6 +31,8 @@ MemoryManagerBase::parseProtocolType(String& protocol_type)
 {
    if (protocol_type == "parametric_dram_directory_msi")
       return PARAMETRIC_DRAM_DIRECTORY_MSI;
+   else if (protocol_type == "fast_nehalem")
+      return FAST_NEHALEM;
    else
       return NUM_CACHING_PROTOCOL_TYPES;
 }

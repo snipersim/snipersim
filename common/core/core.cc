@@ -247,6 +247,14 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
              Core::NONE, Core::READ, address & blockmask, NULL, getMemoryManager()->getCacheBlockSize(), MEM_MODELED_COUNT_TLBTIME, 0, SubsecondTime::MaxTime());
 }
 
+void Core::accessMemoryFast(bool icache, mem_op_t mem_op_type, IntPtr address)
+{
+   SubsecondTime latency = getMemoryManager()->coreInitiateMemoryAccessFast(icache, mem_op_type, address);
+
+   if (latency > SubsecondTime::Zero())
+      m_performance_model->handleMemoryLatency(latency, HitWhere::MISS);
+}
+
 MemoryResult
 Core::initiateMemoryAccess(MemComponent::component_t mem_component,
       lock_signal_t lock_signal,

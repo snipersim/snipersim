@@ -90,7 +90,7 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
   existcaches = [ c for c in allcaches if '%s.loads'%c in results ]
   for c in existcaches:
     results['%s.accesses'%c] = map(sum, zip(results['%s.loads'%c], results['%s.stores'%c]))
-    results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results['%s.store-misses-I'%c]))
+    results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results.get('%s.store-misses-I'%c, results['%s.store-misses'%c])))
     results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['%s.accesses'%c]))
     results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
     template.extend([
@@ -129,23 +129,24 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
     template.append(('  average dram read queueing delay', 'dram.avgqueueread', format_ns(2)))
     template.append(('  average dram write queueing delay', 'dram.avgqueuewrite', format_ns(2)))
   else:
-    results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-queueing-delay'], results['dram.accesses']))
+    results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results.get('dram.total-queueing-delay', [0]*ncores), results['dram.accesses']))
     template.append(('  average dram queueing delay', 'dram.avgqueue', format_ns(2)))
   if 'dram-queue.total-time-used' in results:
     results['dram.bandwidth'] = map(lambda a: 100*a/time0 if time0 else float('inf'), results['dram-queue.total-time-used'])
     template.append(('  average dram bandwidth utilization', 'dram.bandwidth', lambda v: '%.2f%%' % v))
 
-  results['L1-D.loads-where-dram'] = map(sum, zip(results['L1-D.loads-where-dram-local'], results['L1-D.loads-where-dram-remote']))
-  results['L1-D.stores-where-dram'] = map(sum, zip(results['L1-D.stores-where-dram-local'], results['L1-D.stores-where-dram-remote']))
-  template.extend([
-      ('Coherency Traffic', '', ''),
-      ('  num loads from dram', 'L1-D.loads-where-dram' , str),
-      #('  num stores from dram', 'L1-D.stores-where-dram' , str),
-      ('  num loads from dram cache', 'L1-D.loads-where-dram-cache' , str),
-      #('  num stores from dram cache', 'L1-D.stores-where-dram-cache' , str),
-      ('  num loads from remote cache', 'L1-D.loads-where-cache-remote' , str),
-      #('  num stores from remote cache', 'L1-D.stores-where-cache-remote' , str),
-    ])
+  if 'L1-D.loads-where-dram-local' in results:
+    results['L1-D.loads-where-dram'] = map(sum, zip(results['L1-D.loads-where-dram-local'], results['L1-D.loads-where-dram-remote']))
+    results['L1-D.stores-where-dram'] = map(sum, zip(results['L1-D.stores-where-dram-local'], results['L1-D.stores-where-dram-remote']))
+    template.extend([
+        ('Coherency Traffic', '', ''),
+        ('  num loads from dram', 'L1-D.loads-where-dram' , str),
+        #('  num stores from dram', 'L1-D.stores-where-dram' , str),
+        ('  num loads from dram cache', 'L1-D.loads-where-dram-cache' , str),
+        #('  num stores from dram cache', 'L1-D.stores-where-dram-cache' , str),
+        ('  num loads from remote cache', 'L1-D.loads-where-cache-remote' , str),
+        #('  num stores from remote cache', 'L1-D.stores-where-cache-remote' , str),
+      ])
 
   lines = []
   lines.append([''] + [ 'Core %u' % i for i in range(ncores) ])
