@@ -35,6 +35,12 @@ endif
 LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(SNIPER_TARGET_ARCH)/lib -lpython2.7 -lrt -lz -lsqlite3
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
+
+ifneq ($(SQLITE_PATH),)
+	CPPFLAGS += -I$(SQLITE_PATH)/include
+	LD_FLAGS += -L$(SQLITE_PATH)/lib
+endif
+
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 
 # Include paths

@@ -9,7 +9,6 @@ DEPENDENCIES = [
   ('libbz2-dev / bzip2-devel', '/usr/include/bzlib.h'),
   ('g++ / gcc-c++', '/usr/bin/g++'),
   ('wget', '/usr/bin/wget'),
-  ('libsqlite3-dev / sqlite-devel', '/usr/include/sqlite3.h'),
 ]
 
 if os.environ.get('BOOST_INCLUDE', ''):
@@ -19,6 +18,15 @@ if os.environ.get('BOOST_INCLUDE', ''):
 else:
   DEPENDENCIES += [
     ('libboost-dev / boost-devel', '/usr/include/boost/lexical_cast.hpp'),
+  ]
+
+if os.environ.get('SQLITE_PATH', ''):
+  DEPENDENCIES += [
+    ('sqlite to %s' % os.environ['SQLITE_PATH'], '%(SQLITE_PATH)s/include/sqlite3.h' % os.environ),
+  ]
+else:
+  DEPENDENCIES += [
+    ('libsqlite3-dev / sqlite-devel', '/usr/include/sqlite3.h'),
   ]
 
 ALTERNATIVES = [
