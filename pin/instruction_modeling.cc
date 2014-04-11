@@ -160,23 +160,6 @@ std::unordered_map<ADDRINT, const std::vector<const MicroOp *> *> instruction_ca
 
 BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBlock *basic_block, InstMode::inst_mode_t inst_mode)
 {
-   // For all LOCK-prefixed and atomic-update instructions, for timing purposes we add an MFENCE
-   // instruction before and after the atomic instruction to force waiting for loads and stores
-   // in the timing model
-   static Instruction *mfence_instruction = NULL;
-   if (! mfence_instruction) {
-      OperandList list;
-      mfence_instruction = new GenericInstruction(list);
-      MicroOp *uop = new MicroOp();
-      uop->makeDynamic("MFENCE", 1);
-      uop->setMemBarrier(true);
-      uop->setFirst(true);
-      uop->setLast(true);
-      std::vector<const MicroOp*> *uops = new std::vector<const MicroOp*>();
-      uops->push_back(uop);
-      mfence_instruction->setMicroOps(uops);
-   }
-
    // Functional modeling
 
    // Simics-style magic instruction: xchg bx, bx
@@ -261,9 +244,6 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
 
    // Timing modeling
 
-   if (INS_IsAtomicUpdate(ins))
-      basic_block->push_back(mfence_instruction);
-
    OperandList list;
    fillOperandList(&list, ins);
 
@@ -317,9 +297,6 @@ BOOL InstructionModeling::addInstructionModeling(TRACE trace, INS ins, BasicBloc
          instruction_cache[addr] = inst;
    }
    basic_block->back()->setMicroOps(inst);
-
-   if (INS_IsAtomicUpdate(ins))
-      basic_block->push_back(mfence_instruction);
 
    return true;
 }

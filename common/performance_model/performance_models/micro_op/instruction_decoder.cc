@@ -125,6 +125,11 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
       }
    }
 
+   bool is_atomic = false;
+   const xed_operand_values_t* ops = xed_decoded_inst_operands_const(ins);
+   if (xed_operand_values_get_atomic(ops))
+      is_atomic = true;
+
    const xed_inst_t *inst = xed_decoded_inst_inst(ins);
    for(uint32_t idx = 0; idx < xed_inst_noperands(inst); ++idx)
    {
@@ -261,6 +266,8 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
                , xed_iclass_enum_t2str(xed_decoded_inst_get_iclass(ins))
                , memop_store_size[storeIndex]
                );
+         if (is_atomic)
+            currentMicroOp->setMemBarrier(true);
       }
 
 
@@ -319,6 +326,8 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address, co
                // No load microops either: we also inherit its read operands
                addSrcs(regs_src, currentMicroOp);
          }
+         if (is_atomic)
+            currentMicroOp->setMemBarrier(true);
       }
 
 
