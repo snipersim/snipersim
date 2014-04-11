@@ -15,7 +15,8 @@ namespace FastNehalem
    class MemoryManager : public MemoryManagerFast
    {
       private:
-         CacheBase *icache, *dcache, *l2cache, *l3cache, *dram;
+         CacheBase *icache, *dcache, *l2cache;
+         static CacheBase *l3cache, *dram;
 
       public:
          MemoryManager(Core* core, Network* network, ShmemPerfModel* shmem_perf_model);

@@ -108,6 +108,22 @@ namespace FastNehalem
             }
          }
    };
+
+   template <UInt32 assoc, UInt32 size_kb>
+   class CacheLocked : public Cache<assoc, size_kb>
+   {
+      private:
+         Lock lock;
+      public:
+         CacheLocked(Core *core, String name, MemComponent::component_t mem_component, UInt64 latency, CacheBase* next_level)
+            : Cache<assoc, size_kb>(core, name, mem_component, latency, next_level)
+         {}
+         SubsecondTime access(Core::mem_op_t mem_op_type, IntPtr tag)
+         {
+            ScopedLock sl(lock);
+            return Cache<assoc, size_kb>::access(mem_op_type, tag);
+         }
+   };
 }
 
 #endif // __FAST_CACHE_H
