@@ -106,6 +106,8 @@ clean: empty_config empty_deps
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C common clean
 	$(_MSG) '[CLEAN ] sift'
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C sift clean
+	$(_MSG) '[CLEAN ] tools'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C tools clean
 	$(_CMD) rm -f .build_os
 
 distclean: clean
