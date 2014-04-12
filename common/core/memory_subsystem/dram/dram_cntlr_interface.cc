@@ -2,6 +2,7 @@
 #include "memory_manager.h"
 #include "shmem_msg.h"
 #include "shmem_perf.h"
+#include "log.h"
 
 void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {

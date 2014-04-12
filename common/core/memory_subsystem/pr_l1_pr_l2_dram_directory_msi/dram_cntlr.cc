@@ -4,6 +4,7 @@
 #include "log.h"
 #include "subsecond_time.h"
 #include "stats.h"
+#include "fault_injection.h"
 
 #if 0
    extern Lock iolock;
