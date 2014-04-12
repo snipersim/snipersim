@@ -10,5 +10,6 @@ The interval core simulation model is licensed under an academic-use only
 license, see the file LICENSE.interval in this directory.
 All files in the following directories are covered under this license
   common/performance_model/performance_models/interval_performance_model/
+  common/performance_model/performance_models/rob_performance_model/
 
 All other files are covered under the MIT license, see the file LICENSE.
