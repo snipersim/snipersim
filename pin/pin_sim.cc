@@ -263,7 +263,7 @@ VOID traceCallback(TRACE trace, void *v)
          // Instruction modelling
          InstructionModeling::addInstructionModeling(trace, ins, inst_mode);
 
-         if (INSTR_IF_DETAILED(inst_mode))
+         if (INSTR_IF_DETAILED(inst_mode) && !INS_IsSyscall(ins))
          {
             Instruction *inst = InstructionModeling::decodeInstruction(ins);
             INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleInstruction), IARG_THREAD_ID, IARG_PTR, inst, IARG_END);
