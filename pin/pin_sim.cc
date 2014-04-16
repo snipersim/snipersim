@@ -191,11 +191,18 @@ VOID traceCallback(TRACE trace, void *v)
    BBL bbl_head = TRACE_BblHead(trace);
    INS ins_head = BBL_InsHead(bbl_head);
 
+   #ifdef PINPLAY_SUPPORTED
+   // Make sure all version switches happen before any PinPlay instrumentation, to avoid PinPlay seeing some instructions twice
+   CALL_ORDER call_order = (CALL_ORDER)(pinplay_engine.PinPlayFirstBeforeCallOrder() - 1);
+   #else
+   CALL_ORDER call_order = CALL_ORDER_DEFAULT;
+   #endif
+
    // Write the resulting mode to REG_INST_Gx for use by INS_InsertVersionCase
-   INS_InsertCall(ins_head, IPOINT_BEFORE, (AFUNPTR)getInstMode, IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP], IARG_END);
+   INS_InsertCall(ins_head, IPOINT_BEFORE, (AFUNPTR)getInstMode, IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP], IARG_CALL_ORDER, call_order, IARG_END);
 
    // Add version switch cases for all possible target versions (no test to switch to self)
-   #define SWITCH_VERSION(v) if (inst_mode != (v)) INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], v, v, IARG_END);
+   #define SWITCH_VERSION(v) if (inst_mode != (v)) INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], v, v, IARG_CALL_ORDER, call_order, IARG_END);
    SWITCH_VERSION(InstMode::DETAILED)
    SWITCH_VERSION(InstMode::CACHE_ONLY)
    SWITCH_VERSION(InstMode::FAST_FORWARD)
