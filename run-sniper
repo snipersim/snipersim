@@ -527,6 +527,7 @@ elif pinballs and pinball_sift:
     applications.append(([], [ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball, '--outputdir', outputdir ]))
 
 # Setup common generated trace files
+tracecmds = []
 if tracegen:
   tracegen['enabled'] = 'true'
   sniperoptions.append('-g --traceinput/enabled=%s' % tracegen['enabled'])
@@ -544,19 +545,21 @@ if tracegen:
       os.mkfifo(filename)
       tracegen['tracefiles_created'].append(filename)
   # Start app(s) with trace recorder in a thread
-  def run_sift_recorder((pre_cmd, app_cmd)):
-    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + trace_extra_args + app_cmd
+  def run_sift_recorder(tracecmd):
+    tracecmds.append(tracecmd)
     if verbose:
       print '[SNIPER] Running', tracecmd
     sys.stdout.flush()
     sys.stderr.flush()
     time.sleep(1)
     subprocess.Popen(tracecmd).communicate()
-  for app_id, app_cmd in enumerate(applications):
+  for app_id, (pre_cmd, app_cmd) in enumerate(applications):
+    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + trace_extra_args + app_cmd
+    tracecmds.append(tracecmd)
     if tracegen['redirect']: # redirect output
-      threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, app_cmd, outputdir)).start()
+      threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, tracecmd, outputdir)).start()
     else:                    # inline output
-      threading.Thread(target = run_sift_recorder, args = (app_cmd,)).start()
+      threading.Thread(target = run_sift_recorder, args = (tracecmd,)).start()
 
 sniperoptions = ' '.join(sniperoptions)
 
@@ -839,6 +842,7 @@ stats = dict(
   pin_version = pin_version,
   cmdline = sys.argv,
   snipercmd = cmd,
+  tracecmds = tracecmds,
   vmem = memusage,
   rusage = usage and tuple(usage) or None,
   t_start = t_start,
@@ -847,7 +851,7 @@ stats = dict(
 if 'BENCHMARKS_ROOT' in os.environ:
   stats['benchmarks_root'] = os.getenv('BENCHMARKS_ROOT'),
   stats['benchmarks_revision'] = commands.getoutput('cd $BENCHMARKS_ROOT && (if [ -e .git ]; then git rev-parse HEAD; else cat .gitid; fi)'),
-file(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats))
+file(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats)+'\n')
 
 if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpath(outputdir):
   os.system('cp pin.log %s' % outputdir)
