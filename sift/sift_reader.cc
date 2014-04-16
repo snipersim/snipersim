@@ -221,9 +221,10 @@ bool Sift::Reader::Read(Instruction &inst)
                assert(rec.Other.size == sizeof(uint32_t));
                uint32_t icount;
                input->read(reinterpret_cast<char*>(&icount), sizeof(icount));
+               Mode mode = ModeUnknown;
                if (handleInstructionCountFunc)
-                  handleInstructionCountFunc(handleInstructionCountArg, icount);
-               sendSimpleResponse(RecOtherSyncResponse, NULL, 0);
+                  mode = handleInstructionCountFunc(handleInstructionCountArg, icount);
+               sendSimpleResponse(RecOtherSyncResponse, &mode, sizeof(Mode));
                break;
             }
             case RecOtherOutput:
@@ -316,7 +317,10 @@ bool Sift::Reader::Read(Instruction &inst)
             case RecOtherSync:
             {
                assert(rec.Other.size == 0);
-               sendSimpleResponse(RecOtherSyncResponse, NULL, 0);
+               Mode mode = ModeUnknown;
+               if (handleInstructionCountFunc)
+                  mode = handleInstructionCountFunc(handleInstructionCountArg, 0);
+               sendSimpleResponse(RecOtherSyncResponse, &mode, sizeof(Mode));
                break;
             }
             case RecOtherFork:

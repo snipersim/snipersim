@@ -26,7 +26,8 @@ void beginROI(THREADID threadid)
       if (KnobVerbose.Value())
          std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
    }
-   any_thread_in_detail = true;
+
+   setInstrumentationMode(Sift::ModeDetailed);
 
    if (KnobEmulateSyscalls.Value())
    {
@@ -44,8 +45,6 @@ void beginROI(THREADID threadid)
             openFile(i);
       }
    }
-
-   PIN_RemoveInstrumentation();
 }
 
 void endROI(THREADID threadid)
@@ -67,13 +66,35 @@ void endROI(THREADID threadid)
       std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI End" << std::endl;
 
    // Stop threads from sending any more data while we close the SIFT pipes
-   any_thread_in_detail = false;
-   PIN_RemoveInstrumentation();
+   setInstrumentationMode(Sift::ModeIcount);
 
    for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
    {
       if (thread_data[i].running && thread_data[i].output)
          closeFile(i);
+   }
+}
+
+void setInstrumentationMode(Sift::Mode mode)
+{
+   if (current_mode != mode && mode != Sift::ModeUnknown)
+   {
+      current_mode = mode;
+      switch(mode)
+      {
+         case Sift::ModeIcount:
+            any_thread_in_detail = false;
+            break;
+         case Sift::ModeMemory:
+         case Sift::ModeDetailed:
+            any_thread_in_detail = true;
+            break;
+         case Sift::ModeStop:
+            exit(0);
+         case Sift::ModeUnknown:
+            assert(false);
+      }
+      PIN_RemoveInstrumentation();
    }
 }
 

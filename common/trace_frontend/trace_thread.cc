@@ -362,7 +362,7 @@ Instruction* TraceThread::decode(Sift::Instruction &inst)
    return instruction;
 }
 
-void TraceThread::handleInstructionCountFunc(uint32_t icount)
+Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
 {
    if (!m_started)
    {
@@ -382,7 +382,7 @@ void TraceThread::handleInstructionCountFunc(uint32_t icount)
    SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
    core->countInstructions(0, icount);
 
-   if (Sim()->getInstrumentationMode() == InstMode::DETAILED)
+   if (Sim()->getInstrumentationMode() == InstMode::DETAILED && icount)
    {
       // We're in detailed mode, but our SIFT recorder doesn't know it yet
       // Do something to advance time
@@ -396,6 +396,19 @@ void TraceThread::handleInstructionCountFunc(uint32_t icount)
       core = m_thread->getCore();
       core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
    }
+
+   switch(Sim()->getInstrumentationMode())
+   {
+      case InstMode::FAST_FORWARD:
+         return Sift::ModeIcount;
+      case InstMode::CACHE_ONLY:
+         return Sift::ModeMemory;
+      case InstMode::DETAILED:
+         return Sift::ModeDetailed;
+      case InstMode::INVALID:
+         return Sift::ModeUnknown;
+   }
+   assert(false);
 }
 
 void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)

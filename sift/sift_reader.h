@@ -41,7 +41,7 @@ namespace Sift
 
    class Reader
    {
-      typedef void (*HandleInstructionCountFunc)(void* arg, uint32_t icount);
+      typedef Mode (*HandleInstructionCountFunc)(void* arg, uint32_t icount);
       typedef void (*HandleOutputFunc)(void* arg, uint8_t fd, const uint8_t *data, uint32_t size);
       typedef uint64_t (*HandleSyscallFunc)(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size);
       typedef int32_t (*HandleNewThreadFunc)(void* arg);

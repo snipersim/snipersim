@@ -43,12 +43,12 @@ namespace Sift
          ~Writer();
          void End();
          void Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
-         void InstructionCount(uint32_t icount);
+         Mode InstructionCount(uint32_t icount);
          void Output(uint8_t fd, const char *data, uint32_t size);
          uint64_t Syscall(uint16_t syscall_number, const char *data, uint32_t size);
          int32_t NewThread();
          int32_t Join(int32_t);
-         void Sync();
+         Mode Sync();
          uint64_t Magic(uint64_t a, uint64_t b, uint64_t c);
          bool Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
          int32_t Fork();

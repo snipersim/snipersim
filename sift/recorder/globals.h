@@ -1,8 +1,7 @@
 #ifndef __GLOBALS_H
 #define __GLOBALS_H
 
-#define __STDC_FORMAT_MACROS
-#include <inttypes.h>
+#include "sift_format.h"
 
 #include "pin.H"
 #ifdef PINPLAY_SUPPORTED
@@ -54,6 +53,7 @@ extern PIN_LOCK new_threadid_lock;
 extern std::deque<ADDRINT> tidptrs;
 extern INT32 child_app_id;
 extern BOOL any_thread_in_detail;
+extern Sift::Mode current_mode;
 extern const bool verbose;
 extern std::unordered_map<ADDRINT, bool> routines;
 

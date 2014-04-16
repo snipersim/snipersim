@@ -56,8 +56,8 @@ class TraceThread : public Runnable
       bool m_started;
 
       void run();
-      static void __handleInstructionCountFunc(void* arg, uint32_t icount)
-      { ((TraceThread*)arg)->handleInstructionCountFunc(icount); }
+      static Sift::Mode __handleInstructionCountFunc(void* arg, uint32_t icount)
+      { return ((TraceThread*)arg)->handleInstructionCountFunc(icount); }
       static void __handleOutputFunc(void* arg, uint8_t fd, const uint8_t *data, uint32_t size)
       { ((TraceThread*)arg)->handleOutputFunc(fd, data, size); }
       static uint64_t __handleSyscallFunc(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size)
@@ -77,7 +77,7 @@ class TraceThread : public Runnable
       static int32_t __handleForkFunc(void* arg)
       { return ((TraceThread*)arg)->handleForkFunc();}
 
-      void handleInstructionCountFunc(uint32_t icount);
+      Sift::Mode handleInstructionCountFunc(uint32_t icount);
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
       uint64_t handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size);
       int32_t handleNewThreadFunc();

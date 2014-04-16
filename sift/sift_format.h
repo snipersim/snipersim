@@ -5,6 +5,8 @@
 //
 // ia32 and intel64, little-endian
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #include <sys/types.h>
 
 namespace Sift
@@ -144,6 +146,14 @@ namespace Sift
       struct {
       } setthreadinfo;
    } EmuReply;
+
+   typedef enum {
+      ModeUnknown,
+      ModeIcount,
+      ModeMemory,
+      ModeDetailed,
+      ModeStop
+   } Mode;
 
    // Determine record type based on first uint8_t
    inline bool IsInstructionSimple(uint8_t byte) { return byte > 0; }

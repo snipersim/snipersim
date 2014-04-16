@@ -133,7 +133,7 @@ int main(int argc, char **argv)
    }
    if (fast_forward_target == 0 && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
-      any_thread_in_detail = true;
+      setInstrumentationMode(Sift::ModeDetailed);
       openFile(0);
    }
    else if (KnobEmulateSyscalls.Value())

@@ -1,7 +1,10 @@
 #ifndef __RECORDER_CONTROL_H
 #define __RECORDER_CONTROL_H
 
+#include "sift_format.h"
 #include "pin.H"
+
+void setInstrumentationMode(Sift::Mode mode);
 
 void beginROI(THREADID threadid);
 void endROI(THREADID threadid);

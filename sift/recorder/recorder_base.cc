@@ -16,8 +16,9 @@ VOID countInsns(THREADID threadid, INT32 count)
       thread_data[threadid].icount_reported += count;
       if (thread_data[threadid].icount_reported > KnobFlowControlFF.Value())
       {
-         thread_data[threadid].output->InstructionCount(thread_data[threadid].icount_reported);
+         Sift::Mode mode = thread_data[threadid].output->InstructionCount(thread_data[threadid].icount_reported);
          thread_data[threadid].icount_reported = 0;
+         setInstrumentationMode(mode);
       }
    }
 
@@ -28,8 +29,7 @@ VOID countInsns(THREADID threadid, INT32 count)
       if (!thread_data[threadid].output)
          openFile(threadid);
       thread_data[threadid].icount = 0;
-      any_thread_in_detail = true;
-      PIN_RemoveInstrumentation();
+      setInstrumentationMode(Sift::ModeIcount);
    }
 }
 
@@ -77,8 +77,9 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 
    if (KnobUseResponseFiles.Value() && KnobFlowControl.Value() && (thread_data[threadid].icount > thread_data[threadid].flowcontrol_target || ispause))
    {
-      thread_data[threadid].output->Sync();
+      Sift::Mode mode = thread_data[threadid].output->Sync();
       thread_data[threadid].flowcontrol_target = thread_data[threadid].icount + KnobFlowControl.Value();
+      setInstrumentationMode(mode);
    }
 
    if (detailed_target != 0 && thread_data[threadid].icount_detailed >= detailed_target)

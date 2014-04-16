@@ -257,7 +257,7 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
       npredicate++;
 }
 
-void Sift::Writer::InstructionCount(uint32_t icount)
+Sift::Mode Sift::Writer::InstructionCount(uint32_t icount)
 {
    #if VERBOSE > 1
    std::cerr << "[DEBUG:" << m_id << "] Write InstructionCount" << std::endl;
@@ -288,7 +288,10 @@ void Sift::Writer::InstructionCount(uint32_t icount)
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
    sift_assert(respRec.Other.zero == 0);
    sift_assert(respRec.Other.type == RecOtherSyncResponse);
-   sift_assert(respRec.Other.size == 0);
+   Mode mode;
+   sift_assert(respRec.Other.size == sizeof(Mode));
+   response->read(reinterpret_cast<char*>(&mode), sizeof(Mode));
+   return mode;
 }
 
 void Sift::Writer::Output(uint8_t fd, const char *data, uint32_t size)
@@ -492,7 +495,7 @@ int32_t Sift::Writer::Join(int32_t thread)
    return -1;
 }
 
-void Sift::Writer::Sync()
+Sift::Mode Sift::Writer::Sync()
 {
    // send sync
    Record rec;
@@ -522,9 +525,10 @@ void Sift::Writer::Sync()
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Read SyncResponse" << std::endl;
             #endif
-            sift_assert(respRec.Other.size == 0);
-            return;
-            break;
+            Mode mode;
+            sift_assert(respRec.Other.size == sizeof(Mode));
+            response->read(reinterpret_cast<char*>(&mode), sizeof(Mode));
+            return mode;
          case RecOtherMemoryRequest:
             handleMemoryRequest(respRec);
             break;
