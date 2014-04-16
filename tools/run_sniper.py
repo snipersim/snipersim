@@ -1,12 +1,12 @@
 import sys, os, time, subprocess, threading, tempfile, sniper_lib
 
-def Prefix(prefix, filename):
+def Tee(filename, prefix = ''):
   open(filename, 'w').close() # Make sure is writeable and empty
-  obj = subprocess.Popen(['bash', '-c', 'while read line; do echo "%s" $line; echo $line >> %s; done' % (prefix, filename)], stdin = subprocess.PIPE)
+  obj = subprocess.Popen(['bash', '-c', 'while read line; do echo "%s"$line; echo $line >> %s; done' % (prefix, filename)], stdin = subprocess.PIPE)
   return obj.stdin.fileno()
 
 def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
-  prefix_fd = Prefix('[app%d]' % app_id, os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)))
+  prefix_fd = Tee(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), '[app%d] ' % app_id)
   os.dup2(prefix_fd, sys.stdout.fileno())
   os.dup2(prefix_fd, sys.stderr.fileno())
   program_func(program_arg)

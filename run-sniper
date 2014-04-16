@@ -36,6 +36,7 @@ def usage():
         '  [--cache-only]' + \
         '  [--fast-forward]' + \
         '  [--no-cache-warming]' + \
+        '  [--save-output]' + \
         '  [--save-patch]' + \
         '  [--pin-stats]' + \
         '  [--wrap-sim=]' + \
@@ -76,6 +77,7 @@ appdebug_manual = False
 appdebug_nowait = False
 follow_execv = False
 run_power = False
+save_output = False
 save_patch = False
 pin_stats = False
 curdir = os.getcwd()
@@ -191,7 +193,7 @@ try:
       "follow-execv=",
       "power",
       "cache-only", "fast-forward", "no-cache-warming",
-      "save-patch",
+      "save-output", "save-patch",
       "curdir=",
       "pin-stats",
       "traces=", "response-traces=", "trace-manual", "trace-args=",
@@ -286,6 +288,8 @@ for o, a in opts:
     sniperoptions.append('-g --general/inst_mode_roi=fast_forward')
   if o == '--no-cache-warming':
     sniperoptions.append('-g --general/inst_mode_init=fast_forward')
+  if o == '--save-output':
+    save_output = True
   if o == '--save-patch':
     save_patch = True
   if o == '--pin-stats':
@@ -401,6 +405,11 @@ if not os.path.exists(outputdir):
   except OSError:
     print >> sys.stderr, 'Failed to create output directory', outputdir
     sys.exit(-1)
+
+if save_output:
+  prefix_fd = run_sniper.Tee(os.path.join(outputdir, 'sim.stdout'))
+  os.dup2(prefix_fd, sys.stdout.fileno())
+  os.dup2(prefix_fd, sys.stderr.fileno())
 
 if heteroconfig:
   hcfgfile = os.path.join(outputdir,'sim.hetero.cfg')
