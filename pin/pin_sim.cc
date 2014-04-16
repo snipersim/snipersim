@@ -194,12 +194,11 @@ VOID traceCallback(TRACE trace, void *v)
    // Write the resulting mode to REG_INST_Gx for use by INS_InsertVersionCase
    INS_InsertCall(ins_head, IPOINT_BEFORE, (AFUNPTR)getInstMode, IARG_RETURN_REGS, g_toolregs[TOOLREG_TEMP], IARG_END);
 
-   if (INSTR_IF_NOT_DETAILED(inst_mode))
-      INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], InstMode::DETAILED, InstMode::DETAILED, IARG_END);
-   if (INSTR_IF_NOT_CACHEONLY(inst_mode))
-      INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], InstMode::CACHE_ONLY, InstMode::CACHE_ONLY, IARG_END);
-   if (INSTR_IF_NOT_FASTFORWARD(inst_mode))
-      INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], InstMode::FAST_FORWARD, InstMode::FAST_FORWARD, IARG_END);
+   // Add version switch cases for all possible target versions (no test to switch to self)
+   #define SWITCH_VERSION(v) if (inst_mode != (v)) INS_InsertVersionCase(ins_head, g_toolregs[TOOLREG_TEMP], v, v, IARG_END);
+   SWITCH_VERSION(InstMode::DETAILED)
+   SWITCH_VERSION(InstMode::CACHE_ONLY)
+   SWITCH_VERSION(InstMode::FAST_FORWARD)
 
    // Version 0 is only for startup / amnesia, don't do anything else there
    if (TRACE_Version(trace) == 0)
