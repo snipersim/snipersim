@@ -29,12 +29,7 @@ typedef struct {
    ADDRINT last_call_site;
    BOOL last_syscall_emulated;
    BOOL running;
-   #if defined(TARGET_IA32)
-      uint8_t __pad[29];
-   #elif defined(TARGET_INTEL64)
-      uint8_t __pad[53];
-   #endif
-} __attribute__((packed)) thread_data_t;
+} __attribute__((packed,aligned(LINE_SIZE_BYTES))) thread_data_t;
 
 extern thread_data_t *thread_data;
 
