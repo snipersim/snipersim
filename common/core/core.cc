@@ -1,6 +1,7 @@
 #include "core.h"
 #include "network.h"
 #include "syscall_model.h"
+#include "branch_predictor.h"
 #include "memory_manager_base.h"
 #include "pin_memory_manager.h"
 #include "performance_model.h"
@@ -187,6 +188,24 @@ Core::hookPeriodicInsCall()
    {
       Sim()->getHooksManager()->callHooks(HookType::HOOK_PERIODIC_INS, g_instructions_hpi_global);
       g_instructions_hpi_global_callback += Sim()->getConfig()->getHPIInstructionsGlobal();
+   }
+}
+
+bool
+Core::accessBranchPredictor(IntPtr eip, bool taken, IntPtr target)
+{
+   PerformanceModel *prfmdl = getPerformanceModel();
+   BranchPredictor *bp = prfmdl->getBranchPredictor();
+
+   if (bp)
+   {
+      bool prediction = bp->predict(eip, target);
+      bp->update(prediction, taken, eip, target);
+      return (prediction != taken);
+   }
+   else
+   {
+      return false;
    }
 }
 

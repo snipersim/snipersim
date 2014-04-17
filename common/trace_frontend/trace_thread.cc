@@ -426,16 +426,9 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
 
    if (inst.is_branch)
    {
-      PerformanceModel *prfmdl = core->getPerformanceModel();
-      BranchPredictor *bp = prfmdl->getBranchPredictor();
-
-      if (bp)
-      {
-         bool prediction = bp->predict(va2pa(inst.sinst->addr), va2pa(next_inst.sinst->addr));
-         bp->update(prediction, inst.taken, va2pa(inst.sinst->addr), va2pa(next_inst.sinst->addr));
-         if (prediction != inst.taken)
-            core->getPerformanceModel()->handleBranchMispredict();
-      }
+      bool mispredict = core->accessBranchPredictor(va2pa(inst.sinst->addr), inst.taken, va2pa(next_inst.sinst->addr));
+      if (mispredict)
+         core->getPerformanceModel()->handleBranchMispredict();
    }
 
    // Warmup data caches

@@ -63,14 +63,10 @@ static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADD
    Core *core = localStore[thread_id].thread->getCore();
    assert(core);
    PerformanceModel *prfmdl = core->getPerformanceModel();
-   BranchPredictor *bp = prfmdl->getBranchPredictor();
 
-   if (bp) {
-      bool prediction = bp->predict(eip, target);
-      bp->update(prediction, taken, eip, target);
-      if (prediction != taken)
-         prfmdl->handleBranchMispredict();
-   }
+   bool mispredict = core->accessBranchPredictor(eip, taken, target);
+   if (mispredict)
+      prfmdl->handleBranchMispredict();
 }
 
 static ADDRINT handleMagic(THREADID threadIndex, ADDRINT a, ADDRINT b, ADDRINT c)

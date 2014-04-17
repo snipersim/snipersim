@@ -169,21 +169,7 @@ SubsecondTime BranchInstruction::getCost(Core *core) const
 
    LOG_ASSERT_ERROR(i->type == DynamicInstructionInfo::BRANCH, "Expected branch DynInstrInfo, got %d", i->type);
 
-   bool is_mispredict;
-
-   // branch prediction not modeled
-   if (bp == NULL)
-   {
-      is_mispredict = false;
-   }
-   else
-   {
-      bool prediction = bp->predict(getAddress(), i->branch_info.target);
-      bp->update(prediction, i->branch_info.taken, getAddress(), i->branch_info.target);
-
-      is_mispredict = (prediction != i->branch_info.taken);
-   }
-
+   bool is_mispredict = core->accessBranchPredictor(getAddress(), i->branch_info.taken, i->branch_info.target);
    UInt64 cost = is_mispredict ? bp->getMispredictPenalty() : 1;
 
    // TODO: Move everything that changes state (including global state through the DynamicInstructionInfo queue)
