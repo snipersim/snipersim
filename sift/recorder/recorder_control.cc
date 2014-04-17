@@ -68,10 +68,13 @@ void endROI(THREADID threadid)
    // Stop threads from sending any more data while we close the SIFT pipes
    setInstrumentationMode(Sift::ModeIcount);
 
-   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   if (!KnobUseResponseFiles.Value())
    {
-      if (thread_data[i].running && thread_data[i].output)
-         closeFile(i);
+      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      {
+         if (thread_data[i].running && thread_data[i].output)
+            closeFile(i);
+      }
    }
 }
 

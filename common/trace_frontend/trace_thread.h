@@ -58,6 +58,8 @@ class TraceThread : public Runnable
       void run();
       static Sift::Mode __handleInstructionCountFunc(void* arg, uint32_t icount)
       { return ((TraceThread*)arg)->handleInstructionCountFunc(icount); }
+      static void __handleCacheOnlyFunc(void* arg, uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address)
+      { ((TraceThread*)arg)->handleCacheOnlyFunc(icount, type, eip, address); }
       static void __handleOutputFunc(void* arg, uint8_t fd, const uint8_t *data, uint32_t size)
       { ((TraceThread*)arg)->handleOutputFunc(fd, data, size); }
       static uint64_t __handleSyscallFunc(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size)
@@ -78,6 +80,7 @@ class TraceThread : public Runnable
       { return ((TraceThread*)arg)->handleForkFunc();}
 
       Sift::Mode handleInstructionCountFunc(uint32_t icount);
+      void handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address);
       void handleOutputFunc(uint8_t fd, const uint8_t *data, uint32_t size);
       uint64_t handleSyscallFunc(uint16_t syscall_number, const uint8_t *data, uint32_t size);
       int32_t handleNewThreadFunc();

@@ -521,8 +521,13 @@ elif use_sift:
   tracegen['num_apps'] = 1
   tracegen['redirect'] = False
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all processes have completed
+  # Set trace recorder options
+  if roi_only:
+    roi_options = [ '--roi' ]
+  else:
+    roi_options = []
   applications = [
-    ([], ['-e', '1', '-s', '0', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+    ([], roi_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
   ]
 elif pinballs and pinball_sift:
   tracegen = {}

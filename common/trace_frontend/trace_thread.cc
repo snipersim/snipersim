@@ -42,6 +42,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_stopped(false)
 {
    m_trace.setHandleInstructionCountFunc(TraceThread::__handleInstructionCountFunc, this);
+   m_trace.setHandleCacheOnlyFunc(TraceThread::__handleCacheOnlyFunc, this);
    if (Sim()->getCfg()->getBool("traceinput/mirror_output"))
       m_trace.setHandleOutputFunc(TraceThread::__handleOutputFunc, this);
    m_trace.setHandleSyscallFunc(TraceThread::__handleSyscallFunc, this);
@@ -409,6 +410,45 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
          return Sift::ModeUnknown;
    }
    assert(false);
+}
+
+void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address)
+{
+   Core *core = m_thread->getCore();
+   LOG_ASSERT_ERROR(core, "We cannot perform warmup while not on a core");
+
+   if (icount)
+      core->countInstructions(0, icount);
+
+   switch(type)
+   {
+      case Sift::CacheOnlyBranchTaken:
+      case Sift::CacheOnlyBranchNotTaken:
+      {
+         bool taken = (type == Sift::CacheOnlyBranchTaken);
+         bool mispredict = core->accessBranchPredictor(va2pa(eip), taken, va2pa(address));
+         if (mispredict)
+            core->getPerformanceModel()->handleBranchMispredict();
+         break;
+      }
+
+      case Sift::CacheOnlyMemRead:
+      case Sift::CacheOnlyMemWrite:
+         core->accessMemory(
+               Core::NONE,
+               type == Sift::CacheOnlyMemRead ? Core::READ : Core::WRITE,
+               va2pa(address),
+               NULL,
+               4,
+               Core::MEM_MODELED_COUNT,
+               va2pa(eip));
+         break;
+
+      case Sift::CacheOnlyMemIcache:
+         if (Sim()->getConfig()->getEnableICacheModeling())
+            core->readInstructionMemory(va2pa(eip), address);
+         break;
+   }
 }
 
 void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)

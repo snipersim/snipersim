@@ -10,7 +10,8 @@
 
 typedef struct {
    Sift::Writer *output;
-   std::deque<ADDRINT> *dyn_address_queue;
+   ADDRINT dyn_addresses[Sift::MAX_DYNAMIC_ADDRESSES];
+   UINT32 num_dyn_addresses;
    Bbv *bbv;
    UINT64 thread_num;
    ADDRINT bbv_base;
@@ -19,6 +20,8 @@ typedef struct {
    BOOL bbv_end;
    UINT64 blocknum;
    UINT64 icount;
+   UINT64 icount_cacheonly;
+   UINT64 icount_cacheonly_pending;
    UINT64 icount_detailed;
    UINT64 icount_reported;
    ADDRINT last_syscall_number;

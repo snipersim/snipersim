@@ -23,6 +23,8 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , response(NULL)
    , handleInstructionCountFunc(NULL)
    , handleInstructionCountArg(NULL)
+   , handleCacheOnlyFunc(NULL)
+   , handleCacheOnlyArg(NULL)
    , handleOutputFunc(NULL)
    , handleOutputArg(NULL)
    , handleSyscallFunc(NULL)
@@ -225,6 +227,22 @@ bool Sift::Reader::Read(Instruction &inst)
                if (handleInstructionCountFunc)
                   mode = handleInstructionCountFunc(handleInstructionCountArg, icount);
                sendSimpleResponse(RecOtherSyncResponse, &mode, sizeof(Mode));
+               break;
+            }
+            case RecOtherCacheOnly:
+            {
+               #if VERBOSE > 0
+               std::cerr << "[DEBUG:" << m_id << "] Read CacheOnly" << std::endl;
+               #endif
+               assert(rec.Other.size == sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint64_t));
+               uint8_t icount, type;
+               uint64_t eip, address;
+               input->read(reinterpret_cast<char*>(&icount), sizeof(uint8_t));
+               input->read(reinterpret_cast<char*>(&type), sizeof(uint8_t));
+               input->read(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
+               if (handleCacheOnlyFunc)
+                  handleCacheOnlyFunc(handleCacheOnlyArg, icount, (Sift::CacheOnlyType)type, eip, address);
                break;
             }
             case RecOtherOutput:

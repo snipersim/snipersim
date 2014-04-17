@@ -44,6 +44,7 @@ namespace Sift
          void End();
          void Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
          Mode InstructionCount(uint32_t icount);
+         void CacheOnly(uint8_t icount, CacheOnlyType type, uint64_t eip, uint64_t address);
          void Output(uint8_t fd, const char *data, uint32_t size);
          uint64_t Syscall(uint16_t syscall_number, const char *data, uint32_t size);
          int32_t NewThread();

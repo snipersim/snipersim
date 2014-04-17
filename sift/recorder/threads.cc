@@ -23,7 +23,6 @@ thread_data_t *thread_data;
 static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 {
    sift_assert(thread_data[threadid].bbv == NULL);
-   sift_assert(thread_data[threadid].dyn_address_queue == NULL);
 
    // The first thread (master) doesn't need to join with anyone else
    PIN_GetLock(&new_threadid_lock, threadid);
@@ -36,7 +35,6 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 
    thread_data[threadid].thread_num = num_threads++;
    thread_data[threadid].bbv = new Bbv();
-   thread_data[threadid].dyn_address_queue = new std::deque<ADDRINT>();
 
    if (threadid > 0 && (any_thread_in_detail || KnobEmulateSyscalls.Value()))
    {
@@ -72,10 +70,8 @@ static VOID threadFinishHelper(VOID *arg)
       closeFile(threadid);
    }
 
-   delete thread_data[threadid].dyn_address_queue;
    delete thread_data[threadid].bbv;
 
-   thread_data[threadid].dyn_address_queue = NULL;
    thread_data[threadid].bbv = NULL;
 }
 

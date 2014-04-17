@@ -71,7 +71,6 @@ VOID forkAfterInChild(THREADID threadid, const CONTEXT *ctxt, VOID *v)
    num_threads = 1;
    // Open new SIFT pipe for thread 0
    thread_data[0].bbv = new Bbv();
-   thread_data[0].dyn_address_queue = new std::deque<ADDRINT>();
    openFile(0);
 }
 

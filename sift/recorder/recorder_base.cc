@@ -29,7 +29,7 @@ VOID countInsns(THREADID threadid, INT32 count)
       if (!thread_data[threadid].output)
          openFile(threadid);
       thread_data[threadid].icount = 0;
-      setInstrumentationMode(Sift::ModeIcount);
+      setInstrumentationMode(Sift::ModeDetailed);
    }
 }
 
@@ -57,23 +57,19 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
    thread_data[threadid].bbv_end = is_branch;
 
 
-   uint64_t addresses[Sift::MAX_DYNAMIC_ADDRESSES] = { 0 };
-   for(uint8_t i = 0; i < num_addresses; ++i)
+   sift_assert(thread_data[threadid].num_dyn_addresses == num_addresses);
+   if (isbefore)
    {
-      addresses[i] = thread_data[threadid].dyn_address_queue->front();
-      sift_assert(!thread_data[threadid].dyn_address_queue->empty());
-      thread_data[threadid].dyn_address_queue->pop_front();
-
-      if (isbefore)
+      for(uint8_t i = 0; i < num_addresses; ++i)
       {
          // If the instruction hasn't executed yet, access the address to ensure a page fault if the mapping wasn't set up yet
          static char dummy = 0;
-         dummy += *(char *)addresses[i];
+         dummy += *(char *)thread_data[threadid].dyn_addresses[i];
       }
    }
-   sift_assert(thread_data[threadid].dyn_address_queue->empty());
 
-   thread_data[threadid].output->Instruction(addr, size, num_addresses, addresses, is_branch, taken, is_predicate, executing);
+   thread_data[threadid].output->Instruction(addr, size, num_addresses, thread_data[threadid].dyn_addresses, is_branch, taken, is_predicate, executing);
+   thread_data[threadid].num_dyn_addresses = 0;
 
    if (KnobUseResponseFiles.Value() && KnobFlowControl.Value() && (thread_data[threadid].icount > thread_data[threadid].flowcontrol_target || ispause))
    {
@@ -96,13 +92,56 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
    }
 }
 
+VOID cacheOnlyUpdateInsCount(THREADID threadid, UINT32 icount)
+{
+   thread_data[threadid].icount_cacheonly_pending += icount;
+}
+
+VOID cacheOnlyConsumeAddresses(THREADID threadid)
+{
+   thread_data[threadid].num_dyn_addresses = 0;
+}
+
+VOID sendCacheOnly(THREADID threadid, UINT32 icount, UINT32 type, ADDRINT eip, ADDRINT arg)
+{
+   // We're still called for instructions in the same basic block as ROI end, ignore these
+   if (!thread_data[threadid].output)
+      return;
+
+   cacheOnlyUpdateInsCount(threadid, icount);
+
+   ADDRINT address;
+   switch(Sift::CacheOnlyType(type))
+   {
+      case Sift::CacheOnlyMemRead:
+      case Sift::CacheOnlyMemWrite:
+         address = thread_data[threadid].dyn_addresses[arg];
+         break;
+      default:
+         address = arg;
+         break;
+   }
+   thread_data[threadid].output->CacheOnly(thread_data[threadid].icount_cacheonly_pending, Sift::CacheOnlyType(type), eip, address);
+
+   thread_data[threadid].icount_cacheonly += thread_data[threadid].icount_cacheonly_pending;
+   thread_data[threadid].icount_reported += thread_data[threadid].icount_cacheonly_pending;
+   thread_data[threadid].icount_cacheonly_pending = 0;
+
+   if (thread_data[threadid].icount_reported > KnobFlowControlFF.Value())
+   {
+      Sift::Mode mode = thread_data[threadid].output->Sync();
+      thread_data[threadid].icount_reported = 0;
+      setInstrumentationMode(mode);
+   }
+}
+
 VOID handleMemory(THREADID threadid, ADDRINT address)
 {
    // We're still called for instructions in the same basic block as ROI end, ignore these
    if (!thread_data[threadid].output)
       return;
 
-   thread_data[threadid].dyn_address_queue->push_back(address);
+   thread_data[threadid].dyn_addresses[thread_data[threadid].num_dyn_addresses++] = address;
 }
 
 UINT32 addMemoryModeling(INS ins)
@@ -177,11 +216,11 @@ static VOID traceCallback(TRACE trace, void *v)
       {
          BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)countInsns, IARG_THREAD_ID, IARG_UINT32, BBL_NumIns(bbl), IARG_END);
       }
-      else
+      else if (current_mode == Sift::ModeDetailed)
       {
          for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins))
          {
-            // For memory instructions, we should populate data items before we send the MicroOp
+            // For memory instructions, collect all addresses at IPOINT_BEFORE
             UINT32 num_addresses = addMemoryModeling(ins);
 
             bool is_branch = INS_IsBranch(ins) && INS_HasFallThrough(ins);
@@ -200,6 +239,82 @@ static VOID traceCallback(TRACE trace, void *v)
 
             if (ins == BBL_InsTail(bbl))
                break;
+         }
+      }
+      else if (current_mode == Sift::ModeMemory)
+      {
+         UINT32 inscount = 0;
+
+         for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins))
+         {
+            ++inscount;
+
+            // For memory instructions, collect all addresses at IPOINT_BEFORE
+            addMemoryModeling(ins);
+
+            if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
+            {
+               // Prefer IPOINT_AFTER to maximize probability of physical mapping to be available
+               IPOINT ipoint = INS_HasFallThrough(ins) ? IPOINT_AFTER : IPOINT_BEFORE;
+               for (unsigned int idx = 0; idx < INS_MemoryOperandCount(ins); ++idx)
+               {
+                  if (INS_MemoryOperandIsRead(ins, idx))
+                  {
+                     INS_InsertCall(ins, ipoint,
+                           AFUNPTR(sendCacheOnly),
+                           IARG_THREAD_ID,
+                           IARG_UINT32, inscount,
+                           IARG_UINT32, UINT32(Sift::CacheOnlyMemRead),
+                           IARG_ADDRINT, INS_Address(ins),
+                           IARG_UINT32, UINT32(idx),
+                           IARG_END);
+                     inscount = 0;
+                  }
+                  if (INS_MemoryOperandIsWritten(ins, idx))
+                  {
+                     INS_InsertCall(ins, ipoint,
+                           AFUNPTR(sendCacheOnly),
+                           IARG_THREAD_ID,
+                           IARG_UINT32, inscount,
+                           IARG_UINT32, UINT32(Sift::CacheOnlyMemWrite),
+                           IARG_ADDRINT, INS_Address(ins),
+                           IARG_UINT32, UINT32(idx),
+                           IARG_END);
+                     inscount = 0;
+                  }
+               }
+               INS_InsertCall(ins, ipoint,
+                     AFUNPTR(cacheOnlyConsumeAddresses),
+                     IARG_THREAD_ID,
+                     IARG_END);
+            }
+            if (INS_IsBranch(ins) && INS_HasFallThrough(ins))
+            {
+               INS_InsertCall(ins, IPOINT_TAKEN_BRANCH,
+                  AFUNPTR(sendCacheOnly),
+                  IARG_THREAD_ID,
+                  IARG_UINT32, inscount,
+                  IARG_UINT32, UINT32(Sift::CacheOnlyBranchTaken),
+                  IARG_ADDRINT, INS_Address(ins),
+                  IARG_BRANCH_TARGET_ADDR,
+                  IARG_END);
+               INS_InsertCall(ins, IPOINT_AFTER,
+                  AFUNPTR(sendCacheOnly),
+                  IARG_THREAD_ID,
+                  IARG_UINT32, inscount,
+                  IARG_UINT32, Sift::CacheOnlyBranchNotTaken,
+                  IARG_ADDRINT, INS_Address(ins),
+                  IARG_FALLTHROUGH_ADDR,
+                  IARG_END);
+               inscount = 0;
+            }
+
+            if (ins == BBL_InsTail(bbl))
+            {
+               if (inscount)
+                  INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(cacheOnlyUpdateInsCount), IARG_THREAD_ID, IARG_UINT32, inscount, IARG_END);
+               break;
+            }
          }
       }
    }

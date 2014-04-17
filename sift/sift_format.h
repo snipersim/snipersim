@@ -104,6 +104,7 @@ namespace Sift
       RecOtherFork,
       RecOtherForkResponse,
       RecOtherInstructionCount,
+      RecOtherCacheOnly,
       RecOtherEnd = 0xff,
    } RecOtherType;
 
@@ -154,6 +155,14 @@ namespace Sift
       ModeDetailed,
       ModeStop
    } Mode;
+
+   typedef enum {
+      CacheOnlyBranchTaken,
+      CacheOnlyBranchNotTaken,
+      CacheOnlyMemRead,
+      CacheOnlyMemWrite,
+      CacheOnlyMemIcache,
+   } CacheOnlyType;
 
    // Determine record type based on first uint8_t
    inline bool IsInstructionSimple(uint8_t byte) { return byte > 0; }

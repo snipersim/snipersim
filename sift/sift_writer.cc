@@ -294,6 +294,37 @@ Sift::Mode Sift::Writer::InstructionCount(uint32_t icount)
    return mode;
 }
 
+void Sift::Writer::CacheOnly(uint8_t icount, CacheOnlyType type, uint64_t eip, uint64_t address)
+{
+   #if VERBOSE > 1
+   std::cerr << "[DEBUG:" << m_id << "] Write CacheOnly" << std::endl;
+   #endif
+
+   send_va2pa(eip);
+   send_va2pa(address);
+
+   uint8_t _type = type;
+
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherCacheOnly;
+   rec.Other.size = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint64_t) + sizeof(uint64_t);
+
+   #if VERBOSE_HEX > 1
+   hexdump((char*)&rec, sizeof(rec.Other));
+   hexdump((char*)&icount, sizeof(icount));
+   hexdump((char*)&_type, sizeof(_type));
+   hexdump((char*)&eip, sizeof(eip));
+   hexdump((char*)&address, sizeof(address));
+   #endif
+
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<char*>(&icount), sizeof(uint8_t));
+   output->write(reinterpret_cast<char*>(&_type), sizeof(uint8_t));
+   output->write(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
+   output->write(reinterpret_cast<char*>(&address), sizeof(uint64_t));
+}
+
 void Sift::Writer::Output(uint8_t fd, const char *data, uint32_t size)
 {
    #if VERBOSE > 1
