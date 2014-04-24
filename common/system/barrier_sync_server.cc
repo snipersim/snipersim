@@ -59,7 +59,11 @@ BarrierSyncServer::synchronize(core_id_t core_id, SubsecondTime time)
       return;
 
    Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
-   core_id_t master_core_id = m_core_group[core_id] == INVALID_CORE_ID ? core_id : m_core_group[core_id];
+   core_id_t master_core_id;
+   if (m_fastforward)
+      master_core_id = core_id;  // In fast-forward, the SMT performance model in not active so every core (HW context) calls into the barrier
+   else
+      master_core_id = m_core_group[core_id] == INVALID_CORE_ID ? core_id : m_core_group[core_id];
    Core *master_core = Sim()->getCoreManager()->getCoreFromID(core_id);
    thread_id_t thread_me = core->getThread()->getId();
 
@@ -158,7 +162,7 @@ BarrierSyncServer::isCoreRunning(core_id_t core_id, bool siblings)
    }
 
 
-   if (siblings)
+   if (siblings && !m_fastforward)
    {
       for (core_id_t sibling_core_id = 0; sibling_core_id < (core_id_t) Sim()->getConfig()->getApplicationCores(); sibling_core_id++)
       {
@@ -188,10 +192,6 @@ BarrierSyncServer::isBarrierReached()
    // All least one core must have (sync_time > m_next_barrier_time)
    for (core_id_t core_id = 0; core_id < (core_id_t) Sim()->getConfig()->getApplicationCores(); core_id++)
    {
-      // Only consider group masters
-      if (m_core_group[core_id] != INVALID_CORE_ID)
-         continue;
-
       // In fastforward mode, it's enough that a core is waiting. In detailed mode, it needs to have advanced up to the predefined barrier time
       if (m_fastforward)
       {
@@ -205,6 +205,11 @@ BarrierSyncServer::isBarrierReached()
             // Core is running but hasn't checked in yet. Wait for it to sync.
             return false;
          }
+      }
+      else if (m_core_group[core_id] != INVALID_CORE_ID)
+      {
+         // Only consider group masters
+         continue;
       }
       else if (isCoreRunning(core_id))
       {
