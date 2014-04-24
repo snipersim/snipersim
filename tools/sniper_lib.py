@@ -229,6 +229,29 @@ def scale_sci(value):
     return (s * value, ' kMGTPE'[i])
 
 
+#
+# The first few fields of the stat line should be:
+#
+#  pid   %d (1) The process ID
+#  comm  %s (2) Filename of executable, in parentheses
+#  state %c (3) State
+#  ppid  %d (4) ppid --- the value we want to return.
+def parse_stat_line_for_ppid(stat):
+  # Split string into two halves: the part before the
+  # comm, which should end with a ')', and the part after.
+  stat_string = stat.split(')')
+
+  if (len(stat_string) >= 1):
+     # Now split every after comm into tokens by white space.
+     stat_tokens = stat_string[1].split()
+     if (len(stat_tokens) >= 2):
+       ppid_string = stat_tokens[1]
+       try:
+          return int(ppid_string)
+       except ValueError:
+          pass
+  raise ValueError("Unable to parse stat line %s" % stat)
+
 def find_children(pid):
   # build list of all children per ppid
   children = {}
@@ -241,7 +264,7 @@ def find_children(pid):
       stat = file('/proc/%u/stat' % _pid).read()
     except IOError:
       continue # pid already gone
-    ppid = int(stat.split()[3])
+    ppid = parse_stat_line_for_ppid(stat)
     if ppid not in children:
       children[ppid] = []
     children[ppid].append(_pid)
