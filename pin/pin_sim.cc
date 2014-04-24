@@ -449,8 +449,11 @@ int main(int argc, char *argv[])
    PIN_AddThreadStartFunction (threadStartCallback, 0);
    PIN_AddThreadFiniFunction (threadFiniCallback, 0);
 
-   PIN_AddSyscallEntryFunction(lite::syscallEnterRunModel, 0);
-   PIN_AddSyscallExitFunction(lite::syscallExitRunModel, 0);
+   if (Sim()->getConfig()->getEnableSyscallEmulation())
+   {
+      PIN_AddSyscallEntryFunction(lite::syscallEnterRunModel, 0);
+      PIN_AddSyscallExitFunction(lite::syscallExitRunModel, 0);
+   }
    bool enable_signals = cfg->getBool("general/enable_signals");
    if (!enable_signals) {
       PIN_InterceptSignal(SIGILL, lite::interceptSignal, NULL);
@@ -489,22 +492,21 @@ int main(int argc, char *argv[])
 // PIN_SpawnInternalThread doesn't schedule its threads until after PIN_StartProgram
 //   Transport::getSingleton()->barrier();
 
+#ifdef PINPLAY_SUPPORTED
+   if (Sim()->getConfig()->getEnablePinPlay())
+   {
+      pinplay_engine.Activate(argc, argv, false /*logger*/, true /*replayer*/);
+      LOG_ASSERT_ERROR(Sim()->getConfig()->getEnableSyscallEmulation() == false,
+                       "System call emulation must be disabled when using PinPlay.");
+   }
+#else
+   LOG_ASSERT_ERROR(Sim()->getConfig()->getEnablePinPlay() == false,
+                    "PinPlay support not compiled in. Please use a compatible pin kit when compiling.");
+#endif
+
    // config::Config shouldn't be called outside of init/fini
    // With Sim()->hideCfg(), we let Simulator know to complain when someone does call Sim()->getCfg()
    Sim()->hideCfg();
-
-   bool pinplay_enabled = cfg->getBool("general/enable_pinplay");
-#ifdef PINPLAY_SUPPORTED
-   if (pinplay_enabled)
-   {
-      pinplay_engine.Activate(argc, argv, false /*logger*/, true /*replayer*/);
-   }
-#else
-   if (pinplay_enabled)
-   {
-      LOG_PRINT_ERROR("PinPlay support not compiled in. Please use a compatible pin kit when compiling.");
-   }
-#endif
 
    // Never returns
    LOG_PRINT("Running program...");

@@ -32,6 +32,8 @@ CacheEfficiencyTracker::Callbacks Config::m_cache_efficiency_callbacks;
 bool Config::m_suppress_stdout;
 bool Config::m_suppress_stderr;
 bool Config::m_circular_log_enabled;
+bool Config::m_knob_enable_pinplay;
+bool Config::m_knob_enable_syscall_emulation;
 
 Config *Config::m_singleton;
 
@@ -87,6 +89,9 @@ Config::Config(SimulationMode mode)
    m_suppress_stderr = Sim()->getCfg()->getBool("general/suppress_stderr");
 
    m_circular_log_enabled = Sim()->getCfg()->getBool("log/circular_log");
+
+   m_knob_enable_pinplay = Sim()->getCfg()->getBool("general/enable_pinplay");
+   m_knob_enable_syscall_emulation = !m_knob_enable_pinplay && Sim()->getCfg()->getBool("general/enable_syscall_emulation");
 
    m_knob_clock_skew_minimization_scheme = ClockSkewMinimizationObject::parseScheme(Sim()->getCfg()->getString("clock_skew_minimization/scheme"));
 

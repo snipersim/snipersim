@@ -169,25 +169,41 @@ VOID InstructionModeling::addInstructionModeling(TRACE trace, INS ins, InstMode:
    // Simics-style magic instruction: xchg bx, bx
    if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
    {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX,
-         #ifdef TARGET_IA32
-            IARG_REG_VALUE, REG_GDX,
-         #else
-            IARG_REG_VALUE, REG_GBX,
-         #endif
-         IARG_REG_VALUE, REG_GCX, IARG_RETURN_REGS, REG_GAX, IARG_END);
-      // Stop the trace after MAGIC (Redmine #118), which has potentially changed the instrumentation mode,
-      // so execution can resume in the correct instrumentation version
-      INS_InsertDirectJump(ins, IPOINT_AFTER, INS_Address(ins) + INS_Size(ins));
+      if (Sim()->getConfig()->getEnableSyscallEmulation())
+      {
+         INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX,
+            #ifdef TARGET_IA32
+               IARG_REG_VALUE, REG_GDX,
+            #else
+               IARG_REG_VALUE, REG_GBX,
+            #endif
+            IARG_REG_VALUE, REG_GCX, IARG_RETURN_REGS, REG_GAX, IARG_END);
+         // Stop the trace after MAGIC (Redmine #118), which has potentially changed the instrumentation mode,
+         // so execution can resume in the correct instrumentation version
+         INS_InsertDirectJump(ins, IPOINT_AFTER, INS_Address(ins) + INS_Size(ins));
+      }
+      else
+      {
+         INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX,
+            #ifdef TARGET_IA32
+               IARG_REG_VALUE, REG_GDX,
+            #else
+               IARG_REG_VALUE, REG_GBX,
+            #endif
+            IARG_REG_VALUE, REG_GCX, IARG_END);
+      }
    }
 
-   if (INS_IsRDTSC(ins))
-      INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
-
-   if (INS_Opcode(ins) == XED_ICLASS_CPUID)
+   if (Sim()->getConfig()->getEnableSyscallEmulation())
    {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleCpuid, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GBX, IARG_REG_REFERENCE, REG_GCX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
-      INS_Delete(ins);
+      if (INS_IsRDTSC(ins))
+         INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+
+      if (INS_Opcode(ins) == XED_ICLASS_CPUID)
+      {
+         INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleCpuid, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GBX, IARG_REG_REFERENCE, REG_GCX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+         INS_Delete(ins);
+      }
    }
 
    if (INS_Opcode(ins) == XED_ICLASS_PAUSE)
@@ -234,7 +250,7 @@ VOID InstructionModeling::addInstructionModeling(TRACE trace, INS ins, InstMode:
          IARG_END);
    }
 
-   if (INS_IsSyscall(ins))
+   if (INS_IsSyscall(ins) && Sim()->getConfig()->getEnableSyscallEmulation())
    {
       INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
             AFUNPTR(lite::handleSyscall),

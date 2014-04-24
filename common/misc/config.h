@@ -86,6 +86,8 @@ public:
    bool getEnableSpinLoopDetection() const { return m_knob_enable_spinloopdetection; }
    bool suppressStdout() const { return m_suppress_stdout; }
    bool suppressStderr() const { return m_suppress_stderr; }
+   bool getEnablePinPlay() const { return m_knob_enable_pinplay; }
+   bool getEnableSyscallEmulation() const { return m_knob_enable_syscall_emulation; }
 
    bool getBBVsEnabled() const { return m_knob_bbvs; }
    void setBBVsEnabled(bool enable) { m_knob_bbvs = enable; }
@@ -134,6 +136,8 @@ private:
    static bool m_suppress_stdout;
    static bool m_suppress_stderr;
    static bool m_circular_log_enabled;
+   static bool m_knob_enable_pinplay;
+   static bool m_knob_enable_syscall_emulation;
 
    static CacheEfficiencyTracker::Callbacks m_cache_efficiency_callbacks;
 
