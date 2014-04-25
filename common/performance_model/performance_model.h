@@ -70,11 +70,18 @@ public:
    bool isFastForward() { return m_fastforward; }
    void setFastForward(bool fastforward, bool detailed_sync = true)
    {
+      if (m_fastforward == fastforward)
+         return;
       m_fastforward = fastforward;
       m_detailed_sync = detailed_sync;
       // Fastforward performance model has controlled time for a while, now let the detailed model know time has advanced
       if (fastforward == false)
+      {
+         enableDetailedModel();
          notifyElapsedTimeUpdate();
+      }
+      else
+         disableDetailedModel();
    }
 
 protected:
@@ -105,6 +112,9 @@ private:
    // When time is jumped ahead outside of control of the performance model (synchronization instructions, etc.)
    // notify it here. This may be used to synchronize internal time or to flush various instruction queues
    virtual void notifyElapsedTimeUpdate() {}
+   // Called when the detailed model is enabled/disabled. Used to release threads from the SMT barrier.
+   virtual void enableDetailedModel() {}
+   virtual void disableDetailedModel() {}
 
    Core* m_core;
 

@@ -99,11 +99,15 @@ PerformanceModel::~PerformanceModel()
 
 void PerformanceModel::enable()
 {
+   if (!m_enabled)
+      enableDetailedModel();
    m_enabled = true;
 }
 
 void PerformanceModel::disable()
 {
+   if (m_enabled)
+      disableDetailedModel();
    m_enabled = false;
 }
 
