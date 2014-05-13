@@ -55,6 +55,13 @@ public:
    static const SubsecondTime Zero() { return SubsecondTime(); }
    static const SubsecondTime MaxTime() { return SubsecondTime(0xffffffffffffffffULL); }
 
+   static const SubsecondTime FSfromFloat(float fs)        { return fs * SubsecondTime(FS_1); }
+   static const SubsecondTime PSfromFloat(float ps)        { return ps * SubsecondTime(PS_1); }
+   static const SubsecondTime NSfromFloat(float ns)        { return ns * SubsecondTime(NS_1); }
+   static const SubsecondTime USfromFloat(float us)        { return us * SubsecondTime(US_1); }
+   static const SubsecondTime MSfromFloat(float ms)        { return ms * SubsecondTime(MS_1); }
+   static const SubsecondTime SECfromFloat(float sec)      { return sec * SubsecondTime(SEC_1); }
+
    // Public constructors
    SubsecondTime()
       : m_time(0)
@@ -164,6 +171,12 @@ public:
    {
       SubsecondTime new_time;
       new_time.m_time = this->m_time * rhs.m_time;
+      return new_time;
+   }
+   inline SubsecondTime operator*(float rhs)
+   {
+      SubsecondTime new_time;
+      new_time.m_time = this->m_time * rhs;
       return new_time;
    }
    inline SubsecondTime operator/(const SubsecondTime& rhs)
