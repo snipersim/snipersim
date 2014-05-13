@@ -21,9 +21,17 @@ class StatTrace:
       return
     self.stat_name = stat
     stat_component, stat_name = stat.rsplit('.', 1)
-    try:
-      sim.stats.get(stat_component, 0, stat_name)
-    except ValueError:
+
+    valid = False
+    for core in range(sim.config.ncores):
+      try:
+        sim.stats.get(stat_component, core, stat_name)
+      except ValueError:
+        continue
+      else:
+        valid = True
+        break
+    if not valid:
       print 'Stat %s[*].%s not found' % (stat_component, stat_name)
       return
 
@@ -36,9 +44,9 @@ class StatTrace:
 
     self.sd = sim.util.StatsDelta()
     self.stats = {
-      'time': [ self.sd.getter('performance_model', core, 'elapsed_time') for core in range(sim.config.ncores) ],
-      'ffwd_time': [ self.sd.getter('fastforward_performance_model', core, 'fastforwarded_time') for core in range(sim.config.ncores) ],
-      'stat': [ self.sd.getter(stat_component, core, stat_name) for core in range(sim.config.ncores) ],
+      'time': [ self.getStatsGetter('performance_model', core, 'elapsed_time') for core in range(sim.config.ncores) ],
+      'ffwd_time': [ self.getStatsGetter('fastforward_performance_model', core, 'fastforwarded_time') for core in range(sim.config.ncores) ],
+      'stat': [ self.getStatsGetter(stat_component, core, stat_name) for core in range(sim.config.ncores) ],
     }
     sim.util.Every(interval_ns * sim.util.Time.NS, self.periodic, statsdelta = self.sd, roi_only = True)
 
@@ -53,5 +61,15 @@ class StatTrace:
       self.fd.write(' %.3f' % value)
     self.fd.write('\n')
 
+  def getStatsGetter(self, component, core, metric):
+    # Some components don't exist (i.e. DRAM reads on cores that don't have a DRAM controller),
+    # return a special object that always returns 0 in these cases
+    try:
+      return self.sd.getter(component, core, metric)
+    except:
+      class Zero():
+        def __init__(self): self.delta = 0
+        def update(self): pass
+      return Zero()
 
 sim.util.register(StatTrace())
