@@ -264,6 +264,8 @@ VOID traceCallback(TRACE trace, void *v)
             IARG_END);
       }
 
+      UINT32 icount = 0;
+
       for(INS ins = BBL_InsHead(bbl); ; ins = INS_Next(ins))
       {
          // Instruction modelling
@@ -274,13 +276,15 @@ VOID traceCallback(TRACE trace, void *v)
             Instruction *inst = InstructionModeling::decodeInstruction(ins);
             INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleInstruction), IARG_THREAD_ID, IARG_PTR, inst, IARG_END);
          }
+         ++icount;
 
-         if (ins == BBL_InsTail(bbl))
+         if (ins == BBL_InsTail(bbl) || icount >= 32 || INS_HasRealRep(ins))
          {
             if (INS_HasFallThrough(ins))
                INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_AFTER, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_END);
             if (INS_IsBranch(ins))
                INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_TAKEN_BRANCH, AFUNPTR(InstructionModeling::handleBasicBlock), IARG_THREAD_ID, IARG_END);
+            icount = 0;
          }
 
          if (ins == BBL_InsTail(bbl))
