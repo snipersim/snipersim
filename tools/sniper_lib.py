@@ -239,7 +239,7 @@ def scale_sci(value):
 def parse_stat_line_for_ppid(stat):
   # Split string into two halves: the part before the
   # comm, which should end with a ')', and the part after.
-  stat_string = stat.split(')')
+  stat_string = stat.rsplit(')',1)
 
   if (len(stat_string) >= 1):
      # Now split every after comm into tokens by white space.
