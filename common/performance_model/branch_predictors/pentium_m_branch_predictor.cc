@@ -22,6 +22,7 @@ bool PentiumMBranchPredictor::predict(IntPtr ip, IntPtr target)
    bool bimodal_out = m_bimodal_table.predict(ip, target);
 
    m_last_gp_hit = global_pred_out.hit;
+   m_last_bm_pred = bimodal_out;
    m_last_lpb_hit = lpb_out.hit & btb_out.hit;
 
    // Outcome prediction logic
@@ -51,7 +52,15 @@ void PentiumMBranchPredictor::update(bool predicted, bool actual, IntPtr ip, Int
    m_lpb.update(predicted, actual, ip, target);
    if (!m_last_gp_hit && !m_last_lpb_hit) // Update bimodal predictor only when global and loop predictors missed
       m_bimodal_table.update(predicted, actual, ip, target);
-   if (predicted != actual) // Update global predictor only when other predictors were wrong
+   bool lpb_or_bm_hit = m_last_lpb_hit || m_last_bm_pred == actual; // Global should only allocate when no loop predictor hit and bimodal was wrong
+   if (m_last_gp_hit)
+   {
+      if (predicted != actual && lpb_or_bm_hit) // Evict from global when mispredict and loop or bimodal hit
+         m_global_predictor.evict(ip, m_pir);
+      else
+         m_global_predictor.update(predicted, actual, ip, target, m_pir);
+   }
+   else if (predicted != actual && (m_last_gp_hit || !lpb_or_bm_hit)) // Update on mispredict, but don't allocate when loop or bimodal hit
       m_global_predictor.update(predicted, actual, ip, target, m_pir);
    // TODO FIXME: Properly propagate the branch type information from the decoder (IndirectBranch information)
    update_pir(actual, ip, target, BranchPredictorReturnValue::ConditionalBranch);

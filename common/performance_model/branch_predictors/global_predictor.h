@@ -98,7 +98,23 @@ public:
       // Here, we miss with the tag, so reset instead of updating
       m_ways[lru_way].m_predictors[index].reset(actual);
       m_ways[lru_way].m_lru[index] = m_lru_use_count++;
+   }
 
+   void evict(IntPtr ip, IntPtr pir)
+   {
+      UInt32 index, tag;
+
+      gen_index_tag(ip, pir, index, tag);
+
+      for (unsigned int w = 0 ; w < m_num_ways ; ++w )
+      {
+         if (m_ways[w].m_valid[index] && m_ways[w].m_tags[index] == tag)
+         {
+            m_ways[w].m_valid[index] = false;
+            return;
+         }
+      }
+      return;
    }
 
 private:

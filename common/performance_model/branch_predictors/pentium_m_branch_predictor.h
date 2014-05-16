@@ -33,6 +33,7 @@ private:
    IntPtr m_pir;
 
    bool m_last_gp_hit;
+   bool m_last_bm_pred;
    bool m_last_lpb_hit;
 
 };
