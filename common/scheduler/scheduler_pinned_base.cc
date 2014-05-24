@@ -102,20 +102,16 @@ bool SchedulerPinnedBase::threadSetAffinity(thread_id_t calling_thread_id, threa
    else
    {
       m_thread_info[thread_id].clearAffinity();
-      bool any = false;
 
       for(unsigned int cpu = 0; cpu < 8 * cpusetsize; ++cpu)
       {
          if (CPU_ISSET_S(cpu, cpusetsize, mask))
          {
             LOG_ASSERT_ERROR(cpu < Sim()->getConfig()->getApplicationCores(), "Invalid core %d found in sched_setaffinity() mask", cpu);
-            any = true;
 
             m_thread_info[thread_id].addAffinity(cpu);
          }
       }
-
-      //LOG_ASSERT_ERROR(any, "No valid core found in sched_setaffinity() mask");
    }
 
    // We're setting the affinity of a thread that isn't yet created. Do nothing else for now.

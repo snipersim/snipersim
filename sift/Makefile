@@ -22,7 +22,7 @@ include ../common/Makefile.common
 
 XED_HOME=$(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)
 
-CXXFLAGS=$(OPT_CFLAGS) -fPIC -std=c++0x -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
+CXXFLAGS+=-fPIC -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
 
 %.o : %.cc $(wildcard *.h) Makefile
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))

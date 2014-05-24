@@ -398,6 +398,12 @@ int32_t Sift::Writer::NewThread()
    return -1;
 }
 
+template<typename T>
+static T force_read(volatile T *addr)
+{
+    return *addr;
+}
+
 uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32_t size)
 {
    #if VERBOSE > 0
@@ -412,14 +418,14 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    {
       case SYS_futex:
       {
-         int value = *(int *)args[0];
+         force_read(reinterpret_cast<int*>(args[0]));
          send_va2pa(args[0]);
          break;
       }
 
       case SYS_write:
       {
-         int value = *(int *)args[1];
+         force_read(reinterpret_cast<int*>(args[1]));
          send_va2pa(args[1]);
          break;
       }

@@ -31,14 +31,14 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , handleSyscallArg(NULL)
    , handleNewThreadFunc(NULL)
    , handleNewThreadArg(NULL)
+   , handleForkFunc(NULL)
+   , handleForkArg(NULL)
    , handleJoinFunc(NULL)
    , handleJoinArg(NULL)
    , handleMagicFunc(NULL)
    , handleMagicArg(NULL)
    , handleEmuFunc(NULL)
    , handleEmuArg(NULL)
-   , handleForkFunc(NULL)
-   , handleForkArg(NULL)
    , handleRoutineChangeFunc(NULL)
    , handleRoutineAnnounceFunc(NULL)
    , handleRoutineArg(NULL)
@@ -53,7 +53,9 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    if (!xed_initialized)
    {
       xed_tables_init();
+      #if PIN_REV < 65163
       xed_decode_init();
+      #endif
       xed_initialized = true;
    }
 
@@ -189,7 +191,6 @@ bool Sift::Reader::Read(Instruction &inst)
                while (size_left > 0)
                {
                   uint64_t base_addr = address & ICACHE_PAGE_MASK;
-                  uint8_t *icache_page;
                   if (icache.count(base_addr) == 0)
                      icache[base_addr] = new uint8_t[ICACHE_SIZE];
                   uint64_t offset = address & ICACHE_OFFSET_MASK;
@@ -496,6 +497,10 @@ bool Sift::Reader::Read(Instruction &inst)
 
       return true;
    }
+
+   // We should not return false (no more instructions) unless we get the End packet.
+   // Return true in case we get to this point (which we shouldn't).
+   return true;
 }
 
 void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size)
