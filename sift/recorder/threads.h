@@ -10,7 +10,7 @@
 
 typedef struct {
    Sift::Writer *output;
-   ADDRINT dyn_addresses[Sift::MAX_DYNAMIC_ADDRESSES];
+   UINT64 dyn_addresses[Sift::MAX_DYNAMIC_ADDRESSES];
    UINT32 num_dyn_addresses;
    Bbv *bbv;
    UINT64 thread_num;
