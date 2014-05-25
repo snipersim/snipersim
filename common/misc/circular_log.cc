@@ -72,7 +72,7 @@ void CircularLog::writeLog()
    UInt64 head = m_eventnum % BUFFER_SIZE;
    if (head != m_eventnum)
    {
-      fprintf(fp, "... %ld prior events ...\n", m_eventnum - BUFFER_SIZE);
+      fprintf(fp, "... %" PRIu64 " prior events ...\n", m_eventnum - BUFFER_SIZE);
       for(UInt64 idx = head; idx < BUFFER_SIZE; ++idx)
          writeEntry(fp, idx);
    }
