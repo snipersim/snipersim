@@ -4,6 +4,7 @@
 #include "threads.h"
 
 #include <iostream>
+#include <unistd.h>
 #include <syscall.h>
 
 void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::MemoryOpType mem_op, uint64_t d_addr, uint8_t* data_buffer, uint32_t data_size)
