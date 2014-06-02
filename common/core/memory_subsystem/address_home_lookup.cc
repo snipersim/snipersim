@@ -5,6 +5,7 @@ AddressHomeLookup::AddressHomeLookup(UInt32 ahl_param,
       std::vector<core_id_t>& core_list,
       UInt32 cache_block_size):
    m_ahl_param(ahl_param),
+   m_ahl_mask((UInt64(1) << ahl_param) - 1),
    m_core_list(core_list),
    m_cache_block_size(cache_block_size)
 {
@@ -34,7 +35,12 @@ core_id_t AddressHomeLookup::getHome(IntPtr address) const
    return (m_core_list[module_num]);
 }
 
-IntPtr AddressHomeLookup::getTag(IntPtr address) const
+IntPtr AddressHomeLookup::getLinearBlock(IntPtr address) const
 {
    return (address >> m_ahl_param) / m_total_modules;
+}
+
+IntPtr AddressHomeLookup::getLinearAddress(IntPtr address) const
+{
+   return (getLinearBlock(address) << m_ahl_param) | (address & m_ahl_mask);
 }

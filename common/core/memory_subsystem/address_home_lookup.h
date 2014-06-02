@@ -27,11 +27,14 @@ class AddressHomeLookup
       ~AddressHomeLookup();
       // Return home node for a given address
       core_id_t getHome(IntPtr address) const;
-      // Within home node, return unique, incrementing tag to be used in cache set selection
-      IntPtr getTag(IntPtr address) const;
+      // Within home node, return unique, incrementing block number
+      IntPtr getLinearBlock(IntPtr address) const;
+      // Within home node, return unique, incrementing address to be used in cache set selection
+      IntPtr getLinearAddress(IntPtr address) const;
 
    private:
       UInt32 m_ahl_param;
+      UInt64 m_ahl_mask;
       std::vector<core_id_t> m_core_list;
       UInt32 m_total_modules;
       UInt32 m_cache_block_size;
