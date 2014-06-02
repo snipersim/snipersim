@@ -40,10 +40,10 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    {
       openFile(threadid);
 
-      Sift::EmuRequest req;
-      Sift::EmuReply res;
-      req.setthreadinfo.tid = syscall(__NR_gettid);
-      thread_data[threadid].output->Emulate(Sift::EmuTypeSetThreadInfo, req, res);
+      // We should send a EmuTypeSetThreadInfo, but not now as we hold the Pin VM lock:
+      // Sending EmuTypeSetThreadInfo requires the response channel to be opened,
+      // which is done by TraceThread but not any time soon if we aren't scheduled on a core.
+      thread_data[threadid].should_send_threadinfo = true;
    }
 
    thread_data[threadid].running = true;

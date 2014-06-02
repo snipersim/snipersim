@@ -41,6 +41,17 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
 // Do this as a regular callback (versus syscall enter/exit functions) as those hold the global pin lock
 VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 {
+   // If we haven't set our tid yet, do this now
+   if (thread_data[threadid].should_send_threadinfo)
+   {
+      thread_data[threadid].should_send_threadinfo = false;
+
+      Sift::EmuRequest req;
+      Sift::EmuReply res;
+      req.setthreadinfo.tid = syscall(__NR_gettid);
+      thread_data[threadid].output->Emulate(Sift::EmuTypeSetThreadInfo, req, res);
+   }
+
    ADDRINT syscall_number = PIN_GetContextReg(ctxt, REG_GAX);
    sift_assert(syscall_number < MAX_NUM_SYSCALLS);
 
@@ -93,8 +104,6 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          {
             if (args[0] & CLONE_THREAD)
             {
-               /* New thread */
-               thread_data[threadid].output->NewThread();
                // Store the thread's tid ptr for later use
                #if defined(TARGET_IA32)
                   ADDRINT tidptr = args[2];
@@ -104,6 +113,8 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
                PIN_GetLock(&new_threadid_lock, threadid);
                tidptrs.push_back(tidptr);
                PIN_ReleaseLock(&new_threadid_lock);
+               /* New thread */
+               thread_data[threadid].output->NewThread();
             }
             else
             {
