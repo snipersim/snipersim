@@ -199,9 +199,35 @@ static void routineCallback(RTN rtn, void* v)
    }
 }
 
+// PinPlay w/ address translation: Translate IARG_MEMORYOP_EA to actual address
+ADDRINT translateAddress(ADDRINT addr, ADDRINT size)
+{
+   MEMORY_ADDR_TRANS_CALLBACK memory_trans_callback = 0;
+
+   // Get memory translation callback if exists
+   memory_trans_callback = PIN_GetMemoryAddressTransFunction();
+
+   // Check if we have a callback
+   if (memory_trans_callback != 0)
+   {
+       // Prepare callback structure
+       PIN_MEM_TRANS_INFO mem_trans_info;
+       mem_trans_info.addr = addr;
+       mem_trans_info.bytes = size;
+       mem_trans_info.ip = 0; //ip;
+       mem_trans_info.memOpType = PIN_MEMOP_LOAD;
+       mem_trans_info.threadIndex = 0; //threadid;
+
+       // Get translated address from callback directly
+       addr = memory_trans_callback(&mem_trans_info, 0);
+   }
+
+   return addr;
+}
+
 static void getCode(uint8_t *dst, const uint8_t *src, uint32_t size)
 {
-   PIN_SafeCopy(dst, src, size);
+   PIN_SafeCopy(dst, (void*)translateAddress(ADDRINT(src), size), size);
 }
 
 void openFile(THREADID threadid)

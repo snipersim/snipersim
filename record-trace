@@ -32,6 +32,7 @@ use_follow = False
 use_pa = False
 use_routine_tracing = False
 pinball = None
+pinplay_addrtrans = False
 outputdir = '.'
 verbose = False
 extra_args = []
@@ -40,7 +41,7 @@ if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -80,6 +81,8 @@ for o, a in opts:
     gdb_quit = True
   if o == '--gdb-screen':
     gdb_screen = 1
+  if o == '--pinplay-addr-trans':
+    pinplay_addrtrans = True
   if o == '--follow':
     use_follow = True
   if o == '--pa':
@@ -130,8 +133,11 @@ if use_follow:
   pinoptions += ' -follow_execv'
 pinballoptions = ''
 if pinball:
-  pinoptions += ' -xyzzy -reserve_memory "%s.address"' % pinball
   pinballoptions += '-replay -replay:basename "%s" -pinplay:msgfile "%s" -replay:resultfile "%s"' % (pinball, os.path.join(outputdir,'pinball_replay.app%d' % siftcountoffset), os.path.join(outputdir,'pinball_result.app%d' % siftcountoffset))
+  if pinplay_addrtrans:
+    pinballoptions += " -replay:addr_trans"
+  else:
+    pinoptions += ' -xyzzy -reserve_memory "%s.address"' % pinball
   # Replace the command line with the null app for use with PinPlay
   cmdline = ['%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()]
 

@@ -11,6 +11,8 @@ void endROI(THREADID threadid);
 
 ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx);
 
+ADDRINT translateAddress(ADDRINT addr, ADDRINT size);
+
 void openFile(THREADID threadid);
 void closeFile(THREADID threadid);
 

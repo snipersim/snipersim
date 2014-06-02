@@ -68,7 +68,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
       {
          // If the instruction hasn't executed yet, access the address to ensure a page fault if the mapping wasn't set up yet
          static char dummy = 0;
-         dummy += *(char *)thread_data[threadid].dyn_addresses[i];
+         dummy += *(char *)translateAddress(thread_data[threadid].dyn_addresses[i], 0);
       }
    }
 
