@@ -1,3 +1,16 @@
+Version 6.0
+  * Add Instruction Window-Centric core model (internal name: ROB core model, use rob.cfg)
+  * Add SMT support (IWC/ROB core model only, use smt*.cfg)
+  * Add SniperLite, a fast cache-only model (use nehalem-lite.cfg)
+  * Add DRAM cache prefetcher
+  * Add support for non-standard SQLite paths through the SQLITE_PATH environment variable
+  * Add sniperdiff.py for easy diff-ing of Sniper results and configurations
+  * Branch predictor accuracy improvements
+  * New roi-icount script to more easily specify fast-forward/warmup/detailed lengths by instruction count
+  * Faster mode for running single-program / single-threaded PinBall (--pinball-non-sift)
+  * Support for newer Pin versions, up to Pin 2.13.65163 / PinPlay 1.3
+  * Numerous bug fixes and improvements
+
 Version 5.3
   * Fast, cache-only one-IPC timing model (-c cacheonly)
   * Add energystats script to provide runtime energy counters
