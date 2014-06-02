@@ -5,6 +5,8 @@
 
 #include <pin.H>
 
+static AFUNPTR ptr_exit = NULL;
+
 static void handleRdtsc(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gdx)
 {
    if (!thread_data[threadid].output)
@@ -119,6 +121,20 @@ ADDRINT emuGettimeofday(THREADID threadid, struct timeval *tv, struct timezone *
    return 0;
 }
 
+void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt)
+{
+   // Hack to make ICC's OpenMP runtime library work.
+   // This runtime creates a monitor thread which blocks in a condition variable with a timeout.
+   // On exit, thread 0 executes __kmp_reap_monitor() which join()s on this monitor thread.
+   // In due time, the timeout occurs and the monitor thread returns
+   // from pthread_cond_timedwait(), sees that it should be exiting, and returns.
+   // However, in simulation the timeout value may be wrong (if gettimeofday isn't properly replaced)
+   // so the timout doesn't reliably occur. Instead, call exit() here to
+   // forcefully terminate the application when the master thread reaches __kmp_reap_monitor().
+   void *res;
+   PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
+}
+
 static void insCallback(INS ins, VOID *v)
 {
    if (INS_IsRDTSC(ins))
@@ -128,6 +144,21 @@ static void insCallback(INS ins, VOID *v)
    {
       INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleCpuid, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GBX, IARG_REG_REFERENCE, REG_GCX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
       INS_Delete(ins);
+   }
+}
+
+static void traceCallback(TRACE trace, VOID *v)
+{
+   RTN rtn = TRACE_Rtn(trace);
+   if (RTN_Valid(rtn) && RTN_Address(rtn) == TRACE_Address(trace))
+   {
+      std::string rtn_name = RTN_Name(rtn);
+
+      // icc/openmp compatibility
+      if (rtn_name == "__kmp_reap_monitor" || rtn_name == "__kmp_internal_end_atexit")
+      {
+         TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR(emuKmpReapMonitor), IARG_THREAD_ID, IARG_CONTEXT, IARG_END);
+      }
    }
 }
 
@@ -147,6 +178,9 @@ static void rtnCallback(RTN rtn, VOID *v)
    else if (rtn_name.find("gettimeofday") != std::string::npos)
       RTN_ReplaceSignature(rtn, AFUNPTR(emuGettimeofday), IARG_THREAD_ID,
                            IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
+
+   // save pointers to functions we'll want to call through PIN_CallApplicationFunction
+   if (rtn_name == "exit")                   ptr_exit = RTN_Funptr(rtn);
 }
 
 void initEmulation()
@@ -154,6 +188,7 @@ void initEmulation()
    if (KnobEmulateSyscalls.Value())
    {
       INS_AddInstrumentFunction(insCallback, 0);
+      TRACE_AddInstrumentFunction(traceCallback, 0);
       RTN_AddInstrumentFunction(rtnCallback, 0);
    }
 }
