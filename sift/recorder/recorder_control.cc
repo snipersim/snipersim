@@ -17,7 +17,7 @@ void beginROI(THREADID threadid)
    if (app_id < 0)
       findMyAppId();
 
-   if (any_thread_in_detail)
+   if (in_roi)
    {
       std::cerr << "[SIFT_RECORDER:" << app_id << "] Error: ROI_START seen, but we have already started." << std::endl;
    }
@@ -27,6 +27,7 @@ void beginROI(THREADID threadid)
          std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
    }
 
+   in_roi = true;
    setInstrumentationMode(Sift::ModeDetailed);
 
    if (KnobEmulateSyscalls.Value())
@@ -67,6 +68,7 @@ void endROI(THREADID threadid)
 
    // Stop threads from sending any more data while we close the SIFT pipes
    setInstrumentationMode(Sift::ModeIcount);
+   in_roi = false;
 
    if (!KnobUseResponseFiles.Value())
    {
@@ -112,12 +114,12 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 
    if (gax == SIM_CMD_ROI_START)
    {
-      if (KnobUseROI.Value() && !any_thread_in_detail)
+      if (KnobUseROI.Value() && !in_roi)
          beginROI(threadid);
    }
    else if (gax == SIM_CMD_ROI_END)
    {
-      if (KnobUseROI.Value() && any_thread_in_detail)
+      if (KnobUseROI.Value() && in_roi)
          endROI(threadid);
    }
 

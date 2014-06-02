@@ -132,6 +132,7 @@ int main(int argc, char **argv)
    }
    if (fast_forward_target == 0 && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
+      in_roi = true;
       setInstrumentationMode(Sift::ModeDetailed);
       openFile(0);
    }

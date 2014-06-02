@@ -22,13 +22,14 @@ VOID countInsns(THREADID threadid, INT32 count)
       }
    }
 
-   if (thread_data[threadid].icount >= fast_forward_target && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
+   if (thread_data[threadid].icount >= fast_forward_target && !in_roi && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
       if (KnobVerbose.Value())
          std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Changing to detailed after " << thread_data[threadid].icount << " instructions" << std::endl;
       if (!thread_data[threadid].output)
          openFile(threadid);
       thread_data[threadid].icount = 0;
+      in_roi = true;
       setInstrumentationMode(Sift::ModeDetailed);
    }
 }
