@@ -95,6 +95,11 @@ void setInstrumentationMode(Sift::Mode mode)
             any_thread_in_detail = true;
             break;
          case Sift::ModeStop:
+            for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+            {
+               if (thread_data[i].output)
+                  closeFile(i);
+            }
             exit(0);
          case Sift::ModeUnknown:
             assert(false);
