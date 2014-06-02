@@ -1,5 +1,6 @@
 #include "core_model_nehalem.h"
 #include "interval_contention_nehalem.h"
+#include "rob_contention_nehalem.h"
 #include "dynamic_micro_op_nehalem.h"
 #include "log.h"
 #include "config.hpp"
@@ -174,6 +175,11 @@ unsigned int CoreModelNehalem::getLongestLatency() const
 IntervalContention* CoreModelNehalem::createIntervalContentionModel(const Core *core) const
 {
    return new IntervalContentionNehalem(core, this);
+}
+
+RobContention* CoreModelNehalem::createRobContentionModel(const Core *core) const
+{
+   return new RobContentionNehalem(core, this);
 }
 
 DynamicMicroOp* CoreModelNehalem::createDynamicMicroOp(Allocator *alloc, const MicroOp *uop, ComponentPeriod period) const

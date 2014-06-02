@@ -8,6 +8,8 @@
 #include "magic_performance_model.h"
 #include "oneipc_performance_model.h"
 #include "interval_performance_model.h"
+#include "rob_performance_model.h"
+#include "rob_smt_performance_model.h"
 #include "core_manager.h"
 #include "config.hpp"
 #include "stats.h"
@@ -37,6 +39,14 @@ PerformanceModel* PerformanceModel::create(Core* core)
       // The interval model needs the branch misprediction penalty
       int mispredict_penalty = Sim()->getCfg()->getIntArray("perf_model/branch_predictor/mispredict_penalty", core->getId());
       return new IntervalPerformanceModel(core, mispredict_penalty);
+   }
+   else if (type == "rob")
+   {
+      uint32_t smt_threads = Sim()->getCfg()->getIntArray("perf_model/core/logical_cpus", core->getId());
+      if (smt_threads == 1)
+         return new RobPerformanceModel(core);
+      else
+         return new RobSmtPerformanceModel(core);
    }
    else
    {

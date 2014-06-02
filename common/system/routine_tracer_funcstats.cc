@@ -111,8 +111,10 @@ RoutineTracerFunctionStats::RtnMaster::RtnMaster()
    ThreadStatNamedStat::registerStat("l2miss", "L2", "load-misses");
    ThreadStatNamedStat::registerStat("l3miss", "L3", "load-misses");
    ThreadStatAggregates::registerStats();
-   ThreadStatNamedStat::registerStat("cpiBase", "interval_timer", "cpiBase");
-   ThreadStatNamedStat::registerStat("cpiBranchPredictor", "interval_timer", "cpiBranchPredictor");
+   if (ThreadStatNamedStat::registerStat("cpiBase", "interval_timer", "cpiBase") == ThreadStatsManager::INVALID)
+      ThreadStatNamedStat::registerStat("cpiBase", "rob_timer", "cpiBase");
+   if (ThreadStatNamedStat::registerStat("cpiBranchPredictor", "interval_timer", "cpiBranchPredictor") == ThreadStatsManager::INVALID)
+      ThreadStatNamedStat::registerStat("cpiBranchPredictor", "rob_timer", "cpiBranchPredictor");
    ThreadStatCpiMem::registerStat();
    Sim()->getConfig()->setCacheEfficiencyCallbacks(__ce_get_owner, NULL, __ce_notify_evict, (UInt64)this);
 }
@@ -356,6 +358,8 @@ RoutineTracerFunctionStats::ThreadStatCpiMem::ThreadStatCpiMem()
          {
             String metricName = "cpiDataCache" + String(HitWhereString((HitWhere::where_t)h));
             StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject("interval_timer", core_id, metricName);
+            if (!m)
+               m = Sim()->getStatsManager()->getMetricObject("rob_timer", core_id, metricName);
             LOG_ASSERT_ERROR(m != NULL, "Invalid statistic %s.%d.%s", "interval_timer", core_id, metricName.c_str());
             m_stats[core_id].push_back(m);
          }

@@ -24,6 +24,8 @@ class CoreModel
 
       virtual IntervalContention* createIntervalContentionModel(const Core *core) const = 0;
       virtual unsigned int getLongLatencyCutoff() const = 0;
+      // Build a RobContention model for this core type
+      virtual RobContention* createRobContentionModel(const Core *core) const = 0;
 
       // Return an Allocator for my type of DynamicMicroOp
       virtual Allocator* createDMOAllocator() const = 0;

@@ -13,6 +13,8 @@ class CoreModelNehalem : public BaseCoreModel<DynamicMicroOpNehalem>
       CoreModelNehalem();
 
       virtual IntervalContention* createIntervalContentionModel(const Core *core) const;
+      virtual RobContention* createRobContentionModel(const Core *core) const;
+
       virtual DynamicMicroOp* createDynamicMicroOp(Allocator *alloc, const MicroOp *uop, ComponentPeriod period) const;
 
       virtual unsigned int getInstructionLatency(const MicroOp *uop) const;
