@@ -1,4 +1,5 @@
 #include "emulation.h"
+#include "recorder_control.h"
 #include "sift_assert.h"
 #include "globals.h"
 #include "threads.h"
@@ -131,6 +132,14 @@ void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt)
    // However, in simulation the timeout value may be wrong (if gettimeofday isn't properly replaced)
    // so the timout doesn't reliably occur. Instead, call exit() here to
    // forcefully terminate the application when the master thread reaches __kmp_reap_monitor().
+   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   {
+      if (thread_data[i].output)
+      {
+         closeFile(i);
+      }
+   }
+
    void *res;
    PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
 }
