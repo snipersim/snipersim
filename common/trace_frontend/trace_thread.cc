@@ -106,7 +106,7 @@ UInt64 TraceThread::va2pa(UInt64 va, bool *noMapping)
          if (noMapping)
             *noMapping = true;
          else
-            LOG_PRINT_ERROR("No mapping found for logical address %lx", va);
+            LOG_PRINT_WARNING("No mapping found for logical address %lx", va);
          // Fall through to construct an address with our thread id in the upper bits (assume address is private)
       }
    }
@@ -415,7 +415,12 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
 void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address)
 {
    Core *core = m_thread->getCore();
-   LOG_ASSERT_ERROR(core, "We cannot perform warmup while not on a core");
+   if (!core)
+   {
+      //LOG_PRINT_WARNING("Ignoring warmup while not on a core");
+      return;
+   }
+   //LOG_ASSERT_ERROR(core, "We cannot perform warmup while not on a core");
 
    if (icount)
       core->countInstructions(0, icount);
