@@ -38,7 +38,10 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 {
    // We're still called for instructions in the same basic block as ROI end, ignore these
    if (!thread_data[threadid].output)
+   {
+      thread_data[threadid].num_dyn_addresses = 0;
       return;
+   }
 
    ++thread_data[threadid].icount;
    ++thread_data[threadid].icount_detailed;
