@@ -95,7 +95,11 @@ static void traceCallback(TRACE trace, VOID *v)
    if (RTN_Valid(rtn))
    {
       if (routines.count(RTN_Address(rtn)) == 0)
+      {
+         RTN_Open(rtn);
          announceRoutine(rtn);
+         RTN_Close(rtn);
+      }
 
       TRACE_InsertCall(trace, IPOINT_BEFORE, AFUNPTR (routineAssert), IARG_THREAD_ID, IARG_ADDRINT, RTN_Address(rtn), IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
    }
