@@ -66,6 +66,13 @@
   var ipcfilename = "data/".concat(info.name.concat("-ipc.json"));
   var ipcfilename2 = "data/".concat(info.name.concat("-ipcfic.json"));
   var intervalsize = info.intervalsize;
+  var errorSeen = false;
+  var errorCallback = function(data) {
+    if (!errorSeen) {
+      document.getElementById('errorDisplay').hidden = false;
+      errorSeen = true;
+    }
+  }
   markerinfo = jQuery.parseJSON(markerstr);
   document.title = name+ ": cycle stacks over time";
   currentdetail = "simple";
@@ -74,6 +81,9 @@
   writeHeader('level2');
 </script>
 
+<noscript>
+    Error, Javascript must be enabled to use the visulalizations.
+</noscript>
 
 <div id="content">
   <form id="right_panel" action="#">
@@ -191,6 +201,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 	defaultInterpolation: 'step-after',
 	stroke: true,
 	dataURL: ipcfilename,
+	onError: errorCallback,
 	onData: function(d) { return d },
 	onComplete: function(transport) {
 		var graph = ipcgraph = transport.graph;
@@ -254,6 +265,7 @@ var graph = new Rickshaw.Graph.Ajax( {
 	defaultInterpolation: 'step-after',
 	stroke: true,
 	dataURL: ipcfilename2,
+	onError: errorCallback,
 	onData: function(d) { return d },
 	onComplete: function(transport) {
 		var graph = ipcgraph2 = transport.graph;
@@ -371,6 +383,7 @@ function createGraph(detail, normalized) {
 	defaultInterpolation: 'step-after',
 	stroke: true,
 	dataURL: filename,
+	onError: errorCallback,
 	onData: function(d) { return d },
 	onComplete: function(transport) {
 		var graph = transport.graph;

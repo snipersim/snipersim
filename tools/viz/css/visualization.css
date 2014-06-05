@@ -123,3 +123,9 @@ body
   padding: 20px;
   height: 1%;
 }
+
+#errorDisplay
+{
+  color: red;
+  padding: 25px 25px 25px 25px;
+}

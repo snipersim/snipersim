@@ -26,6 +26,12 @@ function writeHeader(currentView)
 '      </ul>'+
 '      <div style="clear:both"></div>'+
 '    </div>'+
+'</div>'+
+'<div id="errorDisplay" hidden="true">'+
+'  Error: Unable to fetch simulation data.</br>'+
+'  Either the data doesn\'t exist, or you are using a browser like Chrome which disables local file access.</br>'+
+'  To fix this issue, either restart Chrome with the "--disable-web-security" option,</br>'+
+'  or create a local webserver. For example, one could run "python -m SimpleHTTPSever" in the viz directory.'+
 '</div>'
 );
 
