@@ -358,7 +358,7 @@ char *argv;
     printf("Increase PARMACS_MAX_THREADS(%u) !\n", PARMACS_MAX_THREADS);
     exit(-1);
   }
-  pthread_create(&ParmacsThreads[ParmacsThreadNum++], NULL, (void * (*)(void *))SlaveStart, (void*)i);
+  pthread_create(&ParmacsThreads[ParmacsThreadNum++], NULL, (void * (*)(void *))SlaveStart, (void*)(long)i);
 };
   }
   SlaveStart(0);
