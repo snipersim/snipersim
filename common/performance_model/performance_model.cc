@@ -3,9 +3,6 @@
 #include "fastforward_performance_model.h"
 #include "branch_predictor.h"
 #include "simulator.h"
-#include "simple_performance_model.h"
-#include "iocoom_performance_model.h"
-#include "magic_performance_model.h"
 #include "oneipc_performance_model.h"
 #include "interval_performance_model.h"
 #include "rob_performance_model.h"
@@ -26,13 +23,7 @@ PerformanceModel* PerformanceModel::create(Core* core)
       LOG_PRINT_ERROR("No perf model type provided.");
    }
 
-   if (type == "iocoom")
-      return new IOCOOMPerformanceModel(core);
-   else if (type == "simple")
-      return new SimplePerformanceModel(core);
-   else if (type == "magic")
-      return new MagicPerformanceModel(core);
-   else if (type == "oneipc")
+   if (type == "oneipc")
       return new OneIPCPerformanceModel(core);
    else if (type == "interval")
    {
