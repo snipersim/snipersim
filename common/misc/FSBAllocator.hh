@@ -55,7 +55,7 @@ class FSBAllocator_ElemAllocator
 
      public:
         MemBlock():
-            block(0),
+            block(new Data_t[BlockSize]),
             firstFreeUnitIndex(Data_t(-1)),
             allocatedElementsAmount(0)
         {}
@@ -67,8 +67,6 @@ class FSBAllocator_ElemAllocator
 
         void clear()
         {
-            delete[] block;
-            block = 0;
             firstFreeUnitIndex = Data_t(-1);
         }
 
@@ -76,10 +74,8 @@ class FSBAllocator_ElemAllocator
         {
             if(firstFreeUnitIndex == Data_t(-1))
             {
-                if(!block)
+                if(allocatedElementsAmount == 0)
                 {
-                    block = new Data_t[BlockSize];
-                    if(!block) return 0;
                     endIndex = 0;
                 }
 
