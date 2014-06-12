@@ -599,8 +599,8 @@ MemoryManager::accessTLB(TLB * tlb, IntPtr address, bool isIfetch, Core::MemMode
       }
       else
       {
-         Instruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
-         getCore()->getPerformanceModel()->queueDynamicInstruction(i);
+         PseudoInstruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
+         getCore()->getPerformanceModel()->queuePseudoInstruction(i);
       }
    }
 }

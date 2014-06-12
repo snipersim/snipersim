@@ -4,6 +4,7 @@
 #include "branch_predictor.h"
 #include "memory_manager_base.h"
 #include "performance_model.h"
+#include "instruction.h"
 #include "clock_skew_minimization_object.h"
 #include "core_manager.h"
 #include "dvfs_manager.h"
@@ -34,7 +35,6 @@ const char * ModeledString(Core::MemModeled modeled) {
       case Core::MEM_MODELED_COUNT_TLBTIME:  return "count/tlb";
       case Core::MEM_MODELED_TIME:           return "time";
       case Core::MEM_MODELED_FENCED:         return "fenced";
-      case Core::MEM_MODELED_DYNINFO:        return "dyninfo";
       case Core::MEM_MODELED_RETURN:         return "return";
    }
   return "?";
@@ -67,7 +67,6 @@ Core::Core(SInt32 id)
    : m_core_id(id)
    , m_dvfs_domain(Sim()->getDvfsManager()->getCoreDomain(id))
    , m_thread(NULL)
-   , m_dyninfo_save_used(false)
    , m_bbv(id)
    , m_topology_info(new TopologyInfo(id))
    , m_core_state(Core::IDLE)
@@ -220,11 +219,6 @@ void
 Core::logMemoryHit(bool icache, mem_op_t mem_op_type, IntPtr address, MemModeled modeled, IntPtr eip)
 {
    getMemoryManager()->addL1Hits(icache, mem_op_type, 1);
-   if (modeled == MEM_MODELED_DYNINFO)
-   {
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, true, SubsecondTime::Zero(), address, 8, (mem_op_type == WRITE) ? Operand::WRITE : Operand::READ, 0, (HitWhere::where_t)(icache ? MemComponent::L1_ICACHE : MemComponent::L1_DCACHE));
-      m_performance_model->pushDynamicInstructionInfo(info);
-   }
 }
 
 MemoryResult
@@ -285,11 +279,6 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
 
    if (data_size <= 0)
    {
-      if (modeled == MEM_MODELED_DYNINFO)
-      {
-         DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, true, SubsecondTime::Zero(), address, data_size, (mem_op_type == WRITE) ? Operand::WRITE : Operand::READ, 0, (HitWhere::where_t)mem_component);
-         m_performance_model->pushDynamicInstructionInfo(info);
-      }
       return makeMemoryResult((HitWhere::where_t)mem_component,SubsecondTime::Zero());
    }
 
@@ -403,43 +392,28 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
         ((mem_op_type == READ) ? "READ" : "WRITE"),
         address, data_size);
 
-   if (lock_signal != Core::LOCK) {
+   if (lock_signal != Core::LOCK)
       m_mem_lock.release();
-      if (m_dyninfo_save_used && modeled == MEM_MODELED_DYNINFO) {
-         // Now we released the cache lock, and we're in a context that normally pushes dyninfos,
-         // push a possible saved dyninfo
-         m_performance_model->pushDynamicInstructionInfo(m_dyninfo_save);
-         m_dyninfo_save_used = false;
-      }
-   }
 
    // Calculate the round-trip time
    SubsecondTime shmem_time = final_time - initial_time;
 
    switch(modeled)
    {
+#if 0
       case MEM_MODELED_DYNINFO:
       {
-         LOG_ASSERT_ERROR(hit_where != HitWhere::UNKNOWN, "hit_where = HitWhere::UNKNOWN"); // HitWhere::UNKNOWN is used to indicate the timing thread still needs to do the access.
          DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, true, shmem_time, address, data_size, (mem_op_type == WRITE) ? Operand::WRITE : Operand::READ, num_misses, hit_where);
-         if (lock_signal == Core::LOCK)
-         {
-            // deadlock can occur if we try to push a dyninfo to a full queue while holding m_mem_lock
-            LOG_ASSERT_ERROR(m_dyninfo_save_used == false, "We already have a saved m_dyninfo_save");
-            m_dyninfo_save = info;
-            m_dyninfo_save_used = true;
-         }
-         else
             m_performance_model->pushDynamicInstructionInfo(info);
-         break;
-      }
+#endif
+
       case MEM_MODELED_TIME:
       case MEM_MODELED_FENCED:
          if (m_performance_model->isEnabled())
          {
             /* queue a fake instruction that will account for the access latency */
-            Instruction *i = new MemAccessInstruction(shmem_time, address, data_size, modeled == MEM_MODELED_FENCED);
-            m_performance_model->queueDynamicInstruction(i);
+            PseudoInstruction *i = new MemAccessInstruction(shmem_time, address, data_size, modeled == MEM_MODELED_FENCED);
+            m_performance_model->queuePseudoInstruction(i);
          }
          break;
       case MEM_MODELED_COUNT:
@@ -479,9 +453,6 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
 MemoryResult
 Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size, MemModeled modeled, IntPtr eip, SubsecondTime now, bool is_fault_mask)
 {
-   if (modeled == MEM_MODELED_DYNINFO)
-      LOG_ASSERT_ERROR(eip != 0, "modeled == MEM_MODELED_DYNINFO but no eip given");
-
    // In PINTOOL mode, if the data is requested, copy it to/from real memory
    if (data_buffer && !is_fault_mask)
    {

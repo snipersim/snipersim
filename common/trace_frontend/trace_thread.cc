@@ -6,6 +6,7 @@
 #include "thread.h"
 #include "dvfs_manager.h"
 #include "instruction.h"
+#include "dynamic_instruction.h"
 #include "performance_model.h"
 #include "instruction_decoder.h"
 #include "config.hpp"
@@ -387,7 +388,7 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
    {
       // We're in detailed mode, but our SIFT recorder doesn't know it yet
       // Do something to advance time
-      core->getPerformanceModel()->queueDynamicInstruction(new UnknownInstruction(icount * core->getDvfsDomain()->getPeriod()));
+      core->getPerformanceModel()->queuePseudoInstruction(new UnknownInstruction(icount * core->getDvfsDomain()->getPeriod()));
       core->getPerformanceModel()->iterate();
    }
 
@@ -395,7 +396,7 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
    if (m_thread->reschedule(time, core))
    {
       core = m_thread->getCore();
-      core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+      core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
    }
 
    switch(Sim()->getInstrumentationMode())
@@ -540,20 +541,18 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
 {
    const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
 
-   // Push instruction
+   // Set up instruction
 
    if (m_icache.count(inst.sinst->addr) == 0)
       m_icache[inst.sinst->addr] = decode(inst);
    Instruction *ins = m_icache[inst.sinst->addr];
+   DynamicInstruction *dynins = prfmdl->createDynamicInstruction(ins, va2pa(inst.sinst->addr));
 
-   prfmdl->queueInstruction(ins);
-
-   // Push dynamic instruction info
+   // Add dynamic instruction info
 
    if (inst.is_branch)
    {
-      DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(va2pa(inst.sinst->addr), inst.taken, va2pa(next_inst.sinst->addr));
-      prfmdl->pushDynamicInstructionInfo(info);
+      dynins->addBranch(inst.taken, va2pa(next_inst.sinst->addr));
    }
 
    // Ignore memory-referencing operands in NOP instructions
@@ -565,7 +564,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
       {
          if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
          {
-            pushDetailedMemoryInfo(inst, xed_inst, mem_idx, Operand::READ, is_prefetch, prfmdl);
+            addDetailedMemoryInfo(dynins, inst, xed_inst, mem_idx, Operand::READ, is_prefetch, prfmdl);
          }
       }
 
@@ -573,17 +572,21 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
       {
          if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
          {
-            pushDetailedMemoryInfo(inst, xed_inst, mem_idx, Operand::WRITE, is_prefetch, prfmdl);
+            addDetailedMemoryInfo(dynins, inst, xed_inst, mem_idx, Operand::WRITE, is_prefetch, prfmdl);
          }
       }
    }
+
+   // Push instruction
+
+   prfmdl->queueInstruction(dynins);
 
    // simulate
 
    prfmdl->iterate();
 }
 
-void TraceThread::pushDetailedMemoryInfo(Sift::Instruction &inst, const xed_decoded_inst_t &xed_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_prefetch, PerformanceModel *prfmdl)
+void TraceThread::addDetailedMemoryInfo(DynamicInstruction *dynins, Sift::Instruction &inst, const xed_decoded_inst_t &xed_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_prefetch, PerformanceModel *prfmdl)
 {
    assert(mem_idx < inst.num_addresses);
 
@@ -591,8 +594,7 @@ void TraceThread::pushDetailedMemoryInfo(Sift::Instruction &inst, const xed_deco
    UInt64 pa = va2pa(inst.addresses[mem_idx], is_prefetch ? &no_mapping : NULL);
    if (no_mapping)
    {
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(
-         va2pa(inst.sinst->addr),
+      dynins->addMemory(
          inst.executed,
          SubsecondTime::Zero(),
          0,
@@ -600,12 +602,10 @@ void TraceThread::pushDetailedMemoryInfo(Sift::Instruction &inst, const xed_deco
          op_type,
          0,
          HitWhere::PREFETCH_NO_MAPPING);
-      prfmdl->pushDynamicInstructionInfo(info);
    }
    else
    {
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(
-         va2pa(inst.sinst->addr),
+      dynins->addMemory(
          inst.executed,
          SubsecondTime::Zero(),
          pa,
@@ -613,7 +613,6 @@ void TraceThread::pushDetailedMemoryInfo(Sift::Instruction &inst, const xed_deco
          op_type,
          0,
          HitWhere::UNKNOWN);
-      prfmdl->pushDynamicInstructionInfo(info);
    }
 }
 
@@ -633,13 +632,13 @@ void TraceThread::unblock()
 
    if (m_thread->getCore())
    {
-      m_thread->getCore()->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
+      m_thread->getCore()->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::SYSCALL));
    }
    else
    {
       // We were scheduled out during the system call
       m_thread->reschedule(end_time, NULL);
-      m_thread->getCore()->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::UNSCHEDULED));
+      m_thread->getCore()->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::UNSCHEDULED));
    }
 
    m_blocked = false;

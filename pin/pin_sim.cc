@@ -31,6 +31,7 @@
 #include "handle_args.h"
 #include "log.h"
 #include "instruction_modeling.h"
+#include "instruction.h"
 #include "magic_client.h"
 #include "sampling_manager.h"
 #include "sampling_provider.h"
@@ -170,7 +171,7 @@ void handleCheckScheduled(THREADID threadIndex)
       core = thread->getCore();
       // If the core already has a later time, we have to wait
       time = std::max(time, core->getPerformanceModel()->getElapsedTime());
-      core->getPerformanceModel()->queueDynamicInstruction(new SpawnInstruction(time));
+      core->getPerformanceModel()->queuePseudoInstruction(new SpawnInstruction(time));
    }
 }
 
@@ -270,12 +271,6 @@ VOID traceCallback(TRACE trace, void *v)
       {
          // Instruction modelling
          InstructionModeling::addInstructionModeling(trace, ins, inst_mode);
-
-         if (INSTR_IF_DETAILED(inst_mode) && !INS_IsSyscall(ins))
-         {
-            Instruction *inst = InstructionModeling::decodeInstruction(ins);
-            INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleInstruction), IARG_THREAD_ID, IARG_PTR, inst, IARG_END);
-         }
          ++icount;
 
          if (ins == BBL_InsTail(bbl) || icount >= 32 || INS_HasRealRep(ins))
@@ -365,7 +360,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
    localStore[threadIndex].thread->m_os_info.tid = syscall(__NR_gettid);
    if (Sim()->getConfig()->getEnableSpinLoopDetection())
       localStore[threadIndex].sld.sld = new SpinLoopDetector(localStore[threadIndex].thread);
-   for (int idx = 0; idx < ThreadLocalStorage::NUM_SCRATCHPADS; ++idx)
+   for (unsigned int idx = 0; idx < ThreadLocalStorage::NUM_SCRATCHPADS; ++idx)
    {
       int status = posix_memalign((void**) &localStore[threadIndex].scratch[idx], 4 * sizeof (void*), ThreadLocalStorage::SCRATCHPAD_SIZE);
       assert(status == 0);

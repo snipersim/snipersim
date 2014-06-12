@@ -2,13 +2,12 @@
 #define PERFORMANCE_MODEL_H
 // This class represents the actual performance model for a given core
 
-#include "instruction.h"
 #include "fixed_types.h"
 #include "mt_circular_queue.h"
 #include "lock.h"
-#include "dynamic_instruction_info.h"
 #include "subsecond_time.h"
 #include "instruction_tracer.h"
+#include "hit_where.h"
 
 #include <queue>
 #include <iostream>
@@ -17,18 +16,20 @@
 class Core;
 class BranchPredictor;
 class FastforwardPerformanceModel;
+class Instruction;
+class PseudoInstruction;
+class DynamicInstruction;
+class Allocator;
 
 class PerformanceModel
 {
 public:
-   static const SubsecondTime DyninsninfoNotAvailable() { return SubsecondTime::MaxTime(); }
-
    PerformanceModel(Core* core);
    virtual ~PerformanceModel();
 
-   void queueDynamicInstruction(Instruction *i);
-   void queueInstruction(Instruction *i);
-   void handleIdleInstruction(Instruction *instruction);
+   void queueInstruction(DynamicInstruction *i);
+   void queuePseudoInstruction(PseudoInstruction *i);
+   void handleIdleInstruction(PseudoInstruction *i);
    void iterate();
    virtual void synchronize();
 
@@ -41,10 +42,6 @@ public:
    void handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where);
    void handleBranchMispredict();
 
-   void pushDynamicInstructionInfo(DynamicInstructionInfo &i);
-   void popDynamicInstructionInfo();
-   DynamicInstructionInfo* getDynamicInstructionInfo(const Instruction &instruction, bool exec_loads = true);
-
    static PerformanceModel *create(Core* core);
 
    BranchPredictor *getBranchPredictor() { return m_bp; }
@@ -52,6 +49,8 @@ public:
 
    FastforwardPerformanceModel *getFastforwardPerformanceModel() { return m_fastforward_model; }
    FastforwardPerformanceModel const* getFastforwardPerformanceModel() const { return m_fastforward_model; }
+
+   DynamicInstruction* createDynamicInstruction(Instruction *ins, IntPtr eip);
 
    void traceInstruction(const DynamicMicroOp *uop, InstructionTracer::uop_times_t *times)
    {
@@ -93,21 +92,17 @@ protected:
    void incrementIdleElapsedTime(SubsecondTime time);
 
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-      typedef MTCircularQueue<DynamicInstructionInfo> DynamicInstructionInfoQueue;
-      typedef MTCircularQueue<Instruction *> InstructionQueue;
+      typedef MTCircularQueue<DynamicInstruction*> InstructionQueue;
    #else
-      typedef CircularQueue<DynamicInstructionInfo> DynamicInstructionInfoQueue;
-      typedef CircularQueue<Instruction *> InstructionQueue;
+      typedef CircularQueue<DynamicInstruction*> InstructionQueue;
    #endif
 
    Core* getCore() { return m_core; }
 
 private:
 
-   DynamicInstructionInfo* getDynamicInstructionInfo();
-
    // Simulate a single instruction
-   virtual bool handleInstruction(Instruction const* instruction) = 0;
+   virtual void handleInstruction(DynamicInstruction *instruction) = 0;
 
    // When time is jumped ahead outside of control of the performance model (synchronization instructions, etc.)
    // notify it here. This may be used to synchronize internal time or to flush various instruction queues
@@ -117,6 +112,7 @@ private:
    virtual void disableDetailedModel() {}
 
    Core* m_core;
+   Allocator *m_dynins_alloc;
 
    bool m_enabled;
 
@@ -148,7 +144,6 @@ private:
    SubsecondTime m_cpiRecv;
 
    InstructionQueue m_instruction_queue;
-   DynamicInstructionInfoQueue m_dynamic_info_queue;
 
    UInt32 m_current_ins_index;
 

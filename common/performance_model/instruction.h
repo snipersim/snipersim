@@ -22,9 +22,8 @@ enum InstructionType
    INST_FMUL,
    INST_FDIV,
    INST_JMP,
-   INST_STRING,
    INST_BRANCH,
-   INST_DYNAMIC_MISC, // All instructions above and including this one are dynamic
+   INST_PSEUDO_MISC, // All instructions above and including this one are dynamic
    INST_RECV,
    INST_SYNC,
    INST_SPAWN,
@@ -36,7 +35,7 @@ enum InstructionType
 };
 
 __attribute__ ((unused)) static const char * INSTRUCTION_NAMES [] =
-{"generic","add","sub","mul","div","fadd","fsub","fmul","fdiv","jmp","string", "branch", "dynamic_misc","recv","sync","spawn","tlb_miss","mem_access","delay","unknown"};
+{"generic","add","sub","mul","div","fadd","fsub","fmul","fdiv","jmp","branch", "dynamic_misc","recv","sync","spawn","tlb_miss","mem_access","delay","unknown"};
 
 class Instruction
 {
@@ -51,8 +50,8 @@ public:
 
    InstructionType getType() const;
    String getTypeName() const;
-   bool isDynamic() const
-   { return getType() >= INST_DYNAMIC_MISC; }
+   bool isPseudo() const
+   { return getType() >= INST_PSEUDO_MISC; }
    bool isIdle() const
    { return getType() == INST_SYNC || getType() == INST_DELAY || getType() == INST_RECV; }
 
@@ -119,22 +118,13 @@ public:
    {}
 };
 
-// CMPSB or SCASB instruction
-class StringInstruction : public Instruction
-{
-public:
-   StringInstruction(OperandList &ops);
-
-   SubsecondTime getCost(Core *core) const;
-};
-
 // for operations not associated with the binary -- such as processing
 // a packet
-class DynamicInstruction : public Instruction
+class PseudoInstruction : public Instruction
 {
 public:
-   DynamicInstruction(SubsecondTime cost, InstructionType type = INST_DYNAMIC_MISC);
-   ~DynamicInstruction();
+   PseudoInstruction(SubsecondTime cost, InstructionType type = INST_PSEUDO_MISC);
+   ~PseudoInstruction();
 
    SubsecondTime getCost(Core *core) const;
 
@@ -142,17 +132,17 @@ private:
    SubsecondTime m_cost;
 };
 
-class RecvInstruction : public DynamicInstruction
+class RecvInstruction : public PseudoInstruction
 {
 public:
    RecvInstruction(SubsecondTime cost)
-      : DynamicInstruction(cost, INST_RECV)
+      : PseudoInstruction(cost, INST_RECV)
    {}
 };
 
 // wake up after synchronization
 // we may have been rescheduled, so this sets an absolute time
-class SyncInstruction : public Instruction
+class SyncInstruction : public PseudoInstruction
 {
 public:
    enum sync_type_t {
@@ -179,7 +169,7 @@ private:
 };
 
 // set clock to particular time
-class SpawnInstruction : public Instruction
+class SpawnInstruction : public PseudoInstruction
 {
 public:
    SpawnInstruction(SubsecondTime time);
@@ -193,32 +183,23 @@ private:
 // conditional branches
 class BranchInstruction : public Instruction
 {
-private:
-   bool m_is_mispredict;
-   bool m_is_taken;
-   IntPtr m_target_address;
 public:
    BranchInstruction(OperandList &l);
-
-   SubsecondTime getCost(Core *core) const;
-   bool getIsMispredict() const { return m_is_mispredict; }
-   bool getIsTaken() const { return m_is_taken; }
-   IntPtr getTargetAddress() const { return m_target_address; }
 };
 
 // TLB misses
-class TLBMissInstruction : public DynamicInstruction
+class TLBMissInstruction : public PseudoInstruction
 {
    bool m_is_ifetch;
 public:
    TLBMissInstruction(SubsecondTime cost, bool is_ifetch)
-      : DynamicInstruction(cost, INST_TLB_MISS)
+      : PseudoInstruction(cost, INST_TLB_MISS)
       , m_is_ifetch(is_ifetch)
    {}
    bool isIfetch() const { return m_is_ifetch; }
 };
 
-class MemAccessInstruction : public DynamicInstruction
+class MemAccessInstruction : public PseudoInstruction
 {
 private:
    IntPtr m_address;
@@ -226,7 +207,7 @@ private:
    bool m_is_fence;
 public:
    MemAccessInstruction(SubsecondTime cost, IntPtr address, UInt32 data_size, bool is_fence)
-      : DynamicInstruction(cost, INST_MEM_ACCESS)
+      : PseudoInstruction(cost, INST_MEM_ACCESS)
       , m_address(address)
       , m_data_size(data_size)
       , m_is_fence(is_fence)
@@ -236,7 +217,7 @@ public:
    bool isFence() const { return m_is_fence; }
 };
 
-class DelayInstruction : public DynamicInstruction
+class DelayInstruction : public PseudoInstruction
 {
 public:
    enum delay_type_t {
@@ -244,7 +225,7 @@ public:
       NUM_TYPES
    };
    DelayInstruction(SubsecondTime cost, delay_type_t delay_type)
-      : DynamicInstruction(cost, INST_DELAY)
+      : PseudoInstruction(cost, INST_DELAY)
       , m_delay_type(delay_type)
    { }
    delay_type_t getDelayType() const { return m_delay_type; }
@@ -252,11 +233,11 @@ private:
    delay_type_t m_delay_type;
 };
 
-class UnknownInstruction : public DynamicInstruction
+class UnknownInstruction : public PseudoInstruction
 {
 public:
    UnknownInstruction(SubsecondTime cost)
-      : DynamicInstruction(cost, INST_UNKNOWN)
+      : PseudoInstruction(cost, INST_UNKNOWN)
    { }
 };
 

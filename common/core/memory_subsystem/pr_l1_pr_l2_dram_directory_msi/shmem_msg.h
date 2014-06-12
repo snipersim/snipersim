@@ -2,7 +2,7 @@
 
 #include "mem_component.h"
 #include "fixed_types.h"
-#include "dynamic_instruction_info.h"
+#include "hit_where.h"
 
 class ShmemPerf;
 

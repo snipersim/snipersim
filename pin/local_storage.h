@@ -10,10 +10,13 @@
 
 class Thread;
 class Core;
+class DynamicInstruction;
 
 struct ThreadLocalStorage
 {
    Thread* thread;
+   DynamicInstruction* dynins;
+
    // Arguments passed to pthread_create and syscall(clone),
    // needed on return once we know the new thread's id
    struct
@@ -35,7 +38,7 @@ struct ThreadLocalStorage
    ADDRINT lastCallSite;
 
    // Scratchpads for fault-injection
-   static const int NUM_SCRATCHPADS = 3;
+   static const unsigned int NUM_SCRATCHPADS = 3;
    static const size_t SCRATCHPAD_SIZE = 1024;
    char* scratch[NUM_SCRATCHPADS];
 };

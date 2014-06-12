@@ -7,6 +7,7 @@
 #include "core_manager.h"
 #include "thread_manager.h"
 #include "performance_model.h"
+#include "instruction.h"
 #include "pthread_emu.h"
 #include "scheduler.h"
 #include "hooks_manager.h"
@@ -131,7 +132,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          if (m_thread->reschedule(end_time, core))
             core = m_thread->getCore();
 
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::SLEEP));
+         core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::SLEEP));
 
          if (rem)
          {
@@ -175,7 +176,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
          if (m_thread->reschedule(time, core))
             core = m_thread->getCore();
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+         core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
 
          // Always succeeds
          m_ret_val = 0;
@@ -225,7 +226,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
          if (m_thread->reschedule(time, core))
             core = m_thread->getCore();
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+         core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
 
          m_ret_val = success ? 0 : -EINVAL;
          m_emulated = true;
@@ -316,7 +317,7 @@ IntPtr SyscallMdl::runExit(IntPtr old_return)
       m_thread->reschedule(time_wake, core);
       core = m_thread->getCore();
 
-      core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time_wake,
+      core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time_wake,
          m_syscall_number == SYS_pause ? SyncInstruction::PAUSE : SyncInstruction::SYSCALL));
 
       m_stalled = false;
@@ -378,7 +379,7 @@ IntPtr SyscallMdl::handleFutexCall(syscall_args_t &args)
    if (m_thread->reschedule(end_time, core))
       core = m_thread->getCore();
 
-   core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::FUTEX));
+   core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::FUTEX));
 
    SubsecondTime delay = end_time - start_time;
 

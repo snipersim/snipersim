@@ -5,6 +5,7 @@
 #include "core_manager.h"
 #include "sync_client.h"
 #include "performance_model.h"
+#include "instruction.h"
 #include "routine_tracer.h"
 #include "config.hpp"
 
@@ -63,7 +64,7 @@ bool Thread::reschedule(SubsecondTime &time, Core *current_core)
       while((volatile Core*)m_core == NULL)
          time = Sim()->getThreadManager()->stallThread(getId(), ThreadManager::STALL_UNSCHEDULED, time);
 
-      m_core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+      m_core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
 
       updateCoreTLS();
       return true;

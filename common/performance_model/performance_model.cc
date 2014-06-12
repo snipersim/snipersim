@@ -12,6 +12,7 @@
 #include "stats.h"
 #include "dvfs_manager.h"
 #include "instruction_tracer.h"
+#include "dynamic_instruction.h"
 
 PerformanceModel* PerformanceModel::create(Core* core)
 {
@@ -49,6 +50,7 @@ PerformanceModel* PerformanceModel::create(Core* core)
 // Public Interface
 PerformanceModel::PerformanceModel(Core *core)
    : m_core(core)
+   , m_dynins_alloc(DynamicInstruction::createAllocator())
    , m_enabled(false)
    , m_fastforward(false)
    , m_fastforward_model(new FastforwardPerformanceModel(core, this))
@@ -62,7 +64,6 @@ PerformanceModel::PerformanceModel(Core *core)
    #else
    , m_instruction_queue(1024) // Need a bit more space for when the dyninsninfo items aren't coming in yet, or for a boatload of TLBMissInstructions
    #endif
-   , m_dynamic_info_queue(640) // Required for REPZ CMPSB instructions with max counts of 256 (256 * 2 memory accesses + space for other dynamic instructions)
    , m_current_ins_index(0)
 {
    m_bp = BranchPredictor::create(core->getId());
@@ -136,7 +137,12 @@ void PerformanceModel::handleBranchMispredict()
    }
 }
 
-void PerformanceModel::queueDynamicInstruction(Instruction *i)
+DynamicInstruction* PerformanceModel::createDynamicInstruction(Instruction *ins, IntPtr eip)
+{
+   return DynamicInstruction::alloc(m_dynins_alloc, ins, eip);
+}
+
+void PerformanceModel::queuePseudoInstruction(PseudoInstruction *i)
 {
    if (i->getType() == INST_SPAWN)
    {
@@ -164,20 +170,20 @@ void PerformanceModel::queueDynamicInstruction(Instruction *i)
    {
       if (m_fastforward)
       {
-         m_fastforward_model->queueDynamicInstruction(i);
+         m_fastforward_model->queuePseudoInstruction(i);
       }
       else
       {
          #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-            m_instruction_queue.push_wait(i);
+            m_instruction_queue.push_wait(createDynamicInstruction(i, 0));
          #else
-            m_instruction_queue.push(i);
+            m_instruction_queue.push(createDynamicInstruction(i, 0));
          #endif
       }
    }
 }
 
-void PerformanceModel::queueInstruction(Instruction *ins)
+void PerformanceModel::queueInstruction(DynamicInstruction *ins)
 {
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
       m_instruction_queue.push_wait(ins);
@@ -186,7 +192,7 @@ void PerformanceModel::queueInstruction(Instruction *ins)
    #endif
 }
 
-void PerformanceModel::handleIdleInstruction(Instruction *instruction)
+void PerformanceModel::handleIdleInstruction(PseudoInstruction *instruction)
 {
    // If fast-forwarding without detailed synchronization, our fast-forwarding IPC
    // already contains idle periods so we can ignore these now
@@ -287,17 +293,13 @@ void PerformanceModel::iterate()
          sched_yield();
       #endif
 
-      Instruction *ins = m_instruction_queue.front();
+      DynamicInstruction *ins = m_instruction_queue.front();
 
-      LOG_ASSERT_ERROR(!ins->isIdle(), "Idle instructions should not make it here!");
+      LOG_ASSERT_ERROR(!ins->instruction->isIdle(), "Idle instructions should not make it here!");
 
-      bool res = handleInstruction(ins);
-      if (!res)
-         // DynamicInstructionInfo not available
-         return;
+      handleInstruction(ins);
 
-      if (ins->isDynamic())
-         delete ins;
+      delete ins;
 
       m_instruction_queue.pop();
    }
@@ -310,86 +312,6 @@ void PerformanceModel::synchronize()
    ClockSkewMinimizationClient *client = m_core->getClockSkewMinimizationClient();
    if (client)
       client->synchronize(SubsecondTime::Zero(), false);
-}
-
-void PerformanceModel::pushDynamicInstructionInfo(DynamicInstructionInfo &i)
-{
-   #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-      m_dynamic_info_queue.push_wait(i);
-   #else
-      m_dynamic_info_queue.push(i);
-   #endif
-}
-
-void PerformanceModel::popDynamicInstructionInfo()
-{
-   #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-      m_dynamic_info_queue.pop_wait();
-   #else
-      m_dynamic_info_queue.pop();
-   #endif
-}
-
-DynamicInstructionInfo* PerformanceModel::getDynamicInstructionInfo()
-{
-   // Information is needed to model the instruction, but isn't
-   // available. This is handled in iterate() by returning early and
-   // continuing from that instruction later.
-
-   #ifdef ENABLE_PERF_MODEL_OWN_THREAD
-      m_dynamic_info_queue.empty_wait();
-   #else
-      if (m_dynamic_info_queue.empty())
-         return NULL;
-   #endif
-
-   return &m_dynamic_info_queue.front();
-}
-
-DynamicInstructionInfo* PerformanceModel::getDynamicInstructionInfo(const Instruction &instruction, bool exec_loads)
-{
-   DynamicInstructionInfo* info = getDynamicInstructionInfo();
-
-   if (!info)
-      return NULL;
-
-   LOG_ASSERT_ERROR(info->eip == instruction.getAddress(), "Expected dynamic info for eip %lx \"%s\", got info for eip %lx", instruction.getAddress(), instruction.getDisassembly().c_str(), info->eip);
-
-   if ((info->type == DynamicInstructionInfo::MEMORY_READ || info->type == DynamicInstructionInfo::MEMORY_WRITE)
-      && info->memory_info.hit_where == HitWhere::UNKNOWN)
-   {
-      if (info->memory_info.executed)
-      {
-         if (exec_loads)
-         {
-            MemoryResult res = m_core->accessMemory(
-               /*instruction.isAtomic()
-                  ? (info->type == DynamicInstructionInfo::MEMORY_READ ? Core::LOCK : Core::UNLOCK)
-                  :*/ Core::NONE, // Just as in pin/lite/memory_modeling.cc, make the second part of an atomic update implicit
-               info->type == DynamicInstructionInfo::MEMORY_READ ? (instruction.isAtomic() ? Core::READ_EX : Core::READ) : Core::WRITE,
-               info->memory_info.addr,
-               NULL,
-               info->memory_info.size,
-               Core::MEM_MODELED_RETURN,
-               instruction.getAddress()
-            );
-            info->memory_info.latency = res.latency;
-            info->memory_info.hit_where = res.hit_where;
-         }
-         else
-         {
-            info->memory_info.latency = SubsecondTime::Zero();
-            info->memory_info.hit_where = HitWhere::UNKNOWN;
-         }
-      }
-      else
-      {
-         info->memory_info.latency = 1 * m_core->getDvfsDomain()->getPeriod(); // 1 cycle latency
-         info->memory_info.hit_where = HitWhere::PREDICATE_FALSE;
-      }
-   }
-
-   return info;
 }
 
 void PerformanceModel::incrementIdleElapsedTime(SubsecondTime time)

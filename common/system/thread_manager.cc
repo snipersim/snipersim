@@ -1,6 +1,7 @@
 #include "thread_manager.h"
 #include "core_manager.h"
 #include "performance_model.h"
+#include "instruction.h"
 #include "hooks_manager.h"
 #include "config.h"
 #include "log.h"
@@ -123,7 +124,7 @@ void ThreadManager::onThreadStart(thread_id_t thread_id, SubsecondTime time)
       PerformanceModel *pm = core->getPerformanceModel();
       // If the core already has a later time, we have to wait
       time = std::max(time, pm->getElapsedTime());
-      pm->queueDynamicInstruction(new SpawnInstruction(time));
+      pm->queuePseudoInstruction(new SpawnInstruction(time));
 
       LOG_PRINT("Setting status[%i] -> RUNNING", thread_id);
       m_thread_state[thread_id].status = Core::RUNNING;
@@ -316,7 +317,7 @@ void ThreadManager::joinThread(thread_id_t thread_id, thread_id_t join_thread_id
    if (thread->reschedule(end_time, core))
       core = thread->getCore();
 
-   core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(end_time, SyncInstruction::JOIN));
+   core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::JOIN));
 
    LOG_PRINT("Exiting join thread.");
 }

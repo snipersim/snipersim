@@ -15,10 +15,10 @@ class TopologyInfo;
 #include "fixed_types.h"
 #include "lock.h"
 #include "packet_type.h"
-#include "dynamic_instruction_info.h"
 #include "subsecond_time.h"
 #include "bbv_count.h"
 #include "cpuid.h"
+#include "hit_where.h"
 
 struct MemoryResult {
    HitWhere::where_t hit_where;
@@ -74,8 +74,7 @@ class Core
          MEM_MODELED_COUNT_TLBTIME, /* Count in #accesses/#misses, queue TLBMissInstruction on TLB miss */
          MEM_MODELED_TIME,      /* Count + account for access latency (using MemAccessInstruction) */
          MEM_MODELED_FENCED,    /* Count + account for access latency as memory fence (using MemAccessInstruction) */
-         MEM_MODELED_DYNINFO,   /* Count + time + queue a DynamicInstructionInfo (corresponds to a real instruction) */
-         MEM_MODELED_RETURN,    /* Count + time + return data to construct DynamicInstructionInfo */
+         MEM_MODELED_RETURN,    /* Count + time + return data to construct DynamicInstruction */
       };
 
       static const char * CoreStateString(State state);
@@ -140,8 +139,6 @@ class Core
       PerformanceModel *m_performance_model;
       ClockSkewMinimizationClient *m_clock_skew_minimization_client;
       Lock m_mem_lock;
-      DynamicInstructionInfo m_dyninfo_save;
-      bool m_dyninfo_save_used;
       ShmemPerfModel* m_shmem_perf_model;
       BbvCount m_bbv;
       TopologyInfo *m_topology_info;

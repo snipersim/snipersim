@@ -26,11 +26,10 @@ protected:
 
    virtual boost::tuple<uint64_t,uint64_t> simulate(const std::vector<DynamicMicroOp*>& insts) = 0;
    virtual void notifyElapsedTimeUpdate() = 0;
-   void doSquashing(uint32_t first_squashed = 0);
+   void doSquashing(std::vector<DynamicMicroOp*> &current_uops, uint32_t first_squashed = 0);
 
 private:
-   bool handleInstruction(Instruction const* instruction);
-   void resetState();
+   void handleInstruction(DynamicInstruction *instruction);
 
    static MicroOp* m_serialize_uop;
    static MicroOp* m_mfence_uop;
@@ -40,18 +39,11 @@ private:
    const bool m_issue_memops;
 
    std::vector<DynamicMicroOp*> m_current_uops;
-   bool m_state_uops_done;
-   bool m_state_icache_done;
-   UInt64 m_state_num_reads_done;
-   UInt64 m_state_num_writes_done;
-   UInt64 m_state_num_nonmem_done;
    // An std::set would sound like a better choice for these, but since the number of elements
    // is usually small (one or two, except for some rare vector instructions) a linear search
    // is fast enough; while std::vector does *much* fewer memory allocations/deallocations
    std::vector<IntPtr> m_cache_lines_read;
    std::vector<IntPtr> m_cache_lines_written;
-   ComponentPeriod m_state_insn_period;
-   const Instruction *m_state_instruction;
 
    UInt64 m_dyninsn_count;
    UInt64 m_dyninsn_cost;

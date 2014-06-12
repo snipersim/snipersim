@@ -5,6 +5,7 @@
 #include "sampling_manager.h"
 #include "stats.h"
 #include "config.hpp"
+#include "instruction.h"
 
 FastforwardPerformanceModel::FastforwardPerformanceModel(Core *core, PerformanceModel *perf)
    : m_core(core)
@@ -76,7 +77,7 @@ FastforwardPerformanceModel::handleBranchMispredict()
 }
 
 void
-FastforwardPerformanceModel::queueDynamicInstruction(Instruction *instr)
+FastforwardPerformanceModel::queuePseudoInstruction(PseudoInstruction *instr)
 {
    LOG_ASSERT_ERROR(!instr->isIdle(), "Expected non-idle instruction, got %s", INSTRUCTION_NAMES[instr->getType()]);
 

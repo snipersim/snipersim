@@ -57,68 +57,27 @@ void Instruction::initializeStaticInstructionModel()
    }
 }
 
-// DynamicInstruction
+// PseudoInstruction
 
-DynamicInstruction::DynamicInstruction(SubsecondTime cost, InstructionType type)
+PseudoInstruction::PseudoInstruction(SubsecondTime cost, InstructionType type)
    : Instruction(type)
    , m_cost(cost)
 {
 }
 
-DynamicInstruction::~DynamicInstruction()
+PseudoInstruction::~PseudoInstruction()
 {
 }
 
-SubsecondTime DynamicInstruction::getCost(Core *core) const
+SubsecondTime PseudoInstruction::getCost(Core *core) const
 {
    return m_cost;
 }
 
-// StringInstruction
-
-StringInstruction::StringInstruction(OperandList &ops)
-   : Instruction(INST_STRING, ops)
-{
-}
-
-SubsecondTime StringInstruction::getCost(Core *core) const
-{
-   // dequeue mem ops until we hit the final marker, then check count
-   PerformanceModel *perf = core->getPerformanceModel();
-   UInt32 count = 0;
-   SubsecondTime cost = SubsecondTime::Zero();
-   DynamicInstructionInfo* i;
-
-   while (true)
-   {
-      i = perf->getDynamicInstructionInfo(*this);
-      if (!i)
-         return PerformanceModel::DyninsninfoNotAvailable();
-
-      if (i->type == DynamicInstructionInfo::STRING)
-         break;
-
-      LOG_ASSERT_ERROR(i->type == DynamicInstructionInfo::MEMORY_READ,
-                       "Expected memory read in string instruction (or STRING).");
-
-      cost += i->memory_info.latency;
-
-      ++count;
-      perf->popDynamicInstructionInfo();
-   }
-
-   LOG_ASSERT_ERROR(count == i->string_info.num_ops,
-                    "Number of mem ops in queue doesn't match number in string instruction.");
-   perf->popDynamicInstructionInfo();
-
-   return cost;
-}
-
-
 // SyncInstruction
 
 SyncInstruction::SyncInstruction(SubsecondTime time, sync_type_t sync_type)
-   : Instruction(INST_SYNC)
+   : PseudoInstruction(SubsecondTime::Zero(), INST_SYNC)
    , m_time(time)
    , m_sync_type(sync_type)
 { }
@@ -133,7 +92,7 @@ SubsecondTime SyncInstruction::getCost(Core *core) const
 // SpawnInstruction
 
 SpawnInstruction::SpawnInstruction(SubsecondTime time)
-   : Instruction(INST_SPAWN)
+   : PseudoInstruction(SubsecondTime::Zero(), INST_SPAWN)
    , m_time(time)
 { }
 
@@ -152,33 +111,4 @@ SubsecondTime SpawnInstruction::getTime() const
 
 BranchInstruction::BranchInstruction(OperandList &l)
    : Instruction(INST_BRANCH, l)
-   , m_is_mispredict(false)
-   , m_is_taken(false)
-   , m_target_address(-1)
 { }
-
-SubsecondTime BranchInstruction::getCost(Core *core) const
-{
-   PerformanceModel *perf = core->getPerformanceModel();
-   BranchPredictor *bp = perf->getBranchPredictor();
-   const ComponentPeriod *period = core->getDvfsDomain();
-
-   DynamicInstructionInfo *i = perf->getDynamicInstructionInfo(*this);
-   if (!i)
-      return PerformanceModel::DyninsninfoNotAvailable();
-
-   LOG_ASSERT_ERROR(i->type == DynamicInstructionInfo::BRANCH, "Expected branch DynInstrInfo, got %d", i->type);
-
-   bool is_mispredict = core->accessBranchPredictor(getAddress(), i->branch_info.taken, i->branch_info.target);
-   UInt64 cost = is_mispredict ? bp->getMispredictPenalty() : 1;
-
-   // TODO: Move everything that changes state (including global state through the DynamicInstructionInfo queue)
-   //       into something that doesn't look like a const accessor function so we don't need this dirty hack.
-
-   const_cast<BranchInstruction*>(this)->m_is_mispredict = is_mispredict;
-   const_cast<BranchInstruction*>(this)->m_is_taken = i->branch_info.taken;
-   const_cast<BranchInstruction*>(this)->m_target_address = i->branch_info.target;
-
-   perf->popDynamicInstructionInfo();
-   return static_cast<SubsecondTime>(*period) * cost;
-}

@@ -6,6 +6,7 @@
 #include "thread.h"
 #include "inst_mode.h"
 #include "instruction_modeling.h"
+#include "dynamic_instruction.h"
 #include "fault_injection.h"
 #include "inst_mode_macros.h"
 #include "local_storage.h"
@@ -185,33 +186,37 @@ void handleMemoryRead(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_a
 
 void handleMemoryReadDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size)
 {
-   Core *core = localStore[thread_id].thread->getCore();
-   assert(core);
-   // Detailed mode: core model will do its own access, just push a dyninfo with the address
-   DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, executing, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::UNKNOWN);
-   core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+   // Detailed mode: core model will do its own access, just log the address
+   assert(localStore[thread_id].dynins);
+   localStore[thread_id].dynins->addMemory(executing, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::UNKNOWN);
 }
 
 void handleMemoryReadDetailedIssue(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr read_address, UInt32 read_data_size)
 {
    Core *core = localStore[thread_id].thread->getCore();
    assert(core);
+   MemoryResult res;
 
    if (executing)
    {
-      core->accessMemory(
+      res = core->accessMemory(
             (is_atomic_update) ? Core::LOCK : Core::NONE,
             (is_atomic_update) ? Core::READ_EX : Core::READ,
             read_address,
             NULL,
             read_data_size,
-            eip ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT,
+            eip ? Core::MEM_MODELED_RETURN : Core::MEM_MODELED_COUNT,
             eip);
    }
    else
    {
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::PREDICATE_FALSE);
-      core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+      res = makeMemoryResult(HitWhere::PREDICATE_FALSE, SubsecondTime::Zero());
+   }
+
+   if (eip)
+   {
+      assert(localStore[thread_id].dynins);
+      localStore[thread_id].dynins->addMemory(executing, res.latency, read_address, read_data_size, Operand::READ, 0, res.hit_where);
    }
 }
 
@@ -246,10 +251,16 @@ ADDRINT handleMemoryReadFaultinjection(THREADID thread_id, BOOL executing, ADDRI
             read_address,
             buf_fault,
             read_data_size,
-            eip ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT,
+            eip ? Core::MEM_MODELED_RETURN : Core::MEM_MODELED_COUNT,
             eip,
             SubsecondTime::MaxTime(),
             true);
+
+      if (eip)
+      {
+         assert(localStore[thread_id].dynins);
+         localStore[thread_id].dynins->addMemory(executing, memres.latency, read_address, read_data_size, Operand::READ, 0, memres.hit_where);
+      }
 
       // Load correct data from real memory
       PIN_SafeCopy(buf_data, (const void*)read_address, read_data_size);
@@ -262,9 +273,9 @@ ADDRINT handleMemoryReadFaultinjection(THREADID thread_id, BOOL executing, ADDRI
    }
    else if (eip)
    {
-      // CMOV with false predicate, no actual write, but performance model expects a DynamicInstructionInfo
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::PREDICATE_FALSE);
-      core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+      // CMOV with false predicate, no actual write, but performance model expects a MemoryInfo
+      assert(localStore[thread_id].dynins);
+      localStore[thread_id].dynins->addMemory(false, SubsecondTime::Zero(), read_address, read_data_size, Operand::READ, 0, HitWhere::PREDICATE_FALSE);
    }
 
    return read_address;
@@ -297,32 +308,47 @@ void handleMemoryWriteDetailed(THREADID thread_id, BOOL executing, ADDRINT eip, 
       appropriate DynamicInstructionInfo, but don't keep the cache hierarchy locked for potentially a very long time. */
    Core* core = localStore[thread_id].thread->getCore();
    if (is_atomic_update && executing)
-      core->logMemoryHit(false, Core::WRITE, write_address, Core::MEM_MODELED_DYNINFO, eip);
-   else {
-      // Detailed mode: core model will do its own access, just push a dyninfo with the address
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, executing, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::UNKNOWN);
-      core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+   {
+      core->logMemoryHit(false, Core::WRITE, write_address, Core::MEM_MODELED_RETURN, eip);
+      if (eip)
+      {
+         assert(localStore[thread_id].dynins);
+         localStore[thread_id].dynins->addMemory(executing, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::L1_OWN);
+      }
+   }
+   else if (eip)
+   {
+      // Detailed mode: core model will do its own access, just log the address
+      assert(localStore[thread_id].dynins);
+      localStore[thread_id].dynins->addMemory(executing, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::UNKNOWN);
    }
 }
 
 void handleMemoryWriteDetailedIssue(THREADID thread_id, BOOL executing, ADDRINT eip, bool is_atomic_update, IntPtr write_address, UInt32 write_data_size)
 {
    Core* core = localStore[thread_id].thread->getCore();
+   MemoryResult res;
+
    if (executing)
    {
-      core->accessMemory(
+      res = core->accessMemory(
             (is_atomic_update) ? Core::UNLOCK : Core::NONE,
             Core::WRITE,
             write_address,
             NULL,
             write_data_size,
-            eip ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT,
+            eip ? Core::MEM_MODELED_RETURN : Core::MEM_MODELED_COUNT,
             eip);
    }
    else
    {
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::PREDICATE_FALSE);
-      core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+      res = makeMemoryResult(HitWhere::PREDICATE_FALSE, SubsecondTime::Zero());
+   }
+
+   if (eip)
+   {
+      assert(localStore[thread_id].dynins);
+      localStore[thread_id].dynins->addMemory(executing, res.latency, write_address, write_data_size, Operand::WRITE, 0, res.hit_where);
    }
 }
 
@@ -347,26 +373,36 @@ void handleMemoryWriteFaultinjection(THREADID thread_id, BOOL executing, ADDRINT
             SubsecondTime::MaxTime(),
             false);
 
-      core->logMemoryHit(false, Core::WRITE, write_address, eip ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT, eip);
+      core->logMemoryHit(false, Core::WRITE, write_address, eip ? Core::MEM_MODELED_RETURN : Core::MEM_MODELED_COUNT, eip);
+      if (eip)
+      {
+         assert(localStore[thread_id].dynins);
+         localStore[thread_id].dynins->addMemory(executing, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::L1_OWN);
+      }
    }
    else if (executing)
    {
-      core->accessMemory(
+      MemoryResult res = core->accessMemory(
             /*(is_atomic_update) ? Core::UNLOCK :*/ Core::NONE,
             Core::WRITE,
             write_address,
             g_zeros,
             write_data_size,
-            eip ? Core::MEM_MODELED_DYNINFO : Core::MEM_MODELED_COUNT,
+            eip ? Core::MEM_MODELED_RETURN : Core::MEM_MODELED_COUNT,
             eip,
             SubsecondTime::MaxTime(),
             false);
+      if (eip)
+      {
+         assert(localStore[thread_id].dynins);
+         localStore[thread_id].dynins->addMemory(executing, res.latency, write_address, write_data_size, Operand::WRITE, 0, res.hit_where);
+      }
    }
    else if (eip)
    {
-      // CMOV with false predicate, no actual write, but performance model expects a DynamicInstructionInfo
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(eip, false, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::PREDICATE_FALSE);
-      core->getPerformanceModel()->pushDynamicInstructionInfo(info);
+      // CMOV with false predicate, no actual write, but performance model expects a MemoryInfo
+      assert(localStore[thread_id].dynins);
+      localStore[thread_id].dynins->addMemory(false, SubsecondTime::Zero(), write_address, write_data_size, Operand::WRITE, 0, HitWhere::PREDICATE_FALSE);
    }
 }
 

@@ -10,6 +10,7 @@
 #include "micro_op.h"
 #include "allocator.h"
 #include "config.hpp"
+#include "dynamic_instruction.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -23,14 +24,6 @@ MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
     , m_core_model(CoreModel::getCoreModel(Sim()->getCfg()->getStringArray("perf_model/core/core_model", core->getId())))
     , m_allocator(m_core_model->createDMOAllocator())
     , m_issue_memops(issue_memops)
-    , m_state_uops_done(false)
-    , m_state_icache_done(false)
-    , m_state_num_reads_done(0)
-    , m_state_num_writes_done(0)
-    , m_state_num_nonmem_done(0)
-    , m_cache_lines_read(0)
-    , m_cache_lines_written(0)
-    , m_state_insn_period(ComponentPeriod::fromFreqHz(1)) // ComponentPeriod() is private, this is a placeholder.  Will be updated at resetState()
     , m_dyninsn_count(0)
     , m_dyninsn_cost(0)
     , m_dyninsn_zero_count(0)
@@ -97,8 +90,6 @@ MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
       m_memaccess_uop->setFirst(true);
       m_memaccess_uop->setLast(true);
    }
-
-   resetState(); // Needed to clear the period value
 }
 
 MicroOpPerformanceModel::~MicroOpPerformanceModel()
@@ -115,16 +106,16 @@ MicroOpPerformanceModel::~MicroOpPerformanceModel()
    delete m_allocator;
 }
 
-void MicroOpPerformanceModel::doSquashing(uint32_t first_squashed)
+void MicroOpPerformanceModel::doSquashing(std::vector<DynamicMicroOp*> &current_uops, uint32_t first_squashed)
 {
    MicroOp::uop_type_t uop_type = MicroOp::UOP_INVALID;
    uint32_t i, size, squashedCount = 0, microOpTypeOffset = 0;
 
    // recalculate microOpTypeOffsets for dynamic uops and
    // collect squashing info
-   for(i = 0, size = m_current_uops.size(); i < size; i++)
+   for(i = 0, size = current_uops.size(); i < size; i++)
    {
-      DynamicMicroOp* uop = m_current_uops[i];
+      DynamicMicroOp* uop = current_uops[i];
       if(uop->isSquashed())
       {
          squashedCount++;
@@ -144,7 +135,7 @@ void MicroOpPerformanceModel::doSquashing(uint32_t first_squashed)
    // recalculate intraInstructionDependancies
    for(i = first_squashed; i < size; i++)
    {
-      DynamicMicroOp* uop = m_current_uops[i];
+      DynamicMicroOp* uop = current_uops[i];
       if(!uop->isSquashed())
       {
          uint32_t intraDeps = uop->getIntraInstrDependenciesLength();
@@ -152,42 +143,34 @@ void MicroOpPerformanceModel::doSquashing(uint32_t first_squashed)
          {
             uint32_t iBase = i - uop->getMicroOp()->microOpTypeOffset;
             LOG_ASSERT_ERROR(iBase >= intraDeps, "intraInstructionDependancies (%d) should be <= (%d)", intraDeps, iBase);
-            uop->setIntraInstrDependenciesLength(intraDeps - (m_current_uops[iBase]->getSquashedCount() -
-                                           m_current_uops[iBase-intraDeps]->getSquashedCount()));
+            uop->setIntraInstrDependenciesLength(intraDeps - (current_uops[iBase]->getSquashedCount() -
+                                           current_uops[iBase-intraDeps]->getSquashedCount()));
          }
       }
    }
 }
 
-bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
+void MicroOpPerformanceModel::handleInstruction(DynamicInstruction *dynins)
 {
-   if (m_state_instruction == NULL)
-   {
-      m_state_instruction = instruction;
-   }
-   LOG_ASSERT_ERROR(m_state_instruction == instruction, "Error: The instruction has changed, but the internal state has not been reset!");
+   ComponentPeriod insn_period = *(const_cast<ComponentPeriod*>(static_cast<const ComponentPeriod*>(m_elapsed_time)));
+   std::vector<DynamicMicroOp*> current_uops;
 
-   // Get the period (current CPU frequency) for this instruction
-   // Keep it constant during it's execution
-   if (m_state_insn_period.getPeriod() == SubsecondTime::Zero())
-   {
-      m_state_insn_period = *(const_cast<ComponentPeriod*>(static_cast<const ComponentPeriod*>(m_elapsed_time)));
-   }
+   // These vectors are local to handleInstruction, but keeping them around as member variables
+   // saves a lot on allocation/deallocation time.
+   m_current_uops.clear();
+   m_cache_lines_read.clear();
+   m_cache_lines_written.clear();
 
-   // Keep our current state of what has already been processed
-   // Each getDynamicInstructionInfo() might cause an exception, but
-   // we need to be sure to save what we have already computed
+   UInt64 num_reads_done = 0;
+   UInt64 num_writes_done = 0;
+   UInt64 num_nonmem_done = 0;
 
-   if (!m_state_uops_done)
+   if (dynins->instruction->getMicroOps())
    {
-      if (instruction->getMicroOps())
+      for(std::vector<const MicroOp*>::const_iterator it = dynins->instruction->getMicroOps()->begin(); it != dynins->instruction->getMicroOps()->end(); it++)
       {
-         for(std::vector<const MicroOp*>::const_iterator it = instruction->getMicroOps()->begin(); it != instruction->getMicroOps()->end(); it++)
-         {
-            m_current_uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, *it, m_state_insn_period));
-         }
+         m_current_uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, *it, insn_period));
       }
-      m_state_uops_done = true;
    }
 
    // Find some information
@@ -219,27 +202,30 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
    }
 
    // Compute the iCache cost, and add to our cycle time
-   if (!m_state_icache_done && Sim()->getConfig()->getEnableICacheModeling())
+   if (Sim()->getConfig()->getEnableICacheModeling())
    {
       // Sometimes, these aren't real instructions (INST_SPAWN, etc), and therefore, we need to skip these
-      if (instruction->getAddress() && !instruction->isDynamic() && m_current_uops.size() > 0 )
+      if (dynins->instruction->getAddress() && !dynins->instruction->isPseudo() && m_current_uops.size() > 0 )
       {
-         MemoryResult memres = getCore()->readInstructionMemory(instruction->getAddress(), instruction->getSize());
+         MemoryResult memres = getCore()->readInstructionMemory(dynins->eip, dynins->instruction->getSize());
 
          // For the interval model, for now, use integers for the cycle latencies
-         UInt64 memory_cycle_latency = SubsecondTime::divideRounded(memres.latency, m_state_insn_period);
+         UInt64 memory_cycle_latency = SubsecondTime::divideRounded(memres.latency, insn_period);
 
          // Set the hit_where information for the icache
          // The interval model will only add icache latencies if there hasn't been a hit.
          m_current_uops[0]->setICacheHitWhere(memres.hit_where);
          m_current_uops[0]->setICacheLatency(memory_cycle_latency);
       }
-      m_state_icache_done = true;
    }
 
    bool do_squashing = false;
    // Graphite instruction operands
-   const OperandList &ops = instruction->getOperands();
+   const OperandList &ops = dynins->instruction->getOperands();
+   unsigned int memidx = 0;
+
+   if (m_issue_memops)
+      dynins->accessMemory(getCore());
 
    // If we haven't gotten all of our read or write data yet, iterate over the operands
    for (size_t i = 0 ; i < ops.size() ; ++i)
@@ -248,34 +234,30 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
 
       if (o.m_type == Operand::MEMORY)
       {
-         // For each memory operand, there exists a dynamic instruction to process
-         DynamicInstructionInfo *info = getDynamicInstructionInfo(*instruction, m_issue_memops);
-         if (!info)
-            return false;
+         LOG_ASSERT_ERROR(dynins->num_memory > memidx, "Did not get enough memory_info objects");
+         DynamicInstruction::MemoryInfo &info = dynins->memory_info[memidx++];
+         LOG_ASSERT_ERROR(info.dir == o.m_direction,
+                          "Expected memory %d info, got: %d.", o.m_direction, info.dir);
 
          // Because the interval model is currently in cycles, convert the data to cycles here before using it
          // Force the latencies into cycles for use in the original interval model
          // FIXME Update the Interval Timer to use SubsecondTime
-         UInt64 memory_cycle_latency = SubsecondTime::divideRounded(info->memory_info.latency, m_state_insn_period);
+         UInt64 memory_cycle_latency = SubsecondTime::divideRounded(info.latency, insn_period);
 
          // Optimize multiple accesses to the same cache line by one instruction (vscatter/vgather)
          //   For simplicity, vgather/vscatter have 16 load/store microops, one for each address.
          //   Here, we squash microops that touch a given cache line a second time
          //   FIXME: although the microop is squashed and its latency ignored, the cache still sees the access
-         IntPtr cache_line = info->memory_info.addr & ~63; // FIXME: hard-coded cache line size
+         IntPtr cache_line = info.addr & ~63; // FIXME: hard-coded cache line size
 
          if (o.m_direction == Operand::READ)
          {
-
             // Operand::READ
 
             if (load_base_index != SIZE_MAX)
             {
+               size_t load_index = load_base_index + num_reads_done;
 
-               size_t load_index = load_base_index + m_state_num_reads_done;
-
-               LOG_ASSERT_ERROR(info->type == DynamicInstructionInfo::MEMORY_READ,
-                                "Expected memory read info, got: %d.", info->type);
                LOG_ASSERT_ERROR(load_index < m_current_uops.size(),
                                 "Expected load_index(%x) to be less than uops.size()(%d).", load_index, m_current_uops.size());
                LOG_ASSERT_ERROR(m_current_uops[load_index]->getMicroOp()->isLoad(),
@@ -292,10 +274,10 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
                UInt64 bypass_latency = m_core_model->getBypassLatency(m_current_uops[load_index]);
                m_current_uops[load_index]->setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
-               addr.set(info->memory_info.addr);
+               addr.set(info.addr);
                m_current_uops[load_index]->setAddress(addr);
-               m_current_uops[load_index]->setDCacheHitWhere(info->memory_info.hit_where);
-               ++m_state_num_reads_done;
+               m_current_uops[load_index]->setDCacheHitWhere(info.hit_where);
+               ++num_reads_done;
             }
             else
             {
@@ -309,11 +291,8 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
 
             if (store_base_index != SIZE_MAX)
             {
+               size_t store_index = store_base_index + num_writes_done;
 
-               size_t store_index = store_base_index + m_state_num_writes_done;
-
-               LOG_ASSERT_ERROR(info->type == DynamicInstructionInfo::MEMORY_WRITE,
-                                "Expected memory write info, got: %d.", info->type);
                LOG_ASSERT_ERROR(store_index < m_current_uops.size(),
                                 "Expected store_index(%d) to be less than uops.size()(%d).", store_index, m_current_uops.size());
                LOG_ASSERT_ERROR(m_current_uops[store_index]->getMicroOp()->isStore(),
@@ -330,10 +309,10 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
                UInt64 bypass_latency = m_core_model->getBypassLatency(m_current_uops[store_index]);
                m_current_uops[store_index]->setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
-               addr.set(info->memory_info.addr);
+               addr.set(info.addr);
                m_current_uops[store_index]->setAddress(addr);
-               m_current_uops[store_index]->setDCacheHitWhere(info->memory_info.hit_where);
-               ++m_state_num_writes_done;
+               m_current_uops[store_index]->setDCacheHitWhere(info.hit_where);
+               ++num_writes_done;
             }
             else
             {
@@ -341,74 +320,68 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
             }
 
          }
-
-         // When we have finally finished processing this dynamic instruction, remove it from the queue
-         popDynamicInstructionInfo();
       }
       else
       {
-         ++m_state_num_nonmem_done;
+         ++num_nonmem_done;
       }
 
    }
 
    if(do_squashing > 0)
-      doSquashing();
+      doSquashing(m_current_uops);
 
-   // Make sure there was an Operand/DynamicInstructionInfo for each MicroOp
+   // Make sure there was an Operand/MemoryInfo for each MicroOp
    // This should detect mismatches between decoding as done by fillOperandListMemOps and InstructionDecoder
-   assert(m_state_num_reads_done == num_loads);
-   assert(m_state_num_writes_done == num_stores);
+   assert(num_reads_done == num_loads);
+   assert(num_writes_done == num_stores);
 
-   // Instruction cost resolution
-   // Because getCost may fail if there are missing DynInstrInfo's, do not call getCost() anywhere else but here
-   // If it fails, keep state because we are waiting for processing that needs to occur,
-   // but some costs (I-cache access) have already been resolved
-   SubsecondTime insn_cost = instruction->getCost(getCore());
-   if (insn_cost == PerformanceModel::DyninsninfoNotAvailable())
-      return false;
+   SubsecondTime insn_cost = SubsecondTime::Zero();
 
-#if DEBUG_INSN_LOG
-   if (insn_cost > 17)
+   if (dynins->instruction->getType() == INST_BRANCH)
    {
-      fprintf(m_insn_log, "[%llu] ", (long long unsigned int)m_cycle_count);
-      if (load_base_index != SIZE_MAX) {
-         fprintf(m_insn_log, "L");
-      }
-      if (store_base_index != SIZE_MAX) {
-         fprintf(m_insn_log, "S");
-      }
-      if (exec_base_index != SIZE_MAX) {
-         fprintf(m_insn_log, "X");
-#ifdef ENABLE_MICROOP_STRINGS
-         fprintf(m_insn_log, "-%s:%s", instruction->getDisassembly().c_str(), instruction->getTypeName().c_str());
-         fflush(m_insn_log);
-#endif
-      }
-      fprintf(m_insn_log, "approx cost = %llu\n", (long long unsigned int)insn_cost);
-   }
-#endif
-
-
-   if (instruction->getType() == INST_BRANCH)
-   {
-      const BranchInstruction *branch_instruction = dynamic_cast<const BranchInstruction*>(instruction);
-      LOG_ASSERT_ERROR(branch_instruction != NULL, "Expected a BranchInstruction, but did not get one.");
+      bool is_mispredict;
+      dynins->getBranchCost(getCore(), &is_mispredict);
 
       // Set whether the branch was mispredicted or not
       LOG_ASSERT_ERROR(m_current_uops[exec_base_index]->getMicroOp()->isBranch(), "Expected to find a branch here.");
-      m_current_uops[exec_base_index]->setBranchMispredicted(branch_instruction->getIsMispredict());
-      m_current_uops[exec_base_index]->setBranchTaken(branch_instruction->getIsTaken());
-      m_current_uops[exec_base_index]->setBranchTarget(branch_instruction->getTargetAddress());
+      m_current_uops[exec_base_index]->setBranchMispredicted(is_mispredict);
+      m_current_uops[exec_base_index]->setBranchTaken(dynins->branch_info.taken);
+      m_current_uops[exec_base_index]->setBranchTarget(dynins->branch_info.target);
       // Do not update the execution latency of a branch instruction
       // The interval model will calculate the branch latency
+   }
+   else
+   {
+      insn_cost = dynins->getCost(getCore());
+
+   #if DEBUG_INSN_LOG
+      if (insn_cost > 17)
+      {
+         fprintf(m_insn_log, "[%llu] ", (long long unsigned int)m_cycle_count);
+         if (load_base_index != SIZE_MAX) {
+            fprintf(m_insn_log, "L");
+         }
+         if (store_base_index != SIZE_MAX) {
+            fprintf(m_insn_log, "S");
+         }
+         if (exec_base_index != SIZE_MAX) {
+            fprintf(m_insn_log, "X");
+   #ifdef ENABLE_MICROOP_STRINGS
+            fprintf(m_insn_log, "-%s:%s", dynins->instruction->getDisassembly().c_str(), dynins->instruction->getTypeName().c_str());
+            fflush(m_insn_log);
+   #endif
+         }
+         fprintf(m_insn_log, "approx cost = %llu\n", (long long unsigned int)insn_cost);
+      }
+   #endif
    }
 
    // Insert an instruction into the interval model to indicate that time has passed
    uint32_t new_num_insns = 0;
    ComponentTime new_latency(m_elapsed_time.getLatencyGenerator()); // Get a new, empty holder for latency
    bool latency_out_of_band = false; // If new_latency contains any values not returned from IntervalTimer/RobTimer, we'll need to call synchronize()
-   if(m_current_uops.size() > 0)
+   if (m_current_uops.size() > 0)
    {
       uint64_t new_latency_cycles;
       boost::tie(new_num_insns, new_latency_cycles) = simulate(m_current_uops);
@@ -431,7 +404,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       fprintf(m_insn_log, "approx cost = %llu\n", (long long unsigned int)insn_cost);
 #endif
    }
-   else if (insn_cost > SubsecondTime::Zero() && instruction->getType() != INST_MEM_ACCESS)
+   else if (insn_cost > SubsecondTime::Zero() && dynins->instruction->getType() != INST_MEM_ACCESS)
    {
       // Handle all non-zero, non MemAccess instructions here
 
@@ -446,7 +419,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       //  has already been taken into account here.  The interval model will serialize, flushing the old window
 
       std::vector<DynamicMicroOp*> uops;
-      uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, m_serialize_uop, m_state_insn_period));
+      uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, m_serialize_uop, insn_period));
 
       uint64_t new_latency_cycles;
       boost::tie(new_num_insns, new_latency_cycles) = simulate(uops);
@@ -459,20 +432,20 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
          latency_out_of_band = true;
       }
 
-      if (instruction->getType() == INST_TLB_MISS)
+      if (dynins->instruction->getType() == INST_TLB_MISS)
       {
-         TLBMissInstruction const* tlb_miss_insn = dynamic_cast<TLBMissInstruction const*>(instruction);
+         TLBMissInstruction const* tlb_miss_insn = dynamic_cast<TLBMissInstruction const*>(dynins->instruction);
          LOG_ASSERT_ERROR(tlb_miss_insn != NULL, "Expected a TLBMissInstruction, but did not get one.");
          if (tlb_miss_insn->isIfetch())
             m_cpiITLBMiss += insn_cost;
          else
             m_cpiDTLBMiss += insn_cost;
       }
-      else if (instruction->getType() == INST_UNKNOWN)
+      else if (dynins->instruction->getType() == INST_UNKNOWN)
       {
          m_cpiUnknown += insn_cost;
       }
-      else if ((instruction->getType() == INST_SYNC) || (instruction->getType() == INST_RECV))
+      else if ((dynins->instruction->getType() == INST_SYNC) || (dynins->instruction->getType() == INST_RECV))
       {
          LOG_PRINT_ERROR("The performance model expects non-idle instructions, not INST_SYNC or INST_RECV");
       }
@@ -483,7 +456,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
 
 
 #if DEBUG_DYN_INSN_LOG
-      fprintf(m_dyninsn_log, "[%llu] %s: cost = %llu\n", (long long unsigned int)m_elapsed_time, instruction->getTypeName().c_str(), (long long unsigned int)insn_cost);
+      fprintf(m_dyninsn_log, "[%llu] %s: cost = %llu\n", (long long unsigned int)m_elapsed_time, dynins->instruction->getTypeName().c_str(), (long long unsigned int)insn_cost);
 #endif
    }
    else if (insn_cost > SubsecondTime::Zero())
@@ -497,12 +470,12 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       // Graphite will still see a huge delta with this cpu's time, and then generate another, equally large
       // MemAccess instruction.  Therefore, as a work around, add the latencies to the
 
-      MemAccessInstruction const* mem_dyn_insn = dynamic_cast<MemAccessInstruction const*>(instruction);
+      MemAccessInstruction const* mem_dyn_insn = dynamic_cast<MemAccessInstruction const*>(dynins->instruction);
       LOG_ASSERT_ERROR(mem_dyn_insn != NULL, "Expected a MemAccessInstruction, but did not get one.");
 
       // Update uop with the necessary information for the MemAccess DynamicInstruction
       std::vector<DynamicMicroOp*> uops;
-      DynamicMicroOp* uop = m_core_model->createDynamicMicroOp(m_allocator, m_memaccess_uop, m_state_insn_period);
+      DynamicMicroOp* uop = m_core_model->createDynamicMicroOp(m_allocator, m_memaccess_uop, insn_period);
 
       // Long latency load setup
       SubsecondTime cost_add_latency_now(SubsecondTime::Zero());
@@ -510,7 +483,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       uint32_t cutoff = m_core_model->getLongLatencyCutoff();
       bool force_lll = false;
       // if we are a long latency load (0 == disable)
-      if ((cutoff > 0) && (insn_cost > cutoff * m_state_insn_period.getPeriod()))
+      if ((cutoff > 0) && (insn_cost > cutoff * insn_period.getPeriod()))
       {
          // Long latency load
          cost_add_latency_now = insn_cost;
@@ -524,7 +497,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       {
          // Normal load
          cost_add_latency_now = SubsecondTime::Zero();
-         cost_add_latency_interval = SubsecondTime::divideRounded(insn_cost, m_state_insn_period.getPeriod());
+         cost_add_latency_interval = SubsecondTime::divideRounded(insn_cost, insn_period.getPeriod());
       }
 
       Memory::Access data_address;
@@ -540,10 +513,10 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       {
          // Add memory fencing support to better simulate actual conditions
          // CMPXCHG instructions are called in mutex handlers, and their performance is about the same as MFENCEs
-         uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, m_mfence_uop, m_state_insn_period));
+         uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, m_mfence_uop, insn_period));
          //uops.push_back(serialize_uop);
          uops.push_back(uop);
-         uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, m_mfence_uop, m_state_insn_period));
+         uops.push_back(m_core_model->createDynamicMicroOp(m_allocator, m_mfence_uop, insn_period));
          // Additionally, we need to think about serialization, and it's effect
          // In the case of a system call, the system will be serialized
          // This would matter only for the case when we initially don't have a lock
@@ -576,7 +549,7 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
       m_cpiMemAccess += cost_add_latency_now;
 
 #if DEBUG_DYN_INSN_LOG
-      fprintf(m_dyninsn_log, "[%llu](MA) %s: cost = %llu\n", (long long unsigned int) m_elapsed_time, instruction->getTypeName().c_str(), (long long unsigned int) insn_cost);
+      fprintf(m_dyninsn_log, "[%llu](MA) %s: cost = %llu\n", (long long unsigned int) m_elapsed_time, dynins->instruction->getTypeName().c_str(), (long long unsigned int) insn_cost);
 #endif
    }
    else
@@ -591,23 +564,4 @@ bool MicroOpPerformanceModel::handleInstruction(Instruction const* instruction)
 #if DEBUG_CYCLE_COUNT_LOG
    fprintf(m_cycle_log, "[%s] latency=%d\n", itostr(m_elapsed_time).c_str(), itostr(new_latency.getElapsedTime()).c_str());
 #endif
-
-   // At the end, update our state to process the next instruction
-   resetState();
-
-   return true;
-}
-
-void MicroOpPerformanceModel::resetState()
-{
-   m_state_uops_done = false;
-   m_state_icache_done = false;
-   m_state_num_reads_done = 0;
-   m_state_num_writes_done = 0;
-   m_state_num_nonmem_done = 0;
-   m_state_insn_period *= 0;
-   m_state_instruction = NULL;
-   m_cache_lines_read.clear();
-   m_cache_lines_written.clear();
-   m_current_uops.clear();
 }

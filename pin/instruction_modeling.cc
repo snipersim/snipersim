@@ -13,6 +13,7 @@
 #include "timer.h"
 #include "instruction_decoder.h"
 #include "instruction.h"
+#include "dynamic_instruction.h"
 #include "micro_op.h"
 #include "magic_client.h"
 #include "inst_mode.h"
@@ -27,7 +28,11 @@ void InstructionModeling::handleInstruction(THREADID thread_id, Instruction *ins
    Thread *thread = localStore[thread_id].thread;
    Core *core = thread->getCore();
    PerformanceModel *prfmdl = core->getPerformanceModel();
-   prfmdl->queueInstruction(instruction);
+
+   if (localStore[thread_id].dynins)
+      prfmdl->queueInstruction(localStore[thread_id].dynins);
+
+   localStore[thread_id].dynins = prfmdl->createDynamicInstruction(instruction, instruction->getAddress());
 }
 
 void InstructionModeling::handleBasicBlock(THREADID thread_id)
@@ -36,6 +41,12 @@ void InstructionModeling::handleBasicBlock(THREADID thread_id)
    Core *core = thread->getCore();
    assert(core);
    PerformanceModel *prfmdl = core->getPerformanceModel();
+
+   if (localStore[thread_id].dynins)
+   {
+      prfmdl->queueInstruction(localStore[thread_id].dynins);
+      localStore[thread_id].dynins = NULL;
+   }
 
 #ifndef ENABLE_PERF_MODEL_OWN_THREAD
    prfmdl->iterate();
@@ -50,12 +61,8 @@ void InstructionModeling::handleBasicBlock(THREADID thread_id)
 
 static void handleBranch(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
 {
-   Core *core = localStore[thread_id].thread->getCore();
-   assert(core);
-   PerformanceModel *prfmdl = core->getPerformanceModel();
-
-   DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(eip, taken, target);
-   prfmdl->pushDynamicInstructionInfo(info);
+   assert(localStore[thread_id].dynins);
+   localStore[thread_id].dynins->addBranch(taken, target);
 }
 
 static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
@@ -209,6 +216,27 @@ VOID InstructionModeling::addInstructionModeling(TRACE trace, INS ins, InstMode:
    if (INS_Opcode(ins) == XED_ICLASS_PAUSE)
       INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handlePause, IARG_END);
 
+   if (INS_IsSyscall(ins) && Sim()->getConfig()->getEnableSyscallEmulation())
+   {
+      INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
+            AFUNPTR(lite::handleSyscall),
+            IARG_THREAD_ID,
+            IARG_CONTEXT,
+            IARG_END);
+   }
+
+
+   // Set up localStore[thread_id].dynins
+
+   if (INSTR_IF_DETAILED(inst_mode) && !INS_IsSyscall(ins))
+   {
+      Instruction *inst = InstructionModeling::decodeInstruction(ins);
+      INSTRUMENT(INSTR_IF_DETAILED(inst_mode), trace, ins, IPOINT_BEFORE, AFUNPTR(InstructionModeling::handleInstruction), IARG_THREAD_ID, IARG_PTR, inst, IARG_END);
+   }
+
+
+   // Timing models, will add dynamic information to localStore[thread_id].dynins
+
    if (INS_IsBranch(ins) && INS_HasFallThrough(ins))
    {
       // In warming mode, warm up the branch predictors
@@ -250,15 +278,7 @@ VOID InstructionModeling::addInstructionModeling(TRACE trace, INS ins, InstMode:
          IARG_END);
    }
 
-   if (INS_IsSyscall(ins) && Sim()->getConfig()->getEnableSyscallEmulation())
-   {
-      INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
-            AFUNPTR(lite::handleSyscall),
-            IARG_THREAD_ID,
-            IARG_CONTEXT,
-            IARG_END);
-   }
-   else
+   if (!INS_IsSyscall(ins))
    {
       // Instrument Memory Operations
       lite::addMemoryModeling(trace, ins, inst_mode);
@@ -341,7 +361,7 @@ VOID InstructionModeling::countInstructions(THREADID thread_id, ADDRINT address,
       if (localStore[thread_id].thread->reschedule(time, core))
       {
          core = localStore[thread_id].thread->getCore();
-         core->getPerformanceModel()->queueDynamicInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+         core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
       }
    }
 }

@@ -32,8 +32,7 @@ class FastforwardPerformanceModel
       void countInstructions(IntPtr address, UInt32 count);
       void handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where);
       void handleBranchMispredict();
-      void queueDynamicInstruction(Instruction *i);
-      void queueInstruction(Instruction *ins) {}
+      void queuePseudoInstruction(PseudoInstruction *i);
 
       SubsecondTime getFastforwardedTime(void) const { return m_fastforwarded_time; }
 };

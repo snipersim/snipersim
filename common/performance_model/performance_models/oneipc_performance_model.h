@@ -10,7 +10,7 @@ public:
    ~OneIPCPerformanceModel();
 
 private:
-   bool handleInstruction(Instruction const* instruction);
+   void handleInstruction(DynamicInstruction *instruction);
 
    bool isModeled(Instruction const* instruction) const;
 

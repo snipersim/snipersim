@@ -14,6 +14,7 @@
 #include "performance_model.h"
 #include "core_model.h"
 #include "rob_contention.h"
+#include "instruction.h"
 
 #include <iostream>
 #include <sstream>

@@ -9,6 +9,7 @@
 #include "log.h"
 #include "subsecond_time.h"
 #include "performance_model.h"
+#include "instruction.h"
 
 // FIXME: Rework netCreateBuf and netExPacket. We don't need to
 // duplicate the sender/receiver info the packet. This should be known
@@ -388,8 +389,8 @@ NetPacket Network::netRecv(const NetMatch &match, UInt64 timeout_ns)
          // Not that non-application models even care about this (their core performance models are never enabled).
          // Why even bother?
          LOG_PRINT("Queueing RecvInstruction(%s)", itostr(packet.time - start_time).c_str());
-         Instruction *i = new RecvInstruction(packet.time - start_time);
-         _core->getPerformanceModel()->queueDynamicInstruction(i);
+         PseudoInstruction *i = new RecvInstruction(packet.time - start_time);
+         _core->getPerformanceModel()->queuePseudoInstruction(i);
       }
    }
 
