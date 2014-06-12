@@ -11,9 +11,6 @@ class ClockSkewMinimizationClient;
 class ShmemPerfModel;
 class TopologyInfo;
 
-// FIXME: Move this out of here eventually
-class PinMemoryManager;
-
 #include "mem_component.h"
 #include "fixed_types.h"
 #include "lock.h"
@@ -110,7 +107,6 @@ class Core
       PerformanceModel *getPerformanceModel() { return m_performance_model; }
       ClockSkewMinimizationClient* getClockSkewMinimizationClient() const { return m_clock_skew_minimization_client; }
       MemoryManagerBase *getMemoryManager() { return m_memory_manager; }
-      PinMemoryManager *getPinMemoryManager() { return m_pin_memory_manager; }
       ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
       const ComponentPeriod* getDvfsDomain() const { return m_dvfs_domain; }
       TopologyInfo* getTopologyInfo() { return m_topology_info; }
@@ -139,7 +135,6 @@ class Core
       core_id_t m_core_id;
       const ComponentPeriod* m_dvfs_domain;
       MemoryManagerBase *m_memory_manager;
-      PinMemoryManager *m_pin_memory_manager;
       Thread *m_thread;
       Network *m_network;
       PerformanceModel *m_performance_model;

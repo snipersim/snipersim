@@ -3,7 +3,6 @@
 #include "syscall_model.h"
 #include "branch_predictor.h"
 #include "memory_manager_base.h"
-#include "pin_memory_manager.h"
 #include "performance_model.h"
 #include "clock_skew_minimization_object.h"
 #include "core_manager.h"
@@ -103,13 +102,11 @@ Core::Core(SInt32 id)
          Sim()->getCfg()->getString("caching_protocol/type"),
          this, m_network, m_shmem_perf_model);
 
-   m_pin_memory_manager = new PinMemoryManager(this);
 }
 
 Core::~Core()
 {
    delete m_topology_info;
-   delete m_pin_memory_manager;
    delete m_memory_manager;
    delete m_shmem_perf_model;
    delete m_performance_model;

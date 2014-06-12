@@ -4,7 +4,6 @@
 #include "core_manager.h"
 #include "core.h"
 #include "thread.h"
-#include "pin_memory_manager.h"
 #include "inst_mode.h"
 #include "instruction_modeling.h"
 #include "fault_injection.h"
@@ -28,7 +27,7 @@ void addMemoryModeling(TRACE trace, INS ins, InstMode::inst_mode_t inst_mode)
             if (Sim()->getFaultinjectionManager())
             {
                LOG_ASSERT_ERROR(i < TOOLREG_NUM_MEM, "Insufficient number of TOOLREG_MEMx available");
-               LOG_ASSERT_ERROR(i < PinMemoryManager::NUM_ACCESS_TYPES, "Insufficient number of PinMemoryManager::NUM_ACCESS_TYPES available");
+               LOG_ASSERT_ERROR(i < ThreadLocalStorage::NUM_SCRATCHPADS, "Insufficient number of ThreadLocalStorage::NUM_SCRATCHPADS available");
 
                INSTRUMENT(
                      INSTR_IF_FASTFORWARD(inst_mode),
@@ -238,8 +237,7 @@ ADDRINT handleMemoryReadFaultinjection(THREADID thread_id, BOOL executing, ADDRI
    if (executing)
    {
       char buf_fault[1024];
-      // We need a per-thread, per-operand buffer. Full mode already provides these.
-      char *buf_data = core->getPinMemoryManager()->getScratchpad(PinMemoryManager::AccessType(op_num));
+      char *buf_data = localStore[thread_id].scratch[op_num];
 
       // Load fault mask from simulated memory
       MemoryResult memres = core->accessMemory(

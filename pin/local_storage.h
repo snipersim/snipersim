@@ -33,6 +33,11 @@ struct ThreadLocalStorage
       size_t size;
    } malloc;
    ADDRINT lastCallSite;
+
+   // Scratchpads for fault-injection
+   static const int NUM_SCRATCHPADS = 3;
+   static const size_t SCRATCHPAD_SIZE = 1024;
+   char* scratch[NUM_SCRATCHPADS];
 };
 // Keep track of THREADID to Thread* pointers (and some other stuff), way faster than a PinTLS lookup
 extern std::vector<ThreadLocalStorage> localStore;
