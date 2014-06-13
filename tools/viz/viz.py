@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os, sys, getopt, re, math, subprocess, json
+import os, sys, getopt, re, math, subprocess, json, shutil
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
 import sniper_lib, sniper_stats, cpistack, level1, level2, level3, topology, profile, functionbased
@@ -22,7 +22,7 @@ levels_default = [ '1', '2', '3', 'topo' ]
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir (default: viz)>] [--mcpat] [--level <levels (default: %s)>] [--add-level <level>] [-v|--verbose]' % ','.join(levels_default)
+    print 'Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-j <jobid>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir (default: viz)>] [--mcpat] [--level <levels (default: %s)>] [--add-level <level>] [-v|--verbose]' % ','.join(levels_default)
     sys.exit()
 
   resultsdir = '.'
@@ -33,9 +33,10 @@ if __name__ == '__main__':
   interval = None
   verbose = False
   levels = levels_default
+  dircleanup = None
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:v", [ "help", "mcpat", "level=", "add-level=", "verbose" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:vj:", [ "help", "mcpat", "level=", "add-level=", "verbose" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -68,6 +69,22 @@ if __name__ == '__main__':
       levels.append(a)
     if o == '-v' or o == '--verbose':
       verbose = True
+    if o == '-j':
+      import tempfile, binascii, iqclient
+      jobid = int(a)
+      dircleanup = tempfile.mkdtemp()
+      tarfn = os.path.join(dircleanup,'%d.tar.gz'%jobid)
+      ic = iqclient.IntelClient()
+      with open(tarfn, 'w') as fp:
+        fp.write(binascii.a2b_base64(ic.job_output(jobid, False)))
+      waitrc = os.system('tar -x -z -f "%s" -C "%s" && rm "%s"' % (tarfn, dircleanup, tarfn))
+      rc = (waitrc >> 8) & 0xff
+      if rc != 0:
+        print 'Error: Unable to download and extract data from jobid %d.' % jobid
+        shutil.rmtree(dircleanup)
+        dircleanup = None
+        sys.exit(1)
+      resultsdir = dircleanup
 
 
   resultsdir = os.path.abspath(resultsdir)
@@ -155,3 +172,7 @@ if __name__ == '__main__':
       os.system('cd "%s"; tar c flot/ levels/functionbased/functionbased.html levels/functionbased/*js css/ levels/functionbased/doxygen | tar x -C %s' % (HOME, outputdir))
   if verbose:
     print "Visualizations can be viewed in "+os.path.join(outputdir,'index.html')
+
+  if dircleanup:
+    shutil.rmtree(dircleanup)
+    dircleanup = None
