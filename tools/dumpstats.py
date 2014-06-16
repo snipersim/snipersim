@@ -3,7 +3,7 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
-  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers | -e|--events] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [--through-time|tt <statname>]  [-d <resultsdir (default: .)>]'
+  print 'Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers | -e|--events | -c|--config ] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [--through-time|tt <statname>]  [-d <resultsdir (default: .)>]'
 
 
 jobid = 0
@@ -15,9 +15,10 @@ do_topo = False
 do_markers = False
 do_events = False
 do_stats = True
+do_config = False
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmte", [ 'list', 'markers', 'topology', 'events', 'partial=', 'tt=', 'through-time=' ])
+  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmtec", [ 'list', 'markers', 'topology', 'events', 'config', 'partial=', 'tt=', 'through-time=' ])
 except getopt.GetoptError, e:
   print e
   usage()
@@ -48,6 +49,9 @@ for o, a in opts:
     do_stats = False
   if o in ('-e', '--events'):
     do_events = True
+    do_stats = False
+  if o in ('-c', '--config'):
+    do_config = True
     do_stats = False
 
 if args:
@@ -115,6 +119,11 @@ if do_events:
       print format_event(timestamp, core, thread, 'Thread exit')
     else:
       print format_event(timestamp, core, thread, 'Unknown event %d (%d, %d, %s)' % (event, value0, value1, description))
+
+if do_config:
+  config = sniper_lib.get_config(resultsdir = resultsdir, jobid = jobid)
+  for k, v in sorted(config.items()):
+    print '%s=%s' % (k, v)
 
 
 if do_stats:
