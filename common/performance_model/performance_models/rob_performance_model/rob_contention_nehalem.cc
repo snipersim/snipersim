@@ -8,10 +8,11 @@
 #include "core.h"
 #include "config.hpp"
 #include "simulator.h"
+#include "memory_manager_base.h"
 
 RobContentionNehalem::RobContentionNehalem(const Core *core, const CoreModel *core_model)
    : m_core_model(core_model)
-   , m_cache_block_mask(~(Sim()->getCfg()->getInt("perf_model/l1_dcache/cache_block_size") - 1))
+   , m_cache_block_mask(~(core->getMemoryManager()->getCacheBlockSize() - 1))
    , m_now(core->getDvfsDomain())
    , alu_used_until(DynamicMicroOpNehalem::UOP_ALU_SIZE, SubsecondTime::Zero())
 {

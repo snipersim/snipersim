@@ -112,6 +112,9 @@ MemoryManager::MemoryManager(Core* core,
          else
             LOG_PRINT_ERROR("dvfs_domain %s is invalid", domain_name.c_str());
 
+         LOG_ASSERT_ERROR(Sim()->getCfg()->getInt("perf_model/" + configName + "/cache_block_size") == m_cache_block_size,
+                          "The cache block size of the %s is not the same as the l1_icache (%d)", configName.c_str(), m_cache_block_size);
+
          cache_parameters[(MemComponent::component_t)i] = CacheParameters(
             configName,
             Sim()->getCfg()->getIntArray(   "perf_model/" + configName + "/cache_size", core->getId()),

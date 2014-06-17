@@ -106,6 +106,7 @@ class Core
       PerformanceModel *getPerformanceModel() { return m_performance_model; }
       ClockSkewMinimizationClient* getClockSkewMinimizationClient() const { return m_clock_skew_minimization_client; }
       MemoryManagerBase *getMemoryManager() { return m_memory_manager; }
+      const MemoryManagerBase *getMemoryManager() const { return m_memory_manager; }
       ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
       const ComponentPeriod* getDvfsDomain() const { return m_dvfs_domain; }
       TopologyInfo* getTopologyInfo() { return m_topology_info; }
