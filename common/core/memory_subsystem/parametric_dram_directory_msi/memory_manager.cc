@@ -9,7 +9,6 @@
 #include "dvfs_manager.h"
 #include "itostr.h"
 #include "instruction.h"
-#include "performance_model.h"
 #include "config.hpp"
 #include "distribution.h"
 #include "topology_info.h"

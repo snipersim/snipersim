@@ -90,8 +90,6 @@ Core::Core(SInt32 id)
 
    m_network = new Network(this);
 
-   m_performance_model = PerformanceModel::create(this);
-
    m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(this);
 
    m_shmem_perf_model = new ShmemPerfModel();
@@ -101,6 +99,7 @@ Core::Core(SInt32 id)
          Sim()->getCfg()->getString("caching_protocol/type"),
          this, m_network, m_shmem_perf_model);
 
+   m_performance_model = PerformanceModel::create(this);
 }
 
 Core::~Core()
