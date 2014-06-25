@@ -100,7 +100,7 @@ class EnergyStats:
 
   def update_power(self, power):
     def get_power(component, prefix = ''):
-      return Power(component[prefix + 'Subthreshold Leakage'] + component[prefix + 'Gate Leakage'], component[prefix + 'Peak Dynamic'])
+      return Power(component[prefix + 'Subthreshold Leakage'] + component[prefix + 'Gate Leakage'], component[prefix + 'Runtime Dynamic'])
     for core in range(sim.config.ncores):
       self.power[('L1-I', core)] = get_power(power['Core'][core], 'Instruction Fetch Unit/Instruction Cache/')
       self.power[('L1-D', core)] = get_power(power['Core'][core], 'Load Store Unit/Data Cache/')
