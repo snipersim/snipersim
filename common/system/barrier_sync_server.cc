@@ -13,6 +13,8 @@
 #include "config.hpp"
 #include "circular_log.h"
 
+#include <algorithm>
+
 BarrierSyncServer::BarrierSyncServer()
    : m_local_clock_list(Sim()->getConfig()->getApplicationCores(), SubsecondTime::Zero())
    , m_barrier_acquire_list(Sim()->getConfig()->getApplicationCores(), false)
@@ -82,6 +84,9 @@ BarrierSyncServer::synchronize(core_id_t core_id, SubsecondTime time)
       return;
    }
 
+   // One thread entered the barrier, another one can resume
+   doRelease(1);
+
    master_core->getPerformanceModel()->barrierEnter();
 
    m_local_clock_list[master_core_id] = time;
@@ -138,6 +143,8 @@ BarrierSyncServer::releaseThread(thread_id_t thread_id)
          m_local_clock_list[core_id] = SubsecondTime::Zero();
       }
    }
+   // One thread stopped running, release another one now
+   doRelease(1);
 }
 
 void
@@ -239,6 +246,8 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id, bool continue_until_rel
    // Advance m_next_barrier_time
    // Release the Barrier
 
+   LOG_ASSERT_ERROR(m_to_release.size() == 0, "Reached the barrier while some threads haven't even restarted?");
+
    if (m_fastforward)
    {
       for (core_id_t core_id = 0; core_id < (core_id_t) Sim()->getConfig()->getApplicationCores(); core_id++)
@@ -296,14 +305,33 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id, bool continue_until_rel
                {
                   Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
                   core->getPerformanceModel()->barrierExit();
-                  m_core_cond[core_id]->signal();
+                  m_to_release.push_back(core_id);
                }
             }
          }
       }
    }
 
+   // To avoid overwhelming the OS scheduler, we only release N threads at a time (N ~= host cores).
+   // Once a thread is done (stops executing because it completed the next barrier quantum, or due to thread stall),
+   // one more thread is released so we always have at most N running threads.
+   std::random_shuffle(m_to_release.begin(), m_to_release.end());
+   doRelease(m_fastforward ? -1 : Sim()->getConfig()->getNumHostCores());
+
    return must_wait;
+}
+
+void
+BarrierSyncServer::doRelease(int n)
+{
+   // Release up to n threads from the list.
+   // When n == -1, all threads are released
+   while(m_to_release.size() && n--)
+   {
+      core_id_t core_id = m_to_release.back();
+      m_to_release.pop_back();
+      m_core_cond[core_id]->signal();
+   }
 }
 
 void

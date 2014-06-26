@@ -17,6 +17,7 @@ class BarrierSyncServer : public ClockSkewMinimizationServer
       std::vector<SubsecondTime> m_local_clock_list;
       std::vector<bool> m_barrier_acquire_list;
       std::vector<ConditionVariable*> m_core_cond;
+      std::vector<core_id_t> m_to_release;
       std::vector<core_id_t> m_core_group;
       std::vector<thread_id_t> m_core_thread;
       SubsecondTime m_global_time;
@@ -29,6 +30,7 @@ class BarrierSyncServer : public ClockSkewMinimizationServer
       bool isCoreRunning(core_id_t core_id, bool siblings = true);
       void releaseThread(thread_id_t thread_id);
       void signal();
+      void doRelease(int n);
 
       static SInt64 hookThreadExit(UInt64 object, UInt64 argument) {
          ((BarrierSyncServer*)object)->threadExit((HooksManager::ThreadTime*)argument); return 0;

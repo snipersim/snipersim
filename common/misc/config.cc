@@ -6,12 +6,14 @@
 #include "utils.h"
 #include "config.hpp"
 
+#include <unistd.h>
 #include <sstream>
 
 #define DEBUG
 
 String Config::m_knob_output_directory;
 UInt32 Config::m_knob_total_cores;
+UInt32 Config::m_knob_num_host_cores;
 bool Config::m_knob_enable_smc_support;
 bool Config::m_knob_issue_memops_at_functional;
 bool Config::m_knob_enable_icache_modeling;
@@ -54,6 +56,22 @@ Config::Config(SimulationMode mode)
 
    m_knob_output_directory = Sim()->getCfg()->getString("general/output_dir");
    m_knob_total_cores = Sim()->getCfg()->getInt("general/total_cores");
+
+   m_knob_num_host_cores = Sim()->getCfg()->getInt("general/num_host_cores");
+   if (m_knob_num_host_cores == 0)
+   {
+      // Count how many cores we are allowed to run on
+      cpu_set_t mask;
+      int res = sched_getaffinity(0, sizeof(mask), &mask);
+      if (res == 0)
+      {
+         for(UInt32 cpu = 0; cpu < _SC_NPROCESSORS_ONLN; ++cpu)
+            if (CPU_ISSET(cpu, &mask))
+               ++m_knob_num_host_cores;
+      }
+      else
+         m_knob_num_host_cores = sysconf(_SC_NPROCESSORS_ONLN);
+   }
 
    m_knob_enable_smc_support = Sim()->getCfg()->getBool("general/enable_smc_support");
    m_knob_enable_icache_modeling = Sim()->getCfg()->getBool("general/enable_icache_modeling");

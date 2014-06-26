@@ -68,6 +68,7 @@ public:
    { return m_simulation_mode; }
 
    // Knobs
+   UInt32 getNumHostCores() const { return m_knob_num_host_cores; }
    bool getEnableSMCSupport() const { return m_knob_enable_smc_support; }
    void forceEnableSMCSupport() { m_knob_enable_smc_support = true; }
    bool getIssueMemopsAtFunctional() const { return m_knob_issue_memops_at_functional; }
@@ -117,6 +118,7 @@ private:
 
    static String m_knob_output_directory;
    static UInt32 m_knob_total_cores;
+   static UInt32 m_knob_num_host_cores;
    static bool m_knob_enable_smc_support;
    static bool m_knob_issue_memops_at_functional;
    static bool m_knob_enable_icache_modeling;
