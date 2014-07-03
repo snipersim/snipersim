@@ -405,9 +405,6 @@ namespace config
 
             for (uint64_t index = 0; index < i->second.size(); ++index)
             {
-                if (index > 0)
-                    out << ",";
-
                 if (i->second[index])
                 {
                     //Quote the value if it is a string
@@ -421,6 +418,8 @@ namespace config
                     }
                 }
                 // else: default value, print nothing between the ","
+
+                out << ",";
             }
 
             out << std::endl;
