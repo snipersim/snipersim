@@ -38,6 +38,8 @@ BarrierSyncClient::synchronize(SubsecondTime time, bool ignore_time, bool abort_
 
       Sim()->getClockSkewMinimizationServer()->synchronize(m_core->getId(), curr_elapsed_time);
 
+      // Update barrier interval in case it was changed
+      m_barrier_interval = Sim()->getClockSkewMinimizationServer()->getBarrierInterval();
       // Update 'm_next_sync_time'
       m_next_sync_time = ((curr_elapsed_time / m_barrier_interval) * m_barrier_interval) + m_barrier_interval;
    }

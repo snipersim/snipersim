@@ -62,6 +62,8 @@ public:
    virtual void setGroup(core_id_t core_id, core_id_t master_core_id) = 0;
    virtual void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime()) = 0;
    virtual SubsecondTime getGlobalTime(bool upper_bound = false);
+   virtual void setBarrierInterval(SubsecondTime barrier_interval) = 0;
+   virtual SubsecondTime getBarrierInterval() const = 0;
 
    virtual void printState(void) {}
 };
