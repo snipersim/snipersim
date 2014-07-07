@@ -253,12 +253,15 @@ ThreadStatNamedStat::ThreadStatNamedStat(String objectName, String metricName)
    for(core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); ++core_id)
    {
       StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject(objectName, core_id, metricName);
-      LOG_ASSERT_ERROR(m != NULL, "Invalid statistic %s.%d.%s", objectName.c_str(), core_id, metricName.c_str());
       m_stats.push_back(m);
    }
 }
 
 UInt64 ThreadStatNamedStat::callback(ThreadStatsManager::ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user)
 {
-   return ((ThreadStatNamedStat*)user)->m_stats[core->getId()]->recordMetric();
+   StatsMetricBase *m = ((ThreadStatNamedStat*)user)->m_stats[core->getId()];
+   if (m)
+      return m->recordMetric();
+   else
+      return 0;
 }
