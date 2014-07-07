@@ -13,6 +13,7 @@ ThreadStatsManager::ThreadStatsManager()
    , m_thread_stat_callbacks()
    , m_next_dynamic_type(DYNAMIC)
    , m_bottlegraphs(MAX_THREADS)
+   , m_waiting_time_last(SubsecondTime::Zero())
 {
    // Order our hooks to occur before possible reschedulings (which are done with ORDER_ACTION), so the scheduler can use up-to-date information
    Sim()->getHooksManager()->registerHook(HookType::HOOK_PRE_STAT_WRITE, hook_pre_stat_write, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
@@ -24,6 +25,7 @@ ThreadStatsManager::ThreadStatsManager()
 
    registerThreadStatMetric(INSTRUCTIONS, "instruction_count", metricCallback, 0);
    registerThreadStatMetric(ELAPSED_NONIDLE_TIME, "nonidle_elapsed_time", metricCallback, 0);
+   registerThreadStatMetric(WAITING_COST, "waiting_cost", metricCallback, 0);
 }
 
 ThreadStatsManager::~ThreadStatsManager()
@@ -55,6 +57,8 @@ void ThreadStatsManager::update(thread_id_t thread_id, SubsecondTime time)
    if (time == SubsecondTime::MaxTime())
       time = Sim()->getClockSkewMinimizationServer()->getGlobalTime();
 
+   calculateWaitingCosts(time);
+
    if (thread_id == INVALID_THREAD_ID)
    {
       for(thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
@@ -67,6 +71,43 @@ void ThreadStatsManager::update(thread_id_t thread_id, SubsecondTime time)
    }
 }
 
+void ThreadStatsManager::calculateWaitingCosts(SubsecondTime time)
+{
+   // Calculate a waiting cost for all threads.
+   // For fully-subscribed systems, the cost is equal to each thread's waiting time.
+   // On over-subscribed systems, waiting is Ok as long as there are other threads that can execute,
+   // so the cost becomes equal to the number of unused core*cycles, which is spread out over all waiting threads.
+
+   if (time > m_waiting_time_last)
+   {
+      SubsecondTime time_delta = time - m_waiting_time_last;
+      UInt32 n_running = 0, n_stalled = 0, n_total = Sim()->getConfig()->getApplicationCores();
+      for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
+      {
+         if (Sim()->getThreadManager()->isThreadRunning(thread_id))
+            ++n_running;
+         else if (Sim()->getThreadManager()->getThreadStallReason(thread_id) == ThreadManager::STALL_UNSCHEDULED)
+            ;
+         else
+            ++n_stalled;
+      }
+
+      if (n_stalled && n_running <= n_total)
+      {
+         SubsecondTime cost = (n_total - n_running) * time_delta / n_stalled;
+         for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
+         {
+            if (!Sim()->getThreadManager()->isThreadRunning(thread_id)
+                && Sim()->getThreadManager()->getThreadStallReason(thread_id) != ThreadManager::STALL_UNSCHEDULED)
+            {
+               m_threads_stats[thread_id]->m_counts[WAITING_COST] += cost.getFS();
+            }
+         }
+      }
+      m_waiting_time_last = time;
+   }
+}
+
 UInt64 ThreadStatsManager::metricCallback(ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user)
 {
    switch(type)
@@ -75,6 +116,9 @@ UInt64 ThreadStatsManager::metricCallback(ThreadStatType type, thread_id_t threa
          return core->getPerformanceModel()->getInstructionCount();
       case ELAPSED_NONIDLE_TIME:
          return core->getPerformanceModel()->getNonIdleElapsedTime().getFS();
+      case WAITING_COST:
+         // Waiting cost is added directly to m_counts[], as it needs to be applied even (especially!) when the thread is not on a core
+         return 0;
       default:
          LOG_PRINT_ERROR("Invalid ThreadStatType(%d) for this callback", type);
    }
@@ -82,7 +126,9 @@ UInt64 ThreadStatsManager::metricCallback(ThreadStatType type, thread_id_t threa
 
 void ThreadStatsManager::pre_stat_write()
 {
-   m_bottlegraphs.update(Sim()->getClockSkewMinimizationServer()->getGlobalTime(), INVALID_THREAD_ID, false);
+   SubsecondTime time = Sim()->getClockSkewMinimizationServer()->getGlobalTime();
+   calculateWaitingCosts(time);
+   m_bottlegraphs.update(time, INVALID_THREAD_ID, false);
    update();
 }
 
@@ -101,6 +147,7 @@ void ThreadStatsManager::threadStart(thread_id_t thread_id, SubsecondTime time)
 
 void ThreadStatsManager::threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time)
 {
+   calculateWaitingCosts(time);
    m_threads_stats[thread_id]->update(time);
    if (reason != ThreadManager::STALL_UNSCHEDULED)
       m_bottlegraphs.update(time, thread_id, false);
@@ -108,12 +155,14 @@ void ThreadStatsManager::threadStall(thread_id_t thread_id, ThreadManager::stall
 
 void ThreadStatsManager::threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time)
 {
+   calculateWaitingCosts(time);
    m_threads_stats[thread_id]->update(time);
    m_bottlegraphs.update(time, thread_id, true);
 }
 
 void ThreadStatsManager::threadExit(thread_id_t thread_id, SubsecondTime time)
 {
+   calculateWaitingCosts(time);
    m_threads_stats[thread_id]->update(time);
    m_bottlegraphs.update(time, thread_id, false);
 }
@@ -123,6 +172,8 @@ ThreadStatsManager::ThreadStats::ThreadStats(thread_id_t thread_id)
    , m_core_id(INVALID_CORE_ID)
    , time_by_core(Sim()->getConfig()->getApplicationCores())
    , insn_by_core(Sim()->getConfig()->getApplicationCores())
+   , m_elapsed_time(SubsecondTime::Zero())
+   , m_unscheduled_time(SubsecondTime::Zero())
    , m_time_last(SubsecondTime::Zero())
    , m_counts()
    , m_last()

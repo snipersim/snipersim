@@ -77,18 +77,20 @@ class CallPrinter:
     call = self.prof.calls[stack]
     self.printLine(call, offset = offset)
     for child in sorted(call.children, key = lambda stack: self.prof.calls[stack].total['nonidle_elapsed_time'], reverse = True):
-      if self.prof.calls[child].total['nonidle_elapsed_time'] / float(self.prof.totals['nonidle_elapsed_time']) < self.opt_cutoff:
+      child_time = self.prof.calls[child].total['nonidle_elapsed_time'] + self.prof.calls[child].total['waiting_cost']
+      if child_time / float(self.prof.totals['nonidle_elapsed_time']) < self.opt_cutoff:
         break
       self.printTree(child, offset = offset + 1)
 
 
 class CallPrinterDefault(CallPrinter):
   def printHeader(self):
-    print >> self.obj, '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 'icount', 'ipc', 'l2.mpki', 'name')
+    print >> self.obj, '%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%7s\t%s' % ('calls', 'time', 't.self', 't.wait', 'icount', 'ipc', 'l2.mpki', 'name')
   def printLine(self, call, offset):
     print >> self.obj, '%7d\t' % call.data['calls'] + \
                        '%6.2f%%\t' % (100 * call.total['nonidle_elapsed_time'] / float(self.prof.totals['nonidle_elapsed_time'] or 1)) + \
                        '%6.2f%%\t' % (100 * call.data['nonidle_elapsed_time'] / float(self.prof.totals['nonidle_elapsed_time'] or 1)) + \
+                       '%6.2f%%\t' % (100 * call.data['waiting_cost'] / float(self.prof.totals['total_coretime'] or 1)) + \
                        '%6.2f%%\t' % (100 * call.total['instruction_count'] / float(self.prof.totals['instruction_count'] or 1)) + \
                        '%7.2f\t' % (call.total['instruction_count'] / (self.prof.fs_to_cycles * float(call.total['nonidle_elapsed_time'] or 1))) + \
                        '%7.2f\t' % (1000 * call.total['l2miss'] / float(call.total['instruction_count'] or 1)) + \
@@ -97,11 +99,12 @@ class CallPrinterDefault(CallPrinter):
 
 class CallPrinterAbsolute(CallPrinter):
   def printHeader(self):
-    print >> self.obj, '%7s\t%9s\t%9s\t%9s\t%9s\t%9s\t%s' % ('calls', 'cycles', 'c.self', 'icount', 'i.self', 'l2miss', 'name')
+    print >> self.obj, '%7s\t%9s\t%9s\t%9s\t%9s\t%9s\t%9s\t%s' % ('calls', 'cycles', 'c.self', 'c.wait', 'icount', 'i.self', 'l2miss', 'name')
   def printLine(self, call, offset):
     print >> self.obj, '%7d\t' % call.data['calls'] + \
                        '%9d\t' % (self.prof.fs_to_cycles * float(call.total['nonidle_elapsed_time'])) + \
                        '%9d\t' % (self.prof.fs_to_cycles * float(call.data['nonidle_elapsed_time'])) + \
+                       '%9d\t' % (self.prof.fs_to_cycles * float(call.data['waiting_cost'])) + \
                        '%9d\t' % call.total['instruction_count'] + \
                        '%9d\t' % call.data['instruction_count'] + \
                        '%9d\t' % call.total['l2miss'] + \
@@ -114,7 +117,9 @@ class Profile:
     if not os.path.exists(filename):
       raise IOError('Cannot find trace file %s' % filename)
 
-    config = sniper_lib.get_config(resultsdir = resultsdir)
+    results = sniper_lib.get_results(resultsdir = resultsdir)
+    config = results['config']
+    stats = results['results']
     freq = 1e9 * float(sniper_config.get_config(config, 'perf_model/core/frequency'))
     self.fs_to_cycles = freq / 1e15
 
@@ -162,6 +167,9 @@ class Profile:
     # by visiting calls_ordered in left-to-right order.
     for stack in calls_ordered:
       self.calls[stack].buildTotal(self)
+
+    ncores = int(config['general/total_cores'])
+    self.totals['total_coretime'] = ncores * stats['barrier.global_time'][0]
 
   def translateEip(self, eip):
     if eip in self.functions:

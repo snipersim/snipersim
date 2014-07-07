@@ -17,6 +17,7 @@ class ThreadStatsManager
       {
          INSTRUCTIONS,
          ELAPSED_NONIDLE_TIME,
+         WAITING_COST,
          NUM_THREAD_STAT_FIXED_TYPES,  // Number of fixed thread statistics
          DYNAMIC,                      // User-defined thread statistics
          INVALID
@@ -49,6 +50,7 @@ class ThreadStatsManager
       // Thread statistics are updated lazily (on thread move and before statistics writing),
       // call this function to force an update before reading
       void update(thread_id_t thread_id = INVALID_THREAD_ID, SubsecondTime time = SubsecondTime::MaxTime());
+      void calculateWaitingCosts(SubsecondTime time);
 
       const ThreadStatTypeList& getThreadStatTypes() { return m_thread_stat_types; }
       const char* getThreadStatName(ThreadStatType type) { return m_thread_stat_callbacks[type].m_name; }
@@ -74,6 +76,7 @@ private:
       std::unordered_map<ThreadStatType, StatCallback> m_thread_stat_callbacks;
       ThreadStatType m_next_dynamic_type;
       BottleGraphManager m_bottlegraphs;
+      SubsecondTime m_waiting_time_last;
 
       static UInt64 metricCallback(ThreadStatType type, thread_id_t thread_id, Core *core, UInt64 user);
       UInt64 callThreadStatCallback(ThreadStatType type, thread_id_t thread_id, Core *core);
