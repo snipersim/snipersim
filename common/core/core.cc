@@ -15,6 +15,7 @@
 #include "config.hpp"
 #include "stats.h"
 #include "topology_info.h"
+#include "cheetah_manager.h"
 
 #include <cstring>
 
@@ -69,6 +70,7 @@ Core::Core(SInt32 id)
    , m_thread(NULL)
    , m_bbv(id)
    , m_topology_info(new TopologyInfo(id))
+   , m_cheetah_manager(Sim()->getCfg()->getBool("core/cheetah/enabled") ? new CheetahManager(id) : NULL)
    , m_core_state(Core::IDLE)
    , m_icache_last_block(-1)
    , m_spin_loops(0)
@@ -104,6 +106,8 @@ Core::Core(SInt32 id)
 
 Core::~Core()
 {
+   if (m_cheetah_manager)
+      delete m_cheetah_manager;
    delete m_topology_info;
    delete m_memory_manager;
    delete m_shmem_perf_model;
@@ -258,6 +262,9 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
 
 void Core::accessMemoryFast(bool icache, mem_op_t mem_op_type, IntPtr address)
 {
+   if (m_cheetah_manager && icache == false)
+      m_cheetah_manager->access(mem_op_type, address);
+
    SubsecondTime latency = getMemoryManager()->coreInitiateMemoryAccessFast(icache, mem_op_type, address);
 
    if (latency > SubsecondTime::Zero())
@@ -351,6 +358,9 @@ Core::initiateMemoryAccess(MemComponent::component_t mem_component,
       }
 
       LOG_PRINT("Start InitiateSharedMemReq: ADDR(0x%x), offset(%u), curr_size(%u)", curr_addr_aligned, curr_offset, curr_size);
+
+      if (m_cheetah_manager)
+         m_cheetah_manager->access(mem_op_type, curr_addr_aligned);
 
       HitWhere::where_t this_hit_where = getMemoryManager()->coreInitiateMemoryAccess(
                mem_component,

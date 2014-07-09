@@ -10,6 +10,7 @@ class PerformanceModel;
 class ClockSkewMinimizationClient;
 class ShmemPerfModel;
 class TopologyInfo;
+class CheetahManager;
 
 #include "mem_component.h"
 #include "fixed_types.h"
@@ -111,6 +112,7 @@ class Core
       const ComponentPeriod* getDvfsDomain() const { return m_dvfs_domain; }
       TopologyInfo* getTopologyInfo() { return m_topology_info; }
       const TopologyInfo* getTopologyInfo() const { return m_topology_info; }
+      const CheetahManager* getCheetahManager() const { return m_cheetah_manager; }
 
       State getState() const { return m_core_state; }
       void setState(State core_state) { m_core_state = core_state; }
@@ -143,6 +145,7 @@ class Core
       ShmemPerfModel* m_shmem_perf_model;
       BbvCount m_bbv;
       TopologyInfo *m_topology_info;
+      CheetahManager *m_cheetah_manager;
 
       State m_core_state;
 

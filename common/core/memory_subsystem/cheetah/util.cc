@@ -1,15 +1,18 @@
 /************************************************************************
-* Copyright (C) 1989, 1990, 1991, 1992, 1993                    	*
-*                   Rabin A. Sugumar and Santosh G. Abraham		*
-*									*
-* This software is distributed absolutely without warranty. You are	*
-* free to use and modify the software as you wish.  You are also free	*
-* to distribute the software as long as it is not for commercial gain,	*
-* you retain the above copyright notice, and you make clear what your	*
-* modifications were.							*
-*									*
-* Send comments and bug reports to rabin@eecs.umich.edu			*
-*									*
+* Copyright (C) 1989, 1990, 1991, 1992, 1993                            *
+*                   Rabin A. Sugumar and Santosh G. Abraham             *
+*                                                                       *
+* This software is distributed absolutely without warranty. You are     *
+* free to use and modify the software as you wish.  You are also free   *
+* to distribute the software as long as it is not for commercial gain,  *
+* you retain the above copyright notice, and you make clear what your   *
+* modifications were.                                                   *
+*                                                                       *
+* Send comments and bug reports to rabin@eecs.umich.edu                 *
+*                                                                       *
+* (c) 2013 Wim Heirman <wim@heirman.net>                                *
+*            Converted to C++ classes, use 64-bit data types            *
+*                                                                       *
 ************************************************************************/
 
 /* Functions used by the simulation algorithms */
@@ -17,11 +20,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../host.h"
-#include "../misc.h"
-#include "../machine.h"
 #include "util.h"
-#include "libcheetah.h"
+
+void fatal(const char* msg)
+{
+   fprintf(stderr, "[CHEETAH] Fatal error: %s\n", msg);
+   exit(1);
+}
 
 /*
  * Calculates x^y
@@ -53,17 +58,17 @@ power(int x, int y)
  * Output: A pointer to the two dimensional array space
  * Side effects: None
  */
-unsigned **
+uint64_t **
 idim2(int row, int col)
 {
   int i;
-  register unsigned **prow, *pdata;
+  register uint64_t **prow, *pdata;
 
-  pdata = (unsigned *)calloc(row*col, sizeof (int));
+  pdata = (uint64_t *)calloc(row*col, sizeof (uint64_t));
   if (!pdata)
     fatal("out of virtual memory");
 
-  prow = (unsigned **)calloc(row, sizeof (int *));
+  prow = (uint64_t **)calloc(row, sizeof (uint64_t *));
   if (!prow)
     fatal("out of virtual memory");
 
@@ -125,9 +130,9 @@ rotate_left(int y, struct tree_node **p_stack)
   if (z > 0)
     {
       if (p_stack[z]->lft == p_stack[y])
-	p_stack[z]->lft = p_stack[x];
+   p_stack[z]->lft = p_stack[x];
       else
-	p_stack[z]->rt = p_stack[x];
+   p_stack[z]->rt = p_stack[x];
     }
   p_stack[y]->rt = p_stack[x]->lft;
   p_stack[y]->rtwt -= p_stack[x]->rtwt + 1;
@@ -159,9 +164,9 @@ rotate_right(int y, struct tree_node **p_stack)
   if (z>0)
     {
       if (t3->lft == t2)
-	t3->lft = t1;
+   t3->lft = t1;
       else
-	t3->rt = t1;
+   t3->rt = t1;
     }
   t2->lft = t1->rt;
   t1->rt = t2;
@@ -188,21 +193,21 @@ splay(int at, struct tree_node **p_stack)
   x = at;
   px = at-1;
   gx = at-2;
- 
+
   /* 'at' is a left child */
   if (p_stack[x] == p_stack[px]->lft)
     {
       if (gx == 0)   /* zig */
-	rotate_right(1, p_stack);
+   rotate_right(1, p_stack);
       else if (p_stack[px] == p_stack[gx]->lft){   /* zig-zig */
-	rotate_right(gx, p_stack);
-	rotate_right(gx, p_stack);
+   rotate_right(gx, p_stack);
+   rotate_right(gx, p_stack);
       }
       else
-	{                               /* zig-zag */
-	  rotate_right(px, p_stack);
-	  rotate_left(gx, p_stack);
-	}
+   {                               /* zig-zag */
+     rotate_right(px, p_stack);
+     rotate_left(gx, p_stack);
+   }
     }
   /* 'at' is a right child */
   else if (gx == 0)                              /* zig */
