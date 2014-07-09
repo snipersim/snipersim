@@ -24,6 +24,7 @@ def usage():
         '  [--viz-aso]' + \
         '  [--profile]' + \
         '  [--memory-profile]' + \
+        '  [--cheetah]' + \
         '  [--perf]' + \
         '  [--gdb]' + \
         '  [--gdb-wait]' + \
@@ -67,6 +68,7 @@ use_viz_aso = ''
 use_viz_mcpat = ''
 use_profile = False
 use_memory_profile = False
+use_cheetah = False
 use_perf = False
 use_wrap_sim = None
 use_gdb = False
@@ -187,7 +189,7 @@ try:
     [
       "roi", "roi-script",
       "viz", "viz-aso",
-      "profile", "memory-profile",
+      "profile", "memory-profile", "cheetah",
       "perf", "valgrind", "wrap-sim=",
       "gdb", "gdb-wait", "gdb-quit",
       "appdebug", "appdebug-manual", "appdebug-enable",
@@ -250,6 +252,9 @@ for o, a in opts:
     use_viz_profile = '--add-level=profile'
   if o == '--memory-profile':
     use_memory_profile = True
+  if o == '--cheetah':
+    use_cheetah = True
+    sniperoptions.append('-g --core/cheetah/enabled=true')
   if o == '--perf':
     use_perf = True
   if o == '--valgrind':
@@ -840,6 +845,9 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
   if use_memory_profile:
     os.system('%(sim_root)s/tools/gen_memory_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
+
+  if use_cheetah:
+    os.system('%(sim_root)s/tools/gen_cheetah.py -d %(outputdir)s -o %(outputdir)s/cheetah' % locals())
 
   if run_power:
     print '[SNIPER] Running McPAT'
