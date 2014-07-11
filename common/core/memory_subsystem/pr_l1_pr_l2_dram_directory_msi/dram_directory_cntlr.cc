@@ -1011,6 +1011,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
             }
             else
             {
+               bool shmem_perf_sent = false;
                // Send Invalidation Request to only a specific set of sharers
                for (UInt32 i = 0; i < sharers_list_pair.second.size(); i++)
                {
@@ -1027,8 +1028,9 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
                            address,
                            NULL, 0,
                            HitWhere::UNKNOWN,
-                           i == 0 ? shmem_msg->getPerf() : NULL,
+                           shmem_perf_sent == false ? shmem_msg->getPerf() : NULL,
                            ShmemPerfModel::_SIM_THREAD);
+                     shmem_perf_sent = true;
                   }
                }
             }
