@@ -16,7 +16,7 @@ def usage():
         '  [-d <outputdir (.)>]' + \
         '  [-c <sniper-config>]' + \
         '  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]' + \
-        '  [-g <sniper-options>]' + \
+        '  [-c <sniper-options: section/key=value>]' + \
         '  [-s <script>]' + \
         '  [--roi]' + \
         '  [--roi-script]' + \
@@ -221,7 +221,11 @@ for o, a in opts:
   if o == '-d':
     outputdir = a
   if o == '-c':
-    if ':' in a or ',' in a:
+    if '=' in a:
+      if not a.startswith('-'):
+        a = '--'+a
+      sniperoptions.append(pipes.quote(a))
+    elif ':' in a or ',' in a:
       obj, _, cfg = a.rpartition(':')
       if not obj:
         obj = 'core'
