@@ -148,7 +148,7 @@ void Sift::Reader::initResponse()
    if (!response)
    {
       assert (strcmp(m_response_filename, "") != 0);
-      response = new std::ofstream(m_response_filename, std::ios::out);
+      response = new vofstream(m_response_filename, std::ios::out);
    }
 
    if (!response->is_open())

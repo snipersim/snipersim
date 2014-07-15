@@ -12,22 +12,27 @@ class vostream
       virtual ~vostream() {}
       virtual void write(const char* s, std::streamsize n) = 0;
       virtual void flush() = 0;
+      virtual bool is_open() = 0;
 };
 
 class vofstream : public vostream
 {
    private:
-      std::ofstream stream;
+      std::ofstream *stream;
    public:
       vofstream(const char * filename, std::ios_base::openmode mode = std::ios_base::out)
-         : stream(filename, mode) {}
-      virtual ~vofstream() {}
+         : stream(new std::ofstream(filename, mode)) {}
+      vofstream(std::ofstream *stream)
+         : stream(stream) {}
+      virtual ~vofstream() { delete stream; }
       virtual void write(const char* s, std::streamsize n)
-         { stream.write(s, n); }
+         { stream->write(s, n); }
       virtual void flush()
-         { stream.flush(); }
+         { stream->flush(); }
       virtual void fail()
-         { stream.fail(); }
+         { stream->fail(); }
+      virtual bool is_open()
+         { return stream->is_open(); }
 };
 
 class ozstream : public vostream
@@ -45,6 +50,8 @@ class ozstream : public vostream
       virtual void write(const char* s, std::streamsize n);
       virtual void flush()
          { output->flush(); }
+      virtual bool is_open()
+         { return output->is_open(); }
 };
 
 

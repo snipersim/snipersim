@@ -78,7 +78,7 @@ void Sift::Writer::initResponse()
    if (!response)
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
+     response = new vifstream(m_response_filename, std::ios::in);
      sift_assert(!response->fail());
    }
 }

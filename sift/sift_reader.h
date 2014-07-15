@@ -13,6 +13,7 @@ extern "C" {
 #include <cassert>
 
 class vistream;
+class vostream;
 
 namespace Sift
 {
@@ -55,7 +56,7 @@ namespace Sift
 
       private:
          vistream *input;
-         std::ofstream *response;
+         vostream *response;
          HandleInstructionCountFunc handleInstructionCountFunc;
          void *handleInstructionCountArg;
          HandleCacheOnlyFunc handleCacheOnlyFunc;

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <assert.h>
 
+class vistream;
 class vostream;
 
 namespace Sift
@@ -19,7 +20,7 @@ namespace Sift
 
       private:
          vostream *output;
-         std::ifstream *response;
+         vistream *response;
          GetCodeFunc getCodeFunc;
          HandleAccessMemoryFunc handleAccessMemoryFunc;
          void *handleAccessMemoryArg;
