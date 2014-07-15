@@ -97,6 +97,7 @@ namespace Sift
          bool m_seen_end;
          const StaticInstruction *m_last_sinst;
 
+         void initResponse();
          const Sift::StaticInstruction* decodeInstruction(uint64_t addr, uint8_t size);
          const Sift::StaticInstruction* getStaticInstruction(uint64_t addr, uint8_t size);
          void sendSyscallResponse(uint64_t return_code);

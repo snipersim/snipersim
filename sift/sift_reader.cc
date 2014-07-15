@@ -143,6 +143,21 @@ void Sift::Reader::initStream()
    #endif
 }
 
+void Sift::Reader::initResponse()
+{
+   if (!response)
+   {
+      assert (strcmp(m_response_filename, "") != 0);
+      response = new std::ofstream(m_response_filename, std::ios::out);
+   }
+
+   if (!response->is_open())
+   {
+      std::cerr << "Cannot open " << m_response_filename << std::endl;
+      assert(false);
+   }
+}
+
 bool Sift::Reader::Read(Instruction &inst)
 {
    if (input == NULL)
@@ -517,17 +532,7 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
       initStream();
    }
 
-   if (!response)
-   {
-      assert (strcmp(m_response_filename, "") != 0);
-      response = new std::ofstream(m_response_filename, std::ios::out);
-   }
-
-   if (!response->is_open())
-   {
-      std::cerr << "Cannot open " << m_response_filename << std::endl;
-      assert(false);
-   }
+   initResponse();
 
    Record rec;
    rec.Other.zero = 0;
@@ -654,17 +659,7 @@ void Sift::Reader::sendSyscallResponse(uint64_t return_code)
    std::cerr << "[DEBUG:" << m_id << "] Write SyscallResponse" << std::endl;
    #endif
 
-   if (!response)
-   {
-      assert (strcmp(m_response_filename, "") != 0);
-      response = new std::ofstream(m_response_filename, std::ios::out);
-   }
-
-   if (!response->is_open())
-   {
-      std::cerr << "Cannot open " << m_response_filename << std::endl;
-      assert(false);
-   }
+   initResponse();
 
    Record rec;
    rec.Other.zero = 0;
@@ -681,17 +676,7 @@ void Sift::Reader::sendEmuResponse(bool handled, EmuReply res)
    std::cerr << "[DEBUG:" << m_id << "] Write sendEmuResponse" << std::endl;
    #endif
 
-   if (!response)
-   {
-      assert (strcmp(m_response_filename, "") != 0);
-      response = new std::ofstream(m_response_filename, std::ios::out);
-   }
-
-   if (!response->is_open())
-   {
-      std::cerr << "Cannot open " << m_response_filename << std::endl;
-      assert(false);
-   }
+   initResponse();
 
    Record rec;
    rec.Other.zero = 0;
@@ -710,17 +695,7 @@ void Sift::Reader::sendSimpleResponse(RecOtherType type, void *data, uint32_t si
    std::cerr << "[DEBUG:" << m_id << "] Write SimpleResponse type=" << type << std::endl;
    #endif
 
-   if (!response)
-   {
-      assert (strcmp(m_response_filename, "") != 0);
-      response = new std::ofstream(m_response_filename, std::ios::out);
-   }
-
-   if (!response->is_open())
-   {
-      std::cerr << "Cannot open " << m_response_filename << std::endl;
-      assert(false);
-   }
+   initResponse();
 
    Record rec;
    rec.Other.zero = 0;

@@ -34,6 +34,7 @@ namespace Sift
          bool m_requires_icache_per_insn;
          bool m_send_va2pa_mapping;
 
+         void initResponse();
          void handleMemoryRequest(Record &respRec);
          void send_va2pa(uint64_t va);
          uint64_t va2pa_lookup(uint64_t va);

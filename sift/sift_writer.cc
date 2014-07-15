@@ -73,6 +73,16 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
       output = new ozstream(output);
 }
 
+void Sift::Writer::initResponse()
+{
+   if (!response)
+   {
+     sift_assert(strcmp(m_response_filename, "") != 0);
+     response = new std::ifstream(m_response_filename, std::ios::in);
+     sift_assert(!response->fail());
+   }
+}
+
 void Sift::Writer::End()
 {
    #if VERBOSE > 0
@@ -277,11 +287,7 @@ Sift::Mode Sift::Writer::InstructionCount(uint32_t icount)
    output->write(reinterpret_cast<char*>(&icount), sizeof(icount));
    output->flush();
 
-   if (!response)
-   {
-     sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
-   }
+   initResponse();
 
    // wait for reply
    Record respRec;
@@ -363,12 +369,7 @@ int32_t Sift::Writer::NewThread()
    std::cerr << "[DEBUG:" << m_id << "] Write NewThread Done" << std::endl;
    #endif
 
-   if (!response)
-   {
-     sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
-     sift_assert(!response->fail());
-   }
+   initResponse();
 
    int32_t retcode = 0;
    while (true)
@@ -445,13 +446,7 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    output->write(data, size);
    output->flush();
 
-
-   if (!response)
-   {
-     sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
-     sift_assert(!response->fail());
-   }
+   initResponse();
 
    uint64_t retcode = 0;
    while (true)
@@ -497,12 +492,7 @@ int32_t Sift::Writer::Join(int32_t thread)
    std::cerr << "[DEBUG:" << m_id << "] Write Join Done" << std::endl;
    #endif
 
-   if (!response)
-   {
-     sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
-     sift_assert(!response->fail());
-   }
+   initResponse();
 
    int32_t retcode = 0;
    while (true)
@@ -542,12 +532,7 @@ Sift::Mode Sift::Writer::Sync()
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    output->flush();
 
-   if (!response)
-   {
-     sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
-     sift_assert(!response->fail());
-   }
+   initResponse();
 
    while (true)
    {
@@ -588,11 +573,7 @@ int32_t Sift::Writer::Fork()
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    output->flush();
 
-   if(!response)
-   {
-      assert(strcmp(m_response_filename, "") != 0);
-      response = new std::ifstream(m_response_filename, std::ios::in);
-   }
+   initResponse();
 
    Record respRec;
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
@@ -621,11 +602,7 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
    output->write(reinterpret_cast<char*>(&c), sizeof(uint64_t));
    output->flush();
 
-   if (!response)
-   {
-     sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
-   }
+   initResponse();
 
    // wait for reply
    while (true)
@@ -670,11 +647,7 @@ bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuR
    output->write(reinterpret_cast<char*>(&req), sizeof(EmuRequest));
    output->flush();
 
-   if (!response)
-   {
-     sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new std::ifstream(m_response_filename, std::ios::in);
-   }
+   initResponse();
 
    // wait for reply
    while (true)
