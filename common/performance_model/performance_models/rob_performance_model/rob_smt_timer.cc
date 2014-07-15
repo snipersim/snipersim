@@ -65,6 +65,7 @@ RobSmtTimer::RobSmtTimer(
       , m_no_address_disambiguation(!Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/address_disambiguation", core->getId()))
       , inorder(Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/in_order", core->getId()))
       , windowRepartition(Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/rob_repartition", core->getId()))
+      , simultaneousIssue(Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/simultaneous_issue", core->getId()))
       , m_rob_contention(
            Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/issue_contention", core->getId())
            ? core_model->createRobContentionModel(core)
@@ -1032,7 +1033,7 @@ SubsecondTime RobSmtTimer::doIssue()
       else if (m_rob_threads[thread_num]->m_num_in_rob > 0)
       {
          bool hasIssued = tryIssue(thread_num, next_event);
-         if (hasIssued)
+         if (hasIssued && !simultaneousIssue)
             break;
       }
       thread_num = (thread_num + 1) % m_threads.size();

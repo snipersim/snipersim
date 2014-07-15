@@ -119,6 +119,7 @@ private:
    const bool m_no_address_disambiguation;
    const bool inorder;
    const bool windowRepartition;
+   const bool simultaneousIssue;
 
    std::vector<RobThread *> m_rob_threads;
    RobContention *m_rob_contention;
