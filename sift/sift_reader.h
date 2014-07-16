@@ -21,6 +21,9 @@ namespace Sift
    class StaticInstruction
    {
       public:
+         StaticInstruction()
+           : xed_inst() {}
+
          uint64_t addr;
          uint8_t size;
          uint8_t data[16];

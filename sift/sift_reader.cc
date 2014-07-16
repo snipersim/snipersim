@@ -616,8 +616,8 @@ const Sift::StaticInstruction* Sift::Reader::decodeInstruction(uint64_t addr, ui
    }
 
    xed_state_t xed_state = m_xed_state_init;
-   xed_decoded_inst_zero_set_mode((xed_decoded_inst_t*)&sinst->xed_inst, &xed_state);
-   xed_error_enum_t result = xed_decode((xed_decoded_inst_t*)&sinst->xed_inst, sinst->data, sinst->size);
+   xed_decoded_inst_zero_set_mode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), &xed_state);
+   xed_error_enum_t result = xed_decode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), sinst->data, sinst->size);
    assert(result == XED_ERROR_NONE);
 
    return sinst;
