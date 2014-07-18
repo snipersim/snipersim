@@ -3,17 +3,19 @@
 import os, sys, time, getopt, math, sniper_lib
 
 def max_diff(l_notsorted):
-  l = sorted(filter(lambda x:x != None, l_notsorted))
+  l = sorted(l_notsorted)
   try:
     l = map(float,l)
   except ValueError, e:
+    # Values are not float (string, bool): print if more than one unique value
     l = map(str,l)
     if len(set(l)) > 1:
       return (1,100,True)
     else:
       return (0.0,0.0,False)
   except TypeError, e:
-    return (0.0,0.0,False)
+    # Some values are None (missing config): definitely print
+    return (0.0,0.0,True)
   islendiff = len(l_notsorted) != len(l)
   if l[0] == 0.0:
     return (l[-1] - l[0], 0.0, islendiff)
