@@ -69,18 +69,17 @@ BarrierSyncServer::synchronize(core_id_t core_id, SubsecondTime time)
    Core *master_core = Sim()->getCoreManager()->getCoreFromID(core_id);
    thread_id_t thread_me = core->getThread()->getId();
 
+   CLOG("barrier", "Core %d entry (master core %d, thread %d, ffwd %d)", core_id, master_core_id, thread_me, m_fastforward);
    LOG_PRINT("Received 'SIM_BARRIER_WAIT' from Core(%i), Time(%s)", core_id, itostr(time).c_str());
 
    LOG_ASSERT_ERROR(core->getState() == Core::RUNNING || core->getState() == Core::INITIALIZING, "Core(%i) is not running or initializing at time(%s)", core_id, itostr(time).c_str());
    LOG_ASSERT_ERROR(m_barrier_acquire_list[master_core_id] == false, "Core(%i) or its sibling is already in the barrier (this is thread %d, we have thread %d)", master_core_id, thread_me, m_core_thread[master_core_id]);
 
-   CLOG("barrier", "Core %d entry (master core %d, thread %d)", core_id, master_core_id, thread_me);
-
    if (time < m_next_barrier_time && !m_fastforward)
    {
       LOG_PRINT("Sent 'SIM_BARRIER_RELEASE' immediately time(%s), m_next_barrier_time(%s)", itostr(time).c_str(), itostr(m_next_barrier_time).c_str());
       // LOG_PRINT_WARNING("core_id(%i), local_clock(%llu), m_next_barrier_time(%llu), m_barrier_interval(%llu)", core_id, time, m_next_barrier_time, m_barrier_interval);
-      CLOG("barrier", "Core %d exit", core_id);
+      CLOG("barrier", "Core %d immediate exit", core_id);
       return;
    }
 
@@ -102,7 +101,7 @@ BarrierSyncServer::synchronize(core_id_t core_id, SubsecondTime time)
    else
       master_core->getPerformanceModel()->barrierExit();
 
-   CLOG("barrier", "Core %d exit", core_id);
+   CLOG("barrier", "Core %d exit (master core %d, thread %d)", core_id, master_core_id, thread_me);
 }
 
 void
@@ -240,6 +239,7 @@ BarrierSyncServer::isBarrierReached()
 bool
 BarrierSyncServer::barrierRelease(thread_id_t caller_id, bool continue_until_release)
 {
+   CLOG("barrier", "Release (caller thread %d)", caller_id);
    LOG_PRINT("Sending 'BARRIER_RELEASE'");
 
    // All cores have reached the barrier
@@ -337,6 +337,7 @@ BarrierSyncServer::doRelease(int n)
 void
 BarrierSyncServer::abortBarrier()
 {
+   CLOG("barrier", "Abort");
    for(core_id_t core_id = 0; core_id < (core_id_t) Sim()->getConfig()->getApplicationCores(); core_id++)
    {
       // Check if this core was running. If yes, release that core
@@ -371,6 +372,8 @@ BarrierSyncServer::setGroup(core_id_t core_id, core_id_t master_core_id)
 void
 BarrierSyncServer::setFastForward(bool fastforward, SubsecondTime next_barrier_time)
 {
+   if (m_fastforward != fastforward)
+      CLOG("barrier", "FastForward %d > %d", m_fastforward, fastforward);
    m_fastforward = fastforward;
    if (next_barrier_time != SubsecondTime::MaxTime())
    {
