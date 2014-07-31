@@ -185,6 +185,14 @@ void PerformanceModel::queuePseudoInstruction(PseudoInstruction *i)
 
 void PerformanceModel::queueInstruction(DynamicInstruction *ins)
 {
+   if (m_fastforward || !m_enabled)
+   {
+      // Some threads may not have switched instrumentation mode yet even though we have left ROI
+      // Ignore the instructions they send to avoid overflowing buffers
+      delete ins;
+      return;
+   }
+
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD
       m_instruction_queue.push_wait(ins);
    #else
