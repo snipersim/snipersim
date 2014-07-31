@@ -36,6 +36,10 @@ FastForwardPerformanceManager::enable()
    for (UInt32 i = 0; i < Sim()->getConfig()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->enablePerformanceModels();
 
+   Sim()->getClockSkewMinimizationServer()->setFastForward(true);
+   // Make sure all threads are released, as the barrier has just changed from per-core to per-HW-context mode
+   Sim()->getClockSkewMinimizationServer()->release();
+
    step();
 }
 
