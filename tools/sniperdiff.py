@@ -76,7 +76,7 @@ def format_diff(d):
   else:
     return format_percent(d)
 
-def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = None, print_alldiffs = True, print_average = False):
+def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = None, print_alldiffs = True, print_average = False, average_nz = True):
 
   jobs = []
   stats = {}
@@ -107,7 +107,14 @@ def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = 
   def get_average(statkey, key):
     data = stats[statkey].get(key)
     if data and type(data) is list and len(data) > 0:
-      return long(sum(data) / float(len(data)))
+      if average_nz:
+        # Find cores for which this statistic is non-zero for at least one of the results
+        alldata = [ stats[_statkey][key] for _statkey in stats.keys() ]
+        nonzero = map(any, zip(*alldata))
+        cnt = len(filter(None, nonzero)) or 1
+      else:
+        cnt = len(data)
+      return long(sum(data) / float(cnt))
     else:
       return None
 
@@ -224,4 +231,4 @@ if __name__ == "__main__":
     sys.exit(1)
 
   with sniper_lib.OutputToLess():
-    print_diff(parmsort = parmsort, restype = restype, resultdirs = resultdirs, partial = partial, print_alldiffs = print_alldiffs, print_average = print_average)
+    print_diff(parmsort = parmsort, restype = restype, resultdirs = resultdirs, partial = partial, print_alldiffs = print_alldiffs, print_average = print_average, average_nz = True)
