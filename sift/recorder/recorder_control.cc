@@ -56,6 +56,7 @@ void endROI(THREADID threadid)
       syscall_args_t args = {0};
       args[0] = 0; // Assume success
       thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
+      thread_data[threadid].output->End();
    }
 
    // Delete our .appid file
