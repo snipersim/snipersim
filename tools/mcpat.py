@@ -967,8 +967,8 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t<!-- Alu stats by default, the processor has one FPU that includes the divider and ",""])
     template.append(["\t\t\t multiplier. The fpu accesses should include accesses to multiplier and divider  -->",""])
 
-    template.append(["\t\t\t<stat name=\"ialu_access\" value=\"%i\"/>",["window_switches.ialu_accesses","stat",iCount]])           #check regarding the stats
-    template.append(["\t\t\t<stat name=\"fpu_access\" value=\"%i\"/>",["window_switches.fpu_accesses","stat",iCount]])    #check regarding the stats
+    template.append(["\t\t\t<stat name=\"ialu_accesses\" value=\"%i\"/>",["window_switches.ialu_accesses","stat",iCount]])           #check regarding the stats
+    template.append(["\t\t\t<stat name=\"fpu_accesses\" value=\"%i\"/>",["window_switches.fpu_accesses","stat",iCount]])    #check regarding the stats
     template.append(["\t\t\t<stat name=\"mul_accesses\" value=\"%i\"/>",["window_switches.mul_accesses","stat",iCount]])  #check regarding the stats
     template.append(["\t\t\t<stat name=\"cdb_alu_accesses\" value=\"%i\"/>",["window_switches.cdb_alu_accesses","stat",iCount]])      #check regarding the stats
     template.append(["\t\t\t<stat name=\"cdb_mul_accesses\" value=\"%i\"/>",["window_switches.cdb_mul_accesses","stat",iCount]])      #check regarding the stats
