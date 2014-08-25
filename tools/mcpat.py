@@ -131,6 +131,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
   if config:
     results['config'] = sniper_config.parse_config(file(config).read(), results['config'])
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
+
   power, nuca_at_level = edit_XML(stats, results['results'], results['config'])
   power = map(lambda v: v[0], power)
   file(tempfile, "w").write('\n'.join(power))
@@ -654,9 +655,9 @@ def edit_XML(statsobj, stats, cfg):
           elif template[i][1][0]=="RF_accesses.fp_regfile_writes":
             template[i][0] = template[i][0] % int(instrs[core]*0.125)
           elif template[i][1][0]=="ROB_reads":
-            template[i][0] = template[i][0] % int(instrs[core]*1)
+            template[i][0] = template[i][0] % int(stats.get('interval_timer.uops_total', stats.get('rob_timer.uops_total', []))[core]*1)
           elif template[i][1][0]=="ROB_writes":
-            template[i][0] = template[i][0] % int(instrs[core]*1)
+            template[i][0] = template[i][0] % int(stats.get('interval_timer.uops_total', stats.get('rob_timer.uops_total', []))[core]*1)
           elif template[i][1][0]=="branch_ins":
             template[i][0] = template[i][0] % int(data[core]['Branch_instructions'])
           elif template[i][1][0]=="branch_mis":
