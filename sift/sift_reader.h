@@ -27,7 +27,7 @@ namespace Sift
          uint64_t addr;
          uint8_t size;
          uint8_t data[16];
-         const xed_decoded_inst_t xed_inst;
+         xed_decoded_inst_t xed_inst;
          const StaticInstruction *next;
    };
 
