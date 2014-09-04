@@ -21,6 +21,12 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 
+#if PIN_REV >= 67254
+extern "C" {
+#include "xed-decoded-inst-api.h"
+}
+#endif
+
 TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracefile, String responsefile, app_id_t app_id, bool cleanup)
    : m__thread(NULL)
    , m_thread(thread)
@@ -355,7 +361,11 @@ Instruction* TraceThread::decode(Sift::Instruction &inst)
    instruction->setSize(inst.sinst->size);
    instruction->setAtomic(xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst)));
    char disassembly[64];
+#if PIN_REV >= 67254
+   xed_format_context(m_syntax, &xed_inst, disassembly, sizeof(disassembly) - 1, inst.sinst->addr, 0, 0);
+#else
    xed_format(m_syntax, &xed_inst, disassembly, sizeof(disassembly) - 1, inst.sinst->addr);
+#endif
    instruction->setDisassembly(disassembly);
 
    const std::vector<const MicroOp*> *uops = InstructionDecoder::decode(inst.sinst->addr, &xed_inst, instruction);

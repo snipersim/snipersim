@@ -9,6 +9,12 @@
 #include <map>
 #include <unordered_map>
 
+#if PIN_REV >= 67254
+extern "C" {
+#include "xed-decoded-inst-api.h"
+}
+#endif
+
 int main(int argc, char* argv[])
 {
    if (argc > 1 && strcmp(argv[1], "-d") == 0)
@@ -43,7 +49,11 @@ int main(int argc, char* argv[])
          for(int i = it->second->size; i < 8; ++i)
             printf("   ");
          char buffer[64];
+#if PIN_REV >= 67254
+         xed_format_context(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first, 0, 0);
+#else
          xed_format(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first);
+#endif
          printf("  %-40s\n", buffer);
          if (it->second->size > 8)
          {
@@ -65,7 +75,11 @@ int main(int argc, char* argv[])
       {
          printf("%016" PRIx64 " ", inst.sinst->addr);
          char buffer[64];
+#if PIN_REV >= 67254
+         xed_format_context(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr, 0, 0);
+#else
          xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr);
+#endif
          printf("%-40s  ", buffer);
 
          for(int i = 0; i < inst.sinst->size; ++i)
