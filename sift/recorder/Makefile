@@ -44,13 +44,13 @@ endif
 
 SOURCES=$(wildcard *.cc)
 OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
-sift_recorder: $(OBJECTS) ../libsift.a
-ifeq ($(SHOW_COMPILE),)
-	@echo '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	@$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS) $(CXXFLAGS_ARCH)
-else
-	$(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS) $(CXXFLAGS_ARCH)
-endif
+sift_recorder: $(OBJECTS) ../libsift.a $(CONTROLLERLIB)
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(TOOL_LDFLAGS) -o $@ $(OBJECTS) $(LDFLAGS) $(TOOL_LPATHS) $(TOOL_LIBS) $(CXXFLAGS_ARCH) $(CONTROLLERLIB)
+
+# Build the Pin controller library when necessary
+$(CONTROLLERLIB):
+	$(MAKE) -C $(TOOLS_ROOT)/InstLib dir $(OBJDIR)controller$(LIB_SUFFIX)
 
 include $(SIM_ROOT)/common/Makefile.common
 

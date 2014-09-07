@@ -61,14 +61,18 @@ FOLLOW_LIB = $(SIM_ROOT)/lib/follow_execv.so
 $(SIM_ROOT)/lib/libcarbon_sim.a:
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
 
-$(TARGET_LIB): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
+$(TARGET_LIB): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a $(CONTROLLERLIB)
 $(TARGET_LIB): $(OBJECTS)
 	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
+	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) $(CONTROLLERLIB) -std=c++0x
 
-$(FOLLOW_LIB): follow_execv/follow_execv.o
+$(FOLLOW_LIB): follow_execv/follow_execv.o $(CONTROLLERLIB)
 	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) -std=c++0x
+	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) $(CONTROLLERLIB) -std=c++0x
+
+# Build the Pin controller library when necessary
+$(CONTROLLERLIB):
+	$(MAKE) -C $(TOOLS_ROOT)/InstLib dir $(OBJDIR)controller$(LIB_SUFFIX)
 
 # This include must be here
 #  - The above targets need to be the default ones.  Makefile.common's would override it
