@@ -187,7 +187,7 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    CLOG("thread", "Exit %d", thread_id);
 }
 
-thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id, thread_func_t func, void *arg)
+thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id)
 {
    ScopedLock sl(getLock());
 
@@ -198,8 +198,6 @@ thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id, t
       Core *core = thread->getCore();
       time_start = core->getPerformanceModel()->getElapsedTime();
    }
-
-   LOG_PRINT("(1) spawnThread with func: %p and arg: %p", func, arg);
 
    Thread *new_thread = createThread_unlocked(app_id, thread_id);
 

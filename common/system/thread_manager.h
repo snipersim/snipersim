@@ -51,7 +51,7 @@ public:
    Thread *findThreadByTid(pid_t tid);
 
    // services
-   thread_id_t spawnThread(thread_id_t thread_id, app_id_t app_id, thread_func_t func, void *arg);
+   thread_id_t spawnThread(thread_id_t thread_id, app_id_t app_id);
    void joinThread(thread_id_t thread_id, thread_id_t join_thread_id);
 
    thread_id_t getThreadToSpawn(SubsecondTime &time);

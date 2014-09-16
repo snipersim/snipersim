@@ -12,9 +12,6 @@ namespace lite
 void routineCallback(RTN rtn, void* v);
 void routineStartCallback(RTN rtn, INS ins);
 
-void emuPthreadCreateBefore(THREADID thread_id, ADDRINT thread_ptr, void* (*thread_func)(void*), void* arg);
-void emuPthreadCreateAfter(THREADID thread_id);
-void emuPthreadJoinBefore(THREADID thread_id, pthread_t thread);
 IntPtr nullFunction();
 
 void pthreadBefore(THREADID thread_id);

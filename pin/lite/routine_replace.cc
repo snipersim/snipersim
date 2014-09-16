@@ -25,7 +25,6 @@
 namespace lite
 {
 
-multimap<thread_id_t, pthread_t> thread_id_to_thread_ptr_map;
 std::unordered_map<core_id_t, SubsecondTime> pthread_t_start;
 AFUNPTR ptr_exit = NULL;
 
@@ -57,12 +56,6 @@ void routineStartCallback(RTN rtn, INS ins)
    // else, we would first issue the basic block to one core and later the send the
    // dynamic information to another core, or send dynamic instructions for the wrong basic block.
 
-   // Thread Joining
-   if (rtn_name.find("pthread_join") != string::npos)
-   {
-      INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(emuPthreadJoinBefore), IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_END);
-   }
-
    // icc/openmp compatibility
    if (rtn_name == "__kmp_reap_monitor" || rtn_name == "__kmp_internal_end_atexit")
    {
@@ -83,16 +76,6 @@ void routineCallback(RTN rtn, void* v)
       RTN_InsertCall (rtn, IPOINT_BEFORE, AFUNPTR (printStackTrace), IARG_THREAD_ID, IARG_ADDRINT, name, IARG_BOOL, true, IARG_END);
       RTN_InsertCall (rtn, IPOINT_AFTER,  AFUNPTR (printStackTrace), IARG_THREAD_ID, IARG_ADDRINT, name, IARG_BOOL, false, IARG_END);
       RTN_Close (rtn);
-   }
-
-   // Thread Creation
-   if (rtn_name.find("pthread_create") != string::npos)
-   {
-      RTN_Open(rtn);
-      RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(emuPthreadCreateBefore), IARG_THREAD_ID,
-         IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 2, IARG_FUNCARG_ENTRYPOINT_VALUE, 3, IARG_END);
-      RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(emuPthreadCreateAfter), IARG_THREAD_ID, IARG_END);
-      RTN_Close(rtn);
    }
 
    if (Sim()->getMemoryTracker())
@@ -342,65 +325,6 @@ AFUNPTR getFunptr(CONTEXT* context, string func_name)
    PIN_UnlockClient();
 
    return RTN_Funptr(rtn);
-}
-
-void emuPthreadCreateBefore(THREADID threadIndex, ADDRINT thread_ptr, void* (*thread_func)(void*), void* arg)
-{
-   // We have to do a loose match on pthread_create (it's sometimes called __pthread_create_2_1),
-   // but that can cause recursion on this function. Detect this by keeping a count
-   // and only act on the outer call.
-   if (0 == localStore[threadIndex].pthread_create.count++)
-   {
-      Thread* thread = localStore[threadIndex].thread;
-      thread_id_t new_thread_id = Sim()->getThreadManager()->spawnThread(thread->getId(), 0, thread_func, arg);
-
-      localStore[threadIndex].pthread_create.thread_ptr = thread_ptr;
-      localStore[threadIndex].pthread_create.thread_id = new_thread_id;
-    }
-}
-
-void emuPthreadCreateAfter(THREADID threadIndex)
-{
-   if (0 == --localStore[threadIndex].pthread_create.count)
-   {
-      pthread_t* thread_ptr = (pthread_t*)localStore[threadIndex].pthread_create.thread_ptr;
-      thread_id_t new_thread_id = localStore[threadIndex].pthread_create.thread_id;
-      thread_id_to_thread_ptr_map.insert(std::pair<thread_id_t, pthread_t>(new_thread_id, *thread_ptr));
-
-      Thread *new_thread = Sim()->getThreadManager()->getThreadFromID(new_thread_id);
-      new_thread->m_os_info.tid_ptr = (IntPtr)localStore[threadIndex].pthread_create.tid_ptr;
-      new_thread->m_os_info.clear_tid = localStore[threadIndex].pthread_create.clear_tid;
-
-      // Waiting for the thread to actually start sounds like a good idea, and even though we do it outside of any callbacks,
-      // deadlocks still seem to occur in Pin if we enable this. Anyway, comparing our supposed start time with the actual time
-      // (as known by the barrier) in ThreadManager::onThreadStart doesn't seem to give big differences anyway, so we should be Ok.
-      //Sim()->getThreadManager()->waitForThreadStart(localStore[threadIndex].thread->getId(), new_thread_id);
-   }
-}
-
-static thread_id_t findThreadByPthreadId(pthread_t pthread)
-{
-   multimap<thread_id_t, pthread_t>::iterator it;
-   for (it = thread_id_to_thread_ptr_map.begin(); it != thread_id_to_thread_ptr_map.end(); it++)
-   {
-      if (pthread_equal(it->second, pthread) != 0)
-      {
-         return it->first;
-      }
-   }
-   return INVALID_THREAD_ID;
-}
-
-void emuPthreadJoinBefore(THREADID thread_id, pthread_t pthread)
-{
-   Thread* thread = localStore[thread_id].thread;
-
-   thread_id_t join_thread_id = findThreadByPthreadId(pthread);
-   LOG_ASSERT_ERROR(join_thread_id != INVALID_THREAD_ID, "Could not find thread_id");
-
-   LOG_PRINT("Joining Thread_ptr(%p), tid(%i)", &pthread, join_thread_id);
-
-   Sim()->getThreadManager()->joinThread(thread->getId(), join_thread_id);
 }
 
 IntPtr nullFunction()

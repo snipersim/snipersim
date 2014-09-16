@@ -332,7 +332,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
    if (! done_app_initialization)
    {
       // Spawn the main() thread
-      Sim()->getThreadManager()->spawnThread(INVALID_THREAD_ID, 0, NULL, NULL);
+      Sim()->getThreadManager()->spawnThread(INVALID_THREAD_ID, 0);
 
       // Start the trace manager, if any
       if (Sim()->getTraceManager())

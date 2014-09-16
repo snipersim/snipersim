@@ -46,6 +46,8 @@ class SyscallMdl
       IntPtr runExit(IntPtr old_return);
       bool isEmulated() const { return m_emulated; }
       bool inSyscall() const { return m_in_syscall; }
+      IntPtr getCurrentSyscallNumber() const { return m_syscall_number; }
+      const syscall_args_t getCurrentSyscallArguments() const { return m_syscall_args; }
       String formatSyscall() const;
 
    private:

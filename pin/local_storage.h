@@ -21,12 +21,8 @@ struct ThreadLocalStorage
    // needed on return once we know the new thread's id
    struct
    {
-      int count;
-      pthread_t thread_ptr;
-      thread_id_t thread_id;
-      void* tid_ptr;
-      bool clear_tid;
-   } pthread_create;
+      thread_id_t new_thread_id;
+   } clone;
    // State used by spin loop detection
    SpinLoopDetectionState sld;
    // Malloc tracker

@@ -48,12 +48,16 @@ void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
 
    if (syscall_number == SYS_clone)
    {
+      thread_id_t new_thread_id = Sim()->getThreadManager()->spawnThread(localStore[threadIndex].thread->getId(), 0);
+      Thread *new_thread = Sim()->getThreadManager()->getThreadFromID(new_thread_id);
+      localStore[threadIndex].clone.new_thread_id = new_thread_id;
+
       #if defined(TARGET_IA32)
-         localStore[threadIndex].pthread_create.tid_ptr = (void*)args.arg2;
+         new_thread->m_os_info.tid_ptr = args.arg2;
       #elif defined(TARGET_INTEL64)
-         localStore[threadIndex].pthread_create.tid_ptr = (void*)args.arg3;
+         new_thread->m_os_info.tid_ptr = args.arg3;
       #endif
-      localStore[threadIndex].pthread_create.clear_tid = args.arg0 & CLONE_CHILD_CLEARTID ? true : false;
+      new_thread->m_os_info.clear_tid = args.arg0 & CLONE_CHILD_CLEARTID ? true : false;
    }
    else if (syscall_number == SYS_execve)
    {
@@ -80,6 +84,12 @@ void syscallExitRunModel(THREADID threadIndex, CONTEXT* ctx, SYSCALL_STANDARD sy
    Thread* thread = localStore[threadIndex].thread;
    LOG_ASSERT_ERROR(thread != NULL, "Thread(NULL)");
    IntPtr old_return_val = PIN_GetSyscallReturn(ctx, syscall_standard);
+
+   if (thread->getSyscallMdl()->getCurrentSyscallNumber() == SYS_clone)
+   {
+      Thread *new_thread = Sim()->getThreadManager()->getThreadFromID(localStore[threadIndex].clone.new_thread_id);
+      new_thread->m_os_info.tid = old_return_val;
+   }
 
    if (thread->getSyscallMdl()->isEmulated())
    {
