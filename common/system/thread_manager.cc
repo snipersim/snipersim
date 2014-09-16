@@ -214,6 +214,8 @@ thread_id_t ThreadManager::getThreadToSpawn(SubsecondTime &time)
 {
    ScopedLock sl(getLock());
 
+   LOG_ASSERT_ERROR(!m_thread_spawn_list.empty(), "Have no thread to spawn");
+
    ThreadSpawnRequest req = m_thread_spawn_list.front();
    m_thread_spawn_list.pop();
 
