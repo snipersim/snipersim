@@ -54,7 +54,7 @@ NucaCache::~NucaCache()
 }
 
 boost::tuple<SubsecondTime, HitWhere::where_t>
-NucaCache::read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *perf)
+NucaCache::read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *perf, bool count)
 {
    HitWhere::where_t hit_where = HitWhere::MISS;
    perf->updateTime(now);
@@ -72,15 +72,15 @@ NucaCache::read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *pe
    }
    else
    {
-      ++m_read_misses;
+      if (count) ++m_read_misses;
    }
-   ++m_reads;
+   if (count) ++m_reads;
 
    return boost::tuple<SubsecondTime, HitWhere::where_t>(latency, hit_where);
 }
 
 boost::tuple<SubsecondTime, HitWhere::where_t>
-NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_address, Byte* evict_buf, SubsecondTime now)
+NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_address, Byte* evict_buf, SubsecondTime now, bool count)
 {
    HitWhere::where_t hit_where = HitWhere::MISS;
 
@@ -112,9 +112,9 @@ NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_a
          }
       }
 
-      ++m_write_misses;
+      if (count) ++m_write_misses;
    }
-   ++m_writes;
+   if (count) ++m_writes;
 
    return boost::tuple<SubsecondTime, HitWhere::where_t>(latency, hit_where);
 }
