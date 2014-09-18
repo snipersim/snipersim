@@ -179,9 +179,9 @@ if use_gdb:
   debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit)
 else:
   subproc = subprocess.Popen([ 'bash', '-c', cmd ], env = env)
-  pid, rc, usage = os.wait4(subproc.pid, 0)
   if use_pid and pid_continue:
     import signal
     while procStatus(use_pid).strip() != 'T':
       usleep(100)
     os.kill(use_pid, signal.SIGCONT)
+  pid, rc, usage = os.wait4(subproc.pid, 0)
