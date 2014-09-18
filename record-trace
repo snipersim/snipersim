@@ -11,9 +11,19 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] { --pinball=<pinball-basename> | -- <cmdline> }' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)>  [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0]
   sys.exit(2)
 
+# From http://stackoverflow.com/questions/6767649/how-to-get-process-status-using-pid
+def procStatus(pid):
+    for line in open("/proc/%d/status" % pid).readlines():
+        if line.startswith("State:"):
+            return line.split(":",1)[1].strip().split(' ')[0]
+    return None
+
+# From http://stackoverflow.com/questions/5568646/usleep-in-python
+import time
+usleep = lambda x: time.sleep(x/1000000.0)
 
 outputfile = 'trace'
 use_roi = False
@@ -36,12 +46,15 @@ pinplay_addrtrans = False
 outputdir = '.'
 verbose = False
 extra_args = []
+use_pid = None
+pid_continue = False
+stop_address = 0
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -98,6 +111,12 @@ for o, a in opts:
     outputdir = a
   if o == '-X':
     extra_args.append(a)
+  if o == '--pid':
+    use_pid = int(a)
+  if o == '--stop-address':
+    stop_address = int(a,0)
+  if o == '--pid-continue':
+    pid_continue = True
 
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
@@ -127,6 +146,8 @@ sim_root = HOME
 outputfile = os.path.realpath(os.path.join(outputfile))
 
 pinoptions = '-mt -injection child -xyzzy -enable_vsm 0'
+if use_pid:
+  pinoptions += (' -pid %d' % (use_pid))
 if use_gdb:
   pinoptions += ' -pause_tool 1'
 if use_follow:
@@ -149,7 +170,7 @@ value_pa = use_pa and 1 or 0
 value_routine_tracing = use_routine_tracing and 1 or 0
 value_verbose = verbose and 1 or 0
 extra_args = ' '.join(extra_args)
-cmd = '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d %(pinballoptions)s %(extra_args)s -- ' % locals() + ' '.join(cmdline)
+cmd = '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(HOME)s/sift/recorder/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_args)s -- ' % locals() + ' '.join(cmdline)
 
 if verbose:
   print '[SIFT_RECORDER]', 'Running', cmd
@@ -159,3 +180,8 @@ if use_gdb:
 else:
   subproc = subprocess.Popen([ 'bash', '-c', cmd ], env = env)
   pid, rc, usage = os.wait4(subproc.pid, 0)
+  if use_pid and pid_continue:
+    import signal
+    while procStatus(use_pid).strip() != 'T':
+      usleep(100)
+    os.kill(use_pid, signal.SIGCONT)

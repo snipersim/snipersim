@@ -212,6 +212,11 @@ static VOID traceCallback(TRACE trace, void *v)
             INS_InsertPredicatedCall(ins, IPOINT_BEFORE, AFUNPTR(emulateSyscallFunc), IARG_THREAD_ID, IARG_CONST_CONTEXT, IARG_END);
          }
 
+         if (KnobStopAddress && (INS_Address(ins) == KnobStopAddress))
+         {
+            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, AFUNPTR(endROI), IARG_THREAD_ID, IARG_END);
+         }
+
          if (ins == BBL_InsTail(bbl))
             break;
       }

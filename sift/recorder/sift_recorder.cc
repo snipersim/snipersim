@@ -141,6 +141,18 @@ int main(int argc, char **argv)
       openFile(0);
    }
 
+   // When attaching with --pid, there could be a number of threads already running.
+   // Manually call NewThread() because the normal method to start new thread pipes (SYS_clone)
+   // will already have happened
+   if (PIN_GetInitialThreadCount() > 1)
+   {
+      sift_assert(thread_data[PIN_ThreadId()].output);
+      for (UINT32 i = 1 ; i < PIN_GetInitialThreadCount() ; i++)
+      {
+         thread_data[PIN_ThreadId()].output->NewThread();
+      }
+   }
+
 #ifdef PINPLAY_SUPPORTED
    if (KnobReplayer.Value())
    {

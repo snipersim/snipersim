@@ -44,6 +44,7 @@ def usage():
         '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec="<mpiexec -mpiarg...>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
+        '  |  --pid=<process-pid>' + \
         '  |  [--sift] -- <cmdline> }'
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
@@ -96,6 +97,7 @@ pinballs = None
 pinball_sift = True
 pinplay_addrtrans = False
 use_sift = False
+use_pid = None
 tracegen = None
 trace_extra_args = []
 verbose = False
@@ -182,6 +184,8 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
   return newconfig
 
 
+record_trace_passthrough = [ 'pid-continue', 'stop-address=' ]
+
 try:
   opts, cmdline = getopt.getopt(
     sys.argv[1:],
@@ -204,7 +208,8 @@ try:
       "mpi", "mpi-ranks=", "mpi-exec=",
       "pinballs=", "pinball-non-sift", "pinplay-addr-trans",
       "sift",
-    ]
+      "pid=",
+    ] + record_trace_passthrough
   )
 except getopt.GetoptError, e:
   # print help information and exit:
@@ -329,6 +334,13 @@ for o, a in opts:
     pinplay_addrtrans = True
   if o == '--sift':
     use_sift = True
+  if o == '--pid':
+    use_pid = a
+    use_sift = True
+  if o.startswith('--') and o[2:] in record_trace_passthrough:
+    trace_extra_args.append(o)
+  if o.startswith('--') and o[2:]+'=' in record_trace_passthrough:
+    trace_extra_args += [o, a]
 
 
 if cmdline:
@@ -367,11 +379,13 @@ else:
     opt_count+=1
   if trace_manual:
     opt_count+=1
+  if use_pid:
+    opt_count+=1
   if opt_count == 0:
-    print >> sys.stderr, 'Need either a set of traces (--traces= or --trace-manual), a pinball, or a benchmark command line'
+    print >> sys.stderr, 'Need either a set of traces (--traces= or --trace-manual), a pinball, an application pid or a benchmark command line'
     usage()
   if opt_count > 1:
-    print >> sys.stderr, 'Can only use one of --traces=, --trace-manual or --pinballs= when not using a command line argument'
+    print >> sys.stderr, 'Can only use one of --traces=, --trace-manual, --pid=  or --pinballs= when not using a command line argument'
     usage()
 
 if roi_only and roi_script:
@@ -534,12 +548,13 @@ elif use_sift:
   tracegen['redirect'] = False
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all processes have completed
   # Set trace recorder options
+  other_options = []
   if roi_only:
-    roi_options = [ '--roi' ]
-  else:
-    roi_options = []
+    other_options += [ '--roi' ]
+  if use_pid:
+    other_options += [ '--pid', use_pid ]
   applications = [
-    ([], roi_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+    ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
   ]
 elif pinballs and pinball_sift:
   tracegen = {}

@@ -16,6 +16,7 @@ KNOB<BOOL> KnobRoutineTracing(KNOB_MODE_WRITEONCE, "pintool", "rtntrace", "0", "
 KNOB<BOOL> KnobRoutineTracingOutsideDetailed(KNOB_MODE_WRITEONCE, "pintool", "rtntrace_outsidedetail", "0", "routine tracing");
 KNOB<BOOL> KnobDebug(KNOB_MODE_WRITEONCE, "pintool", "debug", "0", "start debugger on internal exception");
 KNOB<BOOL> KnobVerbose(KNOB_MODE_WRITEONCE, "pintool", "verbose", "0", "verbose output");
+KNOB<UINT64> KnobStopAddress(KNOB_MODE_WRITEONCE, "pintool", "stop", "0", "stop address (0 = disabled)");
 
 KNOB_COMMENT pinplay_driver_knob_family(KNOB_FAMILY, "PinPlay SIFT Recorder Knobs");
 KNOB<BOOL>KnobReplayer(KNOB_MODE_WRITEONCE, KNOB_FAMILY,

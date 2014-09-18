@@ -1,3 +1,4 @@
+#include "fixed_types.h"
 #include "sift_writer.h"
 #include "sift_format.h"
 #include "sift_utils.h"
@@ -11,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/param.h>
 
 // Enable (>0) to print out everything we write
 #define VERBOSE 0
@@ -71,6 +73,13 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
 
    if (options & CompressionZlib)
       output = new ozstream(output);
+}
+
+// Modified from http://stackoverflow.com/questions/2203159/is-there-a-c-equivalent-to-getcwd
+String get_working_path()
+{
+   char temp[MAXPATHLEN];
+   return ( getcwd(temp, MAXPATHLEN) ? String( temp ) : String("") );
 }
 
 void Sift::Writer::initResponse()
