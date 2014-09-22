@@ -132,7 +132,10 @@ def stats_process(config, results):
   if 'thread.nonidle_elapsed_time' in stats and 'thread.nonidle_cycle_count' not in stats:
     stats['thread.nonidle_cycle_count'] = [ long(stats['fs_to_cycles'] * t) for t in stats['thread.nonidle_elapsed_time'] ]
   # IPC
-  stats['ipc'] = sum(stats.get('performance_model.instruction_count', [0])) / float(sum(stats.get('performance_model.cycle_count', [0])) or 1e16)
+  stats['ipc'] = [
+    i / (c or 1)
+    for i, c in zip(stats['performance_model.instruction_count'], stats['performance_model.cycle_count'])
+  ]
 
   return stats
 
