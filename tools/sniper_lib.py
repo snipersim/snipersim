@@ -116,6 +116,16 @@ def stats_process(config, results):
   stats['fs_to_cycles_cores'] = map(lambda f: f / 1e15, freq)
   # Backwards compatible version returning fs_to_cycles for core 0, for heterogeneous configurations fs_to_cycles_cores needs to be used
   stats['fs_to_cycles'] = stats['fs_to_cycles_cores'][0]
+  # Fixed versions of [idle|nonidle] elapsed time
+  stats['performance_model.nonidle_elapsed_time'] = [
+    stats['performance_model.elapsed_time'][c] - stats['performance_model.idle_elapsed_time'][c]
+    for c in range(ncores)
+  ]
+  stats['performance_model.idle_elapsed_time'] = [
+    time0_end - time0_begin - stats['performance_model.nonidle_elapsed_time'][c]
+    for c in range(ncores)
+  ]
+  stats['performance_model.elapsed_time'] = [ time0_end - time0_begin for c in range(ncores) ]
   # DVFS-enabled runs: emulate cycle_count asuming constant (initial) frequency
   if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
     stats['performance_model.cycle_count'] = [ stats['fs_to_cycles_cores'][idx] * stats['performance_model.elapsed_time'][idx] for idx in range(ncores) ]
