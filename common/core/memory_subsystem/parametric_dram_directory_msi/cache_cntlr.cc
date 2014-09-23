@@ -138,6 +138,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_last_level(NULL),
    m_tag_directory_home_lookup(tag_directory_home_lookup),
    m_perfect(cache_params.perfect),
+   m_passthrough(Sim()->getCfg()->getBoolArray("perf_model/" + cache_params.configName + "/passthrough", core_id)),
    m_coherent(cache_params.coherent),
    m_prefetch_on_prefetch_hit(false),
    m_l1_mshr(cache_params.outstanding_misses > 0),
@@ -159,6 +160,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 
    LOG_ASSERT_ERROR(!Sim()->getCfg()->hasKey("perf_model/perfect_llc"),
                     "perf_model/perfect_llc is deprecated, use perf_model/lX_cache/perfect instead");
+   if (is_last_level_cache)
+      LOG_ASSERT_ERROR(m_passthrough == false, "Cache pass-through not supported on last-level cache");
 
    if (isMasterCache())
    {
@@ -368,6 +371,12 @@ LOG_ASSERT_ERROR(offset + data_length <= getCacheBlockSize(), "access until %u >
          cache_block_info = getCacheBlockInfo(ca_address);
       }
    }
+   else if (cache_hit && m_passthrough)
+   {
+      cache_hit = false;
+      cache_block_info->invalidate();
+      cache_block_info = NULL;
+   }
 
    if (count)
    {
@@ -430,11 +439,12 @@ MYLOG("L1 hit");
    } else {
       /* cache miss: either wrong coherency state or not present in the cache */
 MYLOG("L1 miss");
-      getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
+      if (!m_passthrough)
+         getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
 
       SubsecondTime t_miss_begin = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
       SubsecondTime t_mshr_avail = t_miss_begin;
-      if (modeled && m_l1_mshr)
+      if (modeled && m_l1_mshr && !m_passthrough)
       {
          ScopedLock sl(getLock());
          t_mshr_avail = m_master->m_l1_mshr.getStartTime(t_miss_begin);
@@ -516,7 +526,7 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
          "Expected %x to be valid in L1", ca_address);
 
 
-      if (modeled && m_l1_mshr)
+      if (modeled && m_l1_mshr && !m_passthrough)
       {
          SubsecondTime t_miss_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
          ScopedLock sl(getLock());
@@ -771,6 +781,14 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       else
          cache_block_info = insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD);
    }
+   else if (cache_hit && m_passthrough && count)
+   {
+      // Passthrough == false: cache that always misses (except in the L1 fill path, detected by count==false, where it should return the data)
+      cache_hit = first_hit = false;
+      cache_block_info->invalidate();
+      cache_block_info = NULL;
+      LOG_ASSERT_ERROR(m_next_cache_cntlr != NULL, "Cannot do passthrough on an LLC");
+   }
 
    if (count)
    {
@@ -982,7 +1000,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       Byte data_buf[getCacheBlockSize()];
       retrieveCacheBlock(address, data_buf, ShmemPerfModel::_USER_THREAD, first_hit && count);
       /* Store completion time so we can detect overlapping accesses */
-      if (modeled && !first_hit)
+      if (modeled && !first_hit && !m_passthrough)
       {
          ScopedLock sl(getLock());
          m_master->mshr[address] = make_mshr(t_issue, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));

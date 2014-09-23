@@ -209,6 +209,7 @@ namespace ParametricDramDirectoryMSI
          AddressHomeLookup* m_tag_directory_home_lookup;
          std::unordered_map<IntPtr, MemComponent::component_t> m_shmem_req_source_map;
          bool m_perfect;
+         bool m_passthrough;
          bool m_coherent;
          bool m_prefetch_on_prefetch_hit;
          bool m_l1_mshr;
