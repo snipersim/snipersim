@@ -1804,6 +1804,8 @@ MYLOG("WB REQ<%u @ %lx", sender, address);
          CacheDirectoryWaiter* request = m_master->m_directory_waiters.front(address);
          getLock().release();
 
+         request->cache_cntlr->m_shmem_perf->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), ShmemPerf::PENDING_HIT);
+
          if (request->exclusive && (getCacheState(address) == CacheState::SHARED))
          {
             MYLOG("have SHARED, upgrading to MODIFIED for #%u", request->cache_cntlr->m_core_id);
@@ -2032,6 +2034,7 @@ MYLOG("processWbReqFromDramDirectory l%d", m_mem_component);
    {
       // Update Shared Mem perf counters for access to L2 Cache
       getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_SIM_THREAD);
+      shmem_msg->getPerf()->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), ShmemPerf::REMOTE_CACHE_WB);
 MYLOG("invalid @ %lx, hoping eviction message is underway", address);
    }
 }

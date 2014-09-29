@@ -10,6 +10,7 @@ const char* shmem_reason_names[] = {
    "remote-cache-inv",
    "remote-cache-fwd",
    "remote-cache-wb",
+   "pending-hit",
    "nuca-tags",
    "nuca-bus",
    "nuca-queue",
