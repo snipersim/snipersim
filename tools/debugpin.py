@@ -16,7 +16,7 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
   g_symbols = ''
   while True:
     line = p_graphite.stdout.readline()
-    if line.startswith('Pausing to attach to pid'):
+    if line.startswith('Pausing to attach to pid') or (line.startswith('Pausing for') and 'to attach to process' in line):
       g_pid = line.split()[-1]
     elif line.startswith('   add-symbol-file'):
       g_symbols = line
