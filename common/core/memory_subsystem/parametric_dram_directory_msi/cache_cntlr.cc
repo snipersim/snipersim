@@ -1153,7 +1153,7 @@ CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, 
          SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
          if (cache_block_info && (cache_block_info->getCState() == CacheState::SHARED))
          {
-            processUpgradeReqToDirectory(address, m_shmem_perf);
+            processUpgradeReqToDirectory(address, m_shmem_perf, ShmemPerfModel::_USER_THREAD);
          }
          else
          {
@@ -1193,7 +1193,7 @@ CacheCntlr::processExReqToDirectory(IntPtr address)
 }
 
 void
-CacheCntlr::processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf)
+CacheCntlr::processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num)
 {
    // We need to send a request to the Dram Directory Cache
    MYLOG("UPGR REQ @ %lx", address);
@@ -1208,7 +1208,7 @@ CacheCntlr::processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf)
          getHome(address) /* receiver */,
          address,
          NULL, 0,
-         HitWhere::UNKNOWN, perf, ShmemPerfModel::_USER_THREAD);
+         HitWhere::UNKNOWN, perf, thread_num);
 }
 
 void
@@ -1810,7 +1810,7 @@ MYLOG("WB REQ<%u @ %lx", sender, address);
 
             // We (the master cache) are sending the upgrade request in place of request->cache_cntlr,
             // so use their ShmemPerf* rather than ours
-            processUpgradeReqToDirectory(address, request->cache_cntlr->m_shmem_perf);
+            processUpgradeReqToDirectory(address, request->cache_cntlr->m_shmem_perf, ShmemPerfModel::_SIM_THREAD);
 
             releaseStackLock(address);
             return;

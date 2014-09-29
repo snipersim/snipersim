@@ -309,7 +309,7 @@ namespace ParametricDramDirectoryMSI
          void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, SubsecondTime t_issue);
          void processExReqToDirectory(IntPtr address);
          void processShReqToDirectory(IntPtr address);
-         void processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf);
+         void processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num);
 
          // Process Request from Dram Dir
          void processExRepFromDramDirectory(core_id_t sender, core_id_t requester, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg);
