@@ -16,6 +16,7 @@ class ShmemPerf
          TD_ACCESS,
          INV_IMBALANCE,
          REMOTE_CACHE_INV,
+         REMOTE_CACHE_FWD,
          REMOTE_CACHE_WB,
          NUCA_TAGS,
          NUCA_QUEUE,

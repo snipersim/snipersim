@@ -8,6 +8,7 @@ const char* shmem_reason_names[] = {
    "td-access",
    "inv-imbalance",
    "remote-cache-inv",
+   "remote-cache-fwd",
    "remote-cache-wb",
    "nuca-tags",
    "nuca-bus",
