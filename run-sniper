@@ -112,7 +112,7 @@ def findfile(filename, extension, paths, subpaths = ('.')):
     for subpath in subpaths:
       for ext in ('', extension):
         fullname = os.path.realpath(os.path.join(dirname, subpath, filename + ext))
-        if os.path.isfile(fullname):
+        if os.path.exists(fullname):
           return fullname
   return False
 
