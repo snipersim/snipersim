@@ -143,7 +143,7 @@ void SchedulerBigSmall::pickBigThread()
    std::vector<thread_id_t> eligible;
    for(thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
    {
-      if (m_thread_isbig[thread_id] == false && m_thread_info[thread_id].isRunning())
+      if (m_thread_isbig[thread_id] == false && m_threads_runnable[thread_id])
       {
          eligible.push_back(thread_id);
       }
