@@ -26,6 +26,8 @@ CacheSetNRU::getReplacementIndex(CacheCntlr *cntlr)
 {
    // Invalidations may mess up the LRU bits
 
+   bool have_zero_bit = false;
+
    for (UInt32 i = 0; i < m_associativity; i++)
    {
       if (!m_cache_block_info_array[i]->isValid())
@@ -35,11 +37,18 @@ CacheSetNRU::getReplacementIndex(CacheCntlr *cntlr)
          updateReplacementIndex(i);
          return i;
       }
+      else if (m_lru_bits[i] == 0 && isValidReplacement(i))
+      {
+         // Check if there are any valid replacement candidates with their LRU bit set to zero
+         // If there are none, we'll ignore the LRU bit below and select the first entry with isValidReplacement() as the victim
+         have_zero_bit = true;
+      }
    }
 
    for (UInt32 i = 0; i < m_associativity; i++)
    {
-      if (m_lru_bits[m_replacement_pointer] == 0 && isValidReplacement(m_replacement_pointer))
+      if ((m_lru_bits[m_replacement_pointer] == 0 || have_zero_bit == false)
+          && isValidReplacement(m_replacement_pointer))
       {
          // We choose the first non-touched line as the victim (note that we start searching from the replacement pointer position)
          UInt8 index = m_replacement_pointer;
