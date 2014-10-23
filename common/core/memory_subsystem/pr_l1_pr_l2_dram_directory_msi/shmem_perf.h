@@ -38,15 +38,17 @@ class ShmemPerf
 
       ShmemPerf();
       void disable();
-      void reset(SubsecondTime time);
+      void reset(SubsecondTime time, core_id_t core_id);
       void updateTime(SubsecondTime time, shmem_times_type_t reason = UNKNOWN);
       void updatePacket(NetPacket& packet);
       void add(ShmemPerf *perf);
 
+      core_id_t getCore() const { return m_core_id; }
       SubsecondTime getInitialTime() const { return m_time_begin; }
       SubsecondTime &getComponent(shmem_times_type_t reason) { return m_times[reason]; }
 
    private:
+      core_id_t m_core_id;
       SubsecondTime m_time_begin;
       SubsecondTime m_time_last;
       std::vector<SubsecondTime> m_times;

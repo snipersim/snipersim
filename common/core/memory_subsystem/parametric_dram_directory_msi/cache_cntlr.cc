@@ -970,7 +970,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             }
             else
             {
-               m_shmem_perf->reset(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
+               m_shmem_perf->reset(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD), m_core_id);
 
                Byte data_buf[getCacheBlockSize()];
                SubsecondTime latency;
@@ -1145,7 +1145,7 @@ CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, 
 
    if (first)
    {
-      m_shmem_perf->reset(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
+      m_shmem_perf->reset(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD), m_core_id);
 
       /* We're the first one to request this address, send the message to the directory now */
       if (exclusive)
@@ -2154,7 +2154,7 @@ CacheCntlr::updateUncoreStatistics(HitWhere::where_t hit_where, SubsecondTime no
       m_shmem_perf_totaltime += now - m_shmem_perf->getInitialTime();
       m_shmem_perf_numrequests ++;
 
-      m_shmem_perf->reset(SubsecondTime::Zero());
+      m_shmem_perf->reset(SubsecondTime::Zero(), INVALID_CORE_ID);
    }
 }
 

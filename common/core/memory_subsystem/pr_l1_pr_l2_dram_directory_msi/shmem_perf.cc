@@ -38,7 +38,8 @@ const char* ShmemReasonString(ShmemPerf::shmem_times_type_t reason)
 
 
 ShmemPerf::ShmemPerf()
-   : m_time_begin(SubsecondTime::Zero())
+   : m_core_id(INVALID_CORE_ID)
+   , m_time_begin(SubsecondTime::Zero())
    , m_time_last(SubsecondTime::Zero())
    , m_times(NUM_SHMEM_TIMES)
 {
@@ -50,8 +51,9 @@ void ShmemPerf::disable()
    m_time_last = SubsecondTime::MaxTime();
 }
 
-void ShmemPerf::reset(SubsecondTime time)
+void ShmemPerf::reset(SubsecondTime time, core_id_t core_id)
 {
+   m_core_id = core_id;
    m_time_begin = time;
    m_time_last = time;
    for(int i = 0; i < ShmemPerf::NUM_SHMEM_TIMES; ++i)
