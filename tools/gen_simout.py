@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
-import sys, sniper_lib
+import sys, os, getopt, sniper_lib
 
 
-def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent = False):
+def generate_simout(jobid = None, resultsdir = None, partial = None, output = sys.stdout, silent = False):
 
   try:
-    res = sniper_lib.get_results(jobid = jobid, resultsdir = resultsdir)
+    res = sniper_lib.get_results(jobid = jobid, resultsdir = resultsdir, partial = partial)
   except (KeyError, ValueError), e:
     if not silent:
       print 'Failed to generated sim.out:', e
@@ -186,11 +186,35 @@ def generate_simout(jobid = None, resultsdir = None, output = sys.stdout, silent
 
 
 if __name__ == '__main__':
-  if len(sys.argv) > 2 and sys.argv[1] == '-j':
-    generate_simout(jobid = int(sys.argv[2]))
-    sys.exit(0)
-  if len(sys.argv) > 1:
-    resultsdir = sys.argv[1]
-  else:
-    resultsdir = '.'
-  generate_simout(resultsdir = resultsdir)
+  def usage():
+    print 'Usage:', sys.argv[0], '[-h (help)] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [-d <resultsdir (default: .)>]'
+
+  jobid = 0
+  resultsdir = '.'
+  partial = None
+
+  try:
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:", [ 'partial=' ])
+  except getopt.GetoptError, e:
+    print e
+    usage()
+    sys.exit()
+  for o, a in opts:
+    if o == '-h':
+      usage()
+      sys.exit()
+    if o == '-d':
+      resultsdir = a
+    if o == '-j':
+      jobid = long(a)
+    if o == '--partial':
+      if ':' not in a:
+        sys.stderr.write('--partial=<from>:<to>\n')
+        usage()
+      partial = a.split(':')
+
+  if args:
+    usage()
+    sys.exit(-1)
+
+  generate_simout(jobid = jobid, resultsdir = resultsdir, partial = partial)
