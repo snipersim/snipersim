@@ -214,14 +214,6 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
          }
          break;
       }
-
-      case SYS_wait4:
-      {
-         ScopedLock sl(Sim()->getThreadManager()->getLock());
-         // Let the thread manager know we are blocked on this system call
-         Sim()->getThreadManager()->stallThread_async(m_thread->getId(), ThreadManager::STALL_SYSCALL, getCurrentTime());
-         m_blocked = true;
-      }
    }
 
    return ret;
