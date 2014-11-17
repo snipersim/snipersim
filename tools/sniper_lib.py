@@ -117,25 +117,27 @@ def stats_process(config, results):
   # Backwards compatible version returning fs_to_cycles for core 0, for heterogeneous configurations fs_to_cycles_cores needs to be used
   stats['fs_to_cycles'] = stats['fs_to_cycles_cores'][0]
   # Fixed versions of [idle|nonidle] elapsed time
-  stats['performance_model.nonidle_elapsed_time'] = [
-    stats['performance_model.elapsed_time'][c] - stats['performance_model.idle_elapsed_time'][c]
-    for c in range(ncores)
-  ]
-  stats['performance_model.idle_elapsed_time'] = [
-    time0_end - time0_begin - stats['performance_model.nonidle_elapsed_time'][c]
-    for c in range(ncores)
-  ]
-  stats['performance_model.elapsed_time'] = [ time0_end - time0_begin for c in range(ncores) ]
+  if 'performance_model.elapsed_time' in stats and 'performance_model.idle_elapsed_time' in stats:
+    stats['performance_model.nonidle_elapsed_time'] = [
+      stats['performance_model.elapsed_time'][c] - stats['performance_model.idle_elapsed_time'][c]
+      for c in range(ncores)
+    ]
+    stats['performance_model.idle_elapsed_time'] = [
+      time0_end - time0_begin - stats['performance_model.nonidle_elapsed_time'][c]
+      for c in range(ncores)
+    ]
+    stats['performance_model.elapsed_time'] = [ time0_end - time0_begin for c in range(ncores) ]
   # DVFS-enabled runs: emulate cycle_count asuming constant (initial) frequency
   if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
     stats['performance_model.cycle_count'] = [ stats['fs_to_cycles_cores'][idx] * stats['performance_model.elapsed_time'][idx] for idx in range(ncores) ]
   if 'thread.nonidle_elapsed_time' in stats and 'thread.nonidle_cycle_count' not in stats:
     stats['thread.nonidle_cycle_count'] = [ long(stats['fs_to_cycles'] * t) for t in stats['thread.nonidle_elapsed_time'] ]
   # IPC
-  stats['ipc'] = [
-    i / (c or 1)
-    for i, c in zip(stats['performance_model.instruction_count'], stats['performance_model.cycle_count'])
-  ]
+  if 'performance_model.cycle_count' in stats:
+    stats['ipc'] = [
+      i / (c or 1)
+      for i, c in zip(stats['performance_model.instruction_count'], stats['performance_model.cycle_count'])
+    ]
 
   return stats
 
