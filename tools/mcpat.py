@@ -331,7 +331,7 @@ def edit_XML(statsobj, stats, cfg):
   #param = res['param']         #do it separately
 
   ncores = int(cfg['general/total_cores'])
-  technology_node = int(cfg.get('power/technology_node', 45))
+  technology_node = int(sniper_config.get_config_default(cfg, 'power/technology_node', 45))
 
   l3_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
   l2_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
