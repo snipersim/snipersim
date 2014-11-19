@@ -27,10 +27,15 @@ def parse_config(simcfg, cfg = None):
           # Make value heterogeneous (unless it already was, and we're parsing a second, override config file)
           defval = cfg[key]
           cfg[key] = collections.defaultdict(DefaultValue(defval))
-        for i, v in enumerate(value.split(',')):
-          v = v.strip('"')
-          if v: # Only fill in entries that have been provided
-            cfg[key][i] = v
+        if ',' in value:
+          for i, v in enumerate(value.split(',')):
+            v = v.strip('"')
+            if v: # Only fill in entries that have been provided
+              cfg[key][i] = v
+        else:
+          print 'Changing default',  cfg[key],
+          cfg[key].default_factory = DefaultValue(value.strip('"'))
+          print  cfg[key]
       else: # If there has not been a default value provided, require all array data be populated
         if ',' in value:
           cfg[key] = []
