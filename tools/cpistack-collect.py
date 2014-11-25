@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import sys, os, env_setup
 sys.path.append(os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler'))

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # Make paths in config/graphite.py relative whenever possible
 
 import sys, os

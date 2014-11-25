@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import os, sys, time, re, getopt, subprocess, env_setup
 sys.path.extend([ env_setup.benchmarks_root(), os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler') ])

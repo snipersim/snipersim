@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 """ a small class for Principal Component Analysis
 Usage:
     p = PCA( A, fraction=0.90 )
