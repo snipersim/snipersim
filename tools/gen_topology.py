@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 import sys, os, math, collections, sniper_lib, sniper_stats, sniper_config, getopt
 

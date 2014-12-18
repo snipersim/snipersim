@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 # Generation of bottle graphs [Du Bois, OOSPLA 2013]
 

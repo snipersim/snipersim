@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 import sys, os, re, collections, subprocess, sniper_lib, sniper_config
 

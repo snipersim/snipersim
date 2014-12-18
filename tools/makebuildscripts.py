@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # Create the scripts that define linker flags needed for running an app under Graphite.
 
 import sys, os, subprocess
