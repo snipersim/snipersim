@@ -138,7 +138,7 @@ bool SchedulerPinnedBase::threadSetAffinity(thread_id_t calling_thread_id, threa
       {
          // We have just been moved to a different core, and that core is free. Schedule us there now.
          Core *core = Sim()->getCoreManager()->getCoreFromID(free_core_id);
-         SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
+         SubsecondTime time = std::max(core->getPerformanceModel()->getElapsedTime(), Sim()->getClockSkewMinimizationServer()->getGlobalTime());
          reschedule(time, free_core_id, false);
       }
    }
