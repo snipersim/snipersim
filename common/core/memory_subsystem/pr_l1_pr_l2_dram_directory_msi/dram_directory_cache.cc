@@ -25,6 +25,7 @@ DramDirectoryCache::DramDirectoryCache(
 
    // Instantiate the directory
    m_directory = new Directory(core_id, directory_type_str, total_entries, max_hw_sharers, max_num_sharers);
+   m_replacement_ptrs = new UInt32[m_num_sets];
 
    // Logs
    m_log_num_sets = floorLog2(m_num_sets);
@@ -33,6 +34,7 @@ DramDirectoryCache::DramDirectoryCache(
 
 DramDirectoryCache::~DramDirectoryCache()
 {
+   delete m_replacement_ptrs;
    delete m_directory;
 }
 
@@ -98,8 +100,9 @@ DramDirectoryCache::getReplacementCandidates(IntPtr address, std::vector<Directo
 
    for (UInt32 i = 0; i < m_associativity; i++)
    {
-      replacement_candidate_list.push_back(m_directory->getDirectoryEntry(set_index * m_associativity + i));
+      replacement_candidate_list.push_back(m_directory->getDirectoryEntry(set_index * m_associativity + ((i + m_replacement_ptrs[set_index]) % m_associativity)));
    }
+   ++m_replacement_ptrs[set_index];
 }
 
 DirectoryEntry*

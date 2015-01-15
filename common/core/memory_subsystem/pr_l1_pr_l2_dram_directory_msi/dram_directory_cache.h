@@ -12,6 +12,7 @@ namespace PrL1PrL2DramDirectoryMSI
    {
       private:
          Directory* m_directory;
+         UInt32* m_replacement_ptrs;
          std::vector<DirectoryEntry*> m_replaced_directory_entry_list;
 
          UInt32 m_total_entries;
