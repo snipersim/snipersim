@@ -102,6 +102,8 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
             switch(clock) {
                case CLOCK_REALTIME:
                case CLOCK_MONOTONIC:
+               case CLOCK_MONOTONIC_COARSE:
+               case CLOCK_MONOTONIC_RAW:
                   ts->tv_sec = time_ns / 1000000000;
                   ts->tv_nsec = time_ns % 1000000000;
                   m_ret_val = 0;
