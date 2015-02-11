@@ -87,13 +87,13 @@ def output_cpistack_table(results, metric = 'cpi'):
   print
 
 
-def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480)):
+def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480), save_gnuplot_input = False):
   # Use Gnuplot to make stacked bargraphs of these cpi-stacks
   plot_data = results.get_data(metric)
   colors = results.get_colors()
   plot_labels_with_color = [ (label, 'rgb "#%02x%02x%02x"' % colors[label]) for label in results.labels ]
   gnuplot.make_stacked_bargraph(os.path.join(outputdir, outputfile), plot_labels_with_color, plot_data, size = size, title = title,
-    ylabel = metric == 'cpi' and 'Cycles per instruction' or (metric == 'abstime' and 'Time (seconds)' or 'Fraction of time'))
+    ylabel = metric == 'cpi' and 'Cycles per instruction' or (metric == 'abstime' and 'Time (seconds)' or 'Fraction of time'), save_gnuplot_input = save_gnuplot_input)
 
 
 # Legacy cpistack.cpistack() function, does most of the old one as not to break most of the scripts in papers/
@@ -134,9 +134,10 @@ if __name__ == '__main__':
   use_simple_mem = True
   no_collapse = False
   aggregate = False
+  save_gnuplot_input = False
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "title=", "no-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=" ])
+    opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "title=", "no-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=", "save-gnuplot-input" ])
   except getopt.GetoptError, e:
     print e
     usage()
@@ -174,6 +175,8 @@ if __name__ == '__main__':
         sys.stderr.write('--partial=<from>:<to>\n')
         usage()
       partial = a.split(':')
+    if o == '--save-gnuplot-input':
+      save_gnuplot_input = True
 
   if args:
     usage()
@@ -187,4 +190,4 @@ if __name__ == '__main__':
     output_cpistack_table(results, metric = metric or 'cpi')
   else:
     output_cpistack_text(results)
-  output_cpistack_gnuplot(results = results, metric = metric or 'time', outputfile = outputfile, title = title)
+  output_cpistack_gnuplot(results = results, metric = metric or 'time', outputfile = outputfile, title = title, save_gnuplot_input = save_gnuplot_input)

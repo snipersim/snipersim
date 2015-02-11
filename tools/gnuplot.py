@@ -1,6 +1,6 @@
 import sys, subprocess
 
-def make_stacked_bargraph(outfile, titles, data, ylabel = 'Percent of Cycles', size = (640, 480), title = ''):
+def make_stacked_bargraph(outfile, titles, data, ylabel = 'Percent of Cycles', size = (640, 480), title = '', save_gnuplot_input = False):
 
   gnuplot_cmd_list = []
 
@@ -41,9 +41,9 @@ set xlabel "Core"
       gnuplot_cmd_list.append('\n')
     gnuplot_cmd_list.append('e\n')
 
-  # For debugging
-  #f = open('%s.gnuplot' % outfile, "w")
-  #f.write(''.join(gnuplot_cmd_list))
+  if save_gnuplot_input:
+    f = open('%s.gnuplot' % outfile, "w")
+    f.write(''.join(gnuplot_cmd_list))
 
   cmd = ['gnuplot', '-']
   try:
