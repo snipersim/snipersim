@@ -1,5 +1,5 @@
 Copyright (c) 2010 Massachusetts Institute of Technology
-Copyright (c) 2011 Ghent University
+Copyright (c) 2011, 2012, 2013, 2014 Ghent University
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -18,3 +18,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+
+Portions of the Cheetah codebase follow the following copyright
+Originally obtained from:
+http://www.cs.cmu.edu/afs/cs/academic/class/15740-f03/public/simplescalar/ss3/libcheetah/
+
+Copyright (C) 1989, 1990, 1991, 1992, 1993
+                  Rabin A. Sugumar and Santosh G. Abraham
+
+This software is distributed absolutely without warranty. You are
+free to use and modify the software as you wish.  You are also free
+to distribute the software as long as it is not for commercial gain,
+you retain the above copyright notice, and you make clear what your
+modifications were.
+
+Send comments and bug reports to rabin@eecs.umich.edu
