@@ -439,7 +439,11 @@ void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt)
    // Having time advance using a one-IPC model during pre- and post-ROI would be nice, but for now,
    // just forcefully terminate the application when the master thread reaches __kmp_reap_monitor().
    void *res;
+#if PIN_REV >= 71313
+   PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, NULL, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
+#else
    PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
+#endif
 }
 
 }

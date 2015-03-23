@@ -10,7 +10,7 @@ LIBCARBON_SOURCES = $(foreach dir,$(DIRECTORIES),$(wildcard $(dir)/*.cc)) \
 
 LIBCARBON_OBJECTS = $(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(LIBCARBON_SOURCES) ) ) )
 
-INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)/include $(SIM_ROOT)/linux $(SIM_ROOT)/sift
+INCLUDE_DIRECTORIES = $(DIRECTORIES) $(PIN_HOME)/extras/xed-$(SNIPER_TARGET_ARCH)/include $(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)/include $(SIM_ROOT)/linux $(SIM_ROOT)/sift
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
@@ -34,7 +34,7 @@ endif
 
 LD_LIBS += -lsift -lxed -L$(SIM_ROOT)/python_kit/$(SNIPER_TARGET_ARCH)/lib -lpython2.7 -lrt -lz -lsqlite3
 
-LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift
+LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/sift -L$(PIN_HOME)/extras/xed-$(SNIPER_TARGET_ARCH)/lib
 
 ifneq ($(SQLITE_PATH),)
 	CPPFLAGS += -I$(SQLITE_PATH)/include

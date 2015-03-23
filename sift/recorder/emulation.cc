@@ -141,7 +141,11 @@ void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt)
    }
 
    void *res;
+#if PIN_REV >= 71313
+   PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, NULL, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
+#else
    PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
+#endif
 }
 
 static void insCallback(INS ins, VOID *v)

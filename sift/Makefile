@@ -20,7 +20,7 @@ all : $(TARGET) siftdump recorder
 
 include ../common/Makefile.common
 
-XED_HOME=$(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)
+XED_HOME=$(wildcard $(PIN_HOME)/extras/xed-$(SNIPER_TARGET_ARCH) $(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH))
 
 CXXFLAGS+=-fPIC -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
 
