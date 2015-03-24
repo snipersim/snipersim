@@ -1,15 +1,25 @@
 Sniper Simulator
-Copyright 2009-2012 Universiteit Gent and Contributors
+Copyright 2009-2014 Universiteit Gent and Contributors
 
 Portions of this software are based on the Graphite Multicore Simulator
 developed at the Massachusetts Institute of Technology. The original
 software is available from
    https://github.com/mit-carbon/Graphite/
 
+Portions of this software are based on the Cheetah cache simulator.
+These portions are based on the Cheetah license found in the LICENSE
+file. The code was originally obtained from:
+   http://www.cs.cmu.edu/afs/cs/academic/class/15740-f03/public/simplescalar/ss3/libcheetah/
+Files based on the Cheetah cache simulation model include:
+   common/core/memory_subsystem/cheetah/saclru.h
+   common/core/memory_subsystem/cheetah/saclru.cc
+   common/core/memory_subsystem/cheetah/util.h
+   common/core/memory_subsystem/cheetah/util.cc
+
 The interval core simulation model is licensed under an academic-use only
 license, see the file LICENSE.interval in this directory.
 All files in the following directories are covered under this license
-  common/performance_model/performance_models/interval_performance_model/
-  common/performance_model/performance_models/rob_performance_model/
+   common/performance_model/performance_models/interval_performance_model/
+   common/performance_model/performance_models/rob_performance_model/
 
 All other files are covered under the MIT license, see the file LICENSE.
