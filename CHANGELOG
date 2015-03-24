@@ -1,3 +1,11 @@
+Version 6.1
+  * Support for newer Pin versions, up to Pin 2.14-71313 / PinPlay 2.1
+  * Support GCC 4.9
+  * Integrate the Cheetah cache models
+  * Remove legacy Graphite core models simple, magic and iocoom
+  * A new dumpstats.py option (-c|--config) prints configuration parameters one-per-line
+  * Numerous bug fixes and improvements
+
 Version 6.0
   * Add Instruction Window-Centric core model (internal name: ROB core model, use rob.cfg)
   * Add SMT support (IWC/ROB core model only, use smt*.cfg)
