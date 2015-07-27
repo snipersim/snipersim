@@ -232,11 +232,11 @@ def scale_sci(value):
   i = 0
   s = sign(value)
   value = abs(value)
-  if value < 1 and value > 1e-12:
+  if value < 1 and value > 1e-15:
     while value <= .01:
       value *= 1000.
       i += 1
-    return (s * value, ' munf'[i])
+    return (s * value, ' munpf'[i])
   else:
     while value >= 1000:
       value /= 1000.
