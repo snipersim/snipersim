@@ -394,6 +394,9 @@ def edit_XML(statsobj, stats, cfg):
 #---------------------------
 
   cycles_scale = stats['fs_to_cycles_cores']
+  clock_core = float(sniper_config.get_config(cfg, 'perf_model/core/frequency', 0))*1000
+  for core in range(ncores):
+	cycles_scale[core] = float(clock_core/1000000000)
   instrs = stats['performance_model.instruction_count']
   times = stats['performance_model.elapsed_time']
   cycles = map(lambda c, t: c * t, cycles_scale[:ncores], times[:ncores])
