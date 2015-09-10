@@ -673,9 +673,11 @@ def edit_XML(statsobj, stats, cfg):
           elif template[i][1][0]=="itlb.total_accesses":        #itlb equals icache reads and writes
             template[i][0] = template[i][0] % int(stats['L1-I.loads'][core] + stats['L1-I.stores'][core])
           elif template[i][1][0]=="itlb.total_misses":
-            template[i][0] = template[i][0] % int(stats['L1-I.load-misses'][core] + stats['L1-I.store-misses'][core])
+            template[i][0] = template[i][0] % int(stats['itlb.miss'][core])
           elif template[i][1][0]=="icache.read_accesses":
             template[i][0] = template[i][0] % int(stats['L1-I.loads'][core])
+          elif template[i][1][0]=="icache.read_misses":
+            template[i][0] = template[i][0] % int(stats['L1-I.load-misses'][core])
           elif template[i][1][0]=="dtlb.total_accesses":        #dtlb equals dcache reads and writes
             template[i][0] = template[i][0] % int(stats['L1-D.loads'][core] + stats['L1-D.stores'][core])
           elif template[i][1][0]=="dtlb.total_misses":
@@ -1033,7 +1035,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t\t<param name=\"buffer_sizes\" value=\"16, 16, 16, 0\"/>",""]) #mcpat will crash for some different sizes of 2nd parameter
     template.append(["\t\t\t\t<!-- cache controller buffer sizes: miss_buffer_size(MSHR),fill_buffer_size,prefetch_buffer_size,wb_buffer_size-->",""] )
     template.append(["\t\t\t\t<stat name=\"read_accesses\" value=\"%i\"/>",["icache.read_accesses","stat",iCount]])
-    template.append(["\t\t\t\t<stat name=\"read_misses\" value=\"0\"/>",""])
+    template.append(["\t\t\t\t<stat name=\"read_misses\" value=\"%i\"/>",["icache.read_misses","stat",iCount]])
     template.append(["\t\t\t\t<stat name=\"conflicts\" value=\"0\"/>",""] )
     template.append(["\t\t\t</component>",""])
     template.append(["\t\t\t<component id=\"system.core%i.dtlb\" name=\"dtlb\">"%iCount,""])
