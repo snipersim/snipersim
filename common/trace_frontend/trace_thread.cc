@@ -34,6 +34,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_trace(tracefile.c_str(), responsefile.c_str(), thread->getId())
    , m_trace_has_pa(false)
    , m_address_randomization(Sim()->getCfg()->getBool("traceinput/address_randomization"))
+   , m_appid_from_coreid(Sim()->getCfg()->getString("scheduler/type") == "sequential" ? true : false)
    , m_stop(false)
    , m_bbv_base(0)
    , m_bbv_count(0)
@@ -112,21 +113,35 @@ UInt64 TraceThread::va2pa(UInt64 va, bool *noMapping)
       {
          if (noMapping)
             *noMapping = true;
-         else
-            LOG_PRINT_WARNING("No mapping found for logical address %lx", va);
+         //else
+         //   LOG_PRINT_WARNING("No mapping found for logical address %lx", va);
          // Fall through to construct an address with our thread id in the upper bits (assume address is private)
       }
+   }
+
+   UInt64 haddr;
+
+   // When the scheduler is set to sequential, every thread with same core affinity
+   // will be considered chunks of the same process, therefore they have the same
+   // physical address space.
+   if (m_appid_from_coreid)
+   {
+        haddr = UInt64(m_thread->getCore()->getId());
+   }
+   else
+   {
+        haddr = UInt64(m_thread->getAppId());
    }
 
    if (m_address_randomization)
    {
       // Set 16 bits to app_id | remap middle 36 bits using app_id-specific mapping | keep lower 12 bits (page offset)
-      return (UInt64(m_thread->getAppId()) << pa_core_shift) | (remapAddress(va >> va_page_shift) << va_page_shift) | (va & va_page_mask);
+      return (haddr << pa_core_shift) | (remapAddress(va >> va_page_shift) << va_page_shift) | (va & va_page_mask);
    }
    else
    {
       // Set 16 bits to app_id | keep lower 48 bits
-      return (UInt64(m_thread->getAppId()) << pa_core_shift) | (va & pa_va_mask);
+      return (haddr << pa_core_shift) | (va & pa_va_mask);
    }
 }
 

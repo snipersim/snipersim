@@ -40,6 +40,7 @@ class TraceThread : public Runnable
       Sift::Reader m_trace;
       bool m_trace_has_pa;
       bool m_address_randomization;
+      bool m_appid_from_coreid;
       uint8_t m_address_randomization_table[256];
       bool m_stop;
       std::unordered_map<IntPtr, Instruction *> m_icache;

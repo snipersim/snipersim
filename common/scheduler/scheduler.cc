@@ -3,6 +3,7 @@
 #include "scheduler_pinned.h"
 #include "scheduler_roaming.h"
 #include "scheduler_big_small.h"
+#include "scheduler_sequential.h"
 #include "simulator.h"
 #include "config.hpp"
 #include "core_manager.h"
@@ -21,6 +22,8 @@ Scheduler* Scheduler::create(ThreadManager *thread_manager)
       return new SchedulerRoaming(thread_manager);
    else if (type == "big_small")
       return new SchedulerBigSmall(thread_manager);
+   else if (type == "sequential")
+       return new SchedulerSequential(thread_manager);
    else
       LOG_PRINT_ERROR("Unknown scheduler type %s", type.c_str());
 }
