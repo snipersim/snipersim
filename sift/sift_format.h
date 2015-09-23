@@ -9,6 +9,8 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#define NUM_PAPI_COUNTERS 6
+
 namespace Sift
 {
 
@@ -114,6 +116,8 @@ namespace Sift
       EmuTypeGetTime,
       EmuTypeCpuid,
       EmuTypeSetThreadInfo,
+      EmuTypePAPIstart,
+      EmuTypePAPIread,
    } EmuType;
 
    typedef union {
@@ -129,6 +133,9 @@ namespace Sift
       struct {
          pid_t tid;
       } setthreadinfo;
+      struct {
+         int eventset;
+      } papi;
    } EmuRequest;
 
    typedef union {
@@ -146,6 +153,9 @@ namespace Sift
       } cpuid;
       struct {
       } setthreadinfo;
+      struct {
+         long long values[NUM_PAPI_COUNTERS];
+      } papi;
    } EmuReply;
 
    typedef enum {

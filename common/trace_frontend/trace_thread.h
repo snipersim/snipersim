@@ -10,6 +10,15 @@
 
 #include <unordered_map>
 
+#define NUM_PAPI_COUNTERS 6
+
+#define PAPI_TOT_INS 0
+#define PAPI_TOT_CYC 1
+#define PAPI_L1_DCM 2
+#define PAPI_L2_DCM 3
+#define PAPI_L3_TCM 4
+#define PAPI_BR_MSP 5
+
 class Instruction;
 class DynamicInstruction;
 
@@ -101,6 +110,8 @@ class TraceThread : public Runnable
       void unblock();
 
       SubsecondTime getCurrentTime() const;
+
+      long long *m_papi_counters;
 
    public:
       bool m_stopped;

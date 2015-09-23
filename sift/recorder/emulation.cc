@@ -3,6 +3,7 @@
 #include "sift_assert.h"
 #include "globals.h"
 #include "threads.h"
+#include "papi.h"
 
 #include <pin.H>
 
@@ -203,5 +204,6 @@ void initEmulation()
       INS_AddInstrumentFunction(insCallback, 0);
       TRACE_AddInstrumentFunction(traceCallback, 0);
       RTN_AddInstrumentFunction(rtnCallback, 0);
+      initPapiInterceptors();
    }
 }

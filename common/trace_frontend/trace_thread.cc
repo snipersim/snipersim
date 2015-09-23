@@ -18,6 +18,8 @@
 #include "routine_tracer.h"
 #include "sim_api.h"
 
+#include "stats.h"
+
 #include <unistd.h>
 #include <sys/syscall.h>
 
@@ -322,6 +324,45 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
       {
          m_thread->m_os_info.tid = req.setthreadinfo.tid;
          return true;
+      }
+      case Sift::EmuTypePAPIstart:
+      {
+        m_papi_counters = new long long[NUM_PAPI_COUNTERS];
+        for(unsigned int i = 0; i < NUM_PAPI_COUNTERS; i++)
+          m_papi_counters[i] = 0;
+        return true;
+      }
+      case Sift::EmuTypePAPIread:
+      {
+        m_papi_counters[PAPI_TOT_INS] = m_thread->getCore()->getPerformanceModel()->getInstructionCount();
+
+        SubsecondTime cycles_fs = getCurrentTime();
+        // Convert SubsecondTime to cycles in global clock domain
+        const ComponentPeriod *dom_global = Sim()->getDvfsManager()->getGlobalDomain();
+        UInt64 cycles = SubsecondTime::divideRounded(cycles_fs, *dom_global);
+
+        m_papi_counters[PAPI_TOT_CYC] = cycles;
+
+        UInt64 load_misses_l1d = Sim()->getStatsManager()->getMetricObject("L1-D", m_thread->getCore()->getId(), "load-misses")->recordMetric();
+        UInt64 store_misses_l1d= Sim()->getStatsManager()->getMetricObject("L1-D", m_thread->getCore()->getId(), "store-misses")->recordMetric();
+
+        UInt64 load_misses_l2  = Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "load-misses")->recordMetric();
+        UInt64 store_misses_l2 = Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "store-misses")->recordMetric();
+
+        UInt64 load_misses_l3  = Sim()->getStatsManager()->getMetricObject("L3", m_thread->getCore()->getId(), "load-misses")->recordMetric();
+        UInt64 store_misses_l3 = Sim()->getStatsManager()->getMetricObject("L3", m_thread->getCore()->getId(), "store-misses")->recordMetric();
+
+
+        m_papi_counters[PAPI_L1_DCM] = load_misses_l1d + store_misses_l1d;
+        m_papi_counters[PAPI_L2_DCM] = load_misses_l2 + store_misses_l2;
+        m_papi_counters[PAPI_L3_TCM] = load_misses_l3 + store_misses_l3;
+
+        m_papi_counters[PAPI_BR_MSP] = m_thread->getCore()->getPerformanceModel()->getBranchPredictor()->getNumIncorrectPredictions();
+
+        for(unsigned i = 0; i < NUM_PAPI_COUNTERS; i++)
+          res.papi.values[i] = m_papi_counters[i];
+
+        return true;
       }
       default:
          // Not emulated
