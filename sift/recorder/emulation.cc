@@ -186,7 +186,7 @@ static void rtnCallback(RTN rtn, VOID *v)
       RTN_ReplaceSignature(rtn, AFUNPTR(emuGetNprocs), IARG_THREAD_ID, IARG_END);
    else if (rtn_name == "get_nprocs_conf" || rtn_name == "__get_nprocs_conf")
       RTN_ReplaceSignature(rtn, AFUNPTR(emuGetNprocs), IARG_THREAD_ID, IARG_END);
-   else if (rtn_name == "clock_gettime")
+   else if (rtn_name == "clock_gettime" || rtn_name == "__clock_gettime")
       RTN_ReplaceSignature(rtn, AFUNPTR(emuClockGettime), IARG_THREAD_ID,
                            IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
    else if (rtn_name.find("gettimeofday") != std::string::npos)
