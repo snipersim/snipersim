@@ -21,6 +21,9 @@ KNOB<UINT64> KnobStopAddress(KNOB_MODE_WRITEONCE, "pintool", "stop", "0", "stop 
 KNOB_COMMENT pinplay_driver_knob_family(KNOB_FAMILY, "PinPlay SIFT Recorder Knobs");
 KNOB<BOOL>KnobReplayer(KNOB_MODE_WRITEONCE, KNOB_FAMILY,
                        KNOB_REPLAY_NAME, "0", "Replay a pinball");
+
+KNOB<BOOL>KnobExtraePreLoaded(KNOB_MODE_WRITEONCE, "pintool", "extrae", "0", "Extrae preloaded");
+
 #ifdef PINPLAY_SUPPORTED
 PINPLAY_ENGINE pinplay_engine;
 #endif /* PINPLAY_SUPPORTED */
@@ -38,3 +41,5 @@ BOOL in_roi = false;
 BOOL any_thread_in_detail = false;
 Sift::Mode current_mode = Sift::ModeIcount;
 std::unordered_map<ADDRINT, bool> routines;
+
+extrae_image_t extrae_image;

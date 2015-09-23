@@ -11,8 +11,38 @@
 #include <sys/syscall.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <cstring>
 
-void beginROI(THREADID threadid)
+static AFUNPTR extrae_event_rtn = NULL;
+
+VOID call_extrae_event(const CONTEXT * ctxt, THREADID threadid, unsigned long event, unsigned long value)
+{
+
+    if (extrae_event_rtn == NULL)
+    {
+        std::cerr << "[SIFT_RECORDER:" << app_id << "] Extrae linked but extrae_event could not be found." << std::endl;
+        return;
+    }
+    else
+    {
+        std::cerr << "[SIFT_RECORDER:" << app_id << "] Calling extrae_event func. <" << std::dec << event << ">: " << value << std::endl;
+    }
+
+    CALL_APPLICATION_FUNCTION_PARAM param;
+    memset ( &param, 0, sizeof(param));
+    param.native = 1;
+
+    PIN_CallApplicationFunction ( ctxt, threadid,
+            CALLINGSTD_DEFAULT,
+            extrae_event_rtn,
+            &param,
+            PIN_PARG ( void ),
+            PIN_PARG ( unsigned long ), ROI_ON_EEVENT,
+            PIN_PARG ( unsigned long ), value,
+            PIN_PARG_END () );
+}
+
+void beginROI(THREADID threadid, const CONTEXT * ctxt)
 {
    if (app_id < 0)
       findMyAppId();
@@ -25,6 +55,11 @@ void beginROI(THREADID threadid)
    {
       if (KnobVerbose.Value())
          std::cerr << "[SIFT_RECORDER:" << app_id << "] ROI Begin" << std::endl;
+   }
+
+   if(extrae_image.linked)
+   {
+      call_extrae_event(ctxt, threadid, ROI_ON_EEVENT, 1);
    }
 
    in_roi = true;
@@ -48,16 +83,21 @@ void beginROI(THREADID threadid)
    }
 }
 
-void endROI(THREADID threadid)
+void endROI(THREADID threadid, const CONTEXT * ctxt)
 {
    if (KnobEmulateSyscalls.Value())
    {
-      // Send SYS_exit_group to the simulator to end the application
-      syscall_args_t args = {0};
-      args[0] = 0; // Assume success
-      thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
-      thread_data[threadid].output->End();
-   }
+        // In simulations with MPI, generate the app crash
+        // with the first MPI_Finalize
+        if (!KnobMPIImplicitROI.Value())
+        {
+           // Send SYS_exit_group to the simulator to end the application
+           syscall_args_t args = {0};
+           args[0] = 0; // Assume success
+           thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
+           thread_data[threadid].output->End();
+       }
+    }
 
    // Delete our .appid file
    char filename[1024] = {0};
@@ -69,6 +109,12 @@ void endROI(THREADID threadid)
 
    // Stop threads from sending any more data while we close the SIFT pipes
    setInstrumentationMode(Sift::ModeIcount);
+
+   if(extrae_image.linked)
+   {
+      call_extrae_event(ctxt, threadid, ROI_ON_EEVENT, 0);
+   }
+
    in_roi = false;
 
    if (!KnobUseResponseFiles.Value())
@@ -109,7 +155,7 @@ void setInstrumentationMode(Sift::Mode mode)
    }
 }
 
-ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
+ADDRINT handleMagic(THREADID threadid, const CONTEXT * ctxt, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 {
    uint64_t res = gax; // Default: don't modify gax
 
@@ -121,12 +167,12 @@ ADDRINT handleMagic(THREADID threadid, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
    if (gax == SIM_CMD_ROI_START)
    {
       if (KnobUseROI.Value() && !in_roi)
-         beginROI(threadid);
+         beginROI(threadid, ctxt);
    }
    else if (gax == SIM_CMD_ROI_END)
    {
       if (KnobUseROI.Value() && in_roi)
-         endROI(threadid);
+         endROI(threadid, ctxt);
    }
 
    return res;
@@ -166,17 +212,17 @@ void findMyAppId()
    exit(1);
 }
 
-VOID handleRoutineImplicitROI(THREADID threadid, bool begin)
+VOID handleRoutineImplicitROI(THREADID threadid, const CONTEXT * ctxt, bool begin)
 {
    if (begin)
    {
       thread_data[threadid].output->Magic(SIM_CMD_ROI_START, 0, 0);
-      beginROI(threadid);
+        beginROI(threadid, ctxt);
    }
    else
    {
       thread_data[threadid].output->Magic(SIM_CMD_ROI_END, 0, 0);
-      endROI(threadid);
+        endROI(threadid, ctxt);
    }
 }
 
@@ -185,17 +231,47 @@ static void routineCallback(RTN rtn, void* v)
    if (KnobMPIImplicitROI.Value())
    {
       std::string rtn_name = RTN_Name(rtn);
-      if (rtn_name.find("MPI_Init") != string::npos && rtn_name.find("MPI_Initialized") == string::npos) // Actual name can be MPI_Init, MPI_Init_thread, PMPI_Init_thread, etc.
+      BOOL could_instruments;
+      BOOL in_extrae = rtn_in_extrae(rtn);
+
+      if (KnobExtraePreLoaded.Value())
+         could_instruments = in_extrae || extrae_image.linked == false;
+      else
+         could_instruments = true;
+
+      if (rtn_name.find("MPI_Init") != string::npos &&
+          rtn_name.find("MPI_Initialized") == string::npos &&
+          rtn_name.find("_Wrapper") == string::npos &&
+          //rtn_name.find("_F_Wrapper") == string::npos &&
+          //rtn_name.find("_C_Wrapper") == string::npos && // Actual name can be MPI_Init, MPI_Init_thread, PMPI_Init_thread, etc.
+          could_instruments)
       {
          RTN_Open(rtn);
-         RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_BOOL, true, IARG_END);
+         RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_CONTEXT, IARG_BOOL, true, IARG_END);
          RTN_Close(rtn);
       }
-      if (rtn_name.find("MPI_Finalize") != string::npos)
+      if (rtn_name.find("MPI_Finalize") != string::npos && rtn_name.find("_Wrapper") == string::npos &&
+          could_instruments)
       {
          RTN_Open(rtn);
-         RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_BOOL, false, IARG_END);
+         RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_CONTEXT, IARG_BOOL, false, IARG_END);
          RTN_Close(rtn);
+      }
+
+      //if extrae is preloaded and we have ROIs, mark them into the paraver trace
+      if (in_extrae && (KnobUseROI.Value() || KnobMPIImplicitROI.Value()))
+      {
+          //extrae_event function has multiple alias
+          if (strcmp ( rtn_name.c_str (), "extrae_event" )   == 0
+              || strcmp ( rtn_name.c_str (), "OMPtrace_event" ) == 0 // F apps
+              || strcmp ( rtn_name.c_str (), "SEQtrace_event" ) == 0 // C apps
+              //|| strcmp ( rtn_name.c_str (), "MPItrace_event" ) == 0
+              //|| strcmp ( rtn_name.c_str (), "OMPItrace_event" )== 0
+              )
+          {
+              cerr << "[SIFT_RECORDER:" << app_id << "] Extrae_event has been detected <" << rtn_name << ">." << endl;
+              extrae_event_rtn = RTN_Funptr(rtn);
+          }
       }
    }
 }
@@ -324,6 +400,17 @@ void closeFile(THREADID threadid)
 
       thread_data[threadid].bbv->clear();
    }
+}
+
+bool rtn_in_extrae(RTN rtn)
+{
+   ADDRINT rtn_addr = RTN_Address(rtn);
+   if (extrae_image.linked)
+   {
+      if (rtn_addr > extrae_image.top_addr && rtn_addr < extrae_image.bottom_addr)
+         return true;
+   }
+   return false;
 }
 
 void initRecorderControl()

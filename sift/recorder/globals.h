@@ -35,6 +35,7 @@ extern KNOB<BOOL> KnobRoutineTracingOutsideDetailed;
 extern KNOB<BOOL> KnobDebug;
 extern KNOB<BOOL> KnobVerbose;
 extern KNOB<UINT64> KnobStopAddress;
+extern KNOB<BOOL> KnobExtraePreLoaded;
 
 # define KNOB_REPLAY_NAME "replay"
 # define KNOB_FAMILY "pintool:sift-recorder"
@@ -58,6 +59,16 @@ extern BOOL any_thread_in_detail;
 extern Sift::Mode current_mode;
 extern const bool verbose;
 extern std::unordered_map<ADDRINT, bool> routines;
+
+struct extrae_image_t {
+  ADDRINT top_addr;
+  ADDRINT bottom_addr;
+  BOOL linked;
+  BOOL got_init;
+  BOOL got_fini;
+};
+
+extern extrae_image_t extrae_image;
 
 #if defined(TARGET_IA32)
    typedef uint32_t syscall_args_t[6];

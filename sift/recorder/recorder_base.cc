@@ -188,6 +188,17 @@ VOID insertCall(INS ins, IPOINT ipoint, UINT32 num_addresses, BOOL is_branch, BO
 
 static VOID traceCallback(TRACE trace, void *v)
 {
+   // to not add overhead when extrae is linked, we must ignore extrae instr.
+   if (extrae_image.linked)
+   {
+        ADDRINT trace_address = TRACE_Address(trace);
+        if (trace_address >= extrae_image.top_addr &&
+                trace_address < extrae_image.bottom_addr)
+        {
+            return;
+        }
+    }
+
    BBL bbl_head = TRACE_BblHead(trace);
 
    for (BBL bbl = bbl_head; BBL_Valid(bbl); bbl = BBL_Next(bbl))
@@ -197,7 +208,7 @@ static VOID traceCallback(TRACE trace, void *v)
          // Simics-style magic instruction: xchg bx, bx
          if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
          {
-            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_RETURN_REGS, REG_GAX, IARG_THREAD_ID, IARG_REG_VALUE, REG_GAX,
+            INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleMagic, IARG_RETURN_REGS, REG_GAX, IARG_THREAD_ID, IARG_CONTEXT, IARG_REG_VALUE, REG_GAX,
 #ifdef TARGET_IA32
                                      IARG_REG_VALUE, REG_GDX,
 #else
@@ -329,7 +340,35 @@ static VOID traceCallback(TRACE trace, void *v)
    }
 }
 
+void extraeImgCallback(IMG img, void * args)
+{
+    using namespace std;
+    string img_name = IMG_Name(img);
+
+    if (!extrae_image.linked)
+    {
+        extrae_image.linked = img_name.find("libmpitrace") != string::npos;
+        if(extrae_image.linked)
+        {
+            extrae_image.top_addr=IMG_LowAddress(img);
+            extrae_image.bottom_addr=IMG_HighAddress(img);
+
+            if (KnobVerbose.Value())
+               cerr << "[SIFT_RECORDER:" << app_id << "] Extrae has been detected."
+                    << "[0x" << hex << extrae_image.top_addr << ", 0x" << hex << extrae_image.bottom_addr << "]" << endl;
+        }
+    }
+}
+
 void initRecorderBase()
 {
    TRACE_AddInstrumentFunction(traceCallback, 0);
+
+   if (KnobExtraePreLoaded.Value())
+   {
+       extrae_image.linked = false;
+       extrae_image.got_init = false;
+       extrae_image.got_fini = false;
+       IMG_AddInstrumentFunction(extraeImgCallback, 0);
+   }
 }
