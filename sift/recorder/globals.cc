@@ -22,7 +22,7 @@ KNOB_COMMENT pinplay_driver_knob_family(KNOB_FAMILY, "PinPlay SIFT Recorder Knob
 KNOB<BOOL>KnobReplayer(KNOB_MODE_WRITEONCE, KNOB_FAMILY,
                        KNOB_REPLAY_NAME, "0", "Replay a pinball");
 
-KNOB<BOOL>KnobExtraePreLoaded(KNOB_MODE_WRITEONCE, "pintool", "extrae", "0", "Extrae preloaded");
+KNOB<UINT64>KnobExtraePreLoaded(KNOB_MODE_WRITEONCE, "pintool", "extrae", "0", "Extrae preloaded");
 
 #ifdef PINPLAY_SUPPORTED
 PINPLAY_ENGINE pinplay_engine;

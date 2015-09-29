@@ -35,7 +35,7 @@ extern KNOB<BOOL> KnobRoutineTracingOutsideDetailed;
 extern KNOB<BOOL> KnobDebug;
 extern KNOB<BOOL> KnobVerbose;
 extern KNOB<UINT64> KnobStopAddress;
-extern KNOB<BOOL> KnobExtraePreLoaded;
+extern KNOB<UINT64> KnobExtraePreLoaded;
 
 # define KNOB_REPLAY_NAME "replay"
 # define KNOB_FAMILY "pintool:sift-recorder"

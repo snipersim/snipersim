@@ -228,50 +228,61 @@ VOID handleRoutineImplicitROI(THREADID threadid, const CONTEXT * ctxt, bool begi
 
 static void routineCallback(RTN rtn, void* v)
 {
+   BOOL in_extrae = rtn_in_extrae(rtn);
+   std::string rtn_name = RTN_Name(rtn);
+
    if (KnobMPIImplicitROI.Value())
    {
-      std::string rtn_name = RTN_Name(rtn);
       BOOL could_instruments;
-      BOOL in_extrae = rtn_in_extrae(rtn);
+      BOOL aux_wrapper = rtn_name.find("_Wrapper") == string::npos;
 
-      if (KnobExtraePreLoaded.Value())
-         could_instruments = in_extrae || extrae_image.linked == false;
+      if (KnobExtraePreLoaded.Value() != 0)
+      {
+         could_instruments = in_extrae || (extrae_image.linked == false);
+
+         if (KnobExtraePreLoaded.Value() == 2) // Fortran version
+         {
+            aux_wrapper = (rtn_name.find("_Wrapper") != string::npos);
+         }
+      }
       else
+      {
          could_instruments = true;
+         aux_wrapper = true;
+      }
 
       if (rtn_name.find("MPI_Init") != string::npos &&
-          rtn_name.find("MPI_Initialized") == string::npos &&
-          rtn_name.find("_Wrapper") == string::npos &&
-          //rtn_name.find("_F_Wrapper") == string::npos &&
-          //rtn_name.find("_C_Wrapper") == string::npos && // Actual name can be MPI_Init, MPI_Init_thread, PMPI_Init_thread, etc.
+          rtn_name.find("MPI_Initialized") == string::npos && // Actual name can be MPI_Init, MPI_Init_thread, PMPI_Init_thread, etc.
+          aux_wrapper &&
           could_instruments)
       {
          RTN_Open(rtn);
          RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_CONTEXT, IARG_BOOL, true, IARG_END);
          RTN_Close(rtn);
       }
-      if (rtn_name.find("MPI_Finalize") != string::npos && rtn_name.find("_Wrapper") == string::npos &&
+      if (rtn_name.find("MPI_Finalize") != string::npos &&
+          aux_wrapper &&
           could_instruments)
       {
          RTN_Open(rtn);
          RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_CONTEXT, IARG_BOOL, false, IARG_END);
          RTN_Close(rtn);
       }
+   }
 
-      //if extrae is preloaded and we have ROIs, mark them into the paraver trace
-      if (in_extrae && (KnobUseROI.Value() || KnobMPIImplicitROI.Value()))
+   //if extrae is preloaded and we have ROIs, mark them into the paraver trace
+   if (in_extrae && (KnobUseROI.Value() || KnobMPIImplicitROI.Value()))
+   {
+      //extrae_event function has multiple alias
+      if (strcmp ( rtn_name.c_str (), "extrae_event" )   == 0
+          || strcmp ( rtn_name.c_str (), "OMPtrace_event" ) == 0 // Fortran apps
+          || strcmp ( rtn_name.c_str (), "SEQtrace_event" ) == 0 // C/C++ apps
+          //|| strcmp ( rtn_name.c_str (), "MPItrace_event" ) == 0
+          //|| strcmp ( rtn_name.c_str (), "OMPItrace_event" )== 0
+      )
       {
-          //extrae_event function has multiple alias
-          if (strcmp ( rtn_name.c_str (), "extrae_event" )   == 0
-              || strcmp ( rtn_name.c_str (), "OMPtrace_event" ) == 0 // F apps
-              || strcmp ( rtn_name.c_str (), "SEQtrace_event" ) == 0 // C apps
-              //|| strcmp ( rtn_name.c_str (), "MPItrace_event" ) == 0
-              //|| strcmp ( rtn_name.c_str (), "OMPItrace_event" )== 0
-              )
-          {
-              cerr << "[SIFT_RECORDER:" << app_id << "] Extrae_event has been detected <" << rtn_name << ">." << endl;
-              extrae_event_rtn = RTN_Funptr(rtn);
-          }
+         cerr << "[SIFT_RECORDER:" << app_id << "] Extrae_event has been detected <" << rtn_name << ">." << endl;
+         extrae_event_rtn = RTN_Funptr(rtn);
       }
    }
 }

@@ -364,11 +364,10 @@ void initRecorderBase()
 {
    TRACE_AddInstrumentFunction(traceCallback, 0);
 
-   if (KnobExtraePreLoaded.Value())
+   extrae_image.linked = false;
+
+   if (KnobExtraePreLoaded.Value() != 0)
    {
-       extrae_image.linked = false;
-       extrae_image.got_init = false;
-       extrae_image.got_fini = false;
-       IMG_AddInstrumentFunction(extraeImgCallback, 0);
+      IMG_AddInstrumentFunction(extraeImgCallback, 0);
    }
 }
