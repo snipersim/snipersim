@@ -90,7 +90,6 @@ void Simulator::start()
    m_transport = Transport::create();
    m_dvfs_manager = new DvfsManager();
    m_faultinjection_manager = FaultinjectionManager::create();
-   m_thread_manager = new ThreadManager();
    m_thread_stats_manager = new ThreadStatsManager();
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();
    m_clock_skew_minimization_server = ClockSkewMinimizationServer::create();
@@ -99,6 +98,7 @@ void Simulator::start()
    m_sampling_manager = new SamplingManager();
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
    m_rtn_tracer = RoutineTracer::create();
+   m_thread_manager = new ThreadManager();
 
    if (Sim()->getCfg()->getBool("traceinput/enabled"))
       m_trace_manager = new TraceManager();
