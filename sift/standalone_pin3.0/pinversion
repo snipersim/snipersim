@@ -1,0 +1,16 @@
+#!/bin/bash
+
+pin_version=`$PIN_ROOT/pin -version`
+
+while read -r line; do
+	if [[ "$line" == Pin* ]]
+	then
+		pin_product_version_major=`echo $line | cut -d'.' -f 1 | cut -d' ' -f 2` 
+		pin_product_version_minor=`echo $line | cut -d'.' -f 2`
+	elif  [[ "$line" == @CHARM-VERSION:* ]]
+	then
+		pin_build_number=`echo $line | cut -d' ' -f 3`
+	fi
+done <<< "$pin_version"
+
+echo "$pin_product_version_major.$pin_product_version_minor.$pin_build_number"
