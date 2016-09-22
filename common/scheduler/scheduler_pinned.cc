@@ -36,7 +36,7 @@ core_id_t SchedulerPinned::getFreeCore(core_id_t core_first)
 
    do
    {
-      if (m_core_thread_running[core_next] == INVALID_THREAD_ID)
+      if (m_core_thread_running[core_next] == INVALID_THREAD_ID && m_core_mask[core_next])
          return core_next;
 
       core_next = getNextCore(core_next);
