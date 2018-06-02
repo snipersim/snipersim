@@ -43,6 +43,9 @@ class CacheBase
          HASH_MOD,
          HASH_RNG1_MOD,
          HASH_RNG2_MOD,
+         HASH_PRIME_DIS,
+         HASH_XOR_MOD,
+         HASH_MER_MOD,
       };
 
       enum ReplacementPolicy
@@ -72,6 +75,7 @@ class CacheBase
 
       // computed params
       UInt32 m_log_blocksize;
+      UInt32 m_log_num_sets;
 
    public:
       // constructors/destructors

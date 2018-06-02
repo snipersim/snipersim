@@ -8,9 +8,9 @@
 #include <cstdint>
 #include <cstddef>
 
-extern "C" {
-#include "xed-interface.h"
-}
+//extern "C" {
+//#include "xed-interface.h"
+//}
 
 namespace Sift
 {

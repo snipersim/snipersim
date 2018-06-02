@@ -82,7 +82,7 @@ MicroOpPerformanceModel::MicroOpPerformanceModel(Core *core, bool issue_memops)
       m_memaccess_uop = new MicroOp();
       m_memaccess_uop->makeLoad(
            0 // uop offset of 0 (first uop)
-         , XED_ICLASS_INVALID // opcode
+         , dl::Decoder::DL_OPCODE_INVALID // opcode
          , "invalid"  // instructionName
          , 8
       );
@@ -199,8 +199,8 @@ void MicroOpPerformanceModel::handleInstruction(DynamicInstruction *dynins)
          if (load_base_index == SIZE_MAX)
             load_base_index = m;
       }
-   }
 
+   }
    // Compute the iCache cost, and add to our cycle time
    if (Sim()->getConfig()->getEnableICacheModeling())
    {

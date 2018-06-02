@@ -9,7 +9,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <strings.h>
-#include <sys/stat.h>
+// stat is not supported in Pin 3.0
+// #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <string.h>
 #include <pthread.h>
@@ -76,11 +77,20 @@ VOID forkAfterInChild(THREADID threadid, const CONTEXT *ctxt, VOID *v)
 
 bool assert_ignore()
 {
-   struct stat st;
-   if (stat((KnobOutputFile.Value() + ".sift_done").c_str(), &st) == 0)
+   // stat is not supported in Pin 3.0
+   // this code just check if the file exists or not
+   // struct stat st;
+   // if (stat((KnobOutputFile.Value() + ".sift_done").c_str(), &st) == 0)
+   //    return true;
+   // else
+   //    return false;
+   if(FILE *file = fopen((KnobOutputFile.Value() + ".sift_done").c_str(), "rb")){
+      fclose(file);
       return true;
-   else
+   }
+   else{
       return false;
+   } 
 }
 
 void __sift_assert_fail(__const char *__assertion, __const char *__file,

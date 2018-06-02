@@ -5,6 +5,7 @@
 #include "log.h"
 #include "inst_mode.h"
 
+#include <decoder.h>
 
 class _Thread;
 class SyscallServer;
@@ -78,6 +79,10 @@ public:
    void setInstrumentationMode(InstMode::inst_mode_t new_mode, bool update_barrier);
    InstMode::inst_mode_t getInstrumentationMode() { return InstMode::inst_mode; }
 
+   // Access to the Decoder library for the simulator run
+   void createDecoder();
+   dl::Decoder *getDecoder();
+   
 private:
    Config m_config;
    Log m_log;
@@ -110,6 +115,11 @@ private:
    static config::Config *m_config_file;
    static bool m_config_file_allowed;
    static Config::SimulationMode m_mode;
+   
+   // Object to access the decoder library with the correct configuration
+   static dl::Decoder *m_decoder;
+   // Surrogate to create a Decoder object for a specific architecture
+   dl::DecoderFactory *m_factory;
 
    void printInstModeSummary();
 };

@@ -2,7 +2,7 @@
 #include <inttypes.h>
 
 #include "pinboost_debug.h"
-#include "callstack.h"
+//#include "callstack.h"
 
 #include <sys/types.h>
 #include <sys/syscall.h>
@@ -44,7 +44,7 @@ static EXCEPT_HANDLING_RESULT pinboost_exceptionhandler(THREADID threadid, EXCEP
 
       // Error occurred while handling another error (either in the exception handler, or in another thread)
       // Debug session should already be started, let's ignore this error and halt so the user can inspect the state.
-      pause();
+      sleep(100);
    }
 
    return EHR_CONTINUE_SEARCH;
@@ -59,16 +59,17 @@ void pinboost_register(const char* name, bool do_screen_debug)
       pinboost_do_debug = true;
 }
 
-void rdtsc() {}
+static void rdtsc() {}
 
 bool pinboost_backtrace(EXCEPTION_INFO *pExceptInfo, PHYSICAL_CONTEXT *pPhysCtxt)
 {
-   const int BACKTRACE_SIZE = 16;
-   void * backtrace_buffer[BACKTRACE_SIZE];
-   unsigned int backtrace_n = get_call_stack_from(backtrace_buffer, BACKTRACE_SIZE,
-                                                  (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_STACK_PTR),
-                                                  (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_GBP)
-   );
+   // Pin 3 does not provide symbols for the start of the stack to allow for backtracing
+   //const int BACKTRACE_SIZE = 16;
+   //void * backtrace_buffer[BACKTRACE_SIZE];
+   //unsigned int backtrace_n = get_call_stack_from(backtrace_buffer, BACKTRACE_SIZE,
+   //                                               (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_STACK_PTR),
+   //                                               (void*)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_GBP)
+   //);
 
    char backtrace_filename[1024];
    sprintf(backtrace_filename, "/tmp/debug_backtrace_%ld.out", syscall(__NR_gettid));
@@ -79,10 +80,10 @@ bool pinboost_backtrace(EXCEPTION_INFO *pExceptInfo, PHYSICAL_CONTEXT *pPhysCtxt
    fprintf(fp, "%" PRIdPTR "\n", (intptr_t)rdtsc);
    // actual function function where the exception occured (won't be in the backtrace)
    fprintf(fp, "%" PRIdPTR "", (intptr_t)PIN_GetPhysicalContextReg(pPhysCtxt, LEVEL_BASE::REG_INST_PTR));
-   for(unsigned int i = 0; i < backtrace_n; ++i)
-   {
-      fprintf(fp, " %" PRIdPTR "", (intptr_t)backtrace_buffer[i]);
-   }
+   //for(unsigned int i = 0; i < backtrace_n; ++i)
+   //{
+   //   fprintf(fp, " %" PRIdPTR "", (intptr_t)backtrace_buffer[i]);
+   //}
    fprintf(fp, "\n");
    fprintf(fp, "%s\n", PIN_ExceptionToString(pExceptInfo).c_str());
    fclose(fp);

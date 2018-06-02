@@ -8,7 +8,7 @@
 #include "instruction.h"
 #include "dynamic_instruction.h"
 #include "performance_model.h"
-#include "instruction_decoder.h"
+#include "instruction_decoder_wlib.h"
 #include "config.hpp"
 #include "syscall_model.h"
 #include "core.h"
@@ -23,11 +23,16 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 
-#if PIN_REV >= 67254
-extern "C" {
-#include "xed-decoded-inst-api.h"
-}
-#endif
+#include <x86_decoder.h>  // TODO remove when the decode function in microop perf model is adapted
+
+//#if PIN_REV >= 67254
+//extern "C" {
+//#include "xed-decoded-inst-api.h"
+//}
+//#endif
+
+//bool TraceThread::xed_initialized = false;
+int TraceThread::m_isa = 0;
 
 TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracefile, String responsefile, app_id_t app_id, bool cleanup)
    : m__thread(NULL)
@@ -51,6 +56,16 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_started(false)
    , m_stopped(false)
 {
+
+   //if (!xed_initialized)
+   //{
+   //   xed_tables_init();
+   //   #if PIN_REV < 65163
+   //   xed_decode_init();
+   //   #endif
+   //   xed_initialized = true;
+   //}
+
    m_trace.setHandleInstructionCountFunc(TraceThread::__handleInstructionCountFunc, this);
    m_trace.setHandleCacheOnlyFunc(TraceThread::__handleCacheOnlyFunc, this);
    if (Sim()->getCfg()->getBool("traceinput/mirror_output"))
@@ -80,16 +95,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    }
 
    thread->setVa2paFunc(_va2pa, (UInt64)this);
-
-   String syntax = Sim()->getCfg()->getString("general/syntax");
-   if (syntax == "intel")
-      m_syntax = XED_SYNTAX_INTEL;
-   else if (syntax == "att")
-      m_syntax = XED_SYNTAX_ATT;
-   else if (syntax == "xed")
-      m_syntax = XED_SYNTAX_XED;
-   else
-      LOG_PRINT_ERROR("Unknown assembly syntax %s, should be intel, att or xed.", syntax.c_str());
+   
 }
 
 TraceThread::~TraceThread()
@@ -99,6 +105,10 @@ TraceThread::~TraceThread()
    {
       unlink(m_tracefile.c_str());
       unlink(m_responsefile.c_str());
+   }
+   for(std::unordered_map<IntPtr, const dl::DecodedInst *>::iterator i = m_decoder_cache.begin() ; i != m_decoder_cache.end() ; ++i)
+   {
+      delete (*i).second;
    }
 }
 
@@ -383,40 +393,43 @@ SubsecondTime TraceThread::getCurrentTime() const
 
 Instruction* TraceThread::decode(Sift::Instruction &inst)
 {
-   const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
+
+   //printf("PC: %lx Size: %d num_addresses=%d is_branch=%d\n", inst.sinst->addr, inst.sinst->size, inst.num_addresses, inst.is_branch);
+   if (m_decoder_cache.count(inst.sinst->addr) == 0)
+      m_decoder_cache[inst.sinst->addr] = staticDecode(inst);
+   
+   const dl::DecodedInst& dec_inst = *(m_decoder_cache[inst.sinst->addr]);
 
    OperandList list;
 
    // Ignore memory-referencing operands in NOP instructions
-   if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
+   if (!(dec_inst.is_nop()))
    {
-      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
-         if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+      for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
+         if (Sim()->getDecoder()->op_read_mem(&dec_inst, mem_idx))
             list.push_back(Operand(Operand::MEMORY, 0, Operand::READ));
 
-      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
-         if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+      for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
+         if (Sim()->getDecoder()->op_write_mem(&dec_inst, mem_idx))
             list.push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
    }
 
    Instruction *instruction;
    if (inst.is_branch)
-      instruction = new BranchInstruction(list);
+     instruction = new BranchInstruction(list); 
+
    else
       instruction = new GenericInstruction(list);
 
    instruction->setAddress(va2pa(inst.sinst->addr));
    instruction->setSize(inst.sinst->size);
-   instruction->setAtomic(xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst)));
+   instruction->setAtomic(dec_inst.is_atomic());
    char disassembly[64];
-#if PIN_REV >= 67254
-   xed_format_context(m_syntax, &xed_inst, disassembly, sizeof(disassembly) - 1, inst.sinst->addr, 0, 0);
-#else
-   xed_format(m_syntax, &xed_inst, disassembly, sizeof(disassembly) - 1, inst.sinst->addr);
-#endif
+   dec_inst.disassembly_to_str(disassembly, sizeof(disassembly));  
    instruction->setDisassembly(disassembly);
-
-   const std::vector<const MicroOp*> *uops = InstructionDecoder::decode(inst.sinst->addr, &xed_inst, instruction);
+   //printf("%s\n", instruction->getDisassembly().c_str());
+   
+   const std::vector<const MicroOp*> *uops = InstructionDecoder::decode(inst.sinst->addr, &dec_inst, instruction);
    instruction->setMicroOps(uops);
 
    return instruction;
@@ -515,9 +528,20 @@ void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, 
    }
 }
 
+const dl::DecodedInst* TraceThread::staticDecode(Sift::Instruction &inst)
+{
+   dl::DecodedInst *dec_inst = m_factory->CreateInstruction(Sim()->getDecoder(), inst.sinst->data, 
+                                                            inst.sinst->size, inst.sinst->addr);
+   Sim()->getDecoder()->decode(dec_inst, (dl::dl_isa)inst.isa);
+   return dec_inst;
+}
+
 void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)
 {
-   const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
+   if (m_decoder_cache.count(inst.sinst->addr) == 0)
+      m_decoder_cache[inst.sinst->addr] = staticDecode(inst);
+   
+   const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst->addr]);
 
    // Warmup instruction caches
 
@@ -539,20 +563,33 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
 
    if (inst.executed)
    {
-      const bool is_atomic_update = xed_operand_values_get_atomic(xed_decoded_inst_operands_const(&xed_inst));
-      const bool is_prefetch = xed_decoded_inst_is_prefetch(&xed_inst);
+      const bool is_atomic_update = dec_inst.is_atomic();
+      const bool is_prefetch = dec_inst.is_prefetch();
 
       // Ignore memory-referencing operands in NOP instructions
-      if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
+      if (!dec_inst.is_nop())
       {
-         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+         for(uint32_t mem_idx = 0; mem_idx <  Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
          {
-            if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+            if (Sim()->getDecoder()->op_read_mem(&dec_inst, mem_idx))
             {
-               LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
-
+               UInt64 mem_address;
+               // LDP ARM instructions, second element to be loaded, using the address of the first element
+               if (dec_inst.is_mem_pair() && ((int)mem_idx == (inst.num_addresses + 1)))  
+               {
+                  LOG_ASSERT_ERROR((int)mem_idx < (inst.num_addresses + 1), "Did not receive enough data addresses");
+                  
+                  mem_address = inst.addresses[mem_idx - 1] + Sim()->getDecoder()->size_mem_op(&dec_inst, mem_idx);
+               }
+               else
+               {
+                  LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
+                 
+                  mem_address = inst.addresses[mem_idx];
+               }
+               
                bool no_mapping = false;
-               UInt64 pa = va2pa(inst.addresses[mem_idx], is_prefetch ? &no_mapping : NULL);
+               UInt64 pa = va2pa(mem_address, is_prefetch ? &no_mapping : NULL);
                if (no_mapping)
                   continue;
 
@@ -561,20 +598,33 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
                      (is_atomic_update) ? Core::READ_EX : Core::READ,
                      pa,
                      NULL,
-                     xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+                     Sim()->getDecoder()->size_mem_op(&dec_inst, mem_idx),
                      Core::MEM_MODELED_COUNT,
                      va2pa(inst.sinst->addr));
             }
          }
 
-         for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+         for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
          {
-            if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+            if (Sim()->getDecoder()->op_write_mem(&dec_inst, mem_idx))
             {
-               LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
-
+               UInt64 mem_address;
+               // STP ARM instructions, second element to be stored, using the address of the first element
+               if (dec_inst.is_mem_pair() && ((int)mem_idx == (inst.num_addresses + 1)))  
+               {
+                  LOG_ASSERT_ERROR((int)mem_idx < (inst.num_addresses + 1), "Did not receive enough data addresses");
+                  
+                  mem_address = inst.addresses[mem_idx - 1] + Sim()->getDecoder()->size_mem_op(&dec_inst, mem_idx);
+               }
+               else
+               {
+                  LOG_ASSERT_ERROR(mem_idx < inst.num_addresses, "Did not receive enough data addresses");
+                 
+                  mem_address = inst.addresses[mem_idx];
+               }
+               
                bool no_mapping = false;
-               UInt64 pa = va2pa(inst.addresses[mem_idx], is_prefetch ? &no_mapping : NULL);
+               UInt64 pa = va2pa(mem_address, is_prefetch ? &no_mapping : NULL);
                if (no_mapping)
                   continue;
 
@@ -586,7 +636,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
                         Core::WRITE,
                         pa,
                         NULL,
-                        xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+                        Sim()->getDecoder()->size_mem_op(&dec_inst, mem_idx),
                         Core::MEM_MODELED_COUNT,
                         va2pa(inst.sinst->addr));
             }
@@ -597,12 +647,14 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
 
 void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl)
 {
-   const xed_decoded_inst_t &xed_inst = inst.sinst->xed_inst;
 
    // Set up instruction
 
    if (m_icache.count(inst.sinst->addr) == 0)
       m_icache[inst.sinst->addr] = decode(inst);
+   // Here get the decoder instruction without checking, because we must have it for sure
+   const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst->addr]);
+
    Instruction *ins = m_icache[inst.sinst->addr];
    DynamicInstruction *dynins = prfmdl->createDynamicInstruction(ins, va2pa(inst.sinst->addr));
 
@@ -614,23 +666,23 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    }
 
    // Ignore memory-referencing operands in NOP instructions
-   if (!xed_decoded_inst_get_attribute(&xed_inst, XED_ATTRIBUTE_NOP))
+   if (!dec_inst.is_nop())
    {
-      const bool is_prefetch = xed_decoded_inst_is_prefetch(&xed_inst);
+      const bool is_prefetch = dec_inst.is_prefetch();
 
-      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+      for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
       {
-         if (xed_decoded_inst_mem_read(&xed_inst, mem_idx))
+         if (Sim()->getDecoder()->op_read_mem(&dec_inst, mem_idx))
          {
-            addDetailedMemoryInfo(dynins, inst, xed_inst, mem_idx, Operand::READ, is_prefetch, prfmdl);
+            addDetailedMemoryInfo(dynins, inst, dec_inst, mem_idx, Operand::READ, is_prefetch, prfmdl);
          }
       }
 
-      for(uint32_t mem_idx = 0; mem_idx < xed_decoded_inst_number_of_memory_operands(&xed_inst); ++mem_idx)
+      for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
       {
-         if (xed_decoded_inst_mem_written(&xed_inst, mem_idx))
+         if (Sim()->getDecoder()->op_write_mem(&dec_inst, mem_idx))
          {
-            addDetailedMemoryInfo(dynins, inst, xed_inst, mem_idx, Operand::WRITE, is_prefetch, prfmdl);
+            addDetailedMemoryInfo(dynins, inst, dec_inst, mem_idx, Operand::WRITE, is_prefetch, prfmdl);
          }
       }
    }
@@ -644,19 +696,31 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    prfmdl->iterate();
 }
 
-void TraceThread::addDetailedMemoryInfo(DynamicInstruction *dynins, Sift::Instruction &inst, const xed_decoded_inst_t &xed_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_prefetch, PerformanceModel *prfmdl)
+void TraceThread::addDetailedMemoryInfo(DynamicInstruction *dynins, Sift::Instruction &inst, const dl::DecodedInst &decoded_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_prefetch, PerformanceModel *prfmdl)
 {
-   assert(mem_idx < inst.num_addresses);
-
+   UInt64 mem_address;
+   // LDP/STP ARM instructions, second element to be ld/st, using the address of the first element
+   if (decoded_inst.is_mem_pair() && ((int)mem_idx == inst.num_addresses))  
+   {
+      assert((int)mem_idx < (inst.num_addresses + 1));
+      mem_address = inst.addresses[mem_idx - 1] + Sim()->getDecoder()->size_mem_op(&decoded_inst, mem_idx);
+   }
+   else
+   {
+      assert(mem_idx < inst.num_addresses);
+      mem_address = inst.addresses[mem_idx];
+   }
+               
    bool no_mapping = false;
-   UInt64 pa = va2pa(inst.addresses[mem_idx], is_prefetch ? &no_mapping : NULL);
+   UInt64 pa = va2pa(mem_address, is_prefetch ? &no_mapping : NULL);
+
    if (no_mapping)
    {
       dynins->addMemory(
          inst.executed,
          SubsecondTime::Zero(),
          0,
-         xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+         Sim()->getDecoder()->size_mem_op(&decoded_inst, mem_idx),
          op_type,
          0,
          HitWhere::PREFETCH_NO_MAPPING);
@@ -667,7 +731,7 @@ void TraceThread::addDetailedMemoryInfo(DynamicInstruction *dynins, Sift::Instru
          inst.executed,
          SubsecondTime::Zero(),
          pa,
-         xed_decoded_inst_get_memory_operand_length(&xed_inst, mem_idx),
+         Sim()->getDecoder()->size_mem_op(&decoded_inst, mem_idx),
          op_type,
          0,
          HitWhere::UNKNOWN);

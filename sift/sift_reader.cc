@@ -16,7 +16,7 @@
 #define VERBOSE_HEX 0
 #define VERBOSE_ICACHE 0
 
-bool Sift::Reader::xed_initialized = false;
+//bool Sift::Reader::xed_initialized = false;
 
 Sift::Reader::Reader(const char *filename, const char *response_filename, uint32_t id)
    : input(NULL)
@@ -41,7 +41,7 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , handleEmuArg(NULL)
    , handleRoutineChangeFunc(NULL)
    , handleRoutineAnnounceFunc(NULL)
-   , handleRoutineArg(NULL)
+   , handleRoutineArg(NULL)   
    , filesize(0)
    , last_address(0)
    , icache()
@@ -49,15 +49,16 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , m_trace_has_pa(false)
    , m_seen_end(false)
    , m_last_sinst(NULL)
+   , m_isa(0)
 {
-   if (!xed_initialized)
-   {
-      xed_tables_init();
-      #if PIN_REV < 65163
-      xed_decode_init();
-      #endif
-      xed_initialized = true;
-   }
+//   if (!xed_initialized)
+//   {
+//      xed_tables_init();
+//      #if PIN_REV < 65163
+//      xed_decode_init();
+//      #endif
+//      xed_initialized = true;
+//   }
 
    m_filename = strdup(filename);
    m_response_filename = strdup(response_filename);
@@ -117,15 +118,15 @@ void Sift::Reader::initStream()
 
    if (hdr.options & ArchIA32)
    {
-      xed_state_t init = { XED_MACHINE_MODE_LONG_COMPAT_32, XED_ADDRESS_WIDTH_32b };
-      m_xed_state_init = init;
+      //xed_state_t init = { XED_MACHINE_MODE_LONG_COMPAT_32, XED_ADDRESS_WIDTH_32b };
+      //m_xed_state_init = init;
       hdr.options &= ~ArchIA32;
    }
-   else
-   {
-      xed_state_t init = { XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b };
-      m_xed_state_init = init;
-   }
+   //else
+   //{
+   //   xed_state_t init = { XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b };
+   //   m_xed_state_init = init;
+   //}
 
    if (hdr.options & PhysicalAddress)
    {
@@ -444,6 +445,15 @@ bool Sift::Reader::Read(Instruction &inst)
                free(name);
                free(filename);
                break;
+            }            
+            case RecOtherISAChange:
+            { 
+               assert(rec.Other.size == sizeof(uint32_t));
+               uint32_t new_isa;
+               input->read(reinterpret_cast<char*>(&new_isa), sizeof(new_isa));
+               m_isa = new_isa; // save here new ISA mode value
+
+               break;
             }
             default:
             {
@@ -475,6 +485,7 @@ bool Sift::Reader::Read(Instruction &inst)
          inst.taken = rec.Instruction.taken;
          inst.is_predicate = false;
          inst.executed = true;
+         inst.isa = m_isa;
       }
       else
       {
@@ -492,6 +503,7 @@ bool Sift::Reader::Read(Instruction &inst)
          inst.taken = rec.InstructionExt.taken;
          inst.is_predicate = rec.InstructionExt.is_predicate;
          inst.executed = rec.InstructionExt.executed;
+         inst.isa = m_isa;
 
          last_address = addr;
       }
@@ -595,7 +607,7 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
    }
 }
 
-const Sift::StaticInstruction* Sift::Reader::decodeInstruction(uint64_t addr, uint8_t size)
+const Sift::StaticInstruction* Sift::Reader::staticInfoInstruction(uint64_t addr, uint8_t size)
 {
    StaticInstruction *sinst = new StaticInstruction();
    sinst->addr = addr;
@@ -615,10 +627,10 @@ const Sift::StaticInstruction* Sift::Reader::decodeInstruction(uint64_t addr, ui
       base_addr += ICACHE_SIZE;
    }
 
-   xed_state_t xed_state = m_xed_state_init;
-   xed_decoded_inst_zero_set_mode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), &xed_state);
-   xed_error_enum_t result = xed_decode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), sinst->data, sinst->size);
-   assert(result == XED_ERROR_NONE);
+   //xed_state_t xed_state = m_xed_state_init;
+   //xed_decoded_inst_zero_set_mode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), &xed_state);
+   //xed_error_enum_t result = xed_decode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), sinst->data, sinst->size);
+   //assert(result == XED_ERROR_NONE);
 
    return sinst;
 }
@@ -640,7 +652,7 @@ const Sift::StaticInstruction* Sift::Reader::getStaticInstruction(uint64_t addr,
    }
    else
    {
-      sinst = decodeInstruction(addr, size);
+      sinst = staticInfoInstruction(addr, size);
       scache[addr] = sinst;
    }
 
@@ -726,8 +738,8 @@ uint64_t Sift::Reader::va2pa(uint64_t va)
 {
    if (m_trace_has_pa)
    {
-      intptr_t vp = va / PAGE_SIZE;
-      intptr_t vo = va & (PAGE_SIZE-1);
+      intptr_t vp = va / PAGE_SIZE_SIFT;
+      intptr_t vo = va & (PAGE_SIZE_SIFT-1);
 
       if (vcache.count(vp) == 0)
       {
@@ -736,7 +748,7 @@ uint64_t Sift::Reader::va2pa(uint64_t va)
       else
       {
          intptr_t pp = vcache[vp];
-         return (pp * PAGE_SIZE) | vo;
+         return (pp * PAGE_SIZE_SIFT) | vo;
       }
    }
    else

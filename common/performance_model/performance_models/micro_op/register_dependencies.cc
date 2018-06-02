@@ -11,9 +11,9 @@ void RegisterDependencies::setDependencies(DynamicMicroOp& microOp, uint64_t low
    // Create the dependencies for the microOp
    for(uint32_t i = 0; i < microOp.getMicroOp()->getSourceRegistersLength(); i++)
    {
-      xed_reg_enum_t sourceRegister = microOp.getMicroOp()->getSourceRegister(i);
+      dl::Decoder::decoder_reg sourceRegister = microOp.getMicroOp()->getSourceRegister(i);
       uint64_t producerSequenceNumber;
-      LOG_ASSERT_ERROR(sourceRegister < XED_REG_LAST, "Source register src[%u]=%u is invalid", i, sourceRegister);
+      LOG_ASSERT_ERROR(sourceRegister < Sim()->getDecoder()->last_reg(), "Source register src[%u]=%u is invalid", i, sourceRegister);
       if ((producerSequenceNumber = producers[sourceRegister]) != INVALID_SEQNR)
       {
          if (producerSequenceNumber >= lowestValidSequenceNumber)
@@ -31,15 +31,15 @@ void RegisterDependencies::setDependencies(DynamicMicroOp& microOp, uint64_t low
    for(uint32_t i = 0; i < microOp.getMicroOp()->getDestinationRegistersLength(); i++)
    {
       uint32_t destinationRegister = microOp.getMicroOp()->getDestinationRegister(i);
-      LOG_ASSERT_ERROR(destinationRegister < XED_REG_LAST, "Destination register dst[%u] = %u is invalid", i, destinationRegister);
+      LOG_ASSERT_ERROR(destinationRegister < Sim()->getDecoder()->last_reg(), "Destination register dst[%u] = %u is invalid", i, destinationRegister);
       producers[destinationRegister] = microOp.getSequenceNumber();
    }
 
 }
 
-uint64_t RegisterDependencies::peekProducer(xed_reg_enum_t reg, uint64_t lowestValidSequenceNumber)
+uint64_t RegisterDependencies::peekProducer(dl::Decoder::decoder_reg reg, uint64_t lowestValidSequenceNumber)
 {
-   if (reg == XED_REG_INVALID)
+   if (reg == dl::Decoder::DL_REG_INVALID)
       return INVALID_SEQNR;
 
    uint64_t producerSequenceNumber = producers[reg];
@@ -51,7 +51,7 @@ uint64_t RegisterDependencies::peekProducer(xed_reg_enum_t reg, uint64_t lowestV
 
 void RegisterDependencies::clear()
 {
-   for(uint32_t i = 0; i < XED_REG_LAST; i++)
+   for(uint32_t i = 0; i < Sim()->getDecoder()->last_reg(); i++)
    {
       producers[i] = INVALID_SEQNR;
    }

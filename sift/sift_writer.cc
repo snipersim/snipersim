@@ -19,6 +19,11 @@
 #define VERBOSE_HEX 0
 #define VERBOSE_ICACHE 0
 
+void __assert_fail(const char *__assertion, const char *__file, unsigned int __line, const char *__function) __THROW
+{
+   std::cerr << "[SIFT_RECORDER] " << __file << ":" << __line << ": " << __function << ": Assertion `" << __assertion << "' failed." << std::endl;
+   abort();
+}
 
 // Weakly-linked default implementation of sift_assert() failure handler
 __attribute__ ((weak)) void
@@ -30,9 +35,11 @@ __sift_assert_fail(__const char *__assertion, __const char *__file,
 }
 
 
-Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn, bool send_va2pa_mapping)
+Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn, bool send_va2pa_mapping, GetCodeFunc2 getCodeFunc2, void* getCodeFunc2Data)
    : response(NULL)
    , getCodeFunc(getCodeFunc)
+   , getCodeFunc2(getCodeFunc2)
+   , getCodeFunc2Data(getCodeFunc2Data)
    , ninstrs(0)
    , nbranch(0)
    , npredicate(0)
@@ -62,6 +69,13 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
       options |= PhysicalAddress;
 
    output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+
+   if (!output->is_open())
+   {
+      delete output;
+      output = nullptr;
+      return;
+   }
 
    #if VERBOSE > 0
    std::cerr << "[DEBUG:" << m_id << "] Write Header" << std::endl;
@@ -170,7 +184,11 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
          output->write(reinterpret_cast<char*>(&addr), sizeof(uint64_t));
 
          uint8_t buffer[16] = {0};
-         getCodeFunc(buffer, reinterpret_cast<const uint8_t *>(addr), size);
+         if (getCodeFunc2) {
+            getCodeFunc2(buffer, reinterpret_cast<const uint8_t *>(addr), size, getCodeFunc2Data);
+         } else {
+            getCodeFunc(buffer, reinterpret_cast<const uint8_t *>(addr), size);
+         }
          output->write(reinterpret_cast<char*>(buffer), size);
 
          #if VERBOSE_ICACHE
@@ -198,7 +216,11 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
             output->write(reinterpret_cast<char*>(&base_addr), sizeof(uint64_t));
 
             uint8_t buffer[ICACHE_SIZE];
-            getCodeFunc(buffer, (const uint8_t *)base_addr, ICACHE_SIZE);
+            if (getCodeFunc2) {
+               getCodeFunc2(buffer, (const uint8_t *)base_addr, ICACHE_SIZE, getCodeFunc2Data);
+            } else {
+               getCodeFunc(buffer, (const uint8_t *)base_addr, ICACHE_SIZE);
+            }
             output->write(reinterpret_cast<char*>(buffer), ICACHE_SIZE);
 
             icache[base_addr] = true;
@@ -725,6 +747,31 @@ void Sift::Writer::RoutineAnnounce(uint64_t eip, const char *name, const char *i
    output->write(filename, len_filename);
 }
 
+void Sift::Writer::ISAChange(uint32_t new_isa)
+{
+   #if VERBOSE > 1
+   std::cerr << "[DEBUG:" << m_id << "] Write ISAChange" << std::endl;
+   #endif
+
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherISAChange;
+   rec.Other.size = sizeof(uint32_t);
+
+   #if VERBOSE_HEX > 1
+   hexdump((char*)&rec, sizeof(rec.Other));
+   hexdump((char*)&new_isa, sizeof(new_isa));
+   #endif
+
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<char*>(&new_isa), sizeof(new_isa));
+}
+
+bool Sift::Writer::IsOpen()
+{
+   return !!output;
+}
+
 void Sift::Writer::handleMemoryRequest(Record &respRec)
 {
    #if VERBOSE > 0
@@ -836,7 +883,7 @@ void Sift::Writer::send_va2pa(uint64_t va)
 {
    if (m_send_va2pa_mapping)
    {
-      uint64_t vp = static_cast<uintptr_t>(va) / PAGE_SIZE;
+      uint64_t vp = static_cast<uintptr_t>(va) / PAGE_SIZE_SIFT;
       if (m_va2pa.count(vp) == 0)
       {
          uint64_t pp = va2pa_lookup(vp);

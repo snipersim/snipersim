@@ -29,7 +29,7 @@ all: $(TARGET)
 $(SIM_ROOT)/lib/libcarbon_sim.a:
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
 
-$(TARGET): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a
+$(TARGET): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a $(SIM_ROOT)/decoder_lib/libdecoder.a
 $(TARGET): $(OBJECTS)
 	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	$(_CMD) $(CXX) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(OPT_CFLAGS) -std=c++0x
@@ -53,7 +53,7 @@ endif
 
 # These libraries are used by libcarbon, so add them to the end
 LD_LIBS += -lxed
-LD_FLAGS += -L$(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH)/lib
+LD_FLAGS += -L$(XED_HOME)/lib
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))

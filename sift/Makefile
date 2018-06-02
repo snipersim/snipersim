@@ -10,19 +10,29 @@ else
    ifeq ($(SNIPER_TARGET_ARCH),ia32)
       CXXFLAGS_ARCH=-m32
    else
-      $(error unknown SNIPER_TARGET_ARCH $(SNIPER_TARGET_ARCH))
+      ifeq ($(SNIPER_TARGET_ARCH),arm32)
+         CXXFLAGS_ARCH=
+      else
+         ifeq ($(SNIPER_TARGET_ARCH),arm64)
+            CXXFLAGS_ARCH=
+         else
+            $(error unknown SNIPER_TARGET_ARCH $(SNIPER_TARGET_ARCH))
+         endif
+      endif
    endif
 endif
 
-all : $(TARGET) siftdump recorder
+#all : $(TARGET) siftdump recorder
+all : $(TARGET) recorder
 
 .PHONY : recorder
 
 include ../common/Makefile.common
 
-XED_HOME=$(wildcard $(PIN_HOME)/extras/xed-$(SNIPER_TARGET_ARCH) $(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH))
+#XED_HOME=$(wildcard $(PIN_HOME)/extras/xed-$(SNIPER_TARGET_ARCH) $(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH))
 
-CXXFLAGS+=-fPIC -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
+#CXXFLAGS+=-fPIC -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
+CXXFLAGS+=-fPIC $(CXXFLAGS_ARCH)
 
 %.o : %.cc $(wildcard *.h) Makefile
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
@@ -34,7 +44,8 @@ $(TARGET) : $(OBJECTS)
 
 siftdump : siftdump.o $(TARGET)
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
-	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz
+	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L. -lsift -lz
+	#$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz
 
 recorder : $(TARGET)
 	@$(MAKE) $(MAKE_QUIET) -C recorder

@@ -9,7 +9,8 @@
 #include <stdlib.h>
 #include <sys/file.h>
 #include <sys/syscall.h>
-#include <sys/stat.h>
+// stat is not supported in Pin 3.0
+// #include <sys/stat.h>
 #include <unistd.h>
 #include <cstring>
 
@@ -189,12 +190,16 @@ void findMyAppId()
       char filename[1024] = {0};
 
       // First check whether this many appids are supported by stat()ing the request FIFO for thread 0
-      struct stat sts;
       sprintf(filename, "%s.app%" PRIu64 ".th%" PRIu64 ".sift", KnobOutputFile.Value().c_str(), id, (uint64_t)0);
-      if (stat(filename, &sts) != 0)
-      {
-         break;
-      }
+
+      // stat is not supported in Pin 3.0
+      // this piece of code seems to just check if it can create a file or not, ignore it here
+      // First check whether this many appids are supported by stat()ing the request FIFO for thread 0
+      // struct stat sts;
+      // if (stat(filename, &sts) != 0)
+      // {
+      //    break;
+      // }
 
       // Atomically create .appid file
       sprintf(filename, "%s.app%" PRIu64 ".appid", KnobOutputFile.Value().c_str(), id);
@@ -360,14 +365,15 @@ void openFile(THREADID threadid)
 
 
    // Open the file for writing
-   try {
-      #ifdef TARGET_IA32
-         const bool arch32 = true;
-      #else
-         const bool arch32 = false;
-      #endif
-      thread_data[threadid].output = new Sift::Writer(filename, getCode, KnobUseResponseFiles.Value() ? false : true, response_filename, threadid, arch32, false, KnobSendPhysicalAddresses.Value());
-   } catch (...) {
+   #ifdef TARGET_IA32
+      const bool arch32 = true;
+   #else
+      const bool arch32 = false;
+   #endif
+   thread_data[threadid].output = new Sift::Writer(filename, getCode, KnobUseResponseFiles.Value() ? false : true, response_filename, threadid, arch32, false, KnobSendPhysicalAddresses.Value());
+
+   if (!thread_data[threadid].output->IsOpen())
+   {
       std::cerr << "[SIFT_RECORDER:" << app_id << ":" << thread_data[threadid].thread_num << "] Error: Unable to open the output file " << filename << std::endl;
       exit(1);
    }

@@ -1,0 +1,151 @@
+##############################################################
+#
+# This file includes all the test targets as well as all the
+# non-default build rules and test recipes.
+#
+##############################################################
+
+
+##############################################################
+#
+# Test targets
+#
+##############################################################
+
+###### Place all generic definitions here ######
+
+# This defines tests which run tools of the same name.  This is simply for convenience to avoid
+# defining the test name twice (once in TOOL_ROOTS and again in TEST_ROOTS).
+# Tests defined here should not be defined in TOOL_ROOTS and TEST_ROOTS.
+TEST_TOOL_ROOTS :=
+
+# This defines the tests to be run that were not already defined in TEST_TOOL_ROOTS.
+TEST_ROOTS :=
+
+# This defines a list of tests that should run in the "short" sanity. Tests in this list must also
+# appear either in the TEST_TOOL_ROOTS or the TEST_ROOTS list.
+# If the entire directory should be tested in sanity, assign TEST_TOOL_ROOTS and TEST_ROOTS to the
+# SANITY_SUBSET variable in the tests section below (see example in makefile.rules.tmpl).
+SANITY_SUBSET :=
+
+# This defines the tools which will be run during the the tests, and were not already defined in
+# TEST_TOOL_ROOTS.
+TOOL_ROOTS :=
+
+# This defines the static analysis tools which will be run during the the tests. They should not
+# be defined in TEST_TOOL_ROOTS. If a test with the same name exists, it should be defined in
+# TEST_ROOTS.
+# Note: Static analysis tools are in fact executables linked with the Pin Static Analysis Library.
+# This library provides a subset of the Pin APIs which allows the tool to perform static analysis
+# of an application or dll. Pin itself is not used when this tool runs.
+SA_TOOL_ROOTS :=
+
+# This defines all the applications that will be run during the tests.
+APP_ROOTS :=
+
+# This defines any additional object files that need to be compiled.
+OBJECT_ROOTS :=
+
+# This defines any additional dlls (shared objects), other than the pintools, that need to be compiled.
+DLL_ROOTS :=
+
+# This defines any static libraries (archives), that need to be built.
+LIB_ROOTS :=
+
+
+##############################################################
+#
+# Test recipes
+#
+##############################################################
+
+# This section contains recipes for tests other than the default.
+# See makefile.default.rules for the default test rules.
+# All tests in this section should adhere to the naming convention: <testname>.test
+
+
+##############################################################
+#
+# Build rules
+#
+##############################################################
+
+# This section contains the build rules for all binaries that have special build rules.
+# See makefile.default.rules for the default build rules.
+
+ifneq ($(DEBUG_SHOW_COMPILE),)
+  SHOW_COMPILE=1
+  MAKE_QUIET=
+  _MSG=@echo >/dev/null
+  _CMD=
+else
+  SHOW_COMPILE=
+  MAKE_QUIET=--quiet
+  _MSG=@echo
+  _CMD=@
+endif
+
+ARCH_QUERY = $(shell uname -m)
+ifeq ($(ARCH_QUERY),i686)
+	TARGET_ARCH = -DTARGET_IA32
+else
+	ifeq ($(ARCH_QUERY),x86_64)
+		TARGET_ARCH ?= -DTARGET_INTEL64
+	else
+		$(error Unknown target arch: $(ARCH_QUERY))
+	endif
+endif
+
+ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+
+
+PINPLAY_HOME = $(PIN_ROOT)/extras/pinplay
+PINPLAY_INCLUDE_HOME = $(PINPLAY_HOME)/include
+PINPLAY_LIB_HOME = $(PINPLAY_HOME)/lib/$(TARGET)
+
+ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
+EXT_LIB_HOME = $(PINPLAY_HOME)/lib-ext/$(TARGET)
+PINPLAY_CXXFLAGS = -DPINPLAY_SUPPORTED -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_INCLUDE_HOME)
+PINPLAY_LIBS = $(PINPLAY_LIB_HOME)/libpinplay.a $(EXT_LIB_HOME)/libbz2.a $(EXT_LIB_HOME)/libzlib.a
+PINPLAY_LD_FLAGS = -L$(PINPLAY_LIB_HOME) -L$(EXT_LIB_HOME)
+else
+PINPLAY_CXXFLAGS =
+PINPLAY_LIBS =
+PINPLAY_LD_FLAGS =
+endif
+
+COMPILE_PIN_FLAGS := -g -std=c++0x $(PINPLAY_CXXFLAGS) $(TOOL_CXXFLAGS)
+LINK_FLAGS := -g $(TOOL_LDFLAGS)
+	
+LINK_LIBS = $(ROOT_DIR)/sift/libsift.a $(PINPLAY_LIBS)
+
+SOURCES=$(wildcard *.cc) $(wildcard ../bbv_count.cc)
+OBJECTS=$(patsubst %.cc,$(OBJDIR)%$(OBJ_SUFFIX),$(SOURCES))
+
+export PINPLAY_INCLUDE_HOME
+export COMPILE_PIN_FLAGS
+
+all: sift/libsift.a $(OBJDIR)pin_frontend
+
+$(OBJDIR)%$(OBJ_SUFFIX) : %.cc $(wildcard *.h) $(wildcard ../*.h) $(wildcard ../*.tcc)
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../)/,,$(shell readlink -f $@))
+	$(CXX) -I$(ROOT_DIR)/sift -I$(ROOT_DIR)/.. $(TARGET_ARCH) $(COMPILE_PIN_FLAGS) -c -o $@ $<
+
+sift/sift_reader.h: sift
+	@for i in $(wildcard $(ROOT_DIR)/../../sift/*.h) $(wildcard $(ROOT_DIR)/../../sift/*.cc) ; do ln -fs $$i sift/. ; done
+	@ln -fs $(ROOT_DIR)/../../common/misc/fixed_types.h sift/.
+
+# Build libsift against PinCRT
+sift/libsift.a: sift/sift_reader.h
+	make -C sift
+
+$(OBJDIR)pin_frontend: $(OBJECTS) $(LINK_LIBS) $(CONTROLLERLIB)
+	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../)/,,$(shell readlink -f $@))
+	$(LINKER) $(LINK_FLAGS) $(LINK_EXE) $@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
+
+clean: cleanall
+
+cleanall:
+	rm -f *.o
+	make -C sift clean
+

@@ -3,38 +3,72 @@ SIM_ROOT ?= $(shell readlink -f "$(CURDIR)")
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
 STANDALONE=$(SIM_ROOT)/lib/sniper
+PIN_FRONTEND=$(SIM_ROOT)/frontend/pin-frontend/obj-intel64/pin_frontend
 LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a
 LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_FOLLOW=$(SIM_ROOT)/pin/../lib/follow_execv.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
-SIM_TARGETS=$(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE)
+LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND)
 
-.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean
+.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean mbuild xed_install xed
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
 all: dependencies $(SIM_TARGETS) configscripts
 
-dependencies: package_deps pin python mcpat linux builddir showdebugstatus
+dependencies: package_deps xed pin python mcpat linux builddir showdebugstatus
 
 $(SIM_TARGETS): dependencies
 
 include common/Makefile.common
 
-$(STANDALONE): $(LIB_CARBON) $(LIB_SIFT)
+$(STANDALONE): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/standalone
 
-$(LIB_PIN_SIM): $(LIB_CARBON) $(LIB_SIFT)
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
+$(PIN_FRONTEND):
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/frontend/pin-frontend
 
-$(LIB_FOLLOW):
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
+# Disable original frontend
 
-$(LIB_CARBON):
+#$(LIB_PIN_SIM): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)
+#	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
+
+#$(LIB_FOLLOW):
+#	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
+
+$(LIB_CARBON): 
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
 
 $(LIB_SIFT): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/sift
+
+$(LIB_DECODER): $(LIB_CARBON)
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/decoder_lib 
+
+MBUILD_GITID=1651029643b2adf139a8d283db51b42c3c884513
+MBUILD_INSTALL=$(SIM_ROOT)/mbuild
+MBUILD_INSTALL_DEP=$(MBUILD_INSTALL)/mbuild/arar.py
+mbuild: $(MBUILD_INSTALL_DEP)
+$(MBUILD_INSTALL_DEP):
+	$(_MSG) '[DOWNLO] mbuild'
+	$(_CMD) git clone https://github.com/intelxed/mbuild.git $(MBUILD_INSTALL)
+	$(_CMD) git -C $(MBUILD_INSTALL) reset --hard $(MBUILD_GITID)
+
+XED_GITID=2be2d282939f6eb84e03e1fed9ba82f32c8bac2d
+XED_INSTALL_DEP=$(XED_INSTALL)/src/common/xed-init.c
+xed_install: $(XED_INSTALL_DEP)
+$(XED_INSTALL_DEP):
+	$(_MSG) '[DOWNLO] xed'
+	$(_CMD) git clone https://github.com/intelxed/xed.git $(XED_INSTALL)
+	$(_CMD) git -C $(XED_INSTALL) reset --hard $(XED_GITID)
+
+XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
+xed: mbuild xed_install $(XED_DEP)
+$(XED_DEP):
+	$(_MSG) '[INSTAL] xed'
+	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --shared --install-dir $(XED_HOME) install
+
 
 ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=71313
@@ -59,7 +93,8 @@ python: $(PYTHON_DEP)
 $(PYTHON_DEP):
 	$(_MSG) '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
 	$(_CMD) mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
-	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
+#	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
+	$(_CMD) wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
@@ -67,7 +102,8 @@ mcpat: mcpat/mcpat-1.0
 mcpat/mcpat-1.0:
 	$(_MSG) '[DOWNLO] McPAT'
 	$(_CMD) mkdir -p mcpat
-	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
+#	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
+	$(_CMD) wget -O - --no-verbose "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 endif
 
 linux: include/linux/perf_event.h
@@ -90,8 +126,10 @@ configscripts: dependencies
 	@echo '# This file is auto-generated, changes made to it will be lost. Please edit Makefile instead.' >> config/sniper.py
 	@echo "target=\"$(SNIPER_TARGET_ARCH)\"" >> config/sniper.py
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
+	@./tools/makerelativepath.py xed_home "$(SIM_ROOT)" "$(XED_HOME)" >> config/sniper.py
+	@./tools/makerelativepath.py dynamorio_home "$(SIM_ROOT)" "$(DR_HOME)" >> config/sniper.py
 	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
-	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
+	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(DR_HOME)" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
 
 empty_config:
 	$(_MSG) '[CLEAN ] config'
@@ -108,6 +146,8 @@ clean: empty_config empty_deps
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C sift clean
 	$(_MSG) '[CLEAN ] tools'
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C tools clean
+	$(_MSG) '[CLEAN ] frontend/pin-frontend'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C frontend/pin-frontend clean
 	$(_CMD) rm -f .build_os
 
 distclean: clean
@@ -115,6 +155,8 @@ distclean: clean
 	$(_CMD) rm -rf python_kit
 	$(_MSG) '[DISTCL] McPAT'
 	$(_CMD) rm -rf mcpat
+	$(_MSG) '[DISTCL] Xed'
+	$(_CMD) rm -rf xed xed_kit mbuild
 	$(_MSG) '[DISTCL] perf_event.h'
 	$(_CMD) rm -f include/linux/perf_event.h
 

@@ -273,7 +273,7 @@ boost::tuple<uint64_t,SubsecondTime> RobTimer::simulate(const std::vector<Dynami
       {
          for(unsigned int i = 0; i < entry->uop->getMicroOp()->getAddressRegistersLength(); ++i)
          {
-            xed_reg_enum_t reg = entry->uop->getMicroOp()->getAddressRegister(i);
+            dl::Decoder::decoder_reg reg = entry->uop->getMicroOp()->getAddressRegister(i);
             uint64_t addressProducer = this->registerDependencies->peekProducer(reg, lowestValidSequenceNumber);
             if (addressProducer != INVALID_SEQNR)
             {

@@ -16,12 +16,15 @@ namespace Sift
    class Writer
    {
       typedef void (*GetCodeFunc)(uint8_t *dst, const uint8_t *src, uint32_t size);
+      typedef void (*GetCodeFunc2)(uint8_t *dst, const uint8_t *src, uint32_t size, void *data);
       typedef void (*HandleAccessMemoryFunc)(void *arg, MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size);
 
       private:
          vostream *output;
          vistream *response;
          GetCodeFunc getCodeFunc;
+         GetCodeFunc2 getCodeFunc2;
+         void *getCodeFunc2Data;
          HandleAccessMemoryFunc handleAccessMemoryFunc;
          void *handleAccessMemoryArg;
          uint64_t ninstrs, hsize[16], haddr[MAX_DYNAMIC_ADDRESSES+1], nbranch, npredicate, ninstrsmall, ninstrext;
@@ -41,7 +44,7 @@ namespace Sift
          uint64_t va2pa_lookup(uint64_t va);
 
       public:
-         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false, bool requires_icache_per_insn = false, bool send_va2pa_mapping = false);
+         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false, bool requires_icache_per_insn = false, bool send_va2pa_mapping = false, GetCodeFunc2 getCodeFunc2 = NULL, void *GetCodeFunc2Data = NULL);
          ~Writer();
          void End();
          void Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
@@ -57,6 +60,8 @@ namespace Sift
          int32_t Fork();
          void RoutineChange(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip = 0);
          void RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
+         void ISAChange(uint32_t new_isa);
+         bool IsOpen();
 
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }
    };

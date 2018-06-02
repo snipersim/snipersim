@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
             printf("   ");
          char buffer[64];
 #if PIN_REV >= 67254
-         xed_format_context(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first, 0, 0);
+         //xed_format_context(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first, 0, 0);
 #else
          xed_format(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first);
 #endif
@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
          printf("%016" PRIx64 " ", inst.sinst->addr);
          char buffer[64];
 #if PIN_REV >= 67254
-         xed_format_context(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr, 0, 0);
+         //xed_format_context(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr, 0, 0);
 #else
          xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr);
 #endif

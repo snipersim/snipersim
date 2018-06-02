@@ -34,6 +34,7 @@ Simulator *Simulator::m_singleton;
 config::Config *Simulator::m_config_file;
 bool Simulator::m_config_file_allowed = true;
 Config::SimulationMode Simulator::m_mode;
+dl::Decoder *Simulator::m_decoder;
 
 void Simulator::allocate()
 {
@@ -45,6 +46,53 @@ void Simulator::setConfig(config::Config *cfg, Config::SimulationMode mode)
 {
    m_config_file = cfg;
    m_mode = mode;
+}
+
+void Simulator::createDecoder()
+{
+   // Set up the decoder object if it does not exist yet
+   if (! m_decoder)
+   {
+      // Get architecture
+      dl::dl_arch dla;
+      String architecture = Sim()->getCfg()->getString("general/arch");
+      if (architecture == "intel")
+        dla = dl::DL_ARCH_INTEL;
+      else if (architecture == "riscv")
+        dla = dl::DL_ARCH_RISCV;
+      else
+        LOG_PRINT_ERROR("Unknown architecture %s, should be intel or arm.", architecture.c_str());
+      // Get mode
+      dl::dl_mode dlm;
+      String mode = Sim()->getCfg()->getString("general/mode");
+      if (mode == "64")
+        dlm = dl::DL_MODE_64;
+      else if (mode == "32")
+        dlm = dl::DL_MODE_32;
+      else
+        LOG_PRINT_ERROR("Unknown mode %s, should be 32 or 64 (bits).", mode.c_str());
+      // Get syntax 
+      dl::dl_syntax dls;
+      String syntax = Sim()->getCfg()->getString("general/syntax");
+      if (dla == dl::DL_ARCH_RISCV)
+        dls = dl::DL_SYNTAX_DEFAULT;
+      else if (syntax == "intel")
+        dls = dl::DL_SYNTAX_INTEL;
+      else if (syntax == "att")
+        dls = dl::DL_SYNTAX_ATT;
+      else if (syntax == "xed")
+        dls = dl::DL_SYNTAX_XED;
+      else
+        LOG_PRINT_ERROR("Unknown assembly syntax %s, should be intel, att or xed.", syntax.c_str());
+
+      m_factory = new dl::DecoderFactory;
+      m_decoder = m_factory->CreateDecoder(dla, dlm, dls);  // create decoder for [arch, mode, syntax]
+   }
+}
+
+dl::Decoder * Simulator::getDecoder()
+{
+  return m_decoder;
 }
 
 void Simulator::release()
@@ -82,7 +130,10 @@ Simulator::Simulator()
 void Simulator::start()
 {
    LOG_PRINT("In Simulator ctor.");
-
+   
+   // create a new Decoder object for this Simulator
+   createDecoder();
+   
    m_hooks_manager = new HooksManager();
    m_syscall_server = new SyscallServer();
    m_sync_server = new SyncServer();
@@ -188,14 +239,16 @@ Simulator::~Simulator()
    {
       delete m_rtn_tracer;             m_rtn_tracer = NULL;
    }
-   delete m_trace_manager;             m_trace_manager = NULL;
+   // Don't remove the trace manager as threads could still be alive even if they are done
+   //delete m_trace_manager;             m_trace_manager = NULL;
    delete m_sampling_manager;          m_sampling_manager = NULL;
    if (m_faultinjection_manager)
    {
       delete m_faultinjection_manager; m_faultinjection_manager = NULL;
    }
    delete m_sim_thread_manager;        m_sim_thread_manager = NULL;
-   delete m_thread_manager;            m_thread_manager = NULL;
+   // Don't remove the trace manager as threads could still be alive even if they are done
+   //delete m_thread_manager;            m_thread_manager = NULL;
    delete m_thread_stats_manager;      m_thread_stats_manager = NULL;
    delete m_core_manager;              m_core_manager = NULL;
    delete m_dvfs_manager;              m_dvfs_manager = NULL;

@@ -15,7 +15,7 @@ namespace Sift
 {
 
    const uint32_t MagicNumber = 0x54464953; // "SIFT"
-   const uint64_t PAGE_SIZE = 4096;
+   const uint64_t PAGE_SIZE_SIFT = 4096;
    const uint32_t ICACHE_SIZE = 0x1000;
    const uint64_t ICACHE_OFFSET_MASK = ICACHE_SIZE - 1;
    const uint64_t ICACHE_PAGE_MASK = ~ICACHE_OFFSET_MASK;
@@ -107,6 +107,7 @@ namespace Sift
       RecOtherForkResponse,
       RecOtherInstructionCount,
       RecOtherCacheOnly,
+      RecOtherISAChange,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

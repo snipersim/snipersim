@@ -45,7 +45,10 @@ def usage():
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
         '  |  --pid=<process-pid>' + \
-        '  |  [--sift] -- <cmdline> }'
+        '  |  [--sift]' + \
+        '  |  [--frontend=]' + \
+        '  |  [--isa=ia32|x86_64]' + \
+        '  -- <cmdline> }'
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
   print
@@ -96,7 +99,9 @@ heteroconfig = None
 pinballs = None
 pinball_sift = True
 pinplay_addrtrans = False
-use_sift = False
+use_sift = True
+isa = None
+frontend = None
 use_pid = None
 tracegen = None
 trace_extra_args = []
@@ -184,7 +189,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
   return newconfig
 
 
-record_trace_passthrough = [ 'pid-continue', 'stop-address=' ]
+record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=' ]
 
 try:
   opts, cmdline = getopt.getopt(
@@ -209,6 +214,8 @@ try:
       "pinballs=", "pinball-non-sift", "pinplay-addr-trans",
       "sift",
       "pid=",
+      "isa=",
+      "frontend=",
     ] + record_trace_passthrough
   )
 except getopt.GetoptError, e:
@@ -336,6 +343,11 @@ for o, a in opts:
     use_sift = True
   if o == '--pid':
     use_pid = a
+    use_sift = True
+  if o == '--isa':
+    isa = a
+  if o == '--frontend':
+    frontend = a
     use_sift = True
   if o.startswith('--') and o[2:] in record_trace_passthrough:
     trace_extra_args.append(o)
@@ -574,9 +586,9 @@ if tracegen:
   sniperoptions.append('-g --traceinput/enabled=%s' % tracegen['enabled'])
   sniperoptions.append('-g --traceinput/emulate_syscalls=%s' % tracegen['emulate_syscalls'])
   sniperoptions.append('-g --traceinput/num_apps=%d' % tracegen['num_apps'])
+  tracegen['tracefiles_created'] = [] # FIFOs to be cleaned up
   basefname = 'run_benchmarks'
   tracegen['tracetempdir'] = tempfile.mkdtemp()
-  tracegen['tracefiles_created'] = [] # FIFOs to be cleaned up
   traceprefix = os.path.join(tracegen['tracetempdir'], basefname)
   sniperoptions.append('-g --traceinput/trace_prefix=%s' % traceprefix)
   # Create FIFOs for first thread of each application
@@ -595,6 +607,10 @@ if tracegen:
     subprocess.Popen(tracecmd).communicate()
   if pinplay_addrtrans:
     trace_extra_args += [ '--pinplay-addr-trans' ]
+  if frontend:
+    trace_extra_args += [ '--frontend=%(frontend)s' % locals()]
+    trace_extra_args += [ '--isa=%(isa)s' % locals()]
+    trace_extra_args += [ '--ncores=%(ncores)u' % locals()]
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
     tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     tracecmds.append(tracecmd)
@@ -610,7 +626,7 @@ config = {}
 execfile(configfile, {}, config)
 
 # convert paths in config to absolute paths
-for d in ('pin_home',):
+for d in ('pin_home','xed_home'):
   absdir = os.path.join(HOME, config[d])
   if not os.path.isdir(absdir):
     sys.stderr.write('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
@@ -620,7 +636,7 @@ sim_root = HOME
 arch = config.get('target', 'intel64')
 
 
-env = run_sniper.setup_env(sim_root, pin_home, arch, standalone)
+env = run_sniper.setup_env(sim_root, pin_home, arch, standalone, xed_home)
 
 
 optcmd = ''
@@ -638,9 +654,9 @@ if not standalone:
     print >> sys.stderr, pin_version
     sys.exit(-1)
 
-  pinoptions = '-mt -injection child'
+  pinoptions = '-mt -injection child -ifeellucky'
   if pin_version >= 49303:
-    pinoptions += ' -xyzzy -enable_vsm 0' # TODO: Enable vsm once OpenMP thread exit is solved (Redmine #148)
+    pinoptions += ' -xyzzy' # TODO: Enable vsm once OpenMP thread exit is solved (Redmine #148)
 
   if arch == 'ia32':
     # Running Jikes (which is 32-bit) on Sandy Bridge machines sometimes seem to suffer from data corruption,

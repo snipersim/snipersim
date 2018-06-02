@@ -1,9 +1,9 @@
 #include "micro_op.h"
 #include "instruction.h"
 
-extern "C" {
-#include <xed-decoded-inst.h>
-}
+//extern "C" {
+//#include <xed-decoded-inst.h>
+//}
 
 #include <assert.h>
 #include <iostream>
@@ -28,7 +28,7 @@ MicroOp::MicroOp()
 #endif
 {
    this->uop_type = UOP_INVALID;
-   this->instructionOpcode = XED_ICLASS_INVALID;
+   this->instructionOpcode = dl::Decoder::DL_OPCODE_INVALID;
    this->instruction = NULL;
 
    this->first = false;
@@ -51,11 +51,11 @@ MicroOp::MicroOp()
    this->operand_size = 0;
 
    for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_SOURCE_REGISTERS; i++)
-      this->sourceRegisters[i] = XED_REG_INVALID;
+      this->sourceRegisters[i] = dl::Decoder::DL_OPCODE_INVALID;
    for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS; i++)
-      this->addressRegisters[i] = XED_REG_INVALID;
+      this->addressRegisters[i] = dl::Decoder::DL_OPCODE_INVALID;
    for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS; i++)
-      this->destinationRegisters[i] = XED_REG_INVALID;
+      this->destinationRegisters[i] = dl::Decoder::DL_OPCODE_INVALID;
 
 #ifdef ENABLE_MICROOP_STRINGS
    sourceRegisterNames.clear();
@@ -71,8 +71,8 @@ MicroOp::MicroOp()
 #endif
 }
 
-void MicroOp::makeLoad(uint32_t offset, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size) {
-   this->uop_type = UOP_LOAD;
+void MicroOp::makeLoad(uint32_t offset, dl::Decoder::decoder_opcode instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size) {
+   this->uop_type = UOP_LOAD;               
    this->microOpTypeOffset = offset;
    this->memoryAccessSize = mem_size;
 #ifdef ENABLE_MICROOP_STRINGS
@@ -83,7 +83,7 @@ void MicroOp::makeLoad(uint32_t offset, xed_iclass_enum_t instructionOpcode, con
    this->setTypes();
 }
 
-void MicroOp::makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, bool isBranch) {
+void MicroOp::makeExecute(uint32_t offset, uint32_t num_loads, dl::Decoder::decoder_opcode instructionOpcode, const String& instructionOpcodeName, bool isBranch) {
    this->uop_type = UOP_EXECUTE;
    this->microOpTypeOffset = offset;
    this->intraInstructionDependencies = num_loads;
@@ -95,7 +95,7 @@ void MicroOp::makeExecute(uint32_t offset, uint32_t num_loads, xed_iclass_enum_t
    this->setTypes();
 }
 
-void MicroOp::makeStore(uint32_t offset, uint32_t num_execute, xed_iclass_enum_t instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size) {
+void MicroOp::makeStore(uint32_t offset, uint32_t num_execute, dl::Decoder::decoder_opcode instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size) {
    this->uop_type = UOP_STORE;
    this->microOpTypeOffset = offset;
    this->memoryAccessSize = mem_size;
@@ -111,7 +111,7 @@ void MicroOp::makeDynamic(const String& instructionOpcodeName, uint32_t execLate
    this->uop_type = UOP_EXECUTE;
    this->microOpTypeOffset = 0;
    this->intraInstructionDependencies = 0;
-   this->instructionOpcode = XED_ICLASS_INVALID;
+   this->instructionOpcode = dl::Decoder::DL_OPCODE_INVALID;
 #ifdef ENABLE_MICROOP_STRINGS
    this->instructionOpcodeName = instructionOpcodeName;
 #endif
@@ -121,77 +121,23 @@ void MicroOp::makeDynamic(const String& instructionOpcodeName, uint32_t execLate
 
 
 MicroOp::uop_subtype_t MicroOp::getSubtype_Exec(const MicroOp& uop)
-{
+{   
+   dl::Decoder *dec = Sim()->getDecoder();
+
    // Get the uop subtype for the EXEC part of this instruction
    // (ignoring the fact that this particular microop may be a load/store,
    //  used in determining the data type for load/store when calculating bypass delays)
-   switch(uop.getInstructionOpcode())
-   {
-      case XED_ICLASS_CALL_FAR:
-      case XED_ICLASS_CALL_NEAR:
-      case XED_ICLASS_JB:
-      case XED_ICLASS_JBE:
-      case XED_ICLASS_JL:
-      case XED_ICLASS_JLE:
-      case XED_ICLASS_JMP:
-      case XED_ICLASS_JMP_FAR:
-      case XED_ICLASS_JNB:
-      case XED_ICLASS_JNBE:
-      case XED_ICLASS_JNL:
-      case XED_ICLASS_JNLE:
-      case XED_ICLASS_JNO:
-      case XED_ICLASS_JNP:
-      case XED_ICLASS_JNS:
-      case XED_ICLASS_JNZ:
-      case XED_ICLASS_JO:
-      case XED_ICLASS_JP:
-      case XED_ICLASS_JRCXZ:
-      case XED_ICLASS_JS:
-      case XED_ICLASS_JZ:
-      case XED_ICLASS_RET_FAR:
-      case XED_ICLASS_RET_NEAR:
-         return UOP_SUBTYPE_BRANCH;
-      case XED_ICLASS_ADDPD:
-      case XED_ICLASS_ADDPS:
-      case XED_ICLASS_ADDSD:
-      case XED_ICLASS_ADDSS:
-      case XED_ICLASS_ADDSUBPD:
-      case XED_ICLASS_ADDSUBPS:
-      case XED_ICLASS_SUBPD:
-      case XED_ICLASS_SUBPS:
-      case XED_ICLASS_SUBSD:
-      case XED_ICLASS_SUBSS:
-      case XED_ICLASS_VADDPD:
-      case XED_ICLASS_VADDPS:
-      case XED_ICLASS_VADDSD:
-      case XED_ICLASS_VADDSS:
-      case XED_ICLASS_VADDSUBPD:
-      case XED_ICLASS_VADDSUBPS:
-      case XED_ICLASS_VSUBPD:
-      case XED_ICLASS_VSUBPS:
-      case XED_ICLASS_VSUBSD:
-      case XED_ICLASS_VSUBSS:
-         return UOP_SUBTYPE_FP_ADDSUB;
-      case XED_ICLASS_MULPD:
-      case XED_ICLASS_MULPS:
-      case XED_ICLASS_MULSD:
-      case XED_ICLASS_MULSS:
-      case XED_ICLASS_DIVPD:
-      case XED_ICLASS_DIVPS:
-      case XED_ICLASS_DIVSD:
-      case XED_ICLASS_DIVSS:
-      case XED_ICLASS_VMULPD:
-      case XED_ICLASS_VMULPS:
-      case XED_ICLASS_VMULSD:
-      case XED_ICLASS_VMULSS:
-      case XED_ICLASS_VDIVPD:
-      case XED_ICLASS_VDIVPS:
-      case XED_ICLASS_VDIVSD:
-      case XED_ICLASS_VDIVSS:
-         return UOP_SUBTYPE_FP_MULDIV;
-      default:
-         return UOP_SUBTYPE_GENERIC;
-   }
+   if (dec->is_branch_opcode(uop.getInstructionOpcode()))
+        return UOP_SUBTYPE_BRANCH;
+
+   else if (dec->is_fpvector_addsub_opcode(uop.getInstructionOpcode(), uop.getDecodedInstruction()))
+       return UOP_SUBTYPE_FP_ADDSUB;
+
+   else if (dec->is_fpvector_muldiv_opcode(uop.getInstructionOpcode(), uop.getDecodedInstruction()))
+       return UOP_SUBTYPE_FP_MULDIV;
+
+   else
+       return UOP_SUBTYPE_GENERIC;
 }
 
 
@@ -244,80 +190,9 @@ bool MicroOp::isFpLoadStore() const
          default:
             ; // fall through
       }
-      switch(getInstructionOpcode())
+      if(Sim()->getDecoder()->is_fpvector_ldst_opcode(getInstructionOpcode(), getDecodedInstruction()))
       {
-         case XED_ICLASS_MOVAPS:
-         case XED_ICLASS_MOVAPD:
-         case XED_ICLASS_MOVUPS:
-         case XED_ICLASS_MOVUPD:
-         case XED_ICLASS_MOVSS:
-         case XED_ICLASS_MOVSD_XMM:
-         case XED_ICLASS_MOVHPS:
-         case XED_ICLASS_MOVHPD:
-         case XED_ICLASS_MOVLPS:
-         case XED_ICLASS_MOVLPD:
-         case XED_ICLASS_SHUFPS:
-         case XED_ICLASS_SHUFPD:
-         case XED_ICLASS_BLENDPS:
-         case XED_ICLASS_BLENDPD:
-         case XED_ICLASS_MOVDDUP:
-         case XED_ICLASS_MOVSHDUP:
-         case XED_ICLASS_MOVSLDUP:
-         case XED_ICLASS_UNPCKHPS:
-         case XED_ICLASS_UNPCKLPS:
-         case XED_ICLASS_UNPCKHPD:
-         case XED_ICLASS_UNPCKLPD:
-         case XED_ICLASS_EXTRACTPS:
-         case XED_ICLASS_INSERTPS:
-         case XED_ICLASS_CVTPD2PS:
-         case XED_ICLASS_CVTSD2SS:
-         case XED_ICLASS_CVTPS2PD:
-         case XED_ICLASS_CVTSS2SD:
-         case XED_ICLASS_CVTDQ2PS:
-         case XED_ICLASS_CVTPS2DQ:
-         case XED_ICLASS_CVTTPS2DQ:
-         case XED_ICLASS_CVTDQ2PD:
-         case XED_ICLASS_CVTPD2DQ:
-         case XED_ICLASS_CVTTPD2DQ:
-         case XED_ICLASS_CVTPI2PS:
-         case XED_ICLASS_CVTPS2PI:
-         case XED_ICLASS_CVTTPS2PI:
-         case XED_ICLASS_CVTPI2PD:
-         case XED_ICLASS_CVTPD2PI:
-         case XED_ICLASS_CVTTPD2PI:
-         case XED_ICLASS_CVTSI2SS:
-         case XED_ICLASS_CVTSS2SI:
-         case XED_ICLASS_CVTTSS2SI:
-         case XED_ICLASS_CVTSI2SD:
-         case XED_ICLASS_CVTSD2SI:
-         case XED_ICLASS_CVTTSD2SI:
-         case XED_ICLASS_COMISS:
-         case XED_ICLASS_COMISD:
-         case XED_ICLASS_UCOMISS:
-         case XED_ICLASS_UCOMISD:
-         case XED_ICLASS_MAXSS:
-         case XED_ICLASS_MAXSD:
-         case XED_ICLASS_MAXPS:
-         case XED_ICLASS_MAXPD:
-         case XED_ICLASS_MINSS:
-         case XED_ICLASS_MINSD:
-         case XED_ICLASS_MINPS:
-         case XED_ICLASS_MINPD:
-         case XED_ICLASS_ROUNDPS:
-         case XED_ICLASS_ROUNDPD:
-         case XED_ICLASS_DPPS:
-         case XED_ICLASS_DPPD:
-         case XED_ICLASS_ANDPS:
-         case XED_ICLASS_ANDPD:
-         case XED_ICLASS_ANDNPS:
-         case XED_ICLASS_ANDNPD:
-         case XED_ICLASS_ORPS:
-         case XED_ICLASS_ORPD:
-         case XED_ICLASS_XORPS:
-         case XED_ICLASS_XORPD:
-            return true;
-         default:
-            ;
+         return true;
       }
    }
 
@@ -330,9 +205,9 @@ void MicroOp::verify() const {
    LOG_ASSERT_ERROR(sourceRegistersLength < MAXIMUM_NUMBER_OF_SOURCE_REGISTERS, "sourceRegistersLength(%d) > MAX(%u)", sourceRegistersLength, MAXIMUM_NUMBER_OF_SOURCE_REGISTERS);
    LOG_ASSERT_ERROR(destinationRegistersLength < MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS, "destinationRegistersLength(%u) > MAX(%u)", destinationRegistersLength, MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS);
    for (uint32_t i = 0 ; i < sourceRegistersLength ; i++)
-     LOG_ASSERT_ERROR(sourceRegisters[i] < XED_REG_LAST, "sourceRegisters[%u] >= XED_REG_LAST", i);
+     LOG_ASSERT_ERROR(sourceRegisters[i] < Sim()->getDecoder()->last_reg(), "sourceRegisters[%u] >= DEC_REG_LAST", i);
    for (uint32_t i = 0 ; i < destinationRegistersLength ; i++)
-     LOG_ASSERT_ERROR(destinationRegisters[i] < XED_REG_LAST, "destinationRegisters[%u] >= XED_REG_LAST", i);
+     LOG_ASSERT_ERROR(destinationRegisters[i] < Sim()->getDecoder()->last_reg(), "destinationRegisters[%u] >= DEC_REG_LAST", i);
 }
 
 uint32_t MicroOp::getSourceRegistersLength() const {
@@ -340,7 +215,7 @@ uint32_t MicroOp::getSourceRegistersLength() const {
    return this->sourceRegistersLength;
 }
 
-xed_reg_enum_t MicroOp::getSourceRegister(uint32_t index) const {
+dl::Decoder::decoder_reg MicroOp::getSourceRegister(uint32_t index) const {
    VERIFY_MICROOP();
    assert(index < this->sourceRegistersLength);
    return this->sourceRegisters[index];
@@ -354,7 +229,7 @@ const String& MicroOp::getSourceRegisterName(uint32_t index) const {
 }
 #endif
 
-void MicroOp::addSourceRegister(xed_reg_enum_t registerId, const String& registerName) {
+void MicroOp::addSourceRegister(dl::Decoder::decoder_reg registerId, const String& registerName) {
    VERIFY_MICROOP();
    assert(sourceRegistersLength < MAXIMUM_NUMBER_OF_SOURCE_REGISTERS);
 // assert(registerId >= 0 && registerId < TOTAL_NUM_REGISTERS);
@@ -370,7 +245,7 @@ uint32_t MicroOp::getAddressRegistersLength() const {
    return this->addressRegistersLength;
 }
 
-xed_reg_enum_t MicroOp::getAddressRegister(uint32_t index) const {
+dl::Decoder::decoder_reg MicroOp::getAddressRegister(uint32_t index) const {
    VERIFY_MICROOP();
    assert(index < this->addressRegistersLength);
    return this->addressRegisters[index];
@@ -384,7 +259,7 @@ const String& MicroOp::getAddressRegisterName(uint32_t index) const {
 }
 #endif
 
-void MicroOp::addAddressRegister(xed_reg_enum_t registerId, const String& registerName) {
+void MicroOp::addAddressRegister(dl::Decoder::decoder_reg registerId, const String& registerName) {
    VERIFY_MICROOP();
    assert(addressRegistersLength < MAXIMUM_NUMBER_OF_ADDRESS_REGISTERS);
 // assert(registerId >= 0 && registerId < TOTAL_NUM_REGISTERS);
@@ -400,7 +275,7 @@ uint32_t MicroOp::getDestinationRegistersLength() const {
    return this->destinationRegistersLength;
 }
 
-xed_reg_enum_t MicroOp::getDestinationRegister(uint32_t index) const {
+dl::Decoder::decoder_reg MicroOp::getDestinationRegister(uint32_t index) const {
    VERIFY_MICROOP();
    assert(index < this->destinationRegistersLength);
    return this->destinationRegisters[index];
@@ -414,7 +289,7 @@ const String& MicroOp::getDestinationRegisterName(uint32_t index) const {
 }
 #endif
 
-void MicroOp::addDestinationRegister(xed_reg_enum_t registerId, const String& registerName) {
+void MicroOp::addDestinationRegister(dl::Decoder::decoder_reg registerId, const String& registerName) {
    VERIFY_MICROOP();
    assert(destinationRegistersLength < MAXIMUM_NUMBER_OF_DESTINATION_REGISTERS);
 // assert(registerId >= 0 && registerId < TOTAL_NUM_REGISTERS);

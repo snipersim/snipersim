@@ -51,10 +51,15 @@ def run_multi(snipercmd, applications, repeat = False, outputdir = '.'):
 
   return p_sniper.returncode
 
-# Determine libstdc++.so used by default by pin_sim.so using ldd
+# Determine libstdc++.so used by default by pin_sim.so (or sniper, if we aren't compiling pin_sim.so) using ldd
 # Should take into account the current LD_LIBRARY_PATH
 def get_cxx_inuse(sim_root, clear_ldlibpath = False):
-  pin_sim = '%s/lib/pin_sim.so' % sim_root
+  pin_sim = None
+  for binary in ['%s/lib/pin_sim.so' % sim_root, '%s/lib/sniper' % sim_root]:
+    if os.path.isfile(binary):
+      pin_sim = binary
+  if not pin_sim:
+    return None
   try:
     ldd_out_name = tempfile.NamedTemporaryFile(delete = False).name
     ldlpsave = None
@@ -92,6 +97,7 @@ def get_cxx_override(sim_root, pin_home, arch):
   cxx_versions = [get_cxx_inuse(sim_root), get_cxx_inuse(sim_root, clear_ldlibpath = True), '%s/%s/runtime/cpplibs' % (pin_home, arch)]
   if 'BENCHMARKS_ROOT' in os.environ:
     cxx_versions.append('%s/libs' % os.environ['BENCHMARKS_ROOT'])
+  cxx_versions = filter(lambda x:x!=None, cxx_versions)
   cxx_override = sorted(map(lambda x:(get_cxx_version(x),x), cxx_versions), key=lambda x:x[0])[-1][1]
   return cxx_override
 
@@ -107,7 +113,7 @@ def get_cxx_override(sim_root, pin_home, arch):
 # - scripts being run inside the simulator (SNIPER_SCRIPT_LD_LIBRARY_PATH): original LD_LIBRARY_PATH
 #   (e.g. mcpat when running powertrace.py)
 
-def setup_env(sim_root, pin_home, arch, standalone = False):
+def setup_env(sim_root, pin_home, arch, standalone = False, xed_home = None):
 
   env = dict(os.environ)
   ld_library_path_orig = env.get('LD_LIBRARY_PATH', '')
@@ -121,6 +127,10 @@ def setup_env(sim_root, pin_home, arch, standalone = False):
   if not standalone:
     ld_library_path.append('%s/%s/runtime/cpplibs' % (pin_home, arch))
     ld_library_path.append('%s/%s/runtime' % (pin_home, arch))
+    ld_library_path.append('%s/extras/xed-%s/lib' % (pin_home, arch))
+  else:
+    if xed_home:
+      ld_library_path.append('%s/lib' % (xed_home,))
   if 'SNIPER_SIM_LD_LIBRARY_PATH' in os.environ:
     ld_library_path.append(os.environ['SNIPER_SIM_LD_LIBRARY_PATH'])
   env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)

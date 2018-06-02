@@ -94,7 +94,9 @@ ADDRINT emuClockGettime(THREADID threadid, clockid_t clk_id, struct timespec *tp
          return 0;
       default:
          // Unknown/non-emulated clock types (such as CLOCK_PROCESS_CPUTIME_ID/CLOCK_THREAD_CPUTIME_ID)
-         return clock_gettime(clk_id, tp);
+         // clock_gettime is not supported in Pin 3.0
+         // return clock_gettime(clk_id, tp);
+         return 1;
    }
 }
 
@@ -142,11 +144,7 @@ void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt)
    }
 
    void *res;
-#if PIN_REV >= 71313
    PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, NULL, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
-#else
-   PIN_CallApplicationFunction(ctxt, threadIndex, CALLINGSTD_DEFAULT, ptr_exit, PIN_PARG(void*), &res, PIN_PARG(int), 0, PIN_PARG_END());
-#endif
 }
 
 static void insCallback(INS ins, VOID *v)

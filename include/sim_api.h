@@ -22,6 +22,47 @@
 #define SIM_OPT_INSTRUMENT_WARMUP      1
 #define SIM_OPT_INSTRUMENT_FASTFORWARD 2
 
+#if defined(ARM_64)
+
+#define SimMagic0(cmd) ({                       \
+   unsigned long _cmd = (cmd), _res;            \
+   asm volatile (           \
+   "mov x1, %[x]\n"         \
+   "\tbfm x0, x0, 0, 0\n"   \
+   : [ret]"=r"(_res)        \
+   : [x]"r"(_cmd)           \
+   );                       \
+})
+
+#define SimMagic1(cmd, arg0) ({              \
+   unsigned long _cmd = (cmd), _arg0 = (arg0), _res; \
+   asm volatile (           \
+   "mov x1, %[x]\n"         \
+   "\tmov x2, %[y]\n"       \
+   "\tbfm x0, x0, 0, 0\n"   \
+   : [ret]"=r"(_res)        \
+   : [x]"r"(_cmd),          \
+     [y]"r"(_arg0)          \
+   : "x2", "x1"                   \
+   );                       \
+})
+
+#define SimMagic2(cmd, arg0, arg1) ({        \
+   unsigned long _cmd = (cmd), _arg0 = (arg0), _arg1 = (arg1), _res; \
+   asm volatile (           \
+   "mov x1, %[x]\n"         \
+   "\tmov x2, %[y]\n"       \
+   "\tmov x3, %[z]\n"       \
+   "\tbfm x0, x0, 0, 0\n"   \
+   : [ret]"=r"(_res)        \
+   : [x]"r"(_cmd),          \
+     [y]"r"(_arg0),          \
+     [z]"r"(_arg1)          \
+   : "x1", "x2", "x3"                   \
+   );                       \
+})
+
+#else  // end ARM_64
 
 #if defined(__i386)
    #define MAGIC_REG_A "eax"
@@ -32,7 +73,6 @@
    #define MAGIC_REG_B "rbx"
    #define MAGIC_REG_C "rcx"
 #endif
-
 
 #define SimMagic0(cmd) ({                    \
    unsigned long _cmd = (cmd), _res;         \
@@ -73,6 +113,7 @@
    _res;                                     \
 })
 
+#endif
 
 #define SimRoiStart()             SimMagic0(SIM_CMD_ROI_START)
 #define SimRoiEnd()               SimMagic0(SIM_CMD_ROI_END)

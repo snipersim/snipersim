@@ -29,8 +29,8 @@ class vofstream : public vostream
          { stream->write(s, n); }
       virtual void flush()
          { stream->flush(); }
-      virtual void fail()
-         { stream->fail(); }
+      virtual bool fail()
+         { return stream->fail(); }
       virtual bool is_open()
          { return stream->is_open(); }
 };

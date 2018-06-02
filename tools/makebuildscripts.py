@@ -3,7 +3,7 @@
 
 import sys, os, subprocess
 
-sim_root, pin_home, cc, cxx, arch = sys.argv[1:]
+sim_root, pin_home, dynamorio_home, cc, cxx, arch = sys.argv[1:]
 
 # Needed for sim_api.h
 includes = '-I${SNIPER_ROOT}/include'
@@ -41,6 +41,7 @@ for f in ('SNIPER', 'GRAPHITE'):
   flags['%s_CXX'%f] = cxx
   flags['%s_LD'%f] = cxx
 flags['PIN_HOME'] = pin_home
+flags['DR_HOME'] = dynamorio_home
 
 upcc_link = ('%(SNIPER_CXX)s %(SNIPER_LDFLAGS)s' % flags).strip()
 for f in ('SNIPER', 'GRAPHITE'):

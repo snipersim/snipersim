@@ -3,6 +3,10 @@
 
 #include "dynamic_micro_op.h"
 
+extern "C" {
+#include <xed-iclass-enum.h>
+}
+
 class MicroOp;
 
 class DynamicMicroOpNehalem : public DynamicMicroOp

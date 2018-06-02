@@ -3,7 +3,7 @@
 #include "simulator.h"
 #include "itostr.h"
 
-#include <strings.h>
+#include <cstring>
 #include <sqlite3.h>
 
 class StatsMetricBase

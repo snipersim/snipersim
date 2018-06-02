@@ -52,11 +52,16 @@ typedef SInt32 carbon_thread_t;
 #define INVALID_CORE_ID ((core_id_t) -1)
 #define INVALID_ADDRESS  ((IntPtr) -1)
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
+# if !defined(PIN_CRT)
 // std::string isn't tread-safe when making copies
 // See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=21334
-#include <ext/vstring.h>
+#  include <ext/vstring.h>
 typedef __gnu_cxx::__versa_string<char> String;
-#endif /* __cplusplus */
+# else
+#  include <string>
+typedef std::string String;
+# endif /* __cplusplus */
+#endif
 
 #endif
