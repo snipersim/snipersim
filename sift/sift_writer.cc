@@ -876,7 +876,26 @@ uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
       return vp;
    }
 
-   return pp;
+   // From: https://stackoverflow.com/questions/5748492/is-there-any-api-for-determining-the-physical-address-from-virtual-address-in-li
+   // From: https://stackoverflow.com/a/45128487
+
+   intptr_t pfn = pp & (((intptr_t)1 << 54) - 1);
+   bool present = (pp >> 63) & 1;
+
+   if (!present)
+   {
+      // Lookup failed, Use pfn == vp
+      return vp;
+   }
+
+   // From: https://www.kernel.org/doc/Documentation/vm/pagemap.txt
+   // Since kernel 4.2, access to the pagemap is restricted, and the pfn is zeroed
+   // Check for present and pfn == 0 to see if we have permission to run here
+
+   // A zero-valued pfn is suspicious
+   sift_assert(pfn != 0);
+
+   return pfn;
 }
 
 void Sift::Writer::send_va2pa(uint64_t va)

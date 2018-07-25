@@ -106,6 +106,7 @@ use_pid = None
 tracegen = None
 trace_extra_args = []
 verbose = False
+use_pa = True
 
 
 if not sys.argv[1:]:
@@ -188,6 +189,13 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
   return newconfig
 
+def va2pa_valid():
+  # If the Linux version is 4.0 or greater, and we don't have the CAP_SYS_ADMIN capability (bit 21), report an error
+  output = subprocess.check_output("echo -n $(( $(uname -r | cut -d . -f 2) >= 4 && ((0x$(grep CapEff /proc/self/status | cut -f 2) >> 20) & 1) ))", shell=True)
+  if '0' in output:
+    return False
+  else:
+    return True
 
 record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=' ]
 
@@ -549,8 +557,15 @@ elif use_mpi:
   else:
     mpiexec = ['mpiexec']
   mpiexec.extend(['-np', str(mpi_ranks)])
+  # Set trace recorder options
+  other_options = []
+  if use_pa:
+    if va2pa_valid():
+      other_options += [ '--pa' ]
+    else:
+      print >> sys.stderr, '[SNIPER] Warning: Unable to use physical addresses for shared memory simulation.'
   applications = [
-    (mpiexec, [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+    (mpiexec, other_options + [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]
 elif use_sift:
   tracegen = {}
@@ -565,8 +580,13 @@ elif use_sift:
     other_options += [ '--roi' ]
   if use_pid:
     other_options += [ '--pid', use_pid ]
+  if use_pa:
+    if va2pa_valid():
+      other_options += [ '--pa' ]
+    else:
+      print >> sys.stderr, '[SNIPER] Warning: Unable to use physical addresses for shared memory simulation.'
   applications = [
-    ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--pa', '--routine-tracing', '--' ] + cmdline)
+    ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]
 elif pinballs and pinball_sift:
   tracegen = {}
