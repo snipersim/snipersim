@@ -203,7 +203,7 @@ if frontend:
   if not isa:  # default ISA value
     isa = 'x86_64'
   if 'pin' in frontend:
-    print '[RECORD-TRACE] Using Pin frontend'
+    print '[RECORD-TRACE] Using Pin frontend (frontend/pin-frontend)'
     cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/frontend/pin-frontend/obj-%(arch)s/pin_frontend -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
         #  cmd = '%(HOME)s/qemu/qemu-linaro-install/bin/qemu-x86_64 ' % locals() + ' '.join(cmdline)
   elif 'dr' in frontend:
@@ -244,7 +244,7 @@ if frontend:
     print '[RECORD-TRACE] Error: frontend %s not recognized' % frontend
     sys.exit(1)
 else:
-  print '[RECORD-TRACE] Using legacy Pin frontend'
+  print '[RECORD-TRACE] Using the Pin frontend (sift/recorder)'
   cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
 
 

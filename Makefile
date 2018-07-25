@@ -11,17 +11,24 @@ LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
 SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND)
 
-.PHONY: dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean mbuild xed_install xed
+.PHONY: message dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean mbuild xed_install xed
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
-all: dependencies $(SIM_TARGETS) configscripts
+all: message dependencies $(SIM_TARGETS) configscripts
 
 dependencies: package_deps xed pin python mcpat linux builddir showdebugstatus
 
 $(SIM_TARGETS): dependencies
 
 include common/Makefile.common
+
+message:
+ifeq ($(BUILD_RISCV),0)
+	@echo Building for x86 \($(SNIPER_TARGET_ARCH)\)
+else
+	@echo Building for x86 \($(SNIPER_TARGET_ARCH)\) and RISCV
+endif
 
 $(STANDALONE): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/standalone
