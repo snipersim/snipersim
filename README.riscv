@@ -1,0 +1,126 @@
+ ____        _                           ____  ___ ____   ____   __     __
+/ ___| _ __ (_)_ __   ___ _ __     _    |  _ \|_ _/ ___| / ___|  \ \   / /
+\___ \| '_ \| | '_ \ / _ \ '__|  _| |_  | |_) || |\___ \| |   ____\ \ / /
+ ___) | | | | | |_) |  __/ |    |_   _| |  _ < | | ___) | |__|_____\ V /
+|____/|_| |_|_| .__/ \___|_|      |_|   |_| \_\___|____/ \____|     \_/
+              |_|
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+Contents
+
+0. Building Sniper + RISC-V system
+1. Pre-requisites
+2. Compiling binaries
+3. Running SPEC binaries to generate SIFT traces
+4. Running SIFT traces with Sniper
+
+------------------------------------------------------------------------------------------------------------------------
+0. Building Sniper + RISC-V System
+
+   Script that performs all the Steps (1-4) described below for running SPEC in Sniper + RISC-V ecosystem
+
+   	$SNIPER_ROOT/riscv/build-riscv.sh
+
+------------------------------------------------------------------------------------------------------------------------
+1. Pre-requisites
+
+1a. riscv-tools - includes Spike (that support sift generation)
+
+	git clone -b sift https://github.com/nus-comparch/riscv-tools.git
+	cd riscv-tools
+	git submodule update --init --recursive
+	export RISCV=$(pwd)/RV64G
+	export PATH=$RISCV/bin:$PATH
+
+1b. rv8 simulator (that support sift generation)
+
+	git clone -b sift https://github.com/nus-comparch/rv8.git
+	cd rv8
+	git submodule update --init --recursive
+	export RV8_HOME=$(pwd)
+
+1c. Sniper and Pin
+
+	git clone -b riscv http://snipersim.org/<path-to-sniper>/sniper.git
+	cd sniper
+	export SNIPER_ROOT=$(pwd)
+
+Download Pinplay (or Pin) version 3+ from https://software.intel.com/en-us/articles/program-recordreplay-toolkit
+
+	ln -s <path-to-your-copy-of-pin> pin_kit
+
+
+1d. Speckle
+
+Assumptions: You’ve own copy of SPEC CPU2006 v1.2 installed at $CPU2006_HOME
+
+	export SPEC_DIR=$(CPU2006_HOME)
+	git clone -b sift https://github.com/nus-comparch/Speckle.git
+	cd Speckle
+	export SPECKLE_ROOT=$(pwd)
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+
+2. Compiling binaries
+
+	NPROC=(`nproc --all`)
+
+2a. riscv-tools (includes Spike)
+
+	cd riscv-tools
+	./build-sift.sh $NPROC # optionally add the number of -j threads
+
+2b. rv8
+
+	cd $RV8_HOME
+	make test-build TEST_RV64="ARCH=rv64imafd TARGET=riscv64-unknown-elf"
+	make -j 1 # make -j $NPROC for parallel simulation
+
+2c. Sniper
+
+	cd $SNIPER_ROOT
+	make # Parallel builds currently broken
+
+2d. Speckle
+
+	# To compile and copy SPEC
+	cd $SPECKLE_ROOT
+	./gen_binaries_sift.sh --compile --copy
+
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+
+3. Running SPEC binaries to generate SIFT traces using Speckle
+
+If SPEC is already compiled but not copied (assumes binaries are in $SPECKLE_ROOT/build)
+	./gen_binaries_sift.sh --run  # runs all the benchmarks
+
+If SPEC is already compiled and binaries copied to $SPECKLE_ROOT/riscv-spec-test,
+	./run_sift.sh [--benchmark <bname>][--all]
+
+To run individual binaries in Spike,
+
+	cd $SPECKLE_ROOT/riscv-spec-test/${BENCHMARK}
+		# cut off the numbers ###.short_exe
+	SHORT_EXE=${BENCHMARK##*.}
+		# ${input} : Input command; usage can be found at $SPECKLE_ROOT/commands/${BENCHMARK}.test.cmd
+		# ${input-count} : User-defined; to differentiate the sift files for multiple inputs tested
+	spike --sift=${SHORT_EXE}_${input-count}.sift pk ${SHORT_EXE} ${input}
+
+
+Example:
+	cd $SPECKLE_ROOT/riscv-spec-test/456.hmmer
+	spike --sift=hmmer-1.sift pk  hmmer --fixed 0 --mean 325 --num 45000 --sd 200 --seed 0 bombesin.hmm
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+
+4. Running SIFT traces with Sniper
+
+	$SNIPER_ROOT/run-sniper -criscv --traces=$SPECKLE_ROOT/riscv-spec-test/456.hmmer/hmmer-1.sift
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------

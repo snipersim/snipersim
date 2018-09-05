@@ -2,6 +2,7 @@
 *.d
 *.o
 *.pyc
+*.a
 
 # emacs temp files
 *~
@@ -51,3 +52,12 @@ pin_kit
 linux_2_6_32
 mcpat
 python_kit
+riscv/riscv-tools
+riscv/rv8
+riscv/Speckle
+xed_kit
+mbuild
+
+# Pin3 output
+frontend/pin-frontend/obj-intel64
+sift/recorder/obj-intel64

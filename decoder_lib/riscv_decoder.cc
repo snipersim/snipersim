@@ -112,7 +112,8 @@ void RISCVDecoder::decode(DecodedInst * inst)
 
   ((RISCVDecodedInst *)inst)->set_rv8_dec(dec);
   
-  //printf("inst: (%016llx) Size: %d\t", r_inst, riscv::inst_length(r_inst));
+  //printf("inst: (%016llx) Size: %d Opcode: %d\n", r_inst, riscv::inst_length(r_inst), dec.op); #DEBUG
+
   inst->set_already_decoded(true);
 }
 
@@ -391,12 +392,12 @@ unsigned int RISCVDecoder::get_exec_microops(const DecodedInst *ins, int numLoad
 	  case rv_op_amomax_q:             
     case rv_op_amominu_q:          
 	  case rv_op_amomaxu_q:        
-                        num_exec_uops = 2;
+                        num_exec_uops = 1;
                         break;
     case rv_op_amoswap_w:              	/* Atomic Swap Word */
     case rv_op_amoswap_d:              	/* Atomic Swap Double Word */
     case rv_op_amoswap_q:             
-                        num_exec_uops = 3;
+                        num_exec_uops = 1;
                         break;
   }
   return num_exec_uops;
