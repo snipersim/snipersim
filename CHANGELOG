@@ -1,3 +1,10 @@
+Version 7.0
+  * Added Pin 3, GCC 5 support by default, keeping Pin 2 support in the new pin2 branch
+  * Added initial RISC-V support
+  * Add a new utility to automatically compile RISC-V requirements and SPEC CPU2006 binaries for RISC-V
+  * Add a Docker image for Sniper and RISC-V compilation support
+  * Fixes SIFT recorder address mapping issue caused by physical page mapping access restrictions in Linux kernels 4.0+
+
 Version 6.1
   * Support for newer Pin versions, up to Pin 2.14-71313 / PinPlay 2.1
   * Support GCC 4.9
