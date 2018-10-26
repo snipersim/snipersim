@@ -1,10 +1,15 @@
 #ifndef __ZFSTREAM_H
 #define __ZFSTREAM_H
 
-#include <zlib.h>
+#include "sift_format.h"
+
 #include <ostream>
 #include <istream>
 #include <fstream>
+
+#if SIFT_USE_ZLIB
+# include <zlib.h>
+#endif
 
 class vostream
 {
@@ -39,7 +44,9 @@ class ozstream : public vostream
 {
    private:
       vostream *output;
+#if SIFT_USE_ZLIB
       z_stream zstream;
+#endif
       static const size_t chunksize = 64*1024;
       static const int level = 9;
       char buffer[chunksize];
@@ -88,7 +95,9 @@ class izstream : public vistream
       vistream *input;
       bool m_eof;
       bool m_fail;
+#if SIFT_USE_ZLIB
       z_stream zstream;
+#endif
       static const size_t chunksize = 64*1024;
       char buffer[chunksize];
       char peek_value;

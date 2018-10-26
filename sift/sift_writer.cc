@@ -59,8 +59,14 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    m_response_filename = strdup(response_filename);
 
    uint64_t options = 0;
+#if SIFT_USE_ZLIB
    if (useCompression)
       options |= CompressionZlib;
+#else
+   if (useCompression) {
+      std::cerr << "[SIFT:" << m_id << "] Warning: Compression disabled, ignoring request.\n";
+   }
+#endif
    if (arch32)
       options |= ArchIA32;
    if (requires_icache_per_insn)

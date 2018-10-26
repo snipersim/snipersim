@@ -1,7 +1,51 @@
 #include "zfstream.h"
 
-#include <zlib.h>
 #include <cassert>
+
+#if !SIFT_USE_ZLIB
+
+ozstream::ozstream(vostream *output)
+   : output(output)
+{
+   assert(false);
+}
+
+ozstream::~ozstream()
+{
+}
+
+void ozstream::write(const char* s, std::streamsize n)
+{
+}
+
+void ozstream::doCompress(bool finish)
+{
+}
+
+izstream::izstream(vistream *input)
+   : input(input)
+   , m_eof(false)
+   , m_fail(false)
+   , peek_valid(false)
+{
+}
+
+izstream::~izstream()
+{
+}
+
+void izstream::read(char* s, std::streamsize n)
+{
+}
+
+int izstream::peek()
+{
+   return 0;
+}
+
+#else /*SIFT_USE_ZLIB*/
+
+#include <zlib.h>
 
 ozstream::ozstream(vostream *output)
    : output(output)
@@ -114,3 +158,5 @@ int izstream::peek()
 
    return peek_value;
 }
+
+#endif /*SIFT_USE_ZLIB*/

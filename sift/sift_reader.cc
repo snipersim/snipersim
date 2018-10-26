@@ -110,11 +110,18 @@ void Sift::Reader::initStream()
    assert(hdr.magic == Sift::MagicNumber);
    assert(hdr.size == 0);
 
+#if SIFT_USE_ZLIB
    if (hdr.options & CompressionZlib)
    {
       input = new izstream(input);
       hdr.options &= ~CompressionZlib;
    }
+#else
+   if (hdr.options & CompressionZlib)
+   {
+      std::cerr << "[SIFT:" << m_id << "] Error: Compression requested, but disabled at compile time.\n";
+   }
+#endif
 
    if (hdr.options & ArchIA32)
    {
