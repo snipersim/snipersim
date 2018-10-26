@@ -478,10 +478,10 @@ MYLOG("begin");
          break;
 
       case MemComponent::TAG_DIR:
+         LOG_ASSERT_ERROR(m_tag_directory_present, "Tag directory NOT present");
+
          switch(sender_mem_component)
          {
-            LOG_ASSERT_ERROR(m_tag_directory_present, "Tag directory NOT present");
-
             case MemComponent::LAST_LEVEL_CACHE:
                m_dram_directory_cntlr->handleMsgFromL2Cache(sender, shmem_msg);
                break;
@@ -498,10 +498,10 @@ MYLOG("begin");
          break;
 
       case MemComponent::DRAM:
+         LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
+
          switch(sender_mem_component)
          {
-            LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
-
             case MemComponent::TAG_DIR:
             {
                DramCntlrInterface* dram_interface = m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr;
