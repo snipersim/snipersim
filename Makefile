@@ -74,7 +74,7 @@ XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
 xed: mbuild xed_install $(XED_DEP)
 $(XED_DEP):
 	$(_MSG) '[INSTAL] xed'
-	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --shared --install-dir $(XED_HOME) install
+	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py  --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
 
 ifneq ($(NO_PIN_CHECK),1)

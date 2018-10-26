@@ -10,7 +10,7 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
 # Add other CXX Flags
 CXXFLAGS += -c \
-            -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
+            -fPIC -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
 
 # Use the pin flags for building
 include $(SIM_ROOT)/Makefile.config
@@ -53,7 +53,7 @@ endif
 
 # These libraries are used by libcarbon, so add them to the end
 LD_LIBS += -lxed
-LD_FLAGS += -L$(XED_HOME)/lib
+LD_FLAGS += -L$(XED_HOME)/lib -no-pie
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))
