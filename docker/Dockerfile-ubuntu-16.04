@@ -46,6 +46,8 @@ RUN apt-get update && apt-get install -y \
     texinfo \
     zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
+# Helper utilities
 RUN apt-get update && apt-get install -y \
+    gdb \
     git \
  && rm -rf /var/lib/apt/lists/*
