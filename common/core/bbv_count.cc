@@ -95,8 +95,8 @@ BbvCount::getDiff()
 
    for(int i = 0; i < NUM_BBV; ++i)
    {
-         UInt64 bbv_count = getDimension(i) / (icount ? icount : 1);
-         diff += abs(bbv_count - m_bbv_previous[i]);
+         SInt64 bbv_count = getDimension(i) / (icount ? icount : 1);
+         diff += abs(bbv_count - static_cast<SInt64>(m_bbv_previous[i]));
    }
 
    // Normalize by the number of BBVs to keep the results consistent as the count changes

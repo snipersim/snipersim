@@ -33,7 +33,7 @@ SimplePrefetcher::getNextAddress(IntPtr current_address, core_id_t _core_id)
    // Find the nearest address in our list of previous addresses
    for(UInt32 i = 0; i < n_flows; ++i)
    {
-      IntPtr dist = abs(current_address - prev_address[i]);
+      IntPtr dist = abs(static_cast<SInt64>(current_address) - static_cast<SInt64>(prev_address[i]));
       if (dist < min_dist)
       {
          n_flow = i;
