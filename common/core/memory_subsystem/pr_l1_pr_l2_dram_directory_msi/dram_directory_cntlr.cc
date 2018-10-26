@@ -336,7 +336,7 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req)
                address,
                NULL, 0,
                HitWhere::UNKNOWN,
-               NULL,
+               &m_dummy_shmem_perf,
                ShmemPerfModel::_SIM_THREAD);
          break;
 
@@ -368,7 +368,7 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req)
                         address,
                         NULL, 0,
                         HitWhere::UNKNOWN,
-                        NULL,
+                        &m_dummy_shmem_perf,
                         ShmemPerfModel::_SIM_THREAD);
                }
             }
@@ -459,7 +459,7 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                               address,
                               NULL, 0,
                               HitWhere::UNKNOWN,
-                              i == 0 ? shmem_req->getShmemMsg()->getPerf() : NULL,
+                              i == 0 ? shmem_req->getShmemMsg()->getPerf() : &m_dummy_shmem_perf,
                               ShmemPerfModel::_SIM_THREAD);
             }
          }
@@ -1028,7 +1028,7 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
                            address,
                            NULL, 0,
                            HitWhere::UNKNOWN,
-                           shmem_perf_sent == false ? shmem_msg->getPerf() : NULL,
+                           shmem_perf_sent == false ? shmem_msg->getPerf() : &m_dummy_shmem_perf,
                            ShmemPerfModel::_SIM_THREAD);
                      shmem_perf_sent = true;
                   }
@@ -1224,7 +1224,7 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
                evict_address,
                evict_buf, getCacheBlockSize(),
                HitWhere::UNKNOWN,
-               NULL,
+               &m_dummy_shmem_perf,
                ShmemPerfModel::_SIM_THREAD);
       }
    }
@@ -1254,7 +1254,7 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
             address,
             data_buf, getCacheBlockSize(),
             HitWhere::UNKNOWN,
-            NULL,
+            &m_dummy_shmem_perf,
             ShmemPerfModel::_SIM_THREAD);
 
       // DRAM latency is ignored on write

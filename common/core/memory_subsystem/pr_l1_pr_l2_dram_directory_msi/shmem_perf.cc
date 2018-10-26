@@ -62,24 +62,19 @@ void ShmemPerf::reset(SubsecondTime time, core_id_t core_id)
 
 void ShmemPerf::updateTime(SubsecondTime time, shmem_times_type_t reason)
 {
-   // Allow updateTime to be called on a NULL pointer, and do the check here.
-   // This works as long as this function is not virtual.
-   if (this)
-   {
-      LOG_ASSERT_ERROR(reason < NUM_SHMEM_TIMES, "Invalid ShmemPerf reason %d", reason);
+   LOG_ASSERT_ERROR(reason < NUM_SHMEM_TIMES, "Invalid ShmemPerf reason %d", reason);
 
-      // Ignore duplicate paths or updates using stale pointers
-      if (time > m_time_last)
-      {
-         m_times[reason] += time - m_time_last;
-         m_time_last = time;
-      }
+   // Ignore duplicate paths or updates using stale pointers
+   if (time > m_time_last)
+   {
+      m_times[reason] += time - m_time_last;
+      m_time_last = time;
    }
 }
 
 void ShmemPerf::updatePacket(NetPacket& packet)
 {
-   if (this && packet.time > m_time_last)
+   if (packet.time > m_time_last)
    {
       m_times[NOC_QUEUE] += packet.queue_delay;
       m_time_last += packet.queue_delay;

@@ -30,6 +30,7 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 m_cache_block_size;
 
          ShmemPerfModel* m_shmem_perf_model;
+         ShmemPerf m_dummy_shmem_perf;
 
          CoherencyProtocol::type_t m_protocol;
 
