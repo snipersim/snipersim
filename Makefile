@@ -59,22 +59,22 @@ MBUILD_INSTALL_DEP=$(MBUILD_INSTALL)/mbuild/arar.py
 mbuild: $(MBUILD_INSTALL_DEP)
 $(MBUILD_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] mbuild'
-	$(_CMD) git clone https://github.com/intelxed/mbuild.git $(MBUILD_INSTALL)
-	$(_CMD) git -C $(MBUILD_INSTALL) reset --hard $(MBUILD_GITID)
+	$(_CMD) git clone --quiet https://github.com/intelxed/mbuild.git $(MBUILD_INSTALL)
+	$(_CMD) git -C $(MBUILD_INSTALL) reset --quiet --hard $(MBUILD_GITID)
 
 XED_GITID=2be2d282939f6eb84e03e1fed9ba82f32c8bac2d
 XED_INSTALL_DEP=$(XED_INSTALL)/src/common/xed-init.c
 xed_install: $(XED_INSTALL_DEP)
 $(XED_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] xed'
-	$(_CMD) git clone https://github.com/intelxed/xed.git $(XED_INSTALL)
-	$(_CMD) git -C $(XED_INSTALL) reset --hard $(XED_GITID)
+	$(_CMD) git clone --quiet https://github.com/intelxed/xed.git $(XED_INSTALL)
+	$(_CMD) git -C $(XED_INSTALL) reset --quiet --hard $(XED_GITID)
 
 XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
 xed: mbuild xed_install $(XED_DEP)
 $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_MSG) '[INSTAL] xed'
-	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py  --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
+	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
 
 ifneq ($(NO_PIN_CHECK),1)
@@ -100,8 +100,7 @@ python: $(PYTHON_DEP)
 $(PYTHON_DEP):
 	$(_MSG) '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
 	$(_CMD) mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
-#	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
-	$(_CMD) wget -O - --no-verbose "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
+	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
@@ -109,8 +108,7 @@ mcpat: mcpat/mcpat-1.0
 mcpat/mcpat-1.0:
 	$(_MSG) '[DOWNLO] McPAT'
 	$(_CMD) mkdir -p mcpat
-#	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
-	$(_CMD) wget -O - --no-verbose "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
+	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 endif
 
 linux: include/linux/perf_event.h
