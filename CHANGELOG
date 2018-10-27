@@ -1,3 +1,10 @@
+Version 7.1
+  * Fix compilation errors for GCC 6 and 7
+  * Fix parallel make builds
+  * Add Dockerfile for Ubuntu 18.04
+  * Make zlib optional (Pin3 requires a PinCRT-compiled zlib which is found with Pinplay)
+  * Numerous bug fixes and improvements
+
 Version 7.0
   * Added Pin 3, GCC 5 support by default, keeping Pin 2 support in the new pin2 branch
   * Added initial RISC-V support
