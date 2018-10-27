@@ -105,7 +105,7 @@ endif
 COMPILE_PIN_FLAGS := -g -std=c++0x $(PINPLAY_CXXFLAGS) $(TOOL_CXXFLAGS)
 LINK_FLAGS := -g $(TOOL_LDFLAGS)
 	
-LINK_LIBS = $(ROOT_DIR)/sift/libsift.a $(PINPLAY_LIBS)
+LINK_LIBS = sift/libsift.a $(PINPLAY_LIBS)
 
 SOURCES=$(wildcard *.cc) $(wildcard ../bbv_count.cc)
 OBJECTS=$(patsubst %.cc,$(OBJDIR)%$(OBJ_SUFFIX),$(SOURCES))
@@ -124,7 +124,7 @@ sift/sift_reader.h: sift
 
 # Build libsift against PinCRT
 sift/libsift.a: sift/sift_reader.h
-	@make -C sift
+	@$(MAKE) -C sift
 
 $(OBJDIR)sift_recorder: $(OBJECTS) $(LINK_LIBS) $(CONTROLLERLIB)
 	@$(LINKER) $(LINK_FLAGS) $(LINK_EXE) $@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
