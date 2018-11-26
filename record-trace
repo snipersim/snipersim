@@ -165,11 +165,11 @@ frontend_options_str = ' '.join(frontend_options)
 # convert to absolute path
 outputfile = os.path.realpath(os.path.join(outputfile))
 
-pinoptions = '-mt -injection child -xyzzy -pause_tool 0 -ifeellucky'
+pinoptions = '-mt -injection child -xyzzy -ifeellucky'
 if use_pid:
   pinoptions += (' -pid %d' % (use_pid))
 if use_gdb:
-  pinoptions += ' -pause_tool 100'
+  pinoptions += ' -pause_tool 10'
 if use_follow:
   pinoptions += ' -follow_execv'
 pinballoptions = ''
