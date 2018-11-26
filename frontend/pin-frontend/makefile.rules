@@ -129,23 +129,24 @@ all: sift/libsift.a $(OBJDIR)pin_frontend
 
 $(OBJDIR)%$(OBJ_SUFFIX) : %.cc $(wildcard *.h) $(wildcard ../*.h) $(wildcard ../*.tcc)
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../)/,,$(shell readlink -f $@))
-	$(CXX) -I$(ROOT_DIR)/sift -I$(ROOT_DIR)/.. $(TARGET_ARCH) $(COMPILE_PIN_FLAGS) -c -o $@ $<
+	$(_CMD) $(CXX) -I$(ROOT_DIR)/sift -I$(ROOT_DIR)/.. $(TARGET_ARCH) $(COMPILE_PIN_FLAGS) -c -o $@ $<
 
 sift/sift_reader.h: sift
 	@for i in $(wildcard $(ROOT_DIR)/../../sift/*.h) $(wildcard $(ROOT_DIR)/../../sift/*.cc) ; do ln -fs $$i sift/. ; done
 	@ln -fs $(ROOT_DIR)/../../common/misc/fixed_types.h sift/.
 
 # Build libsift against PinCRT
-sift/libsift.a: sift/sift_reader.h
+sift/libsift.a: sift/sift_reader.h $(wildcard sift/*.h) $(wildcard sift/*.cc)
 	$(MAKE) -C sift
 
 $(OBJDIR)pin_frontend: $(OBJECTS) $(LINK_LIBS) $(CONTROLLERLIB)
 	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../)/,,$(shell readlink -f $@))
-	$(LINKER) $(LINK_FLAGS) $(LINK_EXE) $@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
+	$(_CMD) $(LINKER) $(LINK_FLAGS) $(LINK_EXE) $@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
 
 clean: cleanall
 
 cleanall:
-	rm -f *.o
+	#$(_MSG) '[CLEAN ]' $(subst $(shell readlink -f $(ROOT_DIR)/../..)/,,$(shell readlink -f $(ROOT_DIR)))
+	$(_CMD) rm -f *.o
 	$(MAKE) -C sift clean
 

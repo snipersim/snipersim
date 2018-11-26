@@ -102,6 +102,18 @@ PINPLAY_LIBS =
 PINPLAY_LD_FLAGS =
 endif
 
+ifneq ($(DEBUG_SHOW_COMPILE),)
+  SHOW_COMPILE=1
+  MAKE_QUIET=
+  _MSG=@echo >/dev/null
+  _CMD=
+else
+  SHOW_COMPILE=
+  MAKE_QUIET=--quiet
+  _MSG=@echo
+  _CMD=@
+endif
+
 COMPILE_PIN_FLAGS := -g -std=c++0x $(PINPLAY_CXXFLAGS) $(TOOL_CXXFLAGS)
 LINK_FLAGS := -g $(TOOL_LDFLAGS)
 	
@@ -113,21 +125,30 @@ OBJECTS=$(patsubst %.cc,$(OBJDIR)%$(OBJ_SUFFIX),$(SOURCES))
 export PINPLAY_INCLUDE_HOME
 export COMPILE_PIN_FLAGS
 
+
 all: sift/libsift.a $(OBJDIR)sift_recorder
 
 $(OBJDIR)%$(OBJ_SUFFIX) : %.cc $(wildcard *.h)
-	$(CXX) -I$(ROOT_DIR)/sift -I$(ROOT_DIR)/.. $(TARGET_ARCH) $(COMPILE_PIN_FLAGS) -c -o $@ $<
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(ROOT_DIR)/../..)/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) -I$(ROOT_DIR)/sift -I$(ROOT_DIR)/.. $(TARGET_ARCH) $(COMPILE_PIN_FLAGS) -c -o $@ $<
 
 sift/sift_reader.h: sift
 	@for i in $(wildcard $(ROOT_DIR)/../../sift/*.h) $(wildcard $(ROOT_DIR)/../../sift/*.cc) ; do ln -fs $$i sift/. ; done
 	@ln -fs $(ROOT_DIR)/../../common/misc/fixed_types.h sift/.
 
 # Build libsift against PinCRT
-sift/libsift.a: sift/sift_reader.h
+sift/libsift.a: sift/sift_reader.h $(wildcard sift/*.h) $(wildcard sift/*.cc)
 	@$(MAKE) -C sift
 
 $(OBJDIR)sift_recorder: $(OBJECTS) $(LINK_LIBS) $(CONTROLLERLIB)
-	@$(LINKER) $(LINK_FLAGS) $(LINK_EXE) $@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
+	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(ROOT_DIR)/../..)/,,$(shell readlink -f $@))
+	$(_CMD) $(LINKER) $(LINK_FLAGS) $(LINK_EXE) $@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
+
+CLEAN=$(findstring clean,$(MAKECMDGOALS))
+
+ifneq ($(CLEAN),clean)
+-include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))
+endif
 
 clean: cleanall
 
