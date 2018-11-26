@@ -11,7 +11,7 @@
 
 #if PIN_REV >= 67254
 extern "C" {
-#include "xed-decoded-inst-api.h"
+//#include "xed-decoded-inst-api.h"
 }
 #endif
 
@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
    if (argc > 1 && strcmp(argv[1], "-d") == 0)
    {
       Sift::Reader reader(argv[2]);
-      const xed_syntax_enum_t syntax = XED_SYNTAX_ATT;
+      //const xed_syntax_enum_t syntax = XED_SYNTAX_ATT;
 
       uint64_t icount = 0;
       std::map<uint64_t, const Sift::StaticInstruction*> instructions;
@@ -48,11 +48,11 @@ int main(int argc, char* argv[])
             printf("%02x ", it->second->data[i]);
          for(int i = it->second->size; i < 8; ++i)
             printf("   ");
-         char buffer[64];
+         char buffer[64] = {0};
 #if PIN_REV >= 67254
          //xed_format_context(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first, 0, 0);
 #else
-         xed_format(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first);
+         //xed_format(syntax, &it->second->xed_inst, buffer, sizeof(buffer) - 1, it->first);
 #endif
          printf("  %-40s\n", buffer);
          if (it->second->size > 8)
@@ -68,17 +68,17 @@ int main(int argc, char* argv[])
    else if (argc > 1)
    {
       Sift::Reader reader(argv[1]);
-      const xed_syntax_enum_t syntax = XED_SYNTAX_ATT;
+      //const xed_syntax_enum_t syntax = XED_SYNTAX_ATT;
 
       Sift::Instruction inst;
       while(reader.Read(inst))
       {
          printf("%016" PRIx64 " ", inst.sinst->addr);
-         char buffer[64];
+         char buffer[64] = {0};
 #if PIN_REV >= 67254
          //xed_format_context(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr, 0, 0);
 #else
-         xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr);
+         //xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr);
 #endif
          printf("%-40s  ", buffer);
 

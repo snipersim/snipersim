@@ -22,8 +22,7 @@ else
    endif
 endif
 
-#all : $(TARGET) siftdump recorder
-all : $(TARGET) recorder
+all : $(TARGET) siftdump recorder
 
 .PHONY : recorder
 
