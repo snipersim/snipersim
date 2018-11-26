@@ -1,10 +1,11 @@
 #include <string.h>
 #include "shmem_msg.h"
+#include "shmem_perf.h"
 #include "log.h"
 
 namespace PrL1PrL2DramDirectoryMSI
 {
-   ShmemMsg::ShmemMsg() :
+   ShmemMsg::ShmemMsg(ShmemPerf* perf) :
       m_msg_type(INVALID_MSG_TYPE),
       m_sender_mem_component(MemComponent::INVALID_MEM_COMPONENT),
       m_receiver_mem_component(MemComponent::INVALID_MEM_COMPONENT),
@@ -13,7 +14,7 @@ namespace PrL1PrL2DramDirectoryMSI
       m_address(INVALID_ADDRESS),
       m_data_buf(NULL),
       m_data_length(0),
-      m_perf(NULL)
+      m_perf(perf)
    {}
 
    ShmemMsg::ShmemMsg(msg_t msg_type,
@@ -50,9 +51,9 @@ namespace PrL1PrL2DramDirectoryMSI
    {}
 
    ShmemMsg*
-   ShmemMsg::getShmemMsg(Byte* msg_buf)
+   ShmemMsg::getShmemMsg(Byte* msg_buf, ShmemPerf* perf)
    {
-      ShmemMsg* shmem_msg = new ShmemMsg();
+      ShmemMsg* shmem_msg = new ShmemMsg(perf);
       memcpy((void*) shmem_msg, msg_buf, sizeof(*shmem_msg));
       if (shmem_msg->getDataLength() > 0)
       {

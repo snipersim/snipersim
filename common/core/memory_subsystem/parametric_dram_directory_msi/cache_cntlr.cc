@@ -1502,7 +1502,7 @@ MYLOG("evict FLUSH %lx", evict_address);
                   home_node_id /* receiver */,
                   evict_address,
                   evict_buf, getCacheBlockSize(),
-                  HitWhere::UNKNOWN, NULL, thread_num);
+                  HitWhere::UNKNOWN, &m_dummy_shmem_perf, thread_num);
          }
          else
          {
@@ -1516,7 +1516,7 @@ MYLOG("evict INV %lx", evict_address);
                   home_node_id /* receiver */,
                   evict_address,
                   NULL, 0,
-                  HitWhere::UNKNOWN, NULL, thread_num);
+                  HitWhere::UNKNOWN, &m_dummy_shmem_perf, thread_num);
          }
       }
 

@@ -16,6 +16,7 @@
 #include "req_queue_list_template.h"
 #include "stats.h"
 #include "subsecond_time.h"
+#include "shmem_perf.h"
 
 #include "boost/tuple/tuple.hpp"
 
@@ -270,6 +271,7 @@ namespace ParametricDramDirectoryMSI
          ShmemPerf* m_shmem_perf_global;
          SubsecondTime m_shmem_perf_totaltime;
          UInt64 m_shmem_perf_numrequests;
+         ShmemPerf m_dummy_shmem_perf;
 
          ShmemPerfModel* m_shmem_perf_model;
 

@@ -31,6 +31,8 @@ class NucaCache
 
       UInt64 m_reads, m_writes, m_read_misses, m_write_misses;
 
+      ShmemPerf m_dummy_shmem_perf;
+
       SubsecondTime accessDataArray(Cache::access_t access, SubsecondTime t_start, ShmemPerf *perf);
 
    public:

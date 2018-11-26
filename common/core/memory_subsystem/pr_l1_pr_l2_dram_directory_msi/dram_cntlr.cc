@@ -5,6 +5,7 @@
 #include "subsecond_time.h"
 #include "stats.h"
 #include "fault_injection.h"
+#include "shmem_perf.h"
 
 #if 0
    extern Lock iolock;
@@ -93,7 +94,7 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
          m_fault_injector->postWrite(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
    }
 
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, NULL);
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, &m_dummy_shmem_perf);
 
    ++m_writes;
    #ifdef ENABLE_DRAM_ACCESS_COUNT

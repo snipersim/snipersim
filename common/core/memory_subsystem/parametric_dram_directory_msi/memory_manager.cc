@@ -445,7 +445,7 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
 {
 MYLOG("begin");
    core_id_t sender = packet.sender;
-   PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg = PrL1PrL2DramDirectoryMSI::ShmemMsg::getShmemMsg((Byte*) packet.data);
+   PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg = PrL1PrL2DramDirectoryMSI::ShmemMsg::getShmemMsg((Byte*) packet.data, &m_dummy_shmem_perf);
    SubsecondTime msg_time = packet.time;
 
    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_SIM_THREAD, msg_time);

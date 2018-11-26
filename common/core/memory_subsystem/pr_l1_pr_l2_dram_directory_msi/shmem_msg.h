@@ -52,7 +52,8 @@ namespace PrL1PrL2DramDirectoryMSI
          ShmemPerf* m_perf;
 
       public:
-         ShmemMsg();
+         ShmemMsg() = delete;
+         ShmemMsg(ShmemPerf* perf);
          ShmemMsg(msg_t msg_type,
                MemComponent::component_t sender_mem_component,
                MemComponent::component_t receiver_mem_component,
@@ -65,7 +66,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
          ~ShmemMsg();
 
-         static ShmemMsg* getShmemMsg(Byte* msg_buf);
+         static ShmemMsg* getShmemMsg(Byte* msg_buf, ShmemPerf* perf);
          Byte* makeMsgBuf();
          UInt32 getMsgLen();
 

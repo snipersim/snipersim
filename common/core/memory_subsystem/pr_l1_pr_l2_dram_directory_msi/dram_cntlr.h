@@ -7,6 +7,7 @@
 
 #include "dram_perf_model.h"
 #include "shmem_msg.h"
+#include "shmem_perf.h"
 #include "fixed_types.h"
 #include "memory_manager_base.h"
 #include "dram_cntlr_interface.h"
@@ -26,6 +27,8 @@ namespace PrL1PrL2DramDirectoryMSI
          typedef std::unordered_map<IntPtr,UInt64> AccessCountMap;
          AccessCountMap* m_dram_access_count;
          UInt64 m_reads, m_writes;
+
+         ShmemPerf m_dummy_shmem_perf;
 
          SubsecondTime runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf);
 

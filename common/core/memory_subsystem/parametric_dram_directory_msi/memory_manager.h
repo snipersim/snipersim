@@ -52,6 +52,8 @@ namespace ParametricDramDirectoryMSI
          MemComponent::component_t m_last_level_cache;
          bool m_enabled;
 
+         ShmemPerf m_dummy_shmem_perf;
+
          // Performance Models
          CachePerfModel* m_cache_perf_models[MemComponent::LAST_LEVEL_CACHE + 1];
 
