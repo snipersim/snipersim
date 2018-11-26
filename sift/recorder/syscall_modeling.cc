@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <syscall.h>
 
-void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::MemoryOpType mem_op, uint64_t d_addr, uint8_t* data_buffer, uint32_t data_size)
+bool handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::MemoryOpType mem_op, uint64_t d_addr, uint8_t* data_buffer, uint32_t data_size)
 {
    // Lock memory globally if requested
    // This operation does not occur very frequently, so this should not impact performance
@@ -29,13 +29,15 @@ void handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::Memor
    else
    {
       std::cerr << "Error: invalid memory operation type" << std::endl;
-      sift_assert(false);
+      return false;
    }
 
    if (lock_signal == Sift::MemUnlock)
    {
       PIN_ReleaseLock(&access_memory_lock);
    }
+
+   return true;
 }
 
 // Emulate all system calls

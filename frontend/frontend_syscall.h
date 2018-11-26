@@ -30,7 +30,7 @@ template <typename T> class FrontendSyscallModelBase
   
   /// To obtain data accessed by memory instructions in a safe way
   /// This method is passed to Sniper's bridge (trace manager) between frontend and backend.
-  static void handleAccessMemory(void* arg,
+  static bool handleAccessMemory(void* arg,
                                  Sift::MemoryLockType lock_signal,
                                  Sift::MemoryOpType mem_op,
                                  uint64_t d_addr,

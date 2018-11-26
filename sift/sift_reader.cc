@@ -85,7 +85,7 @@ Sift::Reader::~Reader()
    }
 }
 
-void Sift::Reader::initStream()
+bool Sift::Reader::initStream()
 {
    #if VERBOSE > 0
    std::cerr << "[DEBUG:" << m_id << "] InitStream Attempting Open" << std::endl;
@@ -93,10 +93,10 @@ void Sift::Reader::initStream()
 
    inputstream = new std::ifstream(m_filename, std::ios::in);
 
-   if (!inputstream->is_open())
+   if ((!inputstream->is_open()) || (!inputstream->good()))
    {
-      std::cerr << "Cannot open " << m_filename << std::endl;
-      assert(false);
+      std::cerr << "[SIFT:" << m_id << "] Cannot open " << m_filename << "\n";
+      return false;
    }
 
    struct stat filestatus;
@@ -107,8 +107,15 @@ void Sift::Reader::initStream()
 
    Sift::Header hdr;
    input->read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
-   assert(hdr.magic == Sift::MagicNumber);
-   assert(hdr.size == 0);
+   if (hdr.magic != Sift::MagicNumber)
+   {
+      std::cerr << "[SIFT:" << m_id << "] Invalid magic number\n";
+      return false;
+   }
+   if (hdr.size != 0)
+   {
+      std::cerr << "[SIFT:" << m_id << "] Invalid header size\n";
+   }
 
 #if SIFT_USE_ZLIB
    if (hdr.options & CompressionZlib)
@@ -144,40 +151,59 @@ void Sift::Reader::initStream()
    hdr.options &= ~IcacheVariable;
 
    // Make sure there are no unrecognized options
-   assert(hdr.options == 0);
+   if (hdr.options != 0)
+   {
+      return false;
+   }
 
    #if VERBOSE > 0
    std::cerr << "[DEBUG:" << m_id << "] InitStream Connection Open" << std::endl;
    #endif
+
+   return true;
 }
 
-void Sift::Reader::initResponse()
+bool Sift::Reader::initResponse()
 {
    if (!response)
    {
-      assert (strcmp(m_response_filename, "") != 0);
+      if (strcmp(m_response_filename, "") == 0)
+      {
+         std::cerr << "[SIFT:" << m_id << "] Response filename not set\n";
+         return false;
+      }
       response = new vofstream(m_response_filename, std::ios::out);
    }
 
-   if (!response->is_open())
+   if ((!response->is_open()) || (response->fail()))
    {
-      std::cerr << "Cannot open " << m_response_filename << std::endl;
-      assert(false);
+      std::cerr << "[SIFT:" << m_id << "] Cannot open " << m_response_filename << "\n";
+      return false;
    }
+
+   return true;
 }
 
 bool Sift::Reader::Read(Instruction &inst)
 {
    if (input == NULL)
    {
-      initStream();
+      if (!initStream())
+      {
+         std::cerr << "[SIFT:" << m_id << "] Error: initStream failed\n";
+         return false;
+      }
    }
 
    while(!m_seen_end)
    {
       Record rec;
       uint8_t byte = input->peek();
-      assert(!input->fail());
+      if (input->fail())
+      {
+         std::cerr << "[SIFT:" << m_id << "] Error: " << strerror(errno) << "\n";
+         return false;
+      }
 
       if (byte == 0)
       {
@@ -537,7 +563,7 @@ bool Sift::Reader::Read(Instruction &inst)
    return true;
 }
 
-void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size)
+bool Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size)
 {
    #if VERBOSE > 0
    if (mem_op == MemWrite)
@@ -548,10 +574,18 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
 
    if (input == NULL)
    {
-      initStream();
+      if (!initStream())
+      {
+         std::cerr << "[SIFT:" << m_id << "] Error: initStream failed\n";
+         return false;
+      }
    }
 
-   initResponse();
+   if (!initResponse())
+   {
+      std::cerr << "[SIFT:" << m_id << "] Error: initResponse failed\n";
+      return false;
+   }
 
    Record rec;
    rec.Other.zero = 0;
@@ -581,14 +615,22 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
    #if VERBOSE_HEX > 0
    hexdump((char*)&rec, sizeof(rec.Other));
    #endif
-   assert(rec.Other.type == RecOtherMemoryResponse);
+   if (rec.Other.type != RecOtherMemoryResponse)
+   {
+      std::cerr << "[SIFT:" << m_id << "] Error: Invalid response. Expected RecOtherMemoryResponse\n";
+      return false;
+   }
    input->read(reinterpret_cast<char*>(&addr), sizeof(addr));
    input->read(reinterpret_cast<char*>(&type), sizeof(type));
    #if VERBOSE_HEX > 0
    hexdump((char*)&addr, sizeof(addr));
    hexdump((char*)&type, sizeof(type));
    #endif
-   assert(addr == d_addr);
+   if (addr != d_addr)
+   {
+      std::cerr << "[SIFT:" << m_id << "] Error: Invalid response. Expected addresses to match\n";
+      return false;
+   }
 
    uint32_t payload_size = rec.Other.size - sizeof(addr) - sizeof(type);
 
@@ -597,7 +639,11 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
       #if VERBOSE > 0
       std::cerr << "[DEBUG:" << m_id << "] Read MemoryResponse - Read Return Data" << std::endl;
       #endif
-      assert(data_size == payload_size);
+      if (data_size != payload_size)
+      {
+	 std::cerr << "[SIFT:" << m_id << "] Error: Invalid response. Expected payload size to match\n";
+	 return false;
+      }
       input->read(reinterpret_cast<char*>(data_buffer), data_size);
       #if VERBOSE_HEX > 0
       hexdump((char*)data_buffer, data_size);
@@ -605,13 +651,19 @@ void Sift::Reader::AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op,
    }
    else if (mem_op == MemWrite)
    {
-      assert(payload_size == 0);
+      if (payload_size != 0)
+      {
+	 std::cerr << "[SIFT:" << m_id << "] Error: Invalid response. Expected payload size of 0 for MemWrite\n";
+	 return false;
+      }
    }
    else
    {
       std::cerr << "Sift::Reader::" << __FUNCTION__ << ": invalid return memory op type" << std::endl;
-      assert(false);
+      return false;
    }
+
+   return true;
 }
 
 const Sift::StaticInstruction* Sift::Reader::staticInfoInstruction(uint64_t addr, uint8_t size)
@@ -678,7 +730,10 @@ void Sift::Reader::sendSyscallResponse(uint64_t return_code)
    std::cerr << "[DEBUG:" << m_id << "] Write SyscallResponse" << std::endl;
    #endif
 
-   initResponse();
+   if (!initResponse())
+   {
+      std::cerr << "[SIFT:" << m_id << "] Error: initResponse failed\n";
+   }
 
    Record rec;
    rec.Other.zero = 0;
@@ -695,7 +750,10 @@ void Sift::Reader::sendEmuResponse(bool handled, EmuReply res)
    std::cerr << "[DEBUG:" << m_id << "] Write sendEmuResponse" << std::endl;
    #endif
 
-   initResponse();
+   if (!initResponse())
+   {
+      std::cerr << "[SIFT:" << m_id << "] Error: initResponse failed\n";
+   }
 
    Record rec;
    rec.Other.zero = 0;
@@ -714,7 +772,10 @@ void Sift::Reader::sendSimpleResponse(RecOtherType type, void *data, uint32_t si
    std::cerr << "[DEBUG:" << m_id << "] Write SimpleResponse type=" << type << std::endl;
    #endif
 
-   initResponse();
+   if (!initResponse())
+   {
+      std::cerr << "[SIFT:" << m_id << "] Error: initResponse failed\n";
+   }
 
    Record rec;
    rec.Other.zero = 0;

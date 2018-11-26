@@ -18,6 +18,7 @@ class vostream
       virtual void write(const char* s, std::streamsize n) = 0;
       virtual void flush() = 0;
       virtual bool is_open() = 0;
+      virtual bool fail() = 0;
 };
 
 class vofstream : public vostream
@@ -57,6 +58,8 @@ class ozstream : public vostream
       virtual void write(const char* s, std::streamsize n);
       virtual void flush()
          { output->flush(); }
+      virtual bool fail()
+         { return output->fail(); }
       virtual bool is_open()
          { return output->is_open(); }
 };

@@ -21,7 +21,7 @@
 
 void __assert_fail(const char *__assertion, const char *__file, unsigned int __line, const char *__function) __THROW
 {
-   std::cerr << "[SIFT_RECORDER] " << __file << ":" << __line << ": " << __function << ": Assertion `" << __assertion << "' failed." << std::endl;
+   std::cerr << "[SIFT] " << __file << ":" << __line << ": " << __function << ": Assertion `" << __assertion << "' failed." << std::endl;
    abort();
 }
 

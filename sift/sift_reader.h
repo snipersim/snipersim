@@ -103,7 +103,7 @@ namespace Sift
          
          int m_isa;
 
-         void initResponse();
+         bool initResponse();
          const Sift::StaticInstruction* staticInfoInstruction(uint64_t addr, uint8_t size);
          const Sift::StaticInstruction* getStaticInstruction(uint64_t addr, uint8_t size);
          void sendSyscallResponse(uint64_t return_code);
@@ -113,9 +113,9 @@ namespace Sift
       public:
          Reader(const char *filename, const char *response_filename = "", uint32_t id = 0);
          ~Reader();
-         void initStream();
+         bool initStream();
          bool Read(Instruction&);
-         void AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size);
+         bool AccessMemory(MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size);
 
          void setHandleInstructionCountFunc(HandleInstructionCountFunc func, void* arg = NULL) { handleInstructionCountFunc = func; handleInstructionCountArg = arg; }
          void setHandleCacheOnlyFunc(HandleCacheOnlyFunc func, void* arg = NULL) { handleCacheOnlyFunc = func; handleCacheOnlyArg = arg; }

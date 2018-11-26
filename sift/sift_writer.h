@@ -17,7 +17,7 @@ namespace Sift
    {
       typedef void (*GetCodeFunc)(uint8_t *dst, const uint8_t *src, uint32_t size);
       typedef void (*GetCodeFunc2)(uint8_t *dst, const uint8_t *src, uint32_t size, void *data);
-      typedef void (*HandleAccessMemoryFunc)(void *arg, MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size);
+      typedef bool (*HandleAccessMemoryFunc)(void *arg, MemoryLockType lock_signal, MemoryOpType mem_op, uint64_t d_addr, uint8_t *data_buffer, uint32_t data_size);
 
       private:
          vostream *output;

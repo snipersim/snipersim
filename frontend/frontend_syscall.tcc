@@ -19,7 +19,7 @@ template <typename T>
 std::deque<uint64_t>* FrontendSyscallModelBase<T>::tidptrs;
 
 template <typename T>
-void FrontendSyscallModelBase <T>::handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, 
+bool FrontendSyscallModelBase <T>::handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal,
   Sift::MemoryOpType mem_op, uint64_t d_addr, uint8_t* data_buffer, uint32_t data_size)
 {
   // Lock memory globally if requested
@@ -43,7 +43,7 @@ void FrontendSyscallModelBase <T>::handleAccessMemory(void *arg, Sift::MemoryLoc
   else
   {
     std::cerr << "Error: invalid memory operation type" << std::endl;
-    sift_assert(false);
+    return false;
   }
 
   if (lock_signal == Sift::MemUnlock)
@@ -52,6 +52,7 @@ void FrontendSyscallModelBase <T>::handleAccessMemory(void *arg, Sift::MemoryLoc
 
     m_access_memory_lock->release_lock();
   }
+  return true;
 }
 
 template <typename T>
