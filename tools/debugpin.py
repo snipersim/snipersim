@@ -13,15 +13,16 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
 
   p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env)
   g_pid = 0
-  g_symbols = ''
+  g_symbols = []
   while True:
     line = p_graphite.stdout.readline()
     if line.startswith('Pausing to attach to pid') or (line.startswith('Pausing for') and 'to attach to process' in line):
       g_pid = line.split()[-1]
-    elif line.startswith('   add-symbol-file'):
-      g_symbols = line
-    if g_pid and g_symbols:
-      break
+    elif ('add-symbol-file' in line) or ('file' in line) or ('set' in line):
+      g_symbols.append(line.rstrip())
+    else:
+      if g_pid and g_symbols:
+        break
 
   def output_graphite():
     while True:
@@ -32,7 +33,7 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
 
   fh, fn = tempfile.mkstemp()
   f = open(fn, 'w')
-  f.write('attach %s\n%s\n' % (g_pid, g_symbols))
+  f.write('attach %s\n%s\n' % (g_pid, '\n'.join(g_symbols)))
   if not wait:
     f.write('continue\n')
   # Only quit GDB when we have not seen a signal
