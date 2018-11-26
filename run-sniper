@@ -567,6 +567,16 @@ elif use_mpi:
   applications = [
     (mpiexec, other_options + [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]
+elif pinballs and pinball_sift:
+  tracegen = {}
+  tracegen['enabled'] = 'true'
+  tracegen['emulate_syscalls'] = 'false'
+  tracegen['num_apps'] = len(pinballs)
+  tracegen['redirect'] = True
+  # Set trace recorder options
+  applications = []
+  for app_id, pinball in enumerate(pinballs):
+    applications.append(([], [ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball, '--outputdir', outputdir ]))
 elif use_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
@@ -588,16 +598,6 @@ elif use_sift:
   applications = [
     ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]
-elif pinballs and pinball_sift:
-  tracegen = {}
-  tracegen['enabled'] = 'true'
-  tracegen['emulate_syscalls'] = 'false'
-  tracegen['num_apps'] = len(pinballs)
-  tracegen['redirect'] = True
-  # Set trace recorder options
-  applications = []
-  for app_id, pinball in enumerate(pinballs):
-    applications.append(([], [ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball, '--outputdir', outputdir ]))
 
 # Setup common generated trace files
 tracecmds = []
