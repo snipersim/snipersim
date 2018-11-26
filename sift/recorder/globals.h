@@ -16,7 +16,7 @@
 
 #define LINE_SIZE_BYTES 64
 #define MAX_NUM_SYSCALLS 4096
-#define MAX_NUM_THREADS 128
+#define MAX_NUM_THREADS_DEFAULT 128
 
 extern KNOB<string> KnobOutputFile;
 extern KNOB<UINT64> KnobBlocksize;
@@ -35,6 +35,7 @@ extern KNOB<BOOL> KnobRoutineTracingOutsideDetailed;
 extern KNOB<BOOL> KnobDebug;
 extern KNOB<BOOL> KnobVerbose;
 extern KNOB<UINT64> KnobStopAddress;
+extern KNOB<UINT64> KnobMaxThreads;
 extern KNOB<UINT64> KnobExtraePreLoaded;
 
 # define KNOB_REPLAY_NAME "replay"
@@ -47,6 +48,7 @@ extern PINPLAY_ENGINE pinplay_engine;
 
 extern INT32 app_id;
 extern INT32 num_threads;
+extern UINT32 max_num_threads;
 extern UINT64 blocksize;
 extern UINT64 fast_forward_target;
 extern UINT64 detailed_target;

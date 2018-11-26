@@ -135,7 +135,7 @@ void emuKmpReapMonitor(THREADID threadIndex, CONTEXT *ctxt)
    // However, in simulation the timeout value may be wrong (if gettimeofday isn't properly replaced)
    // so the timout doesn't reliably occur. Instead, call exit() here to
    // forcefully terminate the application when the master thread reaches __kmp_reap_monitor().
-   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   for (unsigned int i = 0 ; i < max_num_threads ; i++)
    {
       if (thread_data[i].output)
       {

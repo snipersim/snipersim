@@ -10,7 +10,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--isa=<ia32|x86_64|arm32|arm64>] [--ncores=(default=1)>] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--isa=<ia32|x86_64|arm32|arm64>] [--ncores=(default=1)>] [--maxthreads] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0]
   sys.exit(2)
 
 # From http://stackoverflow.com/questions/6767649/how-to-get-process-status-using-pid
@@ -52,12 +52,13 @@ isa = None
 use_pid = None
 pid_continue = False
 stop_address = 0
+maxthreads = None
 
 if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "isa=", "ncores=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "isa=", "ncores=", "maxthreads=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -128,6 +129,8 @@ for o, a in opts:
     stop_address = int(a,0)
   if o == '--pid-continue':
     pid_continue = True
+  if o == '--maxthreads':
+    extra_args.append('-maxthreads %s' % a)
 
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):

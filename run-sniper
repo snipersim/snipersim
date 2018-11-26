@@ -197,7 +197,7 @@ def va2pa_valid():
   else:
     return True
 
-record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=' ]
+record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=', 'maxthreads=' ]
 
 try:
   opts, cmdline = getopt.getopt(

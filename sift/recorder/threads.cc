@@ -22,6 +22,7 @@ thread_data_t *thread_data;
 // The thread that watched this new thread start is responsible for setting up the connection with the simulator
 static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 {
+   sift_assert(threadid < max_num_threads);
    sift_assert(thread_data[threadid].bbv == NULL);
 
    // The first thread (master) doesn't need to join with anyone else

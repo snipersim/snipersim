@@ -30,7 +30,7 @@
 
 VOID Fini(INT32 code, VOID *v)
 {
-   for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+   for (unsigned int i = 0 ; i < max_num_threads ; i++)
    {
       if (thread_data[i].output)
       {
@@ -66,7 +66,7 @@ VOID forkAfterInChild(THREADID threadid, const CONTEXT *ctxt, VOID *v)
 {
    // Forget about everything we inherited from the parent
    routines.clear();
-   bzero(thread_data, MAX_NUM_THREADS * sizeof(*thread_data));
+   bzero(thread_data, max_num_threads * sizeof(*thread_data));
    // Assume identity of child process
    app_id = child_app_id;
    num_threads = 1;
@@ -120,7 +120,11 @@ int main(int argc, char **argv)
    }
    PIN_InitSymbols();
 
-   size_t thread_data_size = MAX_NUM_THREADS * sizeof(*thread_data);
+   if (KnobMaxThreads.Value() > 0)
+   {
+      max_num_threads = KnobMaxThreads.Value();
+   }
+   size_t thread_data_size = max_num_threads * sizeof(*thread_data);
    if (posix_memalign((void**)&thread_data, LINE_SIZE_BYTES, thread_data_size) != 0)
    {
       std::cerr << "Error, posix_memalign() failed" << std::endl;

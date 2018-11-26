@@ -17,6 +17,7 @@ KNOB<BOOL> KnobRoutineTracingOutsideDetailed(KNOB_MODE_WRITEONCE, "pintool", "rt
 KNOB<BOOL> KnobDebug(KNOB_MODE_WRITEONCE, "pintool", "debug", "0", "start debugger on internal exception");
 KNOB<BOOL> KnobVerbose(KNOB_MODE_WRITEONCE, "pintool", "verbose", "0", "verbose output");
 KNOB<UINT64> KnobStopAddress(KNOB_MODE_WRITEONCE, "pintool", "stop", "0", "stop address (0 = disabled)");
+KNOB<UINT64> KnobMaxThreads(KNOB_MODE_WRITEONCE, "pintool", "maxthreads", "0", "maximum number of threads (0 = default)");
 
 KNOB_COMMENT pinplay_driver_knob_family(KNOB_FAMILY, "PinPlay SIFT Recorder Knobs");
 KNOB<BOOL>KnobReplayer(KNOB_MODE_WRITEONCE, KNOB_FAMILY,
@@ -30,6 +31,7 @@ PINPLAY_ENGINE pinplay_engine;
 
 INT32 app_id;
 INT32 num_threads = 0;
+UINT32 max_num_threads = MAX_NUM_THREADS_DEFAULT;
 UINT64 blocksize;
 UINT64 fast_forward_target = 0;
 UINT64 detailed_target = 0;

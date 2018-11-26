@@ -76,7 +76,7 @@ void beginROI(THREADID threadid, const CONTEXT * ctxt)
    }
    else
    {
-      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      for (unsigned int i = 0 ; i < max_num_threads ; i++)
       {
          if (thread_data[i].running && !thread_data[i].output)
             openFile(i);
@@ -120,7 +120,7 @@ void endROI(THREADID threadid, const CONTEXT * ctxt)
 
    if (!KnobUseResponseFiles.Value())
    {
-      for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+      for (unsigned int i = 0 ; i < max_num_threads ; i++)
       {
          if (thread_data[i].running && thread_data[i].output)
             closeFile(i);
@@ -143,7 +143,7 @@ void setInstrumentationMode(Sift::Mode mode)
             any_thread_in_detail = true;
             break;
          case Sift::ModeStop:
-            for (unsigned int i = 0 ; i < MAX_NUM_THREADS ; i++)
+            for (unsigned int i = 0 ; i < max_num_threads ; i++)
             {
                if (thread_data[i].output)
                   closeFile(i);
