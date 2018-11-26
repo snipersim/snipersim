@@ -175,6 +175,11 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
    sift_assert(size < 16);
    sift_assert(num_addresses <= MAX_DYNAMIC_ADDRESSES);
 
+   if (!output)
+   {
+      return;
+   }
+
    if (m_requires_icache_per_insn)
    {
       if (! icache[addr])
@@ -310,6 +315,11 @@ Sift::Mode Sift::Writer::InstructionCount(uint32_t icount)
    std::cerr << "[DEBUG:" << m_id << "] Write InstructionCount" << std::endl;
    #endif
 
+   if (!output)
+   {
+      return Sift::ModeUnknown;
+   }
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherInstructionCount;
@@ -343,6 +353,11 @@ void Sift::Writer::CacheOnly(uint8_t icount, CacheOnlyType type, uint64_t eip, u
    std::cerr << "[DEBUG:" << m_id << "] Write CacheOnly" << std::endl;
    #endif
 
+   if (!output)
+   {
+      return;
+   }
+
    send_va2pa(eip);
    send_va2pa(address);
 
@@ -374,6 +389,11 @@ void Sift::Writer::Output(uint8_t fd, const char *data, uint32_t size)
    std::cerr << "[DEBUG:" << m_id << "] Write Output" << std::endl;
    #endif
 
+   if (!output)
+   {
+      return;
+   }
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherOutput;
@@ -395,6 +415,11 @@ int32_t Sift::Writer::NewThread()
    #if VERBOSE > 0
    std::cerr << "[DEBUG:" << m_id << "] Write NewThread" << std::endl;
    #endif
+
+   if (!output)
+   {
+      return -1;
+   }
 
    Record rec;
    rec.Other.zero = 0;
@@ -447,6 +472,11 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    #if VERBOSE > 0
    std::cerr << "[DEBUG:" << m_id << "] Write Syscall" << std::endl;
    #endif
+
+   if (!output)
+   {
+      return 1;
+   }
 
    // Try to send some extra logical2physical address mappings for data referenced by system call arguments.
    // Also try to read from the address first, if the mapping wasn't set up yet (never accessed before, or swapped out),
@@ -518,6 +548,11 @@ int32_t Sift::Writer::Join(int32_t thread)
    std::cerr << "[DEBUG:" << m_id << "] Write Join with thread=" << thread << std::endl;
    #endif
 
+   if (!output)
+   {
+      return -1;
+   }
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherJoin;
@@ -561,6 +596,11 @@ int32_t Sift::Writer::Join(int32_t thread)
 
 Sift::Mode Sift::Writer::Sync()
 {
+   if (!output)
+   {
+      return Sift::ModeUnknown;
+   }
+
    // send sync
    Record rec;
    rec.Other.zero = 0;
@@ -603,6 +643,11 @@ Sift::Mode Sift::Writer::Sync()
 
 int32_t Sift::Writer::Fork()
 {
+   if (!output)
+   {
+      return -1;
+   }
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherFork;
@@ -628,6 +673,11 @@ int32_t Sift::Writer::Fork()
 
 uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 {
+   if (!output)
+   {
+      return 1;
+   }
+
    // send magic
    Record rec;
    rec.Other.zero = 0;
@@ -673,6 +723,11 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 
 bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
 {
+   if (!output)
+   {
+      return false;
+   }
+
    // send magic
    Record rec;
    rec.Other.zero = 0;
@@ -720,6 +775,11 @@ bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuR
 
 void Sift::Writer::RoutineChange(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip)
 {
+   if (!output)
+   {
+      return;
+   }
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherRoutineChange;
@@ -734,6 +794,11 @@ void Sift::Writer::RoutineChange(Sift::RoutineOpType event, uint64_t eip, uint64
 
 void Sift::Writer::RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)
 {
+   if (!output)
+   {
+      return;
+   }
+
    uint16_t len_name = strlen(name) + 1, len_imgname = strlen(imgname) + 1, len_filename = strlen(filename) + 1;
 
    Record rec;
@@ -759,6 +824,11 @@ void Sift::Writer::ISAChange(uint32_t new_isa)
    std::cerr << "[DEBUG:" << m_id << "] Write ISAChange" << std::endl;
    #endif
 
+   if (!output)
+   {
+      return;
+   }
+
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherISAChange;
@@ -783,6 +853,12 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
    #if VERBOSE > 0
    std::cerr << "[DEBUG:" << m_id << "] Read MemoryRequest" << std::endl;
    #endif
+
+   if (!output)
+   {
+      return;
+   }
+
    uint64_t addr;
    uint32_t size;
    MemoryLockType lock;
@@ -906,6 +982,11 @@ uint64_t Sift::Writer::va2pa_lookup(uint64_t vp)
 
 void Sift::Writer::send_va2pa(uint64_t va)
 {
+   if (!output)
+   {
+      return;
+   }
+
    if (m_send_va2pa_mapping)
    {
       uint64_t vp = static_cast<uintptr_t>(va) / PAGE_SIZE_SIFT;
