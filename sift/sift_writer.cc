@@ -339,10 +339,19 @@ Sift::Mode Sift::Writer::InstructionCount(uint32_t icount)
    // wait for reply
    Record respRec;
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-   sift_assert(respRec.Other.zero == 0);
-   sift_assert(respRec.Other.type == RecOtherSyncResponse);
+   if (respRec.Other.zero != 0)
+   {
+      return Sift::ModeUnknown;
+   }
+   if (respRec.Other.type != RecOtherSyncResponse)
+   {
+      return Sift::ModeUnknown;
+   }
    Mode mode;
-   sift_assert(respRec.Other.size == sizeof(Mode));
+   if (respRec.Other.size != sizeof(Mode))
+   {
+      return Sift::ModeUnknown;
+   }
    response->read(reinterpret_cast<char*>(&mode), sizeof(Mode));
    return mode;
 }
@@ -438,7 +447,10 @@ int32_t Sift::Writer::NewThread()
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      sift_assert(respRec.Other.zero == 0);
+      if (respRec.Other.zero != 0)
+      {
+         return -1;
+      }
 
       switch(respRec.Other.type)
       {
@@ -446,7 +458,10 @@ int32_t Sift::Writer::NewThread()
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Read NewThreadResponse" << std::endl;
             #endif
-            sift_assert(respRec.Other.size == sizeof(retcode));
+            if (respRec.Other.size != sizeof(retcode))
+            {
+               return -1;
+            }
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Got NewThreadResponse thread=" << retcode << std::endl;
@@ -454,7 +469,7 @@ int32_t Sift::Writer::NewThread()
             return retcode;
             break;
          default:
-            sift_assert(false);
+            return -1;
             break;
       }
    }
@@ -529,7 +544,10 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Read SyscallResponse" << std::endl;
             #endif
-            sift_assert(respRec.Other.size == sizeof(retcode));
+            if (respRec.Other.size != sizeof(retcode))
+            {
+               return 1;
+            }
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
             return retcode;
          case RecOtherMemoryRequest:
@@ -574,7 +592,10 @@ int32_t Sift::Writer::Join(int32_t thread)
       #endif
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      sift_assert(respRec.Other.zero == 0);
+      if (respRec.Other.zero != 0)
+      {
+         return -1;
+      }
 
       switch(respRec.Other.type)
       {
@@ -582,12 +603,15 @@ int32_t Sift::Writer::Join(int32_t thread)
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Read JoinResponse" << std::endl;
             #endif
-            sift_assert(respRec.Other.size == sizeof(retcode));
+            if (respRec.Other.size != sizeof(retcode))
+            {
+               return -1;
+            }
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
             return retcode;
             break;
          default:
-            sift_assert(false);
+            return -1;
             break;
       }
    }
@@ -615,8 +639,14 @@ Sift::Mode Sift::Writer::Sync()
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      sift_assert(!response->fail());
-      sift_assert(respRec.Other.zero == 0);
+      if (response->fail())
+      {
+         return Sift::ModeUnknown;
+      }
+      if (respRec.Other.zero != 0)
+      {
+         return Sift::ModeUnknown;
+      }
 
       switch(respRec.Other.type)
       {
@@ -625,14 +655,17 @@ Sift::Mode Sift::Writer::Sync()
             std::cerr << "[DEBUG:" << m_id << "] Read SyncResponse" << std::endl;
             #endif
             Mode mode;
-            sift_assert(respRec.Other.size == sizeof(Mode));
+            if (respRec.Other.size != sizeof(Mode))
+            {
+               return Sift::ModeUnknown;
+            }
             response->read(reinterpret_cast<char*>(&mode), sizeof(Mode));
             return mode;
          case RecOtherMemoryRequest:
             handleMemoryRequest(respRec);
             break;
          default:
-            sift_assert(false);
+            return Sift::ModeUnknown;
             break;
       }
    }
@@ -660,14 +693,29 @@ int32_t Sift::Writer::Fork()
    Record respRec;
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
 
-   assert(!response->fail());
-   assert(respRec.Other.zero == 0);
-   assert(respRec.Other.type == RecOtherForkResponse);
-   assert(respRec.Other.size == sizeof(int32_t));
+   if (response->fail())
+   {
+      return -1;
+   }
+   if (respRec.Other.zero != 0)
+   {
+      return -1;
+   }
+   if (respRec.Other.type != RecOtherForkResponse)
+   {
+      return -1;
+   }
+   if (respRec.Other.size != sizeof(int32_t))
+   {
+      return -1;
+   }
 
    int32_t result;
    response->read(reinterpret_cast<char*>(&result), sizeof(int32_t));
-   assert(!response->fail());
+   if (response->fail())
+   {
+      return -1;
+   }
    return result;
 }
 
@@ -764,7 +812,7 @@ bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuR
             handleMemoryRequest(respRec);
             break;
          default:
-            sift_assert(false);
+            return false;
             break;
       }
    }
@@ -863,17 +911,29 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
    uint32_t size;
    MemoryLockType lock;
    MemoryOpType type;
-   sift_assert(respRec.Other.size >= (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type)));
+   if (respRec.Other.size < (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type)))
+   {
+      return;
+   }
    response->read(reinterpret_cast<char*>(&addr), sizeof(addr));
    response->read(reinterpret_cast<char*>(&size), sizeof(size));
    response->read(reinterpret_cast<char*>(&lock), sizeof(lock));
    response->read(reinterpret_cast<char*>(&type), sizeof(type));
    uint32_t payload_size = respRec.Other.size - (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type));
-   sift_assert(handleAccessMemoryFunc);
+   if (!handleAccessMemoryFunc)
+   {
+      return;
+   }
    if (type == MemRead)
    {
-      sift_assert(payload_size == 0);
-      sift_assert(size > 0);
+      if (payload_size != 0)
+      {
+         return;
+      }
+      if (size <= 0)
+      {
+         return;
+      }
       char *read_data = new char[size];
       bzero(read_data, size);
       // Do the read here via a callback to populate the read buffer
@@ -904,8 +964,14 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
       #if VERBOSE > 0
       std::cerr << "[DEBUG:" << m_id << "] Write AccessMemory-Write" << std::endl;
       #endif
-      sift_assert(payload_size > 0);
-      sift_assert(payload_size == size);
+      if (payload_size <= 0)
+      {
+         return;
+      }
+      if (payload_size != size)
+      {
+         return;
+      }
       char *payload = new char[payload_size];
       response->read(reinterpret_cast<char*>(payload), payload_size);
       // Do the write here via a callback to write the data to the appropriate address
@@ -927,7 +993,7 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
    }
    else
    {
-      sift_assert(false);
+      return;
    }
 }
 
