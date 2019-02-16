@@ -1,3 +1,10 @@
+Version 7.2
+  * Improve SIFT recorder error handling to reduce crashes caused by aborts
+  * Fix additional crashes caused by modern GCC behavior (NULL valued this pointer checks are removed by the compiler)
+  * Verify thread count in the sift recorder. Support larger thread counts with the new --maxthreads option
+  * Fix debug symbol parsing with modern Pin versions
+  * Numerous bug fixes and improvements
+
 Version 7.1
   * Fix compilation errors for GCC 6 and 7
   * Fix parallel make builds
