@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 
-import sys, os, re
+import sys, os, re, subprocess
+
+def ex_ret(cmd):
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+
+def run_pin(pin_home):
+  try:
+    ver = ex_ret(pin_home+"/pin -version")
+    versplit = ver.split('pin-')[1].split('\n')[0].split('-')
+    print versplit[0] + '.' + versplit[1]
+    return True
+  except:
+    return False
 
 if len(sys.argv) > 1:
   pin_home = sys.argv[1]
@@ -15,7 +27,10 @@ for filebase in ('source/include/pin/gen/cc_used_ia32_l.CVH', 'source/include/ge
     break
 
 if not headerfile:
-  sys.exit(1)
+  if not run_pin(pin_home):
+    sys.exit(1)
+  else:
+    sys.exit(0)
 
 version = {}
 for line in file(headerfile):
