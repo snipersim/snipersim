@@ -1,3 +1,8 @@
+Version 7.3
+  * Fix compilation and version detection issues for modern Pin versions (3.10)
+  * Properly handle time during fast-forwarding and warmup by default
+  * Remove transitional Pin 3 SIFT recorder code
+
 Version 7.2
   * Improve SIFT recorder error handling to reduce crashes caused by aborts
   * Fix additional crashes caused by modern GCC behavior (NULL valued this pointer checks are removed by the compiler)
