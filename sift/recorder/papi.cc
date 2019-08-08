@@ -207,29 +207,29 @@ ADDRINT emuPAPI_library_init(THREADID, int version)
 void imgCallback(IMG img, VOID *v)
 {
 
-    if (IMG_Name(img).find("libpapi") == string::npos)
+    if (IMG_Name(img).find("libpapi") == std::string::npos)
         return;
 
     for (SEC s=IMG_SecHead(img); SEC_Valid(s); s=SEC_Next(s)) {
         for (RTN rtn=SEC_RtnHead(s); RTN_Valid(rtn); rtn=RTN_Next(rtn)) {
-            string routine_name = RTN_Name(rtn);
+            std::string routine_name = RTN_Name(rtn);
 
-            if (routine_name.find("PAPI_") != string::npos) {
-                if (routine_name.find("PAPI_start") != string::npos)
+            if (routine_name.find("PAPI_") != std::string::npos) {
+                if (routine_name.find("PAPI_start") != std::string::npos)
                     RTN_ReplaceSignature(rtn, AFUNPTR(emuPAPI_start), IARG_THREAD_ID, IARG_END);
-                else if (routine_name.find("PAPI_read") != string::npos)
+                else if (routine_name.find("PAPI_read") != std::string::npos)
                     RTN_ReplaceSignature(rtn, AFUNPTR(emuPAPI_read), IARG_THREAD_ID,
                         IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
-                else if (routine_name.find("PAPI_event_name_to_code") != string::npos)
+                else if (routine_name.find("PAPI_event_name_to_code") != std::string::npos)
                     RTN_ReplaceSignature(rtn, AFUNPTR(emuPAPI_event_name_to_code),
                         IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
-                else if (routine_name.find("PAPI_event_code_to_name") != string::npos)
+                else if (routine_name.find("PAPI_event_code_to_name") != std::string::npos)
                     RTN_ReplaceSignature(rtn, AFUNPTR(emuPAPI_event_code_to_name),
                         IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
-                else if (routine_name.find("PAPI_library_init") != string::npos)
+                else if (routine_name.find("PAPI_library_init") != std::string::npos)
                     RTN_ReplaceSignature(rtn, AFUNPTR(emuPAPI_library_init),
                         IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 0,IARG_END);
-                else if (routine_name.find("PAPI_get_event_info") != string::npos)
+                else if (routine_name.find("PAPI_get_event_info") != std::string::npos)
                     RTN_ReplaceSignature(rtn, AFUNPTR(emuPAPI_get_event_info),
                     IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
                 else

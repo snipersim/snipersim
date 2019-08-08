@@ -239,7 +239,7 @@ static void routineCallback(RTN rtn, void* v)
    if (KnobMPIImplicitROI.Value())
    {
       BOOL could_instruments;
-      BOOL aux_wrapper = rtn_name.find("_Wrapper") == string::npos;
+      BOOL aux_wrapper = rtn_name.find("_Wrapper") == std::string::npos;
 
       if (KnobExtraePreLoaded.Value() != 0)
       {
@@ -247,7 +247,7 @@ static void routineCallback(RTN rtn, void* v)
 
          if (KnobExtraePreLoaded.Value() == 2) // Fortran version
          {
-            aux_wrapper = (rtn_name.find("_Wrapper") != string::npos);
+            aux_wrapper = (rtn_name.find("_Wrapper") != std::string::npos);
          }
       }
       else
@@ -256,8 +256,8 @@ static void routineCallback(RTN rtn, void* v)
          aux_wrapper = true;
       }
 
-      if (rtn_name.find("MPI_Init") != string::npos &&
-          rtn_name.find("MPI_Initialized") == string::npos && // Actual name can be MPI_Init, MPI_Init_thread, PMPI_Init_thread, etc.
+      if (rtn_name.find("MPI_Init") != std::string::npos &&
+          rtn_name.find("MPI_Initialized") == std::string::npos && // Actual name can be MPI_Init, MPI_Init_thread, PMPI_Init_thread, etc.
           aux_wrapper &&
           could_instruments)
       {
@@ -265,7 +265,7 @@ static void routineCallback(RTN rtn, void* v)
          RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_CONTEXT, IARG_BOOL, true, IARG_END);
          RTN_Close(rtn);
       }
-      if (rtn_name.find("MPI_Finalize") != string::npos &&
+      if (rtn_name.find("MPI_Finalize") != std::string::npos &&
           aux_wrapper &&
           could_instruments)
       {
@@ -286,7 +286,7 @@ static void routineCallback(RTN rtn, void* v)
           //|| strcmp ( rtn_name.c_str (), "OMPItrace_event" )== 0
       )
       {
-         cerr << "[SIFT_RECORDER:" << app_id << "] Extrae_event has been detected <" << rtn_name << ">." << endl;
+         std::cerr << "[SIFT_RECORDER:" << app_id << "] Extrae_event has been detected <" << rtn_name << ">." << std::endl;
          extrae_event_rtn = RTN_Funptr(rtn);
       }
    }
