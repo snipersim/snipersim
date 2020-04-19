@@ -1,4 +1,8 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
+# Necessary for tzdata
+ENV DEBIAN_FRONTEND=noninteractive
+ARG TZ_ARG=UTC
+ENV TZ=${TZ_ARG}
 # Add i386 support for support for Pin
 RUN dpkg --add-architecture i386
 RUN apt-get update && apt-get install -y \
@@ -20,7 +24,6 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     zlib1g-dev \
     libbz2-dev \
-    g++-4.8 \
  && rm -rf /var/lib/apt/lists/*
 # For building RISC-V Tools
 RUN apt-get update && apt-get install -y \
