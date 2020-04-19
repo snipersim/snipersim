@@ -87,7 +87,7 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    std::cerr << "[DEBUG:" << m_id << "] Write Header" << std::endl;
    #endif
 
-   Sift::Header hdr = { Sift::MagicNumber, 0 /* header size */, options, {}};
+   Sift::Header hdr = { Sift::MagicNumber, 0 /* header size */, options };
    output->write(reinterpret_cast<char*>(&hdr), sizeof(hdr));
    output->flush();
 

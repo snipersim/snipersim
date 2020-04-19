@@ -85,6 +85,12 @@ public:
 
    // Public operators
 
+   SubsecondTime& operator=(const SubsecondTime &rhs)
+   {
+      m_time = rhs.m_time;
+      return *this;
+   }
+
    // From http://www.stackoverflow.com/questions/4421706
    SubsecondTime& operator+=(const SubsecondTime &rhs)
    {
@@ -311,6 +317,12 @@ public:
    UInt64 getPeriodInFreqMHz(void) const
    {
       return SubsecondTime::US_1 / m_period.m_time;
+   }
+
+   ComponentPeriod& operator=(const ComponentPeriod &rhs)
+   {
+      m_period = rhs.m_period;
+      return *this;
    }
 
    // From http://www.stackoverflow.com/questions/1751869
