@@ -72,7 +72,7 @@ bool pinboost_backtrace(EXCEPTION_INFO *pExceptInfo, PHYSICAL_CONTEXT *pPhysCtxt
    //);
 
    char backtrace_filename[1024];
-   sprintf(backtrace_filename, "/tmp/debug_backtrace_%ld.out", syscall(__NR_gettid));
+   snprintf(backtrace_filename, 1023, "/tmp/debug_backtrace_%ld.out", syscall(__NR_gettid));
 
    FILE* fp = fopen(backtrace_filename, "w");
    // so addr2line can calculate the offset where we're really mapped
@@ -95,7 +95,7 @@ bool pinboost_backtrace(EXCEPTION_INFO *pExceptInfo, PHYSICAL_CONTEXT *pPhysCtxt
    }
 
    char cmd[1024];
-   sprintf(cmd, "%s/tools/gen_backtrace.py \"%s\" >&2", getenv("SNIPER_ROOT"), backtrace_filename);
+   snprintf(cmd, 1023, "%s/tools/gen_backtrace.py \"%s\" >&2", getenv("SNIPER_ROOT"), backtrace_filename);
 
    int rc = system(cmd);
    if (rc)

@@ -33,8 +33,8 @@ class SamplingManager
       void periodic(SubsecondTime time);
       void instr_count(core_id_t core_id);
 
-      static void hook_instr_count(SamplingManager *self, core_id_t core_id) { self->instr_count(core_id); }
-      static void hook_periodic(SamplingManager *self, subsecond_time_t time) { self->periodic(time); }
+      static int64_t hook_instr_count(uint64_t self, uint64_t core_id) { reinterpret_cast<SamplingManager *>(self)->instr_count(static_cast<core_id_t>(core_id)); return 0; }
+      static int64_t hook_periodic(uint64_t self, uint64_t time) { subsecond_time_t t; t.m_time = time; reinterpret_cast<SamplingManager *>(self)->periodic(t); return 0; }
 
    protected:
       friend class FastforwardPerformanceModel;
