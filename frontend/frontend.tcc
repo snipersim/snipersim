@@ -80,7 +80,7 @@ void ExecFrontend <T>::start()
 template <typename T>
 thread_data_t* Frontend<T>::m_thread_data;
 template <typename T> 
-shared_ptr<FrontendSyscallModel<T>> Frontend<T>::m_sysmodel;
+std::shared_ptr<FrontendSyscallModel<T>> Frontend<T>::m_sysmodel;
 template <typename T> 
 FrontendThreads<T>* Frontend<T>::m_threads;
 template <typename T> 
@@ -97,7 +97,7 @@ void Frontend <T>::init_frontend_modules(FrontendOptions<T>* options)
   new_threadid_lock = new FELock<T>;
   
   // Create Syscall module
-  m_sysmodel = shared_ptr<FrontendSyscallModel<T>>(new FrontendSyscallModel<T>(options, m_thread_data, new_threadid_lock, &(tidptrs)));
+  m_sysmodel = std::shared_ptr<FrontendSyscallModel<T>>(new FrontendSyscallModel<T>(options, m_thread_data, new_threadid_lock, &(tidptrs)));
   //m_sysmodel = std::make_shared<FrontendSyscallModel<T>>(options, m_thread_data, new_threadid_lock, &(tidptrs));
 
   // Create Control module

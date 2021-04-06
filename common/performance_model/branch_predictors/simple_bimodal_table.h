@@ -23,13 +23,13 @@ public:
       }
    }
 
-   bool predict(IntPtr ip, IntPtr target)
+   bool predict(bool indirect, IntPtr ip, IntPtr target)
    {
       UInt32 index = ip & m_mask;
       return (m_table[index].predict());
    }
 
-   void update(bool predicted, bool actual, IntPtr ip, IntPtr target)
+   void update(bool predicted, bool actual, bool indirect, IntPtr ip, IntPtr target)
    {
       UInt32 index = ip & m_mask;
       if (actual)

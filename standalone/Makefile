@@ -53,7 +53,7 @@ endif
 
 # These libraries are used by libcarbon, so add them to the end
 LD_LIBS += -lxed
-LD_FLAGS += -L$(XED_HOME)/lib -no-pie
+LD_FLAGS += -L$(XED_HOME)/lib
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cpp,%.d,$(patsubst %.c,%.d,$(patsubst %.cc,%.d,$(SOURCES))))

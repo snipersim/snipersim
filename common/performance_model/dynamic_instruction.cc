@@ -30,7 +30,7 @@ SubsecondTime DynamicInstruction::getBranchCost(Core *core, bool *p_is_mispredic
    BranchPredictor *bp = perf->getBranchPredictor();
    const ComponentPeriod *period = core->getDvfsDomain();
 
-   bool is_mispredict = core->accessBranchPredictor(eip, branch_info.taken, branch_info.target);
+   bool is_mispredict = core->accessBranchPredictor(eip, branch_info.taken, branch_info.is_indirect, branch_info.target);
    UInt64 cost = is_mispredict ? bp->getMispredictPenalty() : 1;
 
    if (p_is_mispredict)

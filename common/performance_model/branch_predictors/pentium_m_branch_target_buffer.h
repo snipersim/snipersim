@@ -35,7 +35,7 @@ public:
       , m_lru_use_count(0)
    {}
 
-   bool predict(IntPtr ip, IntPtr target)
+   bool predict(bool indirect, IntPtr ip, IntPtr target)
    {
       return false;
    }
@@ -59,7 +59,7 @@ public:
       return ret;
    }
 
-   void update(bool predicted, bool actual, IntPtr ip, IntPtr target)
+   void update(bool predicted, bool actual, bool indirect, IntPtr ip, IntPtr target)
    {
       // Start with way 0 as the least recently used
       UInt32 lru_way = 0;

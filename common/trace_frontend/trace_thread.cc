@@ -25,13 +25,6 @@
 
 #include <x86_decoder.h>  // TODO remove when the decode function in microop perf model is adapted
 
-//#if PIN_REV >= 67254
-//extern "C" {
-//#include "xed-decoded-inst-api.h"
-//}
-//#endif
-
-//bool TraceThread::xed_initialized = false;
 int TraceThread::m_isa = 0;
 
 TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracefile, String responsefile, app_id_t app_id, bool cleanup)
@@ -56,15 +49,6 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_started(false)
    , m_stopped(false)
 {
-
-   //if (!xed_initialized)
-   //{
-   //   xed_tables_init();
-   //   #if PIN_REV < 65163
-   //   xed_decode_init();
-   //   #endif
-   //   xed_initialized = true;
-   //}
 
    m_trace.setHandleInstructionCountFunc(TraceThread::__handleInstructionCountFunc, this);
    m_trace.setHandleCacheOnlyFunc(TraceThread::__handleCacheOnlyFunc, this);
@@ -425,7 +409,7 @@ Instruction* TraceThread::decode(Sift::Instruction &inst)
    instruction->setSize(inst.sinst->size);
    instruction->setAtomic(dec_inst.is_atomic());
    char disassembly[64];
-   dec_inst.disassembly_to_str(disassembly, sizeof(disassembly));  
+   dec_inst.disassembly_to_str();  
    instruction->setDisassembly(disassembly);
    //printf("%s\n", instruction->getDisassembly().c_str());
    
@@ -503,7 +487,7 @@ void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, 
       case Sift::CacheOnlyBranchNotTaken:
       {
          bool taken = (type == Sift::CacheOnlyBranchTaken);
-         bool mispredict = core->accessBranchPredictor(va2pa(eip), taken, va2pa(address));
+         bool mispredict = core->accessBranchPredictor(va2pa(eip), taken, false, va2pa(address));
          if (mispredict)
             core->getPerformanceModel()->handleBranchMispredict();
          break;
@@ -554,7 +538,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
 
    if (inst.is_branch)
    {
-      bool mispredict = core->accessBranchPredictor(va2pa(inst.sinst->addr), inst.taken, va2pa(next_inst.sinst->addr));
+      bool mispredict = core->accessBranchPredictor(va2pa(inst.sinst->addr), inst.taken, dec_inst.is_indirect_branch(), va2pa(next_inst.sinst->addr));
       if (mispredict)
          core->getPerformanceModel()->handleBranchMispredict();
    }
@@ -662,7 +646,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
 
    if (inst.is_branch)
    {
-      dynins->addBranch(inst.taken, va2pa(next_inst.sinst->addr));
+      dynins->addBranch(inst.taken, va2pa(next_inst.sinst->addr), dec_inst.is_indirect_branch());
    }
 
    // Ignore memory-referencing operands in NOP instructions

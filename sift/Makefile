@@ -28,9 +28,6 @@ all : $(TARGET) siftdump recorder
 
 include ../common/Makefile.common
 
-#XED_HOME=$(wildcard $(PIN_HOME)/extras/xed-$(SNIPER_TARGET_ARCH) $(PIN_HOME)/extras/xed2-$(SNIPER_TARGET_ARCH))
-
-#CXXFLAGS+=-fPIC -I$(XED_HOME)/include $(CXXFLAGS_ARCH)
 CXXFLAGS+=-fPIC $(CXXFLAGS_ARCH)
 
 %.o : %.cc $(wildcard *.h) Makefile
@@ -44,7 +41,6 @@ $(TARGET) : $(OBJECTS)
 siftdump : siftdump.o $(TARGET)
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L. -lsift -lz
-	#$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L$(XED_HOME)/lib -L. -lsift -lxed -lz
 
 recorder : $(TARGET)
 	@$(MAKE) $(MAKE_QUIET) -C recorder

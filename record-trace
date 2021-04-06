@@ -10,7 +10,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print 'Collect SIFT instruction trace'
   print 'Usage:'
-  print '  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--isa=<ia32|x86_64|arm32|arm64>] [--ncores=(default=1)>] [--maxthreads] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0]
+  print '  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--maxthreads] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0]
   sys.exit(2)
 
 # From http://stackoverflow.com/questions/6767649/how-to-get-process-status-using-pid
@@ -25,7 +25,6 @@ import time
 usleep = lambda x: time.sleep(x/1000000.0)
 
 outputfile = 'trace'
-ncores = 1
 use_roi = False
 roi_mpi = False
 fastforward = 0
@@ -48,7 +47,6 @@ verbose = False
 extra_args = []
 frontend = None
 frontend_options = []
-isa = None
 use_pid = None
 pid_continue = False
 stop_address = 0
@@ -58,7 +56,7 @@ if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "isa=", "ncores=", "maxthreads=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -119,10 +117,6 @@ for o, a in opts:
     frontend = a
   if o == '--frontend-option':
     frontend_options.append(a)
-  if o == '--isa':
-    isa = a
-  if o == '--ncores':
-    ncores = int(a)
   if o == '--pid':
     use_pid = int(a)
   if o == '--stop-address':
@@ -203,12 +197,9 @@ value_routine_tracing = use_routine_tracing and 1 or 0
 value_verbose = verbose and 1 or 0
 extra_args = ' '.join(extra_args)
 if frontend:
-  if not isa:  # default ISA value
-    isa = 'x86_64'
   if 'pin' in frontend:
     print '[RECORD-TRACE] Using Pin frontend (frontend/pin-frontend)'
     cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/frontend/pin-frontend/obj-%(arch)s/pin_frontend -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
-        #  cmd = '%(HOME)s/qemu/qemu-linaro-install/bin/qemu-x86_64 ' % locals() + ' '.join(cmdline)
   elif 'dr' in frontend:
     print '[RECORD-TRACE] Using DynamoRIO frontend'
     DRRUN = '%(dynamorio_home)s/bin64/drrun' % locals()

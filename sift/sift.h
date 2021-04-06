@@ -8,10 +8,6 @@
 #include <cstdint>
 #include <cstddef>
 
-//extern "C" {
-//#include "xed-interface.h"
-//}
-
 namespace Sift
 {
    const uint32_t MAX_DYNAMIC_ADDRESSES = 2;

@@ -46,7 +46,7 @@ export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 # Include paths
 CPPFLAGS+=$(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
           -I$(SIM_ROOT)/python_kit/$(SNIPER_TARGET_ARCH)/include/python2.7 \
-          -I$(SIM_ROOT)/capstone/include 
+          -I$(SIM_ROOT)/capstone/include -I$(SIM_ROOT)/capstone/include/capstone 
 
 CXXFLAGS+=-c \
           -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++11 -fno-strict-aliasing $(OPT_CFLAGS) #-Werror	  

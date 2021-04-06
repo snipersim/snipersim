@@ -1,7 +1,7 @@
 namespace frontend
 {
 
-template <typename T> inline FrontendControl<T>::FrontendControl(FrontendOptions<T>* opts, thread_data_t* td, shared_ptr<FrontendSyscallModel<T>> sysmodel)
+template <typename T> inline FrontendControl<T>::FrontendControl(FrontendOptions<T>* opts, thread_data_t* td, std::shared_ptr<FrontendSyscallModel<T>> sysmodel)
 : in_roi(false)
 , any_thread_in_detail(false)
 {

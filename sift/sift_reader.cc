@@ -16,8 +16,6 @@
 #define VERBOSE_HEX 0
 #define VERBOSE_ICACHE 0
 
-//bool Sift::Reader::xed_initialized = false;
-
 Sift::Reader::Reader(const char *filename, const char *response_filename, uint32_t id)
    : input(NULL)
    , response(NULL)
@@ -51,15 +49,6 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
    , m_last_sinst(NULL)
    , m_isa(0)
 {
-//   if (!xed_initialized)
-//   {
-//      xed_tables_init();
-//      #if PIN_REV < 65163
-//      xed_decode_init();
-//      #endif
-//      xed_initialized = true;
-//   }
-
    m_filename = strdup(filename);
    m_response_filename = strdup(response_filename);
 
@@ -132,15 +121,8 @@ bool Sift::Reader::initStream()
 
    if (hdr.options & ArchIA32)
    {
-      //xed_state_t init = { XED_MACHINE_MODE_LONG_COMPAT_32, XED_ADDRESS_WIDTH_32b };
-      //m_xed_state_init = init;
       hdr.options &= ~ArchIA32;
    }
-   //else
-   //{
-   //   xed_state_t init = { XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b };
-   //   m_xed_state_init = init;
-   //}
 
    if (hdr.options & PhysicalAddress)
    {
@@ -685,11 +667,6 @@ const Sift::StaticInstruction* Sift::Reader::staticInfoInstruction(uint64_t addr
       size -= _size;
       base_addr += ICACHE_SIZE;
    }
-
-   //xed_state_t xed_state = m_xed_state_init;
-   //xed_decoded_inst_zero_set_mode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), &xed_state);
-   //xed_error_enum_t result = xed_decode(const_cast<xed_decoded_inst_t*>(&sinst->xed_inst), sinst->data, sinst->size);
-   //assert(result == XED_ERROR_NONE);
 
    return sinst;
 }

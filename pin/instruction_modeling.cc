@@ -62,7 +62,7 @@ void InstructionModeling::handleBasicBlock(THREADID thread_id)
 static void handleBranch(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
 {
    assert(localStore[thread_id].dynins);
-   localStore[thread_id].dynins->addBranch(taken, target);
+   localStore[thread_id].dynins->addBranch(taken, target, false);
 }
 
 static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADDRINT target)
@@ -71,7 +71,7 @@ static void handleBranchWarming(THREADID thread_id, ADDRINT eip, BOOL taken, ADD
    assert(core);
    PerformanceModel *prfmdl = core->getPerformanceModel();
 
-   bool mispredict = core->accessBranchPredictor(eip, taken, target);
+   bool mispredict = core->accessBranchPredictor(eip, taken, false, target);
    if (mispredict)
       prfmdl->handleBranchMispredict();
 }

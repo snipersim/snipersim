@@ -47,7 +47,6 @@ def usage():
         '  |  --pid=<process-pid>' + \
         '  |  [--sift]' + \
         '  |  [--frontend=]' + \
-        '  |  [--isa=ia32|x86_64]' + \
         '  -- <cmdline> }'
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
@@ -100,7 +99,6 @@ pinballs = None
 pinball_sift = True
 pinplay_addrtrans = False
 use_sift = True
-isa = None
 frontend = None
 use_pid = None
 tracegen = None
@@ -222,7 +220,6 @@ try:
       "pinballs=", "pinball-non-sift", "pinplay-addr-trans",
       "sift",
       "pid=",
-      "isa=",
       "frontend=",
     ] + record_trace_passthrough
   )
@@ -352,8 +349,6 @@ for o, a in opts:
   if o == '--pid':
     use_pid = a
     use_sift = True
-  if o == '--isa':
-    isa = a
   if o == '--frontend':
     frontend = a
     use_sift = True
@@ -629,8 +624,6 @@ if tracegen:
     trace_extra_args += [ '--pinplay-addr-trans' ]
   if frontend:
     trace_extra_args += [ '--frontend=%(frontend)s' % locals()]
-    trace_extra_args += [ '--isa=%(isa)s' % locals()]
-    trace_extra_args += [ '--ncores=%(ncores)u' % locals()]
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
     tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     tracecmds.append(tracecmd)

@@ -17,18 +17,25 @@ SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW
 
 all: message dependencies $(SIM_TARGETS) configscripts
 
+include common/Makefile.common
+
 dependencies: package_deps xed pin python mcpat linux builddir showdebugstatus
+ifeq ($(BUILD_ARM),1)
+dependencies: capstone
+.PHONY: capstone
+endif
 
 $(SIM_TARGETS): dependencies
 
-include common/Makefile.common
-
 message:
-ifeq ($(BUILD_RISCV),0)
-	@echo Building for x86 \($(SNIPER_TARGET_ARCH)\)
-else
-	@echo Building for x86 \($(SNIPER_TARGET_ARCH)\) and RISCV
+	@echo -n Building for x86 \($(SNIPER_TARGET_ARCH)\)
+ifeq ($(BUILD_RISCV),1)
+	@echo -n " and RISCV"
 endif
+ifeq ($(BUILD_ARM),1)
+	@echo -n " and arm64"
+endif
+	@echo ""
 
 $(STANDALONE): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/standalone
@@ -52,6 +59,21 @@ $(LIB_SIFT): $(LIB_CARBON)
 
 $(LIB_DECODER): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/decoder_lib 
+
+CAPSTONE_GITID=f9c6a90489be7b3637ff1c7298e45efafe7cf1b9
+CAPSTONE_INSTALL=$(SIM_ROOT)/capstone
+CAPSTONE_INSTALL_DEP=$(CAPSTONE_INSTALL)/arch/AArch64/ARMMappingInsnOp.inc
+$(CAPSTONE_INSTALL_DEP):
+	$(_MSG) '[DOWNLO] capstone'
+	$(_CMD) git clone --quiet https://github.com/aquynh/capstone.git $(CAPSTONE_INSTALL)
+	$(_CMD) git -C $(CAPSTONE_INSTALL) reset --quiet --hard $(CAPSTONE_GITID)
+
+CAPSTONE_BUILD_DEP=$(CAPSTONE_INSTALL)/libcapstone.so.4
+capstone: $(CAPSTONE_BUILD_DEP)
+$(CAPSTONE_BUILD_DEP): $(CAPSTONE_INSTALL_DEP)
+	$(_MSG) '[INSTAL] capstone'
+	$(_CMD) cd $(CAPSTONE_INSTALL) ; ./make.sh
+
 
 MBUILD_GITID=1651029643b2adf139a8d283db51b42c3c884513
 MBUILD_INSTALL=$(SIM_ROOT)/mbuild

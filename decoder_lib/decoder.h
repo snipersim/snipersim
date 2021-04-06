@@ -12,7 +12,9 @@ namespace dl
 /// Supported architectures
 typedef enum dl_arch {
   DL_ARCH_INTEL,
-  DL_ARCH_RISCV
+  DL_ARCH_RISCV,
+  DL_ARCH_ARMv7,
+  DL_ARCH_ARMv8
 } dl_arch;
 
 /// Supported modes
@@ -33,7 +35,11 @@ typedef enum dl_syntax {
 typedef enum dl_isa {
   DL_ISA_IA32,
   DL_ISA_X86_64,
-  DL_ISA_RISCV
+  DL_ISA_RISCV,
+  DL_ISA_ARM32,   // ARM ISA on ARMv7 architecture
+  DL_ISA_THUMB,   // ARM's Thumb and Thumb2
+  DL_ISA_AARCH64,
+  DL_ISA_V8_32   // ARMv8 32-bit mode
 } dl_isa;
   
 class DecodedInst;
@@ -81,6 +87,12 @@ class Decoder
     
     /// Get the base register of the memory operand pointed by mem_idx
     virtual decoder_reg mem_base_reg (const DecodedInst * inst, unsigned int mem_idx) = 0;
+
+    /// Check if the base register of the memory operand pointed by mem_idx is also updated
+    virtual bool mem_base_upate(const DecodedInst* inst, unsigned int mem_idx) = 0;
+
+    /// Check if the memory operand pointed by mem_idx has an index register
+    virtual bool has_index_reg (const DecodedInst * inst, unsigned int mem_idx) = 0;
 
     /// Get the index register of the memory operand pointed by mem_idx
     virtual decoder_reg mem_index_reg (const DecodedInst * inst, unsigned int mem_idx) = 0;
@@ -141,6 +153,9 @@ class Decoder
     /// Get the value of the last register in the enumeration
     virtual decoder_reg last_reg() = 0;
     
+    /// Get the input register mapped. Some registers can be mapped onto the lower bits of others.
+    virtual uint32_t map_register(decoder_reg reg) = 0;
+
     /// Get the target architecture of the decoder
     dl_arch get_arch();
 
@@ -149,6 +164,18 @@ class Decoder
 
     /// Get the target syntax of the decoder
     dl_syntax get_syntax();
+
+    ///Get the number of implicit registers that are read by the instruction
+    virtual unsigned int num_read_implicit_registers(const DecodedInst* inst) = 0;
+    ///Get the idx implicit source register
+    virtual decoder_reg get_read_implicit_reg(const DecodedInst* inst, unsigned int idx) = 0;
+
+    ///Get the number of implicit registers that are written by the instruction
+    virtual unsigned int num_write_implicit_registers(const DecodedInst* inst) = 0;
+    ///Get the idx implicit destiny register
+    virtual decoder_reg get_write_implicit_reg(const DecodedInst* inst, unsigned int idx) = 0;
+
+    virtual void print_implicit(const DecodedInst* inst) {}
     
   protected:
     dl_arch m_arch;
@@ -172,7 +199,7 @@ class DecodedInst
     virtual unsigned int inst_num_id() const = 0;
     
     /// Get an string with the disassembled instruction
-    virtual void disassembly_to_str(char *, int) const = 0;
+    virtual std::string disassembly_to_str() const = 0;
     
     /// Check if this instruction is a NOP
     virtual bool is_nop() const = 0;
@@ -187,7 +214,10 @@ class DecodedInst
     virtual bool is_serializing() const = 0;
 
     /// Check if this instruction is a conditional branch
-    virtual bool is_conditional_branch() const = 0;
+    virtual bool is_conditional_branch() const = 0;    
+    
+    /// Check if this instruction is an indirect branch
+    virtual bool is_indirect_branch() const = 0;
 
     /// Check if this instruction is a fence/barrier-type
     virtual bool is_barrier() const = 0;
@@ -204,6 +234,8 @@ class DecodedInst
     
     /// Check if this instruction loads or stores pairs of registers using a memory address (ARM)
     virtual bool is_mem_pair() const = 0;
+
+    virtual bool is_writeback() const = 0;
     
   protected:
     /// True if the decoding phase has already happened
@@ -220,6 +252,9 @@ class DecodedInst
     
     /// Instruction's address
     uint64_t m_address;
+    
+    /// Instruction's disassembly text
+    std::string m_disassembly;
 };
 
 class DecoderFactory

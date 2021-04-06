@@ -84,7 +84,7 @@ class Core
       ~Core();
 
       // Query and update branch predictor, return true on mispredict
-      bool accessBranchPredictor(IntPtr eip, bool taken, IntPtr target);
+      bool accessBranchPredictor(IntPtr eip, bool taken, bool indirect, IntPtr target);
 
       MemoryResult readInstructionMemory(IntPtr address,
             UInt32 instruction_size);

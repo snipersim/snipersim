@@ -10,6 +10,9 @@
 # vi temp files
 *.swp
 
+# patch rejections
+*.rej
+
 # test output
 *.log
 sim.out
@@ -61,3 +64,9 @@ mbuild
 # Pin3 output
 frontend/pin-frontend/obj-intel64
 sift/recorder/obj-intel64
+
+# Symlinked SIFT files
+frontend/pin-frontend/sift/*.h
+frontend/pin-frontend/sift/*.cc
+sift/recorder/sift/*.h
+sift/recorder/sift/*.cc

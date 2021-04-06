@@ -12,6 +12,8 @@ void RegisterDependencies::setDependencies(DynamicMicroOp& microOp, uint64_t low
    for(uint32_t i = 0; i < microOp.getMicroOp()->getSourceRegistersLength(); i++)
    {
       dl::Decoder::decoder_reg sourceRegister = microOp.getMicroOp()->getSourceRegister(i);
+      uint32_t mappedRegister = Sim()->getDecoder()->map_register(sourceRegister);
+
       uint64_t producerSequenceNumber;
       LOG_ASSERT_ERROR(sourceRegister < Sim()->getDecoder()->last_reg(), "Source register src[%u]=%u is invalid", i, sourceRegister);
       if ((producerSequenceNumber = producers[sourceRegister]) != INVALID_SEQNR)
@@ -22,7 +24,7 @@ void RegisterDependencies::setDependencies(DynamicMicroOp& microOp, uint64_t low
          }
          else
          {
-            producers[sourceRegister] = INVALID_SEQNR;
+            producers[mappedRegister] = INVALID_SEQNR;
          }
       }
    }

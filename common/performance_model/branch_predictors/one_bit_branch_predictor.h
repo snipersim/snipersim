@@ -11,8 +11,8 @@ public:
    OneBitBranchPredictor(String name, core_id_t core_id, UInt32 size);
    ~OneBitBranchPredictor();
 
-   bool predict(IntPtr ip, IntPtr target);
-   void update(bool predicted, bool actual, IntPtr ip, IntPtr target);
+   bool predict(bool indirect, IntPtr ip, IntPtr target);
+   void update(bool predicted, bool actual, bool indirect, IntPtr ip, IntPtr target);
 
 private:
    std::vector<bool> m_bits;

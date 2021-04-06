@@ -9,6 +9,7 @@
 #include "frontend_control.h"
 #include "frontend_options.h"
 #include <deque>
+#include <memory>
 
 
 namespace frontend

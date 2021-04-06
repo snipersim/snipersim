@@ -11,7 +11,7 @@ thread_data_t* FrontendControl<T>::m_thread_data;
 template <typename T>
 FrontendOptions<T>* FrontendControl<T>::m_options;
 template <typename T>
-shared_ptr<FrontendSyscallModel<T>> FrontendControl<T>::m_sysmodel;
+std::shared_ptr<FrontendSyscallModel<T>> FrontendControl<T>::m_sysmodel;
 
 template <typename T>
 void FrontendControl <T>::setInstrumentationMode(Sift::Mode mode)

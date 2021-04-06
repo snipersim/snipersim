@@ -10,11 +10,6 @@
 
 #include <decoder.h>
 
-//extern "C" {
-//#include <xed-iclass-enum.h>
-//#include <xed-reg-enum.h>
-//}
-
 #include <vector>
 
 class Instruction;
@@ -210,7 +205,9 @@ struct MicroOp
    String toString() const;
    String toShortString(bool withDisassembly = false) const;
 
-   bool isExecute() const { return uop_type == UOP_EXECUTE; };
+   bool isExecute() const { return uop_type == UOP_EXECUTE; }
+
+   bool isWriteback() const { return decodedInstruction->is_writeback(); }
 
    uop_type_t getType() const { return uop_type; }
 

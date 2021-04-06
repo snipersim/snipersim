@@ -12,8 +12,8 @@ public:
    BranchPredictor(String name, core_id_t core_id);
    virtual ~BranchPredictor();
 
-   virtual bool predict(IntPtr ip, IntPtr target) = 0;
-   virtual void update(bool predicted, bool actual, IntPtr ip, IntPtr target) = 0;
+   virtual bool predict(bool indirect, IntPtr ip, IntPtr target) = 0;
+   virtual void update(bool predicted, bool actual, bool indirect, IntPtr ip, IntPtr target) = 0;
 
    UInt64 getMispredictPenalty();
    static BranchPredictor* create(core_id_t core_id);

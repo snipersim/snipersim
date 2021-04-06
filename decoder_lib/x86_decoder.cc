@@ -73,12 +73,12 @@ void X86Decoder::change_isa_mode(dl_isa new_isa)
  
 const char* X86Decoder::inst_name(unsigned int inst_id)
 {
-  return xed_iclass_enum_t2str(static_cast<xed_iclass_enum_t>(inst_id));
+  return xed_iclass_enum_t2str(static_cast<const xed_iclass_enum_t>(inst_id));
 }
  
 const char* X86Decoder::reg_name(unsigned int reg_id)
 {
-  return xed_reg_enum_t2str(static_cast<xed_reg_enum_t>(reg_id));
+  return xed_reg_enum_t2str(static_cast<const xed_reg_enum_t>(reg_id));
 }
 
 Decoder::decoder_reg X86Decoder::largest_enclosing_register(Decoder::decoder_reg r)
@@ -504,6 +504,7 @@ X86DecodedInst::X86DecodedInst(Decoder* d, const uint8_t * code, size_t size, ui
   this->m_size = size;
   this->m_address = address;
   this->m_already_decoded = false;
+  this->set_disassembly();
 }
 
 xed_decoded_inst_t * X86DecodedInst::get_xed_inst()
@@ -516,9 +517,10 @@ unsigned int X86DecodedInst::inst_num_id() const
   return xed_decoded_inst_get_iclass(static_cast<const xed_decoded_inst_t*>(&(this->xed_inst)));
 }
 
-void X86DecodedInst::disassembly_to_str(char *str, int len) const
+void X86DecodedInst::set_disassembly()
 {
   xed_syntax_enum_t s;
+  char temp_buffer[64];
   
   // Choose the XED syntax
   switch(m_dec->get_syntax()){
@@ -535,9 +537,15 @@ void X86DecodedInst::disassembly_to_str(char *str, int len) const
   }
   
   // Disassemble the decoded instruction to out_buffer using the specified syntax
-  xed_format_context(s, (&(this->xed_inst)), str, 
-                      len - 1, this->m_address, 0, 0);
-  str[len-1] = '\0';
+  xed_format_context(s, (&(this->xed_inst)), temp_buffer, 
+                      sizeof(temp_buffer) - 1, this->m_address, 0, 0);
+  
+  m_disassembly.assign(temp_buffer, sizeof(temp_buffer));
+}
+
+std::string X86DecodedInst::disassembly_to_str() const
+{
+  return this->m_disassembly;
 }
 
 bool X86DecodedInst::is_nop() const
@@ -593,6 +601,24 @@ bool X86DecodedInst::is_conditional_branch() const
 {
   return xed_decoded_inst_get_category(
       static_cast<const xed_decoded_inst_t*>(&(this->xed_inst))) == XED_CATEGORY_COND_BR;
+}
+
+
+bool X86DecodedInst::is_indirect_branch() const
+{
+  bool is_b = false;
+  
+  switch(xed_decoded_inst_get_iclass(static_cast<const xed_decoded_inst_t*>(&(this->xed_inst))))
+  {
+    case XED_ICLASS_JMP:
+    case XED_ICLASS_JMP_FAR:
+      is_b = true;
+      break;
+    default:
+      break;
+  }
+  
+  return is_b;
 }
 
 bool X86DecodedInst::is_barrier() const

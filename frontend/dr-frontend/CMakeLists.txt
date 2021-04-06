@@ -47,10 +47,12 @@ if(NOT DEFINED ENV{SNIPER_HOME})
     message(FATAL_ERROR "Please define SNIPER_HOME environment variable")
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c\\+\\+11")
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c\\+\\+11")
 
 set(SNIPER_FRONTEND $ENV{SNIPER_HOME}/frontend)
-set(SNIPER_SIFT $ENV{SNIPER_HOME}/sift)
+set(SNIPER_SIFT $ENV{SNIPER_HOME}/dynamorio/clients/dr-frontend/sift)
 
 include_directories(${SNIPER_FRONTEND} ${SNIPER_SIFT})
 
@@ -71,7 +73,7 @@ add_library(dr-frontend SHARED
 # sniper's libraries and others
 find_library(libz z)
 target_link_libraries(dr-frontend 
-        $ENV{SNIPER_HOME}/sift/libsift.a
+        $ENV{SNIPER_HOME}/dynamorio/clients/dr-frontend/sift/libsift.a
         ${libz})
 
 configure_DynamoRIO_client(dr-frontend)

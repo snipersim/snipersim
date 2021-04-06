@@ -11,13 +11,13 @@ OneBitBranchPredictor::~OneBitBranchPredictor()
 {
 }
 
-bool OneBitBranchPredictor::predict(IntPtr ip, IntPtr target)
+bool OneBitBranchPredictor::predict(bool indirect, IntPtr ip, IntPtr target)
 {
    UInt32 index = ip % m_bits.size();
    return m_bits[index];
 }
 
-void OneBitBranchPredictor::update(bool predicted, bool actual, IntPtr ip, IntPtr target)
+void OneBitBranchPredictor::update(bool predicted, bool actual, bool indirect, IntPtr ip, IntPtr target)
 {
    updateCounters(predicted, actual);
    UInt32 index = ip % m_bits.size();

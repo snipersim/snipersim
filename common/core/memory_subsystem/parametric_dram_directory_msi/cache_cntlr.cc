@@ -1,5 +1,4 @@
-#include "cache_cntlr.h"
-#include "log.h"
+﻿#include "log.h"
 #include "memory_manager.h"
 #include "core_manager.h"
 #include "simulator.h"
@@ -202,8 +201,19 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       m_master = getMemoryManager()->getCacheCntlrAt(m_core_id_master, mem_component)->m_master;
    }
 
-   if (m_master->m_prefetcher)
+   if (m_master->m_prefetcher) {
       m_prefetch_on_prefetch_hit = Sim()->getCfg()->getBoolArray("perf_model/" + cache_params.configName + "/prefetcher/prefetch_on_prefetch_hit", core_id);
+      if (Sim()->getCfg()->hasKey("perf_model/" + cache_params.configName + "/prefetcher/train_prefetcher_on_hit", core_id)) {
+         m_train_prefetcher_on_hit = Sim()->getCfg()->getBoolArray("perf_model/" + cache_params.configName + "/prefetcher/train_prefetcher_on_hit", core_id);
+      }
+      else
+         m_train_prefetcher_on_hit = true;
+      if (Sim()->getCfg()->hasKey("perf_model/" + cache_params.configName + "/prefetcher/delay_prefetcher", core_id)) {
+         m_prefetch_delay = Sim()->getCfg()->getBoolArray("perf_model/" + cache_params.configName + "/prefetcher/delay_prefetcher", core_id);
+      }
+      else
+         m_prefetch_delay = true;
+   }
 
    bzero(&stats, sizeof(stats));
 
@@ -444,6 +454,7 @@ MYLOG("L1 miss");
 
       SubsecondTime t_miss_begin = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
       SubsecondTime t_mshr_avail = t_miss_begin;
+
       if (modeled && m_l1_mshr && !m_passthrough)
       {
          ScopedLock sl(getLock());
@@ -509,7 +520,6 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
          #endif
       }
 
-
       /* data should now be in next-level cache, go get it */
       SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
       copyDataFromNextLevel(mem_op_type, ca_address, modeled, t_now);
@@ -544,10 +554,8 @@ MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
       }
    }
 
-
    accessCache(mem_op_type, ca_address, offset, data_buf, data_length, hit_where == HitWhere::where_t(m_mem_component) && count);
 MYLOG("access done");
-
 
    SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
    SubsecondTime total_latency = t_now - t_start;
@@ -584,10 +592,9 @@ MYLOG("access done");
          stats.loads_where[hit_where]++;
    }
 
-
    if (modeled && m_master->m_prefetcher)
    {
-      trainPrefetcher(ca_address, cache_hit, prefetch_hit, t_start);
+       trainPrefetcher(ca_address, cache_hit, prefetch_hit, false, t_start);
    }
 
    // Call Prefetch on next-level caches (but not for atomic instructions as that causes a locking mess)
@@ -637,6 +644,7 @@ MYLOG("copyDataFromNextLevel l%d", m_mem_component);
    {
       SubsecondTime delay = m_next_level_read_bandwidth.getRoundedLatency(getCacheBlockSize() * 8);
       SubsecondTime t_done = m_master->m_next_level_read_bandwidth.getCompletionTime(t_now, delay);
+
       // Assume cache access time already contains transfer latency, increment time by contention delay only
       LOG_ASSERT_ERROR(t_done >= t_now + delay, "Did not expect next-level cache to be this fast");
       getMemoryManager()->incrElapsedTime(t_done - t_now - delay, ShmemPerfModel::_USER_THREAD);
@@ -657,29 +665,38 @@ MYLOG("copyDataFromNextLevel l%d", m_mem_component);
    }
 }
 
-
 void
-CacheCntlr::trainPrefetcher(IntPtr address, bool cache_hit, bool prefetch_hit, SubsecondTime t_issue)
+CacheCntlr::trainPrefetcher(IntPtr address, bool cache_hit, bool prefetch_hit, bool prefetch_own, SubsecondTime t_issue)
 {
    ScopedLock sl(getLock());
 
-   // Always train the prefetcher
-   std::vector<IntPtr> prefetchList = m_master->m_prefetcher->getNextAddress(address, m_core_id);
+   std::vector<IntPtr> prefetchList;
+
+   bool prefetcherTrained;
+
+   // Train the prefetcher always or only on misses on lines that are not being brought by the prefetcher (load or store miss)
+   if (m_train_prefetcher_on_hit || (!prefetch_own && !cache_hit)) {
+      prefetchList = m_master->m_prefetcher->getNextAddress(address, m_core_id);
+      prefetcherTrained = true;
+   }
+   else prefetcherTrained = false;
 
    // Only do prefetches on misses, or on hits to lines previously brought in by the prefetcher (if enabled)
-   if (!cache_hit || (m_prefetch_on_prefetch_hit && prefetch_hit))
+   if (prefetcherTrained && (!cache_hit || (m_prefetch_on_prefetch_hit && prefetch_hit)))
    {
       m_master->m_prefetch_list.clear();
-      // Just talked to the next-level cache, wait a bit before we start to prefetch
-      m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
+
+      // Just talked to the next-level cache, wait a bit before we start to prefetch if enabled
+      m_master->m_prefetch_next = m_prefetch_delay ? t_issue + PREFETCH_INTERVAL:t_issue;
 
       for(std::vector<IntPtr>::iterator it = prefetchList.begin(); it != prefetchList.end(); ++it)
       {
          // Keep at most PREFETCH_MAX_QUEUE_LENGTH entries in the prefetch queue
          if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
             break;
-         if (!operationPermissibleinCache(*it, Core::READ))
+         if (!operationPermissibleinCache(*it, Core::READ)) {
             m_master->m_prefetch_list.push_back(*it);
+         }
       }
    }
 }
@@ -688,7 +705,7 @@ void
 CacheCntlr::Prefetch(SubsecondTime t_now)
 {
    IntPtr address_to_prefetch = INVALID_ADDRESS;
-
+   //IntPtr addresses_to_prefetch[32];
    {
       ScopedLock sl(getLock());
 
@@ -702,6 +719,7 @@ CacheCntlr::Prefetch(SubsecondTime t_now)
             // Check address again, maybe some other core already brought it into the cache
             if (!operationPermissibleinCache(address, Core::READ))
             {
+               //addresses_to_prefetch[count++] = address;
                address_to_prefetch = address;
                // Do at most one prefetch now, save the rest for a future call
                break;
@@ -712,6 +730,9 @@ CacheCntlr::Prefetch(SubsecondTime t_now)
 
    if (address_to_prefetch != INVALID_ADDRESS)
    {
+      /*for (int i = 0; i < count; ++i) {
+         doPrefetch(addresses_to_prefetch[i], m_master->m_prefetch_next);
+      }*/
       doPrefetch(address_to_prefetch, m_master->m_prefetch_next);
       atomic_add_subsecondtime(m_master->m_prefetch_next, PREFETCH_INTERVAL);
    }
@@ -1010,7 +1031,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
 
    if (modeled && m_master->m_prefetcher)
    {
-      trainPrefetcher(address, cache_hit, prefetch_hit, t_issue);
+      trainPrefetcher(address, cache_hit, prefetch_hit, isPrefetch == Prefetch::prefetch_type_t::OWN, t_issue);
    }
 
    #ifdef PRIVATE_L2_OPTIMIZATION

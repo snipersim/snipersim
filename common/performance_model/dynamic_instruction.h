@@ -24,6 +24,7 @@ class DynamicInstruction
       struct BranchInfo
       {
          bool is_branch;
+         bool is_indirect;
          bool taken;
          IntPtr target;
       };
@@ -74,9 +75,10 @@ class DynamicInstruction
          num_memory++;
       }
 
-      void addBranch(bool taken, IntPtr target)
+      void addBranch(bool taken, IntPtr target, bool indirect)
       {
          branch_info.is_branch = true;
+         branch_info.is_indirect = indirect;
          branch_info.taken = taken;
          branch_info.target = target;
       }

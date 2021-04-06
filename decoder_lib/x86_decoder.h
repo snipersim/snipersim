@@ -28,6 +28,8 @@ class X86Decoder : public Decoder
     virtual unsigned int num_operands (const DecodedInst * inst) override;
     virtual unsigned int num_memory_operands (const DecodedInst * inst) override;
     virtual decoder_reg mem_base_reg (const DecodedInst * inst, unsigned int mem_idx) override;
+    virtual bool mem_base_upate(const DecodedInst *inst, unsigned int mem_idx) override { return false; }
+    virtual bool has_index_reg (const DecodedInst * inst, unsigned int mem_idx) override { return true; }
     virtual decoder_reg mem_index_reg (const DecodedInst * inst, unsigned int mem_idx) override;
     virtual bool op_read_mem (const DecodedInst * inst, unsigned int mem_idx) override;
     virtual bool op_write_mem (const DecodedInst * inst, unsigned int mem_idx) override;
@@ -47,6 +49,11 @@ class X86Decoder : public Decoder
     virtual bool is_fpvector_muldiv_opcode(decoder_opcode opcd, const DecodedInst* ins) override;    
     virtual bool is_fpvector_ldst_opcode(decoder_opcode opcd, const DecodedInst* ins) override;
     virtual decoder_reg last_reg() override;
+    virtual uint32_t map_register(decoder_reg reg) override { return reg; }
+    virtual unsigned int num_read_implicit_registers(const DecodedInst *inst) override {return 0;}
+    virtual decoder_reg get_read_implicit_reg(const DecodedInst* inst, unsigned int idx) override { return 0; }
+    virtual unsigned int num_write_implicit_registers(const DecodedInst *inst) override {return 0; }
+    virtual decoder_reg get_write_implicit_reg(const DecodedInst *inst, unsigned int idx) override { return 0; }
 
   private:
     // Methods
@@ -64,19 +71,22 @@ class X86DecodedInst : public DecodedInst
     xed_decoded_inst_t * get_xed_inst();
     
     virtual unsigned int inst_num_id() const override;
-    virtual void disassembly_to_str(char *, int) const override;
+    virtual std::string disassembly_to_str() const override;
     virtual bool is_nop() const override;
     virtual bool is_atomic() const override;
     virtual bool is_prefetch() const override;
     virtual bool is_serializing() const override;
     virtual bool is_conditional_branch() const override;
+    virtual bool is_indirect_branch() const override;
     virtual bool is_barrier() const override;
     virtual bool src_dst_merge() const override;
     virtual bool is_X87() const override;
     virtual bool has_modifiers() const override;
     virtual bool is_mem_pair() const override;
+    virtual bool is_writeback() const override { return false; }
 
   private:
+    void set_disassembly();
     xed_decoded_inst_t xed_inst;
 
 };

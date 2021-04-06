@@ -18,6 +18,10 @@ ifeq ($(BUILD_RISCV),0)
 OBJECTS:=$(filter-out riscv%,$(OBJECTS))
 endif
 
+ifeq ($(BUILD_ARM),0)
+OBJECTS:=$(filter-out arm%,$(OBJECTS))
+endif
+
 all : $(TARGET) 
 
 include ../common/Makefile.common
@@ -27,7 +31,7 @@ include ../common/Makefile.common
 #CC=gcc-5
 #CXX=g++-5
 
-CXXFLAGS+=-std=c++1y -fPIC -I$(XED_HOME)/include/xed -I$(RV8_HOME)/src $(CXXFLAGS_ARCH) -DBUILD_RISCV=$(BUILD_RISCV)
+CXXFLAGS+=-std=c++1y -fPIC -I$(XED_HOME)/include/xed -I$(RV8_HOME)/src $(CXXFLAGS_ARCH) -DBUILD_RISCV=$(BUILD_RISCV) -DBUILD_ARM=$(BUILD_ARM)
 # When compiling Sniper with gcc-4.9, we need to add this compatibility option to allow linking to those binaries
 # Add compatibility with the rest of the compiled code
 #CXXFLAHS+=-fabi-version=2

@@ -6,6 +6,7 @@
 #include "frontend_threads.h"
 #include "frontend_utils.h"
 #include "frontend_syscall.h"
+#include <memory>
 
 namespace frontend
 {
@@ -20,7 +21,7 @@ template <typename T> class FrontendControl
 {
   public:
   /// Constructor
-  FrontendControl<T>(FrontendOptions<T>* opts, thread_data_t* td, shared_ptr<FrontendSyscallModel<T>> sysmodel);
+  FrontendControl<T>(FrontendOptions<T>* opts, thread_data_t* td, std::shared_ptr<FrontendSyscallModel<T>> sysmodel);
 
   /// Destructor
   ~FrontendControl<T>();
@@ -72,7 +73,7 @@ template <typename T> class FrontendControl
   static thread_data_t* m_thread_data;
   
   /// Syscall modeling module
-  static shared_ptr<FrontendSyscallModel<T>> m_sysmodel;
+  static std::shared_ptr<FrontendSyscallModel<T>> m_sysmodel;
 
   // Methods
   /// Eliminate instrumentation from the running application -- might be optionally specialized

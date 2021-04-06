@@ -213,6 +213,8 @@ namespace ParametricDramDirectoryMSI
          bool m_passthrough;
          bool m_coherent;
          bool m_prefetch_on_prefetch_hit;
+         bool m_train_prefetcher_on_hit;
+         bool m_prefetch_delay;
          bool m_l1_mshr;
 
          struct {
@@ -284,7 +286,7 @@ namespace ParametricDramDirectoryMSI
                IntPtr address, Core::mem_op_t mem_op_type, CacheBlockInfo **cache_block_info = NULL);
 
          void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_start);
-         void trainPrefetcher(IntPtr address, bool cache_hit, bool prefetch_hit, SubsecondTime t_issue);
+         void trainPrefetcher(IntPtr address, bool cache_hit, bool prefetch_hit, bool prefetch_own, SubsecondTime t_issue);
          void Prefetch(SubsecondTime t_start);
          void doPrefetch(IntPtr prefetch_address, SubsecondTime t_start);
 
