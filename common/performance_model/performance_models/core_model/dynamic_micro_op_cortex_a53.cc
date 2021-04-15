@@ -1,6 +1,10 @@
 #include "dynamic_micro_op_cortex_a53.h"
 #include "micro_op.h"
 
+#if SNIPER_ARM == 0
+
+#else /* SNIPER_ARM == 1 */
+
 #include <capstone.h>
 
 const char* DynamicMicroOpCortexA53::getType() const
@@ -127,3 +131,5 @@ DynamicMicroOpCortexA53::DynamicMicroOpCortexA53(const MicroOp *uop, const CoreM
     , uop_issue_slot(getIssueSlot(uop))
 {
 }
+
+#endif /* SNIPER_ARM */

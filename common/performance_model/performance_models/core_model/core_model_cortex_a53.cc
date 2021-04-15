@@ -6,6 +6,10 @@
 #include "config.hpp"
 #include "simulator.h"
 
+#if SNIPER_ARM == 0
+
+#else /* SNIPER_ARM == 1 */
+
 #include <capstone.h>
 #include <decoder.h>
 
@@ -484,3 +488,5 @@ DynamicMicroOp* CoreModelCortexA53::createDynamicMicroOp(Allocator *alloc, const
     info->uop_alu = DynamicMicroOpCortexA53::getAlu(uop);
     return info;
 }
+
+#endif /* SNIPER_ARM */

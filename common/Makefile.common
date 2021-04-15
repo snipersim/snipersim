@@ -26,6 +26,18 @@ endif
 
 CXXFLAGS += -DPIN_REV=$(shell $(SIM_ROOT)/tools/pinversion.py $(PIN_HOME) | cut -d. -f3)
 
+ifeq ($(BUILD_RISCV),0)
+CXXFLAGS += -DSNIPER_RISCV=0
+else
+CXXFLAGS += -DSNIPER_RISCV=1
+endif
+
+ifeq ($(BUILD_ARM),0)
+CXXFLAGS += -DSNIPER_ARM=0
+else
+CXXFLAGS += -DSNIPER_ARM=1
+endif
+
 include $(SIM_ROOT)/Makefile.config
 
 ifneq ($(BOOST_INCLUDE),)
