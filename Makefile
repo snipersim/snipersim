@@ -19,7 +19,7 @@ all: message dependencies $(SIM_TARGETS) configscripts
 
 include common/Makefile.common
 
-dependencies: package_deps xed pin python mcpat linux builddir showdebugstatus
+dependencies: package_deps pin_kit pin xed python mcpat linux builddir showdebugstatus
 ifeq ($(BUILD_ARM),1)
 dependencies: capstone
 .PHONY: capstone
@@ -99,6 +99,16 @@ $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
 
+PIN_DOWNLOAD=https://software.intel.com/sites/landingpage/pintool/downloads/pin-3.18-98332-gaebd7b1e6-gcc-linux.tar.gz
+PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
+pin_kit: $(PIN_DEP)
+$(PIN_DEP):
+	$(_MSG) '[DOWNLO] Pin 3.18-98332'
+	$(_CMD) mkdir -p $(PIN_HOME)
+	$(_CMD) wget -O - --no-verbose --quiet $(PIN_DOWNLOAD) | tar -x -z --strip-components 1 -C $(PIN_HOME)
+	$(_CMD) touch $(PIN_HOME)/.autodownloaded
+
+
 ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=71313
 pin: $(PIN_HOME)/intel64/bin/pinbin $(PIN_HOME)/source/tools/Config/makefile.config package_deps
@@ -174,10 +184,12 @@ clean: empty_config empty_deps
 	$(_MSG) '[CLEAN ] tools'
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C tools clean
 	$(_MSG) '[CLEAN ] frontend/pin-frontend'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C frontend/pin-frontend clean
+	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C frontend/pin-frontend clean ; fi
 	$(_CMD) rm -f .build_os
 
 distclean: clean
+	$(_MSG) '[DISTCL] Pin kit'
+	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
 	$(_MSG) '[DISTCL] python_kit'
 	$(_CMD) rm -rf python_kit
 	$(_MSG) '[DISTCL] McPAT'

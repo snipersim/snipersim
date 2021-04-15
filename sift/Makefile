@@ -48,7 +48,7 @@ recorder : $(TARGET)
 clean :
 	$(_CMD) rm -f *.o *.d $(TARGET) siftdump
 	$(_MSG) '[CLEAN ] sift/recorder'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C recorder clean
+	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C recorder clean ; fi
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cc,%.d,$(SOURCES))
