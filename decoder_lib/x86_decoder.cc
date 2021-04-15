@@ -504,7 +504,8 @@ X86DecodedInst::X86DecodedInst(Decoder* d, const uint8_t * code, size_t size, ui
   this->m_size = size;
   this->m_address = address;
   this->m_already_decoded = false;
-  this->set_disassembly();
+  // this->xed_inst is not initialized, do not try to get its disassembly
+  //this->set_disassembly();
 }
 
 xed_decoded_inst_t * X86DecodedInst::get_xed_inst()
