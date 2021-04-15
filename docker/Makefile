@@ -19,9 +19,9 @@ BUILD_ALL_TARGETS=$(foreach f,$(DOCKER_FILES),$(f).build)
 build-all: $(BUILD_ALL_TARGETS)
 
 run-root:
-	docker run --privileged --rm -it -v "${HOME}:${HOME}" $(DOCKER_IMAGE)
+	docker run --rm -it -v "${HOME}:${HOME}" $(DOCKER_IMAGE)
 
 run:
-	docker run --privileged --rm -it -v "${HOME}:${HOME}" --user $(shell id -u):$(shell id -g) -w "${PWD}" $(DOCKER_IMAGE)
+	docker run --rm -it -v "${HOME}:${HOME}" --user $(shell id -u):$(shell id -g) -w "${PWD}" $(DOCKER_IMAGE)
 
 .PHONY: all build-all run-root run
