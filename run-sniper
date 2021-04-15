@@ -214,13 +214,14 @@ try:
       "save-output", "save-patch",
       "curdir=",
       "pin-stats",
-      "traces=", "response-traces=", "trace-manual", "trace-args=",
+      "traces=", "response-traces=", "trace-manual", "trace-args=", "trace-pin-args=",
       "sim-end=",
       "mpi", "mpi-ranks=", "mpi-exec=",
       "pinballs=", "pinball-non-sift", "pinplay-addr-trans",
       "sift",
       "pid=",
       "frontend=",
+      "record-trace-option=",
     ] + record_trace_passthrough
   )
 except getopt.GetoptError, e:
@@ -331,6 +332,10 @@ for o, a in opts:
     trace_manual = True
   if o == '--trace-args':
     trace_extra_args.extend(['-X', a])
+  if o == '--trace-pin-args':
+    trace_extra_args.extend(['-x', a])
+  if o == '--record-trace-option':
+    trace_extra_args.extend([a])
   if o == '--mpi':
     use_mpi = True
   if o == '--mpi-ranks':

@@ -44,7 +44,8 @@ pinball = None
 pinplay_addrtrans = False
 outputdir = '.'
 verbose = False
-extra_args = []
+extra_tool_args = []
+extra_pin_args = []
 frontend = None
 frontend_options = []
 use_pid = None
@@ -56,7 +57,7 @@ if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=" ])
 except getopt.GetoptError, e:
   # print help information and exit:
   print e
@@ -112,7 +113,9 @@ for o, a in opts:
   if o == '--outputdir':
     outputdir = a
   if o == '-X':
-    extra_args.append(a)
+    extra_tool_args.append(a)
+  if o == '-x':
+    extra_pin_args.append(a)
   if o == '--frontend':
     frontend = a
   if o == '--frontend-option':
@@ -124,7 +127,7 @@ for o, a in opts:
   if o == '--pid-continue':
     pid_continue = True
   if o == '--maxthreads':
-    extra_args.append('-maxthreads %s' % a)
+    extra_tool_args.append('-maxthreads %s' % a)
 
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
@@ -168,7 +171,7 @@ if use_pid:
 if use_gdb:
   pinoptions += ' -pause_tool 10'
 if use_follow:
-  pinoptions += ' -follow_execv'
+  pinoptions += ' -follow_execv 1'
 pinballoptions = ''
 if pinball:
   pinballoptions += '-replay -replay:basename "%s" -pinplay:msgfile "%s" -replay:resultfile "%s"' % (pinball, os.path.join(outputdir,'pinball_replay.app%d' % siftcountoffset), os.path.join(outputdir,'pinball_result.app%d' % siftcountoffset))
@@ -178,6 +181,7 @@ if pinball:
     pinoptions += ' -xyzzy -reserve_memory "%s.address"' % pinball
   # Replace the command line with the null app for use with PinPlay
   cmdline = ['%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()]
+pinoptions += (' ' + ' '.join(extra_pin_args))
 
 env = run_sniper.setup_env(HOME, pin_home, arch)
 
@@ -195,11 +199,11 @@ value_roi_mpi = roi_mpi and 1 or 0
 value_pa = use_pa and 1 or 0
 value_routine_tracing = use_routine_tracing and 1 or 0
 value_verbose = verbose and 1 or 0
-extra_args = ' '.join(extra_args)
+extra_tool_args = ' '.join(extra_tool_args)
 if frontend:
   if 'pin' in frontend:
     print '[RECORD-TRACE] Using Pin frontend (frontend/pin-frontend)'
-    cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/frontend/pin-frontend/obj-%(arch)s/pin_frontend -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
+    cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/frontend/pin-frontend/obj-%(arch)s/pin_frontend -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
   elif 'dr' in frontend:
     print '[RECORD-TRACE] Using DynamoRIO frontend'
     DRRUN = '%(dynamorio_home)s/bin64/drrun' % locals()
@@ -211,8 +215,7 @@ if frontend:
     if value_verbose == 1:
        bool_args += '-verbose '
     # FIXME: we could use -thread_private to simulate multithreading, but this is not supported yet for ARM
-    #cmd = '%(DR_libpath)s %(DRRUN)s -debug -loglevel 1 -thread_private -c %(DR_frontendlib)s -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_args)s  -- ' % locals() + ' '.join(cmdline)
-    cmd = '%(DR_libpath)s %(DRRUN)s -debug -loglevel 1 -thread_private -c %(DR_frontendlib)s -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_args)s  -- ' % locals() + ' '.join(cmdline)
+    cmd = '%(DR_libpath)s %(DRRUN)s -debug -loglevel 1 -thread_private -c %(DR_frontendlib)s -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_tool_args)s  -- ' % locals() + ' '.join(cmdline)
   elif 'rv' in frontend:
     rv8_home = os.getenv('RV8_HOME')
     if not rv8_home:
@@ -239,7 +242,7 @@ if frontend:
     sys.exit(1)
 else:
   print '[RECORD-TRACE] Using the Pin frontend (sift/recorder)'
-  cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
+  cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
 
 
 if verbose:
