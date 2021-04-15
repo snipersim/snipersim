@@ -14,6 +14,10 @@
 #include <fcntl.h>
 #include <sys/param.h>
 
+#ifdef __GNUC__
+# include <features.h>
+#endif
+
 // Enable (>0) to print out everything we write
 #define VERBOSE 0
 #define VERBOSE_HEX 0
@@ -87,7 +91,11 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    std::cerr << "[DEBUG:" << m_id << "] Write Header" << std::endl;
    #endif
 
+   #if __GNUC_PREREQ(6,0)
+   Sift::Header hdr = { Sift::MagicNumber, 0 /* header size */, options };
+   #else
    Sift::Header hdr = { Sift::MagicNumber, 0 /* header size */, options, {} };
+   #endif
    output->write(reinterpret_cast<char*>(&hdr), sizeof(hdr));
    output->flush();
 
