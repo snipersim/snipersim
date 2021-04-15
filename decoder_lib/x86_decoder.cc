@@ -73,12 +73,12 @@ void X86Decoder::change_isa_mode(dl_isa new_isa)
  
 const char* X86Decoder::inst_name(unsigned int inst_id)
 {
-  return xed_iclass_enum_t2str(static_cast<const xed_iclass_enum_t>(inst_id));
+  return xed_iclass_enum_t2str(static_cast<xed_iclass_enum_t>(inst_id));
 }
  
 const char* X86Decoder::reg_name(unsigned int reg_id)
 {
-  return xed_reg_enum_t2str(static_cast<const xed_reg_enum_t>(reg_id));
+  return xed_reg_enum_t2str(static_cast<xed_reg_enum_t>(reg_id));
 }
 
 Decoder::decoder_reg X86Decoder::largest_enclosing_register(Decoder::decoder_reg r)
