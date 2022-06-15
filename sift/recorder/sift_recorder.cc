@@ -40,7 +40,7 @@ using namespace INSTLIB;
 using namespace CONTROLLER;
 
 CONTROL_MANAGER * control_manager = NULL;
-static CONTROLLER::CONTROL_MANAGER control("");
+static CONTROLLER::CONTROL_MANAGER control("pinplay:");
 
 VOID Fini(INT32 code, VOID *v)
 {
