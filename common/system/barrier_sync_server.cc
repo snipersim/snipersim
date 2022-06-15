@@ -27,7 +27,15 @@ BarrierSyncServer::BarrierSyncServer()
 {
    try
    {
-      m_barrier_interval = SubsecondTime::NS() * (UInt64) Sim()->getCfg()->getInt("clock_skew_minimization/barrier/quantum");
+      auto quantum = Sim()->getCfg()->getInt("clock_skew_minimization/barrier/quantum");
+      if (quantum != 0)
+      {
+         m_barrier_interval = SubsecondTime::NS() * quantum;
+      }
+      else
+      {
+         m_barrier_interval = SubsecondTime::MaxTime();
+      }
    }
    catch(...)
    {

@@ -60,6 +60,7 @@ riscv/rv8
 riscv/Speckle
 xed_kit
 mbuild
+sde_kit
 
 # Pin3 output
 frontend/pin-frontend/obj-intel64

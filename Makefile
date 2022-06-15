@@ -19,7 +19,7 @@ all: message dependencies $(SIM_TARGETS) configscripts
 
 include common/Makefile.common
 
-dependencies: package_deps pin_kit pin xed python mcpat linux builddir showdebugstatus
+dependencies: package_deps sde_kit pin_kit pin xed python mcpat linux builddir showdebugstatus
 ifeq ($(BUILD_ARM),1)
 dependencies: capstone
 .PHONY: capstone
@@ -98,6 +98,16 @@ $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_MSG) '[INSTAL] xed'
 	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
+SDE_DOWNLOAD=https://downloadmirror.intel.com/684899/sde-external-9.0.0-2021-11-07-lin.tar.xz
+SDE_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
+sde_kit: $(SDE_DEP)
+$(SDE_DEP):
+	$(_MSG) '[DOWNLO] SDE 9.0.0'
+	$(_CMD) mkdir -p $(SDE_HOME)
+	$(_CMD) wget -O - --no-verbose --quiet $(SDE_DOWNLOAD) | tar -x -J --strip-components 1 -C $(SDE_HOME)
+	$(_CMD) touch $(SDE_HOME)/.autodownloaded
+	$(_MSG) '[DOWNLO] pinplay-scripts'
+	$(_CMD) svn checkout --quiet https://github.com/intel/pinplay-tools/trunk/pinplay-scripts $(SDE_HOME)/pinplay-scripts
 
 PIN_DOWNLOAD=https://software.intel.com/sites/landingpage/pintool/downloads/pin-3.18-98332-gaebd7b1e6-gcc-linux.tar.gz
 PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
@@ -108,6 +118,11 @@ $(PIN_DEP):
 	$(_CMD) wget -O - --no-verbose --quiet $(PIN_DOWNLOAD) | tar -x -z --strip-components 1 -C $(PIN_HOME)
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
 
+ifneq ($(USE_PINPLAY), 1)
+$(info Using SDE kit)
+else
+$(info Using Pinplay kit)
+endif
 
 ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=71313
@@ -162,11 +177,12 @@ configscripts: dependencies
 	@> config/sniper.py
 	@echo '# This file is auto-generated, changes made to it will be lost. Please edit Makefile instead.' >> config/sniper.py
 	@echo "target=\"$(SNIPER_TARGET_ARCH)\"" >> config/sniper.py
+	@./tools/makerelativepath.py sde_home "$(SIM_ROOT)" "$(SDE_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py xed_home "$(SIM_ROOT)" "$(XED_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py dynamorio_home "$(SIM_ROOT)" "$(DR_HOME)" >> config/sniper.py
 	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
-	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(PIN_HOME)" "$(DR_HOME)" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
+	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(SDE_HOME)" "$(PIN_HOME)" "$(DR_HOME)" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
 
 empty_config:
 	$(_MSG) '[CLEAN ] config'
@@ -190,6 +206,8 @@ clean: empty_config empty_deps
 distclean: clean
 	$(_MSG) '[DISTCL] Pin kit'
 	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
+	$(_MSG) '[DISTCL] SDE kit'
+	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then rm -rf $(SDE_HOME); fi
 	$(_MSG) '[DISTCL] python_kit'
 	$(_CMD) rm -rf python_kit
 	$(_MSG) '[DISTCL] McPAT'

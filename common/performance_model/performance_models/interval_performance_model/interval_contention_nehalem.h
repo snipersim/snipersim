@@ -1,5 +1,5 @@
 /*
- * This file is covered under the Interval Academic License, see LICENCE.interval
+ * This file is covered under the Interval Academic License, see LICENCE.academic
  */
 
 #ifndef __INTERVAL_CONTENTION_NEHALEM_H

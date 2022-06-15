@@ -43,12 +43,17 @@ siftdump : siftdump.o $(TARGET)
 	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L. -lsift -lz
 
 recorder : $(TARGET)
+ifneq ($(USE_PINPLAY), 1)
 	@$(MAKE) $(MAKE_QUIET) -C recorder
+else
+	@$(MAKE) $(MAKE_QUIET) -C recorder -f Makefile.pin
+endif
 
 clean :
 	$(_CMD) rm -f *.o *.d $(TARGET) siftdump
 	$(_MSG) '[CLEAN ] sift/recorder'
-	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C recorder clean ; fi
+	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C recorder -f Makefile.pin clean ; fi
+	$(_CMD) if [ -d "$(SDE_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C recorder clean ; fi
 
 ifneq ($(CLEAN),clean)
 -include $(patsubst %.cc,%.d,$(SOURCES))

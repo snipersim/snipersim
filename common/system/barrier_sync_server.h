@@ -55,7 +55,7 @@ class BarrierSyncServer : public ClockSkewMinimizationServer
       void release() { abortBarrier(); }
       void advance();
       void setFastForward(bool fastforward, SubsecondTime next_barrier_time = SubsecondTime::MaxTime());
-      SubsecondTime getGlobalTime(bool upper_bound = false) { return upper_bound ? m_next_barrier_time : m_global_time; }
+      SubsecondTime getGlobalTime(bool upper_bound = false) { return m_barrier_interval == SubsecondTime::MaxTime() ? m_global_time : (upper_bound ? m_next_barrier_time : m_global_time); }
       void setBarrierInterval(SubsecondTime barrier_interval) { m_barrier_interval = barrier_interval; }
       SubsecondTime getBarrierInterval() const { return m_barrier_interval; }
 

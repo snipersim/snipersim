@@ -3,7 +3,7 @@
 
 import sys, os, subprocess
 
-sim_root, pin_home, dynamorio_home, cc, cxx, arch = sys.argv[1:]
+sim_root, sde_home, pin_home, dynamorio_home, cc, cxx, arch = sys.argv[1:]
 
 # Needed for sim_api.h
 includes = '-I${SNIPER_ROOT}/include'

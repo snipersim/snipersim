@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 
 TraceManager::TraceManager()
-   : m_monitor(new Monitor(this))
+   : m_monitor(new Monitor(this, Sim()->getCfg()->getInt("traceinput/timeout")))
    , m_threads(0)
    , m_num_threads_started(0)
    , m_num_threads_running(0)
@@ -330,8 +330,9 @@ void TraceManager::accessMemory(int core_id, Core::lock_signal_t lock_signal, Co
    LOG_PRINT_ERROR("Unable to find core %d", core_id);
 }
 
-TraceManager::Monitor::Monitor(TraceManager *manager)
+TraceManager::Monitor::Monitor(TraceManager *manager, UInt32 timeout)
    : m_manager(manager)
+   , m_timeout(timeout)
 {
 }
 
@@ -346,7 +347,7 @@ void TraceManager::Monitor::run()
    String threadName("trace-monitor");
    SimSetThreadName(threadName.c_str());
 
-   UInt64 n = 0;
+   UInt32 n = 0;
    while(true)
    {
       if (m_manager->m_num_threads_started > 0)
@@ -354,9 +355,9 @@ void TraceManager::Monitor::run()
 
       if (n == 10)
       {
-         fprintf(stderr, "[SNIPER] WARNING: No SIFT connections made yet. Waiting...\n");
+	 fprintf(stderr, "[SNIPER] WARNING: No SIFT connections made yet. Waiting for a total of %d seconds.\n", m_timeout);
       }
-      else if (n == 60)
+      else if (n >= m_timeout)
       {
          fprintf(stderr, "[SNIPER] ERROR: Could not establish SIFT connection, aborting! Check benchmark-app*.log for errors.\n");
          exit(1);

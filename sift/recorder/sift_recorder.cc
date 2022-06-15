@@ -17,6 +17,12 @@
 
 #include "pin.H"
 
+#if defined(SDE_INIT)
+#  include "sde-init.H"
+#  include "sde-control.H"
+#endif
+
+
 #include "globals.h"
 #include "threads.h"
 #include "recorder_control.h"
@@ -27,6 +33,14 @@
 #include "sift_writer.h"
 #include "sift_assert.h"
 #include "pinboost_debug.h"
+#include "instlib.H"
+#include "../../include/sim_api.h"
+
+using namespace INSTLIB;  
+using namespace CONTROLLER;
+
+CONTROL_MANAGER * control_manager = NULL;
+static CONTROLLER::CONTROL_MANAGER control("");
 
 VOID Fini(INT32 code, VOID *v)
 {
@@ -110,14 +124,63 @@ void __sift_assert_fail(__const char *__assertion, __const char *__file,
    }
 }
 
+INSTLIB::ICOUNT icount;
+
+VOID Handler(CONTROLLER::EVENT_TYPE ev, VOID * v, CONTEXT * ctxt, VOID * ip, THREADID tid, BOOL bcast)
+{
+    PIN_GetLock(&output_lock, tid+1);
+
+    std::cout << "[CONTROLLER] tid: " << tid << " ";
+    std::cout << "ip: "  << ip << " " << icount.Count() << " " ;
+
+    switch(ev)
+    {
+        case CONTROLLER::EVENT_START:
+            std::cout << "Start" << endl;
+            break;
+
+        case CONTROLLER::EVENT_STOP:
+            std::cout << "Stop" << endl;
+            break;
+
+
+        case CONTROLLER::EVENT_THREADID:
+            std::cout << "ThreadID" << endl;
+            break;
+
+        default:
+            break;
+    }
+    PIN_ReleaseLock(&output_lock);
+   
+    switch(ev)
+    {
+        case CONTROLLER::EVENT_START:
+            handleMagic(tid, ctxt, SIM_CMD_USER, 0x0be0000f, 0);
+            break;
+
+        case CONTROLLER::EVENT_STOP:
+            handleMagic(tid, ctxt, SIM_CMD_USER, 0x0be0000f, 1);
+            break;
+
+        default:
+            break;
+    }
+}
+
 int main(int argc, char **argv)
 {
+#if defined(SDE_INIT)
+	sde_pin_init(argc,argv);
+	sde_init();
+#else
    if (PIN_Init(argc,argv))
    {
       std::cerr << "Error, invalid parameters" << std::endl;
       std::cerr << KNOB_BASE::StringKnobSummary() << std::endl;
       exit(1);
    }
+#endif
    PIN_InitSymbols();
 
    if (KnobMaxThreads.Value() > 0)
@@ -139,6 +202,7 @@ int main(int argc, char **argv)
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();
+
    if (KnobEmulateSyscalls.Value() || (!KnobUseROI.Value() && !KnobMPIImplicitROI.Value()))
    {
       if (app_id < 0)
@@ -146,6 +210,7 @@ int main(int argc, char **argv)
    }
    if (fast_forward_target == 0 && !KnobUseROI.Value() && !KnobMPIImplicitROI.Value())
    {
+	  // Start in detailed if there is no fast-forwarding or warming requested
       in_roi = true;
       setInstrumentationMode(Sift::ModeDetailed);
       openFile(0);
@@ -175,7 +240,14 @@ int main(int argc, char **argv)
          std::cerr << "Error, emulating syscalls is not compatible with PinPlay replaying." << std::endl;
          exit(1);
       }
-      pinplay_engine.Activate(argc, argv, false /*logger*/, KnobReplayer.Value() /*replayer*/);
+
+#if defined(SDE_INIT)
+    // This is a replay-only tool (for now)
+    pinplay_engine = sde_tracing_get_pinplay_engine();
+#else
+    pinplay_engine = &pp_pinplay_engine;
+    pinplay_engine->Activate(argc, argv, false /*logger*/, KnobReplayer);
+#endif
    }
 #else
    if (KnobReplayer.Value())
@@ -185,6 +257,15 @@ int main(int argc, char **argv)
    }
 #endif
 
+#if defined(SDE_INIT)
+   control_manager = SDE_CONTROLLER::sde_controller_get();
+#else
+   control.Activate();
+   control_manager = &control;
+#endif
+   control_manager->RegisterHandler(Handler, 0, FALSE);
+
+   icount.Activate();
    if (KnobEmulateSyscalls.Value())
    {
       if (!KnobUseResponseFiles.Value())

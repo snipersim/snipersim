@@ -4,10 +4,13 @@
 #include "sift_format.h"
 
 #include "pin.H"
+#if defined(SDE_INIT)
+#include "sde-pinplay-supp.H"
+#endif
 #ifdef PINPLAY_SUPPORTED
 # include "pinplay.H"
 #endif
-
+#include "control_manager.H"
 #include <unordered_map>
 #include <deque>
 
@@ -43,9 +46,9 @@ extern KNOB<UINT64> KnobExtraePreLoaded;
 extern KNOB_COMMENT pinplay_driver_knob_family;
 extern KNOB<BOOL>KnobReplayer;
 #ifdef PINPLAY_SUPPORTED
-extern PINPLAY_ENGINE pinplay_engine;
+extern PINPLAY_ENGINE *pinplay_engine;
+extern PINPLAY_ENGINE pp_pinplay_engine;
 #endif /* PINPLAY_SUPPORTED */
-
 extern INT32 app_id;
 extern INT32 num_threads;
 extern UINT32 max_num_threads;
@@ -54,6 +57,7 @@ extern UINT64 fast_forward_target;
 extern UINT64 detailed_target;
 extern PIN_LOCK access_memory_lock;
 extern PIN_LOCK new_threadid_lock;
+extern PIN_LOCK output_lock;
 extern std::deque<ADDRINT> tidptrs;
 extern INT32 child_app_id;
 extern BOOL in_roi;
@@ -72,10 +76,13 @@ struct extrae_image_t {
 
 extern extrae_image_t extrae_image;
 
+typedef uint64_t syscall_args_t[6];
+/*
 #if defined(TARGET_IA32)
    typedef uint32_t syscall_args_t[6];
 #elif defined(TARGET_INTEL64)
    typedef uint64_t syscall_args_t[6];
 #endif
+*/
 
 #endif // __GLOBALS_H

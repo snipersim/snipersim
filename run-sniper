@@ -467,6 +467,7 @@ if heteroconfig:
 if not configfiles:
   # No config file(s) specified: prepend default Xeon X5550 Gainestown
   configfiles = add_config_file('gainestown')
+  configfiles.extend(add_config_file('rob'))
 # Prepend config files to options, so -g options are always later on the command line and override config files
 sniperoptions = [ '--config=%s' % cfgfile for cfgfile in configfiles ] + sniperoptions
 
@@ -879,6 +880,8 @@ print '[SNIPER] End'
 print '[SNIPER] Elapsed time:', '%.02f' % t_elapsed, 'seconds'
 
 if tracegen:
+  # If we get here, there might still be some front-end processes running (maybe a deadlocked sift recorder trace?). If so, kill those processes
+  sniper_lib.kill_children()
   # Cleanup the pipes and temporary directory
   try:
     for f in tracegen['tracefiles_created']:

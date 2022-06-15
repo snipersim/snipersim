@@ -1,0 +1,69 @@
+##############################################################
+# 
+# Copyright (C) 2021-2021 Intel Corporation.
+# SPDX-License-Identifier: MIT
+# 
+##############################################################
+#
+# This file includes all the test targets as well as all the
+# non-default build rules and test recipes.
+#
+##############################################################
+
+
+##############################################################
+#
+# Test targets
+#
+##############################################################
+
+###### Place all generic definitions here ######
+ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+
+ifneq ($(DEBUG_SHOW_COMPILE),)
+  SHOW_COMPILE=1
+  MAKE_QUIET=
+  _MSG=@echo >/dev/null
+  _CMD=
+else
+  SHOW_COMPILE=
+  MAKE_QUIET=--quiet
+  _MSG=@echo
+  _CMD=@
+endif
+
+# Define the SDE example pin tools to build
+SDE_TOOLS := 
+PINPLAY_TOOLS := 
+
+LIB_ROOTS := libsift
+
+##############################################################
+#
+# Build rules
+#
+##############################################################
+
+# See makefile.default.rules for the default build rules.
+TOOL_CXXFLAGS := -I$(SDE_ROOT)/include $(TOOL_CXXFLAGS)
+TOOL_CXXFLAGS += -DSDE_INIT -DPINPLAY -I$(PINPLAY_ROOT)/include
+
+ifeq ($(OS),Windows_NT)
+TOOL_LPATHS += /LIBPATH:$(SDE_ROOT)/lib/$(TARGET) /LIBPATH:$(PINPLAY_ROOT)/$(TARGET)
+TOOL_LPATHS += libpinplay.lib libsde.lib bz2.lib zlib.lib
+else
+# sde and pinplay libraries appears twice to avoid circular dependency
+TOOL_LPATHS += -L$(SDE_ROOT)/lib/$(TARGET) -L$(PINPLAY_ROOT)/$(TARGET)
+TOOL_LPATHS += -lpinplay -lsde -lpinplay -lsde -lbz2 -lzlib
+endif
+
+###### Special libs' build rules ######
+
+OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
+$(OBJDIR)%.o : %.cc $(wildcard *.h) 
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../..)/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(TOOL_CXXFLAGS) -c -o $@ $< $(CXXFLAGS)
+
+$(OBJDIR)libsift$(LIB_SUFFIX): $(OBJDIR)sift_reader$(OBJ_SUFFIX) $(OBJDIR)sift_utils$(OBJ_SUFFIX) $(OBJDIR)sift_writer$(OBJ_SUFFIX) $(OBJDIR)zfstream$(OBJ_SUFFIX)
+	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../..)/,,$(shell readlink -f $@))
+	$(ARCHIVER)$@ $^

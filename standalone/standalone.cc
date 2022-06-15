@@ -21,8 +21,6 @@ int main(int argc, char* argv[])
    if (ld_orig)
       setenv("LD_LIBRARY_PATH", ld_orig, 1);
 
-   registerExceptionHandler();
-
    string_vec args;
 
    // Set the default config path if it isn't
@@ -40,6 +38,8 @@ int main(int argc, char* argv[])
 
    Simulator::allocate();
    Sim()->start();
+   
+   registerExceptionHandler();
 
    // config::Config shouldn't be called outside of init/fini
    // With Sim()->hideCfg(), we let Simulator know to complain when someone does call Sim()->getCfg()

@@ -4,7 +4,8 @@ class ProgressTrace:
   def setup(self, args):
     self.last_ins = 0
     self.last_time = time.time()
-    sim.util.EveryIns(1000000, self.periodic, roi_only = False)
+    self.ninstrs = long(args or 1000000)
+    sim.util.EveryIns(self.ninstrs, self.periodic, roi_only = False)
     self.sd = sim.util.StatsDelta()
     self.stats = {
       'time': self.sd.getter('barrier', 0, 'global_time'),

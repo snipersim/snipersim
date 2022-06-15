@@ -2,6 +2,7 @@
 #include "simulator.h"
 #include "trace_manager.h"
 #include "hooks_manager.h"
+#include "config.hpp"
 
 #include <signal.h>
 #include <stdio.h>
@@ -69,4 +70,10 @@ void registerExceptionHandler()
 
    sa.sa_sigaction = handleSigUsr1;
    sigaction(SIGUSR1, &sa, NULL);
+
+   auto signal_to_ignore = Sim()->getCfg()->getInt("general/signals_to_ignore");
+   if (signal_to_ignore)
+   {
+      signal(signal_to_ignore, SIG_IGN);
+   }
 }

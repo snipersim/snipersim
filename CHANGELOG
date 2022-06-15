@@ -1,3 +1,8 @@
+Version 8.0
+  * Change of license to academic license
+  * Add SDE-based frontend (default) support along with Pinplay
+  * Add support for PC-based region simulation to support LoopPoint region specification
+
 Version 7.4
   * Add initial ARM64 port
   * Automatically download Pin 3.18-98332

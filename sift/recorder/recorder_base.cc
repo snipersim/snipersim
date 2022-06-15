@@ -154,7 +154,8 @@ UINT32 addMemoryModeling(INS ins)
 
    if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
    {
-      for (unsigned int i = 0; i < INS_MemoryOperandCount(ins); i++)
+      UINT32 max_op_count = std::min<UINT32>(INS_MemoryOperandCount(ins), Sift::MAX_DYNAMIC_ADDRESSES);
+      for (unsigned int i = 0; i < max_op_count; i++)
       {
          INS_InsertCall(ins, IPOINT_BEFORE,
                AFUNPTR(handleMemory),
@@ -163,6 +164,10 @@ UINT32 addMemoryModeling(INS ins)
                IARG_END);
          num_addresses++;
       }
+   }
+   if (INS_MemoryOperandCount(ins) > Sift::MAX_DYNAMIC_ADDRESSES)
+   {
+      std::cerr << "[SIFT_RECORDER] Unable to report all dynamic addresses (" << Sift::MAX_DYNAMIC_ADDRESSES << "/" << INS_MemoryOperandCount(ins) << ") for instruction 0x" << std::hex << INS_Address(ins) << std::dec << "\n";
    }
    sift_assert(num_addresses <= Sift::MAX_DYNAMIC_ADDRESSES);
 

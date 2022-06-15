@@ -775,12 +775,16 @@ void TraceThread::run()
    Sift::Instruction inst, next_inst;
 
    bool have_first = m_trace.Read(inst);
-   // Received first instruction, let TraceManager know our SIFT connection is up and running
-   Sim()->getTraceManager()->signalStarted();
-   m_started = true;
 
    while(have_first && m_trace.Read(next_inst))
    {
+      if (!m_started)
+      {
+         // Received first instructions, let TraceManager know our SIFT connection is up and running
+         // Only enable once we have received two instructions, otherwise, we could deadlock
+         Sim()->getTraceManager()->signalStarted();
+         m_started = true;
+      }
       if (m_blocked)
       {
          unblock();

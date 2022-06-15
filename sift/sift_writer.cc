@@ -543,8 +543,14 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      sift_assert(!response->fail());
-      sift_assert(respRec.Other.zero == 0);
+      if (response->fail())
+      {
+         return 1;
+      }
+      if (respRec.Other.zero != 0)
+      {
+         return 1;
+      }
 
       switch(respRec.Other.type)
       {
