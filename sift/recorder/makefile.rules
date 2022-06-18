@@ -91,7 +91,7 @@ sift/sift_reader.h: sift
 sift/$(OBJDIR)libsift.a: sift/sift_reader.h $(wildcard sift/*.h) $(wildcard sift/*.cc)
 	@$(MAKE) -C sift
 
-export PYTHONPATH := $(SDE_BUILD_KIT)/pinplay-scripts:$(SIM_ROOT)/mbuild
+export PYTHONPATH := $(SDE_BUILD_KIT)/pinplay-tools/pinplay-scripts:$(SIM_ROOT)/mbuild
 $(OBJDIR)sde_sift_recorder:
 ifeq ($(ARCH_QUERY),x86_64)
 	@./mfile.py --host-cpu intel64

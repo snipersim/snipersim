@@ -107,7 +107,7 @@ $(SDE_DEP):
 	$(_CMD) wget -O - --no-verbose --quiet $(SDE_DOWNLOAD) | tar -x -J --strip-components 1 -C $(SDE_HOME)
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-scripts'
-	$(_CMD) svn checkout --quiet https://github.com/intel/pinplay-tools/trunk/pinplay-scripts $(SDE_HOME)/pinplay-scripts
+	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools
 
 PIN_DOWNLOAD=https://software.intel.com/sites/landingpage/pintool/downloads/pin-3.18-98332-gaebd7b1e6-gcc-linux.tar.gz
 PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so

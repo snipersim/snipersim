@@ -105,7 +105,7 @@ tracegen = None
 trace_extra_args = []
 verbose = False
 use_pa = True
-
+use_pinplay = False
 
 if not sys.argv[1:]:
   usage()
@@ -706,7 +706,9 @@ if pinballs and not pinball_sift:
   else:
     pinoptions += ' -xyzzy -reserve_memory "%s.address"' % (pinballs[0])
   # Overwrite the cmdline with the nullapp, as the pinball will handle the appropriate processing
-  nullapp_path = '%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()
+  nullapp_path = '%(sde_home)s/%(arch)s/nullapp' % locals()
+  if use_pinplay:
+    nullapp_path = '%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()
   if not os.path.exists(nullapp_path):
     print >> sys.stderr, "Error: Unable to locate PinPlay's nullapp to play back a pinball"
     sys.exit(1)
