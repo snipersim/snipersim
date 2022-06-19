@@ -19,7 +19,7 @@ all: message dependencies $(SIM_TARGETS) configscripts
 
 include common/Makefile.common
 
-dependencies: package_deps sde_kit pin_kit pin xed python mcpat linux builddir showdebugstatus
+dependencies: package_deps sde_kit $(PIN_ROOT) pin xed python mcpat linux builddir showdebugstatus
 ifeq ($(BUILD_ARM),1)
 dependencies: capstone
 .PHONY: capstone
@@ -29,6 +29,11 @@ $(SIM_TARGETS): dependencies
 
 message:
 	@echo -n Building for x86 \($(SNIPER_TARGET_ARCH)\)
+ifneq ($(USE_PINPLAY), 1)
+	@echo -n " with SDE"
+else
+	@echo -n " with Pinplay"
+endif
 ifeq ($(BUILD_RISCV),1)
 	@echo -n " and RISCV"
 endif
@@ -98,47 +103,34 @@ $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_MSG) '[INSTAL] xed'
 	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
+ifneq ($(USE_PINPLAY), 1)
 SDE_DOWNLOAD=https://downloadmirror.intel.com/684899/sde-external-9.0.0-2021-11-07-lin.tar.xz
-SDE_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
-sde_kit: $(SDE_DEP)
-$(SDE_DEP):
+PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
+sde_kit: $(PIN_DEP)
+$(PIN_DEP):
 	$(_MSG) '[DOWNLO] SDE 9.0.0'
 	$(_CMD) mkdir -p $(SDE_HOME)
 	$(_CMD) wget -O - --no-verbose --quiet $(SDE_DOWNLOAD) | tar -x -J --strip-components 1 -C $(SDE_HOME)
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
-	$(_MSG) '[DOWNLO] pinplay-scripts'
+	$(_MSG) '[DOWNLO] pinplay-tools'
 	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools
-
+$(PIN_ROOT): sde_kit
+else
 PIN_DOWNLOAD=https://software.intel.com/sites/landingpage/pintool/downloads/pin-3.18-98332-gaebd7b1e6-gcc-linux.tar.gz
 PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
-pin_kit: $(PIN_DEP)
+$(PIN_ROOT): $(PIN_DEP)
 $(PIN_DEP):
 	$(_MSG) '[DOWNLO] Pin 3.18-98332'
 	$(_CMD) mkdir -p $(PIN_HOME)
 	$(_CMD) wget -O - --no-verbose --quiet $(PIN_DOWNLOAD) | tar -x -z --strip-components 1 -C $(PIN_HOME)
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
-
-ifneq ($(USE_PINPLAY), 1)
-$(info Using SDE kit)
-else
-$(info Using Pinplay kit)
+sde_kit: $(PIN_ROOT)
 endif
 
 ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=71313
-pin: $(PIN_HOME)/intel64/bin/pinbin $(PIN_HOME)/source/tools/Config/makefile.config package_deps
+pin: $(PIN_DEP)
 	@if [ "$$(tools/pinversion.py $(PIN_HOME) | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo; echo "Found Pin version $$(tools/pinversion.py $(PIN_HOME)) in $(PIN_HOME)"; echo "but at least revision $(PIN_REV_MINIMUM) is required."; echo; false; fi
-$(PIN_HOME)/source/tools/Config/makefile.config:
-	@echo
-	@echo "Old Pin version found in $(PIN_HOME), Sniper requires Pin version $(PIN_REV_MINIMUM) or newer."
-	@echo
-	@false
-$(PIN_HOME)/intel64/bin/pinbin:
-	@echo
-	@echo "Cannot find Pin in $(PIN_HOME). Please download and extract Pin version $(PIN_REV_MINIMUM)"
-	@echo "from http://www.pintool.org/downloads.html into $(PIN_HOME), or set the PIN_HOME environment variable."
-	@echo
-	@false
 endif
 
 ifneq ($(NO_PYTHON_DOWNLOAD),1)
