@@ -263,7 +263,8 @@ int main(int argc, char **argv)
    control.Activate();
    control_manager = &control;
 #endif
-   control_manager->RegisterHandler(Handler, 0, FALSE);
+   if (KnobVerbose.Value())
+      control_manager->RegisterHandler(Handler, 0, FALSE);
 
    icount.Activate();
    if (KnobEmulateSyscalls.Value())
