@@ -159,12 +159,17 @@ if use_pinplay == False and  os.path.isfile('%s/sift/recorder/obj-%s/sift_record
   use_pinplay = True
 
 # convert paths in config to absolute paths
+not_found = []
 for d in ('sde_home', 'pin_home', 'dynamorio_home'):
   absdir = os.path.join(HOME, config[d])
   if not os.path.isdir(absdir):
-    sys.stderr.write('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
-    sys.exit(-1)
-  exec "%s = '%s'" % (d, absdir)
+    not_found.append('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
+  else:
+    exec "%s = '%s'" % (d, absdir)
+if len(not_found) >= 3:
+  for nf in not_found:
+    sys.stderr.write(nf)
+  sys.exit(-1)
 sim_root = HOME
 
 frontend_options_str = ' '.join(frontend_options)
