@@ -138,7 +138,7 @@ sift/sift_reader.h: sift
 
 # Build libsift against PinCRT
 sift/libsift.a: sift/sift_reader.h $(wildcard sift/*.h) $(wildcard sift/*.cc)
-	@$(MAKE) -C sift -f makefile.pin
+	$(_CMD) $(MAKE) -C sift -f makefile.pin
 
 $(OBJDIR)sift_recorder: $(OBJECTS) $(LINK_LIBS) $(CONTROLLERLIB)
 	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(ROOT_DIR)/../..)/,,$(shell readlink -f $@))

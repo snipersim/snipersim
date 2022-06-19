@@ -26,7 +26,7 @@ CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
 endif
 
 include $(CONFIG_ROOT)/makefile.config
-include makefile.rules
+include makefile.sde.rules
 include $(TOOLS_ROOT)/Config/makefile.default.rules
 
 ##############################################################

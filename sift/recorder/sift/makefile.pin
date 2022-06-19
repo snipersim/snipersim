@@ -19,14 +19,14 @@ all: libsift.a
 
 %.o: %.cc $(wildcard *.h)
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../..)/,,$(shell readlink -f $@))
-	$(_CMD) g++ -g -std=c++0x $(COMPILE_PIN_FLAGS) -c -o $@ $<
+	$(_CMD) $(CXX) -g -std=c++0x $(COMPILE_PIN_FLAGS) -c -o $@ $<
 
 libsift.a: $(OBJECTS)
 	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../..)/,,$(shell readlink -f $@))
 	$(_CMD) ar rcs $@ $(^:%.h=)
 
 # siftdump: siftdump.o libsift.a
-# 	g++ -g -std=c++0x -o $@ $< -L$(XED_HOME)/lib -L. -lsift -lxed -lz
+# 	$(CXX) -g -std=c++0x -o $@ $< -L$(XED_HOME)/lib -L. -lsift -lxed -lz
 
 clean:
 	$(_MSG) '[CLEAN ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../..)/,,$(shell readlink -f $(ROOT_DIR)))
