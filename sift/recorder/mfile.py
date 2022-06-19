@@ -83,6 +83,10 @@ if env['host_cpu'] == 'x86-64':
 else:
     env['arch'] = 'ia32'
 
+# Set compiler
+env['CC'] = os.environ['CC']
+env['CXX'] = os.environ['CXX']
+
 # Set include and link dirs
 pinplay_include_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit','pinplay','include')
 instlib_include_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit','source',
