@@ -29,13 +29,23 @@ def determine_valid_flags(archname):
       valid_flags.append(flag)
   return ' '.join(valid_flags)
 
+def determine_valid_ldflags(arch):
+  possible_flags = ['-static']
+  valid_flags = []
+  for flag in possible_flags:
+    rc = subprocess.call(['bash', '-c', ('echo "int main(){return 0;}" | gcc -o /dev/null -x c - -lpthread -lm %(flag)s' % locals())], stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT)
+    if rc == 0:
+      valid_flags.append(flag)
+  return ' '.join(valid_flags)
+
 extra_cflags = determine_valid_flags(arch)
+extra_ldflags = determine_valid_ldflags(arch)
 
 flags = {}
 for f in ('SNIPER', 'GRAPHITE'):
   flags['%s_CFLAGS'%f] = '%(extra_cflags)s %(includes)s %(arch_cflags)s' % locals()
   flags['%s_CXXFLAGS'%f] = '%(extra_cflags)s %(includes)s %(arch_cflags)s' % locals()
-  flags['%s_LDFLAGS'%f] = '-static -L${SNIPER_ROOT}/lib -pthread %(arch_ldflags)s' % locals()
+  flags['%s_LDFLAGS'%f] = '%(extra_ldflags)s -L${SNIPER_ROOT}/lib -pthread %(arch_ldflags)s' % locals()
   flags['%s_LD_LIBRARY_PATH'%f] = ''
   flags['%s_CC'%f] = cc
   flags['%s_CXX'%f] = cxx
