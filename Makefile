@@ -104,25 +104,25 @@ $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
 ifneq ($(USE_PINPLAY), 1)
-SDE_DOWNLOAD=https://downloadmirror.intel.com/684899/sde-external-9.0.0-2021-11-07-lin.tar.xz
+SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.0.0-2021-11-07-lin.tar.xz
 PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
 sde_kit: $(PIN_DEP)
 $(PIN_DEP):
 	$(_MSG) '[DOWNLO] SDE 9.0.0'
 	$(_CMD) mkdir -p $(SDE_HOME)
-	$(_CMD) wget -O - --no-verbose --quiet $(SDE_DOWNLOAD) | tar -x -J --strip-components 1 -C $(SDE_HOME)
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD) | tar -x -J --strip-components 1 -C $(SDE_HOME)
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-tools'
 	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools
 $(PIN_ROOT): sde_kit
 else
-PIN_DOWNLOAD=https://software.intel.com/sites/landingpage/pintool/downloads/pin-3.18-98332-gaebd7b1e6-gcc-linux.tar.gz
+PIN_DOWNLOAD=https://snipersim.org/packages/pin-3.18-98332-gaebd7b1e6-gcc-linux.tar.gz
 PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
 $(PIN_ROOT): $(PIN_DEP)
 $(PIN_DEP):
 	$(_MSG) '[DOWNLO] Pin 3.18-98332'
 	$(_CMD) mkdir -p $(PIN_HOME)
-	$(_CMD) wget -O - --no-verbose --quiet $(PIN_DOWNLOAD) | tar -x -z --strip-components 1 -C $(PIN_HOME)
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet $(PIN_DOWNLOAD) | tar -x -z --strip-components 1 -C $(PIN_HOME)
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
 sde_kit: $(PIN_ROOT)
 endif
@@ -139,7 +139,7 @@ python: $(PYTHON_DEP)
 $(PYTHON_DEP):
 	$(_MSG) '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
 	$(_CMD) mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
-	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "https://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
@@ -147,7 +147,7 @@ mcpat: mcpat/mcpat-1.0
 mcpat/mcpat-1.0:
 	$(_MSG) '[DOWNLO] McPAT'
 	$(_CMD) mkdir -p mcpat
-	$(_CMD) wget -O - --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 endif
 
 linux: include/linux/perf_event.h
