@@ -16,7 +16,7 @@
 #include <cassert>
 #define SHARED_ASSERT(x)    assert(x)
 
-namespace std
+namespace rombauts
 {
 
 /**

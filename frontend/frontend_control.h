@@ -21,7 +21,7 @@ template <typename T> class FrontendControl
 {
   public:
   /// Constructor
-  FrontendControl<T>(FrontendOptions<T>* opts, thread_data_t* td, std::shared_ptr<FrontendSyscallModel<T>> sysmodel);
+  FrontendControl<T>(FrontendOptions<T>* opts, thread_data_t* td, rombauts::shared_ptr<FrontendSyscallModel<T>> sysmodel);
 
   /// Destructor
   ~FrontendControl<T>();
@@ -73,7 +73,7 @@ template <typename T> class FrontendControl
   static thread_data_t* m_thread_data;
   
   /// Syscall modeling module
-  static std::shared_ptr<FrontendSyscallModel<T>> m_sysmodel;
+  static rombauts::shared_ptr<FrontendSyscallModel<T>> m_sysmodel;
 
   // Methods
   /// Eliminate instrumentation from the running application -- might be optionally specialized
