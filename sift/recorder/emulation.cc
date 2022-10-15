@@ -9,7 +9,7 @@
 
 static AFUNPTR ptr_exit = NULL;
 
-static void handleRdtsc(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gdx)
+static void handleRdtsc(THREADID threadid, ADDRINT * gax, ADDRINT * gdx)
 {
    if (!thread_data[threadid].output)
       return;
@@ -21,12 +21,12 @@ static void handleRdtsc(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gd
    if (emulated)
    {
       // Return in eax and edx
-      gdx->dword[0] = res.rdtsc.cycles >> 32;
-      gax->dword[0] = res.rdtsc.cycles & 0xffffffff;
+      *gdx = res.rdtsc.cycles >> 32;
+      *gax = res.rdtsc.cycles & 0xffffffff;
    }
 }
 
-static void handleCpuid(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gbx, PIN_REGISTER * gcx, PIN_REGISTER * gdx)
+static void handleCpuid(THREADID threadid, ADDRINT * gax, ADDRINT * gbx, ADDRINT * gcx, ADDRINT * gdx)
 {
    if (!thread_data[threadid].output)
       return;
@@ -34,15 +34,15 @@ static void handleCpuid(THREADID threadid, PIN_REGISTER * gax, PIN_REGISTER * gb
    Sift::EmuRequest req;
    Sift::EmuReply res;
 
-   req.cpuid.eax = gax->dword[0];
-   req.cpuid.ecx = gcx->dword[0];
+   req.cpuid.eax = *gax;
+   req.cpuid.ecx = *gcx;
    bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeCpuid, req, res);
 
    sift_assert(emulated);
-   gax->dword[0] = res.cpuid.eax;
-   gbx->dword[0] = res.cpuid.ebx;
-   gcx->dword[0] = res.cpuid.ecx;
-   gdx->dword[0] = res.cpuid.edx;
+   *gax = res.cpuid.eax;
+   *gbx = res.cpuid.ebx;
+   *gcx = res.cpuid.ecx;
+   *gdx = res.cpuid.edx;
 }
 
 static ADDRINT emuGetNprocs(THREADID threadid)
