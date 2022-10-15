@@ -33,7 +33,7 @@
 #include "sift_writer.h"
 #include "sift_assert.h"
 #include "pinboost_debug.h"
-#include "icount.H"
+#include "icountsniper.h"
 #include "../../include/sim_api.h"
 
 using namespace CONTROLLER;

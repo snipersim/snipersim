@@ -9,8 +9,8 @@
  * warranties, other than those that are expressly stated in the License.
  */
 
-#ifndef ICOUNT_H
-#define ICOUNT_H
+#ifndef ICOUNTSNIPER_H
+#define ICOUNTSNIPER_H
 
 #define ISIMPOINT_MAX_THREADS 160
 
