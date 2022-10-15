@@ -33,7 +33,7 @@
 #include "sift_writer.h"
 #include "sift_assert.h"
 #include "pinboost_debug.h"
-#include "instlib.H"
+#include "icount.H"
 #include "../../include/sim_api.h"
 
 using namespace INSTLIB;  
@@ -124,7 +124,7 @@ void __sift_assert_fail(__const char *__assertion, __const char *__file,
    }
 }
 
-INSTLIB::ICOUNT icount;
+INSTLIBSNIPER::ICOUNT icount;
 
 VOID Handler(CONTROLLER::EVENT_TYPE ev, VOID * v, CONTEXT * ctxt, VOID * ip, THREADID tid, BOOL bcast)
 {
