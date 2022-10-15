@@ -290,7 +290,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          break;
       }
 
-      case -1:
+      case static_cast<unsigned long>(-1):
       default:
          break;
    }
