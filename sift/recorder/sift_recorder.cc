@@ -36,7 +36,6 @@
 #include "icount.H"
 #include "../../include/sim_api.h"
 
-using namespace INSTLIB;  
 using namespace CONTROLLER;
 
 CONTROL_MANAGER * control_manager = NULL;
