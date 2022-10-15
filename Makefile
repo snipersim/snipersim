@@ -11,6 +11,8 @@ LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
 SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND)
 
+PYTHON2=python2
+
 .PHONY: all message dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean mbuild xed_install xed
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
@@ -101,7 +103,7 @@ XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
 xed: mbuild xed_install $(XED_DEP)
 $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_MSG) '[INSTAL] xed'
-	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
+	$(_CMD) cd $(XED_INSTALL) ; $(PYTHON2) ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
 ifneq ($(USE_PINPLAY), 1)
 SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.0.0-2021-11-07-lin.tar.xz
