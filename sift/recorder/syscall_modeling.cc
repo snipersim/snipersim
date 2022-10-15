@@ -59,7 +59,6 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    sift_assert(syscall_number < MAX_NUM_SYSCALLS);
 
    syscall_args_t args;
-/*
    #if defined(TARGET_IA32)
       args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBX);
       args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GCX);
@@ -67,7 +66,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       args[3] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
       args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
       args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBP);
-   #elif defined(TARGET_INTEL64)
+   #elif defined(TARGET_INTEL64) || defined(TARGET_IA32E)
       args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
       args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
       args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
@@ -75,16 +74,8 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R8);
       args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R9);
    #else
-      #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64"
+      #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64 | TARGET_IA32E"
    #endif
-*/
-// #elif defined(TARGET_INTEL64) // FIXME
-	args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
-	args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
-	args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
-	args[3] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R10);
-	args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R8);
-	args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R9);
 
    if (thread_data[threadid].icount_reported > 0)
    {
@@ -136,14 +127,15 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
             if (args[0] & CLONE_THREAD)
             {
                // Store the thread's tid ptr for later use
-			   /*
+
                #if defined(TARGET_IA32)
                   ADDRINT tidptr = args[2];
-               #elif defined(TARGET_INTEL64)
+               #elif defined(TARGET_INTEL64) || defined(TARGET_IA32E)
                   ADDRINT tidptr = args[3];
+               #else
+                  #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64 | TARGET_IA32E"
                #endif
-			   */
-				ADDRINT tidptr = args[3]; // FIXME
+
                PIN_GetLock(&new_threadid_lock, threadid);
                tidptrs.push_back(tidptr);
                PIN_ReleaseLock(&new_threadid_lock);

@@ -12,7 +12,7 @@
 #define NUM_PAPI_COUNTERS 6
 
 // When compiling against PinCRT and not using Pinplay, disable zlib as we do not have a PinCRT-compiled version
-#if defined(PIN_CRT) && !defined(PINPLAY_SUPPORTED)
+#if defined(PIN_CRT) && !defined(PINPLAY)
 # define SIFT_USE_ZLIB 0
 #else
 # define SIFT_USE_ZLIB 1

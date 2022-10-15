@@ -43,10 +43,12 @@ void HooksPy::setup()
          break;
    }
    LOG_ASSERT_ERROR(sim_root, "Please make sure SNIPER_ROOT or GRAPHITE_ROOT is set");
-#ifdef TARGET_INTEL64
+#if defined(TARGET_INTEL64) || defined(TARGET_IA32E)
    String python_home = String(sim_root) + "/python_kit/intel64";
-#else
+#elif defined(TARGET_IA32)
    String python_home = String(sim_root) + "/python_kit/ia32";
+#else
+   #error "Unknown TARGET definition"
 #endif
    Py_SetPythonHome(strdup(python_home.c_str()));
    Py_InitializeEx(0 /* don't initialize signal handlers */);

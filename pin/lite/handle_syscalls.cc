@@ -26,24 +26,22 @@ void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
 
    SyscallMdl::syscall_args_t args;
 
-#ifdef TARGET_IA32
-   args.arg0 = PIN_GetContextReg (ctx, REG_GBX);
-   args.arg1 = PIN_GetContextReg (ctx, REG_GCX);
-   args.arg2 = PIN_GetContextReg (ctx, REG_GDX);
-   args.arg3 = PIN_GetContextReg (ctx, REG_GSI);
-   args.arg4 = PIN_GetContextReg (ctx, REG_GDI);
-   args.arg5 = PIN_GetContextReg (ctx, REG_GBP);
-#endif
-
-#ifdef TARGET_INTEL64
-   // FIXME: The LEVEL_BASE:: ugliness is required by the fact that REG_R8 etc
-   // are also defined in /usr/include/sys/ucontext.h
+#if defined(TARGET_IA32)
+   args.arg0 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GBX);
+   args.arg1 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GCX);
+   args.arg2 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GDX);
+   args.arg3 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GSI);
+   args.arg4 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GDI);
+   args.arg5 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GBP);
+#elif defined(TARGET_INTEL64) || defined(TARGET_IA32E)
    args.arg0 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GDI);
    args.arg1 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GSI);
    args.arg2 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_GDX);
    args.arg3 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_R10);
    args.arg4 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_R8);
    args.arg5 = PIN_GetContextReg (ctx, LEVEL_BASE::REG_R9);
+#else
+   #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64 | TARGET_IA32E"
 #endif
 
    if (syscall_number == SYS_clone)
@@ -54,7 +52,7 @@ void handleSyscall(THREADID threadIndex, CONTEXT* ctx)
 
       #if defined(TARGET_IA32)
          new_thread->m_os_info.tid_ptr = args.arg2;
-      #elif defined(TARGET_INTEL64)
+      #elif defined(TARGET_INTEL64) || defined(TARGET_IA32E)
          new_thread->m_os_info.tid_ptr = args.arg3;
       #endif
       new_thread->m_os_info.clear_tid = args.arg0 & CLONE_CHILD_CLEARTID ? true : false;

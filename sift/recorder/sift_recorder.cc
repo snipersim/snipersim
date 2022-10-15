@@ -231,7 +231,7 @@ int main(int argc, char **argv)
       }
    }
 
-#ifdef PINPLAY_SUPPORTED
+#ifdef PINPLAY
    if (KnobReplayer.Value())
    {
       if (KnobEmulateSyscalls.Value())
@@ -242,10 +242,10 @@ int main(int argc, char **argv)
 
 #if defined(SDE_INIT)
     // This is a replay-only tool (for now)
-    pinplay_engine = sde_tracing_get_pinplay_engine();
+    p_pinplay_engine = sde_tracing_get_pinplay_engine();
 #else
-    pinplay_engine = &pp_pinplay_engine;
-    pinplay_engine->Activate(argc, argv, false /*logger*/, KnobReplayer);
+    p_pinplay_engine = &pp_pinplay_engine;
+    p_pinplay_engine->Activate(argc, argv, false /*logger*/, KnobReplayer);
 #endif
    }
 #else

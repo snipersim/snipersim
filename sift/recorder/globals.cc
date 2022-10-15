@@ -30,10 +30,12 @@ KNOB<BOOL>KnobReplayer(KNOB_MODE_WRITEONCE, KNOB_FAMILY,
 
 KNOB<UINT64>KnobExtraePreLoaded(KNOB_MODE_WRITEONCE, "pintool", "sniper:extrae", "0", "Extrae preloaded");
 
-#ifdef PINPLAY_SUPPORTED
-PINPLAY_ENGINE *pinplay_engine;
+#ifdef PINPLAY
+PINPLAY_ENGINE *p_pinplay_engine;
+#if !defined(SDE_INIT)
 PINPLAY_ENGINE pp_pinplay_engine;
-#endif /* PINPLAY_SUPPORTED */
+#endif /* !defined(SDE_INIT) */
+#endif /* PINPLAY */
 
 INT32 app_id;
 INT32 num_threads = 0;

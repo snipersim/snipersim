@@ -7,7 +7,7 @@
 #if defined(SDE_INIT)
 #include "sde-pinplay-supp.H"
 #endif
-#ifdef PINPLAY_SUPPORTED
+#ifdef PINPLAY
 # include "pinplay.H"
 #endif
 #include "control_manager.H"
@@ -45,10 +45,10 @@ extern KNOB<UINT64> KnobExtraePreLoaded;
 # define KNOB_FAMILY "pintool:sift-recorder"
 extern KNOB_COMMENT pinplay_driver_knob_family;
 extern KNOB<BOOL>KnobReplayer;
-#ifdef PINPLAY_SUPPORTED
-extern PINPLAY_ENGINE *pinplay_engine;
+#ifdef PINPLAY
+extern PINPLAY_ENGINE *p_pinplay_engine;
 extern PINPLAY_ENGINE pp_pinplay_engine;
-#endif /* PINPLAY_SUPPORTED */
+#endif /* PINPLAY */
 extern INT32 app_id;
 extern INT32 num_threads;
 extern UINT32 max_num_threads;

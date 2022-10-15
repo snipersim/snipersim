@@ -221,23 +221,23 @@ void FrontendSyscallModel<PinFrontend>::emulateSyscallFunc(threadid_t threadid, 
   sift_assert(syscall_number < MAX_NUM_SYSCALLS);
 
   syscall_args_t args;
-  /*#if defined(TARGET_IA32)
+  #if defined(TARGET_IA32)
     args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBX);
     args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GCX);
     args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
     args[3] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
     args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
     args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GBP);
-  #elif defined(TARGET_INTEL64)*/
+  #elif defined(TARGET_INTEL64) || defined(TARGET_IA32E)
     args[0] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDI);
     args[1] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GSI);
     args[2] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_GDX);
     args[3] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R10);
     args[4] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R8);
     args[5] = PIN_GetContextReg(ctxt, LEVEL_BASE::REG_R9);
- /* #else
-    #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64"
-  #endif*/
+  #else
+    #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64 | TARGET_IA32E"
+  #endif
   
   // 3: Process the syscall and send to the backend
   doSyscall(threadid, syscall_number, args);

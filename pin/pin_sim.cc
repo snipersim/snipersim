@@ -54,7 +54,7 @@
 
 #include "pin.H"
 #include "inst_mode_macros.h"
-#ifdef PINPLAY_SUPPORTED
+#ifdef PINPLAY
 # include "pinplay.H"
 #endif
 
@@ -89,7 +89,7 @@ bool forkedInChild = false;
 map <ADDRINT, string> rtn_map;
 PIN_LOCK rtn_map_lock;
 
-#ifdef PINPLAY_SUPPORTED
+#ifdef PINPLAY
 PINPLAY_ENGINE pinplay_engine;
 #endif
 
@@ -192,7 +192,7 @@ VOID traceCallback(TRACE trace, void *v)
    BBL bbl_head = TRACE_BblHead(trace);
    INS ins_head = BBL_InsHead(bbl_head);
 
-   #ifdef PINPLAY_SUPPORTED
+   #ifdef PINPLAY
    // Make sure all version switches happen before any PinPlay instrumentation, to avoid PinPlay seeing some instructions twice
    CALL_ORDER call_order = (CALL_ORDER)(pinplay_engine.PinPlayFirstBeforeCallOrder() - 1);
    #else
@@ -496,7 +496,7 @@ int main(int argc, char *argv[])
 // PIN_SpawnInternalThread doesn't schedule its threads until after PIN_StartProgram
 //   Transport::getSingleton()->barrier();
 
-#ifdef PINPLAY_SUPPORTED
+#ifdef PINPLAY
    if (Sim()->getConfig()->getEnablePinPlay())
    {
       pinplay_engine.Activate(argc, argv, false /*logger*/, true /*replayer*/);

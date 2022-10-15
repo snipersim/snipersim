@@ -43,7 +43,7 @@ CFLAGS += $(CXXFLAGS)
 
 PINPLAY_HOME=$(PIN_HOME)/extras/pinplay
 ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
-CXXFLAGS += -DPINPLAY_SUPPORTED -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_HOME)/include
+CXXFLAGS += -DPINPLAY -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_HOME)/include
 LD_LIBS += -lpinplay -lbz2 -lz
 LD_FLAGS += -L$(PINPLAY_HOME)/lib/$(SNIPER_TARGET_ARCH)
 endif

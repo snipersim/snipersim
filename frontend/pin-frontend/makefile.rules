@@ -90,7 +90,7 @@ ifeq ($(ARCH_QUERY),i686)
 	TARGET_ARCH = -DTARGET_IA32
 else
 	ifeq ($(ARCH_QUERY),x86_64)
-		TARGET_ARCH ?= -DTARGET_INTEL64
+		TARGET_ARCH ?= -DTARGET_INTEL64 -DTARGET_IA32E
 	else
 		$(error Unknown target arch: $(ARCH_QUERY))
 	endif
@@ -105,7 +105,7 @@ PINPLAY_LIB_HOME = $(PINPLAY_HOME)/lib/$(TARGET)
 
 ifneq ($(wildcard $(PINPLAY_HOME)/include/pinplay.H),)
 EXT_LIB_HOME = $(PINPLAY_HOME)/lib-ext/$(TARGET)
-PINPLAY_CXXFLAGS = -DPINPLAY_SUPPORTED -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_INCLUDE_HOME)
+PINPLAY_CXXFLAGS = -DPINPLAY -D_FILE_OFFSET_BITS=64 -I$(PINPLAY_INCLUDE_HOME)
 PINPLAY_LIBS = $(PINPLAY_LIB_HOME)/libpinplay.a $(EXT_LIB_HOME)/libbz2.a $(EXT_LIB_HOME)/libzlib.a
 PINPLAY_LD_FLAGS = -L$(PINPLAY_LIB_HOME) -L$(EXT_LIB_HOME)
 else
@@ -139,7 +139,11 @@ sift/sift_reader.h: sift
 sift/libsift.a: sift/sift_reader.h $(wildcard sift/*.h) $(wildcard sift/*.cc)
 	$(MAKE) -C sift
 
+ifeq (,$(wildcard $(shell dirname $(shell dirname $(CONTROLLERLIB)))))
+$(OBJDIR)pin_frontend: $(OBJECTS) $(LINK_LIBS)
+else
 $(OBJDIR)pin_frontend: $(OBJECTS) $(LINK_LIBS) $(CONTROLLERLIB)
+endif
 	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(ROOT_DIR)/../../)/,,$(shell readlink -f $@))
 	$(_CMD) $(LINKER) $(LINK_FLAGS) $(LINK_EXE) $@ $(^:%.h=) $(TOOL_LPATHS) $(TOOL_LIBS)
 
