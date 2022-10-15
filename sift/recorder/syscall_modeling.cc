@@ -112,6 +112,25 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          // Handle SYS_clone child tid capture for proper pthread_join emulation.
          // When the CLONE_CHILD_CLEARTID option is enabled, remember its child_tidptr and
          // then when the thread ends, write 0 to the tid mutex and futex_wake it
+         case SYS_clone3_sniper:
+         {
+            if (args[0] && CLONE_THREAD)
+            {
+               struct clone_args_sniper* clone3_args = (struct clone_args_sniper*)args[0];
+               ADDRINT tidptr = clone3_args->parent_tid;
+               PIN_GetLock(&new_threadid_lock, threadid);
+               tidptrs.push_back(tidptr);
+               PIN_ReleaseLock(&new_threadid_lock);
+               /* New thread */
+               thread_data[threadid].output->NewThread();
+            }
+            else
+            {
+               /* New process */
+               // Nothing to do there, handled in fork() -> to check SYS_clone3 is new
+            }
+            break;
+         }
          case SYS_clone:
          {
             if (args[0] & CLONE_THREAD)
