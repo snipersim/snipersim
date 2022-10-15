@@ -11,7 +11,7 @@
 
 class Allocator
 {
-   private:
+   protected:
       struct DataElement
       {
           Allocator *allocator;
