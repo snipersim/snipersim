@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
 # Copyright (C) 2022 Intel Corporation
 # SPDX-License-Identifier: BSD-3-Clause
 # -*- python -*-
@@ -84,8 +84,14 @@ else:
     env['arch'] = 'ia32'
 
 # Set compiler
-env['CC'] = os.environ['CC']
-env['CXX'] = os.environ['CXX']
+try:
+    env['CC'] = os.environ['CC']
+except KeyError:
+    pass
+try:
+    env['CXX'] = os.environ['CXX']
+except KeyError:
+    pass
 
 # Set include and link dirs
 pinplay_include_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit','pinplay','include')
