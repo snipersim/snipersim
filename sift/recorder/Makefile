@@ -11,23 +11,30 @@
 
 # If the tool is built out of the kit, PIN_ROOT must be specified in the make 
 # invocation and point to the kit root.
-ifdef SDE_BUILD_KIT
-PIN_ROOT := $(SDE_BUILD_KIT)/pinkit
-SDE_ROOT := $(PIN_ROOT)/sde-example
-PINPLAY_ROOT := $(PIN_ROOT)/pinplay
-CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
-else
-SDE_BUILD_KIT := ../../sde_kit
-PIN_ROOT := $(SDE_BUILD_KIT)/pinkit
-SDE_ROOT := $(PIN_ROOT)/sde-example
-PINPLAY_ROOT := $(PIN_ROOT)/pinplay
-CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
-CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
-endif
 
+ifdef SDE_BUILD_KIT
+
+PIN_ROOT := $(SDE_BUILD_KIT)/pinkit
+SDE_ROOT := $(PIN_ROOT)/sde-example
+PINPLAY_ROOT := $(PIN_ROOT)/pinplay
+CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
 include $(CONFIG_ROOT)/makefile.config
 include makefile.sde.rules
 include $(TOOLS_ROOT)/Config/makefile.default.rules
+
+else ifdef PIN_ROOT
+
+CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
+include $(CONFIG_ROOT)/makefile.config
+include makefile.pin.rules
+include $(TOOLS_ROOT)/Config/makefile.default.rules
+
+else
+
+$(error "Unable to find an SDE or Pin configuration.")
+
+endif
+
 
 ##############################################################
 #
