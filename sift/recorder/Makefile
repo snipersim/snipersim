@@ -14,6 +14,8 @@
 
 ifdef SDE_BUILD_KIT
 
+# In case the file doesn't exist (clean), continue gracefully
+ifneq (,$(wildcard $(SDE_BUILD_KIT)))
 PIN_ROOT := $(SDE_BUILD_KIT)/pinkit
 SDE_ROOT := $(PIN_ROOT)/sde-example
 PINPLAY_ROOT := $(PIN_ROOT)/pinplay
@@ -21,13 +23,23 @@ CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
 include $(CONFIG_ROOT)/makefile.config
 include makefile.sde.rules
 include $(TOOLS_ROOT)/Config/makefile.default.rules
+else
+all:
+clean:
+endif
 
 else ifdef PIN_ROOT
 
+# In case the file doesn't exist (clean), continue gracefully
+ifneq (,$(wildcard $(PIN_ROOT)))
 CONFIG_ROOT := $(PIN_ROOT)/source/tools/Config
 include $(CONFIG_ROOT)/makefile.config
 include makefile.pin.rules
 include $(TOOLS_ROOT)/Config/makefile.default.rules
+else
+all:
+clean:
+endif
 
 else
 
