@@ -132,6 +132,7 @@ registerHook(PyObject *self, PyObject *args)
    HookType::hook_type_t type = HookType::hook_type_t(hook);
    switch(type) {
       case HookType::HOOK_PERIODIC:
+      case HookType::HOOK_EPOCH_TIMEOUT:     // Added by Kleber Kruger
          Sim()->getHooksManager()->registerHook(type, hookCallbackSubsecondTime, (UInt64)pFunc);
          break;
       case HookType::HOOK_SIM_START:
@@ -149,6 +150,10 @@ registerHook(PyObject *self, PyObject *args)
       case HookType::HOOK_INSTRUMENT_MODE:
       case HookType::HOOK_APPLICATION_START:
       case HookType::HOOK_APPLICATION_EXIT:
+      case HookType::HOOK_EPOCH_START:       // Added by Kleber Kruger
+      case HookType::HOOK_EPOCH_END:         // Added by Kleber Kruger
+      case HookType::HOOK_EPOCH_PERSISTED:   // Added by Kleber Kruger
+      case HookType::HOOK_EPOCH_TIMEOUT_INS: // Added by Kleber Kruger
          Sim()->getHooksManager()->registerHook(type, hookCallbackInt, (UInt64)pFunc);
          break;
       case HookType::HOOK_PRE_STAT_WRITE:

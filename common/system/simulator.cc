@@ -27,6 +27,7 @@
 #include "instruction_tracer.h"
 #include "memory_tracker.h"
 #include "circular_log.h"
+#include "epoch_manager.h" // Added by Kleber Kruger
 
 #include <sstream>
 
@@ -120,6 +121,7 @@ Simulator::Simulator()
    , m_hooks_manager(NULL)
    , m_sampling_manager(NULL)
    , m_faultinjection_manager(NULL)
+   , m_epoch_manager(NULL) // Added by Kleber Kruger
    , m_rtn_tracer(NULL)
    , m_memory_tracker(NULL)
    , m_running(false)
@@ -150,6 +152,9 @@ void Simulator::start()
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
    m_rtn_tracer = RoutineTracer::create();
    m_thread_manager = new ThreadManager();
+
+   // TODO: instantiate only in crash consistency projects
+   m_epoch_manager = new EpochManager(); // Added by Kleber Kruger
 
    if (Sim()->getCfg()->getBool("traceinput/enabled"))
       m_trace_manager = new TraceManager();
@@ -259,6 +264,7 @@ Simulator::~Simulator()
    delete m_tags_manager;              m_tags_manager = NULL;
    delete m_transport;                 m_transport = NULL;
    delete m_stats_manager;             m_stats_manager = NULL;
+   delete m_epoch_manager;             m_epoch_manager = NULL; // Added by Kleber Kruger
 }
 
 void Simulator::enablePerformanceModels()

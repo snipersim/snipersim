@@ -27,6 +27,11 @@ const char* HookType::hook_type_names[] = {
    "HOOK_APPLICATION_ROI_BEGIN",
    "HOOK_APPLICATION_ROI_END",
    "HOOK_SIGUSR1",
+   "HOOK_EPOCH_START",        // Added by Kleber Kruger
+   "HOOK_EPOCH_END",          // Added by Kleber Kruger
+   "HOOK_EPOCH_PERSISTED",    // Added by Kleber Kruger
+   "HOOK_EPOCH_TIMEOUT",      // Added by Kleber Kruger
+   "HOOK_EPOCH_TIMEOUT_INS"   // Added by Kleber Kruger
 };
 static_assert(HookType::HOOK_TYPES_MAX == sizeof(HookType::hook_type_names) / sizeof(HookType::hook_type_names[0]),
               "Not enough values in HookType::hook_type_names");
