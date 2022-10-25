@@ -65,6 +65,9 @@ template <typename T> class Frontend
   /// Syscall modeling module
   static rombauts::shared_ptr<FrontendSyscallModel<T>> m_sysmodel;
   
+  /// Configuration options
+  static FrontendOptions<T>* m_options;
+
   /// Current number of simulated threads
   uint32_t num_threads;
   

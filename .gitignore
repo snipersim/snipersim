@@ -61,6 +61,8 @@ riscv/Speckle
 xed_kit
 mbuild
 sde_kit
+capstone
+dynamorio
 
 # Pin3 output
 frontend/pin-frontend/obj-intel64

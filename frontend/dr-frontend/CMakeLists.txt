@@ -29,30 +29,18 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE.
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.6...2.8.12)
 
-#include(CheckCXXCompilerFlag)
-#CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-#CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-#if(COMPILER_SUPPORTS_CXX11)
-#        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-#elseif(COMPILER_SUPPORTS_CXX0X)
-#        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-#else()
-#        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
-#endif()
+project(dr-frontend)
 
-message("SNIPER_HOME:" $ENV{SNIPER_HOME})
-if(NOT DEFINED ENV{SNIPER_HOME})
-    message(FATAL_ERROR "Please define SNIPER_HOME environment variable")
-endif()
+get_filename_component(SNIPER_FE_HOME ${CMAKE_CURRENT_LIST_DIR} PATH)
+get_filename_component(SNIPER_HOME ${SNIPER_FE_HOME} PATH)
 
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c\\+\\+11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g")
 
-set(SNIPER_FRONTEND $ENV{SNIPER_HOME}/frontend)
-set(SNIPER_SIFT $ENV{SNIPER_HOME}/dynamorio/clients/dr-frontend/sift)
+set(SNIPER_FRONTEND ${SNIPER_HOME}/frontend)
+set(SNIPER_SIFT ${SNIPER_HOME}/sift)
 
 include_directories(${SNIPER_FRONTEND} ${SNIPER_SIFT})
 
@@ -60,11 +48,11 @@ set(HEADER_FILES ${SNIPER_FRONTEND}/frontend.h ${SNIPER_FRONTEND}/frontend_threa
 
 #todo: include options and defs headers
 
-#find_package(DynamoRIO)
-#if (NOT DynamoRIO_FOUND)
-#  message(FATAL_ERROR "DynamoRIO package required to build")
-#endif(NOT DynamoRIO_FOUND)
-#
+find_package(DynamoRIO)
+if (NOT DynamoRIO_FOUND)
+  message(FATAL_ERROR "DynamoRIO package required to build")
+endif(NOT DynamoRIO_FOUND)
+
 add_library(dr-frontend SHARED
        dr_frontend.cc 
        ${SNIPER_FRONTEND}/bbv_count.cc 
@@ -73,7 +61,7 @@ add_library(dr-frontend SHARED
 # sniper's libraries and others
 find_library(libz z)
 target_link_libraries(dr-frontend 
-        $ENV{SNIPER_HOME}/dynamorio/clients/dr-frontend/sift/libsift.a
+        ${SNIPER_HOME}/sift/libsift.a
         ${libz})
 
 configure_DynamoRIO_client(dr-frontend)
@@ -81,13 +69,6 @@ use_DynamoRIO_extension(dr-frontend drmgr)
 use_DynamoRIO_extension(dr-frontend droption)
 use_DynamoRIO_extension(dr-frontend drreg)
 use_DynamoRIO_extension(dr-frontend drutil)
-#use_DynamoRIO_extension(drltrace drwrap)
-#use_DynamoRIO_extension(drltrace drx)
-# We keep our shared libs in the lib dir, not the bin dir:
-place_shared_lib_in_lib_dir(dr-frontend)
-
-# ensure we rebuild if includes change
-add_dependencies(dr-frontend api_headers)
 
 # Provide a hint for how to use the client
 if (NOT DynamoRIO_INTERNAL OR NOT "${CMAKE_GENERATOR}" MATCHES "Ninja")
@@ -97,8 +78,6 @@ if (NOT DynamoRIO_INTERNAL OR NOT "${CMAKE_GENERATOR}" MATCHES "Ninja")
     ARGS -E echo "Usage: pass to drconfig or drrun: -t dr-frontend"
     VERBATIM)
 endif ()
-
-install_target(dr-frontend ${INSTALL_CLIENTS_LIB})
 
 set(INSTALL_DRLTRACE_CONFIG ${INSTALL_CLIENTS_BASE})
 
@@ -115,6 +94,3 @@ file(APPEND ${CONFIG} "# client tool path\n")
 file(APPEND ${CONFIG} "CLIENT_REL=${INSTALL_CLIENTS_LIB}/${LIB_PFX}dr-frontend${LIB_EXT}\n")
 file(APPEND ${CONFIG} "# client tool options\n")
 file(APPEND ${CONFIG} "TOOL_OP=\n")
-
-DR_install(FILES "${CONFIG}" DESTINATION ${INSTALL_DRLTRACE_CONFIG})
-register_tool_file("dr-frontend")

@@ -53,14 +53,14 @@ template <> void ExecFrontend<DRFrontend>::handle_frontend_fini()
 
 void DRFrontend::allocate_thread_data(size_t thread_data_size)
 {
-  std::cerr << "Inside allocate" << std::endl;
+  //std::cerr << "Inside allocate" << std::endl;
   m_thread_data = (thread_data_t*) dr_custom_alloc(NULL, (dr_alloc_flags_t) 0, thread_data_size, 0, NULL);
 }
 
 // Frontend initialization, called from the specialization of ExecFrontend::handle_frontend_init().
 void DRFrontend::init()
 {
-  std::cerr << "Init specific frontend" << std::endl;
+  //std::cerr << "Init specific frontend" << std::endl;
 
   this->num_threads = 0;
   // Initialize options for scratch registers - We need 2 reg slots beyond drreg's eflags slots => 3 slots 
@@ -147,8 +147,10 @@ void DRFrontend::event_thread_init(void *drcontext)
 
   // Update the thread counter
   next_threadid++;
+  if (m_options->get_verbose())
+  {
     std::cerr << "[Thread init end] Threadid: " << next_threadid << std::endl;
-
+  }
 }
 
 void DRFrontend::event_thread_exit(void *drcontext)
@@ -159,9 +161,15 @@ void DRFrontend::event_thread_exit(void *drcontext)
   int threadid_dr = dr_get_thread_id(drcontext);  
   // get thread id in the frontend of this DR threadid
   threadid_t threadid_fe = map_threadids[threadid_dr];
-  std::cerr << "[Thread exit] Threadid: " << threadid_fe << std::endl;
-  if(dr_using_all_private_caches())
+  if (m_options->get_verbose())
+  {
+    std::cerr << "[Thread exit] Threadid: " << threadid_fe << std::endl;
+  }
+  if (m_options->get_verbose())
+  {
+    if(dr_using_all_private_caches())
       std::cerr << "[Thread exit] Using private caches."  << std::endl;
+  }
   
   // free allocated memory for tls 
   per_thread_t *data = (per_thread_t *) drmgr_get_tls_field(drcontext, tls_idx);
@@ -173,7 +181,10 @@ void DRFrontend::event_thread_exit(void *drcontext)
 
 void DRFrontend::event_exit(void)
 {
-  std::cerr << "[Exit event] Begin."  << std::endl;
+  if (m_options->get_verbose())
+  {
+    std::cerr << "[Exit event] Begin."  << std::endl;
+  }
 
   if (!dr_raw_tls_cfree(tls_offs, FRONTEND_TLS_COUNT))
     DR_ASSERT(false);
@@ -186,7 +197,10 @@ void DRFrontend::event_exit(void)
     DR_ASSERT(false);
     
   drmgr_exit();
-  std::cerr << "[Exit event] End."  << std::endl;
+  if (m_options->get_verbose())
+  {
+    std::cerr << "[Exit event] End."  << std::endl;
+  }
 }
 
 // analysis of application code: count instructions 
@@ -631,7 +645,7 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
 DR_EXPORT void
 dr_client_main(client_id_t id, int argc, const char *argv[])
 {
-  std::cerr << "Main client" << std::endl;
+  //std::cerr << "Main client" << std::endl;
   frontend::ExecFrontend<DRFrontend>(argc, argv).start();
 }
 

@@ -89,6 +89,8 @@ template <typename T>
 FrontendControl<T>* Frontend<T>::m_control;
 template <typename T>
 FELock<T>* Frontend<T>::new_threadid_lock;
+template <typename T>
+FrontendOptions<T>* Frontend<T>::m_options;
 
 template <typename T>
 void Frontend <T>::init_frontend_modules(FrontendOptions<T>* options)
@@ -96,6 +98,9 @@ void Frontend <T>::init_frontend_modules(FrontendOptions<T>* options)
   // Lock for the creation of new threads (used in the Threads and SyscallModel modules)
   new_threadid_lock = new FELock<T>;
   
+  // Save options
+  m_options = options;
+
   // Create Syscall module
   m_sysmodel = rombauts::shared_ptr<FrontendSyscallModel<T>>(new FrontendSyscallModel<T>(options, m_thread_data, new_threadid_lock, &(tidptrs)));
   //m_sysmodel = std::make_shared<FrontendSyscallModel<T>>(options, m_thread_data, new_threadid_lock, &(tidptrs));

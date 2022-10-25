@@ -176,7 +176,10 @@ void FrontendControl <T>::closeFile(threadid_t threadid)
    Sift::Writer *output = m_thread_data[threadid].output;
    m_thread_data[threadid].output = NULL;
    // Thread will stop writing to output from this point on
-           std::cerr << "[SNIPER_FRONTEND] Invoking End" << std::endl;
+   if (m_options->get_verbose())
+   {
+      std::cerr << "[SNIPER_FRONTEND] Invoking End" << std::endl;
+   }
 
    output->End();
    delete output;

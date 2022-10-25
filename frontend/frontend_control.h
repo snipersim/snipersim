@@ -6,6 +6,7 @@
 #include "frontend_threads.h"
 #include "frontend_utils.h"
 #include "frontend_syscall.h"
+#include "shared_ptr.h"
 #include <memory>
 
 namespace frontend

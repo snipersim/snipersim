@@ -4,12 +4,13 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
 STANDALONE=$(SIM_ROOT)/lib/sniper
 PIN_FRONTEND=$(SIM_ROOT)/frontend/pin-frontend/obj-intel64/pin_frontend
+DYNAMORIO_FRONTEND=$(SIM_ROOT)/frontend/dr-frontend/build/libdr-frontend.so
 LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a
 LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_FOLLOW=$(SIM_ROOT)/pin/../lib/follow_execv.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND)
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
 
 PYTHON2=python2
 
@@ -22,9 +23,22 @@ all: message dependencies $(SIM_TARGETS) configscripts
 include common/Makefile.common
 
 dependencies: package_deps sde_kit $(PIN_ROOT) pin xed python mcpat linux builddir showdebugstatus
+
+BUILD_CAPSTONE ?=
 ifeq ($(BUILD_ARM),1)
+BUILD_CAPSTONE=1
+else ifeq ($(BUILD_DYNAMORIO),1)
+BUILD_CAPSTONE=1
+endif
+
+ifeq ($(BUILD_CAPSTONE),1)
 dependencies: capstone
 .PHONY: capstone
+endif
+
+ifeq ($(BUILD_DYNAMORIO),1)
+dependencies: dynamorio
+.PHONY: dynamorio
 endif
 
 $(SIM_TARGETS): dependencies
@@ -35,6 +49,9 @@ ifneq ($(USE_PINPLAY), 1)
 	@echo -n " with SDE"
 else
 	@echo -n " with Pinplay"
+endif
+ifeq ($(BUILD_DYNAMORIO),1)
+	@echo -n " and DynamoRIO"
 endif
 ifeq ($(BUILD_RISCV),1)
 	@echo -n " and RISCV"
@@ -49,6 +66,15 @@ $(STANDALONE): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)
 
 $(PIN_FRONTEND):
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/frontend/pin-frontend
+
+ifeq ($(BUILD_DYNAMORIO),1)
+$(DYNAMORIO_FRONTEND): $(LIB_SIFT)
+	@if [ ! -e "$(SIM_ROOT)/frontend/dr-frontend/build/Makefile" ]; then mkdir -p $(SIM_ROOT)/frontend/dr-frontend/build && cd $(SIM_ROOT)/frontend/dr-frontend/build && cmake -DDEBUG=ON -DDynamoRIO_DIR=$(DYNAMORIO_INSTALL)/build/cmake .. ; fi
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/frontend/dr-frontend/build
+else
+$(DYNAMORIO_FRONTEND):
+	$(_CMD) true
+endif
 
 # Disable original frontend
 
@@ -67,6 +93,22 @@ $(LIB_SIFT): $(LIB_CARBON)
 $(LIB_DECODER): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/decoder_lib 
 
+DYNAMORIO_GITID=246ddb28e7848b2d09d2b9909f99a6da9b2ce35e
+DYNAMORIO_INSTALL=$(SIM_ROOT)/dynamorio
+DYNAMORIO_INSTALL_DEP=$(DYNAMORIO_INSTALL)/CMakeLists.txt
+$(DYNAMORIO_INSTALL_DEP):
+	$(_MSG) '[DOWNLO] dynamorio'
+	$(_CMD) git clone --quiet --recursive https://github.com/DynamoRIO/dynamorio.git $(DYNAMORIO_INSTALL)
+	$(_CMD) git -C $(DYNAMORIO_INSTALL) reset --quiet --hard $(DYNAMORIO_GITID)
+	$(_CMD) touch $(DYNAMORIO_INSTALL)/.autodownloaded
+
+DYNAMORIO_BUILD_DEP=$(DYNAMORIO_INSTALL)/build/bin64/drrun
+dynamorio: $(DYNAMORIO_BUILD_DEP)
+$(DYNAMORIO_BUILD_DEP): $(DYNAMORIO_INSTALL_DEP)
+	$(_MSG) '[INSTAL] dynamorio'
+	$(_CMD) cd dynamorio && mkdir build && cd build && cmake -DDEBUG=ON ..
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C dynamorio/build
+
 CAPSTONE_GITID=f9c6a90489be7b3637ff1c7298e45efafe7cf1b9
 CAPSTONE_INSTALL=$(SIM_ROOT)/capstone
 CAPSTONE_INSTALL_DEP=$(CAPSTONE_INSTALL)/arch/AArch64/ARMMappingInsnOp.inc
@@ -74,6 +116,7 @@ $(CAPSTONE_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] capstone'
 	$(_CMD) git clone --quiet https://github.com/aquynh/capstone.git $(CAPSTONE_INSTALL)
 	$(_CMD) git -C $(CAPSTONE_INSTALL) reset --quiet --hard $(CAPSTONE_GITID)
+	$(_CMD) touch $(CAPSTONE_INSTALL)/.autodownloaded
 
 CAPSTONE_BUILD_DEP=$(CAPSTONE_INSTALL)/libcapstone.so.4
 capstone: $(CAPSTONE_BUILD_DEP)
@@ -174,9 +217,9 @@ configscripts: dependencies
 	@./tools/makerelativepath.py sde_home "$(SIM_ROOT)" "$(SDE_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py xed_home "$(SIM_ROOT)" "$(XED_HOME)" >> config/sniper.py
-	@./tools/makerelativepath.py dynamorio_home "$(SIM_ROOT)" "$(DR_HOME)" >> config/sniper.py
+	@./tools/makerelativepath.py dynamorio_home "$(SIM_ROOT)" "$(DYNAMORIO_INSTALL)/build" >> config/sniper.py
 	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
-	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(SDE_HOME)" "$(PIN_HOME)" "$(DR_HOME)" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
+	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(SDE_HOME)" "$(PIN_HOME)" "$(DYNAMORIO_INSTALL)/build" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
 
 empty_config:
 	$(_MSG) '[CLEAN ] config'
@@ -195,6 +238,8 @@ clean: empty_config empty_deps
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C tools clean
 	$(_MSG) '[CLEAN ] frontend/pin-frontend'
 	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C frontend/pin-frontend clean ; fi
+	$(_MSG) '[CLEAN ] frontend/dr-frontend'
+	$(_CMD) if [ -d "$(SIM_ROOT)/frontend/dr-frontend/build" ]; then rm -rf $(SIM_ROOT)/frontend/dr-frontend/build ; fi
 	$(_CMD) rm -f .build_os
 
 distclean: clean
@@ -202,6 +247,10 @@ distclean: clean
 	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
 	$(_MSG) '[DISTCL] SDE kit'
 	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then rm -rf $(SDE_HOME); fi
+	$(_MSG) '[DISTCL] Capstone'
+	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then rm -rf $(CAPSTONE_INSTALL); fi
+	$(_MSG) '[DISTCL] DynamoRIO'
+	$(_CMD) if [ -e "$(DYNAMORIO_INSTALL)/.autodownloaded" ]; then rm -rf $(DYNAMORIO_INSTALL); fi
 	$(_MSG) '[DISTCL] python_kit'
 	$(_CMD) rm -rf python_kit
 	$(_MSG) '[DISTCL] McPAT'

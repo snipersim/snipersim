@@ -222,7 +222,7 @@ if frontend:
   elif 'dr' in frontend:
     print '[RECORD-TRACE] Using DynamoRIO frontend'
     DRRUN = '%(dynamorio_home)s/bin64/drrun' % locals()
-    DR_frontendlib = '%(dynamorio_home)s/clients/lib64/debug/libdr-frontend.so' % locals()
+    DR_frontendlib = '%(HOME)s/frontend/dr-frontend/build/libdr-frontend.so' % locals()
     DR_libpath = 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%(dynamorio_home)s/lib64/debug' % locals()
     bool_args = ''
     if value_pa == 1:
