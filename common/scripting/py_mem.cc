@@ -18,7 +18,7 @@ readMemory(PyObject *self, PyObject *args)
    core->accessMemory(Core::NONE, Core::READ, address, buf, size, Core::MEM_MODELED_NONE);
 
    PyObject *res = Py_BuildValue("s#", buf, size);
-   delete buf;
+   delete [] buf;
 
    return res;
 }
@@ -48,7 +48,7 @@ readCstr(PyObject *self, PyObject *args)
 
    buf[maxsize] = 0;
    PyObject *res = Py_BuildValue("s", buf);
-   delete buf;
+   delete [] buf;
 
    return res;
 }
