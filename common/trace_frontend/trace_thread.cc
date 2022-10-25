@@ -408,10 +408,7 @@ Instruction* TraceThread::decode(Sift::Instruction &inst)
    instruction->setAddress(va2pa(inst.sinst->addr));
    instruction->setSize(inst.sinst->size);
    instruction->setAtomic(dec_inst.is_atomic());
-   char disassembly[64];
-   dec_inst.disassembly_to_str();  
-   instruction->setDisassembly(disassembly);
-   //printf("%s\n", instruction->getDisassembly().c_str());
+   instruction->setDisassembly(dec_inst.disassembly_to_str().c_str());
    
    const std::vector<const MicroOp*> *uops = InstructionDecoder::decode(inst.sinst->addr, &dec_inst, instruction);
    instruction->setMicroOps(uops);
