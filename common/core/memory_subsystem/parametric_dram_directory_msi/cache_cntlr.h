@@ -17,6 +17,7 @@
 #include "stats.h"
 #include "subsecond_time.h"
 #include "shmem_perf.h"
+#include "epoch_cntlr.h" // Added by Kleber Kruger
 
 #include "boost/tuple/tuple.hpp"
 
@@ -349,6 +350,8 @@ namespace ParametricDramDirectoryMSI
          core_id_t getHome(IntPtr address) { return m_tag_directory_home_lookup->getHome(address); }
 
          CacheCntlr* lastLevelCache(void);
+
+         EpochCntlr* getEpochCntlr(void); // Added by Kleber Kruger
 
       public:
 

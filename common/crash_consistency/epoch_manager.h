@@ -1,12 +1,15 @@
 #ifndef EPOCH_MANAGER_H
 #define EPOCH_MANAGER_H
 
+#include "epoch_cntlr.h"
 #include "simulator.h"
 #include "core_manager.h"
 #include "performance_model.h"
 #include "hooks_manager.h"
 #include "config.hpp"
 #include "stats.h"
+
+#include <cmath>
 
 class EpochManager
 {
@@ -77,6 +80,14 @@ public:
    UInt64 getPersistedInstruction() const { return m_commited.instr; }
 
    /**
+    * @brief Get the Epoch Cntlr
+    * 
+    * @param core_id 
+    * @return EpochCntlr* 
+    */
+   EpochCntlr* getEpochCntlr(const core_id_t core_id);
+
+   /**
     * @brief Get the Global SystemEID
     * @return UInt64 
     */
@@ -104,6 +115,11 @@ private:
 
    SubsecondTime m_max_interval_time;
    UInt64 m_max_interval_instr;
+   
+   std::vector<EpochCntlr*> m_cntlrs;
+   UInt32 m_cores_by_vd;
+
+   void createEpochCntlrs();
 
    /**
     * @brief Start the epoch manager system
@@ -132,8 +148,10 @@ private:
 
    static UInt64 getMaxIntervalTime();
    static UInt64 getMaxIntervalInstructions();
+   static UInt32 getNumVersionedDomains();
+   static UInt32 getSharedCoresByVD();
    
-   static UInt64 getInstructionCount();
+   static UInt64 getTotalInstructionCount();
 
    template <typename T>
    static T gapBetweenCheckpoints(T current, T last);

@@ -8,6 +8,7 @@
 #include "hooks_manager.h"
 #include "cache_atd.h"
 #include "shmem_perf.h"
+#include "epoch_manager.h" // Added by Kleber Kruger
 
 #include <cstring>
 
@@ -2301,6 +2302,17 @@ Semaphore*
 CacheCntlr::getNetworkThreadSemaphore()
 {
    return m_network_thread_sem;
+}
+
+/**
+ * @brief Get the EpochCntlr of this CacheCntlr
+ * Added by Kleber Kruger
+ * 
+ * @return EpochCntlr* 
+ */
+EpochCntlr* CacheCntlr::getEpochCntlr(void)
+{
+   return Sim()->getEpochManager()->getEpochCntlr(m_core_id);
 }
 
 }
