@@ -80,9 +80,9 @@ bool Sift::Reader::initStream()
    std::cerr << "[DEBUG:" << m_id << "] InitStream Attempting Open" << std::endl;
    #endif
 
-   inputstream = new std::ifstream(m_filename, std::ios::in);
+   input = new vifstream(m_filename);
 
-   if ((!inputstream->is_open()) || (!inputstream->good()))
+   if ((!input->is_open()) || (input->fail()))
    {
       std::cerr << "[SIFT:" << m_id << "] Cannot open " << m_filename << "\n";
       return false;
@@ -91,8 +91,6 @@ bool Sift::Reader::initStream()
    struct stat filestatus;
    stat(m_filename, &filestatus);
    filesize = filestatus.st_size;
-
-   input = new vifstream(inputstream);
 
    Sift::Header hdr;
    input->read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
@@ -154,7 +152,7 @@ bool Sift::Reader::initResponse()
          std::cerr << "[SIFT:" << m_id << "] Response filename not set\n";
          return false;
       }
-      response = new vofstream(m_response_filename, std::ios::out);
+      response = new vofstream(m_response_filename);
    }
 
    if ((!response->is_open()) || (response->fail()))
@@ -310,7 +308,7 @@ bool Sift::Reader::Read(Instruction &inst)
                hexdump((char*)bytes, size);
                #endif
                #if VERBOSE > 1
-               for (int i = 0 ; i < (size/8) ; i++)
+               for (uint32_t i = 0 ; i < (size/8) ; i++)
                {
                   std::cerr << __FUNCTION__ << ": syscall args[" << i << "] = " << ((uint64_t*)bytes)[i] << std::endl;
                }
@@ -768,8 +766,8 @@ void Sift::Reader::sendSimpleResponse(RecOtherType type, void *data, uint32_t si
 
 uint64_t Sift::Reader::getPosition()
 {
-   if (inputstream)
-      return inputstream->tellg();
+   if (input)
+      return input->tellg();
    else
       return 0;
 }

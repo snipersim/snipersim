@@ -78,7 +78,7 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    if (m_send_va2pa_mapping)
       options |= PhysicalAddress;
 
-   output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+   output = new vofstream(filename);
 
    if (!output->is_open())
    {
@@ -115,7 +115,7 @@ void Sift::Writer::initResponse()
    if (!response)
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new vifstream(m_response_filename, std::ios::in);
+     response = new vifstream(m_response_filename);
      sift_assert(!response->fail());
    }
 }
