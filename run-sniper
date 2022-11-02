@@ -564,7 +564,9 @@ elif use_mpi:
     if va2pa_valid():
       other_options += [ '--pa' ]
     else:
-      print >> sys.stderr, '[SNIPER] Warning: Unable to use physical addresses for shared memory simulation.'
+      # Only print a warning if we are attempting to use multiple ranks (apps) that could share memory.
+      if tracegen['num_apps'] > 1:
+        print >> sys.stderr, '[SNIPER] Warning: Unable to use physical addresses for shared memory simulation.'
   applications = [
     (mpiexec, other_options + [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]
@@ -594,8 +596,6 @@ elif use_sift:
   if use_pa:
     if va2pa_valid():
       other_options += [ '--pa' ]
-    else:
-      print >> sys.stderr, '[SNIPER] Warning: Unable to use physical addresses for shared memory simulation.'
   applications = [
     ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]
