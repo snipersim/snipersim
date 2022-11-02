@@ -1,4 +1,5 @@
 #include "epoch_cntlr.h"
+#include "epoch_manager.h"
 
 VersionedDomain::VersionedDomain(const UInt32 id) : m_id(id)
 {
@@ -7,12 +8,24 @@ VersionedDomain::VersionedDomain(const UInt32 id) : m_id(id)
 
 VersionedDomain::~VersionedDomain() = default;
 
-EpochCntlr::EpochCntlr(const UInt32 vd_id, std::vector<core_id_t> cores) : m_vd(vd_id), m_cores(cores)
+EpochCntlr::EpochCntlr(EpochManager* epoch_manager, const UInt32 vd_id, std::vector<core_id_t> cores) : 
+                       m_epoch_manager(epoch_manager), m_vd(vd_id), m_cores(cores) { }
+
+EpochCntlr::~EpochCntlr() = default;
+
+void EpochCntlr::newEpoch()
 {
+   m_vd.increment();
 }
 
-EpochCntlr::~EpochCntlr()
+void EpochCntlr::commit()
 {
+   m_epoch_manager->commit();
+}
+
+void EpochCntlr::registerPersistedEID(UInt64 persisted_eid)
+{
+   m_epoch_manager->registerPersistedEID(persisted_eid);
 }
 
 UInt64 EpochCntlr::getInstructionCount()

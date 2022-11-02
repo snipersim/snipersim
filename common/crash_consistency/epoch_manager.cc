@@ -31,7 +31,7 @@ void EpochManager::createEpochCntlrs()
       all_cores.push_back(core_id);
 
    if (m_cntlrs.size() == 1)
-      m_cntlrs[0] = new EpochCntlr(0, all_cores);
+      m_cntlrs[0] = new EpochCntlr(this, 0, all_cores);
    
    else
    {
@@ -41,7 +41,7 @@ void EpochManager::createEpochCntlrs()
          auto first = vd_id * cores_by_vd;
          auto last = (first + cores_by_vd) <= total_cores ? (first + cores_by_vd) : total_cores;
          std::vector<core_id_t> cores(all_cores.begin() + first, all_cores.begin() + last);
-         m_cntlrs[vd_id] = new EpochCntlr(vd_id, cores);
+         m_cntlrs[vd_id] = new EpochCntlr(this, vd_id, cores);
       }
    }
 }

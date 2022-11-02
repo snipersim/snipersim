@@ -9,7 +9,6 @@
 class VersionedDomain
 {
 public:
-
    VersionedDomain(const UInt32 id);
    ~VersionedDomain();
 
@@ -21,26 +20,50 @@ public:
    UInt64 getEpochID() const { return m_eid; }
 
 private:
-
    const UInt32 m_id;
    UInt64 m_eid;
 };
 
+class EpochManager;
 class EpochCntlr
 {
 public:
 
+   // struct VersionedDomain
+   // {
+   //    VersionedDomain(const UInt32 id) : m_id(id) {}
+   //    ~VersionedDomain() = default;
+      
+   //    const UInt32 m_id;
+   //    UInt64 m_eid;  
+   // };
+
    /**
     * @brief Construct a new Epoch Cntlr
     */
-   EpochCntlr(const UInt32 vd_id, std::vector<core_id_t> cores);
+   EpochCntlr(EpochManager* epoch_manager, const UInt32 vd_id, std::vector<core_id_t> cores);
 
    /**
     * @brief Destroy the Epoch Cntlr
     */
    ~EpochCntlr();
 
-   UInt64 getInstructionCount();
+   /**
+    * @brief Increment the current epoch
+    */
+   void newEpoch();
+
+   /**
+    * @brief Commit the current epoch
+    */
+   void commit();
+
+   /**
+    * @brief Register an Epoch ID with the last persisted data
+    * 
+    * @param persisted_eid
+    */
+   void registerPersistedEID(UInt64 persisted_eid);
 
    UInt64 getCurrentEID() const { return m_vd.getEpochID(); }
 
@@ -48,8 +71,11 @@ public:
 
 private:
 
+   EpochManager* m_epoch_manager;
    VersionedDomain m_vd;
    std::vector<core_id_t> m_cores;
+
+   UInt64 getInstructionCount();
 };
 
 #endif /* EPOCH_CNTLR_H */
