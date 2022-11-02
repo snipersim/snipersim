@@ -38,6 +38,11 @@ public:
       HOOK_APPLICATION_ROI_BEGIN, // none                            ROI begin, always triggers
       HOOK_APPLICATION_ROI_END,   // none                            ROI end, always triggers
       HOOK_SIGUSR1,             // none                              Sniper process received SIGUSR1
+      HOOK_EPOCH_START,         // Added by Kleber Kruger            An epoch starts
+      HOOK_EPOCH_END,           // Added by Kleber Kruger            An epoch ends
+      HOOK_EPOCH_PERSISTED,     // Added by Kleber Kruger            An epoch persisted
+      HOOK_EPOCH_TIMEOUT,       // Added by Kleber Kruger            An epoch timeout
+      HOOK_EPOCH_TIMEOUT_INS,   // Added by Kleber Kruger            An epoch timeout (by instructions interval)
       HOOK_TYPES_MAX
    };
    static const char* hook_type_names[];

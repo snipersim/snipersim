@@ -29,7 +29,18 @@ class FaultinjectionManager;
 class TagsManager;
 class RoutineTracer;
 class MemoryTracker;
+class EpochManager; // Added by Kleber Kruger
 namespace config { class Config; }
+
+// Added by Kleber Kruger
+typedef enum project_type_t
+{
+   DEFAULT = 0,
+   PICL,
+   NVOVERLAY,
+   DONUTS,
+   NUM_PROJECT_TYPES
+} ProjectType;
 
 class Simulator
 {
@@ -68,6 +79,7 @@ public:
    FaultinjectionManager *getFaultinjectionManager() { return m_faultinjection_manager; }
    TraceManager *getTraceManager() { return m_trace_manager; }
    TagsManager *getTagsManager() { return m_tags_manager; }
+   EpochManager *getEpochManager() { return m_epoch_manager; } // Added by Kleber Kruger
    RoutineTracer *getRoutineTracer() { return m_rtn_tracer; }
    MemoryTracker *getMemoryTracker() { return m_memory_tracker; }
    void setMemoryTracker(MemoryTracker *memory_tracker) { m_memory_tracker = memory_tracker; }
@@ -82,6 +94,9 @@ public:
    // Access to the Decoder library for the simulator run
    void createDecoder();
    dl::Decoder *getDecoder();
+
+   ProjectType getProjectType() const { return m_project_type; }  // Added by Kleber Kruger
+   static const char* project_names[];                            // Added by Kleber Kruger
    
 private:
    Config m_config;
@@ -104,8 +119,10 @@ private:
    HooksManager *m_hooks_manager;
    SamplingManager *m_sampling_manager;
    FaultinjectionManager *m_faultinjection_manager;
+   EpochManager *m_epoch_manager;   // Added by Kleber Kruger
    RoutineTracer *m_rtn_tracer;
    MemoryTracker *m_memory_tracker;
+   ProjectType m_project_type;      // Added by Kleber Kruger
 
    bool m_running;
    bool m_inst_mode_output;
@@ -115,6 +132,8 @@ private:
    static config::Config *m_config_file;
    static bool m_config_file_allowed;
    static Config::SimulationMode m_mode;
+
+   static ProjectType loadProjectType(); // Added by Kleber Kruger
    
    // Object to access the decoder library with the correct configuration
    static dl::Decoder *m_decoder;

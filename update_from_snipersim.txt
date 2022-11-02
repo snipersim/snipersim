@@ -1,0 +1,4 @@
+1)   git remote add upstream https://github.com/snipersim/snipersim.git
+2)   git pull --rebase upstream main
+2.1) git rebase --skip
+3)   git push --force-with-lease origin main
