@@ -224,13 +224,16 @@ if frontend:
     DRRUN = '%(dynamorio_home)s/bin64/drrun' % locals()
     DR_frontendlib = '%(HOME)s/frontend/dr-frontend/build/libdr-frontend.so' % locals()
     DR_libpath = 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%(dynamorio_home)s/lib64/debug' % locals()
+    dr_args = '-thread_private'
     bool_args = ''
     if value_pa == 1:
        bool_args += '-pa '
-    if value_verbose == 1:
-       bool_args += '-verbose '
-    # FIXME: we could use -thread_private to simulate multithreading, but this is not supported yet for ARM
-    cmd = '%(DR_libpath)s %(DRRUN)s -debug -loglevel 1 -thread_private -c %(DR_frontendlib)s -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_tool_args)s  -- ' % locals() + ' '.join(cmdline)
+    if verbose:
+       bool_args += '-verbose %(value_verbose)s' % locals()
+       dr_args += ' -loglevel 1'
+    else:
+       dr_args += ' -loglevel 0 -stderr_mask 0'
+    cmd = '%(DR_libpath)s %(DRRUN)s %(dr_args)s -c %(DR_frontendlib)s -roi %(value_roi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_tool_args)s  -- ' % locals() + ' '.join(cmdline)
   elif 'rv' in frontend:
     rv8_home = os.getenv('RV8_HOME')
     if not rv8_home:
