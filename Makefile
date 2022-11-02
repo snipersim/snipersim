@@ -45,10 +45,12 @@ $(SIM_TARGETS): dependencies
 
 message:
 	@echo -n Building for x86 \($(SNIPER_TARGET_ARCH)\)
-ifneq ($(USE_PINPLAY), 1)
-	@echo -n " with SDE"
-else
+ifneq (,$(USE_PIN))
+	@echo -n " with Pin"
+else ifneq (,$(USE_PINPLAY))
 	@echo -n " with Pinplay"
+else
+	@echo -n " with SDE"
 endif
 ifeq ($(BUILD_DYNAMORIO),1)
 	@echo -n " and DynamoRIO"
@@ -148,28 +150,44 @@ $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_MSG) '[INSTAL] xed'
 	$(_CMD) cd $(XED_INSTALL) ; $(PYTHON2) ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
-ifneq ($(USE_PINPLAY), 1)
-SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.0.0-2021-11-07-lin.tar.xz
+ifneq (,$(USE_PIN))
+PIN_DOWNLOAD=https://snipersim.org/packages/pin-3.22-98547-g7a303a835-gcc-linux.tar.gz
+PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
+$(PIN_ROOT): $(PIN_DEP)
+$(PIN_DEP):
+	$(_MSG) '[DOWNLO] Pin 3.22-98547'
+	$(_CMD) mkdir -p $(PIN_HOME)
+	$(_CMD) wget -O $(shell basename $(PIN_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(PIN_DOWNLOAD)
+	$(_CMD) tar -x -f $(shell basename $(PIN_DOWNLOAD)) --auto-compress --strip-components 1 -C $(PIN_HOME)
+	$(_CMD) rm $(shell basename $(PIN_DOWNLOAD))
+	$(_CMD) touch $(PIN_HOME)/.autodownloaded
+sde_kit: $(PIN_ROOT)
+else ifneq (,$(USE_PINPLAY))
+PIN_DOWNLOAD=https://snipersim.org/packages/pinplay-dcfg-3.11-pin-3.11-97998-g7ecce2dac-gcc-linux.tar.bz2
+PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
+$(PIN_ROOT): $(PIN_DEP)
+$(PIN_DEP):
+	$(_MSG) '[DOWNLO] Pinplay 3.11-97998'
+	$(_CMD) mkdir -p $(PIN_HOME)
+	$(_CMD) wget -O $(shell basename $(PIN_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(PIN_DOWNLOAD)
+	$(_CMD) tar -x -f $(shell basename $(PIN_DOWNLOAD)) --auto-compress --strip-components 1 -C $(PIN_HOME)
+	$(_CMD) rm $(shell basename $(PIN_DOWNLOAD))
+	$(_CMD) touch $(PIN_HOME)/.autodownloaded
+sde_kit: $(PIN_ROOT)
+else
+SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.7.0-2022-05-09-lin.tar.xz
 PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
 sde_kit: $(PIN_DEP)
 $(PIN_DEP):
-	$(_MSG) '[DOWNLO] SDE 9.0.0'
+	$(_MSG) '[DOWNLO] SDE 9.7.0-2022-05-09'
 	$(_CMD) mkdir -p $(SDE_HOME)
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD) | tar -x -J --strip-components 1 -C $(SDE_HOME)
+	$(_CMD) wget -O $(shell basename $(SDE_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD)
+	$(_CMD) tar -x -f $(shell basename $(SDE_DOWNLOAD)) --auto-compress --strip-components 1 -C $(SDE_HOME)
+	$(_CMD) rm $(shell basename $(SDE_DOWNLOAD))
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-tools'
 	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools
 $(PIN_ROOT): sde_kit
-else
-PIN_DOWNLOAD=https://snipersim.org/packages/pin-3.18-98332-gaebd7b1e6-gcc-linux.tar.gz
-PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
-$(PIN_ROOT): $(PIN_DEP)
-$(PIN_DEP):
-	$(_MSG) '[DOWNLO] Pin 3.18-98332'
-	$(_CMD) mkdir -p $(PIN_HOME)
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet $(PIN_DOWNLOAD) | tar -x -z --strip-components 1 -C $(PIN_HOME)
-	$(_CMD) touch $(PIN_HOME)/.autodownloaded
-sde_kit: $(PIN_ROOT)
 endif
 
 ifneq ($(NO_PIN_CHECK),1)
@@ -245,6 +263,7 @@ clean: empty_config empty_deps
 distclean: clean
 	$(_MSG) '[DISTCL] Pin kit'
 	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
+	$(_CMD) if [ -e "pin_kit/.autodownloaded" ]; then rm -rf pin_kit; fi
 	$(_MSG) '[DISTCL] SDE kit'
 	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then rm -rf $(SDE_HOME); fi
 	$(_MSG) '[DISTCL] Capstone'
