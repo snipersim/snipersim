@@ -10,4 +10,4 @@ $(TARGET): $(TARGET).o
 
 run_$(TARGET):
 #	../../run-sniper -n 4 -c gainestown --roi -c hetero.cfg -g --perf_model/core/interval_timer/window_size=128,96,64,32 -- ./fft -p 4
-	../../run-sniper -n 4 -c nvoverlay.cfg --roi -g --perf_model/core/interval_timer/window_size=128,96,64,32 -- ./fft -p 4
+	../../run-sniper -n 4 -c writethrough --roi -g --perf_model/core/interval_timer/window_size=128,96,64,32 -- ./fft -p 4

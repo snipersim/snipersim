@@ -14,6 +14,7 @@ const char * MemComponentString(MemComponent::component_t mem_component)
       case MemComponent::NUCA_CACHE:   return "nuca-cache";
       case MemComponent::DRAM_CACHE:   return "dram-cache";
       case MemComponent::DRAM:         return "dram";
+      case MemComponent::NVM:          return "nvm";        // Added by Kleber Kruger
       default:                         return "????";
    }
 }

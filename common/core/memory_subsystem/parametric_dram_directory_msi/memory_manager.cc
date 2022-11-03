@@ -229,9 +229,15 @@ MemoryManager::MemoryManager(Core* core,
    {
       m_dram_cntlr_present = true;
 
-      m_dram_cntlr = new PrL1PrL2DramDirectoryMSI::DramCntlr(this,
-            getShmemPerfModel(),
-            getCacheBlockSize());
+      // Modified by Kleber Kruger
+      // Original implementation:
+      // m_dram_cntlr = new PrL1PrL2DramDirectoryMSI::DramCntlr(this, getShmemPerfModel(), getCacheBlockSize());
+      // New implementation:
+      String param = "perf_model/dram/technology";
+      m_dram_cntlr = Sim()->getCfg()->hasKey(param) && Sim()->getCfg()->getString(param) == "nvm" ?
+                     new PrL1PrL2DramDirectoryMSI::NvmCntlr(this, getShmemPerfModel(), getCacheBlockSize()) :
+                     new PrL1PrL2DramDirectoryMSI::DramCntlr(this, getShmemPerfModel(), getCacheBlockSize());
+
       Sim()->getStatsManager()->logTopology("dram-cntlr", core->getId(), core->getId());
 
       if (Sim()->getCfg()->getBoolArray("perf_model/dram/cache/enabled", core->getId()))
@@ -512,6 +518,26 @@ MYLOG("begin");
             default:
                LOG_PRINT_ERROR("Unrecognized sender component(%u)",
                      sender_mem_component);
+               break;
+         }
+         break;
+
+      // Added by Kleber Kruger
+      case MemComponent::NVM:
+         LOG_ASSERT_ERROR(m_dram_cntlr_present, "Nvm Cntlr NOT present");
+
+         switch(sender_mem_component)
+         {
+            case MemComponent::LAST_LEVEL_CACHE:
+            {
+               DramCntlrInterface *dram_interface = m_dram_cache ? (DramCntlrInterface *)m_dram_cache : (DramCntlrInterface *)m_dram_cntlr;
+               PrL1PrL2DramDirectoryMSI::NvmCntlr *nvm_cntlr = (PrL1PrL2DramDirectoryMSI::NvmCntlr *)dram_interface;
+               nvm_cntlr->checkpoint();
+               break;
+            }
+
+            default:
+               LOG_PRINT_ERROR("Unrecognized sender component(%u)", sender_mem_component);
                break;
          }
          break;

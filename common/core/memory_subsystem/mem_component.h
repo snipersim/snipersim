@@ -23,7 +23,8 @@ class MemComponent
          NUCA_CACHE,
          DRAM_CACHE,
          DRAM,
-         MAX_MEM_COMPONENT = DRAM,
+         NVM,                       // Added by Kleber Kruger
+         MAX_MEM_COMPONENT = NVM,   // Modified by Kleber Kruger (DRAM -> NVM)
          NUM_MEM_COMPONENTS = MAX_MEM_COMPONENT - MIN_MEM_COMPONENT + 1
       };
 };

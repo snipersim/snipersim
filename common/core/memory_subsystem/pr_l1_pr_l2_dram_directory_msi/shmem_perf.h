@@ -32,6 +32,12 @@ class ShmemPerf
          DRAM_QUEUE,
          DRAM_BUS,
          DRAM_DEVICE,
+         NVM,        // Added by Kleber Kruger (not used yet!)
+         NVM_QUEUE,  // Added by Kleber Kruger (not used yet!)
+         NVM_BUS,    // Added by Kleber Kruger (not used yet!)
+         NVM_DEVICE, // Added by Kleber Kruger
+         LOG_QUEUE,  // Added by Kleber Kruger
+         LOG_BUS,    // Added by Kleber Kruger
          UNKNOWN,
          NUM_SHMEM_TIMES
       } shmem_times_type_t;

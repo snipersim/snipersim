@@ -28,6 +28,7 @@ class DramCntlrInterface
       {
          READ = 0,
          WRITE,
+         LOG, // Added by Kleber Kruger (for Donuts NVM model)
          NUM_ACCESS_TYPES
       } access_t;
 

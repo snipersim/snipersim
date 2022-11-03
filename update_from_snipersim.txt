@@ -1,3 +1,5 @@
+Tutorial: https://gist.github.com/seLain/8bdf12c7196f3fccafdf067dec2696b2
+
 1)   git remote add upstream https://github.com/snipersim/snipersim.git
 2)   git pull --rebase upstream main
 2.1) git rebase --skip

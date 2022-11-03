@@ -5,6 +5,7 @@
 #include "cache_cntlr.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/dram_directory_cntlr.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h"
+#include "../pr_l1_pr_l2_dram_directory_msi/nvm_cntlr.h" // Added by Kleber Kruger
 #include "address_home_lookup.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/shmem_msg.h"
 #include "mem_component.h"
