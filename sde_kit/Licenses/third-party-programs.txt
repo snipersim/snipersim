@@ -1,0 +1,36 @@
+This text file is the "third-party-programs.txt" file specified in the accompanying
+Intel Simplified Software License.
+All capitalized terms used but not defined in this text file have the same meaning as
+specified in the Agreement.
+
+The Third Party Programs files and the corresponding third party licenses are listed
+below. As specified in the Agreement, the listed Third Party Programs files are subject
+to the corresponding third party licenses that solely and exclusively govern Your use of
+the Third Party Programs.
+
+Full text of license terms included with this software can be found here: <installdir>/Licenses
+
+List of Third Party Programs included in SDE:
+
+* Intel® Pin licensing information can be found under "pin licensing" directory.
+
+* Intel® X86 Encoder Decoder is licensed under the Apache-2.0 license, see full text in apache.txt
+
+* zlib is licensed under the zlib License, see full text in zlib.txt, but has been modified by Intel. 
+  The modifications are licensed under the Intel Simplified Software License.
+
+* bzip2 is licensed under the bzip2 License, see full text in bzip2.txt, but has been modified by Intel. 
+  The modifications are licensed under the Intel Simplified Software License.
+  
+* The XML files in the misc/gdb-xml directory are licensed under the FSF All Permissive License, 
+  see full text in the gdb-xml.txt.
+
+* Hacker's Delight code is licensed under the Hacker's Delight License, 
+  see full text in HackersDelight.txt
+
+* libdwarf is licensed under the BSD 2-clause "Simplified" License,
+  see full text in bsd2clause.txt
+
+* Libelf is licensed under the BSD 2-clause "Simplified" License,
+  see full text in bsd2clause.txt
+

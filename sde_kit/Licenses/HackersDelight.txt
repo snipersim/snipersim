@@ -1,0 +1,13 @@
+You are free to use, copy, and distribute any of the code on this web site, whether modified by you or not. 
+You need not give attribution. This includes the algorithms (some of which appear in Hacker's Delight), 
+the Hacker's Assistant, and any code submitted by readers. Submitters implicitly agree to this.
+
+The textural material and pictures are copyright by the author, and the usual copyright rules apply. E.g., 
+you may store the material on your computer and make hard or soft copies for your own use. However, 
+you may not incorporate this material into another publication without written permission from the author (which the author may give by email).
+
+The author has taken care in the preparation of this material, 
+but makes no expressed or implied warranty of any kind and assumes no responsibility for errors or omissions. 
+No liability is assumed for incidental or consequential damages in connection with or arising out of the use of the information or programs contained herein.
+
+ 

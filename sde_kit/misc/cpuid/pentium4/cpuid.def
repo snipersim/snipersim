@@ -1,0 +1,21 @@
+# Copyright (C) 2014-2016 Intel Corporation.
+# 
+# This software and the related documents are Intel copyrighted materials, and your
+# use of them is governed by the express license under which they were provided to
+# you ("License"). Unless the License provides otherwise, you may not use, modify,
+# copy, publish, distribute, disclose or transmit this software or the related
+# documents without Intel's prior written permission.
+# 
+# This software and the related documents are provided as is, with no express or
+# implied warranties, other than those that are expressly stated in the License.
+#
+# CPUID_VERSION = 1.0
+#      Input      =>               Output
+# EAX      ECX    =>   EAX      EBX      ECX      EDX
+00000000 ******** => 00000002 756e6547 6c65746e 49656e69
+00000001 ******** => 00000f29 0602080b 00004400 bfebfbff
+00000002 ******** => 665b5001 00000000 00000000 007b7040
+80000000 ******** => 80000004 00000000 00000000 00000000
+80000002 ******** => 20202020 20202020 20202020 20202020
+80000003 ******** => 6e492020 286c6574 58202952 286e6f65
+80000004 ******** => 20294d54 20555043 36302e33 007a4847

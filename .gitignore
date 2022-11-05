@@ -60,7 +60,7 @@ riscv/rv8
 riscv/Speckle
 xed_kit
 #mbuild
-sde_kit
+#sde_kit
 capstone
 dynamorio
 
