@@ -9,4 +9,5 @@ $(TARGET): $(TARGET).o
 	$(CC) $(TARGET).o -lm $(SNIPER_LDFLAGS) -o $(TARGET)
 
 run_$(TARGET):
-	../../run-sniper --roi -n 4 -c gainestown -c tiny,small,big,tiny -- ./fft -p 4
+#	../../run-sniper --roi -n 4 -c gainestown -c tiny,small,big,tiny -- ./fft -p 4
+	../../run-sniper --roi -n 4 -c writethrough -c tiny,small,big,tiny -- ./fft -p 4

@@ -1,0 +1,441 @@
+.roofline * {  padding: 0; margin: 0; vertical-align: top; }
+
+.roofline {
+  background: url(background.png) repeat-x;
+  font: 18px/1.5em "proxima-nova", Helvetica, Arial, sans-serif;
+}
+
+.roofline a {  color: #069; }
+.roofline a:hover { color: #28b; }
+
+.roofline h2 {
+  margin-top: 15px;
+  font: normal 32px "omnes-pro", Helvetica, Arial, sans-serif;
+}
+
+.roofline h3 {
+  margin-left: 30px;
+  font: normal 26px "omnes-pro", Helvetica, Arial, sans-serif;
+  color: #666;
+  cursor: pointer;
+}
+
+.roofline p {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #666;
+}
+
+.roofline table {
+  font-size: 14px;
+  color: #666;
+}
+
+
+.roofline input {
+  font-size: 18px;
+}
+
+.roofline input[type=checkbox] {
+  margin: 7px;
+}
+
+.roofline #header {
+  position: relative;
+  width: 900px;
+  margin: auto;
+}
+
+.roofline .header {
+  position: relative;
+  width: 900px;
+/*  margin: auto;*/
+}
+
+.roofline #header h2 {
+  margin-left: 10px;
+  vertical-align: middle;
+  font-size: 42px;
+  font-weight: bold;
+  text-decoration: none;
+  color: #000;
+}
+
+.roofline .header h2 {
+  margin-left: 0px;
+  vertical-align: middle;
+  font-size: 42px;
+  font-weight: bold;
+  text-decoration: none;
+  color: #000;
+}
+
+.roofline #content {
+  /*width: 880px;*/
+  margin: 0 auto;
+  padding: 10px;
+}
+
+.roofline #footer {
+  margin-top: 25px;
+  margin-bottom: 10px;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+}
+
+.roofline #span   {
+  font-size: 15px;
+}
+
+.roofline .demo-container {
+  box-sizing: border-box;
+  width: 970px;
+  height: 450px;
+  padding: 20px 15px 15px 15px;
+  margin: 15px auto 30px 20px;
+  border: 1px solid #ddd;
+  background: #fff;
+  background: linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -o-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -ms-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -moz-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -webkit-linear-gradient(#f6f6f6 0, #fff 50px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  -o-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -ms-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -moz-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -webkit-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.roofline .functioninfo-container {
+  box-sizing: border-box;
+  width: 970px;
+  height: 620px;
+  padding: 20px 15px 15px 15px;
+  margin: 15px auto 30px 20px;
+  border: 1px solid #ddd;
+  background: #fff;
+  background: linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -o-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -ms-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -moz-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -webkit-linear-gradient(#f6f6f6 0, #fff 50px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  -o-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -ms-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -moz-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -webkit-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.roofline .optimization-container {
+  box-sizing: border-box;
+  width: 970px;
+  height: 500px;
+  padding: 10px 10px 10px 10px;
+  margin: 15px auto 30px 20px;
+  border: 1px solid #ddd;
+  background: #fff;
+  background: linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -o-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -ms-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -moz-linear-gradient(#f6f6f6 0, #fff 50px);
+  background: -webkit-linear-gradient(#f6f6f6 0, #fff 50px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  -o-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -ms-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -moz-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  -webkit-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.roofline .demo-placeholder {
+  width: 100%;
+  height: 100%;
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.roofline .legend table {
+  border-spacing: 5px;
+}
+
+.roofline .options {
+  font-size: 10px;
+}
+
+.roofline input.button_add {
+    background-image: url(./images/zoomout-16.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_next {
+    background-image: url(./images/bullet-right.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_prev {
+    background-image: url(./images/bullet-left.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_max {
+    background-image: url(./images/right_forward.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_min {
+    background-image: url(./images/left_forward.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_doxy {
+    background-image: url(./images/document.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_info {
+    background-image: url(./images/info.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_instrvstime {
+    background-image: url(./images/instrvstime.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_roofline {
+    background-image: url(./images/roofline.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline input.button_optimization {
+    background-image: url(./images/optimization.png); /* 16px x 16px */
+    background-color: transparent; /* make the button transparent */
+    background-repeat: no-repeat;  /* make the background image appear only once */
+    background-position: 0px 0px;  /* equivalent to 'top left' */
+    border: none;           /* assuming we don't want any borders */
+    cursor: pointer;        /* make the cursor like hovering over an <a> element */
+    height: 16px;           /* make this the size of your image */
+    padding-left: 16px;     /* make text start to the right of the image */
+    vertical-align: middle; /* align the text vertically centered */
+}
+
+.roofline .ui-progressbar {
+    height:15px;
+    width:50px;
+    font-size: 1px;
+    margin:0 auto;
+    margin-top: 5px;
+}
+
+
+.roofline .ui-progressbar .ui-progressbar-value {
+  height: 100%;
+}
+
+
+.roofline .ui-progressbar span {
+    width:50px;
+    position:absolute;
+    text-align:center;
+    font-size: 10px;
+    margin-top: -5px;
+}
+
+/*tab view */
+.roofline .tab {
+    font-size: 14px;
+    width: 200px;
+    padding: 5px;
+    /*color: #065fba;*/
+    color: #666;
+    /*background: #f4f5f8;*/
+    /*background: #868687;*/
+    background: #C0C1C4;
+    border: #e2e2e2 1px solid;
+}
+.roofline .tab:hover {
+    /*background: #065fba;*/
+    background: #474747;
+    /*color: #f4f5f8;*/
+    color: #FFFFFF;
+}
+.roofline .tabSelect {
+    font-size: 14px;
+    width: 800px;
+    padding: 5px;
+    /*background: #065fba;*/
+    background: #868687;
+    /*color: #f4f5f8;*/
+    color: #FFFFFF;
+    border: #e2e2e2 1px solid;
+}
+.roofline .box {
+    width: 950px;
+    margin-top:5;
+    padding: 5px;
+    background: #ffffff;
+    /*border: #065fba 2px solid;*/
+    height:400px;
+}
+.roofline a {
+    color: #000000;
+    text-decoration: none;
+}
+
+/*floating sidebar*/
+
+.roofline #float {
+    position:fixed;
+    top:200px;
+    right:5px;
+    background: #fff;
+    background: linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -o-linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -ms-linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -moz-linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -webkit-linear-gradient(#f6f6f6 0, #fff 50px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    -o-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    -ms-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    -moz-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    -webkit-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.roofline #floaticons {
+    position:fixed;
+    top:200px;
+    right:5px;
+    background: #fff;
+    background: linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -o-linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -ms-linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -moz-linear-gradient(#f6f6f6 0, #fff 50px);
+    background: -webkit-linear-gradient(#f6f6f6 0, #fff 50px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    -o-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    -ms-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    -moz-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    -webkit-box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.roofline table.opttable {
+  border: 0px;
+  table-layout: fixed;
+  width: 970px;
+}
+
+.roofline table.opttable th {
+  border-width: 1px;
+  padding: 8px;
+  border-style: solid;
+  border-color: #666666;
+  background-color: #dedede;
+}
+
+.roofline table.opttable td.number {
+  width: 25px;
+}
+
+.roofline table.opttable td.function {
+  width: 250px;
+}
+
+.roofline table.opttable td.optimization{
+  width: 104px;
+}
+
+.roofline table.opttable td.timegain{
+  width: 120px;
+  margin-right: auto;
+  padding:0 40px 0 10px;
+}
+
+.roofline table.opttable td.timegainpercent{
+  width: 110px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.roofline table.opttable td.speedup{
+  width: 80px;
+}
+
+.roofline table.opttable td.optimizationbar{
+  width: 330px;
+}
+
+.roofline table.opttable td.combinedoptimizationbar{
+  width: 435px;
+}
+
+.roofline table.opttable td.funoptimizationbar{
+  width: 430px;
+}
+
+.roofline table.opttable td.buttons{
+  width: 80px;
+}

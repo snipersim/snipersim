@@ -1,0 +1,1136 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>Function Based</title>
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/graph.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/detail.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/legend.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/extensions.css" />
+	<link rel="stylesheet" href="../../css/visualization.css" type="text/css" media="screen" />
+	<link href="../../flot/roofline.css" rel="stylesheet" type="text/css">
+	<link href="../../flot/jquery-ui-1.10.2.custom.css" rel="stylesheet" type="text/css">
+
+	<!--[if lte IE 8]><script language="javascript" type="text/javascript" src="../../excanvas.min.js"></script><![endif]-->
+	<script language="javascript" type="text/javascript" src="../../flot/jquery.js"></script>
+	<script language="javascript" type="text/javascript" src="../../flot/jquery.flot.js"></script>
+	<script language="javascript" type="text/javascript" src="../../flot/jquery.flot.axislabels.js"></script>
+	<script language="javascript" type="text/javascript" src="../../flot/jquery.flot.selection.js"></script>
+	<script language="javascript" type="text/javascript" src="../../flot/jquery.flot.stack.js"></script>
+	<script language="javascript" type="text/javascript" src="../../flot/jquery-ui-1.10.2.custom.min.js"></script>
+	<script language="javascript" type="text/javascript" src="optimizations.js"></script>
+	<script language="javascript" type="text/javascript" src="functioninfo.js"></script>
+
+        <link rel="stylesheet" href="../../css/visualization.css" type="text/css" media="screen" />
+        <script type="text/javascript" src="../../scripts/header.js"></script>
+
+        <script type="text/javascript" src="../../basicstats.txt"></script>
+        <script type="text/javascript" src="../../info.txt"></script>
+        <script type="text/javascript" src="../../asoinfo.txt"></script>
+
+
+	<script type="text/javascript">
+
+	/*global variables*/
+	var currentfunctionid=0;
+	var currentfunctionname="";
+	var functions=[];
+        var functionpercentages=[];
+	var functionboundaries;
+	var plot1;
+	var overviewplot1;
+	var plot2;
+	var overviewplot2;
+	var top_optimizations;
+	var optimizationsperfunction;
+	var optimization_names;
+	var optimization_summary;
+	var optimizationspermodule;
+        var optimizationscombined;
+	var props = ["instruction_count","calls","core_elapsed_time","nonidle_elapsed_time","fp_addsub","fp_muldiv","l3miss","cpi"];
+	var minmax = ["min","max"];
+	var nextprev = ["prev","next"];
+
+	/*global functions:*/
+
+	//determine maximum y and x value
+	function getMax(data,index){
+		var datacolumn = data.map(function(value) { return value[index]; });
+		return Math.max.apply(null, datacolumn);
+
+	}
+
+	//getLogscaleTicks, given a maxvalue
+	function getLogscaleTicks(maxvalue,base,start){
+		logscaleticks=[];
+		current=start;
+		while (current < maxvalue){
+			logscaleticks.push(current);
+			current=current*base;
+		}
+		logscaleticks.push(current);
+		return logscaleticks;
+	}
+
+	//show tooltips
+	function showTooltip(x, y, contents) {
+		$("<div id='tooltip'>" + contents + "</div>").css({
+		position: "absolute",
+		display: "none",
+		top: y + 5,
+		left: x + 5,
+		border: "1px solid #fdd",
+		padding: "2px",
+		background: "#fff",
+		opacity: 0.90
+		}).appendTo("body").fadeIn(200);
+
+		///"background-color": "#fee",
+	}
+
+
+
+
+
+
+
+
+
+	/* ------------------FUNCTIONS: INSTRUCTIONS VERSUS DATA --------------------*/
+
+
+	$(function() {
+
+		//general options of the instructions versus data plot
+		var generalplotoptions = {
+			xaxis: {
+				tickDecimals: 0,
+				tickFormatter: numberWithCommas,
+ 				axisLabel: 'Time (nanoseconds)',
+				axisLabelFontSizePixels: 12,
+				axisLabelFontFamily: 'Arial',
+				autoscaleMargin: 0.02,
+				//transform:function(v) {return v/1e6}
+			},
+			yaxis: {
+			    	axisLabel: 'Instructions',
+				tickFormatter: numberWithCommas,
+			    	axisLabelUseCanvas: true,
+			    	axisLabelFontSizePixels: 12,
+			},
+
+			grid: {
+				hoverable: true,
+				clickable: true,
+
+			},
+			selection: { mode: "xy"},
+			legend: {container: legend}
+		}
+
+		//general options of the overview plot
+		var overviewplotoptions = {
+			legend: {show: false},
+			xaxis: {
+				ticks: 0,
+				axisLabel: 'Time',
+				tickFormatter: numberWithCommas,
+				axisLabelFontSizePixels: 10,
+				axisLabelFontFamily: 'Arial'
+			},
+			yaxis: {
+				axisLabel: 'Instr.',
+				tickFormatter: numberWithCommas,
+			    	axisLabelUseCanvas: true,
+			    	axisLabelFontSizePixels: 10,
+			},
+			grid: {
+				color: "#999",
+				hoverable: true,
+				clickable: true
+			},
+			selection: {mode: "xy"}
+		};
+
+
+
+		//options of the functionseries
+		var functionseries = {
+			data: [],
+			label: "functions",
+			color: "blue",
+			highlightColor: "red",
+			lines: { show: false },
+			points: {show: true},
+		}
+
+
+		var plot = $.plot("#placeholder", [], []);
+		var overview = $.plot("#overview", [], []);
+		var xmax =0;
+		var ymax =0;
+		var logscaleticksx=[];
+		var logscaleticksy=[];
+
+		//load the data
+		function onDataReceived(series) {
+			functionseries["data"]=series["iptdata"];
+                        functions=series["functioninfo"];
+                        functionpercentages=series["functionpercentages"];
+			functionboundaries=series["functionboundaries"];
+			optimizationsperfunction=series["optimizationinfo"]["per_function"];
+			optimizationspermodule = series["optimizationinfo"]["per_module"];
+			top_optimizations=series["optimizationinfo"]["top_optimizations"];
+			optimizationscombined = series["optimizationinfo"]["combined"];
+
+			optimization_names=series["optimizationinfo"]["optimization_names"];
+			optimization_summary=series["optimizationinfo"]["summary"];
+			makeTabs();
+			fillOptimizationInfo();
+			fillOptimizationInfoCombined();
+
+
+			xmax = getMax(series["iptdata"],0);
+			logscaleticksx = getLogscaleTicks(xmax,10,1);
+			ymax = getMax(series["iptdata"],1);
+			logscaleticksy = getLogscaleTicks(ymax,10,1);
+			//set logscale options on by default
+			setLogscaleOptions();
+			plotGraph();
+			//now hide this div:
+			$("#container1").slideToggle('slow', function() {});
+
+			getNext(0,functions);
+			makeRoofline();
+
+		}
+		var dataurl = "iptstats.json"
+		$.ajax({
+			url: dataurl,
+			type: "GET",
+			dataType: "json",
+			success: onDataReceived
+		});
+
+		function plotGraph(){
+			//plot the big visualization
+			plot1 = $.plot("#placeholder",
+				[
+				functionseries	//series containing the functions
+				],
+				generalplotoptions //general options for the plot
+			);
+			//plot the overview visualization
+			overviewplot1 = $.plot("#overview",
+				[
+				functionseries
+				],
+				overviewplotoptions
+			);
+		}
+
+
+		//handle hover overs
+		var previousPoint = null;
+		$("#placeholder").bind("plothover", hoverfunction);
+
+
+		//handle clicks
+		$("#placeholder").bind("plotclick", showinfofunction);
+
+		//handle zooming
+
+
+		//now connect two plots:
+		$("#placeholder").bind("plotselected", function (event, ranges) {
+
+			// clamp the zooming to prevent eternal zoom
+
+			if (ranges.xaxis.to - ranges.xaxis.from < 0.00001) {
+				ranges.xaxis.to = ranges.xaxis.from + 0.00001;
+			}
+
+			if (ranges.yaxis.to - ranges.yaxis.from < 0.00001) {
+				ranges.yaxis.to = ranges.yaxis.from + 0.00001;
+			}
+
+			// do the zooming
+
+
+			plot1 = $.plot("#placeholder", [functionseries],
+				$.extend(true, {}, generalplotoptions, {
+					xaxis: { min: ranges.xaxis.from, max: ranges.xaxis.to },
+					yaxis: { min: ranges.yaxis.from, max: ranges.yaxis.to }
+				})
+			);
+
+			plot1.highlight(0, currentfunctionid);
+
+			// don't fire event on the overview to prevent eternal loop
+
+			//show unzoom button:
+			$("#zoomout").show();
+		});
+
+		$("#overview").bind("plotselected", function (event, ranges) {
+			plot.setSelection(ranges);
+		});
+
+		//handle overviewclicks:
+		//handle clicks
+		$("#overview").bind("plotclick", showinfofunction);
+
+		//handle overview hover over
+		$("#overview").bind("plothover", hoverfunction);
+
+		//zoom out button
+		$("#zoomAllOut").click(function () {
+			plotGraph();
+			$("#zoomout").hide();
+			plot1.highlight(0, currentfunctionid);
+			overviewplot1.highlight(0, currentfunctionid);
+		});
+
+
+		function setLogscaleOptions(){
+			//change main viz
+			generalplotoptions.yaxis.transform=function(v) {return Math.log(v+0.0001)};
+			generalplotoptions.yaxis.inverseTransform= function (v) { return Math.exp(v) };
+			generalplotoptions.yaxis.ticks = logscaleticksy;
+			generalplotoptions.yaxis.min = 0.1;
+
+			generalplotoptions.xaxis.transform=function(v) {return Math.log(v+0.0001)};
+			generalplotoptions.xaxis.inverseTransform= function (v) { return Math.exp(v); };
+			generalplotoptions.xaxis.ticks = logscaleticksx;
+			generalplotoptions.xaxis.min = 0.1;
+			generalplotoptions.xaxis.max = Math.max.apply(null, logscaleticksx);
+
+			//change overview viz
+			overviewplotoptions.yaxis.transform=function(v) {return Math.log(v+0.0001)};
+			generalplotoptions.yaxis.inverseTransform= function (v) { return Math.exp(v); };
+			overviewplotoptions.yaxis.ticks = [0,Math.max.apply(null, logscaleticksy)];
+
+			overviewplotoptions.xaxis.transform=function(v) {return Math.log(v+0.0001)};
+			generalplotoptions.inverseTransform= function (v) { return Math.exp(v); };
+			overviewplotoptions.xaxis.ticks = [0,Math.max.apply(null, logscaleticksx)];;
+		}
+
+		function setNonLogscaleOptions(){
+			//reset main viz
+			generalplotoptions.yaxis.transform=function(v) {return v};
+			generalplotoptions.inverseTransform= null;
+			generalplotoptions.yaxis.ticks = null;
+			generalplotoptions.xaxis.transform=function(v) {return v};
+			generalplotoptions.inverseTransform= null;
+			generalplotoptions.xaxis.ticks = null;
+			generalplotoptions.xaxis.min = null;
+			generalplotoptions.xaxis.max = null;
+
+			//reset overview viz
+			overviewplotoptions.yaxis.transform=function(v) {return v};
+			overviewplotoptions.yaxis.inverseTransform=null;
+			overviewplotoptions.yaxis.ticks = null;
+
+			overviewplotoptions.xaxis.transform=function(v) {return v};
+			overviewplotoptions.xaxis.inverseTransform=null;
+			overviewplotoptions.xaxis.ticks = 0;
+
+		}
+
+
+		//logscale checkbox
+		$('#logscalecheck').prop('checked', true); //turn on by default
+		$("#logscalecheck").click(function () {
+			if ($("#logscalecheck").prop("checked")){
+				setLogscaleOptions();
+			}
+			else {
+				setNonLogscaleOptions()
+			}
+			plotGraph();
+			plot1.highlight(0, currentfunctionid);
+			overviewplot1.highlight(0, currentfunctionid);
+
+		});
+
+
+	});
+
+	/* -----------------------------ROOFLINE--------------------------------- */
+
+
+	function makeRoofline() {
+
+		var data = [];
+		var xmax =0;
+		var ymax =0;
+		var reset = 0;
+		var maxtime=1;
+		var peakfloatperf=0;
+		var peakmembandwidth=0;
+		var logscaleticksx=[];
+		var logscaleticksy=[];
+
+		//this function calculates the size of the dot, according to the
+		//time consumed by the function, represented by this dot
+		pointSize.calls = 0;
+		//idea: store x,y values with functionindex
+		function pointSize(ctx, x, y, radius, shadow){
+
+			//xdata = data.slice(0);
+			//xdata = data.map(function(value) { return value[0]; });
+			//ydata = data.map(function(value) { return value[1]; });
+			//alert(x);
+			//alert(xdata.indexOf(x));
+			if (pointSize.calls >=  functions.length){
+				pointSize.calls=0;
+			}
+			if(functions.length > 0){
+				resizedot = functions[pointSize.calls]["core_elapsed_time"]/maxtime;
+				pointSize.calls++;
+				ctx.arc(x, y, radius*5*resizedot+3 , 0, shadow ? Math.PI : Math.PI * 2, false);
+			}
+			else {
+				ctx.arc(x, y, radius , 0, shadow ? Math.PI : Math.PI * 2, false);
+			}
+		}
+
+		function numberformat(number){
+				return numberWithCommas(Math.round(number*100)/100);
+		}
+
+		//general plot options
+		var generalplotoptions = {
+			xaxis: {
+				tickDecimals: 0,
+ 				axisLabel: 'Operational Intensity (Flops/Byte)',
+				autoscaleMargin: 0.02,
+				tickFormatter: numberformat,
+				axisLabelFontSizePixels: 12,
+				axisLabelFontFamily: 'Arial',
+			},
+			yaxis: {
+				axisLabel: 'Attainable GFlops/sec',
+				tickFormatter: numberformat,
+				axisLabelUseCanvas: true,
+				axisLabelFontSizePixels: 12,
+			},
+			grid: {hoverable: true, clickable: true},
+			selection: {mode: "xy"},
+			legend: {container: rooflinelegend}
+
+		};
+
+		//general options of the overview plot
+		var overviewplotoptions = {
+			legend: {show: false},
+			xaxis: {
+				ticks: 0,
+				axisLabel: 'Time',
+				axisLabelFontSizePixels: 10,
+				tickFormatter: numberformat,
+				autoscaleMargin: 0.02,
+				axisLabelFontFamily: 'Arial'
+			},
+			yaxis: {
+				axisLabel: 'Instr.',
+			    	axisLabelUseCanvas: true,
+				tickFormatter: numberformat,
+			    	axisLabelFontSizePixels: 10,
+			},
+			grid: {
+				color: "#999",
+				hoverable: true,
+				clickable: true
+			},
+			selection: {mode: "xy"}
+		};
+
+		//series containing the function data
+		var functionseries = {
+			color: "blue",
+			highlightColor: "red",
+			data: [],
+			label: "functions",
+			lines: {
+				show: false
+			},
+			points: {
+				show: true,
+				//symbol: pointSize
+			},
+		}
+
+		//series containing the function data with options for the overview viz
+		var overviewfunctionseries = {
+			data: [],
+			color: "blue",
+			highlightColor: "red",
+			label: "functions",
+			lines: {
+				show: false
+			},
+			points: {
+				show: true,
+			},
+		}
+
+		//floating point performance
+		var fpperformanceseries = {
+			data: [[1, 3], [5,3]],
+			lines: { show: true, fill: false },
+			label: "peak floating point performance",
+
+		}
+
+		//peak memory bandwidth
+		var peakmembandwidthseries = {
+			data: [[0, 0], [1,3]],
+			lines: { show: true, fill: false },
+			label: "peak memory bandwidth",
+
+		}
+
+		var plot = $.plot("#rooflineplaceholder", [], []);
+		var overview = $.plot("#rooflineoverview", [], []);
+
+
+
+		function onDataReceived(series) {
+			functionseries["data"]=series["rooflinedata"];
+			data = series["rooflinedata"];
+			//functions=series["functioninfo"];
+			overviewfunctionseries["data"]=series["rooflinedata"];
+			peakfloatperf = series["peakfpperformance"];
+			peakmembandwidth = series["peakmembandwidth"];
+
+			xmax = getMax(series["rooflinedata"],0);
+			logscaleticksx = getLogscaleTicks(xmax,2,1/256);
+			ymax = getMax(series["rooflinedata"],1);
+			logscaleticksy = getLogscaleTicks(peakfloatperf,2,1/256);
+			maxtime = getMax(functions,"core_elapsed_time");
+
+			fpperformanceseries["data"][0][0]=peakmembandwidth/peakfloatperf;
+			fpperformanceseries["data"][0][1]=peakfloatperf;
+			if (peakmembandwidth/peakfloatperf < xmax){
+				fpperformanceseries["data"][1][0]=Math.round(xmax);
+			}
+			else{
+				fpperformanceseries["data"][1][0]=Math.round(peakmembandwidth/peakfloatperf+xmax)-0.05;
+			}
+			fpperformanceseries["data"][1][1]=peakfloatperf;
+			peakmembandwidthseries["data"][1][0]=peakmembandwidth/peakfloatperf;
+			peakmembandwidthseries["data"][1][1]=peakfloatperf;
+
+
+			pointSize.calls = 0;
+			reset=0;
+			//logscale checkbox:
+			$('#rooflinelogscalecheck').prop('checked', true); //turn on by default
+			setlogscaleoptions();
+			plotGraph();
+			//fill function info with most promising function
+			getInfo(top_optimizations[0]["id"]);
+			$("#container3").hide();
+			//now hide this div:
+			$("#container2").slideToggle('slow', function() {});
+			//$("#container2").hide();
+
+
+		}
+
+		var dataurl = "rooflinestats.json"
+		$.ajax({
+			url: dataurl,
+			type: "GET",
+			dataType: "json",
+			success: onDataReceived
+		});
+
+
+
+		function plotGraph(){
+			if (functions.length > 0){
+				if ($("#rooflinecheck").prop("checked")){
+					//plot the big visualization
+					plot2 = $.plot("#rooflineplaceholder",
+						[
+						functionseries,	//series containing the functions
+						//series containing a line for the max floating point performance
+						fpperformanceseries,
+						//series containing a line for the max memory bandwidth
+						peakmembandwidthseries
+						],
+						generalplotoptions //general options for the plot
+					);
+					//plot the overview visualization
+					overviewplot2 = $.plot("#rooflineoverview",
+						[
+						overviewfunctionseries,	//series containing the functions
+						//series containing a line for the max floating point performance
+						fpperformanceseries,
+						//series containing a line for the max memory bandwidth
+						peakmembandwidthseries
+						],
+						overviewplotoptions
+					);
+				}
+				else{
+					plot2 = $.plot("#rooflineplaceholder", [functionseries],generalplotoptions);
+					overviewplot2 = $.plot("#rooflineoverview", [overviewfunctionseries], overviewplotoptions);
+				}
+			}
+		}
+
+
+		//handle hover overs
+		var previousPoint = null;
+		$("#rooflineplaceholder").bind("plothover", hoverfunction);
+
+
+		//handle clicks
+		$("#rooflineplaceholder").bind("plotclick", showinfofunction);
+
+		//connect two plots:
+		$("#rooflineplaceholder").bind("plotselected", function (event, ranges) {
+
+			// clamp the zooming to prevent eternal zoom
+
+			if (ranges.xaxis.to - ranges.xaxis.from < 0.00001) {
+				ranges.xaxis.to = ranges.xaxis.from + 0.00001;
+			}
+
+			if (ranges.yaxis.to - ranges.yaxis.from < 0.00001) {
+				ranges.yaxis.to = ranges.yaxis.from + 0.00001;
+			}
+
+			// do the zooming
+
+			plot2 = $.plot("#rooflineplaceholder", [functionseries,fpperformanceseries,peakmembandwidth],
+				$.extend(true, {}, generalplotoptions, {
+					xaxis: { min: ranges.xaxis.from, max: ranges.xaxis.to },
+					yaxis: { min: ranges.yaxis.from, max: ranges.yaxis.to }
+				})
+			);
+
+			// don't fire event on the overview to prevent eternal loop
+
+			plot2.highlight(0, currentfunctionid);
+
+			//overview.setSelection(ranges, true);
+
+			//show unzoom button:
+			$("#rooflinezoomout").show();
+		});
+
+		$("#rooflineoverview").bind("plotselected", function (event, ranges) {
+			plot.setSelection(ranges);
+		});
+
+		//handle overviewclicks:
+		//handle clicks
+
+
+
+		$("#rooflineoverview").bind("plotclick", showinfofunction);
+
+
+
+		//handle overview hover over
+		$("#rooflineoverview").bind("plothover", hoverfunction );
+
+		//zoom out button
+		$("#rooflinezoomAllOut").click(function () {
+			pointSize.calls = 0;
+			plotGraph();
+			plot2.highlight(0, currentfunctionid);
+			overviewplot2.highlight(0, currentfunctionid);
+			$("#rooflinezoomout").hide();
+		});
+
+		//log_2 function
+		LN2=Math.log(2);
+		var log2 = function(v){
+			return Math.log(v)/LN2;
+		};
+
+		//exp_2 function
+		var exp2 = function(v){
+			return Math.pow(2,v);
+		}
+
+
+
+		//roofline checkbox
+		//turn on by default
+		$('#rooflinecheck').prop('checked', true);
+		$("#rooflinecheck").click(function () {
+			if ($("#rooflinecheck").prop("checked")){
+				plotGraph();
+			}
+			else{
+				plot2 = $.plot("#rooflineplaceholder", [functionseries],generalplotoptions);
+				overviewplot2 = $.plot("#rooflineoverview", [overviewfunctionseries], overviewplotoptions);
+				plot2.highlight(0, currentfunctionid);
+				overviewplot2.highlight(0, currentfunctionid);
+			}
+			plot2.highlight(0, currentfunctionid);
+			overviewplot2.highlight(0, currentfunctionid);
+
+		});
+
+
+
+		var minval = 0.0625;
+		var displacementfunction = function (v) {
+			if (v == 0) {
+				return 0;
+			} else {
+				// Shift all negative numbers to be positive
+				return (-log2(minval) + log2(v));
+			}
+		}
+
+		var inversedisplacementfunction = function (v) {
+			if (v == 0) {
+				return 0;
+			} else {
+				// Shift all negative numbers to be positive
+				return exp2(v+log2(minval));
+			}
+		}
+
+		function setlogscaleoptions(){
+			generalplotoptions.yaxis.transform=displacementfunction;
+			generalplotoptions.yaxis.inverseTransform=inversedisplacementfunction;
+			generalplotoptions.yaxis.ticks = logscaleticksy;
+			generalplotoptions.yaxis.min = 1/256;
+			generalplotoptions.xaxis.transform=displacementfunction;
+			generalplotoptions.xaxis.inverseTransform=inversedisplacementfunction;
+			generalplotoptions.xaxis.ticks = logscaleticksx;
+			generalplotoptions.xaxis.min = 1/256;
+
+			//change overview viz
+			overviewplotoptions.yaxis.transform=displacementfunction;
+			overviewplotoptions.yaxis.inverseTransform = inversedisplacementfunction;
+			overviewplotoptions.yaxis.ticks = [0,Math.max.apply(null, logscaleticksy)];
+			overviewplotoptions.yaxis.min = 1/256;
+			overviewplotoptions.xaxis.transform=displacementfunction;
+			overviewplotoptions.xaxis.inverseTransform = inversedisplacementfunction;
+			overviewplotoptions.xaxis.ticks = [0,Math.max.apply(null, logscaleticksx)];;
+			overviewplotoptions.xaxis.min = 1/256;
+		}
+
+
+		$("#rooflinelogscalecheck").click(function () {
+			if ($("#rooflinelogscalecheck").prop("checked")){
+				//change main viz
+				setlogscaleoptions();
+			}
+			else {
+				//reset main viz
+				generalplotoptions.yaxis.transform=function(v) {return v};
+				generalplotoptions.yaxis.ticks = null;
+				generalplotoptions.yaxis.inverseTransform=null;
+				generalplotoptions.yaxis.min = null;
+				generalplotoptions.xaxis.transform=function(v) {return v};
+				generalplotoptions.xaxis.ticks = null;
+				generalplotoptions.xaxis.inverseTransform=null;
+				generalplotoptions.xaxis.min = null;
+
+				//reset overview viz
+				overviewplotoptions.yaxis.transform=function(v) {return v};
+				overviewplotoptions.yaxis.ticks = null;
+				overviewplotoptions.yaxis.inverseTransform=null;
+				overviewplotoptions.yaxis.min = null;
+				overviewplotoptions.xaxis.transform=function(v) {return v};
+				overviewplotoptions.xaxis.ticks = 0;
+				overviewplotoptions.xaxis.inverseTransform=null;
+				overviewplotoptions.xaxis.min = null;
+			}
+			pointSize.calls = 0;
+			plotGraph();
+			plot2.highlight(0, currentfunctionid);
+			overviewplot2.highlight(0, currentfunctionid);
+		});
+
+		//show/hide functions: instructions versus time
+		$("#functionheader").click(function () {
+			 $("#container1").slideToggle('slow', function() {});
+		});
+
+		//show/hide roofline model
+		$("#rooflineheader").click(function () {
+			 $("#container2").slideToggle('slow', function() {});
+		});
+
+		//show/hide function info
+		$("#functiondataheader").click(function () {
+			$("#container3").slideToggle('slow', function() {});
+		});
+
+		//show/hide function info
+		$("#optimizationheader").click(function () {
+			$("#optimizationcontainer").slideToggle('slow', function() {});
+		});
+
+		//go to optimization suggestions
+		$("#float_optimization").click(function() {
+			window.location.hash="optimization";
+			if ($('#optimizationcontainer').is(':hidden')) {
+				$("#optimizationcontainer").slideToggle('slow', function() {});
+			}
+		});
+
+		//go to function info
+		$("#float_functioninfo").click(function() {
+			window.location.hash="function_info";
+			if ($('#container3').is(':hidden')) {
+				$("#container3").slideToggle('slow', function() {});
+			}
+		});
+
+		//go to instructionsvstime
+		$("#float_instrvstime").click(function() {
+			window.location.hash="instrvstime";
+			if ($('#container1').is(':hidden')) {
+				$("#container1").slideToggle('slow', function() {});
+			}
+		});
+
+		//go to roofline
+		$("#float_roofline").click(function() {
+			window.location.hash="roofline";
+			if ($('#container2').is(':hidden')) {
+				$("#container2").slideToggle('slow', function() {});
+			}
+		});
+
+		//show floating navigation when hovering over icons
+		$("#floaticons").hover(function() {
+			$("#float").fadeIn();
+		});
+
+		//hide floating navigation when hovering out
+		$("#float").mouseleave(function() {
+			$("#float").fadeOut();
+		});
+
+
+
+		//if window is too small, hide float
+		if ($(window).width() < 900){
+			$("#floaticons").hide();
+		}
+
+		$("#nextcore_elapsed_time").click(function () {getInfo(getNext("core_elapsed_time","next"));});
+		$("#prevcore_elapsed_time").click(function () {getInfo(getNext("core_elapsed_time","prev"));});
+		$("#nextcalls").click(function () {getInfo(getNext("calls","next"));});
+		$("#prevcalls").click(function () {getInfo(getNext("calls","prev"));});
+		$("#nextinstruction_count").click(function () {getInfo(getNext("instruction_count","next"));});
+		$("#previnstruction_count").click(function () {getInfo(getNext("instruction_count","prev"));});
+		$("#nextnonidle_elapsed_time").click(function () {getInfo(getNext("nonidle_elapsed_time","next"));});
+		$("#prevnonidle_elapsed_time").click(function () {getInfo(getNext("nonidle_elapsed_time","prev"));});
+		$("#nextfp_addsub").click(function () {getInfo(getNext("fp_addsub","next"));});
+		$("#prevfp_addsub").click(function () {getInfo(getNext("fp_addsub","prev"));});
+		$("#nextfp_muldiv").click(function () {getInfo(getNext("fp_muldiv","next"));});
+		$("#prevfp_muldiv").click(function () {getInfo(getNext("fp_muldiv","prev"));});
+		$("#nextl3miss").click(function () {getInfo(getNext("l3miss","next"));});
+		$("#prevl3miss").click(function () {getInfo(getNext("l3miss","prev"));});
+		$("#nextcpi").click(function () {getInfo(getNext("cpi","next"));});
+		$("#prevcpi").click(function () {getInfo(getNext("cpi","prev"));});
+
+		$("#maxinstruction_count").click(function () {getInfo(functionboundaries["instruction_count"]["max"]);});
+		$("#mininstruction_count").click(function () {getInfo(functionboundaries["instruction_count"]["min"]);});
+		$("#maxcalls").click(function () {getInfo(functionboundaries["calls"]["max"]);});
+		$("#mincalls").click(function () {getInfo(functionboundaries["calls"]["min"]);});
+		$("#maxcore_elapsed_time").click(function () {getInfo(functionboundaries["core_elapsed_time"]["max"]);});
+		$("#mincore_elapsed_time").click(function () {getInfo(functionboundaries["core_elapsed_time"]["min"]);});
+		$("#maxnonidle_elapsed_time").click(function () {getInfo(functionboundaries["nonidle_elapsed_time"]["max"]);});
+		$("#minnonidle_elapsed_time").click(function () {getInfo(functionboundaries["nonidle_elapsed_time"]["min"]);});
+		$("#maxfp_addsub").click(function () {getInfo(functionboundaries["fp_addsub"]["max"]);});
+		$("#minfp_addsub").click(function () {getInfo(functionboundaries["fp_addsub"]["min"]);});
+		$("#maxfp_muldiv").click(function () {getInfo(functionboundaries["fp_muldiv"]["max"]);});
+		$("#minfp_muldiv").click(function () {getInfo(functionboundaries["fp_muldiv"]["min"]);});
+		$("#maxl3miss").click(function () {getInfo(functionboundaries["l3miss"]["max"]);});
+		$("#minl3miss").click(function () {getInfo(functionboundaries["l3miss"]["min"]);});
+		$("#maxcpi").click(function () {getInfo(functionboundaries["cpi"]["max"]);});
+		$("#mincpi").click(function () {getInfo(functionboundaries["cpi"]["min"]);});
+
+
+		$("#doxygen").click(function () {
+			links = getDoxygenFile(functions[currentfunctionid]["name"]);
+			for (i=0; i<links.length; i++){
+				window.open(links[i]);
+			}
+		});
+
+
+
+	};
+
+
+
+	</script>
+</head>
+<body>
+
+  <script type="text/javascript">
+    writeHeader('Suggestions for Optimization');
+  </script>
+
+  <div class="roofline">
+
+	<div id="floaticons">
+		<div id="float_optimization2">
+		<p><input type="button" class="button_optimization" title="Show automatic suggestions for optimization"></input>
+		</p></div>
+
+		<div id="float_instrvstime2">
+		<p><input type="button" class="button_instrvstime" title="Show instructions versus time plot"></input>
+		</p></div>
+
+		<div id="float_roofline2"><p>
+		<input type="button" class="button_roofline" title="Show roofline plot"></input>
+		</p></div>
+
+		<div id="float_functioninfo2">
+		<p><input type="button"class="button_info" title="Show function info"></input>
+		</p></div>
+	</div>
+
+
+	<div id="float" style="display:none;">
+		<div id="float_optimization" style="cursor: pointer;">
+		<p><input type="button" class="button_optimization" title="Show automatic suggestions for optimization"></input>
+		Suggestions for Optimization</p></div>
+
+		<div id="float_instrvstime" style="cursor: pointer;">
+		<p><input type="button" class="button_instrvstime" title="Show instructions versus time plot"></input>
+		Functions: instructions versus time</p></div>
+
+		<div id="float_roofline" style="cursor: pointer;"><p>
+		<input type="button" class="button_roofline" title="Show roofline plot"></input>
+		Roofline model</p></div>
+
+		<div id="float_functioninfo" style="cursor: pointer;">
+		<p><input type="button"class="button_info" title="Show function info"></input>
+		Function info</p></div>
+	</div>
+
+
+
+	<div id="content">
+		<a name=optimization></a>
+		<div id="optimizationheader" class="header" title="Click to show/hide. Automatic suggestions for optimizing the application will be shown.">
+			<h3>Suggestions for Optimization</h3>
+		</div>
+		<div id="optimizationcontainer" class="optimization-container">
+			<div id="tabs"></div>
+			<div id="Page1">
+			     <div id="top_optimizationtable"></div>
+			</div>
+			<div id="Page2">
+			     <div id="optimizationscombined"></div>
+			</div>
+
+			<div id="optimizationtabs"></div>
+
+		</div>
+
+		<a name=instrvstime></a>
+		<div id="functionheader" class="header" title="Click to show/hide. In this 2D scatter plot, each function is plotted regarding it's time and instructioncount. Outliers, e.g. functions with a lower instruction count, but using a lot of time can be identified quickly. Hover over the dots to see the function name. Click on the dots to retrieve more information. Check 'log scale' to get the loglog plot. Select a region on the plot to zoom in and keep an overview of the plot on the right hand side."
+				 >
+			<h3>Functions: instructions versus time</h3>
+		</div>
+
+
+		<div id="container1" class="demo-container">
+			<div id="placeholder" class="demo-placeholder" style="float:left; width:750px;"></div>
+			<div id="legend" class="demo-placeholder" style="float:right;width:180px; height:50px;"></div>
+			<div id="overview" class="demo-placeholder" style="float:right;width:160px; height:125px;"></div>
+			<div id="zoomout" style="display:none;"><input type="button" id="zoomAllOut"
+				value="" class="button_add" title="Zoom all the way out"/></div>
+			<p style="float:right; width:135px;">
+				<input type='checkbox' name="Logscale" id="logscalecheck"
+				title="Use this checkbox to toggle log scale on and off"/>Logscale <br />
+			</p>
+
+		</div>
+		<a name=roofline></a>
+		<div id="rooflineheader" class="header" title="Click to show/hide. This plot shows the roofline model.">
+			<h3>Roofline Model</h3>
+		</div>
+
+		<div id="container2" class="demo-container">
+			<div id="rooflineplaceholder" class="demo-placeholder" style="float:left; width:750px;"></div>
+			<div id="rooflinelegend" class="demo-placeholder" style="float:right;width:180px; height:100px;"></div>
+			<div id="rooflineoverview" class="demo-placeholder" style="float:right;width:160px; height:125px;"></div>
+			<div id="rooflinezoomout" style="display:none;"><input type="button" id="rooflinezoomAllOut"
+				value="" class="button_add" title="Zoom all the way out"/></div>
+			<p style="float:right; width:135px;">
+				<input type='checkbox' name="Logscale" id="rooflinelogscalecheck"
+				title="Use this checkbox to toggle log scale on and off"/>Logscale <br />
+				<input type='checkbox' name="Roofline" checked='checked' id='rooflinecheck'
+				title="Use this checkbox to toggle roofline on and off"/>Roofline
+			</p>
+		</div>
+
+		<a name=function_info></a>
+		<div id="functiondataheader" class="header" title="Click to show/hide. When you click on a function in one of the upper visualizations, info about this function is shown.">
+			<h3>Function Info</h3>
+		</div>
+		<div id="container3" class="functioninfo-container" style="display:none;">
+		<p>
+			<span id="hoverdata"></span>
+
+			<!--<span id="clickdata">Click on a function to obtain more information about:</span><br />-->
+
+			<table border="0" width="100%">
+				<tr>
+					<td style="width:200px;">Function name</td>
+					<td><span id="functionname"></span></td>
+				</tr>
+				<tr>
+					<td>EIP</td>
+					<td><span id="eip"></span><br /></td>
+				</tr>
+				<tr>
+					<td>Source</td>
+					<td><span id="source"></span></td>
+					<td style="width:100px;"><input type="button" id="doxygen" value="" class="button_doxy" style="display:none;" title="View DoxyGen information"/></td>
+
+				</tr>
+				<tr>
+					<td>Calls</td>
+					<td><table border="0"><tr><td width="150">
+						<span id="calls"></span></td><td><div id="callprogress"><span id="callspercentage"></span></div>
+					</td></tr></table>
+
+					<td><input type="button" id="mincalls" value="" class="button_min" style="display:none;"
+						title="Get min function by calls"/>
+					<input type="button" id="prevcalls" value="" class="button_prev" style="display:none;"
+						title="Get previous function by instruction count"/>
+					<input type="button" id="nextcalls" value="" class="button_next" style="display:none;"
+						title="Get next function by calls"/>
+					<input type="button" id="maxcalls" value="" class="button_max" style="display:none;"
+						title="Get max function by calls"/></td>
+				</tr>
+				<tr>
+					<td>Instruction count</td>
+					<td><table border="0"><tr><td width="150">
+						<span id="icount"></span></td><td><div id="icountprogress"><span id="icountpercentage"></span></div>
+					</td></tr></table>
+					<td><input type="button" id="mininstruction_count" value="" class="button_min" style="display:none;"
+						title="Get min function by instruction count"/>
+					<input type="button" id="previnstruction_count" value="" class="button_prev" style="display:none;"
+						title="Get previous function by instruction count"/>
+					<input type="button" id="nextinstruction_count" value="" class="button_next" style="display:none;"
+						title="Get next function by instruction count"/>
+					<input type="button" id="maxinstruction_count" value="" class="button_max" style="display:none;"
+						title="Get max function by instruction count"/></td>
+				</tr>
+				<tr>
+					<td>Core elapsed time</td>
+					<td><table border="0"><tr><td width="150">
+						<span id="coretime"></span></td><td><div id="coretimeprogress"><span id="coretimepercentage"></span></div>
+					</td></tr></table>
+					<td><input type="button" id="mincore_elapsed_time" value="" class="button_min" style="display:none;"
+						title="Get min function by time"/>
+					<input type="button" id="prevcore_elapsed_time" value="" class="button_prev" style="display:none;"
+						title="Get previous function by time"/>
+					<input type="button" id="nextcore_elapsed_time" value="" class="button_next" style="display:none;"
+						title="Get next function by time"/>
+					<input type="button" id="maxcore_elapsed_time" value="" class="button_max" style="display:none;"
+						title="Get max function by time"/></td>
+				</tr>
+				<tr>
+					<td>Non-idle elapsed time</td>
+					<td><table border="0"><tr><td width="150">
+						<span id="nonidletime"></span></td><td><div id="nonidletimeprogress"><span id="nonidletimepercentage"></span></div>
+					</td></tr></table>
+					<td><input type="button" id="minnonidle_elapsed_time" value="" class="button_min" style="display:none;"
+						title="Get min function by time"/>
+					<input type="button" id="prevnonidle_elapsed_time" value="" class="button_prev" style="display:none;"
+						title="Get previous function by time"/>
+					<input type="button" id="nextnonidle_elapsed_time" value="" class="button_next" style="display:none;"
+						title="Get next function by time"/>
+					<input type="button" id="maxnonidle_elapsed_time" value="" class="button_max" style="display:none;"
+						title="Get max function by time"/></td>
+				</tr>
+				<tr>
+					<td>Add/Sub FP ops</td>
+					<td><table border="0"><tr><td width="150">
+						<span id="fp_addsub"></span></td><td><div id="fp_addsubprogress"><span id="fp_addsubpercentage"></span></div>
+					</td></tr></table>
+					<td><input type="button" id="minfp_addsub" value="" class="button_min" style="display:none;"
+						title="Get min function by floating point operations"/>
+					<input type="button" id="prevfp_addsub" value="" class="button_prev" style="display:none;"
+						title="Get previous function by floating point operations"/>
+					<input type="button" id="nextfp_addsub" value="" class="button_next" style="display:none;"
+						title="Get next function by floating point operations"/>
+					<input type="button" id="maxfp_addsub" value="" class="button_max" style="display:none;"
+						title="Get max function by floating point operations"/></td>
+				</tr>
+				<tr>
+					<td>Mul/Div FP ops</td>
+					<td><table border="0"><tr><td width="150">
+						<span id="fp_muldiv"></span></td><td><div id="fp_muldivprogress"><span id="fp_muldivpercentage"></span></div>
+					</td></tr></table>
+					<td><input type="button" id="minfp_muldiv" value="" class="button_min" style="display:none;"
+						title="Get min function by floating point operations"/>
+					<input type="button" id="prevfp_muldiv" value="" class="button_prev" style="display:none;"
+						title="Get previous function by floating point operations"/>
+					<input type="button" id="nextfp_muldiv" value="" class="button_next" style="display:none;"
+						title="Get next function by floating point operations"/>
+					<input type="button" id="maxfp_muldiv" value="" class="button_max" style="display:none;"
+						title="Get max function by floating point operations"/></td>
+				</tr>
+				<tr>
+					<td>L3 cache misses</td>
+					<td><table border="0"><tr><td width="150">
+						<span id="l3miss"></span></td><td><div id="l3missprogress"><span id="l3misspercentage"></span></div>
+					</td></tr></table>
+					<td><input type="button" id="minl3miss" value="" class="button_min" style="display:none;"
+						title="Get min function by L3 cache misses"/>
+					<input type="button" id="prevl3miss" value="" class="button_prev" style="display:none;"
+						title="Get previous function by L3 cache misses"/>
+					<input type="button" id="nextl3miss" value="" class="button_next" style="display:none;"
+						title="Get next function by L3 cache misses"/>
+					<input type="button" id="maxl3miss" value="" class="button_max" style="display:none;"
+						title="Get max function by L3 cache misses"/></td>
+				</tr>
+				<tr><td>CPI</td>
+				<td>
+					<table border="0">
+						<tr><td width="150"><span id="cpivalue" title="CPI of this function"></span></td>
+						<td><div id="cpibar" style="width:380px;height:15px;top:5px"></div></td></tr>
+					</table>
+				</td>
+				<td><input type="button" id="mincpi" value="" class="button_min" style="display:none;"
+						title="Get min function by CPI"/>
+					<input type="button" id="prevcpi" value="" class="button_prev" style="display:none;"
+						title="Get previous function by CPI"/>
+					<input type="button" id="nextcpi" value="" class="button_next" style="display:none;"
+						title="Get next function by CPI"/>
+					<input type="button" id="maxcpi" value="" class="button_max" style="display:none;"
+						title="Get max function by CPI"/></td>
+				</tr>
+				<tr>
+					<td>Optimizations</td>
+					<td><div id="optimizationtable"></div></td>
+				</tr>
+			</table>
+
+
+		</p>
+
+		</div>
+
+	</div>
+
+  </div>
+
+<a name=bottom></a>
+</body>
+</html>

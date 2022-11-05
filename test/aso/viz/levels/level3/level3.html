@@ -1,0 +1,249 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta name="generator" content=
+  "HTML Tidy for Linux/x86 (vers 11 February 2007), see www.w3.org" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf8" />
+  <!--[if IE]><script type="text/javascript" src="excanvas.js"></script><![endif]-->
+
+  <link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/extensions.css" />
+  <link rel="stylesheet" href="../../css/visualization.css" type="text/css" media="screen" />
+
+  <script type="text/javascript" src='javascript/SurfacePlot.js'></script>
+  <script type="text/javascript" src='javascript/ColourGradient.js'></script>
+  <script type="text/javascript" src="javascript/glMatrix-0.9.5.min.js"></script>
+  <script type="text/javascript" src="javascript/webgl-utils.js"></script>
+  <script type="text/javascript" src="javascript/jquery.min.js"></script>
+
+  <script type="text/javascript" src="../../scripts/header.js"></script>
+
+  <script type="text/javascript" src="../../basicstats.txt"></script>
+  <script type="text/javascript" src="../../info.txt"></script>
+  <script src="data/ipcvalues.txt" type="text/javascript"></script>
+
+  <title>3D (time-cores-IPC) Visualization</title>
+  <script id="shader-fs" type="x-shader/x-fragment">
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+
+            varying vec4 vColor;
+            varying vec3 vLightWeighting;
+
+            void main(void)
+            {
+                gl_FragColor = vec4(vColor.rgb * vLightWeighting, vColor.a);
+            }
+
+  </script>
+  <script type="text/javascript">
+		var ipcvaluestr = jQuery.parseJSON(ipcvaluestr);
+                var numberofintervals = ipcvaluestr.length;
+                var numberofcores = ipcvaluestr[0].length;
+  </script>
+  <script id="shader-vs" type="x-shader/x-vertex">
+            attribute vec3 aVertexPosition;
+            attribute vec3 aVertexNormal;
+            attribute vec4 aVertexColor;
+
+            uniform mat4 uMVMatrix;
+            uniform mat4 uPMatrix;
+            uniform mat3 uNMatrix;
+            varying vec4 vColor;
+
+            uniform vec3 uAmbientColor;
+            uniform vec3 uLightingDirection;
+            uniform vec3 uDirectionalColor;
+            varying vec3 vLightWeighting;
+
+            void main(void)
+            {
+                gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+
+                vec3 transformedNormal = uNMatrix * aVertexNormal;
+                float directionalLightWeighting = max(dot(transformedNormal, uLightingDirection), 0.0);
+                vLightWeighting = uAmbientColor + uDirectionalColor * directionalLightWeighting;
+
+                vColor = aVertexColor;
+            }
+  </script>
+  <script id="axes-shader-fs" type="x-shader/x-fragment">
+            precision mediump float;
+                        varying vec4 vColor;
+
+                        void main(void)
+                        {
+                                gl_FragColor = vColor;
+                        }
+
+  </script>
+  <script id="axes-shader-vs" type="x-shader/x-vertex">
+            attribute vec3 aVertexPosition;
+            attribute vec4 aVertexColor;
+            uniform mat4 uMVMatrix;
+            uniform mat4 uPMatrix;
+            varying vec4 vColor;
+            uniform vec3 uAxesColour;
+
+            void main(void)
+            {
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+            vColor =  vec4(uAxesColour, 1.0);
+            }
+
+  </script>
+  <script id="texture-shader-fs" type="x-shader/x-fragment">
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+
+            varying vec2 vTextureCoord;
+
+            uniform sampler2D uSampler;
+
+            void main(void)
+            {
+                gl_FragColor = texture2D(uSampler, vTextureCoord);
+            }
+  </script>
+  <script id="texture-shader-vs" type="x-shader/x-vertex">
+            attribute vec3 aVertexPosition;
+
+            attribute vec2 aTextureCoord;
+            varying vec2 vTextureCoord;
+
+            uniform mat4 uMVMatrix;
+            uniform mat4 uPMatrix;
+
+            void main(void)
+            {
+                gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+                vTextureCoord = aTextureCoord;
+            }
+  </script>
+    <script type='text/javascript'>
+      $('document').ready(function() {
+        $('.fadeOutSlow').delay(10000).fadeOut("slow");
+      } );
+    </script>
+</head>
+
+<body style="background:#ffffff">
+
+<script  type="text/javascript">
+  writeHeader('level3');
+</script>
+
+<div style="position: relative">
+  <div style="height:20px">
+    <span class="fadeOutSlow" style="font-size: 16px; color: gray; position: absolute; left:0px; top:0px; background-color: #ffffff; color: #000000">Click and drag to rotate. Hold the shift key and drag to scale.</span>
+  </div>
+
+  <div>
+    <div id='surfacePlotDiv' style="float: left; width: 600px; height: 600px;">
+      <!-- SurfacePlot goes here... -->
+    </div>
+  </div><script type='text/javascript'>
+     var surfacePlot;
+
+                        function setUp()
+                        {
+
+                                var tooltipStrings = new Array();
+                                var values = new Array();
+                                var data = {nRows: numberofintervals, nCols: numberofcores, formattedValues: values};
+                                var idx = 0;
+
+                                for (var interval = 0; interval < numberofintervals; interval++)
+                                {
+                                        values[interval] = new Array();
+                                        for (var core = 0; core < numberofcores; core++)
+                                        {
+						var time = ipcvaluestr[interval][0].time;
+						var ipc = ipcvaluestr[interval][core].ipc
+                                                values[interval][core] = parseFloat(ipc);
+                                                tooltipStrings[idx] = "Time:" + time +" ns"+ ", Core:" + core + " IPC:" + ipc;
+                                                idx++;
+                                        }
+                                }
+
+
+                                surfacePlot = new SurfacePlot(document.getElementById("surfacePlotDiv"));
+
+                                // Don't fill polygons in IE. It's too slow.
+                                var fillPly = true;
+
+                                // Define a colour gradient.
+                                var colour1 = {red:0, green:0, blue:255};
+                                var colour2 = {red:0, green:255, blue:255};
+                                var colour3 = {red:0, green:255, blue:0};
+                                var colour4 = {red:255, green:255, blue:0};
+                                var colour5 = {red:255, green:0, blue:0};
+                                var colours = [colour1, colour2, colour3, colour4, colour5];
+
+                                // Axis labels.
+                                var xAxisHeader = "Time (μs)";
+                                var yAxisHeader = "Cores";
+                                var zAxisHeader = "IPC";
+
+                                var renderDataPoints = true;
+                                var background = '#ffffff';
+                                var axisForeColour = '#000000';
+                                var hideFloorPolygons = true;
+                                var chartOrigin = {x: 150, y:250};
+
+                                // Options for the basic canvas pliot.
+                                var basicPlotOptions = {fillPolygons: fillPly, tooltips: tooltipStrings, renderPoints: renderDataPoints }
+
+
+				var xLabels = new Array();
+
+				// start generating numbers
+
+				for( var i = 0; i <= numberofintervals; i+= (numberofintervals/10) )
+				{
+					time = i*intervalsize/1000000000;
+					var roundedtime = Math.round(time*Math.pow(10,2))/Math.pow(10,2);
+					xLabels.push( roundedtime );
+				}
+
+				var yLabels = new Array();
+
+				// start generating numbers
+                                if(numberofcores <= 16){
+					for( var i = 0; i < numberofcores; i+= 1 )
+					{
+						yLabels.push( i );
+					}
+				}
+				else {
+					for( var i = 0; i <= numberofcores; i+= (numberofcores/16) )
+                                        	{
+                                                	yLabels.push( i );
+                                        	}
+				}
+
+                                // Options for the webGL plot.
+                                //var xLabels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+                                //var yLabels = [0, 1];
+                                var zLabels = [0, 1, 2, 3, 4, 5, 6]; // These labels ar eused when autoCalcZScale is false;
+                                var glOptions = {xLabels: xLabels, yLabels: yLabels, zLabels: zLabels, chkControlId: "allowWebGL" ,autoCalcZScale: true};
+
+                                // Options common to both types of plot.
+                                var options = {xPos: 0, yPos: 0, width: 800, height: 600, colourGradient: colours,
+                                        xTitle: xAxisHeader, yTitle: yAxisHeader, zTitle: zAxisHeader,
+                                        backColour: background, axisTextColour: axisForeColour, hideFlatMinPolygons: hideFloorPolygons, origin: chartOrigin};
+
+                                surfacePlot.draw(data, options, basicPlotOptions, glOptions);
+
+                        }
+
+                        setUp();
+
+  </script>
+</div>
+</body>
+</html>
+

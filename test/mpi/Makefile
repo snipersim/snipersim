@@ -16,7 +16,8 @@ pi: pi_mpi.o Makefile
 
 
 run_$(TARGET):
-	../../run-sniper --mpi -n 4 -c gainestown -- ./pi
+#	../../run-sniper --mpi -n 4 -c gainestown -- ./pi
+	../../run-sniper --mpi -n 4 -c writethrough -- ./pi
 
 run_mpirun:
 	../../run-sniper --mpi --mpi-ranks=2 --mpi-exec="mpirun -genv ENVNAME VALUE" -n 4 -c gainestown -- ./pi

@@ -1,0 +1,9 @@
+title = 'aso';
+num_intervals = '174';
+interval = '1000000000';
+use_level2 = 1;
+use_mcpat = 0;
+use_level3 = 1;
+use_topo = 1;
+use_profile = 0;
+use_aso = 1;

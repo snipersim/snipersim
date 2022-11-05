@@ -1,0 +1,131 @@
+body
+{
+  margin: 0;
+}
+
+#container
+{
+  margin: 0 auto;
+  width: 100%;
+  background: #fff;
+}
+
+#header
+{
+  background: #ccc;
+  padding: 5px 5px 5px 20px;
+}
+
+#header h1 { margin: 0; font-size: 200%; }
+
+#header .basicstats th, #header .basicstats td
+{
+  padding-left: 1em;
+  text-align: right;
+  font-size: 70%;
+}
+
+#navigation
+{
+  background: #333;
+  padding: 0 10px;
+}
+
+#navigation ul
+{
+  margin: 0;
+  padding: 0;
+}
+
+#navigation ul li
+{
+  list-style-type: none;
+  display: inline;
+  float: left;
+  padding: 5px 10px;
+  border-right: 1px solid #fff;
+}
+
+#navigation li.unavailable
+{
+  color: #c88;
+}
+
+#navigation li a
+{
+  display: block;
+  color: #fff;
+  text-decoration: none;
+}
+
+#navigation li a:hover { background: #383; }
+
+#content-container1
+{
+  float: left;
+  width: 100%;
+  background: #fff url(background1.gif) repeat-y 20% 0;
+}
+
+#content-container2
+{
+  float: left;
+  width: 100%;
+  background: url(background2.gif) repeat-y 80% 0;
+}
+
+#section-navigation
+{
+  float: left;
+  width: 16%;
+  padding: 20px 0;
+  margin: 0 2%;
+  display: inline;
+}
+
+#section-navigation ul
+{
+  margin: 0;
+  padding: 0;
+}
+
+#section-navigation ul li
+{
+  margin: 0 0 1em;
+  padding: 0;
+  list-style-type: none;
+}
+
+#content
+{
+  padding: 20px 0;
+  margin: 20px 0 0 2%;
+}
+
+#content h2 { margin: 0; }
+
+#aside
+{
+  float: right;
+  width: 16%;
+  padding: 20px 0;
+  margin: 0 2% 0 0;
+  display: inline;
+}
+
+#aside h3 { margin: 0; }
+
+#footer
+{
+  clear: both;
+  background: #ccc;
+  text-align: right;
+  padding: 20px;
+  height: 1%;
+}
+
+#errorDisplay
+{
+  color: red;
+  padding: 25px 25px 25px 25px;
+}

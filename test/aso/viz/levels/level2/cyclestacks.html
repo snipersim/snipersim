@@ -1,0 +1,505 @@
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+	<title></title>
+	<link type="text/css" rel="stylesheet" href="css/jquery-ui.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/graph.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/detail.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/legend.css" />
+	<link type="text/css" rel="stylesheet" href="../../rickshaw/src/css/extensions.css" />
+	<link rel="stylesheet" href="../../css/visualization.css" type="text/css" media="screen" />
+
+	<style>
+	  #offset_form label { display: inline-block; }
+	</style>
+
+	<script type="text/javascript" src="../../rickshaw/vendor/d3.min.js"></script>
+	<script type="text/javascript" src="../../rickshaw/vendor/d3.layout.min.js"></script>
+
+	<script type="text/javascript" src="javascript/jquery.min.js"></script>
+	<script type="text/javascript" src="javascript/jquery-ui.min.js"></script>
+
+
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Class.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Compat.ClassList.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Ajax.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.Area.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.Line.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.Bar.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Renderer.ScatterPlot.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.RangeSlider.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.HoverDetail.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Annotate.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Legend.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.Time.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.X.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Toggle.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Order.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Behavior.Series.Highlight.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Smoother.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Unstacker.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Fixtures.Time.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Fixtures.Number.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Fixtures.RandomData.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Fixtures.Color.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Color.Palette.js"></script>
+	<script type="text/javascript" src="../../rickshaw/src/js/Rickshaw.Graph.Axis.Y.js"></script>
+	<script type="text/javascript" src="../../rickshaw/js/extensions.js"></script>
+
+	<script type="text/javascript" src="../../scripts/header.js"></script>
+
+    <script type="text/javascript" src="../../basicstats.txt"></script>
+    <script type="text/javascript" src="../../info.txt"></script>
+	<script type="text/javascript" src="data/info.txt"></script>
+	<script type="text/javascript" src="data/markers.txt"></script>
+
+</head>
+<body>
+
+<script  type="text/javascript">
+  var info = jQuery.parseJSON(infostr);
+  var name = info.name
+  var date = info.date
+  var ipcfilename = "data/".concat(info.name.concat("-ipc.json"));
+  var ipcfilename2 = "data/".concat(info.name.concat("-ipcfic.json"));
+  var intervalsize = info.intervalsize;
+  var errorSeen = false;
+  var errorCallback = function(data) {
+    if (!errorSeen) {
+      document.getElementById('errorDisplay').hidden = false;
+      errorSeen = true;
+    }
+  }
+  markerinfo = jQuery.parseJSON(markerstr);
+  document.title = name+ ": cycle stacks over time";
+  currentdetail = "simple";
+  currentnormalized = true;
+
+  writeHeader('level2');
+</script>
+
+<noscript>
+    Error, Javascript must be enabled to use the visulalizations.
+</noscript>
+
+<div id="content">
+  <form id="right_panel" action="#">
+      <div id="legend"></div>
+  </form>
+
+  <form id="side_panel" action="#">
+    <div id="renderer_form" class="toggler" style="display: none;">
+      <input type="radio" name="renderer" id="area" value="area" checked="checked" />
+      <label for="area">area</label>
+    </div>
+    <section>
+      <div id="offset_form">
+        <script type="text/javascript">document.write("<input type='radio' id='detailsimple' name='detailselect' value='simple' onchange='createGraph(this.value,currentnormalized);' checked='checked' /\>");</script>
+        <label for='detailsimple'>Simple</label><br />
+        <script type="text/javascript">document.write("<input type='radio' id='detailfull' name='detailselect' value='full' onchange='createGraph(this.value,currentnormalized);' /\>");</script>
+        <label for='detailfull'>Detailed</label>
+      </div>
+      <div id="offset_form">
+        <script type="text/javascript">document.write("<input type='radio' id='normalized' name='normalizeselect' value='true' onchange='createGraph(currentdetail,true);' checked='checked' /\>");</script>
+        <label for='normalized'>Normalized</label><br />
+        <script type="text/javascript">document.write("<input type='radio' id='notnormalized' name='normalizeselect' value='false' onchange='createGraph(currentdetail,false);' /\>");</script>
+        <label for='notnormalized'>Absolute CPI</label>
+      </div>
+      <script type="text/javascript">
+        document.getElementById('detailsimple').checked = true;
+        document.getElementById('normalized').checked = true;
+      </script>
+    </section>
+    <div id="offset_form" style="display: none;">
+      <label for="stack">
+      <input type="radio" name="offset" id="stack" value="zero" checked="checked" />
+      <span>stack</span>
+      </label>
+    </div>
+    <div id="interpolation_form" style="display: none;">
+      <label for="step">
+      <input type="radio" name="interpolation" id="step" value="step-after" checked="checked" />
+      <span>step</span>
+      </label>
+    </div>
+    <section>
+	<h6>Smoothing</h6>
+	<div id="smoother"></div>
+    </section>
+    <section>
+      <input type="checkbox" name="interpolation" id="ipcgraphshow" value="step-after" />
+      <label for='ipcgraphshow'>Show IPC graph</label>
+      <script type="text/javascript">
+        document.getElementById('ipcgraphshow').checked = false;
+      </script>
+    </section>
+	<div id="yaxislabel" class="vertical-text">CPI (%)</div>
+  </form>
+
+  <div id="chart_container">
+
+    <div id="chart"></div>
+    <div id="xaxislabel">Time (µs)</div>
+    <div id="timeline"></div>
+    <div id="slider"></div>
+
+  </div>
+</div>
+
+
+<br />
+
+<!--IPC stack 2 (with fixed instruction count intervals)-->
+<div id ="ipcchart2content">
+  <div id="content">
+    <form id="side_panel">
+      <section>
+        <h6>Smoothing</h6>
+        <div id="ipcsmoother2"></div>
+        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
+      </section>
+    </form>
+  <div id="chart_container">
+    <div id="ipcchart2"></div>
+    <div id="xaxislabel">Time (µs)</div>
+    <br /><br /><br /><br />
+  </div>
+</div>
+</div>
+
+
+<!--IPC stack-->
+<div id ="ipcchartcontent">
+  <div id="content">
+    <form id="side_panel">
+      <section>
+        <h6>Smoothing</h6>
+        <div id="ipcsmoother"></div>
+        <div id="ipcyaxislabel" class="vertical-text" style="text-align:center;">IPC</div>
+      </section>
+    </form>
+  <div id="chart_container">
+    <div id="ipcchart"></div>
+    <div id="xaxislabel">Time (µs)</div>
+    <br /><br /><br /><br />
+  </div>
+</div>
+</div>
+
+
+
+<script type="text/javascript">
+var ipcgraph;
+var graph = new Rickshaw.Graph.Ajax( {
+	element: document.getElementById("ipcchart"),
+	width: 800,
+	height: 150,
+	renderer: 'area',
+	defaultInterpolation: 'step-after',
+	stroke: true,
+	dataURL: ipcfilename,
+	onError: errorCallback,
+	onData: function(d) { return d },
+	onComplete: function(transport) {
+		var graph = ipcgraph = transport.graph;
+		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
+			graph: graph,
+			xFormatter: function(x) {
+					return x+" µs";
+			},
+
+			yFormatter: function(y) {
+					var content = Math.round(y*100)/100 + " IPC";
+					return content;
+				},
+			} );
+		var controls = new RenderControls( {
+			element: document.querySelector('form'),
+			graph: graph
+		} );
+
+		var smoother = new Rickshaw.Graph.Smoother( {
+			graph: graph,
+			element: $('#ipcsmoother')
+		} );
+		var ticksTreatment = 'glow';
+
+		var yAxis = new Rickshaw.Graph.Axis.Y( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+		} );
+
+		yAxis.render();
+
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
+	},
+	series: [
+		{
+			name: 'IPC',
+			color: 'green'
+		}
+	]
+} );
+
+
+</script>
+
+<script type="text/javascript">
+var ipcgraph2;
+var graph = new Rickshaw.Graph.Ajax( {
+	element: document.getElementById("ipcchart2"),
+	width: 800,
+	height: 150,
+	renderer: 'area',
+	defaultInterpolation: 'step-after',
+	stroke: true,
+	dataURL: ipcfilename2,
+	onError: errorCallback,
+	onData: function(d) { return d },
+	onComplete: function(transport) {
+		var graph = ipcgraph2 = transport.graph;
+		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
+			graph: graph,
+			xFormatter: function(x) {
+					return x+" µs";
+			},
+
+			yFormatter: function(y) {
+					var content = Math.round(y*100)/100 + " IPC";
+					return content;
+				},
+			} );
+		var controls = new RenderControls( {
+			element: document.querySelector('form'),
+			graph: graph
+		} );
+
+		var smoother = new Rickshaw.Graph.Smoother( {
+			graph: graph,
+			element: $('#ipcsmoother2')
+		} );
+		var ticksTreatment = 'glow';
+
+		var yAxis = new Rickshaw.Graph.Axis.Y( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+		} );
+
+		yAxis.render();
+
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
+	},
+	series: [
+		{
+			name: 'IPC',
+			color: 'green'
+		}
+	]
+} );
+
+
+</script>
+
+<script type="text/javascript">
+function createGraph(detail, normalized) {
+
+  currentdetail = detail;
+  if (currentnormalized != normalized && document.getElementById("ipcgraphshow").checked){
+    if(normalized){
+      $('#ipcchartcontent').show();
+      $('#ipcchart2content').hide();
+    }
+    else {
+      $('#ipcchartcontent').hide();
+      $('#ipcchart2content').show();
+    }
+
+  }
+  currentnormalized = normalized;
+  $('#chart').empty();
+  $('#legend').empty();
+  $('#timeline').empty();
+
+  if (normalized){
+    document.getElementById('yaxislabel').innerHTML = "CPI (%)"
+    yformatter = function(series, x, y) {
+				return series.name+": "+Math.round(y*100)/100+ " % CPI";
+			};
+  }
+  else{
+    document.getElementById('yaxislabel').innerHTML = "CPI"
+    yformatter = function(series, x, y) {
+				return series.name+": "+Math.round(y*100)/100+ " CPI";
+			};
+  }
+
+  if (detail == "simple") {
+
+	   if (normalized) {
+	    	var filename = "data/".concat(info.name.concat("-cpipercentagesimplified.json"));
+	    	labels = cpipercentagesimplifiedlabels;
+	   }
+	   else {
+		var filename = "data/".concat(info.name.concat("-cpificsimple.json"));
+	   	labels = simplelabels;
+	    }
+  }
+  else if (detail == "full") {
+	   if (normalized) {
+	    	var filename = "data/".concat(info.name.concat("-cpipercentage.json"));
+	    	labels = cpipercentagelabels;
+	   }
+	   else {
+		var filename = "data/".concat(info.name.concat("-cpific.json"));
+	   	labels = cpificlabels;
+
+	    }
+  }
+
+  var graph = new Rickshaw.Graph.Ajax( {
+	element: document.getElementById("chart"),
+	width: 800,
+	height: 400,
+	renderer: 'area',
+	defaultInterpolation: 'step-after',
+	stroke: true,
+	dataURL: filename,
+	onError: errorCallback,
+	onData: function(d) { return d },
+	onComplete: function(transport) {
+		var graph = transport.graph;
+		var legend = new Rickshaw.Graph.Legend( {
+			graph: graph,
+			element: document.getElementById('legend')
+		} );
+		var slider = new Rickshaw.Graph.RangeSlider( {
+			graph: [graph, ipcgraph, ipcgraph2],
+			element: $('#slider')
+		} );
+
+		// Reset the IPC graphs when creating a new graph to sync up the RangeSlider
+		ipcgraph.window.xMin = undefined;
+		ipcgraph.window.xMax = undefined;
+		ipcgraph.update();
+		ipcgraph2.window.xMin = undefined;
+		ipcgraph2.window.xMax = undefined;
+		ipcgraph2.update();
+
+		var hoverDetail = new Rickshaw.Graph.HoverDetail( {
+			graph: graph,
+			formatter: yformatter,
+                        xFormatter: function(x) {
+		  		return x+" µs";
+				},
+		} );
+
+		var order = new Rickshaw.Graph.Behavior.Series.Order( {
+			graph: graph,
+			legend: legend
+		} );
+		var controls = new RenderControls( {
+			element: document.querySelector('form'),
+			graph: graph,
+		} );
+
+		var shelving = new Rickshaw.Graph.Behavior.Series.Toggle( {
+			graph: graph,
+			legend: legend
+		} );
+		var highlighter = new Rickshaw.Graph.Behavior.Series.Highlight( {
+			graph: graph,
+			legend: legend
+		} );
+
+		var smoother = new Rickshaw.Graph.Smoother( {
+			graph: graph,
+			element: $('#smoother')
+		} );
+		var ticksTreatment = 'glow';
+
+		var yAxis = new Rickshaw.Graph.Axis.Y( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+		} );
+
+		yAxis.render();
+
+		var xAxis = new Rickshaw.Graph.Axis.X( {
+			graph: graph,
+			tickFormat: Rickshaw.Fixtures.Number.formatKMBT,
+			ticksTreatment: ticksTreatment,
+			orientation: "bottom",
+		} );
+
+		xAxis.render();
+
+
+		var annotator = new Rickshaw.Graph.Annotate( {
+			graph: graph,
+			element: document.getElementById('timeline')
+		} );
+
+
+		var numberofmarkers = markerinfo.markers.length;
+
+		for (var i=0; i<numberofmarkers; i++)
+		  {
+			annotator.add(markerinfo.markers[i].timestamp, markerinfo.markers[i].marker);
+		  }
+		annotator.update();
+	},
+	series: labels
+
+
+	} );
+
+}
+
+</script>
+
+<script type="text/javascript">
+$('#ipcgraphshow').change(function() {
+  if(currentnormalized){
+    element = '#ipcchartcontent'
+  }
+  else {
+    element = '#ipcchart2content'
+  }
+  $(element).slideToggle('slow', function() {
+  });
+
+});
+
+
+</script>
+
+
+<script type="text/javascript">
+$('#ipcchartcontent').hide();
+$('#ipcchart2content').hide();
+createGraph('simple',true);
+</script>
+
+
+</body>
+
