@@ -1,0 +1,1 @@
+/home/kleber.kruger/snipersim/frontend/pin-frontend/../../sift/sift_assert.h
