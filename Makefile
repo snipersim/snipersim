@@ -43,6 +43,42 @@ endif
 
 $(SIM_TARGETS): dependencies
 
+# Check for errors. Only one value should be set
+TARGET_COUNT:=0
+# For Pin
+ifeq (,$(USE_PIN))
+# Do nothing
+else ifeq ($(USE_PIN),1)
+TARGET_COUNT:=$(shell echo $$(($(TARGET_COUNT)+1)))
+else # USE_PIN != "1"
+$(error If using, set USE_PIN to "1", not "$(USE_PIN)")
+endif
+# For Pinplay
+ifeq (,$(USE_PINPLAY))
+# Do nothing
+else ifeq ($(USE_PINPLAY),1)
+TARGET_COUNT:=$(shell echo $$(($(TARGET_COUNT)+1)))
+else # USE_PINPLAY != "1"
+$(error If using, set USE_PINPLAY to "1", not "$(USE_PINPLAY)")
+endif
+# For SDE
+ifeq (,$(USE_SDE))
+# Do nothing
+else ifeq ($(USE_SDE),1)
+TARGET_COUNT:=$(shell echo $$(($(TARGET_COUNT)+1)))
+else # USE_SDE != "1"
+$(error If using, set USE_SDE to "1", not "$(USE_SDE)")
+endif
+# Set the default if no values are set
+ifeq ($(TARGET_COUNT),0)
+USE_PINPLAY=1
+else ifeq ($(TARGET_COUNT),1)
+# Input is valid. Use user-supplied default
+else
+# Error, cannot be >= 2
+$(error One or more tools requested for build. Only one supported USE_PIN=$(USE_PIN) USE_PINPLAY=$(USE_PINPLAY) USE_SDE=$(USE_SDE))
+endif
+
 message:
 	@echo -n Building for x86 \($(SNIPER_TARGET_ARCH)\)
 ifneq (,$(USE_PIN))
