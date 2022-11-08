@@ -6,6 +6,8 @@
 #include "stats.h"
 #include "fault_injection.h"
 #include "shmem_perf.h"
+#include "config.hpp"         // Added by Kleber Kruger
+#include "nvm_perf_model.h"   // Added by Kleber Kruger
 
 #if 0
    extern Lock iolock;
@@ -28,9 +30,8 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    , m_reads(0)
    , m_writes(0)
 {
-   m_dram_perf_model = DramPerfModel::createDramPerfModel(
-         memory_manager->getCore()->getId(),
-         cache_block_size);
+   // Modified by Kleber Kruger (original implementation: DramPerfModel::createDramPerfModel(...))
+   m_dram_perf_model = createDramPerfModel(memory_manager->getCore()->getId(), cache_block_size);
 
    m_fault_injector = Sim()->getFaultinjectionManager()
       ? Sim()->getFaultinjectionManager()->getFaultInjector(memory_manager->getCore()->getId(), MemComponent::DRAM)
@@ -39,6 +40,9 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    m_dram_access_count = new AccessCountMap[DramCntlrInterface::NUM_ACCESS_TYPES];
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "reads", &m_reads);
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "writes", &m_writes);
+
+   // registerStatsMetric(getTechnology(), memory_manager->getCore()->getId(), "reads", &m_reads);    // Modifyed by Kleber Kruger (old value: dram)
+   // registerStatsMetric(getTechnology(), memory_manager->getCore()->getId(), "writes", &m_writes);  // Modifyed by Kleber Kruger (old value: dram)
 }
 
 DramCntlr::~DramCntlr()
@@ -134,6 +138,24 @@ DramCntlr::printDramAccessCount()
          }
       }
    }
+}
+
+// Added by Kleber Kruger
+DramPerfModel*
+DramCntlr::createDramPerfModel(core_id_t core_id, UInt32 cache_block_size)
+{
+   String param = "perf_model/dram/technology";
+   return Sim()->getCfg()->hasKey(param) && Sim()->getCfg()->getString(param) == "nvm" ?
+          NvmPerfModel::createNvmPerfModel(core_id, cache_block_size) :
+          DramPerfModel::createDramPerfModel(core_id, cache_block_size);
+}
+
+// TODO: Improve this method (check if technology is valid! use enum?)
+String
+DramCntlr::getTechnology()
+{
+   String param = "perf_model/dram/technology";
+   return Sim()->getCfg()->hasKey(param) && Sim()->getCfg()->getString(param) == "nvm" ? "nvm" : "dram";
 }
 
 }

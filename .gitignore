@@ -73,3 +73,10 @@ frontend/pin-frontend/sift/*.h
 frontend/pin-frontend/sift/*.cc
 sift/recorder/sift/*.h
 sift/recorder/sift/*.cc
+
+# Test files
+out.txt
+test/aso/viz
+
+# DONUTS files
+sim.logs.csv

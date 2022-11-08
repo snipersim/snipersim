@@ -24,6 +24,12 @@ const char* shmem_reason_names[] = {
    "dram-queue",
    "dram-bus",
    "dram-device",
+   "nvm",            // Added by Kleber Kruger
+   "nvm-queue",      // Added by Kleber Kruger
+   "nvm-bus",        // Added by Kleber Kruger
+   "nvm-device",     // Added by Kleber Kruger
+   "nvm-log-queue",  // Added by Kleber Kruger
+   "nvm-log-bus",    // Added by Kleber Kruger
    "unknown",
 };
 
