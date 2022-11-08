@@ -36,6 +36,40 @@ bool Simulator::m_config_file_allowed = true;
 Config::SimulationMode Simulator::m_mode;
 dl::Decoder *Simulator::m_decoder;
 
+const char* Simulator::project_names[] = {
+   "Baseline",
+   "PiCL",
+   "NVOverlay",
+   "dOnuts",
+};
+static_assert(ProjectType::NUM_PROJECT_TYPES == sizeof(Simulator::project_names) / sizeof(Simulator::project_names[0]),
+              "Not enough values in ProjectType::project_type_names");
+
+/**
+ * @brief Get the project type
+ * Added by Kleber Kruger
+ * 
+ * @return ProjectType
+ */
+ProjectType Simulator::loadProjectType()
+{
+   const String key = "general/project_type";
+   String project = Sim()->getCfg()->hasKey(key) ? Sim()->getCfg()->getString(key) : "default";
+
+   // transform(project.begin(), project.end(), project.begin(), ::tolower);
+
+   if (project == "default")
+      return ProjectType::DEFAULT;
+   if (project == "picl")
+      return ProjectType::PICL;
+   if (project == "nvoverlay")
+      return ProjectType::NVOVERLAY;
+   if (project == "donuts")
+      return ProjectType::DONUTS;
+   
+   LOG_PRINT_ERROR("Unknown project %s", project.c_str());
+}
+
 void Simulator::allocate()
 {
    assert(m_singleton == NULL);
@@ -122,6 +156,7 @@ Simulator::Simulator()
    , m_faultinjection_manager(NULL)
    , m_rtn_tracer(NULL)
    , m_memory_tracker(NULL)
+   , m_project_type(loadProjectType()) // Added by Kleber Kruger
    , m_running(false)
    , m_inst_mode_output(true)
 {
@@ -316,6 +351,7 @@ void Simulator::printInstModeSummary()
          LOG_PRINT_ERROR("Unknown simulation mode");
    }
    printf(" frontend\n");
+   printf("[SNIPER] Running project [ %s ]\n", project_names[m_project_type]); // Added by Kleber Kruger
    switch(getConfig()->getSimulationROI())
    {
       case Config::ROI_FULL:
