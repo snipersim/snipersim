@@ -580,6 +580,9 @@ elif pinballs and pinball_sift:
   applications = []
   for app_id, pinball in enumerate(pinballs):
     applications.append(([], [ '-e', '0', '-s', str(app_id), '-r', '1', '--pinball', pinball, '--outputdir', outputdir ]))
+elif trace_manual:
+  # Let's not start a frontend if it is being handled manually
+  pass
 elif use_sift:
   tracegen = {}
   tracegen['enabled'] = 'true'
