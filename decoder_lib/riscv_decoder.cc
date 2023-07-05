@@ -84,6 +84,31 @@ const char* reg_name_sym[] = {
       nullptr
     };
 
+static bool is_conditional_branch_op(uint16_t op)
+{
+  switch (op) {
+    case rv_op_beq:		/* Branch Equal */
+    case rv_op_bne:		/* Branch Not Equal */
+    case rv_op_blt:		/* Branch Less Than */
+    case rv_op_bge:		/* Branch Greater than Equal */
+    case rv_op_bltu:	/* Branch Less Than Unsigned */
+    case rv_op_bgeu:	/* Branch Greater than Equal Unsigned */
+    case rv_op_beqz:	/* Branch if = zero */
+    case rv_op_bnez:	/* Branch if ≠ zero */
+    case rv_op_blez:	/* Branch if ≤ zero */
+    case rv_op_bgez:	/* Branch if ≥ zero */
+    case rv_op_bltz:	/* Branch if < zero */
+    case rv_op_bgtz:	/* Branch if > zero */
+    case rv_op_ble:
+    case rv_op_bleu:
+    case rv_op_bgt:
+    case rv_op_bgtu:
+      return true;
+    default:
+      return false;
+  }
+}
+
 RISCVDecoder::RISCVDecoder(dl_arch arch, dl_mode mode, dl_syntax syntax)
 {
   this->m_arch = arch;
@@ -447,27 +472,7 @@ bool RISCVDecoder::is_pause_opcode(decoder_opcode opcd)
 /// Check if the opcode is a branch instruction
 bool RISCVDecoder::is_branch_opcode(decoder_opcode opcd) 
 {
-  bool res = false;
-  switch(opcd) {
-    case rv_op_beq:		/* Branch Equal */
-    case rv_op_bne:		/* Branch Not Equal */
-    case rv_op_blt:		/* Branch Less Than */
-    case rv_op_bge:		/* Branch Greater than Equal */
-    case rv_op_bltu:	/* Branch Less Than Unsigned */
-    case rv_op_bgeu:	/* Branch Greater than Equal Unsigned */
-    case rv_op_beqz:	/* Branch if = zero */
-    case rv_op_bnez:	/* Branch if ≠ zero */
-    case rv_op_blez:	/* Branch if ≤ zero */
-    case rv_op_bgez:	/* Branch if ≥ zero */
-    case rv_op_bltz:	/* Branch if < zero */
-    case rv_op_bgtz:	/* Branch if > zero */
-    case rv_op_ble:
-    case rv_op_bleu:
-    case rv_op_bgt:
-    case rv_op_bgtu:
-      res = true; break;
-  }
-  return res;
+  return is_conditional_branch_op(opcd);
 }
 
 /// Check if the opcode is an add/sub instruction that operates in vector and FP registers
@@ -648,32 +653,7 @@ bool RISCVDecodedInst::is_serializing() const
 /// Check if this instruction is a conditional branch
 bool RISCVDecodedInst::is_conditional_branch() const
 {
-  bool res = false;
-  riscv::decode dec = this->rv8_dec;
-  switch (dec.op) {
-    case rv_op_beq:		/* Branch Equal */
-    case rv_op_bne:		/* Branch Not Equal */
-    case rv_op_blt:		/* Branch Less Than */
-    case rv_op_bge:		/* Branch Greater than Equal */
-    case rv_op_bltu:	/* Branch Less Than Unsigned */
-    case rv_op_bgeu:	/* Branch Greater than Equal Unsigned */
-    case rv_op_beqz:	/* Branch if = zero */
-    case rv_op_bnez:	/* Branch if ≠ zero */
-    case rv_op_blez:	/* Branch if ≤ zero */
-    case rv_op_bgez:	/* Branch if ≥ zero */
-    case rv_op_bltz:	/* Branch if < zero */
-    case rv_op_bgtz:	/* Branch if > zero */
-    case rv_op_ble:
-    case rv_op_bleu:
-    case rv_op_bgt:
-    case rv_op_bgtu:
-      res = true;
-      break;
-    default:
-      res = false;
-      break;
-  }
-  return res;
+  return is_conditional_branch_op(this->rv8_dec.op);
 }
 
 /// Check if this instruction is a fence/barrier-type
