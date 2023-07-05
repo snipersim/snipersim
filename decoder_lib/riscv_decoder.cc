@@ -484,7 +484,14 @@ bool RISCVDecoder::is_pause_opcode(decoder_opcode opcd)
 /// Check if the opcode is a branch instruction
 bool RISCVDecoder::is_branch_opcode(decoder_opcode opcd) 
 {
-  return is_conditional_branch_op(opcd) || is_indirect_branch_op(opcd);
+  switch (opcd)
+  {
+    case rv_op_jal:
+    case rv_op_j:
+      return true;
+    default:
+      return is_conditional_branch_op(opcd) || is_indirect_branch_op(opcd);
+  }
 }
 
 /// Check if the opcode is an add/sub instruction that operates in vector and FP registers
