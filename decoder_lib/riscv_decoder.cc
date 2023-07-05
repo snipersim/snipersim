@@ -109,6 +109,17 @@ static bool is_conditional_branch_op(uint16_t op)
   }
 }
 
+static bool is_indirect_branch_op(uint16_t op)
+{
+  switch (op) {
+    case rv_op_jalr:
+    case rv_op_jr:
+      return true;
+    default:
+      return false;
+  }
+}
+
 RISCVDecoder::RISCVDecoder(dl_arch arch, dl_mode mode, dl_syntax syntax)
 {
   this->m_arch = arch;
@@ -472,7 +483,7 @@ bool RISCVDecoder::is_pause_opcode(decoder_opcode opcd)
 /// Check if the opcode is a branch instruction
 bool RISCVDecoder::is_branch_opcode(decoder_opcode opcd) 
 {
-  return is_conditional_branch_op(opcd);
+  return is_conditional_branch_op(opcd) || is_indirect_branch_op(opcd);
 }
 
 /// Check if the opcode is an add/sub instruction that operates in vector and FP registers
@@ -697,6 +708,11 @@ bool RISCVDecodedInst::is_mem_pair() const
   // instr like ldnp, ldpsw, stnp, stp in ARM
   // no load/store pair instructions in RISCV
   return false;
+}
+
+bool RISCVDecodedInst::is_indirect_branch() const
+{
+  return is_indirect_branch_op(this->rv8_dec.op);
 }
 
 } // namespace dl;
