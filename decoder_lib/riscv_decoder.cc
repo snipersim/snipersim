@@ -113,6 +113,7 @@ static bool is_indirect_branch_op(uint16_t op)
 {
   switch (op) {
     case rv_op_jalr:
+    case rv_op_ret:
     case rv_op_jr:
       return true;
     default:
