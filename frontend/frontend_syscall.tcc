@@ -93,7 +93,7 @@ void FrontendSyscallModelBase <T>::setTID(threadid_t threadid)
 
 template <typename T>
 void FrontendSyscallModelBase <T>::doSyscall
-(threadid_t threadid, addr_t syscall_number, syscall_args_t& args)
+(threadid_t threadid, addr_t syscall_number, syscall_args_t args)
 {
    if (m_thread_data[threadid].icount_reported > 0)
    {
@@ -185,7 +185,7 @@ void FrontendSyscallModelBase <T>::doSyscall
             m_thread_data[threadid].last_syscall_number = syscall_number;
             m_thread_data[threadid].last_syscall_emulated = false;
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in not emulated option" << std::endl;
-            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(syscall_args_t));
             break;
 
          // System calls emulated (not passed through to OS)
@@ -198,13 +198,13 @@ void FrontendSyscallModelBase <T>::doSyscall
             m_thread_data[threadid].last_syscall_emulated = true;
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in emulated option" << std::endl;
             m_thread_data[threadid].last_syscall_returnval = 
-            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(syscall_args_t));
             break;
 
          // System calls sent to Sniper, but also passed through to OS
          case SYS_exit_group:
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in both options" << std::endl;
-            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(syscall_args_t));
             break;
          
          default:
