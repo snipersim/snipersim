@@ -129,12 +129,21 @@ void FrontendSyscallModelBase <T>::doSyscall
          {
             if (args[0] & CLONE_THREAD)
             {
+               addr_t tidptr;
                // Store the thread's tid ptr for later use  -- FIXME!!
-               #if defined(TARGET_IA32) || defined(ARM_32) || defined(ARM_64)  // from man clone
-                  addr_t tidptr = args[2];
-               #elif defined(TARGET_INTEL64) || defined(X86_64)
-                  addr_t tidptr = args[3];
-               #endif
+               switch (m_options->get_theISA())
+               {
+                  case INTEL_IA32:
+                  case ARM_AARCH32:
+                  case ARM_AARCH64:
+                     tidptr = args[2];
+                     break;
+                  case INTEL_X86_64:
+                     tidptr = args[3];
+                     break;
+                  default:
+                     abort();
+               }
                if (m_options->get_verbose())
                {
                   std::cerr << "[FRONTEND] Clone thread: going to acquire lock" << std::endl;

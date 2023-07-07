@@ -86,6 +86,19 @@ template <> class FrontendOptions<DRFrontend> : public OptionsBase<DRFrontend>
   /// Return a string with the available command line options
   std::string cmd_summary();
 
+  FrontendISA get_theISA()
+  {
+#ifdef ARM_32
+    return ARM_AARCH32;
+#elif defined(ARM_64)
+    return ARM_AARCH64;
+#elif defined(X86_64)
+    return INTEL_X86_64;
+#else
+#error unsupported ISA
+#endif
+  };
+
 };
 
 } // end namespace frontend

@@ -95,11 +95,16 @@ void FrontendControl <T>::openFile(threadid_t threadid)
   // Open the file for writing
   // TODO adapt this to a more cross platform friendly version
   try {
-    #if defined(TARGET_IA32) || defined(ARM_32)
-      const bool arch32 = true;
-    #else
-      const bool arch32 = false;
-    #endif
+    bool arch32;
+    switch (m_options->get_theISA())
+    {
+      case INTEL_IA32:
+      case ARM_AARCH32:
+        arch32 = true;
+        break;
+      default:
+        arch32 = false;
+    }
     m_thread_data[threadid].output = new Sift::Writer (filename, this->getCode, 
                                                        m_options->get_response_files() ? false : true,
                                                        response_filename, threadid, arch32, false, 
