@@ -11,6 +11,11 @@ template <typename T> inline uint64_t OptionsBase<T>::get_fast_forward_target()
   return fast_forward_target;
 }
 
+template <typename T> inline uint64_t OptionsBase<T>::get_detailed_target()
+{
+  return detailed_target;
+}
+
 template <typename T> inline uint64_t OptionsBase<T>::get_flow_control()
 {
   return flow_control;

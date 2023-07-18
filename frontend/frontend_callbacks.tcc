@@ -99,8 +99,15 @@ void FrontendCallbacks <T>::sendInstruction(threadid_t threadid, addr_t addr, ui
   }
    // std::cerr << "Icount: " << m_thread_data[threadid].icount << std::endl;
 
+  auto detailed_target = m_options->get_detailed_target();
+  if (detailed_target && m_thread_data[threadid].icount_detailed >= detailed_target)
+  {
+    m_control->setInstrumentationMode(Sift::ModeIcount);
+    m_control->closeFile(threadid);
+  }
 
-  // TODO fill in cases with use response files, detailed target, blocksize
+
+  // TODO fill in cases with use response files, blocksize
 }
 
 template <typename T>
