@@ -58,7 +58,7 @@ extern UINT64 detailed_target;
 extern PIN_LOCK access_memory_lock;
 extern PIN_LOCK new_threadid_lock;
 extern PIN_LOCK output_lock;
-extern std::deque<ADDRINT> tidptrs;
+extern std::unordered_map<int, std::deque<ADDRINT>> tidptrs;
 extern INT32 child_app_id;
 extern BOOL in_roi;
 extern BOOL any_thread_in_detail;

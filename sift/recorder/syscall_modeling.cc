@@ -110,7 +110,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
                struct clone_args_sniper* clone3_args = (struct clone_args_sniper*)args[0];
                ADDRINT tidptr = clone3_args->parent_tid;
                PIN_GetLock(&new_threadid_lock, threadid);
-               tidptrs.push_back(tidptr);
+               tidptrs[PIN_GetTid()].push_back(tidptr);
                PIN_ReleaseLock(&new_threadid_lock);
                /* New thread */
                thread_data[threadid].output->NewThread();
@@ -137,7 +137,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
                #endif
 
                PIN_GetLock(&new_threadid_lock, threadid);
-               tidptrs.push_back(tidptr);
+               tidptrs[PIN_GetTid()].push_back(tidptr);
                PIN_ReleaseLock(&new_threadid_lock);
                /* New thread */
                thread_data[threadid].output->NewThread();
