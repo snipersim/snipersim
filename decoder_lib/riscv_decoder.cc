@@ -443,7 +443,7 @@ unsigned int RISCVDecoder::get_exec_microops(const DecodedInst *ins, int numLoad
 /// Get the maximum size of the operands of instruction inst in bits
 uint16_t RISCVDecoder::get_operand_size(const DecodedInst *ins)
 {
-  uint16_t max_reg_size = 32; 
+  uint16_t max_reg_size = 64; 
 
   // TODO: if register- get sizereg (for now)
   
