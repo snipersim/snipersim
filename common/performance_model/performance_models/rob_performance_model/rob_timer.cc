@@ -899,7 +899,7 @@ void RobTimer::execute(uint64_t& instructionsExecuted, SubsecondTime& latency)
    // If frontend not stalled
    if (frontend_stalled_until <= now)
    {
-      if (rob.size() < m_num_in_rob + 2*dispatchWidth)
+      if (rob.size() < std::min(m_num_in_rob + 2*dispatchWidth, windowSize))
       {
          // We don't have enough instructions to dispatch <dispatchWidth> new ones. Ask for more before doing anything this cycle.
          return;
