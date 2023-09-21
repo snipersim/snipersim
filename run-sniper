@@ -47,6 +47,8 @@ def usage():
         '  |  --pid=<process-pid>' + \
         '  |  [--sift]' + \
         '  |  [--frontend=]' + \
+        '  |  [--sde-arch=]' + \
+        '  |  [--use-pinplay]' + \
         '  -- <cmdline> }'
   print
   print 'Example: $ ./run-sniper -- /bin/ls'
@@ -195,7 +197,7 @@ def va2pa_valid():
   else:
     return True
 
-record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=', 'maxthreads=' ]
+record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=', 'maxthreads=', 'sde-arch=', 'use-pinplay' ]
 
 try:
   opts, cmdline = getopt.getopt(

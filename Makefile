@@ -10,7 +10,8 @@ LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_FOLLOW=$(SIM_ROOT)/pin/../lib/follow_execv.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
+#SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE)
 
 PYTHON2=python2
 
@@ -211,11 +212,11 @@ $(PIN_DEP):
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
 sde_kit: $(PIN_ROOT)
 else
-SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.7.0-2022-05-09-lin.tar.xz
-PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
+SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.24.0-2023-07-13-lin.tar.xz
+PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpindwarf.so
 sde_kit: $(PIN_DEP)
 $(PIN_DEP):
-	$(_MSG) '[DOWNLO] SDE 9.7.0-2022-05-09'
+	$(_MSG) '[DOWNLO] SDE 9.24.0-2023-07-13'
 	$(_CMD) mkdir -p $(SDE_HOME)
 	$(_CMD) wget -O $(shell basename $(SDE_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD)
 	$(_CMD) tar -x -f $(shell basename $(SDE_DOWNLOAD)) --auto-compress --strip-components 1 -C $(SDE_HOME)

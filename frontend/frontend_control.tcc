@@ -104,7 +104,12 @@ void FrontendControl <T>::openFile(threadid_t threadid)
                                                        m_options->get_response_files() ? false : true,
                                                        response_filename, threadid, arch32, false, 
                                                        m_options->get_send_physical_address());
-    // Frontend and backend communicate over network: open socat pipes
+    if (!m_thread_data[threadid].output->IsOpen())
+    {
+      std::cerr << "[SNIPER_FRONTEND:" << m_options->get_app_id() << ":" << m_thread_data[threadid].thread_num << "] Error: Unable to open the output    file " << filename << std::endl;
+      exit(1);
+    }
+	// Frontend and backend communicate over network: open socat pipes
     if (m_options->get_ssh())
     {
       std::cerr << "SOCAT at work" << std::endl;

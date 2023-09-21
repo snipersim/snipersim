@@ -14,7 +14,8 @@ ozstream::~ozstream()
 {
 }
 
-void ozstream::write(const char* s, std::streamsize n)
+//void ozstream::write(const char* s, std::streamsize n)
+void ozstream::write(const char* s, size_t n)
 {
 }
 
@@ -34,7 +35,8 @@ izstream::~izstream()
 {
 }
 
-void izstream::read(char* s, std::streamsize n)
+//void izstream::read(char* s, std::streamsize n)
+void izstream::read(char* s, size_t n)
 {
 }
 
@@ -64,7 +66,8 @@ ozstream::~ozstream()
    delete output;
 }
 
-void ozstream::write(const char* s, std::streamsize n)
+//void ozstream::write(const char* s, std::streamsize n)
+void ozstream::write(const char* s, size_t n)
 {
    zstream.next_in = (Bytef*)s;
    zstream.avail_in = n;
@@ -112,17 +115,20 @@ izstream::~izstream()
    delete input;
 }
 
-void izstream::read(char* s, std::streamsize n)
+//void izstream::read(char* s, std::streamsize n)
+void izstream::read(char* s, size_t n)
 {
-   if (peek_valid)
+   if (n == 0)
+      return;
+   if (peek_valid) // n > 0
    {
       s[0] = peek_value;
       peek_valid = false;
       ++s;
       --n;
    }
-   if (n == 0)
-      return;
+   //if (n == 0)
+   //   return;
 
    zstream.next_out = (Bytef*)s;
    zstream.avail_out = n;
@@ -153,7 +159,8 @@ int izstream::peek()
    if (peek_valid == true)
       return peek_value;
 
-   read(&peek_value, 1);
+   //read(&peek_value, 1);
+   this->read(&peek_value, 1);
    peek_valid = true;
 
    return peek_value;
