@@ -148,7 +148,6 @@ void RobSmtTimer::initializeThread(smtthread_id_t thread_num)
    thread->m_cpiIdle = SubsecondTime::Zero();
    thread->m_cpiSMT = SubsecondTime::Zero();
    thread->m_cpiBranchPredictor = SubsecondTime::Zero();
-   thread->m_cpiSerialization = SubsecondTime::Zero();
    thread->m_cpiRSFull = SubsecondTime::Zero();
 
    registerStatsMetric("rob_timer", core->getId(), "cpiBase", &thread->m_cpiBase);
@@ -156,7 +155,6 @@ void RobSmtTimer::initializeThread(smtthread_id_t thread_num)
    // Don't register a statistic for it though else cpistack.py will see it.
    registerStatsMetric("rob_timer", core->getId(), "cpiSMT", &thread->m_cpiSMT);
    registerStatsMetric("rob_timer", core->getId(), "cpiBranchPredictor", &thread->m_cpiBranchPredictor);
-   registerStatsMetric("rob_timer", core->getId(), "cpiSerialization", &thread->m_cpiSerialization);
    registerStatsMetric("rob_timer", core->getId(), "cpiRSFull", &thread->m_cpiRSFull);
 
    thread->m_cpiInstructionCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
@@ -657,8 +655,6 @@ SubsecondTime* RobSmtTimer::findCpiComponent(smtthread_id_t thread_num)
       // This is the first instruction in the ROB which is still executing
       // Assume everyone is blocked on this one
       // Assign 100% of this cycle to this guy's CPI component
-      if (uop->getMicroOp()->isSerializing() || uop->getMicroOp()->isMemBarrier())
-         return &thread->m_cpiSerialization;
       else if (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore())
          return &thread->m_cpiDataCache[uop->getDCacheHitWhere()];
       else

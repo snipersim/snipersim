@@ -93,11 +93,9 @@ RobTimer::RobTimer(
 
    m_cpiBase = SubsecondTime::Zero();
    m_cpiBranchPredictor = SubsecondTime::Zero();
-   m_cpiSerialization = SubsecondTime::Zero();
 
    registerStatsMetric("rob_timer", core->getId(), "cpiBase", &m_cpiBase);
    registerStatsMetric("rob_timer", core->getId(), "cpiBranchPredictor", &m_cpiBranchPredictor);
-   registerStatsMetric("rob_timer", core->getId(), "cpiSerialization", &m_cpiSerialization);
    registerStatsMetric("rob_timer", core->getId(), "cpiRSFull", &m_cpiRSFull);
 
    m_cpiInstructionCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
@@ -436,8 +434,6 @@ SubsecondTime* RobTimer::findCpiComponent()
       // This is the first instruction in the ROB which is still executing
       // Assume everyone is blocked on this one
       // Assign 100% of this cycle to this guy's CPI component
-      if (uop->getMicroOp()->isSerializing() || uop->getMicroOp()->isMemBarrier())
-         return &m_cpiSerialization;
       else if (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore())
          return &m_cpiDataCache[uop->getDCacheHitWhere()];
       else
@@ -552,7 +548,7 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
       // Front-end is stalled
       if (cpiRobHead)
       {
-         // Have memory/serialization components take precendence over front-end stalls
+         // Have memory components take precendence over front-end stalls
          *cpiComponent = cpiRobHead;
       }
       else
