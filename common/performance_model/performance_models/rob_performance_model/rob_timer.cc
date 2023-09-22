@@ -447,11 +447,10 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
 {
    SubsecondTime next_event = SubsecondTime::MaxTime();
    SubsecondTime *cpiFrontEnd = NULL;
+   uint32_t instrs_dispatched = 0, uops_dispatched = 0;
 
    if (frontend_stalled_until <= now)
    {
-      uint32_t instrs_dispatched = 0, uops_dispatched = 0;
-
       while(m_num_in_rob < windowSize)
       {
          LOG_ASSERT_ERROR(m_num_in_rob < rob.size(), "Expected sufficient uops for dispatching in pre-ROB buffer, but didn't find them");
@@ -543,22 +542,18 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
    // Find CPI component corresponding to the first executing instruction
    SubsecondTime *cpiRobHead = findCpiComponent();
 
-   if (cpiFrontEnd)
+   if (cpiRobHead &&
+       ((!uops_dispatched &&
+         frontend_stalled_until == SubsecondTime::MaxTime()) ||
+        m_rs_entries_used - uops_dispatched + dispatchWidth > rsEntries ||
+        m_num_in_rob - uops_dispatched + dispatchWidth > windowSize))
    {
-      // Front-end is stalled
-      if (cpiRobHead)
-      {
-         // Have memory components take precendence over front-end stalls
-         *cpiComponent = cpiRobHead;
-      }
-      else
-      {
-         *cpiComponent = cpiFrontEnd;
-      }
+      // Have memory components take precendence over front-end stalls
+      *cpiComponent = cpiRobHead;
    }
-   else if (m_num_in_rob == windowSize)
+   else if (cpiFrontEnd)
    {
-      *cpiComponent = cpiRobHead ? cpiRobHead : &m_cpiBase;
+      *cpiComponent = cpiFrontEnd;
    }
    else
    {
