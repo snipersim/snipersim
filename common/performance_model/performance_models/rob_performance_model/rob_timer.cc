@@ -434,7 +434,8 @@ SubsecondTime* RobTimer::findCpiComponent()
       // This is the first instruction in the ROB which is still executing
       // Assume everyone is blocked on this one
       // Assign 100% of this cycle to this guy's CPI component
-      else if (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore())
+      else if (entry->done != SubsecondTime::MaxTime() &&
+               (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore()))
          return &m_cpiDataCache[uop->getDCacheHitWhere()];
       else
          return NULL;
