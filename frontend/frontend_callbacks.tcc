@@ -104,10 +104,18 @@ void FrontendCallbacks <T>::sendInstruction(threadid_t threadid, addr_t addr, ui
   {
     m_control->setInstrumentationMode(Sift::ModeIcount);
     m_control->closeFile(threadid);
+    return;
+  }
+
+  auto blocksize = m_options->get_blocksize();
+  if (blocksize && m_thread_data[threadid].icount >= blocksize)
+  {
+    m_control->openFile(threadid);
+    m_thread_data[threadid].icount = 0;
   }
 
 
-  // TODO fill in cases with use response files, blocksize
+  // TODO fill in cases with use response files
 }
 
 template <typename T>
