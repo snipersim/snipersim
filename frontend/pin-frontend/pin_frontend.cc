@@ -92,6 +92,17 @@ template <> class FrontendOptions<PinFrontend> : public OptionsBase<PinFrontend>
   /// Return a string with the available command line options
   std::string cmd_summary();
 
+  FrontendISA get_theISA()
+  {
+#ifdef TARGET_IA32
+    return INTEL_IA32;
+#elif defined(TARGET_INTEL64)
+    return INTEL_X86_64;
+#else
+#error unsupported ISA
+#endif
+  }
+
   private:
   /// Memory lock to create a new thread within the frontend
   PIN_LOCK new_threadid_lock;

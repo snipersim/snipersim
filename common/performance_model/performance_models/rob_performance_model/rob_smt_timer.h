@@ -86,7 +86,6 @@ private:
          SubsecondTime m_cpiSMT;
          SubsecondTime m_cpiIdle;
          SubsecondTime m_cpiBranchPredictor;
-         SubsecondTime m_cpiSerialization;
          SubsecondTime m_cpiRSFull;
 
          std::vector<SubsecondTime> m_cpiInstructionCache;

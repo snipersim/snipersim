@@ -68,7 +68,7 @@ template <typename T> class FrontendSyscallModelBase
   static void setTID(threadid_t threadid);
   
   /// Process syscall number and arguments and send request to the backend
-  static void doSyscall(threadid_t threadid, addr_t syscall_number, syscall_args_t& args);
+  static void doSyscall(threadid_t threadid, addr_t syscall_number, syscall_args_t args);
 
 };
 

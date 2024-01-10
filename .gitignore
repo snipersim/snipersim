@@ -44,6 +44,7 @@ sift/libsift.a
 sift/siftdump
 sift/recorder/sift_recorder
 tools/pinversion
+/frontend/dr-frontend/build
 
 # result files
 results/

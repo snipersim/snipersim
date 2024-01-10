@@ -144,7 +144,7 @@ DYNAMORIO_BUILD_DEP=$(DYNAMORIO_INSTALL)/build/bin64/drrun
 dynamorio: $(DYNAMORIO_BUILD_DEP)
 $(DYNAMORIO_BUILD_DEP): $(DYNAMORIO_INSTALL_DEP)
 	$(_MSG) '[INSTAL] dynamorio'
-	$(_CMD) if [ ! -e "$(SIM_ROOT)/dynamorio/build/Makefile" ]; then cd dynamorio && mkdir build && cd build && cmake -DDEBUG=ON .. ; fi
+	$(_CMD) if [ ! -e "$(SIM_ROOT)/dynamorio/build/Makefile" ]; then cd dynamorio && mkdir -p build && cd build && cmake -DDEBUG=ON .. ; fi
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C dynamorio/build
 
 CAPSTONE_GITID=f9c6a90489be7b3637ff1c7298e45efafe7cf1b9

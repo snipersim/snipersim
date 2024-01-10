@@ -10,19 +10,9 @@
 #define MAX_NUM_SYSCALLS 4096
 
 // Type declarations
-#if defined(TARGET_IA32) || defined(ARM_32)
-typedef uint32_t addr_t;
-#else
-typedef uint64_t addr_t; // TODO add cases that enter here
-#endif
-
+typedef uint64_t addr_t;
 typedef uint32_t threadid_t;
-
-#if defined(TARGET_IA32) || defined(ARM_32)
-typedef uint32_t syscall_args_t[6];
-#else
 typedef uint64_t syscall_args_t[6];
-#endif
 
 typedef struct
 {

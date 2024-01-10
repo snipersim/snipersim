@@ -122,7 +122,6 @@ private:
    // CPI stacks
    SubsecondTime m_cpiBase;
    SubsecondTime m_cpiBranchPredictor;
-   SubsecondTime m_cpiSerialization;
    SubsecondTime m_cpiRSFull;
 
    std::vector<SubsecondTime> m_cpiInstructionCache;

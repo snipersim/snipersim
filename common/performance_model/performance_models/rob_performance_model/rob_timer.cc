@@ -93,11 +93,9 @@ RobTimer::RobTimer(
 
    m_cpiBase = SubsecondTime::Zero();
    m_cpiBranchPredictor = SubsecondTime::Zero();
-   m_cpiSerialization = SubsecondTime::Zero();
 
    registerStatsMetric("rob_timer", core->getId(), "cpiBase", &m_cpiBase);
    registerStatsMetric("rob_timer", core->getId(), "cpiBranchPredictor", &m_cpiBranchPredictor);
-   registerStatsMetric("rob_timer", core->getId(), "cpiSerialization", &m_cpiSerialization);
    registerStatsMetric("rob_timer", core->getId(), "cpiRSFull", &m_cpiRSFull);
 
    m_cpiInstructionCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
@@ -436,9 +434,8 @@ SubsecondTime* RobTimer::findCpiComponent()
       // This is the first instruction in the ROB which is still executing
       // Assume everyone is blocked on this one
       // Assign 100% of this cycle to this guy's CPI component
-      if (uop->getMicroOp()->isSerializing() || uop->getMicroOp()->isMemBarrier())
-         return &m_cpiSerialization;
-      else if (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore())
+      else if (entry->done != SubsecondTime::MaxTime() &&
+               (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore()))
          return &m_cpiDataCache[uop->getDCacheHitWhere()];
       else
          return NULL;
@@ -451,11 +448,10 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
 {
    SubsecondTime next_event = SubsecondTime::MaxTime();
    SubsecondTime *cpiFrontEnd = NULL;
+   uint32_t instrs_dispatched = 0, uops_dispatched = 0;
 
    if (frontend_stalled_until <= now)
    {
-      uint32_t instrs_dispatched = 0, uops_dispatched = 0;
-
       while(m_num_in_rob < windowSize)
       {
          LOG_ASSERT_ERROR(m_num_in_rob < rob.size(), "Expected sufficient uops for dispatching in pre-ROB buffer, but didn't find them");
@@ -547,22 +543,18 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
    // Find CPI component corresponding to the first executing instruction
    SubsecondTime *cpiRobHead = findCpiComponent();
 
-   if (cpiFrontEnd)
+   if (cpiRobHead &&
+       ((!uops_dispatched &&
+         frontend_stalled_until == SubsecondTime::MaxTime()) ||
+        m_rs_entries_used - uops_dispatched + dispatchWidth > rsEntries ||
+        m_num_in_rob - uops_dispatched + dispatchWidth > windowSize))
    {
-      // Front-end is stalled
-      if (cpiRobHead)
-      {
-         // Have memory/serialization components take precendence over front-end stalls
-         *cpiComponent = cpiRobHead;
-      }
-      else
-      {
-         *cpiComponent = cpiFrontEnd;
-      }
+      // Have memory components take precendence over front-end stalls
+      *cpiComponent = cpiRobHead;
    }
-   else if (m_num_in_rob == windowSize)
+   else if (cpiFrontEnd)
    {
-      *cpiComponent = cpiRobHead ? cpiRobHead : &m_cpiBase;
+      *cpiComponent = cpiFrontEnd;
    }
    else
    {
@@ -899,7 +891,7 @@ void RobTimer::execute(uint64_t& instructionsExecuted, SubsecondTime& latency)
    // If frontend not stalled
    if (frontend_stalled_until <= now)
    {
-      if (rob.size() < m_num_in_rob + 2*dispatchWidth)
+      if (rob.size() < std::min(m_num_in_rob + 2*dispatchWidth, windowSize))
       {
          // We don't have enough instructions to dispatch <dispatchWidth> new ones. Ask for more before doing anything this cycle.
          return;

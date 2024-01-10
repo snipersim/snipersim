@@ -148,7 +148,6 @@ void RobSmtTimer::initializeThread(smtthread_id_t thread_num)
    thread->m_cpiIdle = SubsecondTime::Zero();
    thread->m_cpiSMT = SubsecondTime::Zero();
    thread->m_cpiBranchPredictor = SubsecondTime::Zero();
-   thread->m_cpiSerialization = SubsecondTime::Zero();
    thread->m_cpiRSFull = SubsecondTime::Zero();
 
    registerStatsMetric("rob_timer", core->getId(), "cpiBase", &thread->m_cpiBase);
@@ -156,7 +155,6 @@ void RobSmtTimer::initializeThread(smtthread_id_t thread_num)
    // Don't register a statistic for it though else cpistack.py will see it.
    registerStatsMetric("rob_timer", core->getId(), "cpiSMT", &thread->m_cpiSMT);
    registerStatsMetric("rob_timer", core->getId(), "cpiBranchPredictor", &thread->m_cpiBranchPredictor);
-   registerStatsMetric("rob_timer", core->getId(), "cpiSerialization", &thread->m_cpiSerialization);
    registerStatsMetric("rob_timer", core->getId(), "cpiRSFull", &thread->m_cpiRSFull);
 
    thread->m_cpiInstructionCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
@@ -657,8 +655,6 @@ SubsecondTime* RobSmtTimer::findCpiComponent(smtthread_id_t thread_num)
       // This is the first instruction in the ROB which is still executing
       // Assume everyone is blocked on this one
       // Assign 100% of this cycle to this guy's CPI component
-      if (uop->getMicroOp()->isSerializing() || uop->getMicroOp()->isMemBarrier())
-         return &thread->m_cpiSerialization;
       else if (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore())
          return &thread->m_cpiDataCache[uop->getDCacheHitWhere()];
       else
@@ -684,50 +680,48 @@ SubsecondTime RobSmtTimer::doDispatch()
       SubsecondTime *cpiComponent = NULL;
       SubsecondTime *cpiRobHead = findCpiComponent(thread_num);
 
-      if (thread->frontend_stalled_until > now)
-      {
-         // front-end should not be stalled due to I-cache miss or branch misprediction
-         assert(thread->m_cpiCurrentFrontEndStall);
-         // canDispatch returned false, but not because the ROB was full: previous stall condition
-         // (I-cache miss or BP-misprediction) still applies
-         if (cpiRobHead)
-            // Prioritize back-end stalls over front-end stalls
-            cpiComponent = cpiRobHead;
-         else
-            cpiComponent = thread->m_cpiCurrentFrontEndStall;
-      }
-      else if (!smt_thread->running || thread->now > now)
+      if (!smt_thread->running || thread->now > now)
       {
          // thread should not be idle, nor should it live way in the future because it just woke from idle
          cpiComponent = &thread->m_cpiIdle;
       }
-      else if (thread->m_num_in_rob >= currentWindowSize)
+      else if (hasDispatched)
       {
-         // Could not dispatch because of a full ROB: determine which instruction we're stalling on
-         cpiComponent = cpiRobHead ? cpiRobHead : &thread->m_cpiBase;
+         // Could have dispatched something, but a previous thread has already dispatched
+         cpiComponent = &thread->m_cpiSMT;
       }
       else
       {
-         // Front-end is fine, lets try to dispatch new instructions
+         auto last_rs_entries_used = m_rs_entries_used;
+         auto last_num_in_rob = thread->m_num_in_rob;
 
-         if (hasDispatched)
+         if (thread->frontend_stalled_until > now)
          {
-            // Could have dispatched something, but a previous thread has already dispatched
-            cpiComponent = &thread->m_cpiSMT;
+            // front-end should not be stalled due to I-cache miss or branch misprediction
+            assert(thread->m_cpiCurrentFrontEndStall);
+            // canDispatch returned false, but not because the ROB was full: previous stall condition
+            // (I-cache miss or BP-misprediction) still applies
          }
          else
          {
+            // Front-end is fine, lets try to dispatch new instructions
             hasDispatched = tryDispatch(thread_num, next_event);
             if (hasDispatched)
                thread_dispatched_from = thread_num;
-
-            if (thread->m_cpiCurrentFrontEndStall)
-               // if tryDispatch failed, it will have set m_cpiCurrentFrontEndStall
-               cpiComponent = thread->m_cpiCurrentFrontEndStall;
-            else
-               // if it did dispatch something, add to base CPI
-               cpiComponent = &thread->m_cpiBase;
          }
+
+         if (cpiRobHead &&
+             (last_rs_entries_used + dispatchWidth > rsEntries &&
+              last_num_in_rob + dispatchWidth > currentWindowSize))
+            // Could not dispatch because of a full RS/ROB: determine which instruction we're stalling on
+            // Prioritize back-end stalls over front-end stalls
+            cpiComponent = cpiRobHead;
+         else if (thread->m_cpiCurrentFrontEndStall)
+            // if tryDispatch failed, it will have set m_cpiCurrentFrontEndStall
+            cpiComponent = thread->m_cpiCurrentFrontEndStall;
+         else
+            // if it did dispatch something, add to base CPI
+            cpiComponent = &thread->m_cpiBase;
       }
 
       LOG_ASSERT_ERROR(cpiComponent != NULL, "We expected cpiComponent to be set, but it wasn't");

@@ -93,7 +93,7 @@ void FrontendSyscallModelBase <T>::setTID(threadid_t threadid)
 
 template <typename T>
 void FrontendSyscallModelBase <T>::doSyscall
-(threadid_t threadid, addr_t syscall_number, syscall_args_t& args)
+(threadid_t threadid, addr_t syscall_number, syscall_args_t args)
 {
    if (m_thread_data[threadid].icount_reported > 0)
    {
@@ -129,12 +129,21 @@ void FrontendSyscallModelBase <T>::doSyscall
          {
             if (args[0] & CLONE_THREAD)
             {
+               addr_t tidptr;
                // Store the thread's tid ptr for later use  -- FIXME!!
-               #if defined(TARGET_IA32) || defined(ARM_32) || defined(ARM_64)  // from man clone
-                  addr_t tidptr = args[2];
-               #elif defined(TARGET_INTEL64) || defined(X86_64)
-                  addr_t tidptr = args[3];
-               #endif
+               switch (m_options->get_theISA())
+               {
+                  case INTEL_IA32:
+                  case ARM_AARCH32:
+                  case ARM_AARCH64:
+                     tidptr = args[2];
+                     break;
+                  case INTEL_X86_64:
+                     tidptr = args[3];
+                     break;
+                  default:
+                     abort();
+               }
                if (m_options->get_verbose())
                {
                   std::cerr << "[FRONTEND] Clone thread: going to acquire lock" << std::endl;
@@ -176,7 +185,7 @@ void FrontendSyscallModelBase <T>::doSyscall
             m_thread_data[threadid].last_syscall_number = syscall_number;
             m_thread_data[threadid].last_syscall_emulated = false;
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in not emulated option" << std::endl;
-            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(syscall_args_t));
             break;
 
          // System calls emulated (not passed through to OS)
@@ -189,13 +198,13 @@ void FrontendSyscallModelBase <T>::doSyscall
             m_thread_data[threadid].last_syscall_emulated = true;
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in emulated option" << std::endl;
             m_thread_data[threadid].last_syscall_returnval = 
-            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(syscall_args_t));
             break;
 
          // System calls sent to Sniper, but also passed through to OS
          case SYS_exit_group:
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in both options" << std::endl;
-            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(syscall_args_t));
             break;
          
          default:
