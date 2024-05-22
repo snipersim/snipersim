@@ -42,6 +42,7 @@ private:
          SubsecondTime addressReady;
          SubsecondTime addressReadyMax;
          SubsecondTime issued;
+         SubsecondTime forwardable;
          SubsecondTime done;
    };
 
