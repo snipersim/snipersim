@@ -92,10 +92,10 @@ template <typename T> class ExecFrontend
 {
   public:
   /// Constructor: uses the command line arguments to initialize the running environment
-  ExecFrontend<T>(int argc, const char* argv[]);
+  ExecFrontend(int argc, const char* argv[]);
 
   /// Destructor
-  ~ExecFrontend<T>();
+  ~ExecFrontend();
 
   /// Initializes all data and starts the execution of the frontend
   void start();
