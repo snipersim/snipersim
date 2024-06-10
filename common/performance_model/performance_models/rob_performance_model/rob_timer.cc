@@ -93,11 +93,9 @@ RobTimer::RobTimer(
 
    m_cpiBase = SubsecondTime::Zero();
    m_cpiBranchPredictor = SubsecondTime::Zero();
-   m_cpiSerialization = SubsecondTime::Zero();
 
    registerStatsMetric("rob_timer", core->getId(), "cpiBase", &m_cpiBase);
    registerStatsMetric("rob_timer", core->getId(), "cpiBranchPredictor", &m_cpiBranchPredictor);
-   registerStatsMetric("rob_timer", core->getId(), "cpiSerialization", &m_cpiSerialization);
    registerStatsMetric("rob_timer", core->getId(), "cpiRSFull", &m_cpiRSFull);
 
    m_cpiInstructionCache.resize(HitWhere::NUM_HITWHERES, SubsecondTime::Zero());
@@ -187,6 +185,7 @@ void RobTimer::RobEntry::init(DynamicMicroOp *_uop, UInt64 sequenceNumber)
    addressReady = SubsecondTime::MaxTime();
    addressReadyMax = SubsecondTime::Zero();
    issued = SubsecondTime::MaxTime();
+   forwardable = SubsecondTime::MaxTime();
    done = SubsecondTime::MaxTime();
 
    uop = _uop;
@@ -279,8 +278,8 @@ boost::tuple<uint64_t,SubsecondTime> RobTimer::simulate(const std::vector<Dynami
             if (addressProducer != INVALID_SEQNR)
             {
                RobEntry *prodEntry = this->findEntryBySequenceNumber(addressProducer);
-               if (prodEntry->done != SubsecondTime::MaxTime())
-                  entry->addressReadyMax = std::max(entry->addressReadyMax, prodEntry->done);
+               if (prodEntry->forwardable != SubsecondTime::MaxTime())
+                  entry->addressReadyMax = std::max(entry->addressReadyMax, prodEntry->forwardable);
                else
                   entry->addAddressProducer(addressProducer);
             }
@@ -321,11 +320,11 @@ boost::tuple<uint64_t,SubsecondTime> RobTimer::simulate(const std::vector<Dynami
       {
          RobEntry *prodEntry = this->findEntryBySequenceNumber(entry->uop->getDependency(i));
          minProducerDistance = std::min( minProducerDistance,  entry->uop->getSequenceNumber() - prodEntry->uop->getSequenceNumber() );
-         if (prodEntry->done != SubsecondTime::MaxTime())
+         if (prodEntry->forwardable != SubsecondTime::MaxTime())
          {
             // If producer is already done (but hasn't reached writeback stage), remove it from our dependency list
             deps_to_remove[num_dtr++] = entry->uop->getDependency(i);
-            entry->readyMax = std::max(entry->readyMax, prodEntry->done);
+            entry->readyMax = std::max(entry->readyMax, prodEntry->forwardable);
          }
          else
          {
@@ -436,9 +435,8 @@ SubsecondTime* RobTimer::findCpiComponent()
       // This is the first instruction in the ROB which is still executing
       // Assume everyone is blocked on this one
       // Assign 100% of this cycle to this guy's CPI component
-      if (uop->getMicroOp()->isSerializing() || uop->getMicroOp()->isMemBarrier())
-         return &m_cpiSerialization;
-      else if (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore())
+      else if (entry->done != SubsecondTime::MaxTime() &&
+               (uop->getMicroOp()->isLoad() || uop->getMicroOp()->isStore()))
          return &m_cpiDataCache[uop->getDCacheHitWhere()];
       else
          return NULL;
@@ -451,11 +449,10 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
 {
    SubsecondTime next_event = SubsecondTime::MaxTime();
    SubsecondTime *cpiFrontEnd = NULL;
+   uint32_t instrs_dispatched = 0, uops_dispatched = 0;
 
    if (frontend_stalled_until <= now)
    {
-      uint32_t instrs_dispatched = 0, uops_dispatched = 0;
-
       while(m_num_in_rob < windowSize)
       {
          LOG_ASSERT_ERROR(m_num_in_rob < rob.size(), "Expected sufficient uops for dispatching in pre-ROB buffer, but didn't find them");
@@ -547,22 +544,18 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
    // Find CPI component corresponding to the first executing instruction
    SubsecondTime *cpiRobHead = findCpiComponent();
 
-   if (cpiFrontEnd)
+   if (cpiRobHead &&
+       ((!uops_dispatched &&
+         frontend_stalled_until == SubsecondTime::MaxTime()) ||
+        m_rs_entries_used - uops_dispatched + dispatchWidth > rsEntries ||
+        m_num_in_rob - uops_dispatched + dispatchWidth > windowSize))
    {
-      // Front-end is stalled
-      if (cpiRobHead)
-      {
-         // Have memory/serialization components take precendence over front-end stalls
-         *cpiComponent = cpiRobHead;
-      }
-      else
-      {
-         *cpiComponent = cpiFrontEnd;
-      }
+      // Have memory components take precendence over front-end stalls
+      *cpiComponent = cpiRobHead;
    }
-   else if (m_num_in_rob == windowSize)
+   else if (cpiFrontEnd)
    {
-      *cpiComponent = cpiRobHead ? cpiRobHead : &m_cpiBase;
+      *cpiComponent = cpiFrontEnd;
    }
    else
    {
@@ -639,6 +632,7 @@ void RobTimer::issueInstruction(uint64_t idx, SubsecondTime &next_event)
       m_rob_contention->doIssue(uop);
 
    entry->issued = now;
+   entry->forwardable = cycle_depend;
    entry->done = cycle_done;
 
    next_event = std::min(next_event, entry->done);
@@ -681,7 +675,7 @@ void RobTimer::issueInstruction(uint64_t idx, SubsecondTime &next_event)
                depEntry->addressReadyMax = std::max(depEntry->addressReadyMax, cycle_depend.getElapsedTime());
             }
 
-            if (prodEntry && prodEntry->done == SubsecondTime::MaxTime())
+            if (prodEntry && prodEntry->forwardable == SubsecondTime::MaxTime())
             {
                // An address producer has not yet been issued: address remains not ready
                ready = false;
@@ -899,7 +893,7 @@ void RobTimer::execute(uint64_t& instructionsExecuted, SubsecondTime& latency)
    // If frontend not stalled
    if (frontend_stalled_until <= now)
    {
-      if (rob.size() < m_num_in_rob + 2*dispatchWidth)
+      if (rob.size() < std::min(m_num_in_rob + 2*dispatchWidth, windowSize))
       {
          // We don't have enough instructions to dispatch <dispatchWidth> new ones. Ask for more before doing anything this cycle.
          return;

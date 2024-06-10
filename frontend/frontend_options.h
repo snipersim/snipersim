@@ -24,6 +24,7 @@ template <typename T> class OptionsBase
 
   /// Get protected fields
   uint64_t get_fast_forward_target();
+  uint64_t get_detailed_target();
   uint64_t get_blocksize();
   bool get_verbose();
   bool get_use_roi();  

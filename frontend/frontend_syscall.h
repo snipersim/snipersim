@@ -23,10 +23,10 @@ template <typename T> class FrontendSyscallModelBase
 {
   public:
   /// Constructor
-  FrontendSyscallModelBase<T>(FrontendOptions<T>* opts, thread_data_t* td, FELock<T> *ntid_lock, std::deque<uint64_t>* tids);
+  FrontendSyscallModelBase(FrontendOptions<T>* opts, thread_data_t* td, FELock<T> *ntid_lock, std::deque<uint64_t>* tids);
 
   /// Destructor
-  ~FrontendSyscallModelBase<T>();
+  ~FrontendSyscallModelBase();
   
   /// To obtain data accessed by memory instructions in a safe way
   /// This method is passed to Sniper's bridge (trace manager) between frontend and backend.
@@ -68,7 +68,7 @@ template <typename T> class FrontendSyscallModelBase
   static void setTID(threadid_t threadid);
   
   /// Process syscall number and arguments and send request to the backend
-  static void doSyscall(threadid_t threadid, addr_t syscall_number, syscall_args_t& args);
+  static void doSyscall(threadid_t threadid, addr_t syscall_number, syscall_args_t args);
 
 };
 

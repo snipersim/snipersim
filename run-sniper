@@ -803,10 +803,10 @@ def execute():
     except OSError:
       # Already dead, never mind
       pass
-    return 9
+    return -9
 
-  rc >>= 8
-  return rc
+  signum = rc & 0x7f
+  return -signum if signum else rc >> 8
 
 def execute_appdebug():
   if verbose:

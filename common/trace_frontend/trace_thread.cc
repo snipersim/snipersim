@@ -405,7 +405,7 @@ Instruction* TraceThread::decode(Sift::Instruction &inst)
    else
       instruction = new GenericInstruction(list);
 
-   instruction->setAddress(va2pa(inst.sinst->addr));
+   instruction->setAddress(inst.sinst->addr);
    instruction->setSize(inst.sinst->size);
    instruction->setAtomic(dec_inst.is_atomic());
    instruction->setDisassembly(dec_inst.disassembly_to_str().c_str());
@@ -484,7 +484,7 @@ void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, 
       case Sift::CacheOnlyBranchNotTaken:
       {
          bool taken = (type == Sift::CacheOnlyBranchTaken);
-         bool mispredict = core->accessBranchPredictor(va2pa(eip), taken, false, va2pa(address));
+         bool mispredict = core->accessBranchPredictor(eip, taken, false, address);
          if (mispredict)
             core->getPerformanceModel()->handleBranchMispredict();
          break;
@@ -499,7 +499,7 @@ void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, 
                NULL,
                4,
                Core::MEM_MODELED_COUNT,
-               va2pa(eip));
+               eip);
          break;
 
       case Sift::CacheOnlyMemIcache:
@@ -535,7 +535,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
 
    if (inst.is_branch)
    {
-      bool mispredict = core->accessBranchPredictor(va2pa(inst.sinst->addr), inst.taken, dec_inst.is_indirect_branch(), va2pa(next_inst.sinst->addr));
+      bool mispredict = core->accessBranchPredictor(inst.sinst->addr, inst.taken, dec_inst.is_indirect_branch(), next_inst.sinst->addr);
       if (mispredict)
          core->getPerformanceModel()->handleBranchMispredict();
    }
@@ -581,7 +581,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
                      NULL,
                      Sim()->getDecoder()->size_mem_op(&dec_inst, mem_idx),
                      Core::MEM_MODELED_COUNT,
-                     va2pa(inst.sinst->addr));
+                     inst.sinst->addr);
             }
          }
 
@@ -610,7 +610,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
                   continue;
 
                if (is_atomic_update)
-                  core->logMemoryHit(false, Core::WRITE, pa, Core::MEM_MODELED_COUNT, va2pa(inst.sinst->addr));
+                  core->logMemoryHit(false, Core::WRITE, pa, Core::MEM_MODELED_COUNT, inst.sinst->addr);
                else
                   core->accessMemory(
                         /*(is_atomic_update) ? Core::UNLOCK :*/ Core::NONE,
@@ -619,7 +619,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
                         NULL,
                         Sim()->getDecoder()->size_mem_op(&dec_inst, mem_idx),
                         Core::MEM_MODELED_COUNT,
-                        va2pa(inst.sinst->addr));
+                        inst.sinst->addr);
             }
          }
       }
@@ -643,7 +643,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
 
    if (inst.is_branch)
    {
-      dynins->addBranch(inst.taken, va2pa(next_inst.sinst->addr), dec_inst.is_indirect_branch());
+      dynins->addBranch(inst.taken, next_inst.sinst->addr, dec_inst.is_indirect_branch());
    }
 
    // Ignore memory-referencing operands in NOP instructions

@@ -22,10 +22,10 @@ template <typename T> class FrontendControl
 {
   public:
   /// Constructor
-  FrontendControl<T>(FrontendOptions<T>* opts, thread_data_t* td, rombauts::shared_ptr<FrontendSyscallModel<T>> sysmodel);
+  FrontendControl(FrontendOptions<T>* opts, thread_data_t* td, rombauts::shared_ptr<FrontendSyscallModel<T>> sysmodel);
 
   /// Destructor
-  ~FrontendControl<T>();
+  ~FrontendControl();
   
   /// Closes all the communication pipes between frontend and Sniper backend threads
   static void Fini(int32_t code, void *v);
