@@ -130,6 +130,7 @@ class TraceThread : public Runnable
 
       void spawn();
       void stop() { m_stop = true; }
+      void frontEndStop(); //Ask all trace_threads to send signal to front-end to shutdown
       UInt64 getProgressExpect();
       UInt64 getProgressValue();
       Thread* getThread() const { return m_thread; }

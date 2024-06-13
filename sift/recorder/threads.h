@@ -33,6 +33,7 @@ typedef struct {
    BOOL last_syscall_emulated;
    BOOL running;
    BOOL should_send_threadinfo;
+   Sift::EmuReply cpuid_vals;
 } __attribute__((packed,aligned(LINE_SIZE_BYTES))) thread_data_t;
 
 extern thread_data_t *thread_data;

@@ -1,6 +1,8 @@
 #include "zfstream.h"
 
+#include <algorithm>
 #include <cassert>
+#include <ios>
 
 #if !SIFT_USE_ZLIB
 
@@ -160,3 +162,55 @@ int izstream::peek()
 }
 
 #endif /*SIFT_USE_ZLIB*/
+
+#include <cstdio>
+cvifstream::cvifstream(const char * filename, std::ios_base::openmode mode){
+         //: stream(new std::ofstream(filename, mode)) 
+	std::string mode_str;
+	if(mode & std::ios_base::in)
+		mode_str += "r";
+	if(mode & std::ios_base::out)
+		mode_str += "w";
+	if(mode & std::ios_base::binary)
+		mode_str += "b";
+
+	//Need to correctly implement this
+	if(mode & (std::ios_base::app | std::ios_base::ate | std::ios_base::trunc))
+		assert(false);
+
+	this->stream = std::fopen(filename, mode_str.c_str());
+	assert(this->stream != NULL);
+	this->buffer_in_use = false;
+}
+
+cvifstream::~cvifstream(){
+	std::fclose(this->stream);
+}
+
+void cvifstream::read(char* s, std::streamsize n){ 
+	size_t nr_to_read = n;
+	char* start_buffer = s;
+	if(this->buffer_in_use){
+		start_buffer[0] = this->peek_buffer;
+		nr_to_read--;
+		start_buffer++;
+		this->buffer_in_use = false;
+	}
+	if(nr_to_read > 0){
+		ssize_t num_read = std::fread(start_buffer, sizeof(char), nr_to_read, this->stream);
+		//if num_read < n -> it can be an eof or an error
+		assert(num_read == n || std::ferror(this->stream) == 0);
+	}
+}
+
+int cvifstream::peek(){ 
+	if(!this->buffer_in_use){
+		this->read(&this->peek_buffer, 1);
+		this->buffer_in_use = true;
+	}
+	return this->peek_buffer;
+}
+
+bool cvifstream::fail() const { 
+	return this->stream == NULL; 
+}
