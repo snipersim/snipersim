@@ -77,7 +77,7 @@ LINK_LIBS = sift/$(OBJDIR)libsift.a $(PINPLAY_LIBS)
 SOURCES=$(wildcard *.cc) $(wildcard ../bbv_count.cc)
 OBJECTS=$(patsubst %.cc,$(OBJDIR)%$(OBJ_SUFFIX),$(SOURCES))
 
-all: sift/$(OBJDIR)libsift.a $(OBJDIR)sde_sift_recorder
+all: sift/$(OBJDIR)libsift.a $(OBJDIR)sde_sift_recorder$(PINTOOL_SUFFIX)
 
 $(OBJDIR)%$(OBJ_SUFFIX) : %.cc $(wildcard *.h)
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(ROOT_DIR)/../..)/,,$(shell readlink -f $@))
@@ -91,12 +91,15 @@ sift/sift_reader.h: sift
 sift/$(OBJDIR)libsift.a: sift/sift_reader.h $(wildcard sift/*.h) $(wildcard sift/*.cc)
 	@$(MAKE) -C sift
 
-export PYTHONPATH := $(SDE_BUILD_KIT)/pinplay-tools/pinplay-scripts:$(SIM_ROOT)/mbuild
-$(OBJDIR)sde_sift_recorder: $(wildcard *.cc *.h sift/*.cc sift/*.h)
+CC ?= gcc
+CXX ?= g++
+# export PYTHONPATH := $(SDE_BUILD_KIT)/pinplay-tools/pinplay-scripts:$(SIM_ROOT)/mbuild
+export PYTHONPATH := $(SDE_BUILD_KIT)/pinplay-tools/pinplay-scripts:$(SDE_BUILD_KIT)/pinkit/sde-example/mbuild
+$(OBJDIR)sde_sift_recorder$(PINTOOL_SUFFIX): $(wildcard *.cc *.h sift/*.cc sift/*.h)
 ifeq ($(ARCH_QUERY),x86_64)
-	@./mfile.py --host-cpu intel64
+	@CC=$(CC) CXX=$(CXX) ./mfile.py --host-cpu intel64
 else
-	@./mfile.py --host-cpu ia32
+	@CC=$(CC) CXX=$(CXX) ./mfile.py --host-cpu ia32
 endif
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))

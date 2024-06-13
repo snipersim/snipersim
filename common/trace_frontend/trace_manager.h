@@ -75,6 +75,7 @@ class TraceManager
       void signalStarted();
       void signalDone(TraceThread *thread, SubsecondTime time, bool aborted);
       void endApplication(TraceThread *thread, SubsecondTime time);
+      void endFrontEnd(); //Ask all trace_threads to send signal to front-end to shutdown
       void accessMemory(int core_id, Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
 
       UInt64 getProgressExpect();

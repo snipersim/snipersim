@@ -20,29 +20,6 @@ PYTHON2=python2
 
 all: message dependencies $(SIM_TARGETS) configscripts
 
-include common/Makefile.common
-
-dependencies: package_deps sde_kit $(PIN_ROOT) pin xed python mcpat linux builddir showdebugstatus
-
-BUILD_CAPSTONE ?=
-ifeq ($(BUILD_ARM),1)
-BUILD_CAPSTONE=1
-else ifeq ($(BUILD_DYNAMORIO),1)
-BUILD_CAPSTONE=1
-endif
-
-ifeq ($(BUILD_CAPSTONE),1)
-dependencies: capstone
-.PHONY: capstone
-endif
-
-ifeq ($(BUILD_DYNAMORIO),1)
-dependencies: dynamorio
-.PHONY: dynamorio
-endif
-
-$(SIM_TARGETS): dependencies
-
 # Check for errors. Only one value should be set
 TARGET_COUNT:=0
 # For Pin
@@ -71,13 +48,38 @@ $(error If using, set USE_SDE to "1", not "$(USE_SDE)")
 endif
 # Set the default if no values are set
 ifeq ($(TARGET_COUNT),0)
-USE_PINPLAY=1
+# USE_PINPLAY=1
+USE_SDE=1
+export USE_SDE #Makefile.config needs that variable
 else ifeq ($(TARGET_COUNT),1)
 # Input is valid. Use user-supplied default
 else
 # Error, cannot be >= 2
 $(error One or more tools requested for build. Only one supported USE_PIN=$(USE_PIN) USE_PINPLAY=$(USE_PINPLAY) USE_SDE=$(USE_SDE))
 endif
+
+include common/Makefile.common
+
+dependencies: package_deps sde_kit $(PIN_ROOT) pin xed python mcpat linux builddir showdebugstatus
+
+BUILD_CAPSTONE ?=
+ifeq ($(BUILD_ARM),1)
+BUILD_CAPSTONE=1
+else ifeq ($(BUILD_DYNAMORIO),1)
+BUILD_CAPSTONE=1
+endif
+
+ifeq ($(BUILD_CAPSTONE),1)
+dependencies: capstone
+.PHONY: capstone
+endif
+
+ifeq ($(BUILD_DYNAMORIO),1)
+dependencies: dynamorio
+.PHONY: dynamorio
+endif
+
+$(SIM_TARGETS): dependencies
 
 message:
 	@echo -n Building for x86 \($(SNIPER_TARGET_ARCH)\)
@@ -211,15 +213,16 @@ $(PIN_DEP):
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
 sde_kit: $(PIN_ROOT)
 else
-SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.7.0-2022-05-09-lin.tar.xz
-PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
+SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.38.0-2024-04-18-lin.tar.xz
+PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpindwarf.so
 sde_kit: $(PIN_DEP)
 $(PIN_DEP):
-	$(_MSG) '[DOWNLO] SDE 9.7.0-2022-05-09'
+	$(_MSG) '[DOWNLO] SDE 9.38.0-2024-04-18'
 	$(_CMD) mkdir -p $(SDE_HOME)
 	$(_CMD) wget -O $(shell basename $(SDE_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD)
 	$(_CMD) tar -x -f $(shell basename $(SDE_DOWNLOAD)) --auto-compress --strip-components 1 -C $(SDE_HOME)
 	$(_CMD) rm $(shell basename $(SDE_DOWNLOAD))
+	$(_CMD) rm -r $(SDE_HOME)/pinkit/source/tools/InstLib #It looks like it is missing source files, so it fails to compile but not necessary for sniper
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-tools'
 	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools

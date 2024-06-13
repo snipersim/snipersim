@@ -52,6 +52,7 @@ setProgress(PyObject *self, PyObject *args)
    Py_RETURN_NONE;
 }
 
+#include "trace_manager.h"
 static PyObject *
 simulatorAbort(PyObject *self, PyObject *args)
 {
@@ -60,6 +61,8 @@ simulatorAbort(PyObject *self, PyObject *args)
 
    // If we're still in ROI, make sure we end it properly
    Sim()->getMagicServer()->setPerformance(false);
+   // Ends front-end, such that it does not hang waiting for response.
+   Sim()->getTraceManager()->endFrontEnd();
 
    LOG_PRINT("Application exit.");
    Simulator::release();
