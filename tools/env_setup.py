@@ -15,9 +15,9 @@ def sniper_root():
       if not os.path.isfile(os.path.join(root,'run-sniper')):
         raise EnvironmentError((errno.EINVAL, 'Invalid %s directory [%s]' % (rootname, root)))
       else:
-	if os.path.realpath(root) != local_sniper_root():
-	  print >> sys.stderr, 'Warning: %s is different from current script directory [%s]!=[%s]' % (rootname, os.path.realpath(root), local_sniper_root())
-	return root
+        if os.path.realpath(root) != local_sniper_root():
+          print('Warning: %s is different from current script directory [%s]!=[%s]' % (rootname, os.path.realpath(root), local_sniper_root()), file=sys.stderr)
+        return root
 
   # Use the root corresponding to this file when nothing has been set
   return local_sniper_root()
@@ -53,6 +53,6 @@ if __name__ == "__main__":
     roots['SNIPER_ROOT'] = roots['GRAPHITE_ROOT'] = sniper_root()
     try:
       roots['BENCHMARKS_ROOT'] = benchmarks_root()
-    except EnvironmentError, e:
+    except EnvironmentError as e:
       pass
-    print roots
+    print(roots)

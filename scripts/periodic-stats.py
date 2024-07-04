@@ -11,10 +11,10 @@ import sim
 class PeriodicStats:
   def setup(self, args):
     args = dict(enumerate((args or '').split(':')))
-    interval = long(args.get(0, '') or 1000000000)
-    self.max_snapshots = long(args.get(1, 0))
+    interval = int(args.get(0, '') or 1000000000)
+    self.max_snapshots = int(args.get(1, 0))
     self.num_snapshots = 0
-    self.interval = long(interval * sim.util.Time.NS)
+    self.interval = int(interval * sim.util.Time.NS)
     self.next_interval = float('inf')
     self.in_roi = False
     sim.util.Every(self.interval, self.periodic, roi_only = True)

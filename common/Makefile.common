@@ -44,7 +44,9 @@ ifneq ($(BOOST_INCLUDE),)
 	CPPFLAGS += -I$(BOOST_INCLUDE)
 endif
 
-LD_LIBS += -ldecoder -lsift -lxed -L$(SIM_ROOT)/python_kit/$(SNIPER_TARGET_ARCH)/lib -lpython2.7 -lrt -lz -lsqlite3
+# Assuming python3 include dir is within the gcc search path
+PYTHON_LD_LIBS := $(shell python3-config --libs --embed)
+LD_LIBS += -ldecoder -lsift -lxed -lrt -lz -lsqlite3 $(PYTHON_LD_LIBS)
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/decoder_lib/ -L$(SIM_ROOT)/sift -L$(XED_HOME)/lib
 
@@ -56,8 +58,9 @@ endif
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 
 # Include paths
+PYTHON_INCLUD_PATH := $(shell python3-config --includes)
 CPPFLAGS+=$(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
-          -I$(SIM_ROOT)/python_kit/$(SNIPER_TARGET_ARCH)/include/python2.7 \
+	  $(PYTHON_INCLUD_PATH) \
           -I$(SIM_ROOT)/capstone/include -I$(SIM_ROOT)/capstone/include/capstone 
 
 CXXFLAGS+=-c \

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import threading, subprocess, sys, os, tempfile
 
@@ -7,7 +7,7 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
     raise ValueError('Cannot call execute_gdb() with both wait and false == True')
 
   if not quiet:
-    print 'Running', cmd
+    print('Running', cmd)
     sys.stdout.flush()
     sys.stderr.flush()
 
@@ -28,7 +28,7 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
     while True:
       line = p_graphite.stdout.readline()
       if not line: break
-      print line,
+      print(line, end=' ')
   threading.Thread(target = output_graphite).start()
 
   fh, fn = tempfile.mkstemp()

@@ -176,7 +176,7 @@ class CpiItems:
 # Color helper functions
 
 def color_tint_shade(base_color, num):
-  base_color = map(lambda x:float(x)/255, base_color)
+  base_color = [float(x)/255 for x in base_color]
   base_color = colorsys.rgb_to_hsv(*base_color)
   colors = []
   delta = 0.6 / float((num/2) or 1)
@@ -191,8 +191,8 @@ def color_tint_shade(base_color, num):
   for _ in range(num/2):
     tint -= delta
     colors.append((base_color[0],tint,base_color[2]))
-  colors = map(lambda x:colorsys.hsv_to_rgb(*x),colors)
-  colors = map(lambda x:tuple(map(lambda y:int(y*255),x)),colors)
+  colors = [colorsys.hsv_to_rgb(*x) for x in colors]
+  colors = [tuple([int(y*255) for y in x]) for x in colors]
   return colors
 
 def get_colors(labels, groups, names_to_contributions):

@@ -43,7 +43,7 @@ getFrequency(PyObject *self, PyObject *args)
 
    UInt64 freq = 1000000000 / domain->getPeriod().getFS();
 
-   return PyInt_FromLong(freq);
+   return PyLong_FromLong(freq);
 }
 
 static PyObject *
@@ -72,11 +72,21 @@ static PyMethodDef PyDvfsMethods[] = {
    {NULL, NULL, 0, NULL} /* Sentinel */
 };
 
-void HooksPy::PyDvfs::setup(void)
-{
-   PyObject *pModule = Py_InitModule("sim_dvfs", PyDvfsMethods);
+static PyModuleDef PyDvfsModule = {
+	PyModuleDef_HEAD_INIT,
+	"sim_dvfs",
+	"",
+	-1,
+	PyDvfsMethods,
+	NULL, NULL, NULL, NULL
+};
 
-   PyObject *pGlobalConst = PyInt_FromLong(-1);
+PyMODINIT_FUNC PyInit_sim_dvfs(void)
+{
+   PyObject *pModule = PyModule_Create(&PyDvfsModule);
+
+   PyObject *pGlobalConst = PyLong_FromLong(-1);
    PyObject_SetAttrString(pModule, "GLOBAL", pGlobalConst);
    Py_DECREF(pGlobalConst);
+   return pModule;
 }

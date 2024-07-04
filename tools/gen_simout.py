@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, getopt, sniper_lib
 
@@ -7,16 +7,16 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
 
   try:
     res = sniper_lib.get_results(jobid = jobid, resultsdir = resultsdir, partial = partial)
-  except (KeyError, ValueError), e:
+  except (KeyError, ValueError) as e:
     if not silent:
-      print 'Failed to generated sim.out:', e
+      print('Failed to generated sim.out:', e)
     return
 
   results = res['results']
   config = res['config']
   ncores = int(config['general/total_cores'])
 
-  format_int = lambda v: str(long(v))
+  format_int = lambda v: str(int(v))
   format_pct = lambda v: '%.1f%%' % (100. * v)
   def format_float(digits):
     return lambda v: ('%%.%uf' % digits) % v
@@ -89,8 +89,8 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
 
   for tlb in ('itlb', 'dtlb', 'stlb'):
     if '%s.access'%tlb in results:
-      results['%s.missrate'%tlb] = map(lambda (a,b): 100*a/float(b or 1), zip(results['%s.miss'%tlb], results['%s.access'%tlb]))
-      results['%s.mpki'%tlb] = map(lambda (a,b): 1000*a/float(b or 1), zip(results['%s.miss'%tlb], results['performance_model.instruction_count']))
+      results['%s.missrate'%tlb] = [100*a_b[0]/float(a_b[1] or 1) for a_b in zip(results['%s.miss'%tlb], results['%s.access'%tlb])]
+      results['%s.mpki'%tlb] = [1000*a_b1[0]/float(a_b1[1] or 1) for a_b1 in zip(results['%s.miss'%tlb], results['performance_model.instruction_count'])]
       template.extend([
         ('  %s' % {'itlb': 'I-TLB', 'dtlb': 'D-TLB', 'stlb': 'L2 TLB'}[tlb], '', ''),
         ('    num accesses', '%s.access'%tlb, str),
@@ -105,10 +105,10 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
   allcaches = [ 'L1-I', 'L1-D' ] + [ 'L%u'%l for l in range(2, 5) ]
   existcaches = [ c for c in allcaches if '%s.loads'%c in results ]
   for c in existcaches:
-    results['%s.accesses'%c] = map(sum, zip(results['%s.loads'%c], results['%s.stores'%c]))
-    results['%s.misses'%c] = map(sum, zip(results['%s.load-misses'%c], results.get('%s.store-misses-I'%c, results['%s.store-misses'%c])))
-    results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['%s.accesses'%c]))
-    results['%s.mpki'%c] = map(lambda (a,b): 1000*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['performance_model.instruction_count']))
+    results['%s.accesses'%c] = list(map(sum, list(zip(results['%s.loads'%c], results['%s.stores'%c]))))
+    results['%s.misses'%c] = list(map(sum, list(zip(results['%s.load-misses'%c], results.get('%s.store-misses-I'%c, results['%s.store-misses'%c])))))
+    results['%s.missrate'%c] = [100*a_b2[0]/float(a_b2[1]) if a_b2[1] else float('inf') for a_b2 in zip(results['%s.misses'%c], results['%s.accesses'%c])]
+    results['%s.mpki'%c] = [1000*a_b3[0]/float(a_b3[1]) if a_b3[1] else float('inf') for a_b3 in zip(results['%s.misses'%c], results['performance_model.instruction_count'])]
     template.extend([
       ('  Cache %s'%c, '', ''),
       ('    num cache accesses', '%s.accesses'%c, str),
@@ -120,12 +120,12 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
   allcaches = [ 'nuca-cache', 'dram-cache' ]
   existcaches = [ c for c in allcaches if '%s.reads'%c in results ]
   for c in existcaches:
-    results['%s.accesses'%c] = map(sum, zip(results['%s.reads'%c], results['%s.writes'%c]))
-    results['%s.misses'%c] = map(sum, zip(results['%s.read-misses'%c], results['%s.write-misses'%c]))
-    results['%s.missrate'%c] = map(lambda (a,b): 100*a/float(b) if b else float('inf'), zip(results['%s.misses'%c], results['%s.accesses'%c]))
+    results['%s.accesses'%c] = list(map(sum, list(zip(results['%s.reads'%c], results['%s.writes'%c]))))
+    results['%s.misses'%c] = list(map(sum, list(zip(results['%s.read-misses'%c], results['%s.write-misses'%c]))))
+    results['%s.missrate'%c] = [100*a_b4[0]/float(a_b4[1]) if a_b4[1] else float('inf') for a_b4 in zip(results['%s.misses'%c], results['%s.accesses'%c])]
     icount = sum(results['performance_model.instruction_count'])
     icount /= len([ v for v in results['%s.accesses'%c] if v ]) # Assume instructions are evenly divided over all cache slices
-    results['%s.mpki'%c] = map(lambda a: 1000*a/float(icount) if icount else float('inf'), results['%s.misses'%c])
+    results['%s.mpki'%c] = [1000*a/float(icount) if icount else float('inf') for a in results['%s.misses'%c]]
     template.extend([
       ('  %s cache'% c.split('-')[0].upper(), '', ''),
       ('    num cache accesses', '%s.accesses'%c, str),
@@ -134,28 +134,28 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
       ('    mpki', '%s.mpki'%c, lambda v: '%.2f' % v),
     ])
 
-  results['dram.accesses'] = map(sum, zip(results['dram.reads'], results['dram.writes']))
-  results['dram.avglatency'] = map(lambda (a,b): a/b if b else float('inf'), zip(results['dram.total-access-latency'], results['dram.accesses']))
+  results['dram.accesses'] = list(map(sum, list(zip(results['dram.reads'], results['dram.writes']))))
+  results['dram.avglatency'] = [a_b8[0]/a_b8[1] if a_b8[1] else float('inf') for a_b8 in zip(results['dram.total-access-latency'], results['dram.accesses'])]
   template += [
     ('DRAM summary', '', ''),
     ('  num dram accesses', 'dram.accesses', str),
     ('  average dram access latency (ns)', 'dram.avglatency', format_ns(2)),
   ]
   if 'dram.total-read-queueing-delay' in results:
-    results['dram.avgqueueread'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-read-queueing-delay'], results['dram.reads']))
-    results['dram.avgqueuewrite'] = map(lambda (a,b): a/(b or 1), zip(results['dram.total-write-queueing-delay'], results['dram.writes']))
+    results['dram.avgqueueread'] = [a_b5[0]/(a_b5[1] or 1) for a_b5 in zip(results['dram.total-read-queueing-delay'], results['dram.reads'])]
+    results['dram.avgqueuewrite'] = [a_b6[0]/(a_b6[1] or 1) for a_b6 in zip(results['dram.total-write-queueing-delay'], results['dram.writes'])]
     template.append(('  average dram read queueing delay', 'dram.avgqueueread', format_ns(2)))
     template.append(('  average dram write queueing delay', 'dram.avgqueuewrite', format_ns(2)))
   else:
-    results['dram.avgqueue'] = map(lambda (a,b): a/(b or 1), zip(results.get('dram.total-queueing-delay', [0]*ncores), results['dram.accesses']))
+    results['dram.avgqueue'] = [a_b7[0]/(a_b7[1] or 1) for a_b7 in zip(results.get('dram.total-queueing-delay', [0]*ncores), results['dram.accesses'])]
     template.append(('  average dram queueing delay', 'dram.avgqueue', format_ns(2)))
   if 'dram-queue.total-time-used' in results:
-    results['dram.bandwidth'] = map(lambda a: 100*a/time0 if time0 else float('inf'), results['dram-queue.total-time-used'])
+    results['dram.bandwidth'] = [100*a/time0 if time0 else float('inf') for a in results['dram-queue.total-time-used']]
     template.append(('  average dram bandwidth utilization', 'dram.bandwidth', lambda v: '%.2f%%' % v))
 
   if 'L1-D.loads-where-dram-local' in results:
-    results['L1-D.loads-where-dram'] = map(sum, zip(results['L1-D.loads-where-dram-local'], results['L1-D.loads-where-dram-remote']))
-    results['L1-D.stores-where-dram'] = map(sum, zip(results['L1-D.stores-where-dram-local'], results['L1-D.stores-where-dram-remote']))
+    results['L1-D.loads-where-dram'] = list(map(sum, list(zip(results['L1-D.loads-where-dram-local'], results['L1-D.loads-where-dram-remote']))))
+    results['L1-D.stores-where-dram'] = list(map(sum, list(zip(results['L1-D.stores-where-dram-local'], results['L1-D.stores-where-dram-remote']))))
     template.extend([
         ('Coherency Traffic', '', ''),
         ('  num loads from dram', 'L1-D.loads-where-dram' , str),
@@ -187,7 +187,7 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [-d <resultsdir (default: .)>]'
+    print('Usage:', sys.argv[0], '[-h (help)] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [-d <resultsdir (default: .)>]')
 
   jobid = 0
   resultsdir = '.'
@@ -195,8 +195,8 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hj:d:", [ 'partial=' ])
-  except getopt.GetoptError, e:
-    print e
+  except getopt.GetoptError as e:
+    print(e)
     usage()
     sys.exit()
   for o, a in opts:
@@ -206,7 +206,7 @@ if __name__ == '__main__':
     if o == '-d':
       resultsdir = a
     if o == '-j':
-      jobid = long(a)
+      jobid = int(a)
     if o == '--partial':
       if ':' not in a:
         sys.stderr.write('--partial=<from>:<to>\n')

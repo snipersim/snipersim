@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, subprocess, env_setup
 
@@ -18,7 +18,7 @@ class Addr2Line:
     self.cache = {}
 
   def addr2line(self, a):
-    a = long(a)
+    a = int(a)
     if a < self.offset:
       return ('??', '??', '??')
     if a not in self.cache:
@@ -31,8 +31,8 @@ class Addr2Line:
 
 if __name__ == '__main__':
   if len(sys.argv) < 2:
-    print 'Usage: addr2line.py <address-of-rdtsc> [<address-to-resolve> ]*'
+    print('Usage: addr2line.py <address-of-rdtsc> [<address-to-resolve> ]*')
     sys.exit(1)
-  a2l = Addr2Line(os.path.join(env_setup.sim_root(), 'lib', 'pin_sim.so'), long(sys.argv[1]))
+  a2l = Addr2Line(os.path.join(env_setup.sim_root(), 'lib', 'pin_sim.so'), int(sys.argv[1]))
   for addr in sys.argv[2:]:
-    print ':'.join(a2l(long(addr)))
+    print(':'.join(a2l(int(addr))))

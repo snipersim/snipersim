@@ -1,9 +1,10 @@
 import sys, os, sniper_lib
 
-_, EVENT_MARKER, EVENT_THREAD_NAME, EVENT_APP_START, EVENT_APP_EXIT, EVENT_THREAD_CREATE, EVENT_THREAD_EXIT = range(7)
+_, EVENT_MARKER, EVENT_THREAD_NAME, EVENT_APP_START, EVENT_APP_EXIT, EVENT_THREAD_CREATE, EVENT_THREAD_EXIT = list(range(7))
 
 class SniperStatsBase:
-  def parse_stats(self, (k1, k2), ncores, metrics = None):
+  def parse_stats(self, xxx_todo_changeme, ncores, metrics = None):
+    (k1, k2) = xxx_todo_changeme
     v1 = self.read_snapshot(k1, metrics = metrics)
     v2 = self.read_snapshot(k2, metrics = metrics)
     results = []
@@ -11,11 +12,12 @@ class SniperStatsBase:
       name = '%s.%s' % self.names[metricid]
       if metrics and name not in metrics:
         continue
-      id_min = min(min(v2.get(metricid, {}).keys() or [0]), 0)
-      id_max = max(max(v2.get(metricid, {}).keys() or [0])+1, ncores)
+      id_min = min(min(list(v2.get(metricid, {}).keys()) or [0]), 0)
+      id_max = max(max(list(v2.get(metricid, {}).keys()) or [0])+1, ncores)
       vals1 = v1.get(metricid, {})
       vals2 = v2.get(metricid, {})
       results += [ (name, idx, vals2.get(idx, 0) - vals1.get(idx, 0)) for idx in range(id_min, id_max) ]
+      idx = range(id_min, id_max)[-1]
       if name == 'performance_model.elapsed_time' and idx < ncores:
         results += [ ('performance_model.elapsed_time_begin', idx, vals1.get(idx, 0)) for idx in range(ncores) ]
         results += [ ('performance_model.elapsed_time_end', idx, vals2.get(idx, 0)) for idx in range(ncores) ]

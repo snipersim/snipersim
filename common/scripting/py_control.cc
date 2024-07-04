@@ -78,23 +78,33 @@ static PyMethodDef PyControlMethods[] = {
    { NULL, NULL, 0, NULL } /* Sentinel */
 };
 
-void HooksPy::PyControl::setup(void)
+static PyModuleDef PyControlModule = {
+	PyModuleDef_HEAD_INIT,
+	"sim_control",
+	"",
+	-1,
+	PyControlMethods,
+	NULL, NULL, NULL, NULL
+};
+
+PyMODINIT_FUNC PyInit_sim_control(void)
 {
-   PyObject *pModule = Py_InitModule("sim_control", PyControlMethods);
+   PyObject *pModule = PyModule_Create(&PyControlModule);
 
    {
-      PyObject *pGlobalConst = PyInt_FromLong(SIM_OPT_INSTRUMENT_DETAILED);
+      PyObject *pGlobalConst = PyLong_FromLong(SIM_OPT_INSTRUMENT_DETAILED);
       PyObject_SetAttrString(pModule, "DETAILED", pGlobalConst);
       Py_DECREF(pGlobalConst);
    }
    {
-      PyObject *pGlobalConst = PyInt_FromLong(SIM_OPT_INSTRUMENT_WARMUP);
+      PyObject *pGlobalConst = PyLong_FromLong(SIM_OPT_INSTRUMENT_WARMUP);
       PyObject_SetAttrString(pModule, "WARMUP", pGlobalConst);
       Py_DECREF(pGlobalConst);
    }
    {
-      PyObject *pGlobalConst = PyInt_FromLong(SIM_OPT_INSTRUMENT_FASTFORWARD);
+      PyObject *pGlobalConst = PyLong_FromLong(SIM_OPT_INSTRUMENT_FASTFORWARD);
       PyObject_SetAttrString(pModule, "FASTFORWARD", pGlobalConst);
       Py_DECREF(pGlobalConst);
    }
+   return pModule;
 }

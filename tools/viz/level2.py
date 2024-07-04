@@ -12,7 +12,7 @@ def mkdir_p(path):
   import errno
   try:
     os.makedirs(path)
-  except OSError, exc:
+  except OSError as exc:
     if exc.errno == errno.EEXIST and os.path.isdir(path):
       pass
     else: raise
@@ -55,7 +55,7 @@ def initialize():
   ipcvalues = [1]
   ipcvalues[0] = {}
   ipcvalues[0]["name"]="IPC"
-  ipcvalues[0]["data"]=[0 for x in xrange(num_intervals)]
+  ipcvalues[0]["data"]=[0 for x in range(num_intervals)]
 
   #ipcvalues calculated with fixed instruction count intervals
   global ipcvaluesfic
@@ -73,18 +73,18 @@ def initialize():
         #second column = cpipercentagevalues
         #third column = cpivalues
   for component in cpiitems.names:
-    cpicomponents[component] = [[0 for x in xrange(3)] for x in xrange(num_intervals)]
+    cpicomponents[component] = [[0 for x in range(3)] for x in range(num_intervals)]
         #first column = x values
         #second column = cpipercentagevalues
         #third column = cpivalues
   for component in cpiitemssimple.names:
-    simplifiedcpicomponents[component] = [[0 for x in xrange(3)] for x in xrange(num_intervals)]
+    simplifiedcpicomponents[component] = [[0 for x in range(3)] for x in range(num_intervals)]
         #first column = x values
         #second column = power values
         #third column = energy values
         #fourth column = energypercentage values
   for component in listofmcpatcomponents:
-    mcpatcomponents[component] = [[0 for x in xrange(4)] for x in xrange(num_intervals)]
+    mcpatcomponents[component] = [[0 for x in range(4)] for x in range(num_intervals)]
 
 
 #collect CPI stack data with fixed instruction counts
@@ -93,14 +93,14 @@ def collectCPIStackDataFIC(verbose=False, requested_cores_list = []):
   groupedintervals = groupIntervalsOnInstructionCount(getTotalInstructionCount()/num_intervals, verbose)
   usedcomponents = dict.fromkeys(cpiitems.names,0)
   usedsimplecomponents = []
-  ipcvaluesfic[0]["data"]=[dict(x=0,y=0) for x in xrange(len(groupedintervals))]
-  for key in cpificcomponents.keys():
-    cpificcomponents[key] = [[0 for x in xrange(2)] for x in xrange(len(groupedintervals))]
-  for key in simplifiedcpificcomponents.keys():
-    simplifiedcpificcomponents[key] = [[0 for x in xrange(2)] for x in xrange(len(groupedintervals))]
+  ipcvaluesfic[0]["data"]=[dict(x=0,y=0) for x in range(len(groupedintervals))]
+  for key in list(cpificcomponents.keys()):
+    cpificcomponents[key] = [[0 for x in range(2)] for x in range(len(groupedintervals))]
+  for key in list(simplifiedcpificcomponents.keys()):
+    simplifiedcpificcomponents[key] = [[0 for x in range(2)] for x in range(len(groupedintervals))]
   for i in range (1, len(groupedintervals)):
     if verbose:
-      print 'Collect CPI stack info for intervals with a fixed instruction count (interval '+str(i+1)+' / '+str(len(groupedintervals))+')'+"\r",
+      print('Collect CPI stack info for intervals with a fixed instruction count (interval '+str(i+1)+' / '+str(len(groupedintervals))+')'+"\r", end=' ')
     cyclecountstart = groupedintervals[i-1]["cyclecount"]
     instructioncount = groupedintervals[i]["instructioncount"]
     nameintervalstart = groupedintervals[i-1]["intervalname"]
@@ -123,7 +123,7 @@ def collectCPIStackDataFIC(verbose=False, requested_cores_list = []):
       )
       data = results.get_data('cpi')
 
-      totalcpi=sum(data[0].itervalues())
+      totalcpi=sum(data[0].values())
       if totalcpi > 0:
         ipc = 1./totalcpi
       else:
@@ -157,12 +157,12 @@ def collectCPIStackDataFIC(verbose=False, requested_cores_list = []):
 
 
   def writeJSON(components, usedcomponents, name):
-    jsonoutput = [0 for x in xrange(len(usedcomponents))]
+    jsonoutput = [0 for x in range(len(usedcomponents))]
     index=0
     for key in usedcomponents:
       jsonoutput[index]={}
       jsonoutput[index]["name"]=key
-      jsonoutput[index]["data"]=[0 for x in xrange(len(groupedintervals))]
+      jsonoutput[index]["data"]=[0 for x in range(len(groupedintervals))]
       for i in range(0,len(groupedintervals)):
         xvalue = str(components[key][i][1])
         yvalue = str(components[key][i][0])
@@ -178,19 +178,19 @@ def collectCPIStackDataFIC(verbose=False, requested_cores_list = []):
   writeJSON(simplifiedcpificcomponents,usedsimplecomponents,'cpificsimple')
 
   if verbose:
-    print
+    print()
 
 
 #Collect data with fixed cycle counts for the intervals
 def collectCPIStackDataFCC(verbose = False, requested_cores_list = []):
-  from StringIO import StringIO
+  from io import StringIO
   instructioncount=0
   num_exceptions=0
   usedcomponents = dict.fromkeys(cpiitems.names,0)
 
   for i in range(0,num_intervals):
     if verbose:
-      print 'Collect CPI stack info for intervals with a fixed time span (interval '+str(i+1)+' / '+str(num_intervals)+')'+"\r",
+      print('Collect CPI stack info for intervals with a fixed time span (interval '+str(i+1)+' / '+str(num_intervals)+')'+"\r", end=' ')
     currentinterval = ("periodic-"+str(i*interval)+":periodic-"+str((i+1)*interval)).split(":")
 
     newinstructioncount=getInstructionCount(currentinterval)
@@ -211,7 +211,7 @@ def collectCPIStackDataFCC(verbose = False, requested_cores_list = []):
       )
       data = results.get_data('cpi')
 
-      totalcpi=sum(data[0].itervalues())
+      totalcpi=sum(data[0].values())
       if totalcpi > 0:
         ipc = 1./totalcpi
       else:
@@ -248,19 +248,19 @@ def collectCPIStackDataFCC(verbose = False, requested_cores_list = []):
       usedcpicomponents.append(component)
 
   if verbose:
-    print
+    print()
     if(num_exceptions>0):
-      print "There was no useful information for "+str(num_exceptions)+" intervals."
-      print "You might want to increase the interval size."
+      print("There was no useful information for "+str(num_exceptions)+" intervals.")
+      print("You might want to increase the interval size.")
 
 
 def collectMcPATData(verbose = False):
   #Collecting data for McPat Visualization
   #print('Collecting data for mcpat visualization')
-  from StringIO import StringIO
+  from io import StringIO
   for i in range(0,num_intervals):
     if verbose:
-      print 'Collect McPAT info (interval '+str(i+1)+' / '+str(num_intervals)+')'
+      print('Collect McPAT info (interval '+str(i+1)+' / '+str(num_intervals)+')')
 
     data_to_return = mcpat.main(
       jobid = 0,
@@ -276,7 +276,7 @@ def collectMcPATData(verbose = False):
     components = data_to_return["labels"]
     powerdata = data_to_return["power_data"][0]
     time_s = data_to_return["time_s"]
-    total = sum(data_to_return["power_data"][0].itervalues())
+    total = sum(data_to_return["power_data"][0].values())
 
     for component in components:
       power = powerdata[component]/time_s
@@ -290,7 +290,7 @@ def collectMcPATData(verbose = False):
       mcpatcomponents[component][i][3]=energypercentage
 
   if verbose:
-    print
+    print()
 
 
 #write values into json
@@ -299,7 +299,7 @@ def collectMcPATData(verbose = False):
 #componentindex = index of the y value
 def writetojson(outputdir, componentname, componenttype, componentindex, verbose = False):
   if verbose:
-    print 'Writing '+title+'-'+componentname+'.json'
+    print('Writing '+title+'-'+componentname+'.json')
   index=0
   if(componenttype == "cpi"):
     usedcomponents = usedcpicomponents
@@ -311,12 +311,12 @@ def writetojson(outputdir, componentname, componenttype, componentindex, verbose
     usedcomponents = usedmcpatcomponents
     components = mcpatcomponents
 
-  jsonoutput = [0 for x in xrange(len(usedcomponents))]
+  jsonoutput = [0 for x in range(len(usedcomponents))]
 
   for key in usedcomponents:
     jsonoutput[index]={}
     jsonoutput[index]["name"]=key
-    jsonoutput[index]["data"]=[0 for x in xrange(num_intervals)]
+    jsonoutput[index]["data"]=[0 for x in range(num_intervals)]
     for i in range(0,num_intervals):
       if componenttype != "mcpat":
         xvalue = str(components[key][i][0]*interval/1e9) #x-axis now in microseconds
@@ -343,13 +343,13 @@ def calculateMarkerPosition(time):
 #write markers
 def writemarkers(outputdir, verbose = False):
   if verbose:
-    print 'Writing markers.txt'
+    print('Writing markers.txt')
 
   try:
     markersdb = stats.get_markers()
-  except Exception, e:
-    print e
-    print 'Cannot get markers from database.'
+  except Exception as e:
+    print(e)
+    print('Cannot get markers from database.')
     return
 
   markersjson = {}
@@ -364,7 +364,7 @@ def writemarkers(outputdir, verbose = False):
     markersjson["markers"].append(dict(timestamp=timestamp / 1e9, marker=marker))
 
   if verbose:
-    print 'Found %d markers, writing markers.txt' % len(markersjson["markers"])
+    print('Found %d markers, writing markers.txt' % len(markersjson["markers"]))
 
   mkdir_p(os.path.join(outputdir,'levels','level2','data'))
   markerstxt = open(os.path.join(outputdir,'levels','level2','data','markers.txt'), "w")
@@ -374,7 +374,7 @@ def writemarkers(outputdir, verbose = False):
 # Write general info about the visualization in info.txt
 def writeinfo(outputdir, verbose = False):
   if verbose:
-    print 'Writing info.txt'
+    print('Writing info.txt')
   mkdir_p(os.path.join(outputdir,'levels','level2','data'))
   info = open(os.path.join(outputdir,'levels','level2','data','info.txt'), "w")
   #info.write("infostr ='{ \"name\":\""+title+"\", \"intervalsize\":\""+str(interval)+"\", \"num_intervals\":\""+str(num_intervals)+"\",\"use_mcpat\":\""+str(use_mcpat)+"}';\n")
@@ -418,7 +418,7 @@ def writelabels(outputdir, componentname, componenttype):
 #write ipc values into json
 def writeIPCvaluestoJSON(outputdir, verbose = False):
   if verbose:
-    print 'Writing '+title+'-ipc.json'
+    print('Writing '+title+'-ipc.json')
   mkdir_p(os.path.join(outputdir,'levels','level2','data'))
   ipcjsonfile = open(os.path.join(outputdir,'levels','level2','data',title+'-ipc.json'), "w")
   ipcjsonfile.write(json.dumps(ipcvalues, indent=4))
@@ -458,7 +458,7 @@ def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
   nrofintervals = 0
   while currentintervalnr < num_intervals_to_use:
     if verbose:
-      print "Put fixed time interval", currentintervalnr+1, "/", num_intervals_to_use, "in a fixed instruction count interval\r",
+      print("Put fixed time interval", currentintervalnr+1, "/", num_intervals_to_use, "in a fixed instruction count interval\r", end=' ')
     instructioncount+=getInstructionCount(currentintervalstr)
     nrofintervals+=1
     if instructioncount > fixedinstructioncount:
@@ -471,14 +471,14 @@ def groupIntervalsOnInstructionCount(fixedinstructioncount, verbose=False):
     currentintervalstr = ("periodic-"+str(currentintervalnr*interval_to_use), "periodic-"+str((currentintervalnr+1)*interval_to_use))
 
   if verbose:
-    print
+    print()
   return intervalsequences
 
 
 def createJSONData(native_interval_, nativenum_intervals_, interval_, num_intervals_, resultsdir_, outputdir_, title_, mcpat, verbose = False, requested_cores_list = []):
 
   if verbose:
-    print 'Generate JSON data for Level 2'
+    print('Generate JSON data for Level 2')
 
   global native_interval, nativenum_intervals, interval, num_intervals, resultsdir, outputdir, title, use_mcpat, stats, config
   native_interval = native_interval_
@@ -521,7 +521,7 @@ def createJSONData(native_interval_, nativenum_intervals_, interval_, num_interv
 
 if __name__ == '__main__':
   def usage():
-    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose] [-N <colon-separated-core-list>]')
+    print(('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-o <outputdir (default: .)>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)] [-i <interval (default: smallest_interval)> ] [--mcpat] [-v|--verbose] [-N <colon-separated-core-list>]'))
     sys.exit()
 
   resultsdir = '.'
@@ -536,7 +536,7 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:vN:", [ "help", "mcpat", "verbose" ])
-  except getopt.GetoptError, e:
+  except getopt.GetoptError as e:
     print(e)
     usage()
     sys.exit()
@@ -552,17 +552,17 @@ if __name__ == '__main__':
     if o == '--mcpat':
       use_mcpat = True
     if o == '-n':
-      num_intervals = long(a)
+      num_intervals = int(a)
     if o == '-i':
-      interval = long(a)
+      interval = int(a)
     if o == '-v' or o == '--verbose':
       verbose = True
     if o == '-N':
-      requested_cores_list += map(int,a.split(':'))
+      requested_cores_list += list(map(int,a.split(':')))
 
 
   if verbose:
-    print 'This script generates data for the second Level 2 visualization'
+    print('This script generates data for the second Level 2 visualization')
 
   resultsdir = os.path.abspath(resultsdir)
   outputdir = os.path.abspath(outputdir)
@@ -574,27 +574,27 @@ if __name__ == '__main__':
     stats = sniper_stats.SniperStats(resultsdir)
     snapshots = stats.get_snapshots()
   except:
-    print "No valid results found in "+resultsdir
+    print("No valid results found in "+resultsdir)
     sys.exit(1)
 
-  snapshots = sorted([ long(name.split('-')[1]) for name in snapshots if re.match(r'periodic-[0-9]+', name) ])
+  snapshots = sorted([ int(name.split('-')[1]) for name in snapshots if re.match(r'periodic-[0-9]+', name) ])
   defaultinterval = snapshots[1] - snapshots[0]
   defaultnum_intervals = len(snapshots)-1
 
 
   if(num_intervals == 0 or num_intervals > defaultnum_intervals):
-    print 'No number of intervals specified or number of intervals is to big.'
-    print 'Now using all intervals ('+str(defaultnum_intervals)+') found in resultsdir.'
+    print('No number of intervals specified or number of intervals is to big.')
+    print('Now using all intervals ('+str(defaultnum_intervals)+') found in resultsdir.')
     num_intervals = defaultnum_intervals
 
   if(interval == 0 or interval < defaultinterval):
-    print 'No interval specified or interval is smaller than smallest interval.'
-    print 'Now using smallest interval ('+str(defaultinterval)+' femtoseconds).'
+    print('No interval specified or interval is smaller than smallest interval.')
+    print('Now using smallest interval ('+str(defaultinterval)+' femtoseconds).')
     interval = defaultinterval
 
   if(interval*num_intervals > defaultinterval*defaultnum_intervals):
-    print 'The combination '+str(num_intervals)+' intervals and an interval size of '+str(interval)+' is invalid.'
-    print 'Now using all intervals ('+str(defaultnum_intervals)+') with the smallest interval size ('+str(defaultinterval)+' femtoseconds).'
+    print('The combination '+str(num_intervals)+' intervals and an interval size of '+str(interval)+' is invalid.')
+    print('Now using all intervals ('+str(defaultnum_intervals)+') with the smallest interval size ('+str(defaultinterval)+' femtoseconds).')
     interval = defaultinterval
     num_intervals = defaultnum_intervals
 
@@ -603,8 +603,8 @@ if __name__ == '__main__':
 
   # Now copy all static files as well
   if outputdir != HOME:
-    print "Copy files to output directory "+outputdir
+    print("Copy files to output directory "+outputdir)
     os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html css/ levels/level2/css levels/level2/javascript/ | tar x -C %s' % (HOME, outputdir))
-  print "Visualizations can be viewed in "+os.path.join(outputdir,'index.html')
+  print("Visualizations can be viewed in "+os.path.join(outputdir,'index.html'))
 
 

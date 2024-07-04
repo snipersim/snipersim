@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, getopt, subprocess, tarfile
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
@@ -8,9 +8,9 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 
 
 def usage():
-  print 'Collect SIFT instruction trace'
-  print 'Usage:'
-  print '  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--maxthreads] [--use-pinplay] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0]
+  print('Collect SIFT instruction trace')
+  print('Usage:')
+  print('  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--maxthreads] [--use-pinplay] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0])
   sys.exit(2)
 
 # From http://stackoverflow.com/questions/6767649/how-to-get-process-status-using-pid
@@ -59,9 +59,9 @@ if not sys.argv[1:]:
 
 try:
   opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "use-pinplay" ])
-except getopt.GetoptError, e:
+except getopt.GetoptError as e:
   # print help information and exit:
-  print e
+  print(e)
   usage()
 for o, a in opts:
   if o == '-h':
@@ -76,15 +76,15 @@ for o, a in opts:
   if o == '--roi-mpi':
     roi_mpi = True
   if o == '-f':
-    fastforward = long(float(a))
+    fastforward = int(float(a))
   if o == '-d':
-    detailed = long(float(a))
+    detailed = int(float(a))
   if o == '-b':
-    blocksize = long(float(a))
+    blocksize = int(float(a))
   if o == '-e':
-    syscallemulation = long(float(a))
+    syscallemulation = int(float(a))
   if o == '-s':
-    siftcountoffset = long(float(a))
+    siftcountoffset = int(float(a))
   if o == '-r':
     useresponsefiles = int(a) and 1 or 0
   if o == '--gdb':
@@ -108,7 +108,7 @@ for o, a in opts:
     use_routine_tracing = True
   if o == '--pinball':
     if not os.path.exists('%s.address' % a):
-      print >> sys.stderr, 'Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (a, a)
+      print('Unable to locate a pinball at (%s), make sure that (%s.address) exists.' % (a, a), file=sys.stderr)
       sys.exit(1)
     pinball = a
   if o == '--outputdir':
@@ -137,7 +137,7 @@ if not os.path.exists(outputdir):
   try:
     os.makedirs(outputdir)
   except OSError:
-    print >> sys.stderr, 'Failed to create output directory', outputdir
+    print('Failed to create output directory', outputdir, file=sys.stderr)
     sys.exit(-1)
 
 # Check for ability to use VA to PA translation
@@ -145,12 +145,12 @@ if use_pa:
   # If the Linux version is 4.0 or greater, and we don't have the CAP_SYS_ADMIN capability (bit 21), report an error
   output = subprocess.check_output("echo -n $(( $(uname -r | cut -d . -f 2) >= 4 && ((0x$(grep CapEff /proc/self/status | cut -f 2) >> 20) & 1) ))", shell=True)
   if '0' in output:
-    print >> sys.stderr, '[SIFT_RECORDER]', 'Unable to use physical address translation with this kernel and current user capabilities, aborting.'
+    print('[SIFT_RECORDER]', 'Unable to use physical address translation with this kernel and current user capabilities, aborting.', file=sys.stderr)
     sys.exit(1)
 
 configfile = os.path.join(HOME, 'config/sniper.py')
 config = {}
-execfile(configfile, {}, config)
+exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
 
 arch = config.get('target', 'intel64')
 
@@ -165,7 +165,7 @@ for d in ('sde_home', 'pin_home', 'dynamorio_home'):
   if not os.path.isdir(absdir):
     not_found.append('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
   else:
-    exec "%s = '%s'" % (d, absdir)
+    exec("%s = '%s'" % (d, absdir))
 if len(not_found) >= 3:
   for nf in not_found:
     sys.stderr.write(nf)
@@ -217,10 +217,10 @@ value_verbose = verbose and 1 or 0
 extra_tool_args = ' '.join(extra_tool_args)
 if frontend:
   if 'pin' in frontend:
-    print '[RECORD-TRACE] Using Pin frontend (frontend/pin-frontend)'
+    print('[RECORD-TRACE] Using Pin frontend (frontend/pin-frontend)')
     cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/frontend/pin-frontend/obj-%(arch)s/pin_frontend -verbose %(value_verbose)d -debug %(gdb_screen)d -roi %(value_roi)d -roi-mpi %(value_roi_mpi)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -pa %(value_pa)d -rtntrace %(value_routine_tracing)d -stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
   elif 'dr' in frontend:
-    print '[RECORD-TRACE] Using DynamoRIO frontend'
+    print('[RECORD-TRACE] Using DynamoRIO frontend')
     DRRUN = '%(dynamorio_home)s/bin64/drrun' % locals()
     DR_frontendlib = '%(HOME)s/frontend/dr-frontend/build/libdr-frontend.so' % locals()
     DR_libpath = 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%(dynamorio_home)s/lib64/debug' % locals()
@@ -237,29 +237,29 @@ if frontend:
   elif 'rv' in frontend:
     rv8_home = os.getenv('RV8_HOME')
     if not rv8_home:
-      print '[RECORD-TRACE] Error: RV8_HOME environment variable not set'
+      print('[RECORD-TRACE] Error: RV8_HOME environment variable not set')
       sys.exit(1)
     rv8_bin = os.path.join(rv8_home, 'build','linux_x86_64','bin','rv-jit')
     if not os.path.isfile(rv8_bin):
-      print '[RECORD-TRACE] Error: Could not find rv-jit at [%s]' % rv8_bin
+      print('[RECORD-TRACE] Error: Could not find rv-jit at [%s]' % rv8_bin)
       sys.exit(1)
     cmd = '%(rv8_bin)s --log-sift --log-sift-filename %(outputfile)s.app0.th0.sift %(frontend_options_str)s -- ' % locals() + ' '.join(cmdline)
   elif 'spike' in frontend:
     spike_home = os.getenv('RISCV')
     if not spike_home:
-      print '[RECORD-TRACE] Error: RISCV environment variable not set'
+      print('[RECORD-TRACE] Error: RISCV environment variable not set')
       sys.exit(1)
     spike_bin = os.path.join(spike_home,'bin','spike')
     pk_bin = os.path.join(spike_home,'riscv64-unknown-elf','bin','pk')
     if not os.path.isfile(spike_bin) or not os.path.isfile(pk_bin):
-      print '[RECORD-TRACE] Error: Could not find spike/pk at [%s][%s]' % (spike_bin, pk_bin)
+      print('[RECORD-TRACE] Error: Could not find spike/pk at [%s][%s]' % (spike_bin, pk_bin))
       sys.exit(1)
     cmd = '%(spike_bin)s --sift %(outputfile)s.app0.th0.sift %(frontend_options_str)s %(pk_bin)s ' % locals() + ' '.join(cmdline)
   else:
-    print '[RECORD-TRACE] Error: frontend %s not recognized' % frontend
+    print('[RECORD-TRACE] Error: frontend %s not recognized' % frontend)
     sys.exit(1)
 else:
-  print '[RECORD-TRACE] Using the Pin frontend (sift/recorder)'
+  print('[RECORD-TRACE] Using the Pin frontend (sift/recorder)')
   if not use_pinplay:
     sde_arch = '-use_host_cpuid'
     cmd = '%(sde_home)s/sde64 %(sde_arch)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s -- ' % locals() + ' '.join(cmdline)
@@ -268,7 +268,7 @@ else:
 
 
 if verbose:
-  print '[SIFT_RECORDER]', 'Running', cmd
+  print('[SIFT_RECORDER]', 'Running', cmd)
   sys.stdout.flush()
 if use_gdb:
   debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit)
