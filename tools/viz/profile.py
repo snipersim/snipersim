@@ -9,7 +9,7 @@ def mkdir_p(path):
   import errno
   try:
     os.makedirs(path)
-  except OSError, exc:
+  except OSError as exc:
     if exc.errno == errno.EEXIST and os.path.isdir(path):
       pass
     else: raise
@@ -21,7 +21,7 @@ def createJSONData(resultsdir, outputdir, verbose = False):
 
   prof = gen_profile.Profile(resultsdir)
   callgrindfile = os.path.join(profiledir, 'callgrind.out.sniper')
-  prof.writeCallgrind(file(callgrindfile, 'w'))
+  prof.writeCallgrind(open(callgrindfile, 'w'))
 
   gprof2dot_py = os.path.join(HOME, '..', 'gprof2dot.py')
   dotbasefile = os.path.join(profiledir, 'sim.profile')

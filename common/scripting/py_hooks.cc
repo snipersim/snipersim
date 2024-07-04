@@ -11,8 +11,8 @@ static SInt64 hookCallbackResult(PyObject *pResult)
    SInt64 result = -1;
    if (pResult == NULL)
       return -1;
-   else if (PyInt_Check(pResult))
-      result = PyInt_AsLong(pResult);
+   else if (PyLong_Check(pResult))
+      result = PyLong_AsLong(pResult);
    else if (PyLong_Check(pResult))
       result = PyLong_AsLong(pResult);
    Py_DECREF(pResult);
@@ -197,7 +197,7 @@ triggerHookMagicUser(PyObject *self, PyObject *args)
 
    UInt64 res = Sim()->getMagicServer()->Magic_unlocked(INVALID_THREAD_ID, INVALID_CORE_ID, SIM_CMD_USER, a, b);
 
-   return PyInt_FromLong(res);
+   return PyLong_FromLong(res);
 }
 
 static PyMethodDef PyHooksMethods[] = {
@@ -206,17 +206,27 @@ static PyMethodDef PyHooksMethods[] = {
    {NULL, NULL, 0, NULL} /* Sentinel */
 };
 
-void HooksPy::PyHooks::setup()
+static PyModuleDef PyHooksModule = {
+	PyModuleDef_HEAD_INIT,
+	"sim_hooks",
+	"",
+	-1,
+	PyHooksMethods,
+	NULL, NULL, NULL, NULL
+};
+
+PyMODINIT_FUNC PyInit_sim_hooks(void)
 {
-   PyObject *pModule = Py_InitModule("sim_hooks", PyHooksMethods);
+   PyObject *pModule = PyModule_Create(&PyHooksModule);
    PyObject *pHooks = PyDict_New();
    PyObject_SetAttrString(pModule, "hooks", pHooks);
 
    for(int i = 0; i < int(HookType::HOOK_TYPES_MAX); ++i) {
-      PyObject *pGlobalConst = PyInt_FromLong(i);
+      PyObject *pGlobalConst = PyLong_FromLong(i);
       PyObject_SetAttrString(pModule, HookType::hook_type_names[i], pGlobalConst);
       PyDict_SetItemString(pHooks, HookType::hook_type_names[i], pGlobalConst);
       Py_DECREF(pGlobalConst);
    }
    Py_DECREF(pHooks);
+   return pModule;
 }

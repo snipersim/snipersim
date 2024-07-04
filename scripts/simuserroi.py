@@ -13,7 +13,7 @@ class SimUserROI:
   def setup(self, args):
     roiscript = sim.config.get_bool('general/roi_script')
     if not roiscript:
-      print '[SimUserROI] ERROR: --roi-script is not set, but is required when using a start instruction count. Aborting'
+      print('[SimUserROI] ERROR: --roi-script is not set, but is required when using a start instruction count. Aborting')
       sim.control.abort()
       return
     sim.util.register_command(SIM_USER_ROI, self.set_roi)

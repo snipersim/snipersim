@@ -215,7 +215,7 @@ SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.7.0-2022-05-09-lin.ta
 PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpin3dwarf.so
 sde_kit: $(PIN_DEP)
 $(PIN_DEP):
-	$(_MSG) '[DOWNLO] SDE 9.7.0-2022-05-09'
+	$(_MSG) '[DOWNLO] SDE'
 	$(_CMD) mkdir -p $(SDE_HOME)
 	$(_CMD) wget -O $(shell basename $(SDE_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD)
 	$(_CMD) tar -x -f $(shell basename $(SDE_DOWNLOAD)) --auto-compress --strip-components 1 -C $(SDE_HOME)
@@ -232,14 +232,11 @@ pin: $(PIN_DEP)
 	@if [ "$$(tools/pinversion.py $(PIN_HOME) | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo; echo "Found Pin version $$(tools/pinversion.py $(PIN_HOME)) in $(PIN_HOME)"; echo "but at least revision $(PIN_REV_MINIMUM) is required."; echo; false; fi
 endif
 
-ifneq ($(NO_PYTHON_DOWNLOAD),1)
-PYTHON_DEP=python_kit/$(SNIPER_TARGET_ARCH)/lib/python2.7/lib-dynload/_sqlite3.so
+PYTHON_DEP=python_kit/$(SNIPER_TARGET_ARCH)/pyvenv.cfg
 python: $(PYTHON_DEP)
 $(PYTHON_DEP):
-	$(_MSG) '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
-	$(_CMD) mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "https://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
-endif
+	$(_MSG) '[INSTAL] Python virtualenv python_kit/$(SNIPER_TARGET_ARCH)'
+	$(_CMD) python3 -m venv python_kit/$(SNIPER_TARGET_ARCH)
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
 mcpat: mcpat/mcpat-1.0

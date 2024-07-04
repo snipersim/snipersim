@@ -50,5 +50,5 @@ set xlabel "Core"
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     out, err = p.communicate(''.join(gnuplot_cmd_list))
   except OSError:
-    print "Warning: Unable to run gnuplot to create cpi stack graphs.  Maybe gnuplot is not installed?"
+    print("Warning: Unable to run gnuplot to create cpi stack graphs.  Maybe gnuplot is not installed?")
 

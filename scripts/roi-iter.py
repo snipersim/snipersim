@@ -26,15 +26,15 @@ class RoiIter:
       # Only enable once, even if the benchmark has duplicate SimMarker()s
       return
     if a == 2 and b == self.end_detailed:
-      print '[SCRIPT] End of iteration %d: ending ROI' % b
+      print('[SCRIPT] End of iteration %d: ending ROI' % b)
       sim.control.set_roi(False)
       self.state = 'done'
     elif a == 1 and (b == self.start_detailed or (self.start_detailed == -1 and self.state != 'detailed')):
-      print '[SCRIPT] Start of iteration %d: beginning ROI' % b
+      print('[SCRIPT] Start of iteration %d: beginning ROI' % b)
       sim.control.set_roi(True)
       self.state = 'detailed'
     elif a == 1 and (b == self.start_warmup or (self.start_warmup == -1 and self.state == 'init')):
-      print '[SCRIPT] Start of iteration %d: going to WARMUP' % b
+      print('[SCRIPT] Start of iteration %d: going to WARMUP' % b)
       sim.control.set_instrumentation_mode(sim.control.WARMUP)
       self.state = 'warmup'
 

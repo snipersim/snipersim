@@ -23,7 +23,7 @@ Register an object as being a hooks listener.
 
 def register(obj):
 
-  for name, hook in sim.hooks.hooks.items():
+  for name, hook in list(sim.hooks.hooks.items()):
     func = getattr(obj, name.lower(), None)
     if func and callable(func):
       sim.hooks.register(hook, func)
@@ -132,9 +132,9 @@ class StatsDelta:
 
 class Every:
   def __init__(self, interval, callback, statsdelta = None, roi_only = True):
-    min_interval = long(sim.config.get('clock_skew_minimization/barrier/quantum')) * 1e6
+    min_interval = int(sim.config.get('clock_skew_minimization/barrier/quantum')) * 1e6
     if interval < min_interval:
-      print >> sys.stderr, 'sim.util.Every(): interval(%dns) < periodic callback(%dns), consider reducing clock_skew_minimization/barrier/quantum' % (interval/1e6, min_interval/1e6)
+      print('sim.util.Every(): interval(%dns) < periodic callback(%dns), consider reducing clock_skew_minimization/barrier/quantum' % (interval/1e6, min_interval/1e6), file=sys.stderr)
     self.interval = interval
     self.callback = callback
     self.statsdelta = statsdelta
@@ -169,9 +169,9 @@ class Every:
 
 class EveryIns:
   def __init__(self, interval, callback, roi_only = True):
-    min_interval = long(sim.config.get('core/hook_periodic_ins/ins_global'))
+    min_interval = int(sim.config.get('core/hook_periodic_ins/ins_global'))
     if interval < min_interval:
-      print >> sys.stderr, 'sim.util.EveryIns(): interval(%d) < periodic callback(>=%d), consider reducing core/hook_periodic_ins/ins_global' % (interval, min_interval)
+      print('sim.util.EveryIns(): interval(%d) < periodic callback(>=%d), consider reducing core/hook_periodic_ins/ins_global' % (interval, min_interval), file=sys.stderr)
     self.interval = interval
     self.callback = callback
     self.roi_only = roi_only
