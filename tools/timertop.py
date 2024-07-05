@@ -3,7 +3,7 @@
 import sys, os, subprocess, addr2line
 
 def ex(cmd):
-  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE, text=True).communicate()[0]
 
 if len(sys.argv) > 1:
   if sys.argv[1] == '-':
