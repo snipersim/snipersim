@@ -4,7 +4,7 @@ import sys, os, collections, subprocess, sniper_lib, sniper_config
 
 
 def ex_ret(cmd):
-  return subprocess.Popen(cmd, stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen(cmd, stdout = subprocess.PIPE, text=True).communicate()[0]
 def cppfilt(name):
   return ex_ret([ 'c++filt', name ])
 

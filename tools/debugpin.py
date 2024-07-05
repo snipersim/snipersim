@@ -11,7 +11,7 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
     sys.stdout.flush()
     sys.stderr.flush()
 
-  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env)
+  p_graphite = subprocess.Popen([ 'bash', '-c', cmd ], bufsize = 1, stdout = subprocess.PIPE, env = env, text=True)
   g_pid = 0
   g_symbols = []
   while True:

@@ -3,7 +3,7 @@
 import sys, os, subprocess, env_setup
 
 def ex(cmd):
-  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE, text=True).communicate()[0]
 
 class Addr2Line:
   def __init__(self, objname, marker_addr = 0, marker_name = '_Z5rdtscv'):

@@ -8,7 +8,7 @@ ic = iqclient.IntelClient()
 
 
 def ex_ret(cmd):
-  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE, text=True).communicate()[0]
 def git(args):
   return ex_ret('git --git-dir="%s/.git" %s' % (env_setup.sim_root(),args)).strip()
 

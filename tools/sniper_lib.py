@@ -319,7 +319,7 @@ class OutputToLess:
         return False
       data = self.stream.getvalue()
       if len(data) > 0:
-        less = subprocess.Popen([ 'less', '--no-init', '--quit-if-one-screen', '--chop-long-lines' ], stdin = subprocess.PIPE)
+        less = subprocess.Popen([ 'less', '--no-init', '--quit-if-one-screen', '--chop-long-lines' ], stdin = subprocess.PIPE, text=True)
         try:
           less.stdin.write(data)
           less.stdin.close()

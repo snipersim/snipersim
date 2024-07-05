@@ -3,7 +3,7 @@
 import sys, os, subprocess, re, tempfile, getopt, signal
 
 def ex(cmd):
-  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE, text=True).communicate()[0]
 
 def get_section_offsets(fn):
   obj_out = ex('objdump -h "%s"' % fn)
