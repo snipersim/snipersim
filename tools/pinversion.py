@@ -3,7 +3,7 @@
 import sys, os, re, subprocess
 
 def ex_ret(cmd):
-  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE, text=True).communicate()[0]
 
 def run_pin(pin_home):
   try:
@@ -20,7 +20,7 @@ else:
   pin_home = os.getenv('PIN_HOME')
 
 headerfile = None
-for filebase in ('source/include/pin/gen/cc_used_ia32_l.CVH', 'source/include/gen/cc_used_ia32_l.CVH'):
+for filebase in ('source/include/pin/pin_version.h', 'source/include/pin/gen/cc_used_ia32_l.CVH', 'source/include/gen/cc_used_ia32_l.CVH'):
   filename = os.path.join(pin_home, filebase)
   if os.path.exists(filename):
     headerfile = filename
