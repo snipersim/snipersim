@@ -94,7 +94,7 @@ def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = 
   def key_map(xxx_todo_changeme):
     (k, v) = xxx_todo_changeme
     return (k, len(v) if type(v) is list else 0)
-  allkeys = sum([ map(key_map, s.items()) for s in stats.values() ], [])
+  allkeys = sum([list(map(key_map, s.items())) for s in stats.values()], [])
   keyinfo = {}
   for key, length in allkeys:
     keyinfo[key] = max(keyinfo.get(key, 0), length)

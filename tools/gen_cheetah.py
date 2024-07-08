@@ -89,14 +89,14 @@ if __name__ == '__main__':
         sys.stderr.write('--partial=<from>:<to>\n')
         usage()
       partial = a.split(':')
-  if o == '-t':
-    title = a
-  if o == '-y':
-    yscale = 0, float(a)
-  if o == '--logy':
-    yscale = list(map(float, a.split(':')))
-    logy = True
-  if o == '--diff':
-    diff = True
+    if o == '-t':
+      title = a
+    if o == '-y':
+      yscale = 0, float(a)
+    if o == '--logy':
+      yscale = list(map(float, a.split(':')))
+      logy = True
+    if o == '--diff':
+      diff = True
 
   generate_cheetah(jobid = jobid, resultsdir = resultsdir, outputbase = outputbase, partial = partial, title = title, yscale = yscale, logy = logy, diff = diff)

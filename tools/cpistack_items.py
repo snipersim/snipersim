@@ -181,14 +181,14 @@ def color_tint_shade(base_color, num):
   colors = []
   delta = 0.6 / float((num/2) or 1)
   shade = 1.0
-  for _ in range(num/2):
+  for _ in range(num//2):
     shade -= delta
     colors.append((base_color[0],base_color[1],shade))
   colors = colors[::-1] # Reverse
   if num % 2 == 1:
     colors.append(base_color)
   tint = 1.0
-  for _ in range(num/2):
+  for _ in range(num//2):
     tint -= delta
     colors.append((base_color[0],tint,base_color[2]))
   colors = [colorsys.hsv_to_rgb(*x) for x in colors]

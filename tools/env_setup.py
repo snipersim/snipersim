@@ -1,4 +1,4 @@
-#!//usr/bin/env python
+#!//usr/bin/env python3
 
 import os, sys, errno
 
@@ -40,6 +40,7 @@ def benchmarks_root():
   benchtry.append(os.path.realpath(os.path.join(sniper_root(),'..','benchmarks','run-sniper')))
   benchtry.append(os.path.realpath(os.path.join(sniper_root(),'benchmarks','run-sniper')))
   benchtry.append(os.path.realpath(os.path.join(sniper_root(),'..','run-sniper')))
+  benchtry.append(os.path.realpath(os.path.join(sniper_root(),'run-sniper')))
 
   for bt in benchtry:
     if os.path.isfile(bt):

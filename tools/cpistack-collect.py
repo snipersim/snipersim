@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 
 import sys, os, env_setup
+
+#comment next lines bellow to run script anyway
+print("This script relies on Intel scripts to submit and collect sniper simualtions on a cluster, which not shipped with Sniper. Therefore, this script is not tested/updated for Python3 support", file=sys.stderr)
+exit(0)
+
 sys.path.append(os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler'))
 import getopt, intelqueue, iqclient, iqlib, cpistack, buildstack, gnuplot
 

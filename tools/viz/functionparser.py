@@ -13,7 +13,7 @@ import subprocess, io
 def cppfilt(name):
     args = ['c++filt']
     args.extend([name])
-    pipe = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    pipe = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     stdout, _ = pipe.communicate()
     return stdout.replace('\n','')			
 
