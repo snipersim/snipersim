@@ -356,7 +356,7 @@ def edit_XML(statsobj, stats, cfg):
       nuca_locations = [ lid for name, lid, mid in statsobj.get_topology() if name == 'nuca-cache' ]
       # Right now we only support NUCA slices at regular interleaving
       num_nucas = len(nuca_locations)
-      nuca_cacheSharedCores = ncores / num_nucas
+      nuca_cacheSharedCores = (ncores + num_nucas - 1) // num_nucas
       nuca_locations_assumed = [ i*nuca_cacheSharedCores for i in range(num_nucas) ]
       if nuca_locations != nuca_locations_assumed:
         raise ValueError('Unsupported tag directory locations %s' % cfg['perf_model/dram_directory/locations'])
@@ -396,7 +396,7 @@ def edit_XML(statsobj, stats, cfg):
   cycles_scale = stats['fs_to_cycles_cores']
   clock_core = float(sniper_config.get_config(cfg, 'perf_model/core/frequency', 0))*1000
   for core in range(ncores):
-	cycles_scale[core] = float(clock_core/1000000000)
+    cycles_scale[core] = float(clock_core/1000000000)
   instrs = stats['performance_model.instruction_count']
   times = stats['performance_model.elapsed_time']
   cycles = list(map(lambda c, t: c * t, cycles_scale[:ncores], times[:ncores]))

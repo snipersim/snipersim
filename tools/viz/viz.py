@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import os, sys, getopt, re, math, subprocess, json, shutil
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
@@ -64,12 +64,15 @@ if __name__ == '__main__':
       levels = a.split(',')
     if o == '--add-level':
       if a not in levels_all:
-	print('Invalid level', a)
-	sys.exit(1)
+        print('Invalid level', a)
+        sys.exit(1)
       levels.append(a)
     if o == '-v' or o == '--verbose':
       verbose = True
     if o == '-j':
+      #comment next lines bellow to run script anyway
+      print("This script relies on Intel scripts to submit and collect sniper simualtions on a cluster, which not shipped with Sniper. Therefore, this script is not tested/updated for Python3 support", file=sys.stderr)
+      # exit(0)
       import tempfile, binascii, iqclient
       jobid = int(a)
       dircleanup = tempfile.mkdtemp()

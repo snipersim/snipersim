@@ -91,7 +91,7 @@ class CpiData:
       }
       for k in self.stats:
         if k.startswith('interval_timer.cpContr_'):
-          if k not in cpContrMap.keys)):
+          if k not in cpContrMap.keys():
             print('Missing in cpContrMap: ', k)
       # Keep 1/width as base CPI component, break down the remainder according to critical path contributors
       BaseBest = instrs[core] / float(sniper_config.get_config(self.config, 'perf_model/core/interval_timer/dispatch_width', core))
