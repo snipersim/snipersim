@@ -20,6 +20,9 @@ PYTHON2=python2
 
 all: message dependencies $(SIM_TARGETS) configscripts
 
+#NOTE PINPLAY: This is not updated to the latest version: 1) SDE already contains pinplay, 2) the pinplay-driver (inside the pinplay_toolkit github) cannot easily be build for PIN. 3) The latest pinplay version has a bug preventing to read pinballs.
+#KNOWN ISSUE WITH SDE: It cannot run properly inside virtualbox
+
 # Check for errors. Only one value should be set
 TARGET_COUNT:=0
 # For Pin
@@ -48,7 +51,7 @@ $(error If using, set USE_SDE to "1", not "$(USE_SDE)")
 endif
 # Set the default if no values are set
 ifeq ($(TARGET_COUNT),0)
-# USE_PINPLAY=1
+# USE_PIN=1
 USE_SDE=1
 export USE_SDE #Makefile.config needs that variable
 else ifeq ($(TARGET_COUNT),1)
@@ -165,35 +168,31 @@ $(CAPSTONE_BUILD_DEP): $(CAPSTONE_INSTALL_DEP)
 	$(_CMD) cd $(CAPSTONE_INSTALL) ; ./make.sh
 
 
-MBUILD_GITID=1651029643b2adf139a8d283db51b42c3c884513
 MBUILD_INSTALL=$(SIM_ROOT)/mbuild
 MBUILD_INSTALL_DEP=$(MBUILD_INSTALL)/mbuild/arar.py
 mbuild: $(MBUILD_INSTALL_DEP)
 $(MBUILD_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] mbuild'
 	$(_CMD) git clone --quiet https://github.com/intelxed/mbuild.git $(MBUILD_INSTALL)
-	$(_CMD) git -C $(MBUILD_INSTALL) reset --quiet --hard $(MBUILD_GITID)
 
-XED_GITID=2be2d282939f6eb84e03e1fed9ba82f32c8bac2d
 XED_INSTALL_DEP=$(XED_INSTALL)/src/common/xed-init.c
 xed_install: $(XED_INSTALL_DEP)
 $(XED_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] xed'
 	$(_CMD) git clone --quiet https://github.com/intelxed/xed.git $(XED_INSTALL)
-	$(_CMD) git -C $(XED_INSTALL) reset --quiet --hard $(XED_GITID)
 
 XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
 xed: mbuild xed_install $(XED_DEP)
 $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_MSG) '[INSTAL] xed'
-	$(_CMD) cd $(XED_INSTALL) ; $(PYTHON2) ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
+	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
 
 ifneq (,$(USE_PIN))
-PIN_DOWNLOAD=https://snipersim.org/packages/pin-3.22-98547-g7a303a835-gcc-linux.tar.gz
-PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
+PIN_DOWNLOAD=https://software.intel.com/sites/landingpage/pintool/downloads/pin-external-3.31-98861-g71afcc22f-gcc-linux.tar.gz
+PIN_DEP=$(PIN_HOME)/intel64/lib/libpindwarf.so
 $(PIN_ROOT): $(PIN_DEP)
 $(PIN_DEP):
-	$(_MSG) '[DOWNLO] Pin 3.22-98547'
+	$(_MSG) '[DOWNLO] Pin'
 	$(_CMD) mkdir -p $(PIN_HOME)
 	$(_CMD) wget -O $(shell basename $(PIN_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(PIN_DOWNLOAD)
 	$(_CMD) tar -x -f $(shell basename $(PIN_DOWNLOAD)) --auto-compress --strip-components 1 -C $(PIN_HOME)

@@ -2,6 +2,7 @@
 #define CIRCULAR_QUEUE_H
 
 #include <assert.h>
+#include <iterator>
 #include <string.h>
 
 template <class T> class CircularQueue
@@ -16,12 +17,18 @@ template <class T> class CircularQueue
 
    public:
       typedef T value_type;
-      class iterator : public std::iterator<std::forward_iterator_tag, T, std::ptrdiff_t, const T*, const T&>
+      class iterator
       {
          private:
             CircularQueue &_queue;
             UInt32 _idx;
          public:
+	    using iterator_category = std::forward_iterator_tag;
+	    using difference_type = std::ptrdiff_t;
+	    using value_type = T;
+	    using pointer = const T*;
+	    using reference = const T&;
+
             iterator(CircularQueue &queue, UInt32 idx) : _queue(queue), _idx(idx) {}
             T& operator*() const { return _queue.at(_idx); }
             T* operator->() const { return &_queue.at(_idx); }
