@@ -248,9 +248,7 @@ mcpat/main.cc:
 mcpat: mcpat/mcpat-1.0
 mcpat/mcpat-1.0: mcpat/main.cc
 	$(_MSG) '[INSTAL] mcpat'
-	$(_CMD) touch mcpat/cacti/io.cc
 	$(_CMD) SUFFIX=-1.0 make -C mcpat
-	$(_CMD) touch mcpat/cacti/io.cc
 	$(_CMD) SUFFIX=-1.0.cache CACHE=1 make -C mcpat
 endif
 
@@ -299,6 +297,9 @@ clean: empty_config empty_deps
 	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C frontend/pin-frontend clean ; fi
 	$(_MSG) '[CLEAN ] frontend/dr-frontend'
 	$(_CMD) if [ -d "$(SIM_ROOT)/frontend/dr-frontend/build" ]; then rm -rf $(SIM_ROOT)/frontend/dr-frontend/build ; fi
+	$(_MSG) '[CLEAN ] McPat'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) SUFFIX=-1.0 -C mcpat clean
+	$(_CMD) $(MAKE) $(MAKE_QUIET) SUFFIX=-1.0.cache -C mcpat clean
 	$(_CMD) rm -f .build_os
 
 distclean: clean
