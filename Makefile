@@ -221,7 +221,7 @@ $(PIN_DEP):
 	$(_CMD) rm $(shell basename $(SDE_DOWNLOAD))
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-tools'
-	$(_CMD) git submoulde update --init --quiet $(SDE_HOME)/pinplay-tools
+	$(_CMD) git submodule update --init --quiet $(SDE_HOME)/pinplay-tools
 $(PIN_ROOT): sde_kit
 endif
 
@@ -298,8 +298,8 @@ clean: empty_config empty_deps
 	$(_MSG) '[CLEAN ] frontend/dr-frontend'
 	$(_CMD) if [ -d "$(SIM_ROOT)/frontend/dr-frontend/build" ]; then rm -rf $(SIM_ROOT)/frontend/dr-frontend/build ; fi
 	$(_MSG) '[CLEAN ] McPat'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) SUFFIX=-1.0 -C mcpat clean
-	$(_CMD) $(MAKE) $(MAKE_QUIET) SUFFIX=-1.0.cache -C mcpat clean
+	$(_CMD) if [ -e mcpat/makefile ]; then $(MAKE) $(MAKE_QUIET) SUFFIX=-1.0 -C mcpat clean; fi
+	$(_CMD) if [ -e mcpat/makefile ]; then $(MAKE) $(MAKE_QUIET) SUFFIX=-1.0.cache -C mcpat clean; fi
 	$(_CMD) rm -f .build_os
 
 distclean: clean
@@ -307,7 +307,7 @@ distclean: clean
 	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
 	$(_CMD) if [ -e "pin_kit/.autodownloaded" ]; then rm -rf pin_kit; fi
 	$(_MSG) '[DISTCL] SDE kit'
-	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then git submodule deinit --quiet -f $(SDE_HOME)/pinplay-tools; find $(SDE_HOME) ! -name 'pinplay-tools' -delete; fi
+	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then git submodule deinit --quiet -f $(SDE_HOME)/pinplay-tools; find $(SDE_HOME)/ -mindepth 1 -not -name 'pinplay-tools' -exec rm -rf {} \; 2> /dev/null || true ; fi
 	$(_MSG) '[DISTCL] Capstone'
 	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then git submodule deinit --quiet -f capstone; fi
 	$(_MSG) '[DISTCL] DynamoRIO'
