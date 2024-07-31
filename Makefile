@@ -221,7 +221,7 @@ $(PIN_DEP):
 	$(_CMD) rm $(shell basename $(SDE_DOWNLOAD))
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-tools'
-	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools
+	$(_CMD) git submoulde update --init --quiet $(SDE_HOME)/pinplay-tools
 $(PIN_ROOT): sde_kit
 endif
 
@@ -307,7 +307,7 @@ distclean: clean
 	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
 	$(_CMD) if [ -e "pin_kit/.autodownloaded" ]; then rm -rf pin_kit; fi
 	$(_MSG) '[DISTCL] SDE kit'
-	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then rm -rf $(SDE_HOME); fi
+	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then git submodule deinit --quiet -f $(SDE_HOME)/pinplay-tools; find $(SDE_HOME) ! -name 'pinplay-tools' -delete; fi
 	$(_MSG) '[DISTCL] Capstone'
 	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then git submodule deinit --quiet -f capstone; fi
 	$(_MSG) '[DISTCL] DynamoRIO'
