@@ -13,3 +13,6 @@
 [submodule "mcpat"]
 	path = mcpat
 	url = https://github.com/JaimeRoelandts/McPat_Sniper
+[submodule "sde_kit/pinplay-tools"]
+	path = sde_kit/pinplay-tools
+	url = https://github.com/intel/pinplay-tools.git

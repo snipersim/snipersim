@@ -83,7 +83,8 @@ riscv/riscv-tools
 riscv/rv8
 riscv/Speckle
 xed_kit
-sde_kit
+sde_kit/*
+!sde_kit/pinplay-tools
 
 # packages
 graphite-*.tar.bz2
