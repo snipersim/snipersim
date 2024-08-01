@@ -55,6 +55,6 @@ RUN apt-get update && apt-get install -y \
     gdb \
     gfortran \
     git \
-    g++-9 \
+    g++ \
     vim \
  && rm -rf /var/lib/apt/lists/*
