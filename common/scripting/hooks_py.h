@@ -20,6 +20,7 @@ class HooksPy {
       static PyObject * callPythonFunction(PyObject *pFunc, PyObject *pArgs);
    private:
       static std::string get_root();
+      static void run_python_file_with_argv(const std::string &filename, const std::string &argv_str);
       static bool pyInit;
 
       static PyThreadState *_save;
