@@ -21,6 +21,8 @@ class HooksPy {
    private:
       static std::string get_root();
       static bool pyInit;
+
+      static PyThreadState *_save;
 };
 
 PyMODINIT_FUNC PyInit_sim_config(void);
