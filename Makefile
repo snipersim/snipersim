@@ -307,7 +307,7 @@ distclean: clean
 	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
 	$(_CMD) if [ -e "pin_kit/.autodownloaded" ]; then rm -rf pin_kit; fi
 	$(_MSG) '[DISTCL] SDE kit'
-	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then git submodule deinit --quiet -f $(SDE_HOME)/pinplay-tools; find $(SDE_HOME)/ -mindepth 1 -not -name 'pinplay-tools' -exec rm -rf {} \; 2> /dev/null || true ; fi
+	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" -a -e "$(SDE_HOME)/sde" ]; then git submodule deinit --quiet -f $(SDE_HOME)/pinplay-tools; find $(SDE_HOME)/ -mindepth 1 -not -name 'pinplay-tools' -exec rm -rf {} \; 2> /dev/null || true ; fi
 	$(_MSG) '[DISTCL] Capstone'
 	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then git submodule deinit --quiet -f capstone; fi
 	$(_MSG) '[DISTCL] DynamoRIO'
