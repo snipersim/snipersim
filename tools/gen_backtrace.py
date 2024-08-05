@@ -10,9 +10,9 @@ if len(sys.argv) > 1:
 else:
   data = open('debug_backtrace.out', "r")
 
-objname = data.next().strip()
+objname = next(data).strip()
 marker = int(next(data))
-backtrace = data.next().split()
+backtrace = next(data).split()
 message = next(data)
 
 if objname == 'sniper':

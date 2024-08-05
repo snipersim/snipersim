@@ -3,6 +3,7 @@
 
 #include <decoder.h>
 #include <vector>
+#include <cstdint>
 
 //extern "C" {
 //#include <xed-reg-enum.h>
