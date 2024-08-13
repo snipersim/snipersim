@@ -18,10 +18,14 @@ class HooksPy {
       static void fini(void);
 
       static PyObject * callPythonFunction(PyObject *pFunc, PyObject *pArgs);
+
+      static void prepare_abort();
+      static bool need_to_abort();
    private:
       static std::string get_root();
       static void run_python_file_with_argv(const std::string &filename, const std::string &argv_str);
       static bool pyInit;
+      static bool abort;
 
       static PyThreadState *_save;
 };

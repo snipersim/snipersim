@@ -55,16 +55,9 @@ setProgress(PyObject *self, PyObject *args)
 static PyObject *
 simulatorAbort(PyObject *self, PyObject *args)
 {
-   // Exit now, cleaning up as best as possible
-   // For benchmarks where, after ROI, functionally simulating until the end takes too long.
-
-   // If we're still in ROI, make sure we end it properly
-   Sim()->getMagicServer()->setPerformance(false);
-
-   LOG_PRINT("Application exit.");
-   Simulator::release();
-
-   exit(0);
+   //cannot Abort here, because we have the GIL, and it is needed to release the python interpreter, so set a flag instead, and wait once we come back from the callback.
+   HooksPy::prepare_abort();
+   Py_RETURN_NONE;
 }
 
 static PyMethodDef PyControlMethods[] = {
