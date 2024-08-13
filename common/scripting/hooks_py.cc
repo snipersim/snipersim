@@ -3,6 +3,7 @@
 #include "config.hpp"
 
 bool HooksPy::pyInit = false;
+bool HooksPy::abort = false;
 PyThreadState* HooksPy::_save = NULL;
 
 void HooksPy::init()
@@ -158,4 +159,12 @@ PyObject * HooksPy::callPythonFunction(PyObject *pFunc, PyObject *pArgs)
       PyErr_Print();
    }
    return pResult;
+}
+
+void HooksPy::prepare_abort(){
+	HooksPy::abort = true;
+}
+
+bool HooksPy::need_to_abort(){
+	return HooksPy::abort;
 }
