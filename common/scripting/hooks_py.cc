@@ -148,7 +148,7 @@ void HooksPy::fini()
    if (pyInit){
       PyEval_RestoreThread(HooksPy::_save);
 //BUG? Python 3.12 hangs on this function, while we have the GIL
-#if PY_MAJOR_VERSION == 3 || PY_MINOR_VERSION < 12
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 12
       Py_FinalizeEx();
 #endif
    }
