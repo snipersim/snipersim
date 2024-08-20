@@ -3,6 +3,7 @@
 #include "config.hpp"
 
 bool HooksPy::pyInit = false;
+bool HooksPy::abort = false;
 PyThreadState* HooksPy::_save = NULL;
 
 void HooksPy::init()
@@ -146,7 +147,10 @@ void HooksPy::fini()
 {
    if (pyInit){
       PyEval_RestoreThread(HooksPy::_save);
+//BUG? Python 3.12 hangs on this function, while we have the GIL
+#if PY_MAJOR_VERSION == 3 || PY_MINOR_VERSION < 12
       Py_FinalizeEx();
+#endif
    }
 }
 
@@ -158,4 +162,12 @@ PyObject * HooksPy::callPythonFunction(PyObject *pFunc, PyObject *pArgs)
       PyErr_Print();
    }
    return pResult;
+}
+
+void HooksPy::prepare_abort(){
+	HooksPy::abort = true;
+}
+
+bool HooksPy::need_to_abort(){
+	return HooksPy::abort;
 }
