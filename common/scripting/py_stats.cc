@@ -50,7 +50,7 @@ statsGetterGet(PyObject *self, PyObject *args, PyObject *kw)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static PyTypeObject statsGetterType = {
-   PyVarObject_HEAD_INIT(NULL, 0)
+   .ob_base = PyVarObject_HEAD_INIT(NULL, 0)
    .tp_name = "statsGetter",
    .tp_basicsize = sizeof(statsGetterObject),
    .tp_call = statsGetterGet,
