@@ -4,7 +4,6 @@ import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint,
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
 import sniper_lib, sniper_config, gen_simout, debugpin, env_setup, run_sniper
 
-
 HOME = env_setup.sim_root()
 
 
