@@ -71,7 +71,9 @@ $(error If using, set USE_SDE to "1", not "$(USE_SDE)")
 endif
 # Set the default if no values are set
 ifeq ($(TARGET_COUNT),0)
-USE_PINPLAY=1
+USE_PIN=1
+# USE_SDE=1
+# export USE_SDE #Makefile.config needs that variable
 else ifeq ($(TARGET_COUNT),1)
 # Input is valid. Use user-supplied default
 else
@@ -131,13 +133,12 @@ $(LIB_SIFT): $(LIB_CARBON)
 $(LIB_DECODER): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/decoder_lib 
 
-DYNAMORIO_GITID=246ddb28e7848b2d09d2b9909f99a6da9b2ce35e
+# DYNAMORIO_GITID=246ddb28e7848b2d09d2b9909f99a6da9b2ce35e
 DYNAMORIO_INSTALL=$(SIM_ROOT)/dynamorio
 DYNAMORIO_INSTALL_DEP=$(DYNAMORIO_INSTALL)/CMakeLists.txt
 $(DYNAMORIO_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] dynamorio'
-	$(_CMD) git clone --quiet --recursive https://github.com/DynamoRIO/dynamorio.git $(DYNAMORIO_INSTALL)
-	$(_CMD) git -C $(DYNAMORIO_INSTALL) reset --quiet --hard $(DYNAMORIO_GITID)
+	$(_CMD) git submodule update --init --recursive --quiet dynamorio
 	$(_CMD) touch $(DYNAMORIO_INSTALL)/.autodownloaded
 
 DYNAMORIO_BUILD_DEP=$(DYNAMORIO_INSTALL)/build/bin64/drrun
@@ -147,13 +148,12 @@ $(DYNAMORIO_BUILD_DEP): $(DYNAMORIO_INSTALL_DEP)
 	$(_CMD) if [ ! -e "$(SIM_ROOT)/dynamorio/build/Makefile" ]; then cd dynamorio && mkdir build && cd build && cmake -DDEBUG=ON .. ; fi
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C dynamorio/build
 
-CAPSTONE_GITID=f9c6a90489be7b3637ff1c7298e45efafe7cf1b9
+# CAPSTONE_GITID=f9c6a90489be7b3637ff1c7298e45efafe7cf1b9
 CAPSTONE_INSTALL=$(SIM_ROOT)/capstone
 CAPSTONE_INSTALL_DEP=$(CAPSTONE_INSTALL)/arch/AArch64/ARMMappingInsnOp.inc
 $(CAPSTONE_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] capstone'
-	$(_CMD) git clone --quiet https://github.com/aquynh/capstone.git $(CAPSTONE_INSTALL)
-	$(_CMD) git -C $(CAPSTONE_INSTALL) reset --quiet --hard $(CAPSTONE_GITID)
+	$(_CMD) git submodule update --init --quiet capstone
 	$(_CMD) touch $(CAPSTONE_INSTALL)/.autodownloaded
 
 CAPSTONE_BUILD_DEP=$(CAPSTONE_INSTALL)/libcapstone.so.4
@@ -169,16 +169,15 @@ MBUILD_INSTALL_DEP=$(MBUILD_INSTALL)/mbuild/arar.py
 mbuild: $(MBUILD_INSTALL_DEP)
 $(MBUILD_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] mbuild'
-	$(_CMD) git clone --quiet https://github.com/intelxed/mbuild.git $(MBUILD_INSTALL)
-	$(_CMD) git -C $(MBUILD_INSTALL) reset --quiet --hard $(MBUILD_GITID)
+	$(_CMD) git submodule update --init --quiet mbuild
+	$(_CMD) 
 
 XED_GITID=2be2d282939f6eb84e03e1fed9ba82f32c8bac2d
 XED_INSTALL_DEP=$(XED_INSTALL)/src/common/xed-init.c
 xed_install: $(XED_INSTALL_DEP)
 $(XED_INSTALL_DEP):
 	$(_MSG) '[DOWNLO] xed'
-	$(_CMD) git clone --quiet https://github.com/intelxed/xed.git $(XED_INSTALL)
-	$(_CMD) git -C $(XED_INSTALL) reset --quiet --hard $(XED_GITID)
+	$(_CMD) git submodule update --init --quiet xed
 
 XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
 xed: mbuild xed_install $(XED_DEP)
@@ -242,11 +241,17 @@ $(PYTHON_DEP):
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
-mcpat: mcpat/mcpat-1.0
-mcpat/mcpat-1.0:
+mcpat/main.cc:
 	$(_MSG) '[DOWNLO] McPAT'
-	$(_CMD) mkdir -p mcpat
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
+	$(_CMD) git submodule update --init --quiet mcpat
+
+mcpat: mcpat/mcpat-1.0
+mcpat/mcpat-1.0: mcpat/main.cc
+	$(_MSG) '[INSTAL] mcpat'
+	$(_CMD) touch mcpat/cacti/io.cc
+	$(_CMD) SUFFIX=-1.0 make -C mcpat
+	$(_CMD) touch mcpat/cacti/io.cc
+	$(_CMD) SUFFIX=-1.0.cache CACHE=1 make -C mcpat
 endif
 
 linux: include/linux/perf_event.h
@@ -303,15 +308,16 @@ distclean: clean
 	$(_MSG) '[DISTCL] SDE kit'
 	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then rm -rf $(SDE_HOME); fi
 	$(_MSG) '[DISTCL] Capstone'
-	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then rm -rf $(CAPSTONE_INSTALL); fi
+	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then git submodule deinit --quiet -f capstone; fi
 	$(_MSG) '[DISTCL] DynamoRIO'
-	$(_CMD) if [ -e "$(DYNAMORIO_INSTALL)/.autodownloaded" ]; then rm -rf $(DYNAMORIO_INSTALL); fi
+	$(_CMD) if [ -e "$(DYNAMORIO_INSTALL)/.autodownloaded" ]; then git submodule deinit --quiet -f dynamorio; fi
 	$(_MSG) '[DISTCL] python_kit'
 	$(_CMD) rm -rf python_kit
 	$(_MSG) '[DISTCL] McPAT'
-	$(_CMD) rm -rf mcpat
+	$(_CMD) git submodule deinit --quiet -f mcpat
 	$(_MSG) '[DISTCL] Xed'
-	$(_CMD) rm -rf xed xed_kit mbuild
+	$(_CMD) git submodule deinit --quiet -f xed mbuild
+	$(_CMD) rm -rf xed_kit
 	$(_MSG) '[DISTCL] perf_event.h'
 	$(_CMD) rm -f include/linux/perf_event.h
 
