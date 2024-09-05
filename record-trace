@@ -156,7 +156,7 @@ execfile(configfile, {}, config)
 arch = config.get('target', 'intel64')
 
 if use_pinplay == False and  os.path.isfile('%s/sift/recorder/obj-%s/sift_recorder' %(HOME, arch)) and \
-    not os.path.isfile('%s/sift/recorder/obj-%s/sde_sift_recorder' %(HOME, arch)):
+    not os.path.isfile('%s/sift/recorder/obj-%s/sde_sift_recorder.so' %(HOME, arch)):
   use_pinplay = True
 
 # convert paths in config to absolute paths

@@ -34,7 +34,7 @@ DramDirectoryCache::DramDirectoryCache(
 
 DramDirectoryCache::~DramDirectoryCache()
 {
-   delete m_replacement_ptrs;
+   delete[] m_replacement_ptrs;
    delete m_directory;
 }
 
