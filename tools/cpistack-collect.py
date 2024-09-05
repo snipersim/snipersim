@@ -1,6 +1,11 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, env_setup
+
+#comment next lines bellow to run script anyway
+print("This script relies on Intel scripts to submit and collect sniper simualtions on a cluster, which not shipped with Sniper. Therefore, this script is not tested/updated for Python3 support", file=sys.stderr)
+exit(0)
+
 sys.path.append(os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler'))
 import getopt, intelqueue, iqclient, iqlib, cpistack, buildstack, gnuplot
 
@@ -21,7 +26,7 @@ for job in ic.job_list(groupname, age*86400, intelqueue.JobState.DONE):
   jobids[job['name']] = job['jobid']
 
 # Sort the jobs
-jobids_x = sorted(jobids.iteritems(), key=lambda (name, jobid): (name.split('-')[1], name.split('-')[2], name.split('-')[3], int(name.split('-')[4])))
+jobids_x = sorted(iter(jobids.items()), key=lambda name_jobid: (name_jobid[0].split('-')[1], name_jobid[0].split('-')[2], name_jobid[0].split('-')[3], int(name_jobid[0].split('-')[4])))
 
 html_file = open(os.path.join(outputpath, 'index.html'), 'w')
 html_file.write(r'''
@@ -58,11 +63,11 @@ function hideAllDiv() {
 ''')
 
 # Start with a fresh CSV file
-file(os.path.join(outputpath, 'cpi-stack.csv'), 'w').write('')
+open(os.path.join(outputpath, 'cpi-stack.csv'), 'w').write('')
 
 csv_print_header = True # Only print the header one time
 for (jobname, jobid) in jobids_x:
-  print jobname, jobid
+  print(jobname, jobid)
 
   def output(jobname, threads):
     global csv_print_header, jobs_processed, errors_seen
@@ -74,7 +79,7 @@ for (jobname, jobid) in jobids_x:
       cpistack.cpistack(jobid = jobid, job_name = jobname, outputfile = outputfile + '-nocollapse', outputdir = outputpath, use_simple_mem = False, gen_text_stack = False, use_cpi = False, no_collapse = True, gen_csv_stack = True, csv_print_header = csv_print_header, threads = threads)
       csv_print_header = False
       jobs_processed += 1
-    except (KeyError, ZeroDivisionError), e:
+    except (KeyError, ZeroDivisionError) as e:
       raise
       errors_seen += 1
       # For debugging
@@ -99,13 +104,13 @@ for (jobname, jobid) in jobids_x:
   if 'parsec-dedup' in jobname:
     nthreads = int(jobname.split('-')[-1]) / 4
     names = ['ChunkProcess', 'FindAllAnchors', 'Compress']
-    ttt = [range(1,1+nthreads),range(1+nthreads,1+2*nthreads),range(1+2*nthreads,1+3*nthreads)]
+    ttt = [list(range(1,1+nthreads)),list(range(1+nthreads,1+2*nthreads)),list(range(1+2*nthreads,1+3*nthreads))]
     for name, threads in zip(names, ttt):
       output(jobname.replace('dedup', 'dedup_%s' % name), threads)
   elif 'parsec-ferret' in jobname:
     nthreads = (int(jobname.split('-')[-1]) - 3) / 4
     names = ['vec', 'rank']
-    ttt = [range(2+2*nthreads,2+3*nthreads),range(2+3*nthreads,2+4*nthreads)]
+    ttt = [list(range(2+2*nthreads,2+3*nthreads)),list(range(2+3*nthreads,2+4*nthreads))]
     for name, threads in zip(names, ttt):
       output(jobname.replace('ferret', 'ferret_%s' % name), threads)
   else:
@@ -117,6 +122,6 @@ html_file.write(r'''
 ''')
 html_file.close()
 
-print '\nJobs successfully processed = %d' % jobs_processed
+print('\nJobs successfully processed = %d' % jobs_processed)
 if errors_seen > 0:
-  print 'Errors seen = %d' % errors_seen
+  print('Errors seen = %d' % errors_seen)

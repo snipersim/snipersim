@@ -4,7 +4,8 @@ class SniperStatsCompat(sniper_stats.SniperStatsBase):
   def __init__(self, resultsdir):
     self.resultsdir = resultsdir
 
-  def parse_stats(self, (k1, k2), ncores, metrics = None):
+  def parse_stats(self, xxx_todo_changeme, ncores, metrics = None):
+    (k1, k2) = xxx_todo_changeme
     simstats = os.path.join(self.resultsdir, 'sim.stats')
     simstats = os.path.exists(simstats) and open(simstats) or None
 
@@ -18,9 +19,9 @@ class SniperStatsCompat(sniper_stats.SniperStatsBase):
     stats = {}
     for line in (simstatsdelta or simstats):
       if line.startswith(k1+'.'):
-        stats_begin[line.split()[0][len(k1+'.'):]] = long(line.split()[1])
+        stats_begin[line.split()[0][len(k1+'.'):]] = int(line.split()[1])
       if line.startswith(k2+'.'):
-        stats[line.split()[0][len(k2+'.'):]] = long(line.split()[1])
+        stats[line.split()[0][len(k2+'.'):]] = int(line.split()[1])
 
     if simstatsbase:
       # End stats may not be empty, check before adding the defaults

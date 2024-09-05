@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os, sys, math, re, collections, buildstack, gnuplot, getopt, pprint, sniper_lib, sniper_config, sniper_stats
 import math
@@ -36,7 +36,7 @@ def power2up(num):
   if hob != orig_num:
     hob = hob << 1
     if orig_num not in power2up_warnings:
-      print '[mcpat.py] Warning: McPAT requires inputs that are powers of two for some parameters. Increasing %d to %d.' % (orig_num, hob)
+      print('[mcpat.py] Warning: McPAT requires inputs that are powers of two for some parameters. Increasing %d to %d.' % (orig_num, hob))
       power2up_warnings[orig_num] = True
   return hob
 
@@ -129,18 +129,18 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
 
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   if config:
-    results['config'] = sniper_config.parse_config(file(config).read(), results['config'])
+    results['config'] = sniper_config.parse_config(open(config, "r").read(), results['config'])
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
 
   power, nuca_at_level = edit_XML(stats, results['results'], results['config'])
-  power = map(lambda v: v[0], power)
-  file(tempfile, "w").write('\n'.join(power))
+  power = [v[0] for v in power]
+  open(tempfile, "w").write('\n'.join(power))
 
   # Run McPAT
   mcpat_run(tempfile, outputfile + '.txt')
 
   # Parse output
-  power_txt = file(outputfile + '.txt')
+  power_txt = open(outputfile + '.txt')
   power_dat = {}
 
   components = power_txt.read().split('*'*89)[2:-1]
@@ -164,7 +164,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
             try:
               value = float(res.group(2))
             except:
-              print >> sys.stderr, 'Invalid float:', line, res.groups()
+              print('Invalid float:', line, res.groups(), file=sys.stderr)
               raise
           values[name] = value
       else:
@@ -204,7 +204,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
     'Area': 0,
   }
   # Write back
-  file(outputfile + '.py', 'w').write("power = " + pprint.pformat(power_dat))
+  open(outputfile + '.py', 'w').write("power = " + pprint.pformat(power_dat))
 
 
   # Build stack
@@ -218,13 +218,13 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
   plot_data = {}
   if powertype == 'area':
     if print_stack:
-      print '                         Area    Area %'
+      print('                         Area    Area %')
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
       total_core = 0.; total_cache = 0.
       for name, value in res:
         if print_stack:
-          print '  %-12s    %6.2f mm^2   %6.2f%%' % (name, float(value), 100 * float(value) / total)
+          print('  %-12s    %6.2f mm^2   %6.2f%%' % (name, float(value), 100 * float(value) / total))
         if name.startswith('core'):
           total_core += float(value)
         elif name in ('icache', 'dcache', 'l2', 'l3', 'nuca'):
@@ -232,20 +232,20 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
         plot_labels.append(name)
         plot_data[core][name] = float(value)
       if print_stack:
-        print
-        print '  %-12s    %6.2f mm^2   %6.2f%%' % ('core', float(total_core), 100 * float(total_core) / total)
-        print '  %-12s    %6.2f mm^2   %6.2f%%' % ('cache', float(total_cache), 100 * float(total_cache) / total)
-        print '  %-12s    %6.2f mm^2   %6.2f%%' % ('total', float(total), 100 * float(total) / total)
+        print()
+        print('  %-12s    %6.2f mm^2   %6.2f%%' % ('core', float(total_core), 100 * float(total_core) / total))
+        print('  %-12s    %6.2f mm^2   %6.2f%%' % ('cache', float(total_cache), 100 * float(total_cache) / total))
+        print('  %-12s    %6.2f mm^2   %6.2f%%' % ('total', float(total), 100 * float(total) / total))
   else:
     if print_stack:
-      print '                     Power     Energy    Energy %'
+      print('                     Power     Energy    Energy %')
     for core, (res, total, other, scale) in results.items():
       plot_data[core] = {}
       total_core = 0.; total_cache = 0.
       for name, value in res:
         if print_stack:
           energy, energy_scale = sniper_lib.scale_sci(float(value) * seconds)
-          print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % (name, float(value), energy, energy_scale, 100 * float(value) / total)
+          print('  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % (name, float(value), energy, energy_scale, 100 * float(value) / total))
         if name.startswith('core'):
           total_core += float(value)
         elif name in ('icache', 'dcache', 'l2', 'l3', 'nuca'):
@@ -253,19 +253,19 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
         plot_labels.append(name)
         plot_data[core][name] = float(value) * seconds
       if print_stack:
-        print
+        print()
         energy, energy_scale = sniper_lib.scale_sci(float(total_core) * seconds)
-        print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('core', float(total_core), energy, energy_scale, 100 * float(total_core) / total)
+        print('  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('core', float(total_core), energy, energy_scale, 100 * float(total_core) / total))
         energy, energy_scale = sniper_lib.scale_sci(float(total_cache) * seconds)
-        print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('cache', float(total_cache), energy, energy_scale, 100 * float(total_cache) / total)
+        print('  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('cache', float(total_cache), energy, energy_scale, 100 * float(total_cache) / total))
         energy, energy_scale = sniper_lib.scale_sci(float(total) * seconds)
-        print '  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('total', float(total), energy, energy_scale, 100 * float(total) / total)
+        print('  %-12s    %6.2f W   %6.2f %sJ    %6.2f%%' % ('total', float(total), energy, energy_scale, 100 * float(total) / total))
 
   if not no_graph:
     # Use Gnuplot to make a stacked bargraphs of these cpi-stacks
     if 'other' in plot_labels:
       all_names.append('other')
-    all_names_with_colors = zip(all_names, range(1,len(all_names)+1))
+    all_names_with_colors = list(zip(all_names, list(range(1,len(all_names)+1))))
     plot_labels_with_color = [n for n in all_names_with_colors if n[0] in plot_labels]
     gnuplot.make_stacked_bargraph(outputfile, plot_labels_with_color, plot_data, 'Energy (J)')
 
@@ -333,12 +333,12 @@ def edit_XML(statsobj, stats, cfg):
   ncores = int(cfg['general/total_cores'])
   technology_node = int(sniper_config.get_config_default(cfg, 'power/technology_node', 45))
 
-  l3_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
-  l2_cacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
+  l3_cacheSharedCores = int(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
+  l2_cacheSharedCores = int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
   nuca_at_level = False
   private_l2s = True
 
-  if long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0)) > 0:
+  if int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0)) > 0:
     num_l2s = int(math.ceil(ncores / float(l2_cacheSharedCores)))
     private_l2s = int(sniper_config.get_config(cfg, 'perf_model/l2_cache/shared_cores')) == 1
   else:
@@ -347,7 +347,7 @@ def edit_XML(statsobj, stats, cfg):
   if int(cfg['perf_model/cache/levels']) >= 3:
     num_l3s = int(math.ceil(ncores / float(l3_cacheSharedCores)))
     if cfg.get('perf_model/nuca/enabled') == 'true':
-      print >> sys.stderr, "L3 configured, NUCA power will be ignored"
+      print("L3 configured, NUCA power will be ignored", file=sys.stderr)
   elif cfg.get('perf_model/nuca/enabled') == 'true':
     if cfg['perf_model/dram_directory/locations'] == 'interleaved':
       nuca_cacheSharedCores = int(cfg['perf_model/dram_directory/interleaving'])
@@ -356,7 +356,7 @@ def edit_XML(statsobj, stats, cfg):
       nuca_locations = [ lid for name, lid, mid in statsobj.get_topology() if name == 'nuca-cache' ]
       # Right now we only support NUCA slices at regular interleaving
       num_nucas = len(nuca_locations)
-      nuca_cacheSharedCores = ncores / num_nucas
+      nuca_cacheSharedCores = (ncores + num_nucas - 1) // num_nucas
       nuca_locations_assumed = [ i*nuca_cacheSharedCores for i in range(num_nucas) ]
       if nuca_locations != nuca_locations_assumed:
         raise ValueError('Unsupported tag directory locations %s' % cfg['perf_model/dram_directory/locations'])
@@ -396,10 +396,10 @@ def edit_XML(statsobj, stats, cfg):
   cycles_scale = stats['fs_to_cycles_cores']
   clock_core = float(sniper_config.get_config(cfg, 'perf_model/core/frequency', 0))*1000
   for core in range(ncores):
-	cycles_scale[core] = float(clock_core/1000000000)
+    cycles_scale[core] = float(clock_core/1000000000)
   instrs = stats['performance_model.instruction_count']
   times = stats['performance_model.elapsed_time']
-  cycles = map(lambda c, t: c * t, cycles_scale[:ncores], times[:ncores])
+  cycles = list(map(lambda c, t: c * t, cycles_scale[:ncores], times[:ncores]))
   max_system_cycles = float(max(cycles)) or 1 # avoid division by zero
   data = [ {} for core in range(ncores) ]
   for core in range(ncores):
@@ -417,7 +417,7 @@ def edit_XML(statsobj, stats, cfg):
 
   template=readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node)
   #for j in range(ncores):
-  for i in xrange(len(template)-1):
+  for i in range(len(template)-1):
     #for j in range(ncores):
       if template[i][1] and template[i][1][1] in ('stat', 'cfg', 'comb'):
         core = template[i][1][2]
@@ -447,38 +447,38 @@ def edit_XML(statsobj, stats, cfg):
           return vdd_global
         else:
           raise ValueError('Unknown DVFS domain %s' % domain)
-      issue_width = long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core))
-      peak_issue_width = long(long(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
+      issue_width = int(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core))
+      peak_issue_width = int(int(sniper_config.get_config(cfg, 'perf_model/core/interval_timer/dispatch_width', core)) * 1.5)
       ALU_per_core = peak_issue_width
       window_size = int(sniper_config.get_config(cfg, "perf_model/core/interval_timer/window_size", core))
       if sniper_config.get_config(cfg, "perf_model/core/type", core) == 'rob' and sniper_config.get_config_bool(cfg, "perf_model/core/rob_timer/in_order", core):
         machineType = 1 # in-order
       else:
         machineType = 0 # OoO
-      latency_bp = long(sniper_config.get_config(cfg, 'perf_model/branch_predictor/mispredict_penalty', core))
+      latency_bp = int(sniper_config.get_config(cfg, 'perf_model/branch_predictor/mispredict_penalty', core))
         #---FROM CONFIG----------
-      latency_l1_d = long(sniper_config.get_config(cfg, 'perf_model/l1_dcache/data_access_time', core))
-      latency_l1_i = long(sniper_config.get_config(cfg, 'perf_model/l1_icache/data_access_time', core))
-      latency_l2 = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0, core))
-      latency_l3 = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/data_access_time', 0, core))
-      l1_dcacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/associativity', 0, core)))
-      l1_dcacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_block_size', 0, core))
-      l1_dcacheSize= long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_size', 0, core))
-      l1_dcacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/shared_cores', 0, core))
-      l1_dcacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/writeback_time', 0, core))
-      l1_icacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/associativity', 0, core)))
-      l1_icacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_block_size', 0, core))
-      l1_icacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_size', 0, core))
-      l1_icacheSharedCores = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/shared_cores', 0, core))
-      l1_icacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/writeback_time', 0, core))
-      l2_cacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/associativity', 0, core)))
-      l2_cacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_size', 0, core))
-      l2_cacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_block_size', 0, core))
-      l2_cacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/writeback_time', 0, core))
-      l3_cacheAssociativity = power2up(long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/associativity', 0, core)))
-      l3_cacheBlockSize = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_block_size', 0, core))
-      l3_cacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core))
-      l3_cacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/writeback_time', 0, core))
+      latency_l1_d = int(sniper_config.get_config(cfg, 'perf_model/l1_dcache/data_access_time', core))
+      latency_l1_i = int(sniper_config.get_config(cfg, 'perf_model/l1_icache/data_access_time', core))
+      latency_l2 = int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/data_access_time', 0, core))
+      latency_l3 = int(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/data_access_time', 0, core))
+      l1_dcacheAssociativity = power2up(int(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/associativity', 0, core)))
+      l1_dcacheBlockSize = int(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_block_size', 0, core))
+      l1_dcacheSize= int(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/cache_size', 0, core))
+      l1_dcacheSharedCores = int(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/shared_cores', 0, core))
+      l1_dcacheWriteBackTime = int(sniper_config.get_config_default(cfg, 'perf_model/l1_dcache/writeback_time', 0, core))
+      l1_icacheAssociativity = power2up(int(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/associativity', 0, core)))
+      l1_icacheBlockSize = int(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_block_size', 0, core))
+      l1_icacheSize = int(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/cache_size', 0, core))
+      l1_icacheSharedCores = int(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/shared_cores', 0, core))
+      l1_icacheWriteBackTime = int(sniper_config.get_config_default(cfg, 'perf_model/l1_icache/writeback_time', 0, core))
+      l2_cacheAssociativity = power2up(int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/associativity', 0, core)))
+      l2_cacheSize = int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_size', 0, core))
+      l2_cacheBlockSize = int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/cache_block_size', 0, core))
+      l2_cacheWriteBackTime = int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/writeback_time', 0, core))
+      l3_cacheAssociativity = power2up(int(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/associativity', 0, core)))
+      l3_cacheBlockSize = int(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_block_size', 0, core))
+      l3_cacheSize = int(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core))
+      l3_cacheWriteBackTime = int(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/writeback_time', 0, core))
 
       if template[i][1]:
            #if template[i][1][1]=="cfg":
@@ -516,8 +516,8 @@ def edit_XML(statsobj, stats, cfg):
           else:
             raise ValueError('Unknown cfg template %s' % template[i][1][0])
         elif template[i][1][1]=="stat":
-          cores_l2s = range(l2_cacheSharedCores*core, min(ncores, l2_cacheSharedCores*core+l2_cacheSharedCores))
-          cores_l3s = range(l3_cacheSharedCores*core, min(ncores, l3_cacheSharedCores*core+l3_cacheSharedCores))
+          cores_l2s = list(range(l2_cacheSharedCores*core, min(ncores, l2_cacheSharedCores*core+l2_cacheSharedCores)))
+          cores_l3s = list(range(l3_cacheSharedCores*core, min(ncores, l3_cacheSharedCores*core+l3_cacheSharedCores)))
           # core statistics
           if template[i][1][0]=="total_cycles":
             template[i][0] = template[i][0] % cycles[core]
@@ -539,18 +539,18 @@ def edit_XML(statsobj, stats, cfg):
             else:
               template[i][0] = template[i][0] % float(((instrs[core]))/max_system_cycles)
           elif template[i][1][0]=="LSU.duty_cycle":
-            if float((long(stats['L1-D.loads'][core])+long(stats['L1-D.stores'][core]))/max_system_cycles) <= 1:
-              template[i][0] = template[i][0] % float((long(stats['L1-D.loads'][core])+long(stats['L1-D.stores'][core]))/max_system_cycles)
+            if float((int(stats['L1-D.loads'][core])+int(stats['L1-D.stores'][core]))/max_system_cycles) <= 1:
+              template[i][0] = template[i][0] % float((int(stats['L1-D.loads'][core])+int(stats['L1-D.stores'][core]))/max_system_cycles)
             else:
               template[i][0] = template[i][0] % 1
           elif template[i][1][0]=="MemManU.I.duty_cycle":
-            if float((long(stats['L1-I.loads'][core])+long(stats['L1-I.stores'][core]))/max_system_cycles) <= 1:
-              template[i][0] = template[i][0] % float((long(stats['L1-I.loads'][core])+long(stats['L1-I.stores'][core]))/max_system_cycles)
+            if float((int(stats['L1-I.loads'][core])+int(stats['L1-I.stores'][core]))/max_system_cycles) <= 1:
+              template[i][0] = template[i][0] % float((int(stats['L1-I.loads'][core])+int(stats['L1-I.stores'][core]))/max_system_cycles)
             else:
               template[i][0] = template[i][0] % 1
           elif template[i][1][0]=="MemManU.D.duty_cycle":
-            if float((long(stats['L1-D.loads'][core])+long(stats['L1-D.stores'][core]))/max_system_cycles) <= 1:
-              template[i][0] = template[i][0] % float((long(stats['L1-D.loads'][core])+long(stats['L1-D.stores'][core]))/max_system_cycles)
+            if float((int(stats['L1-D.loads'][core])+int(stats['L1-D.stores'][core]))/max_system_cycles) <= 1:
+              template[i][0] = template[i][0] % float((int(stats['L1-D.loads'][core])+int(stats['L1-D.stores'][core]))/max_system_cycles)
             else:
               template[i][0] = template[i][0] % 1
           elif template[i][1][0]=="FPU.duty_cycle":
@@ -601,9 +601,9 @@ def edit_XML(statsobj, stats, cfg):
             else:
               template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['bus.time-used'][0])/max_system_cycles)
           elif template[i][1][0]=="loads":
-            template[i][0] = template[i][0] % long(stats['L1-D.loads'][core])
+            template[i][0] = template[i][0] % int(stats['L1-D.loads'][core])
           elif template[i][1][0]=="stores":
-            template[i][0] = template[i][0] % long(stats['L1-D.stores'][core])
+            template[i][0] = template[i][0] % int(stats['L1-D.stores'][core])
           elif template[i][1][0]=="total_instructions":
             template[i][0] = template[i][0] % instrs[core]
           elif template[i][1][0]=="integer_ins":
@@ -1256,7 +1256,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-c <override-config>] [-o <output-file (power{.png,.txt,.py})>]' % '|'.join(powertypes)
+    print('Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-t <type: %s>] [-c <override-config>] [-o <output-file (power{.png,.txt,.py})>]' % '|'.join(powertypes))
     sys.exit(-1)
 
   jobid = 0
@@ -1271,8 +1271,8 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hj:t:c:d:o:", [ 'no-graph', 'no-text', 'partial=' ])
-  except getopt.GetoptError, e:
-    print e
+  except getopt.GetoptError as e:
+    print(e)
     usage()
   for o, a in opts:
     if o == '-h':
@@ -1280,7 +1280,7 @@ if __name__ == '__main__':
     if o == '-d':
       resultsdir = a
     if o == '-j':
-      jobid = long(a)
+      jobid = int(a)
     if o == '-t':
       if a not in powertypes:
         sys.stderr.write('Power type %s not supported\n' % a)

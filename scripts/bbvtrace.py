@@ -32,7 +32,7 @@ class BbvTrace:
     sim.bbv.enable()
     args = dict(enumerate((args or '').split(':')))
     filename = args.get(0, None)
-    interval_ns = long(args.get(1, 100000))
+    interval_ns = int(args.get(1, 100000))
     if filename:
       self.fd = file(os.path.join(sim.config.output_dir, filename), 'w')
       self.isTerminal = False

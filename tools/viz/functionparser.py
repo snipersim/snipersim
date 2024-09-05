@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 # coding: utf-8
-import subprocess, cStringIO
+import subprocess, io
 
 #script that takes a rtntrace file and parses it
 
@@ -13,7 +13,7 @@ import subprocess, cStringIO
 def cppfilt(name):
     args = ['c++filt']
     args.extend([name])
-    pipe = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    pipe = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     stdout, _ = pipe.communicate()
     return stdout.replace('\n','')			
 
@@ -30,7 +30,7 @@ def parseFunctions(inputfile = None, inputdata = None):
   if inputfile:
     f=open(inputfile, "r")
   elif inputdata:
-    f=cStringIO.StringIO(inputdata)
+    f=io.StringIO(inputdata)
   else:
     return None,None
   i=0
@@ -39,7 +39,7 @@ def parseFunctions(inputfile = None, inputdata = None):
   for line in f:
     output=line.rstrip(' \n').split('\t')
     if i == 0:
-      name2idx = dict(map(lambda a:(a[1],a[0]), enumerate(output)))
+      name2idx = dict([(a[1],a[0]) for a in enumerate(output)])
     #only functions that execute 1 or more instructions are stored
     if i > 0 and float(output[name2idx['instruction_count']]) >0:
       d = dict(
@@ -95,5 +95,5 @@ def parseFunctions(inputfile = None, inputdata = None):
   return functiondata, total
 
 def parseFunctionsDict(d):
-  da = zip(*d.items())
+  da = list(zip(*d.items()))
   return parseFunctions(inputdata = ('\t'.join(map(str,da[0]))+'\n'+'\t'.join(map(str,da[1]))))

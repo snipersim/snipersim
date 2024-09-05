@@ -1,9 +1,9 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
-  print 'Usage:', sys.argv[0], '[-h (help)] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [-d <resultsdir (default: .)>]'
+  print('Usage:', sys.argv[0], '[-h (help)] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)]  [-d <resultsdir (default: .)>]')
 
 
 jobid = 0
@@ -12,8 +12,8 @@ partial = None
 
 try:
   opts, args = getopt.getopt(sys.argv[1:], "hj:d:", [ 'partial=' ])
-except getopt.GetoptError, e:
-  print e
+except getopt.GetoptError as e:
+  print(e)
   usage()
   sys.exit()
 for o, a in opts:
@@ -23,7 +23,7 @@ for o, a in opts:
   if o == '-d':
     resultsdir = a
   if o == '-j':
-    jobid = long(a)
+    jobid = int(a)
   if o == '--partial':
     if ':' not in a:
       sys.stderr.write('--partial=<from>:<to>\n')
@@ -53,20 +53,20 @@ def format_num(v):
 def format_ns(v):
   return '%8.2f' % (v * 1e-6)
 
-print '                        Average | ' + '  '.join(map(lambda core: '%8s' % ('Core %d' % core), range(ncores)))
-print
-print 'Requests:              ' + format_num(sum(requests)) + ' | ' + '  '.join(map(format_num, requests))
-print 'Total time:            ' + format_ns(sum(totaltime) / (sum(requests) or 1)) + ' | ' + '  '.join(map(lambda t, n: format_ns(t / (n or 1)), totaltime, requests))
-print
+print('                        Average | ' + '  '.join(['%8s' % ('Core %d' % core) for core in range(ncores)]))
+print()
+print('Requests:              ' + format_num(sum(requests)) + ' | ' + '  '.join(map(format_num, requests)))
+print('Total time:            ' + format_ns(sum(totaltime) / (sum(requests) or 1)) + ' | ' + '  '.join(map(lambda t, n: format_ns(t / (n or 1)), totaltime, requests)))
+print()
 for component in llc_components:
   statname = '%s.%s' % (llc_name, component)
   if sum(stats[statname]):
-    print '%-22s' % ('%s:' % component[12:]),
-    print format_ns(sum(stats[statname]) / (sum(requests) or 1)) + ' |',
+    print('%-22s' % ('%s:' % component[12:]), end=' ')
+    print(format_ns(sum(stats[statname]) / (sum(requests) or 1)) + ' |', end=' ')
     for core in range(ncores):
-      print format_ns(stats[statname][core] / (requests[core] or 1)) + ' ',
+      print(format_ns(stats[statname][core] / (requests[core] or 1)) + ' ', end=' ')
       sums[core] += stats[statname][core]
-    print
+    print()
 if sum(totaltime) > sum(sums):
-  print 'unaccounted:           ' + format_ns((sum(totaltime) - sum(sums)) / (sum(requests) or 1)) + ' |',
-  print '  '.join(map(lambda t, s, n: format_ns((t - s) / (n or 1)), totaltime, sums, requests))
+  print('unaccounted:           ' + format_ns((sum(totaltime) - sum(sums)) / (sum(requests) or 1)) + ' |', end=' ')
+  print('  '.join(map(lambda t, s, n: format_ns((t - s) / (n or 1)), totaltime, sums, requests)))

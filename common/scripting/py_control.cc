@@ -55,16 +55,9 @@ setProgress(PyObject *self, PyObject *args)
 static PyObject *
 simulatorAbort(PyObject *self, PyObject *args)
 {
-   // Exit now, cleaning up as best as possible
-   // For benchmarks where, after ROI, functionally simulating until the end takes too long.
-
-   // If we're still in ROI, make sure we end it properly
-   Sim()->getMagicServer()->setPerformance(false);
-
-   LOG_PRINT("Application exit.");
-   Simulator::release();
-
-   exit(0);
+   //cannot Abort here, because we have the GIL, and it is needed to release the python interpreter, so set a flag instead, and wait once we come back from the callback.
+   HooksPy::prepare_abort();
+   Py_RETURN_NONE;
 }
 
 static PyMethodDef PyControlMethods[] = {
@@ -75,23 +68,33 @@ static PyMethodDef PyControlMethods[] = {
    { NULL, NULL, 0, NULL } /* Sentinel */
 };
 
-void HooksPy::PyControl::setup(void)
+static PyModuleDef PyControlModule = {
+	PyModuleDef_HEAD_INIT,
+	"sim_control",
+	"",
+	-1,
+	PyControlMethods,
+	NULL, NULL, NULL, NULL
+};
+
+PyMODINIT_FUNC PyInit_sim_control(void)
 {
-   PyObject *pModule = Py_InitModule("sim_control", PyControlMethods);
+   PyObject *pModule = PyModule_Create(&PyControlModule);
 
    {
-      PyObject *pGlobalConst = PyInt_FromLong(SIM_OPT_INSTRUMENT_DETAILED);
+      PyObject *pGlobalConst = PyLong_FromLong(SIM_OPT_INSTRUMENT_DETAILED);
       PyObject_SetAttrString(pModule, "DETAILED", pGlobalConst);
       Py_DECREF(pGlobalConst);
    }
    {
-      PyObject *pGlobalConst = PyInt_FromLong(SIM_OPT_INSTRUMENT_WARMUP);
+      PyObject *pGlobalConst = PyLong_FromLong(SIM_OPT_INSTRUMENT_WARMUP);
       PyObject_SetAttrString(pModule, "WARMUP", pGlobalConst);
       Py_DECREF(pGlobalConst);
    }
    {
-      PyObject *pGlobalConst = PyInt_FromLong(SIM_OPT_INSTRUMENT_FASTFORWARD);
+      PyObject *pGlobalConst = PyLong_FromLong(SIM_OPT_INSTRUMENT_FASTFORWARD);
       PyObject_SetAttrString(pModule, "FASTFORWARD", pGlobalConst);
       Py_DECREF(pGlobalConst);
    }
+   return pModule;
 }

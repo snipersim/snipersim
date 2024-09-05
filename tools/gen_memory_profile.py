@@ -1,16 +1,16 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, re, collections, subprocess, sniper_lib, sniper_config
 
 
 def ex_ret(cmd):
-  return subprocess.Popen(cmd, stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen(cmd, stdout = subprocess.PIPE, text=True).communicate()[0]
 def cppfilt(name):
   return ex_ret([ 'c++filt', name ])
 
 
 def get_source_line(filename, linenr):
-  for linenum, line in enumerate(file(filename)):
+  for linenum, line in enumerate(open(filename, "r")):
     if linenum+1 == linenr:
       return line.strip()
   return ''
@@ -23,7 +23,7 @@ class Function:
     self.location = location.split(':')
     self.imgname = self.location[0]
     self.sourcefile = self.location[2]
-    self.sourceline = long(self.location[3])
+    self.sourceline = int(self.location[3])
     if self.sourceline:
       self.locationshort = '%s:%d' % (os.path.basename(self.sourcefile), self.sourceline)
       if os.path.exists(self.sourcefile):
@@ -105,19 +105,19 @@ class MemoryTracker:
         for data in line[3:]:
           key, value = data.split('=')
           if key == 'num-allocations':
-            results['numallocations'] = long(value)
+            results['numallocations'] = int(value)
           if key == 'total-allocated':
-            results['totalallocated'] = long(value)
+            results['totalallocated'] = int(value)
           elif key == 'hit-where':
-            entries = map(lambda s: s.split(':'), value.strip(',').split(','))
-            results['hitwhereload'] = dict([ (s[1:], long(v)) for s, v in entries if s.startswith('L') ])
+            entries = [s.split(':') for s in value.strip(',').split(',')]
+            results['hitwhereload'] = dict([ (s[1:], int(v)) for s, v in entries if s.startswith('L') ])
             for k, v in results['hitwhereload'].items():
               self.hitwhere_load_unknown[k] -= v
-            results['hitwherestore'] = dict([ (s[1:], long(v)) for s, v in entries if s.startswith('S') ])
+            results['hitwherestore'] = dict([ (s[1:], int(v)) for s, v in entries if s.startswith('S') ])
             for k, v in results['hitwherestore'].items():
               self.hitwhere_store_unknown[k] -= v
           elif key == 'evicted-by':
-            results['evictedby'] = dict(map(lambda (s, v): (s, long(v)), map(lambda s: s.split(':'), value.strip(',').split(','))))
+            results['evictedby'] = dict([(s_v[0], int(s_v[1])) for s_v in [s.split(':') for s in value.strip(',').split(',')]])
             self.evicts_unknown -= sum(results['evictedby'].values())
         self.siteids[siteid] = stack
         if stack in self.sites:
@@ -144,73 +144,73 @@ class MemoryTracker:
     return tuple(_stack)
 
   def write(self, obj):
-    sites_sorted = sorted(self.sites.items(), key = lambda (k, v): v.totalloads + v.totalstores, reverse = True)
+    sites_sorted = sorted(list(self.sites.items()), key = lambda k_v1: k_v1[1].totalloads + k_v1[1].totalstores, reverse = True)
     site_names = dict([ (stack, '#%d' % (idx+1)) for idx, (stack, site) in enumerate(sites_sorted) ])
     totalloads = sum(self.hitwhere_load_global.values())
     totalstores = sum(self.hitwhere_store_global.values())
 
     for stack, site in sites_sorted:
-      print >> obj, 'Site %s:' % site_names[stack]
-      print >> obj, '\tCall stack:'
+      print('Site %s:' % site_names[stack], file=obj)
+      print('\tCall stack:', file=obj)
       for eip in site.stack:
-        print >> obj, '\t\t%s' % (self.functions[eip] if eip in self.functions else '(unknown)')
-      print >> obj, '\tAllocations: %d' % site.numallocations
-      print >> obj, '\tTotal allocated: %s (%s average)' % (sniper_lib.format_size(site.totalallocated), sniper_lib.format_size(site.totalallocated / site.numallocations))
+        print('\t\t%s' % (self.functions[eip] if eip in self.functions else '(unknown)'), file=obj)
+      print('\tAllocations: %d' % site.numallocations, file=obj)
+      print('\tTotal allocated: %s (%s average)' % (sniper_lib.format_size(site.totalallocated), sniper_lib.format_size(site.totalallocated / site.numallocations)), file=obj)
 
-      print >> obj, '\tHit-where:'
-      print >> obj, '\t\t%-15s: %s' % ('Loads', format_abs_ratio(site.totalloads, totalloads)),
-      print >> obj, '\t%-15s: %s' % ('Stores', format_abs_ratio(site.totalstores, totalstores))
+      print('\tHit-where:', file=obj)
+      print('\t\t%-15s: %s' % ('Loads', format_abs_ratio(site.totalloads, totalloads)), end=' ', file=obj)
+      print('\t%-15s: %s' % ('Stores', format_abs_ratio(site.totalstores, totalstores)), file=obj)
       for hitwhere in self.hitwheres:
         if site.hitwhereload.get(hitwhere) or site.hitwherestore.get(hitwhere):
           cnt = site.hitwhereload[hitwhere]
-          print >> obj, '\t\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalloads)),
+          print('\t\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalloads)), end=' ', file=obj)
           cnt = site.hitwherestore[hitwhere]
-          print >> obj, '\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores))
+          print('\t  %-15s: %s' % (hitwhere, format_abs_ratio(cnt, site.totalstores)), file=obj)
 
-      print >> obj, '\tEvicts:'
+      print('\tEvicts:', file=obj)
       evicts = {}
       for _stack, _site in self.sites.items():
         for _siteid, _cnt in _site.evictedby.items():
           if self.siteids.get(_siteid) == stack:
             evicts[_stack] = evicts.get(_stack, 0) + _cnt
-      evicts = sorted(evicts.items(), key = lambda (_stack, _cnt): _cnt, reverse = True)
+      evicts = sorted(list(evicts.items()), key = lambda _stack__cnt: _stack__cnt[1], reverse = True)
       for _stack, cnt in evicts[:10]:
         name = site_names.get(_stack, 'other') if _stack != stack else 'self'
-        print >> obj, '\t\t%-15s: %12d' % (name, cnt)
+        print('\t\t%-15s: %12d' % (name, cnt), file=obj)
 
-      print >> obj, '\tEvicted-by:'
+      print('\tEvicted-by:', file=obj)
       evicts = {}
       for siteid, cnt in site.evictedby.items():
         _stack = self.siteids[siteid] if siteid != '0' else 'other'
         evicts[_stack] = evicts.get(_stack, 0) + cnt
-      evicts = sorted(evicts.items(), key = lambda (stack, cnt): cnt, reverse = True)
+      evicts = sorted(list(evicts.items()), key = lambda stack_cnt: stack_cnt[1], reverse = True)
       for _stack, cnt in evicts[:10]:
         name = site_names.get(_stack, 'other') if _stack != stack else 'self'
-        print >> obj, '\t\t%-15s: %12d' % (name, cnt)
-      print >> obj
+        print('\t\t%-15s: %12d' % (name, cnt), file=obj)
+      print(file=obj)
 
-    print >> obj, 'By hit-where:'
+    print('By hit-where:', file=obj)
     for hitwhere in self.hitwheres:
       if self.hitwhere_load_global[hitwhere] + self.hitwhere_store_global[hitwhere]:
         totalloadhere = self.hitwhere_load_global[hitwhere]
         totalstorehere = self.hitwhere_store_global[hitwhere]
-        print >> obj, '\t%s:' % hitwhere
-        print >> obj, '\t\t%-15s: %s' % ('Loads', format_abs_ratio(totalloadhere, totalloads)),
-        print >> obj, '\t%-15s: %s' % ('Stores', format_abs_ratio(totalstorehere, totalstores))
-        for stack, site in sorted(self.sites.items(), key = lambda (k, v): v.hitwhereload.get(hitwhere, 0) + v.hitwherestore.get(hitwhere, 0), reverse = True):
+        print('\t%s:' % hitwhere, file=obj)
+        print('\t\t%-15s: %s' % ('Loads', format_abs_ratio(totalloadhere, totalloads)), end=' ', file=obj)
+        print('\t%-15s: %s' % ('Stores', format_abs_ratio(totalstorehere, totalstores)), file=obj)
+        for stack, site in sorted(self.sites.items(), key = lambda k_v: k_v[1].hitwhereload.get(hitwhere, 0) + k_v[1].hitwherestore.get(hitwhere, 0), reverse = True):
           if site.hitwhereload.get(hitwhere) > .001 * totalloadhere or site.hitwherestore.get(hitwhere) > .001 * totalstorehere:
-            print >> obj, '\t\t  %-15s: %s' % (site_names[stack], format_abs_ratio(site.hitwhereload.get(hitwhere), totalloadhere)),
-            print >> obj, '\t  %-15s: %s' % (site_names[stack], format_abs_ratio(site.hitwherestore.get(hitwhere), totalstorehere))
+            print('\t\t  %-15s: %s' % (site_names[stack], format_abs_ratio(site.hitwhereload.get(hitwhere), totalloadhere)), end=' ', file=obj)
+            print('\t  %-15s: %s' % (site_names[stack], format_abs_ratio(site.hitwherestore.get(hitwhere), totalstorehere)), file=obj)
         if self.hitwhere_load_unknown.get(hitwhere) > .001 * totalloadhere or self.hitwhere_store_unknown.get(hitwhere) > .001 * totalstorehere:
-          print >> obj, '\t\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_load_unknown.get(hitwhere), totalloadhere)),
-          print >> obj, '\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_store_unknown.get(hitwhere), totalstorehere))
+          print('\t\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_load_unknown.get(hitwhere), totalloadhere)), end=' ', file=obj)
+          print('\t  %-15s: %s' % ('other', format_abs_ratio(self.hitwhere_store_unknown.get(hitwhere), totalstorehere)), file=obj)
 
 if __name__ == '__main__':
 
   import getopt
 
   def usage():
-    print '%s  [-d <resultsdir (.)> | -o <outputdir>]' % sys.argv[0]
+    print('%s  [-d <resultsdir (.)> | -o <outputdir>]' % sys.argv[0])
     sys.exit(1)
 
   HOME = os.path.dirname(__file__)
@@ -219,9 +219,9 @@ if __name__ == '__main__':
 
   try:
     opts, cmdline = getopt.getopt(sys.argv[1:], "hd:o:")
-  except getopt.GetoptError, e:
+  except getopt.GetoptError as e:
     # print help information and exit:
-    print >> sys.stderr, e
+    print(e, file=sys.stderr)
     usage()
   for o, a in opts:
     if o == '-h':
@@ -233,4 +233,4 @@ if __name__ == '__main__':
       outputdir = a
 
   result = MemoryTracker(resultsdir)
-  result.write(file(os.path.join(outputdir, 'sim.memoryprofile'), 'w') if outputdir else sys.stdout)
+  result.write(open(os.path.join(outputdir, 'sim.memoryprofile'), 'w') if outputdir else sys.stdout)

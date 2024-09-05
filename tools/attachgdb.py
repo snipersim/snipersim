@@ -1,9 +1,9 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, subprocess, re, tempfile, getopt, signal
 
 def ex(cmd):
-  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE, text=True).communicate()[0]
 
 def get_section_offsets(fn):
   obj_out = ex('objdump -h "%s"' % fn)
@@ -11,7 +11,7 @@ def get_section_offsets(fn):
   for line in obj_out.split('\n'):
     try:
       if line and re.match(".", line.split()[1]):
-        ret[line.split()[1]] = long('0x%s' % line.split()[3], 16)
+        ret[line.split()[1]] = int('0x%s' % line.split()[3], 16)
     except IndexError:
       pass
     except ValueError:
@@ -19,10 +19,10 @@ def get_section_offsets(fn):
   return ret
 
 def add_offset(d, off):
-  return dict( [section, address + off] for section, address in d.iteritems() )
+  return dict( [section, address + off] for section, address in d.items() )
 
 def get_base_offset(pid, so_file):
-  return long(ex('grep "%s" /proc/%s/maps' % (so_file, pid)).split('-')[0], 16)
+  return int(ex('grep "%s" /proc/%s/maps' % (so_file, pid)).split('-')[0], 16)
 
 # Strips chroot directory prefix, if the path contains it
 # This is needed because the binary paths in /proc/<pid>/maps contains the full path if
@@ -61,7 +61,7 @@ def find_pintool_name(pid, pintoolname):
   for pintoolname in pintoolnames:
     if get_bin_path(pid, pintoolname):
       return pintoolname
-  print 'No pintool found, please use --toolname'
+  print('No pintool found, please use --toolname')
   sys.exit(1)
 
 def attach_gdb(pid, symoff, pintoolname):
@@ -98,9 +98,9 @@ if __name__ == '__main__':
   pintoolname = None
 
   def usage():
-    print 'Attach GDB to a running Sniper process'
-    print 'Usage:'
-    print '  %s  [-h|--help] [--all-threads] [--action={bt}] [--abt] [--toolname={auto}] <pid>' % sys.argv[0]
+    print('Attach GDB to a running Sniper process')
+    print('Usage:')
+    print('  %s  [-h|--help] [--all-threads] [--action={bt}] [--abt] [--toolname={auto}] <pid>' % sys.argv[0])
     sys.exit(2)
 
   action = 'interactive'
@@ -111,9 +111,9 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "h", [ "help", "all-threads", "action=", "abt", "toolname=" ])
-  except getopt.GetoptError, e:
+  except getopt.GetoptError as e:
     # print help information and exit:
-    print e
+    print(e)
     usage()
   for o, a in opts:
     if o == '-h' or o == '--help':
@@ -123,7 +123,7 @@ if __name__ == '__main__':
       all_threads = True
     if o == '--action':
       if a not in actions:
-        print 'Invalid action', a
+        print('Invalid action', a)
         usage()
       action = a
     if o == '--abt':
@@ -135,14 +135,14 @@ if __name__ == '__main__':
   if len(args) < 1:
     usage()
   if action == 'interactive' and all_threads:
-      print 'Cannot combine --interactive with --all-threads'
+      print('Cannot combine --interactive with --all-threads')
       sys.exit(2)
 
   ret_code = 0
-  pgm_pid = long(args[0])
+  pgm_pid = int(args[0])
   pgm_orig_state = ex('ps -p %u -o s=' % pgm_pid)
   if all_threads:
-    pids = map(long, os.listdir(os.path.join('/proc', str(pgm_pid), 'task')))
+    pids = list(map(int, os.listdir(os.path.join('/proc', str(pgm_pid), 'task'))))
   else:
     pids = [ pgm_pid ]
   if pgm_orig_state == 'R':
@@ -155,11 +155,11 @@ if __name__ == '__main__':
     for pid in pids:
       attach_gdb(pid, symoff, pintoolname)
   except IOError:
-    print ""
-    print "Error: Unable to correctly determine the path to a mapped object."
-    print "  This means that either you do not have permission to view the dynamic"
-    print "  linking maps, or the pid provided isn't a pin/Sniper program."
-    print ""
+    print("")
+    print("Error: Unable to correctly determine the path to a mapped object.")
+    print("  This means that either you do not have permission to view the dynamic")
+    print("  linking maps, or the pid provided isn't a pin/Sniper program.")
+    print("")
     ret_code = 1
   if pgm_orig_state == 'R':
     os.kill(pgm_pid, signal.SIGCONT)

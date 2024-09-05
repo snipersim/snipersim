@@ -1,6 +1,6 @@
 # A copy of this file is distributed with the binaries of Sniper and Benchmarks
 
-import sys, os, re, subprocess, cStringIO, sniper_stats, sniper_config
+import sys, os, re, subprocess, io, sniper_stats, sniper_config
 try:
   import json
 except ImportError:
@@ -11,7 +11,7 @@ try:
   try:
     import env_setup
     sys.path.append(os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler'))
-  except EnvironmentError, e:
+  except EnvironmentError as e:
     pass
   import intelqueue, iqclient, packdir, app_constraints
   ic = iqclient.IntelClient()
@@ -32,7 +32,7 @@ def get_config(jobid = None, resultsdir = None, force_deleted = True):
     cfgfile = os.path.join(resultsdir, 'sim.cfg')
     if not os.path.exists(cfgfile):
       raise ValueError('Cannot find config file at %s' % resultsdir)
-    simcfg = file(cfgfile).read()
+    simcfg = open(cfgfile, 'r').read()
   config = sniper_config.parse_config(simcfg)
   return config
 
@@ -113,7 +113,7 @@ def stats_process(config, results):
   stats['pthread_locks_contended'] = float(sum(stats.get('pthread.pthread_mutex_lock_contended', [0]))) / (sum(stats.get('pthread.pthread_mutex_lock_count', [0])) or 1)
   # femtosecond to cycles conversion
   freq = [ 1e9 * float(sniper_config.get_config(config, 'perf_model/core/frequency', idx)) for idx in range(ncores) ]
-  stats['fs_to_cycles_cores'] = map(lambda f: f / 1e15, freq)
+  stats['fs_to_cycles_cores'] = [f / 1e15 for f in freq]
   # Backwards compatible version returning fs_to_cycles for core 0, for heterogeneous configurations fs_to_cycles_cores needs to be used
   stats['fs_to_cycles'] = stats['fs_to_cycles_cores'][0]
   # Fixed versions of [idle|nonidle] elapsed time
@@ -131,7 +131,7 @@ def stats_process(config, results):
   if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
     stats['performance_model.cycle_count'] = [ stats['fs_to_cycles_cores'][idx] * stats['performance_model.elapsed_time'][idx] for idx in range(ncores) ]
   if 'thread.nonidle_elapsed_time' in stats and 'thread.nonidle_cycle_count' not in stats:
-    stats['thread.nonidle_cycle_count'] = [ long(stats['fs_to_cycles'] * t) for t in stats['thread.nonidle_elapsed_time'] ]
+    stats['thread.nonidle_cycle_count'] = [ int(stats['fs_to_cycles'] * t) for t in stats['thread.nonidle_elapsed_time'] ]
   # IPC
   if 'performance_model.cycle_count' in stats:
     stats['ipc'] = [
@@ -206,7 +206,7 @@ def get_results_file(filename, jobid = None, resultsdir = None, force = False):
   else:
     filename = os.path.join(resultsdir, filename)
     if os.path.exists(filename):
-      return file(filename).read()
+      return open(filename).read()
     else:
       return None
 
@@ -276,7 +276,7 @@ def find_children(pid):
     except ValueError:
       continue # not a pid
     try:
-      stat = file('/proc/%u/stat' % _pid).read()
+      stat = open('/proc/%u/stat' % _pid, 'r').read()
     except IOError:
       continue # pid already gone
     ppid = parse_stat_line_for_ppid(stat)
@@ -304,7 +304,7 @@ def kill_children():
 class OutputToLess:
   def __enter__(self):
     if sys.stdout.isatty():
-      self.stream = cStringIO.StringIO()
+      self.stream = io.StringIO()
       sys.stdout = self.stream
     else:
       self.stream = None
@@ -314,12 +314,12 @@ class OutputToLess:
       sys.stdout = sys.__stdout__
       if exc_type:
         # Dump output up to error
-        print self.stream.getvalue(),
+        print(self.stream.getvalue(), end=' ')
         # Process exception normally
         return False
       data = self.stream.getvalue()
       if len(data) > 0:
-        less = subprocess.Popen([ 'less', '--no-init', '--quit-if-one-screen', '--chop-long-lines' ], stdin = subprocess.PIPE)
+        less = subprocess.Popen([ 'less', '--no-init', '--quit-if-one-screen', '--chop-long-lines' ], stdin = subprocess.PIPE, text=True)
         try:
           less.stdin.write(data)
           less.stdin.close()

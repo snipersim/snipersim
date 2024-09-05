@@ -22,7 +22,7 @@ def command(command, timeout, pollinterval = .1, return_stderr = False):
         try:
           os.kill(process.pid, signal.SIGKILL)
           os.waitpid(process.pid, os.WNOHANG)
-        except OSError, e:
+        except OSError as e:
           pass  # ignore [Errno 3] No such process: process may have exited between process.poll() and here
         raise Timeout
       try:            outtxt += os.read(outfd, 4096)

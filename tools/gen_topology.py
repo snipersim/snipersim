@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, math, collections, sniper_lib, sniper_stats, sniper_config, getopt
 
@@ -13,7 +13,7 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
   try:
     topology = stats.get_topology()
   except:
-    print >> sys.stderr, "Failed getting topology information"
+    print("Failed getting topology information", file=sys.stderr)
     topology = None
 
 
@@ -21,7 +21,7 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
   if topology:
     for name, lid, mid in stats.get_topology():
       if name not in names:
-        print >> sys.stderr, 'Unknown component', name
+        print('Unknown component', name, file=sys.stderr)
         continue
       ids[name][int(lid)] = int(mid)
       max_id = max(max_id, int(lid))
@@ -31,23 +31,23 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
     caches = {'L1-I': 'l1_icache', 'L1-D': 'l1_dcache', 'L2': 'l2_cache', 'L3': 'l3_cache', 'L4': 'l4_cache'}
     if name in caches:
       value = sniper_config.get_config(config, 'perf_model/%s/cache_size' % caches[name], lid)
-      return sniper_lib.format_size(1024 * long(value), digits = 0)
+      return sniper_lib.format_size(1024 * int(value), digits = 0)
     elif name == 'dram-cache':
       value = sniper_config.get_config(config, 'perf_model/dram/cache/cache_size', lid)
-      return sniper_lib.format_size(1024 * long(value), digits = 0)
+      return sniper_lib.format_size(1024 * int(value), digits = 0)
     else:
       return ''
 
 
   if format == 'text':
-    print >> outputobj, ' '*20,
+    print(' '*20, end=' ', file=outputobj)
     for lid in range(max_id+1):
-      print >> outputobj, '%3d' % lid,
-    print >> outputobj
+      print('%3d' % lid, end=' ', file=outputobj)
+    print(file=outputobj)
 
     for name in names:
       if ids[name].keys():
-        print >> outputobj, '%-20s' % name,
+        print('%-20s' % name, end=' ', file=outputobj)
         for lid in range(max_id+1):
           mid = ids[name][lid]
           if mid is None:
@@ -56,8 +56,8 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
             value = 'X'
           else:
             value = '<'
-          print >> outputobj, '%3s' % value,
-        print >> outputobj
+          print('%3s' % value, end=' ', file=outputobj)
+        print(file=outputobj)
 
 
   elif format == 'svg':
@@ -67,7 +67,9 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
         self.margin_y = 50; self.step_y = 50
         self.size_x = 0; self.size_y = 0
         self.items = []
-      def paint_box(self, (x, y), (w, h), name = '', label = 0, color = '#ffffff', zorder = 0, margin = (.2, .2), root = (0, 0)):
+      def paint_box(self, xxx_todo_changeme, xxx_todo_changeme1, name = '', label = 0, color = '#ffffff', zorder = 0, margin = (.2, .2), root = (0, 0)):
+        (x, y) = xxx_todo_changeme
+        (w, h) = xxx_todo_changeme1
         x += root[0]; y += root[1]
         self.size_x = max(self.size_x, (x+w) * self.step_x); self.size_y = max(self.size_y, (y+h) * self.step_y)
         svg = '''\
@@ -82,20 +84,20 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
         self.items.append((zorder, svg))
       def write(self, outputobj):
         if not embedded:
-          print >> outputobj, '''\
+          print('''\
 <?xml version="1.0" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-'''
-        print >> outputobj, '''\
+''', file=outputobj)
+        print('''\
 <svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">
 <g style="stroke-width:.025in; fill:none">
-  ''' % (self.size_x + 2*self.margin_x, self.size_y + 2*self.margin_y)
+  ''' % (self.size_x + 2*self.margin_x, self.size_y + 2*self.margin_y), file=outputobj)
         for order, svg in sorted(self.items, reverse = True):
-          print >> outputobj, svg
-        print >> outputobj, '''\
+          print(svg, file=outputobj)
+        print('''\
 </g>
 </svg>
-  '''
+  ''', file=outputobj)
 
     svg = Svg()
     ymax = None
@@ -110,7 +112,7 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
         width, height = int(math.ceil(1.0 * ncores / concentration)), 1
       else:
         if config.get('network/emesh_hop_by_hop/size'):
-          width, height = map(int, sniper_config.get_config(config, 'network/emesh_hop_by_hop/size').split(':'))
+          width, height = list(map(int, sniper_config.get_config(config, 'network/emesh_hop_by_hop/size').split(':')))
         else:
           width = int(math.sqrt(ncores / concentration))
           height = int(math.ceil(1.0 * ncores / concentration / width))
@@ -134,7 +136,7 @@ def gen_topology(resultsdir = '.', jobid = None, outputobj = sys.stdout, format 
 
 
     if topology:
-      _xpos = range(max_id+1)
+      _xpos = list(range(max_id+1))
       if ids['smt'].keys():
         x = -1
         for lid in range(max_id+1):
@@ -246,12 +248,12 @@ if __name__ == '__main__':
   format = 'svg'
 
   def usage():
-    print 'Usage: %s [-h|--help (help)]  [-d <resultsdir (.)> | -j <jobid>]  [-o|--output (output filename/"-" for stdout)]  [-f|--format (options: %s)]' % (sys.argv[0], validformats)
+    print('Usage: %s [-h|--help (help)]  [-d <resultsdir (.)> | -j <jobid>]  [-o|--output (output filename/"-" for stdout)]  [-f|--format (options: %s)]' % (sys.argv[0], validformats))
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hd:j:o:f:", [ "help", "output=", "format=" ])
-  except getopt.GetoptError, e:
-    print e
+  except getopt.GetoptError as e:
+    print(e)
     usage()
     sys.exit()
   for o, a in opts:
@@ -261,12 +263,12 @@ if __name__ == '__main__':
     elif o == '-d':
       resultsdir = a
     elif o == '-j':
-      jobid = long(a)
+      jobid = int(a)
     elif o == '-o' or o == '--output':
       outputfilename = a
     elif o == '-f' or o == '--format':
       if a not in validformats:
-        print >> sys.stderr, '%s is not a valid format' % a
+        print('%s is not a valid format' % a, file=sys.stderr)
         usage()
         sys.exit()
       format = a

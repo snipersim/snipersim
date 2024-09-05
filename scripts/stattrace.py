@@ -14,10 +14,10 @@ class StatTrace:
     args = dict(enumerate((args or '').split(':')))
     stat = args[0]
     filename = args.get(1, None)
-    interval_ns = long(args.get(2, 10000))
+    interval_ns = int(args.get(2, 10000))
 
     if '.' not in stat:
-      print 'Stat name needs to be of the format <component>.<statname>, now %s' % stat
+      print('Stat name needs to be of the format <component>.<statname>, now %s' % stat)
       return
     self.stat_name = stat
     stat_component, stat_name = stat.rsplit('.', 1)
@@ -32,7 +32,7 @@ class StatTrace:
         valid = True
         break
     if not valid:
-      print 'Stat %s[*].%s not found' % (stat_component, stat_name)
+      print('Stat %s[*].%s not found' % (stat_component, stat_name))
       return
 
     if filename:
