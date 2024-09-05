@@ -35,7 +35,7 @@ if not headerfile:
 version = {}
 for line in open(headerfile, "r"):
   for var in ('PIN_PRODUCT_VERSION_MAJOR', 'PIN_PRODUCT_VERSION_MINOR', 'PIN_BUILD_NUMBER'):
-    res = re.search('#define\s+%s\s+(\d+)' % var, line)
+    res = re.search(r'#define\s+%s\s+(\d+)' % var, line)
     if res:
       version[var] = res.group(1)
       break

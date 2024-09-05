@@ -3,6 +3,7 @@
 #include "config.hpp"
 
 bool HooksPy::pyInit = false;
+PyThreadState* HooksPy::_save = NULL;
 
 void HooksPy::init()
 {
@@ -60,6 +61,7 @@ void HooksPy::init()
             fprintf(stderr, "Sniper Error running Python script %s\n", scriptname.c_str());
             exit(-1);
          }
+	 HooksPy::_save = PyEval_SaveThread();
       }
    }
 }
@@ -94,8 +96,10 @@ void HooksPy::set_env(){
 
 void HooksPy::fini()
 {
-   if (pyInit)
-      Py_Finalize();
+   if (pyInit){
+      PyEval_RestoreThread(HooksPy::_save);
+      Py_FinalizeEx();
+   }
 }
 
 PyObject * HooksPy::callPythonFunction(PyObject *pFunc, PyObject *pArgs)

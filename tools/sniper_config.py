@@ -10,7 +10,7 @@ class DefaultValue:
 def parse_config(simcfg, cfg = None):
   import configparser, io
   cp = configparser.ConfigParser()
-  cp.readfp(io.StringIO(str(simcfg)))
+  cp.read_file(io.StringIO(str(simcfg)))
   if not cfg:
     cfg = {}
   for section in cp.sections():

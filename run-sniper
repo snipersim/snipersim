@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, queue, pipes
+import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, queue, shlex
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
 import sniper_lib, sniper_config, gen_simout, debugpin, env_setup, run_sniper
 
@@ -242,7 +242,7 @@ for o, a in opts:
     if '=' in a:
       if not a.startswith('-'):
         a = '--'+a
-      sniperoptions.append(pipes.quote(a))
+      sniperoptions.append(shlex.quote(a))
     elif ':' in a or ',' in a:
       obj, _, cfg = a.rpartition(':')
       if not obj:
@@ -253,7 +253,7 @@ for o, a in opts:
   if o == '-g':
     if not a.startswith('-'):
       a = '--'+a
-    sniperoptions.append(pipes.quote(a))
+    sniperoptions.append(shlex.quote(a))
   if o == '--roi':
     roi_only = True
   if o == '--roi-script':

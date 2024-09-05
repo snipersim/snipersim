@@ -5,6 +5,7 @@
 #include "magic_server.h"
 #include "syscall_model.h"
 #include "sim_api.h"
+#include <ios>
 
 static SInt64 hookCallbackResult(PyObject *pResult)
 {
@@ -19,94 +20,132 @@ static SInt64 hookCallbackResult(PyObject *pResult)
    return result;
 }
 
+/* Notes on the PyGILState, we only need to take a lock on the Global Interpreter lock, when executing the function from a c-thread. All the other callback functions, called by the python scripts, which are assumed to have the GIL already, so we don't need to explictly take it anymore.
+ */
 static SInt64 hookCallbackNone(UInt64 pFunc, UInt64)
 {
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, NULL);
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackInt(UInt64 pFunc, UInt64 argument)
 {
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(L)", argument));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackSubsecondTime(UInt64 pFunc, UInt64 argument)
 {
    SubsecondTime time(*(subsecond_time_t*)&argument);
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(L)", time.getFS()));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackString(UInt64 pFunc, UInt64 _argument)
 {
    const char* argument = (const char*)_argument;
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(s)", argument));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackMagicMarkerType(UInt64 pFunc, UInt64 _argument)
 {
    MagicServer::MagicMarkerType* argument = (MagicServer::MagicMarkerType*)_argument;
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiKKs)", argument->thread_id, argument->core_id, argument->arg0, argument->arg1, argument->str));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackThreadCreateType(UInt64 pFunc, UInt64 _argument)
 {
    HooksManager::ThreadCreate* argument = (HooksManager::ThreadCreate*)_argument;
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(ii)", argument->thread_id, argument->creator_thread_id));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackThreadTimeType(UInt64 pFunc, UInt64 _argument)
 {
    HooksManager::ThreadTime* argument = (HooksManager::ThreadTime*)_argument;
    SubsecondTime time(argument->time);
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iL)", argument->thread_id, time.getFS()));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackThreadStallType(UInt64 pFunc, UInt64 _argument)
 {
    HooksManager::ThreadStall* argument = (HooksManager::ThreadStall*)_argument;
    SubsecondTime time(argument->time);
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(isL)", argument->thread_id, ThreadManager::stall_type_names[argument->reason], time.getFS()));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackThreadResumeType(UInt64 pFunc, UInt64 _argument)
 {
    HooksManager::ThreadResume* argument = (HooksManager::ThreadResume*)_argument;
    SubsecondTime time(argument->time);
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiL)", argument->thread_id, argument->thread_by, time.getFS()));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackThreadMigrateType(UInt64 pFunc, UInt64 _argument)
 {
    HooksManager::ThreadMigrate* argument = (HooksManager::ThreadMigrate*)_argument;
    SubsecondTime time(argument->time);
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiL)", argument->thread_id, argument->core_id, time.getFS()));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackSyscallEnter(UInt64 pFunc, UInt64 _argument)
 {
    SyscallMdl::HookSyscallEnter* argument = (SyscallMdl::HookSyscallEnter*)_argument;
    SubsecondTime time(argument->time);
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiLi(llllll))", argument->thread_id, argument->core_id, time.getFS(),
       argument->syscall_number, argument->args.arg0, argument->args.arg1, argument->args.arg2, argument->args.arg3, argument->args.arg4, argument->args.arg5));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static SInt64 hookCallbackSyscallExit(UInt64 pFunc, UInt64 _argument)
 {
    SyscallMdl::HookSyscallExit* argument = (SyscallMdl::HookSyscallExit*)_argument;
    SubsecondTime time(argument->time);
+   PyGILState_STATE state = PyGILState_Ensure();
    PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iiLiO)", argument->thread_id, argument->core_id, time.getFS(),
       argument->ret_val, argument->emulated ? Py_True : Py_False));
-   return hookCallbackResult(pResult);
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   return result;
 }
 
 static PyObject *
