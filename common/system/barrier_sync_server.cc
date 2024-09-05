@@ -323,7 +323,7 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id, bool continue_until_rel
    // To avoid overwhelming the OS scheduler, we only release N threads at a time (N ~= host cores).
    // Once a thread is done (stops executing because it completed the next barrier quantum, or due to thread stall),
    // one more thread is released so we always have at most N running threads.
-   std::random_shuffle(m_to_release.begin(), m_to_release.end());
+   std::shuffle(m_to_release.begin(), m_to_release.end(), generator);
    doRelease(m_fastforward ? -1 : Sim()->getConfig()->getNumHostCores());
 
    return must_wait;
