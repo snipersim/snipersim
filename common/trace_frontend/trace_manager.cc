@@ -221,6 +221,15 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
    }
 }
 
+void TraceManager::endFrontEnd()
+{
+	for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it){
+		if(!(*it)->m_stopped)
+			(*it)->frontEndStop();
+	}
+}
+
+
 void TraceManager::cleanup()
 {
    for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)

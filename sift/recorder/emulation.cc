@@ -38,11 +38,26 @@ static void handleCpuid(THREADID threadid, ADDRINT * gax, ADDRINT * gbx, ADDRINT
    req.cpuid.ecx = *gcx;
    bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeCpuid, req, res);
 
+   //printf("PIN CPUID: %08lx %08lx => ", *gax, *gcx);
+   //printf("%08x %08x %08x %08x\n", res.cpuid.eax, res.cpuid.ebx, res.cpuid.ecx, res.cpuid.edx);
+
    sift_assert(emulated);
    *gax = res.cpuid.eax;
    *gbx = res.cpuid.ebx;
    *gcx = res.cpuid.ecx;
    *gdx = res.cpuid.edx;
+   thread_data[threadid].cpuid_vals = res;
+}
+
+static void handleCpuid_assign(THREADID threadid, ADDRINT * gax, ADDRINT * gbx, ADDRINT * gcx, ADDRINT * gdx)
+{
+   //Those two elements sometimes do not match, even after being assigned by "handleCPUID"
+   //printf("After handle CPUID: %08lx %08lx %08lx %08lx\n", *gax, *gbx, *gcx, *gdx);
+   //printf("After handle CPUID saved: %08x %08x %08x %08x\n", g_reply.cpuid.eax, g_reply.cpuid.ebx, g_reply.cpuid.ecx, g_reply.cpuid.edx);
+   *gax = thread_data[threadid].cpuid_vals.cpuid.eax;
+   *gbx = thread_data[threadid].cpuid_vals.cpuid.ebx;
+   *gcx = thread_data[threadid].cpuid_vals.cpuid.ecx;
+   *gdx = thread_data[threadid].cpuid_vals.cpuid.edx;
 }
 
 static ADDRINT emuGetNprocs(THREADID threadid)
@@ -155,6 +170,7 @@ static void insCallback(INS ins, VOID *v)
    if (INS_Opcode(ins) == XED_ICLASS_CPUID)
    {
       INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR)handleCpuid, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GBX, IARG_REG_REFERENCE, REG_GCX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+      INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleCpuid_assign, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GBX, IARG_REG_REFERENCE, REG_GCX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
       INS_Delete(ins);
    }
 }

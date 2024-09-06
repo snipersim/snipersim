@@ -1,42 +1,16 @@
-#!/usr/bin/env python2
-# Copyright (C) 2022 Intel Corporation
-# SPDX-License-Identifier: BSD-3-Clause
+#!/usr/bin/env python3
 # -*- python -*-
-#BEGIN_LEGAL
-#BSD License
-#
-#Copyright (c)2022 Intel Corporation. All rights reserved.
-#
-#Redistribution and use in source and binary forms, with or without modification,
-# are permitted provided that the following conditions are met:
-#
-#1. Redistributions of source code must retain the above copyright notice,
-#   this list of conditions and the following disclaimer.
-#
-#2. Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
-#
-#3. Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED.
-# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
-# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#END_LEGAL
+
+# Copyright (C) 2004-2023 Intel Corporation.
+# SPDX-License-Identifier: MIT
+# 
+
 import sys
 import os
 import re
 import copy
+import shutil
+import platform
 
 # set the SDE_BUILD_KIT environment variable to point to the root directory
 # containing the sde package.
@@ -58,17 +32,40 @@ def add_link_libs(env):
     # Support PIN CRT link
     if env.on_linux():
         env['LIBS'] += ' -lpinplay -lpin -lzlib -lbz2 -lsift'
+        # Add internal libs if exists
+        if os.path.exists(os.path.join(pinplay_link_dir,'libxml2'+env['LIBEXT'])):       
+            env['LIBS'] += ' -larchxml -lxml2 '
+
     elif env.on_windows():
         env['LIBS'] += ' libpinplay%(LIBEXT)s'
         env['LIBS'] += ' bz2%(LIBEXT)s'
         env['LIBS'] += ' zlib%(LIBEXT)s'
+        if os.path.exists(os.path.join(pinplay_link_dir,'xml2'+env['LIBEXT'])):     
+            # Add internal libs if exists               
+            env['LIBS'] += ' xml2%(LIBEXT)s'
+            env['LIBS'] += ' libarchxml%(LIBEXT)s'
+        
     else:
         mbuild.die('no supported OS')
 
 env = mbuild.env_t()
 
 build_kit.early_init(env,build_kit=True)
-env.parse_args({'shared':True})
+
+if env.on_windows():
+   # Add clang tools definitions
+   env['clang-cl']=True   
+   clang_which = shutil.which('clang-cl.exe')
+   if clang_which != None and clang_which != '':
+       clang_path = clang_which[:clang_which.find('clang-cl.exe')]
+       compiler_path = '"'+os.path.join(clang_path,'clang-cl.exe')+'"'
+       linker_path = '"'+os.path.join(clang_path,'lld-link.exe')+'"'
+       mbuild.msgb("COMPILER_PATH",compiler_path)
+       mbuild.msgb("LINKER_PATH",linker_path)
+   env.parse_args({'shared':True,'cc':compiler_path,'cxx':compiler_path,'linker':linker_path})
+else:    
+   env.parse_args({'shared':True})
+   
 build_kit.late_init(env)
 
 if 'clean' in env['targets']:
@@ -83,17 +80,7 @@ if env['host_cpu'] == 'x86-64':
 else:
     env['arch'] = 'ia32'
 
-# Set compiler
-try:
-    env['CC'] = os.environ['CC']
-except KeyError:
-    pass
-try:
-    env['CXX'] = os.environ['CXX']
-except KeyError:
-    pass
-
-# Set include and link dirs
+# Set include and link dirs 
 pinplay_include_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit','pinplay','include')
 instlib_include_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit','source',
                                                                 'tools','InstLib')
@@ -130,14 +117,16 @@ add_link_libs(env)
 env.add_link_dir(pin_lib_dir)
 env.add_link_dir(pin_crt_dir)
 env.add_link_dir('./sift/obj-intel64')
-#env.add_link_dir('../obj-intel64') # for libsift.a
 if env.on_linux():
     env['LINKFLAGS'] += ' -Wl,--hash-style=sysv '
     env['LINKFLAGS'] += ' -Wl,--rpath,\$ORIGIN/../../../../%(arch)s/pin_lib:\$ORIGIN/../../../../%(arch)s/xed_lib:\$ORIGIN/pin_lib:\$ORIGIN/xed_lib'
-'pinplay-branch-predictor', 'pinplay-debugger', 'pinplay-driver', 'pinplay_controller', 'pinplay_debugtrace', 'pinplay_isimpoint', 'pinplay_strace', 'pinplayatrace'
+
 # Tools sources
 tool_sources = {}
 tool_sources['sde_sift_recorder'] =  ['bbv_count.cc', 'emulation.cc','globals.cc','papi.cc','pinboost_debug.cc','recorder_base.cc','recorder_control.cc','sift_recorder.cc','syscall_modeling.cc','threads.cc','trace_rtn.cc' ]
+
+# Programs sources
+programs_sources = {}
 
 # Build tools
 for tool in tools:
@@ -148,9 +137,7 @@ for tool in tools:
             continue
         if s.endswith('.cpp'):
             cmd = dag.add(env, env.cxx_compile( s ))
-        if s.endswith('.cc'):
-            cmd = dag.add(env, env.cxx_compile( s ))
-        elif s.endswith('.c'):
+        elif s.endswith('.c') or s.endswith('.cc'):
             cmd = dag.add(env, env.cc_compile( s ))
         elif s.endswith('.s'):
             cmd = dag.add(env, env.cc_assemble( s ))
@@ -169,7 +156,7 @@ for tool in tools:
         all_objs.extend(objs)
     objs = all_objs
 
-    toolname = tool #+ "%(pintool_suffix)s"
+    toolname = tool + "%(pintool_suffix)s" 
 
     cmd2 = dag.add(env, env.dynamic_lib(objs, toolname, relocate=True))
 
@@ -217,4 +204,4 @@ work_queue = mbuild.work_queue_t(env['jobs'])
 okay = work_queue.build(dag)
 if not okay:
     mbuild.die("build failed")
-#mbuild.msgb("SUCCESS")
+mbuild.msgb("SUCCESS")

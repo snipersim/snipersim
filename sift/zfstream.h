@@ -92,6 +92,22 @@ class vifstream : public vistream
       virtual bool fail() const { return stream->fail(); }
 };
 
+class cvifstream : public vistream
+{
+   private:
+	   std::FILE *stream;
+	   char peek_buffer;
+	   bool buffer_in_use;
+   public:
+	   cvifstream(const char * filename, std::ios_base::openmode mode = std::ios_base::in);
+	   cvifstream(std::FILE *stream)
+		   : stream(stream) {}
+	   virtual ~cvifstream();
+	   virtual void read(char* s, std::streamsize n);
+	   virtual int peek();
+	   virtual bool fail() const; 
+};
+
 class izstream : public vistream
 {
    private:

@@ -61,7 +61,7 @@ CPPFLAGS+=$(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
           -I$(SIM_ROOT)/capstone/include -I$(SIM_ROOT)/capstone/include/capstone 
 
 CXXFLAGS+=-c \
-          -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++11 -fno-strict-aliasing $(OPT_CFLAGS) #-Werror	  
+          -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++20 -fno-strict-aliasing $(OPT_CFLAGS) #-Werror
 #CXXFLAGS+=-I$(SIM_ROOT)/rv8/src
 #CXXFLAGS+=-I$(SIM_ROOT)/rv8
 
