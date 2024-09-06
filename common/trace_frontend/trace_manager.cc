@@ -224,7 +224,8 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
 void TraceManager::endFrontEnd()
 {
 	for(std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it){
-		(*it)->frontEndStop();
+		if(!(*it)->m_stopped)
+			(*it)->frontEndStop();
 	}
 }
 
