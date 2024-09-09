@@ -1,0 +1,18 @@
+[submodule "dynamorio"]
+	path = dynamorio
+	url = https://github.com/DynamoRIO/dynamorio
+[submodule "capstone"]
+	path = capstone
+	url = https://github.com/capstone-engine/capstone
+[submodule "mbuild"]
+	path = mbuild
+	url = https://github.com/intelxed/mbuild
+[submodule "xed"]
+	path = xed
+	url = https://github.com/intelxed/xed
+[submodule "mcpat"]
+	path = mcpat
+	url = https://github.com/JaimeRoelandts/McPat_Sniper
+[submodule "sde_kit/pinplay-tools"]
+	path = sde_kit/pinplay-tools
+	url = https://github.com/intel/pinplay-tools.git

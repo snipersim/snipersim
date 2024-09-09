@@ -8,7 +8,17 @@
 *~
 
 # vi temp files
-*.swp
+*.sw*
+
+# Other popular IDE fiels
+.idea
+.vscode
+
+# Python temp file
+__pycache__
+
+# OSX stuff
+.DS_Store
 
 # patch rejections
 *.rej
@@ -29,12 +39,18 @@ graphite.out
 cpi-stack.jpg
 output_files
 tools/cpistack-collect/cpistack-*
+power.xml
+power.png
+power.txt
+power.py
 
 # compiled libraries
+lib
 lib/libcarbon_sim.a
 lib/pin_sim.so
 lib/libgraphite_user.a
 lib/sniper
+decoder_lib/libdecoder.a
 config/buildconf.*
 config/sniper.py
 docs
@@ -44,32 +60,35 @@ sift/libsift.a
 sift/siftdump
 sift/recorder/sift_recorder
 tools/pinversion
+# Symlinked SIFT files
+frontend/pin-frontend/sift/*.h
+frontend/pin-frontend/sift/*.cc
+sift/recorder/sift/*.h
+sift/recorder/sift/*.cc
+# Pin3 output
+frontend/pin-frontend/obj-intel64
+sift/recorder/obj-intel64
+sift/recorder/sift/obj-intel64
 
 # result files
-results/
+results
 !results/.DO_NOT_DELETE
 
 # dependencies
 boost_1_38_0
 pin_kit
 linux_2_6_32
-mcpat
 python_kit
 riscv/riscv-tools
 riscv/rv8
 riscv/Speckle
 xed_kit
-mbuild
-sde_kit
-capstone
-dynamorio
+sde_kit/*
+!sde_kit/pinplay-tools
 
-# Pin3 output
-frontend/pin-frontend/obj-intel64
-sift/recorder/obj-intel64
+# packages
+graphite-*.tar.bz2
 
-# Symlinked SIFT files
-frontend/pin-frontend/sift/*.h
-frontend/pin-frontend/sift/*.cc
-sift/recorder/sift/*.h
-sift/recorder/sift/*.cc
+.cache
+tags
+compile_commands.json
