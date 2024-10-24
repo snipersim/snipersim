@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import os, sys, getopt, re, math, subprocess, json, shutil
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
@@ -10,7 +10,7 @@ def mkdir_p(path):
   import errno
   try:
     os.makedirs(path)
-  except OSError, exc:
+  except OSError as exc:
     if exc.errno == errno.EEXIST and os.path.isdir(path):
       pass
     else: raise
@@ -22,7 +22,7 @@ levels_default = [ '1', '2', '3', 'topo' ]
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-j <jobid>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir (default: viz)>] [--mcpat] [--level <levels (default: %s)>] [--add-level <level>] [-v|--verbose]' % ','.join(levels_default)
+    print('Usage: '+sys.argv[0]+ ' [-h|--help (help)] [-d <resultsdir (default: .)>] [-j <jobid>] [-t <title>] [-n <num-intervals (default: 1000, all: 0)>] [-i <interval (default: smallest_interval)>] [-o <outputdir (default: viz)>] [--mcpat] [--level <levels (default: %s)>] [--add-level <level>] [-v|--verbose]' % ','.join(levels_default))
     sys.exit()
 
   resultsdir = '.'
@@ -37,8 +37,8 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hd:o:t:n:i:vj:", [ "help", "mcpat", "level=", "add-level=", "verbose" ])
-  except getopt.GetoptError, e:
-    print e
+  except getopt.GetoptError as e:
+    print(e)
     usage()
     sys.exit()
   for o, a in opts:
@@ -53,23 +53,26 @@ if __name__ == '__main__':
     if o == '-t':
       title = a
     if o == '-n':
-      num_intervals = long(a)
+      num_intervals = int(a)
     if o == '-i':
-      interval = long(a)
+      interval = int(a)
     if o == '--level':
       for l in a.split(','):
         if l not in levels_all:
-          print 'Invalid level', l
+          print('Invalid level', l)
           sys.exit(1)
       levels = a.split(',')
     if o == '--add-level':
       if a not in levels_all:
-	print 'Invalid level', a
-	sys.exit(1)
+        print('Invalid level', a)
+        sys.exit(1)
       levels.append(a)
     if o == '-v' or o == '--verbose':
       verbose = True
     if o == '-j':
+      #comment next lines bellow to run script anyway
+      print("This script relies on Intel scripts to submit and collect sniper simualtions on a cluster, which not shipped with Sniper. Therefore, this script is not tested/updated for Python3 support", file=sys.stderr)
+      # exit(0)
       import tempfile, binascii, iqclient
       jobid = int(a)
       dircleanup = tempfile.mkdtemp()
@@ -80,7 +83,7 @@ if __name__ == '__main__':
       waitrc = os.system('tar -x -z -f "%s" -C "%s" && rm "%s"' % (tarfn, dircleanup, tarfn))
       rc = (waitrc >> 8) & 0xff
       if rc != 0:
-        print 'Error: Unable to download and extract data from jobid %d.' % jobid
+        print('Error: Unable to download and extract data from jobid %d.' % jobid)
         shutil.rmtree(dircleanup)
         dircleanup = None
         sys.exit(1)
@@ -97,10 +100,10 @@ if __name__ == '__main__':
     stats = sniper_stats.SniperStats(resultsdir)
     snapshots = stats.get_snapshots()
   except:
-    print "No valid results found in "+resultsdir
+    print("No valid results found in "+resultsdir)
     sys.exit(1)
 
-  snapshots = sorted([ long(name.split('-')[1]) for name in snapshots if re.match(r'periodic-[0-9]+', name) ])
+  snapshots = sorted([ int(name.split('-')[1]) for name in snapshots if re.match(r'periodic-[0-9]+', name) ])
   defaultinterval = snapshots[1] - snapshots[0]
   defaultnum_intervals = len(snapshots)-1
 
@@ -109,10 +112,10 @@ if __name__ == '__main__':
   if num_intervals == 0:
     num_intervals = defaultnum_intervals
   elif num_intervals <= 0:
-    print 'Number of intervals is invalid (%s), using (%s) intervals instead.' % (num_intervals, defaultnum_intervals)
+    print('Number of intervals is invalid (%s), using (%s) intervals instead.' % (num_intervals, defaultnum_intervals))
     num_intervals = defaultnum_intervals
   elif num_intervals > defaultnum_intervals:
-    print 'Number of intervals is too large (%s), using (%s) intervals instead.' % (num_intervals, defaultnum_intervals)
+    print('Number of intervals is too large (%s), using (%s) intervals instead.' % (num_intervals, defaultnum_intervals))
     num_intervals = defaultnum_intervals
   elif num_intervals < defaultnum_intervals:
     # Automatically determine interval to end up with (around) num_intervals in total
@@ -122,15 +125,15 @@ if __name__ == '__main__':
   if interval == None:
     interval = defaultinterval
   elif interval <= 0:
-    print 'Invalid interval specified (%s), using the smallest interval (%s) instead' % (interval, defaultinterval)
+    print('Invalid interval specified (%s), using the smallest interval (%s) instead' % (interval, defaultinterval))
     interval = defaultinterval
   elif interval < defaultinterval:
-    print 'Interval is smaller than the smallest interval, using the smallest interval (%s) instead.' % defaultinterval
+    print('Interval is smaller than the smallest interval, using the smallest interval (%s) instead.' % defaultinterval)
     interval = defaultinterval
 
   if(interval*num_intervals > defaultinterval*defaultnum_intervals):
-    print 'The combination '+str(num_intervals)+' intervals and an interval size of '+str(interval)+' is invalid.'
-    print 'Now using all intervals ('+str(defaultnum_intervals)+') with the smallest interval size ('+str(defaultinterval)+' femtoseconds).'
+    print('The combination '+str(num_intervals)+' intervals and an interval size of '+str(interval)+' is invalid.')
+    print('Now using all intervals ('+str(defaultnum_intervals)+') with the smallest interval size ('+str(defaultinterval)+' femtoseconds).')
     interval = defaultinterval
     num_intervals = defaultnum_intervals
 
@@ -146,7 +149,7 @@ if __name__ == '__main__':
   if 'aso' in levels: functionbased.createJSONData(resultsdir, outputdir, title)
 
   if verbose:
-    print "Write general info about the visualizations in info.txt"
+    print("Write general info about the visualizations in info.txt")
   info = open(os.path.join(outputdir,'info.txt'), "w")
   info.write("title = '"+title+"';\n")
   info.write("num_intervals = '"+str(num_intervals)+"';\n")
@@ -166,12 +169,12 @@ if __name__ == '__main__':
   # Now copy all static files as well
   if outputdir != HOME:
     if verbose:
-      print "Copy files to output directory "+outputdir
+      print("Copy files to output directory "+outputdir)
     os.system('cd "%s"; tar c index.html rickshaw/ levels/level2/*html levels/level3/*html levels/topology/*html levels/profile/*html css/ images/ scripts/ levels/level2/css levels/level2/javascript/ levels/level3/javascript | tar x -C %s' % (HOME, outputdir))
     if 'aso' in levels:
       os.system('cd "%s"; tar c flot/ levels/functionbased/functionbased.html levels/functionbased/*js css/ levels/functionbased/doxygen | tar x -C %s' % (HOME, outputdir))
   if verbose:
-    print "Visualizations can be viewed in "+os.path.join(outputdir,'index.html')
+    print("Visualizations can be viewed in "+os.path.join(outputdir,'index.html'))
 
   if dircleanup:
     shutil.rmtree(dircleanup)

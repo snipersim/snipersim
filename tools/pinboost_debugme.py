@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, tempfile
 
@@ -19,8 +19,8 @@ continue
 backtrace
 ''')
 
-print >> sys.stderr
-print >> sys.stderr, "[PINBOOST] Starting screen session with GDB attached to thread %d; resume using" % mytid
-print >> sys.stderr, "# screen -r gdb-%d" % mytid
+print(file=sys.stderr)
+print("[PINBOOST] Starting screen session with GDB attached to thread %d; resume using" % mytid, file=sys.stderr)
+print("# screen -r gdb-%d" % mytid, file=sys.stderr)
 
 os.system('screen -d -m -S gdb-%d -- gdb -command=%s $SNIPER_ROOT/pin_kit/intel64/bin/pinbin %d' % (mytid, cmdfile, mytid))

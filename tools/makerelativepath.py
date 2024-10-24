@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # Make paths in config/graphite.py relative whenever possible
 
 import sys, os
@@ -12,4 +12,4 @@ if configdir:
     if configdir and configdir[0] == '/':
       configdir = configdir[1:]
 
-print '%s="%s"' % (name, configdir)
+print('%s="%s"' % (name, configdir))

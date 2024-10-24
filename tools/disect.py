@@ -1,6 +1,11 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os, sys, time, re, getopt, subprocess, env_setup
+#comment next lines bellow to run script anyway
+print("This script relies on Intel scripts to submit and collect sniper simualtions on a cluster, which not shipped with Sniper. Therefore, this script is not tested/updated for Python3 support", file=sys.stderr)
+exit(0)
+
+#Append path where iqclient, iqlib and intelqueue python scripts are located
 sys.path.extend([ env_setup.benchmarks_root(), os.path.join(env_setup.benchmarks_root(), 'tools', 'scheduler') ])
 import iqclient, iqlib, intelqueue
 
@@ -8,7 +13,7 @@ ic = iqclient.IntelClient()
 
 
 def ex_ret(cmd):
-  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE).communicate()[0]
+  return subprocess.Popen([ 'bash', '-c', cmd ], stdout = subprocess.PIPE, text=True).communicate()[0]
 def git(args):
   return ex_ret('git --git-dir="%s/.git" %s' % (env_setup.sim_root(),args)).strip()
 
@@ -17,14 +22,14 @@ if len(sys.argv) < 3:
   prefix = sys.argv[1]
 
   os.system('iqall -J$USER -jdisect-%s-%% -a10 | grep disect | sort -r -k2 -t-' % prefix)
-  print
-  print
+  print()
+  print()
 
   height, width = ex_ret('stty size').split()
   width = int(width)
 
   jobs = ic.job_list(os.getenv('USER'), 10*86400, 0, 'disect-%s-%%' % prefix)
-  jobs = filter(lambda j: j['state'] > 0, jobs)
+  jobs = [j for j in jobs if j['state'] > 0]
   jobs.sort(key = lambda j: j['name'])
   gitid_head = jobs[-1]['name'].split('-')[-6]
   results = {}
@@ -48,7 +53,7 @@ if len(sys.argv) < 3:
   for line in tree:
     if not line.endswith('='):
       # Lines without a commit (just the merge part of the graph)
-      print line
+      print(line)
       continue
     res = re.match(r'([ *|/\\]+) ([0-9a-f]*) ([0-9]*) (.*)=', line)
     if not res:
@@ -62,14 +67,14 @@ if len(sys.argv) < 3:
       out += ' '*9
     out += '      '
     out += subject[:max(30, width-len(out)-1)]
-    print out
+    print(out)
     if not results:
       break
   sys.exit(0)
 
 
 def usage():
-  print '%s <prefix> {iqgraphite options: pnicgJq} [-N <identical copies (1)>] gitid..gitid' % sys.argv[0]
+  print('%s <prefix> {iqgraphite options: pnicgJq} [-N <identical copies (1)>] gitid..gitid' % sys.argv[0])
   sys.exit(-1)
 
 if len(sys.argv) < 3:
@@ -89,9 +94,9 @@ gitid_end = None
 
 try:
   opts, args = getopt.getopt(sys.argv[2:], "hJ:q:p:n:i:N:c:g:", [])
-except getopt.GetoptError, e:
+except getopt.GetoptError as e:
   # print help information and exit:
-  print e
+  print(e)
   usage()
 for o, a in opts:
   if o == '-h':
@@ -120,7 +125,7 @@ for o, a in opts:
 try:
   gitid_start, gitid_end = args[0].split('..')
 except:
-  print 'Need startgitid..endgitid as argument'
+  print('Need startgitid..endgitid as argument')
   usage()
 
 
@@ -156,4 +161,4 @@ for gitid in reversed(gitids):
     if ic.graphite_exists(jobgroup, jobname, None, bm, inputsize, ncores, graphiteoptions):
       continue
     startsim(jobname, gitid)
-    print jobname
+    print(jobname)

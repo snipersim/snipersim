@@ -2,10 +2,10 @@ import sim
 
 
 def getScoreMetricTime(thread_id):
-  return long(sim.stats.get('thread', thread_id, 'nonidle_elapsed_time'))
+  return int(sim.stats.get('thread', thread_id, 'nonidle_elapsed_time'))
 
 def getScoreMetricInstructions(thread_id):
-  return long(sim.stats.get('thread', thread_id, 'instruction_count'))
+  return int(sim.stats.get('thread', thread_id, 'instruction_count'))
 
 
 class Thread:
@@ -47,7 +47,7 @@ class SchedulerLocality:
 
   def setup(self, args):
     args = dict(enumerate((args or '').split(':')))
-    interval_ns = long(args.get(0, None) or 10000000)
+    interval_ns = int(args.get(0, None) or 10000000)
     scheduler_type = args.get(1, 'equal_time')
     core_mask = args.get(2, '')
     if scheduler_type == 'equal_time':
@@ -57,10 +57,10 @@ class SchedulerLocality:
     else:
       raise ValueError('Invalid scheduler type %s' % scheduler_type)
     if core_mask:
-      core_mask = map(int, core_mask.split(',')) + [0]*sim.config.ncores
+      core_mask = list(map(int, core_mask.split(','))) + [0]*sim.config.ncores
       self.cores = [ core for core in range(sim.config.ncores) if core_mask[core] ]
     else:
-      self.cores = range(sim.config.ncores)
+      self.cores = list(range(sim.config.ncores))
     sim.util.Every(interval_ns * sim.util.Time.NS, self.periodic)
     self.threads = {}
     self.last_core = 0
@@ -87,7 +87,7 @@ class SchedulerLocality:
       self.threads[thread_id].setCore(None, time)
       self.threads[thread_id].runnable = False
       # Schedule a new thread (runnable, but not running) on this free core
-      threads = [ thread for thread in self.threads.values() if thread.runnable and thread.core is None ]
+      threads = [ thread for thread in list(self.threads.values()) if thread.runnable and thread.core is None ]
       if threads:
         # Order by score
         threads.sort(key = lambda thread: thread.score)
@@ -98,20 +98,20 @@ class SchedulerLocality:
       # Ignore calls due to the thread being scheduled back in
       self.threads[thread_id].unscheduled = False
     else:
-      self.threads[thread_id].setScore(min([ thread.score for thread in self.threads.values() ]))
+      self.threads[thread_id].setScore(min([ thread.score for thread in list(self.threads.values()) ]))
       self.threads[thread_id].runnable = True
       # If there is a free core, move us there now
-      used_cores = set([ thread.core for thread in self.threads.values() if thread.core is not None ])
+      used_cores = set([ thread.core for thread in list(self.threads.values()) if thread.core is not None ])
       free_cores = set(self.cores) - used_cores
       if len(free_cores):
         self.threads[thread_id].setCore(list(free_cores)[0], time)
 
   def periodic(self, time, time_delta):
     # Update thread scores
-    [ thread.updateScore() for thread in self.threads.values() if thread.core is not None ]
+    [ thread.updateScore() for thread in list(self.threads.values()) if thread.core is not None ]
 
     # Get a list of all runnable threads
-    threads = [ thread for thread in self.threads.values() if thread.runnable ]
+    threads = [ thread for thread in list(self.threads.values()) if thread.runnable ]
     # Order by score
     threads.sort(key = lambda thread: thread.score)
     # Select threads to run now, one per core
@@ -128,7 +128,7 @@ class SchedulerLocality:
     assert(len(free_cores) >= len(threads))
 
     for thread, core in zip(threads, sorted(free_cores)):
-      current_thread = [ t for t in self.threads.values() if t.core == core ]
+      current_thread = [ t for t in list(self.threads.values()) if t.core == core ]
       if current_thread:
         current_thread[0].setCore(None)
       thread.setCore(core, time)

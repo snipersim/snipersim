@@ -10,8 +10,8 @@ import sim
 class PeriodicInsStats:
   def setup(self, args):
     args = dict(enumerate((args or '').split(':')))
-    interval = long(args.get(0, '') or 1000000000)
-    sim.util.EveryIns(long(interval), self.periodicins, roi_only = True)
+    interval = int(args.get(0, '') or 1000000000)
+    sim.util.EveryIns(int(interval), self.periodicins, roi_only = True)
 
   def periodicins(self, ins, ins_delta):
     sim.stats.write('periodicins-%d' % ins)

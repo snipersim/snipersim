@@ -14,7 +14,7 @@ SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW
 
 PYTHON2=python2
 
-.PHONY: all message dependencies compile_simulator configscripts package_deps pin python linux builddir showdebugstatus distclean mbuild xed_install xed
+.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
@@ -63,7 +63,7 @@ endif
 
 include common/Makefile.common
 
-dependencies: package_deps sde_kit $(PIN_ROOT) pin xed python mcpat linux builddir showdebugstatus
+dependencies: package_deps sde_kit $(PIN_ROOT) pin xed mcpat linux builddir showdebugstatus
 
 BUILD_CAPSTONE ?=
 ifeq ($(BUILD_ARM),1)
@@ -235,15 +235,6 @@ ifneq ($(NO_PIN_CHECK),1)
 PIN_REV_MINIMUM=71313
 pin: $(PIN_DEP)
 	@if [ "$$(tools/pinversion.py $(PIN_HOME) | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo; echo "Found Pin version $$(tools/pinversion.py $(PIN_HOME)) in $(PIN_HOME)"; echo "but at least revision $(PIN_REV_MINIMUM) is required."; echo; false; fi
-endif
-
-ifneq ($(NO_PYTHON_DOWNLOAD),1)
-PYTHON_DEP=python_kit/$(SNIPER_TARGET_ARCH)/lib/python2.7/lib-dynload/_sqlite3.so
-python: $(PYTHON_DEP)
-$(PYTHON_DEP):
-	$(_MSG) '[DOWNLO] Python $(SNIPER_TARGET_ARCH)'
-	$(_CMD) mkdir -p python_kit/$(SNIPER_TARGET_ARCH)
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "https://snipersim.org/packages/sniper-python27-$(SNIPER_TARGET_ARCH).tgz" | tar xz --strip-components 1 -C python_kit/$(SNIPER_TARGET_ARCH)
 endif
 
 ifneq ($(NO_MCPAT_DOWNLOAD),1)

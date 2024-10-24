@@ -9,11 +9,11 @@ class Marker:
     self.write_stats = 'stats' in args
   def hook_magic_marker(self, thread, core, a, b, s):
     if self.write_terminal:
-      print '[SCRIPT] Magic marker from thread %d: a = %d,' % (thread, a),
+      print('[SCRIPT] Magic marker from thread %d: a = %d,' % (thread, a), end=' ')
       if s:
-        print 'str = %s' % s
+        print('str = %s' % s)
       else:
-        print 'b = %d' % b
+        print('b = %d' % b)
 
     if self.write_markers:
       sim.stats.marker(thread, core, a, b, s)

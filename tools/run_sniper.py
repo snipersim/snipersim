@@ -21,9 +21,9 @@ def run_program_repeat(app_id, program_func, program_arg, outputdir):
   global running
   run_id = 0
   while running:
-    print '[RUN-SNIPER] Starting application', app_id
+    print('[RUN-SNIPER] Starting application', app_id)
     run_program_redirect(app_id, program_func, program_arg, outputdir, run_id)
-    print '[RUN-SNIPER] Application', app_id, 'done'
+    print('[RUN-SNIPER] Application', app_id, 'done')
     time.sleep(1)
     run_id += 1
 
@@ -73,8 +73,8 @@ def get_cxx_inuse(sim_root, clear_ldlibpath = False):
     ldd_out = open(ldd_out_name).read()
     os.unlink(ldd_out_name)
     libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
-  except Exception, e:
-    print >> sys.stderr, `e`
+  except Exception as e:
+    print(repr(e), file=sys.stderr)
     return None
   return libcxx_path
 
@@ -86,8 +86,8 @@ def get_cxx_version(path):
     try:
       version = int(realname.split('.')[-1])
       return version
-    except Exception, e:
-      print >> sys.stderr, `e`
+    except Exception as e:
+      print(repr(e), file=sys.stderr)
       return 0
   else:
     return 0
@@ -97,8 +97,8 @@ def get_cxx_override(sim_root, pin_home, arch):
   cxx_versions = [get_cxx_inuse(sim_root), get_cxx_inuse(sim_root, clear_ldlibpath = True), '%s/%s/runtime/cpplibs' % (pin_home, arch)]
   if 'BENCHMARKS_ROOT' in os.environ:
     cxx_versions.append('%s/libs' % os.environ['BENCHMARKS_ROOT'])
-  cxx_versions = filter(lambda x:x!=None, cxx_versions)
-  cxx_override = sorted(map(lambda x:(get_cxx_version(x),x), cxx_versions), key=lambda x:x[0])[-1][1]
+  cxx_versions = [x for x in cxx_versions if x!=None]
+  cxx_override = sorted([(get_cxx_version(x),x) for x in cxx_versions], key=lambda x:x[0])[-1][1]
   return cxx_override
 
 # LD_LIBRARY_PATH setup
