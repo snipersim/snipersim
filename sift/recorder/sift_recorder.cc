@@ -154,6 +154,10 @@ VOID Handler(CONTROLLER::EVENT_TYPE ev, VOID * v, CONTEXT * ctxt, VOID * ip, THR
    
     switch(ev)
     {
+        case CONTROLLER::EVENT_WARMUP_START:
+            handleMagic(tid, ctxt, SIM_CMD_USER, 0x0be0000f, 2);
+            break;
+
         case CONTROLLER::EVENT_START:
             handleMagic(tid, ctxt, SIM_CMD_USER, 0x0be0000f, 0);
             break;
