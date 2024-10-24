@@ -40,6 +40,7 @@ def usage():
         '  [--save-patch]' + \
         '  [--pin-stats]' + \
         '  [--wrap-sim=]' + \
+        '  [--sde-arch=]' + \
         '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec="<mpiexec -mpiarg...>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
@@ -105,6 +106,7 @@ trace_extra_args = []
 verbose = False
 use_pa = True
 use_pinplay = False
+sde_arch = ''
 
 if not sys.argv[1:]:
   usage()
@@ -222,6 +224,7 @@ try:
       "sift",
       "pid=",
       "frontend=",
+      "sde-arch=",
       "record-trace-option=",
     ] + record_trace_passthrough
   )
@@ -358,6 +361,8 @@ for o, a in opts:
   if o == '--frontend':
     frontend = a
     use_sift = True
+  if o == '--sde-arch':
+    sde_arch = a
   if o.startswith('--') and o[2:] in record_trace_passthrough:
     trace_extra_args.append(o)
   if o.startswith('--') and o[2:]+'=' in record_trace_passthrough:
@@ -643,6 +648,8 @@ if tracegen:
     trace_extra_args += [ '--pinplay-addr-trans' ]
   if frontend:
     trace_extra_args += [ '--frontend=%(frontend)s' % locals()]
+  if sde_arch:
+    trace_extra_args += [ '--sde-arch=%(sde_arch)s' % locals() ]
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
     tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     tracecmds.append(tracecmd)

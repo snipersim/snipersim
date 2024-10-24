@@ -59,7 +59,7 @@ if not sys.argv[1:]:
   usage()
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "use-pinplay" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "use-pinplay", "sde-arch=" ])
 except getopt.GetoptError as e:
   # print help information and exit:
   print(e)
@@ -132,6 +132,10 @@ for o, a in opts:
     extra_tool_args.append('-sniper:maxthreads %s' % a)
   if o == '--use-pinplay':
     use_pinplay = True
+  if o == '--sde-arch':
+    sde_arch = a
+    if not sde_arch.startswith('-'):
+      sde_arch = '-' + sde_arch
 
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
