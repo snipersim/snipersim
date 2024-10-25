@@ -215,11 +215,11 @@ $(PIN_DEP):
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
 sde_kit: $(PIN_ROOT)
 else
-SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.38.0-2024-04-18-lin.tar.xz
+SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.44.0-2024-08-22-lin.tar.xz
 PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpindwarf.so
 sde_kit: $(PIN_DEP)
 $(PIN_DEP):
-	$(_MSG) '[DOWNLO] SDE 9.38.0-2024-04-18'
+	$(_MSG) '[DOWNLO] SDE 9.44.0-2024-08-22'
 	$(_CMD) mkdir -p $(SDE_HOME)
 	$(_CMD) wget -O $(shell basename $(SDE_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD)
 	$(_CMD) tar -x -f $(shell basename $(SDE_DOWNLOAD)) --auto-compress --strip-components 1 -C $(SDE_HOME)
