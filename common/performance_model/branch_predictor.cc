@@ -3,6 +3,7 @@
 #include "one_bit_branch_predictor.h"
 #include "pentium_m_branch_predictor.h"
 #include "a53branchpredictor.h"
+#include "nn_branch_predictor.h"
 #include "config.hpp"
 #include "stats.h"
 
@@ -50,6 +51,11 @@ BranchPredictor* BranchPredictor::create(core_id_t core_id)
       }
       else if (type == "a53") {
           return new A53BranchPredictor("branch_predictor", core_id);
+      }
+      else if (type == "nn") {
+          UInt32 batch_length = cfg->getIntArray("perf_model/branch_predictor/batch_length", core_id);
+          double learning_rate = cfg->getFloatArray("perf_model/branch_predictor/learning_rate", core_id);
+          return new NNBranchPredictor("branch_predictor", core_id, batch_length, learning_rate);
       }
       else
       {
