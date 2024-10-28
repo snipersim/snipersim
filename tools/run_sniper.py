@@ -131,6 +131,7 @@ def setup_env(sim_root, pin_home, arch, standalone = False, xed_home = None):
   else:
     if xed_home:
       ld_library_path.append('%s/lib' % (xed_home,))
+  ld_library_path.append('%s/libtorch/lib' % (sim_root, ))
   if 'SNIPER_SIM_LD_LIBRARY_PATH' in os.environ:
     ld_library_path.append(os.environ['SNIPER_SIM_LD_LIBRARY_PATH'])
   env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)
