@@ -63,6 +63,7 @@ mbuild
 sde_kit
 capstone
 dynamorio
+libtorch
 
 # Pin3 output
 frontend/pin-frontend/obj-intel64
