@@ -10,11 +10,12 @@ LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_FOLLOW=$(SIM_ROOT)/pin/../lib/follow_execv.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
+LIB_TORCH=$(SIM_ROOT)/libtorch/lib/libtorch.so
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND) $(LIB_TORCH)
 
 PYTHON2=python2
 
-.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed
+.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed libtorch
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
@@ -63,7 +64,7 @@ endif
 
 include common/Makefile.common
 
-dependencies: package_deps sde_kit $(PIN_ROOT) pin xed mcpat linux builddir showdebugstatus
+dependencies: package_deps sde_kit $(PIN_ROOT) pin xed mcpat torch linux builddir showdebugstatus
 
 BUILD_CAPSTONE ?=
 ifeq ($(BUILD_ARM),1)
@@ -244,11 +245,24 @@ mcpat/mcpat-1.0:
 	$(_CMD) mkdir -p mcpat
 	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 endif
-
 linux: include/linux/perf_event.h
 include/linux/perf_event.h:
 	$(_MSG) '[INSTAL] perf_event.h'
 	$(_CMD) if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
+
+TORCH_VERSION=latest
+TORCH_DOWNLOAD=https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-${TORCH_VERSION}.zip
+TORCH_HOME=$(SIM_ROOT)/libtorch
+TORCH_DEP=$(TORCH_HOME)/lib/libtorch.so
+
+ifneq ($(NO_TORCH),1)
+torch: $(TORCH_DEP)
+$(TORCH_DEP):
+	$(_MSG) '[DOWNLO] LIBTORCH latest';
+	$(_CMD) wget -O $(shell basename $(TORCH_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(TORCH_DOWNLOAD);
+	$(_CMD) unzip -q $(shell basename $(TORCH_DOWNLOAD)) -d $(SIM_ROOT);
+	$(_CMD) rm $(shell basename $(TORCH_DOWNLOAD));
+endif
 
 builddir: lib
 lib:
@@ -291,6 +305,8 @@ clean: empty_config empty_deps
 	$(_MSG) '[CLEAN ] frontend/dr-frontend'
 	$(_CMD) if [ -d "$(SIM_ROOT)/frontend/dr-frontend/build" ]; then rm -rf $(SIM_ROOT)/frontend/dr-frontend/build ; fi
 	$(_CMD) rm -f .build_os
+	$(_MSG) '[CLEAN ] libtorch'
+	$(_CMD) rm -rf libtorch
 
 distclean: clean
 	$(_MSG) '[DISTCL] Pin kit'
@@ -310,6 +326,8 @@ distclean: clean
 	$(_CMD) rm -rf xed xed_kit mbuild
 	$(_MSG) '[DISTCL] perf_event.h'
 	$(_CMD) rm -f include/linux/perf_event.h
+	$(_MSG) '[DISTCL] libtorch'
+	$(_CMD) rm -rf libtorch
 
 regress_quick: regress_unit regress_apps
 
