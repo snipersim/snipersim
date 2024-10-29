@@ -250,18 +250,21 @@ include/linux/perf_event.h:
 	$(_MSG) '[INSTAL] perf_event.h'
 	$(_CMD) if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
 
+TORCH_HOME=$(SIM_ROOT)/libtorch
+ifneq ($(NO_TORCH),1)
 TORCH_VERSION=latest
 TORCH_DOWNLOAD=https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-${TORCH_VERSION}.zip
-TORCH_HOME=$(SIM_ROOT)/libtorch
-TORCH_DEP=$(TORCH_HOME)/lib/libtorch.so
-
-ifneq ($(NO_TORCH),1)
-torch: $(TORCH_DEP)
-$(TORCH_DEP):
+TORCH_DEP := $(SIM_ROOT)/libtorch/lib/libtorch.so
+ifeq ($(wildcard $(TORCH_DEP)),)
+torch-download:
 	$(_MSG) '[DOWNLO] LIBTORCH latest';
-	$(_CMD) wget -O $(shell basename $(TORCH_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(TORCH_DOWNLOAD);
+	$(_CMD) wget -O $(shell basename $(TORCH_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(TORCH_DOWNLOAD)
+
+torch: torch-download
 	$(_CMD) unzip -q $(shell basename $(TORCH_DOWNLOAD)) -d $(SIM_ROOT);
 	$(_CMD) rm $(shell basename $(TORCH_DOWNLOAD));
+all: torch
+endif
 endif
 
 builddir: lib
@@ -306,8 +309,6 @@ clean: empty_config empty_deps
 	$(_MSG) '[CLEAN ] frontend/dr-frontend'
 	$(_CMD) if [ -d "$(SIM_ROOT)/frontend/dr-frontend/build" ]; then rm -rf $(SIM_ROOT)/frontend/dr-frontend/build ; fi
 	$(_CMD) rm -f .build_os
-	$(_MSG) '[CLEAN ] libtorch'
-	$(_CMD) rm -rf libtorch
 
 distclean: clean
 	$(_MSG) '[DISTCL] Pin kit'

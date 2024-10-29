@@ -31,7 +31,6 @@ private:
     const size_t batch_length;
     BranchPredictorModel model;
     torch::optim::Adam optimizer;
-    // std::unordered_set<std::tuple<IntPtr, IntPtr>> poss;
     std::vector<std::tuple<bool, bool, bool, IntPtr, IntPtr>> batch;
 };
   

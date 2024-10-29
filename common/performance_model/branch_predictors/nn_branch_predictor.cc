@@ -6,10 +6,10 @@
 #include <ATen/ATen.h>
 
 torch::Tensor process_x(const std::vector<std::tuple<IntPtr, IntPtr>>& vector_x) {
-    const size_t N = vector_x.size();
+    const long N = vector_x.size();
     torch::Tensor result = torch::zeros({N, 128}, torch::kFloat);
     auto accessor = result.accessor<float, 2>();
-    for (size_t i = 0; i < N; i++) {
+    for (long i = 0; i < N; i++) {
         IntPtr ip = std::get<0>(vector_x[i]);
         IntPtr target = std::get<1>(vector_x[i]);
         for (size_t bit = 0; bit < 64; bit++) {
@@ -31,10 +31,10 @@ torch::Tensor process_x(const std::vector<std::tuple<IntPtr, IntPtr>>& vector_x)
 }
 
 torch::Tensor process_y(const std::vector<bool>& vector_y) {
-    const size_t N = vector_y.size();
+    const long N = vector_y.size();
     torch::Tensor result = torch::zeros({N}, torch::kFloat);
     auto accessor = result.accessor<float, 1>();
-    for (size_t i = 0; i < N; i++) {
+    for (long i = 0; i < N; i++) {
         if (vector_y[i]) {
             accessor[i] = 1;
         } else {
