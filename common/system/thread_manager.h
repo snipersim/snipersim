@@ -2,7 +2,7 @@
 #define THREAD_MANAGER_H
 
 #include "fixed_types.h"
-#include "semaphore.h"
+#include "sem.h"
 #include "core.h"
 #include "lock.h"
 #include "subsecond_time.h"

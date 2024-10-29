@@ -2,7 +2,7 @@
 #define __TRACE_MANAGER_H
 
 #include "fixed_types.h"
-#include "semaphore.h"
+#include "sem.h"
 #include "core.h" // for lock_signal_t and mem_op_t
 #include "_thread.h"
 

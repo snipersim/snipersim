@@ -3,7 +3,6 @@
 
 #include "branch_predictor.h"
 #include <torch/torch.h>
-#include <semaphore.h>
 
 struct BranchPredictorModel : torch::nn::Module {
   BranchPredictorModel() {
