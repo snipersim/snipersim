@@ -252,8 +252,8 @@ include/linux/perf_event.h:
 
 TORCH_HOME=$(SIM_ROOT)/libtorch
 ifneq ($(NO_TORCH),1)
-TORCH_VERSION=latest
-TORCH_DOWNLOAD=https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-${TORCH_VERSION}.zip
+TORCH_VERSION=2.5.0
+TORCH_DOWNLOAD=https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-${TORCH_VERSION}%2Bcpu.zip
 TORCH_DEP := $(SIM_ROOT)/libtorch/lib/libtorch.so
 ifeq ($(wildcard $(TORCH_DEP)),)
 torch-download:

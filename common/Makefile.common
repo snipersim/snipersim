@@ -46,7 +46,7 @@ endif
 
 # Assuming python3 include dir is within the gcc search path
 PYTHON_LD_LIBS := $(shell python3-config --libs --embed)
-LD_LIBS += -ldecoder -lsift -lxed -lrt -lz -lsqlite3 -ltorch -lc10 $(PYTHON_LD_LIBS)
+LD_LIBS += -ldecoder -lsift -lxed -lrt -lz -lsqlite3 -ltorch -ltorch_cpu -lc10 $(PYTHON_LD_LIBS)
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/decoder_lib/ -L$(SIM_ROOT)/sift -L$(XED_HOME)/lib -L$(SIM_ROOT)/libtorch/lib
 
