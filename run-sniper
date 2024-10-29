@@ -665,7 +665,7 @@ config = {}
 exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
 
 # convert paths in config to absolute paths
-for d in ('pin_home','xed_home'):
+for d in ('pin_home','xed_home', 'torch_home'):
   absdir = os.path.join(HOME, config[d])
   if not os.path.isdir(absdir):
     sys.stderr.write('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
@@ -674,9 +674,7 @@ for d in ('pin_home','xed_home'):
 sim_root = HOME
 arch = config.get('target', 'intel64')
 
-
-env = run_sniper.setup_env(sim_root, pin_home, arch, standalone, xed_home)
-
+env = run_sniper.setup_env(sim_root, pin_home, arch, standalone, xed_home, torch_home)
 
 optcmd = ''
 pin_version = 'unknown'

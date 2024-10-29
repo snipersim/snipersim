@@ -15,7 +15,7 @@ SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW
 
 PYTHON2=python2
 
-.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed libtorch
+.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed torch
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
@@ -282,6 +282,7 @@ configscripts: dependencies
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py xed_home "$(SIM_ROOT)" "$(XED_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py dynamorio_home "$(SIM_ROOT)" "$(DYNAMORIO_INSTALL)/build" >> config/sniper.py
+	@./tools/makerelativepath.py torch_home "$(SIM_ROOT)" "$(TORCH_HOME)" >> config/sniper.py
 	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
 	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(SDE_HOME)" "$(PIN_HOME)" "$(DYNAMORIO_INSTALL)/build" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
 
