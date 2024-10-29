@@ -253,11 +253,11 @@ include/linux/perf_event.h:
 TORCH_HOME=$(SIM_ROOT)/libtorch
 ifneq ($(NO_TORCH),1)
 TORCH_VERSION=2.5.0
-TORCH_DOWNLOAD=https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-${TORCH_VERSION}%2Bcpu.zip
+TORCH_DOWNLOAD=http://snipersim.org/packages/libtorch-shared-with-deps-${TORCH_VERSION}-cpu.zip
 TORCH_DEP := $(SIM_ROOT)/libtorch/lib/libtorch.so
 ifeq ($(wildcard $(TORCH_DEP)),)
 torch-download:
-	$(_MSG) '[DOWNLO] LIBTORCH latest';
+	$(_MSG) '[DOWNLO] LIBTORCH $(TORCH_VERSION)';
 	$(_CMD) wget -O $(shell basename $(TORCH_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(TORCH_DOWNLOAD)
 
 torch: torch-download
