@@ -10,11 +10,12 @@ LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
 LIB_FOLLOW=$(SIM_ROOT)/pin/../lib/follow_execv.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
+LIB_TORCH=$(SIM_ROOT)/libtorch/lib/libtorch.so
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND) $(LIB_TORCH)
 
 PYTHON2=python2
 
-.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed
+.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed torch
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
 .PHONY: $(LIB_CARBON)
 
@@ -63,7 +64,7 @@ endif
 
 include common/Makefile.common
 
-dependencies: package_deps sde_kit $(PIN_ROOT) pin xed mcpat linux builddir showdebugstatus
+dependencies: package_deps sde_kit $(PIN_ROOT) pin xed mcpat torch linux builddir showdebugstatus
 
 BUILD_CAPSTONE ?=
 ifeq ($(BUILD_ARM),1)
@@ -244,11 +245,27 @@ mcpat/mcpat-1.0:
 	$(_CMD) mkdir -p mcpat
 	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
 endif
-
 linux: include/linux/perf_event.h
 include/linux/perf_event.h:
 	$(_MSG) '[INSTAL] perf_event.h'
 	$(_CMD) if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
+
+TORCH_HOME=$(SIM_ROOT)/libtorch
+ifneq ($(NO_TORCH),1)
+TORCH_VERSION=2.5.0
+TORCH_DOWNLOAD=http://snipersim.org/packages/libtorch-shared-with-deps-${TORCH_VERSION}-cpu.zip
+TORCH_DEP := $(SIM_ROOT)/libtorch/lib/libtorch.so
+ifeq ($(wildcard $(TORCH_DEP)),)
+torch-download:
+	$(_MSG) '[DOWNLO] LIBTORCH $(TORCH_VERSION)';
+	$(_CMD) wget -O $(shell basename $(TORCH_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(TORCH_DOWNLOAD)
+
+torch: torch-download
+	$(_CMD) unzip -q $(shell basename $(TORCH_DOWNLOAD)) -d $(SIM_ROOT);
+	$(_CMD) rm $(shell basename $(TORCH_DOWNLOAD));
+all: torch
+endif
+endif
 
 builddir: lib
 lib:
@@ -268,6 +285,7 @@ configscripts: dependencies
 	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py xed_home "$(SIM_ROOT)" "$(XED_HOME)" >> config/sniper.py
 	@./tools/makerelativepath.py dynamorio_home "$(SIM_ROOT)" "$(DYNAMORIO_INSTALL)/build" >> config/sniper.py
+	@./tools/makerelativepath.py torch_home "$(SIM_ROOT)" "$(TORCH_HOME)" >> config/sniper.py
 	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
 	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(SDE_HOME)" "$(PIN_HOME)" "$(DYNAMORIO_INSTALL)/build" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
 
@@ -310,6 +328,8 @@ distclean: clean
 	$(_CMD) rm -rf xed xed_kit mbuild
 	$(_MSG) '[DISTCL] perf_event.h'
 	$(_CMD) rm -f include/linux/perf_event.h
+	$(_MSG) '[DISTCL] libtorch'
+	$(_CMD) rm -rf libtorch
 
 regress_quick: regress_unit regress_apps
 

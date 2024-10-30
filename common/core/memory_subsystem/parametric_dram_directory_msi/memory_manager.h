@@ -8,7 +8,7 @@
 #include "address_home_lookup.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/shmem_msg.h"
 #include "mem_component.h"
-#include "semaphore.h"
+#include "sem.h"
 #include "fixed_types.h"
 #include "shmem_perf_model.h"
 #include "shared_cache_block_info.h"

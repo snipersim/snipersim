@@ -113,7 +113,7 @@ def get_cxx_override(sim_root, pin_home, arch):
 # - scripts being run inside the simulator (SNIPER_SCRIPT_LD_LIBRARY_PATH): original LD_LIBRARY_PATH
 #   (e.g. mcpat when running powertrace.py)
 
-def setup_env(sim_root, pin_home, arch, standalone = False, xed_home = None):
+def setup_env(sim_root, pin_home, arch, standalone = False, xed_home = None, torch_home = None):
 
   env = dict(os.environ)
   ld_library_path_orig = env.get('LD_LIBRARY_PATH', '')
@@ -131,6 +131,8 @@ def setup_env(sim_root, pin_home, arch, standalone = False, xed_home = None):
   else:
     if xed_home:
       ld_library_path.append('%s/lib' % (xed_home,))
+  if torch_home:
+    ld_library_path.append('%s/lib' % (torch_home, ))
   if 'SNIPER_SIM_LD_LIBRARY_PATH' in os.environ:
     ld_library_path.append(os.environ['SNIPER_SIM_LD_LIBRARY_PATH'])
   env['LD_LIBRARY_PATH'] = ':'.join(ld_library_path)

@@ -3,7 +3,7 @@ SIM_ROOT ?= $(shell readlink -f "$(CURDIR)/../")
 include $(SIM_ROOT)/Makefile.config
 
 DIRECTORIES := ${shell find $(SIM_ROOT)/common -type d -print} \
-	$(SIM_ROOT)/include
+	$(SIM_ROOT)/include $(SIM_ROOT)/libtorch/include $(SIM_ROOT)/libtorch/include/torch/csrc/api/include
 
 LIBCARBON_SOURCES = $(foreach dir,$(DIRECTORIES),$(wildcard $(dir)/*.cc)) \
 	$(wildcard $(SIM_ROOT)/common/config/*.cpp)
@@ -46,9 +46,9 @@ endif
 
 # Assuming python3 include dir is within the gcc search path
 PYTHON_LD_LIBS := $(shell python3-config --libs --embed)
-LD_LIBS += -ldecoder -lsift -lxed -lrt -lz -lsqlite3 $(PYTHON_LD_LIBS)
+LD_LIBS += -ldecoder -lsift -lxed -lrt -lz -lsqlite3 -ltorch -ltorch_cpu -lc10 $(PYTHON_LD_LIBS)
 
-LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/decoder_lib/ -L$(SIM_ROOT)/sift -L$(XED_HOME)/lib
+LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/decoder_lib/ -L$(SIM_ROOT)/sift -L$(XED_HOME)/lib -L$(SIM_ROOT)/libtorch/lib
 
 ifneq ($(SQLITE_PATH),)
 	CPPFLAGS += -I$(SQLITE_PATH)/include
@@ -64,7 +64,7 @@ CPPFLAGS+=$(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
           -I$(SIM_ROOT)/capstone/include -I$(SIM_ROOT)/capstone/include/capstone 
 
 CXXFLAGS+=-c \
-          -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++20 -fno-strict-aliasing $(OPT_CFLAGS) #-Werror
+          -Wall -Wextra -Wcast-align -Wno-unused-parameter -Wno-unknown-pragmas -std=c++20 -fno-strict-aliasing -D_GLIBCXX_USE_CXX11_ABI=0 $(OPT_CFLAGS) #-Werror
 #CXXFLAGS+=-I$(SIM_ROOT)/rv8/src
 #CXXFLAGS+=-I$(SIM_ROOT)/rv8
 
