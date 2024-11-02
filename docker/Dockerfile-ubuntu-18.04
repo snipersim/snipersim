@@ -1,3 +1,4 @@
+# Not going to fix, make sure python is at least python3.8
 FROM ubuntu:18.04
 # Add i386 support for support for Pin
 RUN dpkg --add-architecture i386

@@ -1,8 +1,9 @@
 #ifndef __REGISTER_DEPENDENCIES_H
 #define __REGISTER_DEPENDENCIES_H
 
-#include "fixed_types.h"
 #include <decoder.h>
+#include <vector>
+#include <cstdint>
 
 //extern "C" {
 //#include <xed-reg-enum.h>
@@ -12,10 +13,8 @@ class DynamicMicroOp;
 
 class RegisterDependencies {
 private:
-    // Array containing the sequence number of the producers for each of the registers.
-    // FIXME Depending on the architecture we may have too many elements
-    // Not easy to get last element statically with the library
-  uint64_t producers[280];  //XED_REG_LAST;
+  // Array containing the sequence number of the producers for each of the registers.
+  std::vector<uint64_t> producers;
 public:
   RegisterDependencies();
 

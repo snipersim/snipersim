@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf8 -*-
 
 import os, sys, re, collections, gnuplot, getopt
@@ -6,8 +6,8 @@ import cpistack_data, cpistack_items, cpistack_results
 
 try:
   collections.defaultdict()
-except AttributeError, e:
-  print sys.argv[0], "Error: This script requires Python version 2.5 or greater"
+except AttributeError as e:
+  print(sys.argv[0], "Error: This script requires Python version 2.5 or greater")
   sys.exit()
 
 
@@ -33,20 +33,20 @@ def cpistack_compute(jobid = 0, resultsdir = None, config = None, stats = None, 
 
 
 def output_cpistack_text(results):
-  print '                        CPI       Time'
+  print('                        CPI       Time')
   cpi = results.get_data('cpi')
   time = results.get_data('time')
 
   for core in results.cores:
     if len(results.cores) > 1:
-      print 'Core', core
+      print('Core', core)
     total = { 'cpi': 0, 'time': 0 }
     for label in results.labels:
-      print '  %-15s    %6.2f    %6.2f%%' % (label, cpi[core][label], 100 * time[core][label])
+      print('  %-15s    %6.2f    %6.2f%%' % (label, cpi[core][label], 100 * time[core][label]))
       total['cpi'] += cpi[core][label]
       total['time'] += time[core][label]
-    print
-    print '  %-15s    %6.2f    %6.2f%%' % ('total', total['cpi'], 100 * total['time'])
+    print()
+    print('  %-15s    %6.2f    %6.2f%%' % ('total', total['cpi'], 100 * total['time']))
 
 
 def output_cpistack_table(results, metric = 'cpi'):
@@ -73,18 +73,18 @@ def output_cpistack_table(results, metric = 'cpi'):
   else:
     raise ValueError('Unknown metric %s' % metric)
 
-  print '%-20s' % title, '  '.join([ '%-9s' % ('Core %d' % core) for core in results.cores ])
+  print('%-20s' % title, '  '.join([ '%-9s' % ('Core %d' % core) for core in results.cores ]))
   for label in results.labels:
-    print '%-15s ' % label,
+    print('%-15s ' % label, end=' ')
     for core in results.cores:
-      print ' ', format(multiplier * data[core][label]),
+      print(' ', format(multiplier * data[core][label]), end=' ')
       total[core] += data[core][label]
-    print
-  print
-  print '%-15s ' % 'total',
+    print()
+  print()
+  print('%-15s ' % 'total', end=' ')
   for core in results.cores:
-    print ' ', format(multiplier * total[core]),
-  print
+    print(' ', format(multiplier * total[core]), end=' ')
+  print()
 
 
 def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480), save_gnuplot_input = False):
@@ -122,7 +122,7 @@ def cpistack(jobid = 0, resultsdir = '.', data = None, partial = None, outputfil
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h|--help (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--title=""] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]'
+    print('Usage:', sys.argv[0], '[-h|--help (help)] [-j <jobid> | -d <resultsdir (default: .)>] [-o <output-filename (cpi-stack)>] [--title=""] [--without-roi] [--simplified] [--no-collapse] [--no-simple-mem] [--time|--cpi|--abstime (default: time)] [--aggregate]')
 
   jobid = 0
   resultsdir = '.'
@@ -138,8 +138,8 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:", [ "help", "title=", "no-roi", "simplified", "no-collapse", "no-simple-mem", "cpi", "time", "abstime", "aggregate", "partial=", "save-gnuplot-input" ])
-  except getopt.GetoptError, e:
-    print e
+  except getopt.GetoptError as e:
+    print(e)
     usage()
     sys.exit()
   for o, a in opts:
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     if o == '-d':
       resultsdir = a
     if o == '-j':
-      jobid = long(a)
+      jobid = int(a)
     if o == '-o':
       outputfile = a
     if o == '--title':

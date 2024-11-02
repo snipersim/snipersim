@@ -875,6 +875,10 @@ UInt64 TraceThread::getProgressValue()
    return m_trace.getPosition();
 }
 
+void TraceThread::frontEndStop(){
+	m_trace.frontEndStop();
+}
+
 void TraceThread::handleAccessMemory(Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size)
 {
    Sift::MemoryLockType sift_lock_signal;

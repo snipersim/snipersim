@@ -8,9 +8,9 @@ class DefaultValue:
 
 # Parse sim.cfg, read from file or from ic.job_output(jobid, 'sim.cfg'), into a dictionary
 def parse_config(simcfg, cfg = None):
-  import ConfigParser, cStringIO
-  cp = ConfigParser.ConfigParser()
-  cp.readfp(cStringIO.StringIO(str(simcfg)))
+  import configparser, io
+  cp = configparser.ConfigParser()
+  cp.read_file(io.StringIO(str(simcfg)))
   if not cfg:
     cfg = {}
   for section in cp.sections():
@@ -33,9 +33,9 @@ def parse_config(simcfg, cfg = None):
             if v: # Only fill in entries that have been provided
               cfg[key][i] = v
         else:
-          print 'Changing default',  cfg[key],
+          print('Changing default',  cfg[key], end=' ')
           cfg[key].default_factory = DefaultValue(value.strip('"'))
-          print  cfg[key]
+          print(cfg[key])
       else: # If there has not been a default value provided, require all array data be populated
         if ',' in value:
           cfg[key] = []

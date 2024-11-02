@@ -62,7 +62,7 @@ uint64_t **
 idim2(int row, int col)
 {
   int i;
-  register uint64_t **prow, *pdata;
+  uint64_t **prow, *pdata;
 
   pdata = (uint64_t *)calloc(row*col, sizeof (uint64_t));
   if (!pdata)
@@ -154,7 +154,7 @@ void
 rotate_right(int y, struct tree_node **p_stack)
 {
   int x,z;
-  register struct tree_node *t1, *t2, *t3;
+  struct tree_node *t1, *t2, *t3;
 
   z = y-1;
   x = y+1;

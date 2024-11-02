@@ -15,7 +15,7 @@ class Dvfs:
     self.events = []
     args = args.split(':')
     for i in range(0, len(args), 3):
-      self.events.append((long(args[i])*sim.util.Time.NS, int(args[i+1]), int(args[i+2])))
+      self.events.append((int(args[i])*sim.util.Time.NS, int(args[i+1]), int(args[i+2])))
     self.events.sort()
     sim.util.Every(100*sim.util.Time.NS, self.periodic, roi_only = True)
 

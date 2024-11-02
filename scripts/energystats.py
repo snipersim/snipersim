@@ -35,7 +35,7 @@ class Power:
 class EnergyStats:
   def setup(self, args):
     args = dict(enumerate((args or '').split(':')))
-    interval_ns = long(args.get(0, None) or 1000000) # Default power update every 1 ms
+    interval_ns = int(args.get(0, None) or 1000000) # Default power update every 1 ms
     sim.util.Every(interval_ns * sim.util.Time.NS, self.periodic, roi_only = True)
     self.dvfs_table = build_dvfs_table(int(sim.config.get('power/technology_node')))
     #
@@ -96,7 +96,7 @@ class EnergyStats:
   def get_stat(self, objectName, index, metricName):
     if not self.in_stats_write:
       self.update()
-    return self.energy.get((objectName, index, metricName), 0L)
+    return self.energy.get((objectName, index, metricName), 0)
 
   def update_power(self, power):
     def get_power(component, prefix = ''):
@@ -112,9 +112,9 @@ class EnergyStats:
   def update_energy(self):
     if self.power and sim.stats.time() > self.time_last_energy:
       time_delta = sim.stats.time() - self.time_last_energy
-      for (component, core), power in self.power.items():
-        self.energy[(component, core, 'energy-static')] = self.energy.get((component, core, 'energy-static'), 0) + long(time_delta * power.s)
-        self.energy[(component, core, 'energy-dynamic')] = self.energy.get((component, core, 'energy-dynamic'), 0) + long(time_delta * power.d)
+      for (component, core), power in list(self.power.items()):
+        self.energy[(component, core, 'energy-static')] = self.energy.get((component, core, 'energy-static'), 0) + int(time_delta * power.s)
+        self.energy[(component, core, 'energy-dynamic')] = self.energy.get((component, core, 'energy-dynamic'), 0) + int(time_delta * power.d)
       self.time_last_energy = sim.stats.time()
 
   def get_vdd_from_freq(self, f):
@@ -134,7 +134,7 @@ class EnergyStats:
 frequency[] = %s
 [power]
 vdd[] = %s
-    ''' % (','.join(map(lambda f: '%f' % (f / 1000.), freq)), ','.join(map(str, vdd))))
+    ''' % (','.join(['%f' % (f / 1000.) for f in freq]), ','.join(map(str, vdd))))
     cfg.close()
     return configfile
 
@@ -152,7 +152,7 @@ vdd[] = %s
     ))
 
     result = {}
-    execfile(outputbase + '.py', {}, result)
+    exec(compile(open(outputbase + '.py', "rb").read(), outputbase + '.py', 'exec'), {}, result)
     return result['power']
 
 # All scripts execute in global scope, so other scripts will be able to call energystats.update()

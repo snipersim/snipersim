@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys, os, getopt, subprocess, sniper_lib
 
@@ -17,10 +17,10 @@ def generate_cheetah(jobid = None, resultsdir = '.', partial = None, outputbase 
   def grouping_title(grouping):
     return grouping
 
-  GROUPINGS = sorted(data.keys(), key = grouping_sortkey)
+  GROUPINGS = sorted(list(data.keys()), key = grouping_sortkey)
   xmax = 1 << max(map(len, data.values()))
 
-  o = file(outputbase + '.input', 'w')
+  o = open(outputbase + '.input', 'w')
   o.write('''\
 set fontpath "/usr/share/fonts/truetype/freefont"
 set terminal png font "FreeSans,15" size 500,350 linewidth 2 rounded
@@ -58,7 +58,7 @@ plot %s
 
 if __name__ == '__main__':
   def usage():
-    print 'Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [--partial=<begin:end (roi-begin:roi-end)>] [-o <output (cheetah)>] [-t <title>] [-y <ymax> | --logy=<miny:maxy>] [--diff]'
+    print('Usage:', sys.argv[0], '[-h (help)] [-j <jobid> | -d <resultsdir (default: .)>] [--partial=<begin:end (roi-begin:roi-end)>] [-o <output (cheetah)>] [-t <title>] [-y <ymax> | --logy=<miny:maxy>] [--diff]')
     sys.exit(-1)
 
   jobid = 0
@@ -72,8 +72,8 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hj:d:o:t:y:", [ 'partial=', 'logy=', 'diff' ])
-  except getopt.GetoptError, e:
-    print e
+  except getopt.GetoptError as e:
+    print(e)
     usage()
   for o, a in opts:
     if o == '-h':
@@ -81,7 +81,7 @@ if __name__ == '__main__':
     if o == '-d':
       resultsdir = a
     if o == '-j':
-      jobid = long(a)
+      jobid = int(a)
     if o == '-o':
       outputbase = a
     if o == '--partial':
@@ -89,14 +89,14 @@ if __name__ == '__main__':
         sys.stderr.write('--partial=<from>:<to>\n')
         usage()
       partial = a.split(':')
-  if o == '-t':
-    title = a
-  if o == '-y':
-    yscale = 0, float(a)
-  if o == '--logy':
-    yscale = map(float, a.split(':'))
-    logy = True
-  if o == '--diff':
-    diff = True
+    if o == '-t':
+      title = a
+    if o == '-y':
+      yscale = 0, float(a)
+    if o == '--logy':
+      yscale = list(map(float, a.split(':')))
+      logy = True
+    if o == '--diff':
+      diff = True
 
   generate_cheetah(jobid = jobid, resultsdir = resultsdir, outputbase = outputbase, partial = partial, title = title, yscale = yscale, logy = logy, diff = diff)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 """ a small class for Principal Component Analysis
 Usage:
     p = PCA( A, fraction=0.90 )
@@ -52,7 +52,7 @@ See also:
 
 """
 
-from __future__ import division
+
 import numpy
 dot = numpy.dot
     # import bz.numpyutil as nu
@@ -117,13 +117,13 @@ class Center:
     def __init__( self, A, axis=0, scale=True, verbose=1 ):
         self.mean = A.mean(axis=axis)
         if verbose:
-            print "Center -= A.mean:", self.mean
+            print("Center -= A.mean:", self.mean)
         A -= self.mean
         if scale:
             std = A.std(axis=axis)
             self.std = numpy.where( std, std, 1. )
             if verbose:
-                print "Center /= A.std:", self.std
+                print("Center /= A.std:", self.std)
             A /= self.std
         else:
             self.std = numpy.ones( A.shape[-1] )
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-      print 'Usage: %s filename' % sys.argv[0]
+      print('Usage: %s filename' % sys.argv[0])
       sys.exit(-1)
 
     csv = sys.argv[1]
@@ -159,20 +159,20 @@ if __name__ == "__main__":
     A = A[1:,1:]
 
     N, K = A.shape
-    print "csv: %s  N: %d  K: %d  fraction: %.2g" % (csv, N, K, fraction)
+    print("csv: %s  N: %d  K: %d  fraction: %.2g" % (csv, N, K, fraction))
 
-    print "PCA ..." ,
+    print("PCA ...", end=' ')
     p = pca(A, fraction)
 
-    print "npc:", p.npc
-    print "% variance:", p.sumvariance * 100
+    print("npc:", p.npc)
+    print("% variance:", p.sumvariance * 100)
 
     # Convery to a numpy array to allow for more elaborate array slicing
     pc = numpy.ma.array(p.pc())
 
-    print "Vt[0], weights that give PC 0:", p.Vt[0]
-    print "A . Vt[0]:", dot( A, p.Vt[0] )
-    print "pc:", p.pc()
+    print("Vt[0], weights that give PC 0:", p.Vt[0])
+    print("A . Vt[0]:", dot( A, p.Vt[0] ))
+    print("pc:", p.pc())
 
     import numpy
     from matplotlib.figure import Figure
@@ -184,23 +184,23 @@ if __name__ == "__main__":
     canvas = FigureCanvasAgg(fig)
     canvas.print_figure('pca.png')
 
-    print "\nobs <-> pc <-> x: with fraction=1, diffs should be ~ 0"
+    print("\nobs <-> pc <-> x: with fraction=1, diffs should be ~ 0")
     x = numpy.ones(K)
     # x = numpy.ones(( 3, K ))
-    print "x:", x
+    print("x:", x)
     pc = p.vars_pc(x)  # d' Vt' x
-    print "vars_pc(x):", pc
-    print "back to ~ x:", p.pc_vars(pc)
+    print("vars_pc(x):", pc)
+    print("back to ~ x:", p.pc_vars(pc))
 
     Ax = dot( A, x.T )
     pcx = p.obs(x)  # U' d' Vt' x
-    print "Ax:", Ax
-    print "A'x:", pcx
-    print "max |Ax - A'x|: %.2g" % numpy.linalg.norm( Ax - pcx, numpy.inf )
+    print("Ax:", Ax)
+    print("A'x:", pcx)
+    print("max |Ax - A'x|: %.2g" % numpy.linalg.norm( Ax - pcx, numpy.inf ))
 
     b = Ax  # ~ back to original x, Ainv A x
     back = p.vars(b)
-    print "~ back again:", back
-    print "max |back - x|: %.2g" % numpy.linalg.norm( back - x, numpy.inf )
+    print("~ back again:", back)
+    print("max |back - x|: %.2g" % numpy.linalg.norm( back - x, numpy.inf ))
 
 # end pca.py

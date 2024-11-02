@@ -4,7 +4,8 @@ class ProgressTrace:
   def setup(self, args):
     self.last_ins = 0
     self.last_time = time.time()
-    self.ninstrs = long(args or 1000000)
+    args = dict(enumerate((args or '').split(':')))
+    self.ninstrs = int(args.get(0, '') or 1000000)
     sim.util.EveryIns(self.ninstrs, self.periodic, roi_only = False)
     self.sd = sim.util.StatsDelta()
     self.stats = {
@@ -25,7 +26,7 @@ class ProgressTrace:
         ipc = instrs / (cycles or 1)
       else:
         ipc = None
-      print ('[PROGRESS] %.0fM instructions, %.0f KIPS' % (ins / 1e6, ips / 1e3)) + (', %.2f IPC' % ipc if ipc else '')
+      print ('[PROGRESS] %.0fM instructions, %.0f KIPS%s' % (ins / 1e6, ips / 1e3, (', %.2f IPC' % ipc) if ipc else ''))
       self.last_ins = ins
       self.last_time = time_now
 

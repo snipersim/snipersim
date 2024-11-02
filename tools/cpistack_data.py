@@ -39,7 +39,7 @@ class CpiData:
     fastforward_extrapolate = False
 
 
-    data = collections.defaultdict(lambda: collections.defaultdict(long))
+    data = collections.defaultdict(lambda: collections.defaultdict(int))
     for key, values in self.stats.items():
       if '.cpi' in key:
         if key.startswith('thread.'):
@@ -92,7 +92,7 @@ class CpiData:
       for k in self.stats:
         if k.startswith('interval_timer.cpContr_'):
           if k not in cpContrMap.keys():
-            print 'Missing in cpContrMap: ', k
+            print('Missing in cpContrMap: ', k)
       # Keep 1/width as base CPI component, break down the remainder according to critical path contributors
       BaseBest = instrs[core] / float(sniper_config.get_config(self.config, 'perf_model/core/interval_timer/dispatch_width', core))
       BaseAct = data[core]['Base']
@@ -124,7 +124,7 @@ class CpiData:
 
     self.data = data
     self.ncores = ncores
-    self.cores = range(ncores)
+    self.cores = list(range(ncores))
     self.instrs = instrs
     self.times = times
     self.cycles_scale = cycles_scale

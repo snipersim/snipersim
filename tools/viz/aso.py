@@ -184,17 +184,17 @@ def prettyPrint(optimizationlist,totaltime,numberofresults,originalfunctions):
     originalfunction    = getFunctionById(originalfunctions, function["id"])
     originaltime        = originalfunction["nonidle_elapsed_time"]
 
-    print "#"+str(i+1),         function["name_clean"], "id: ",function["id"]
-    print "Optimization: ",     function["optimizations"]
-    print "Time won back: ",    function["time_won_back"], "("+str(function["time_won_back"]/originaltime*100)+"% of function time)"
-    print "Speedup factor for application: ","x"+str(totaltime/(totaltime-function["time_won_back"]))
-    print
+    print("#"+str(i+1),         function["name_clean"], "id: ",function["id"])
+    print("Optimization: ",     function["optimizations"])
+    print("Time won back: ",    function["time_won_back"], "("+str(function["time_won_back"]/originaltime*100)+"% of function time)")
+    print("Speedup factor for application: ","x"+str(totaltime/(totaltime-function["time_won_back"])))
+    print()
     i+=1
     
 #print overall result
 def printResult(optimizationlist,totaltime,numberofresults, originalfunctions):
-  print "Top "+str(numberofresults)+" optimizations (sorted by absolute time gain)"
-  print "===================="
+  print("Top "+str(numberofresults)+" optimizations (sorted by absolute time gain)")
+  print("====================")
   prettyPrint(optimizationlist,totaltime,numberofresults, originalfunctions)
 
 
@@ -206,7 +206,7 @@ def printResult(optimizationlist,totaltime,numberofresults, originalfunctions):
 #main function
 if __name__ == '__main__':
   def usage():
-    print('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-j <jobid>] [-n number of results (default: 10)] [-v|--verbose]')
+    print(('Usage: '+sys.argv[0]+' [-h|--help (help)] [-d <resultsdir (default: .)>] [-j <jobid>] [-n number of results (default: 10)] [-v|--verbose]'))
     sys.exit()
 
   resultsdir = '.'
@@ -219,7 +219,7 @@ if __name__ == '__main__':
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], "hd:n:vj:", [ "help", "verbose" ])
-  except getopt.GetoptError, e:
+  except getopt.GetoptError as e:
     print(e)
     usage()
     sys.exit()
@@ -237,11 +237,11 @@ if __name__ == '__main__':
 
 
   if verbose:
-    print 'This script generates automatic suggestions for optimization'
+    print('This script generates automatic suggestions for optimization')
   
   config = sniper_lib.get_config(jobid = jobid, resultsdir = resultsdir)
   if verbose:
-    print "parsing functions from sim.rtntrace"
+    print("parsing functions from sim.rtntrace")
   for fn in ("sim.rtntrace", "rtntrace.out"):
     rtntrace = sniper_lib.get_results_file(filename = fn, jobid = jobid, resultsdir = resultsdir)
     if rtntrace:
@@ -249,11 +249,11 @@ if __name__ == '__main__':
   functions,total=functionparser.parseFunctions(inputdata = rtntrace)
   optimizationlist = runModules(functions,config)
   totaltime = total["nonidle_elapsed_time"]
-  print
-  print "Overall best optimizations"
+  print()
+  print("Overall best optimizations")
   printResult(optimizationlist,totaltime,numberofresults,functions)
 
-  print 
-  print "Overall best combined optimizations"
+  print() 
+  print("Overall best combined optimizations")
   combinedlist = runCombinedModules(functions,config)
   printResult(combinedlist, totaltime, numberofresults,functions)

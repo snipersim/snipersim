@@ -60,5 +60,5 @@ class SniperStatsSqlite(sniper_stats.SniperStatsBase):
 
 if __name__ == '__main__':
   stats = SniperStatsSqlite()
-  print stats.get_snapshots()
-  print stats.read_snapshot('roi-end')
+  print(stats.get_snapshots())
+  print(stats.read_snapshot('roi-end'))

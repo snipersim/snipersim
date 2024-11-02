@@ -1,3 +1,7 @@
+#comment next lines bellow to run script anyway
+print("This script relies on Intel scripts to submit and collect sniper simualtions on a cluster, which not shipped with Sniper. Therefore, this script is not tested/updated for Python3 support", file=sys.stderr)
+exit(0)
+
 import sniper_stats, intelqueue, iqclient
 
 

@@ -1,19 +1,19 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os, sys, time, getopt, math, sniper_lib
 
 def max_diff(l_notsorted):
   l = sorted(l_notsorted)
   try:
-    l = map(float,l)
-  except ValueError, e:
+    l = list(map(float,l))
+  except ValueError as e:
     # Values are not float (string, bool): print if more than one unique value
-    l = map(str,l)
+    l = list(map(str,l))
     if len(set(l)) > 1:
       return (1,100,True)
     else:
       return (0.0,0.0,False)
-  except TypeError, e:
+  except TypeError as e:
     # Some values are None (missing config): definitely print
     return (0.0,0.0,True)
   islendiff = len(l_notsorted) != len(l)
@@ -24,8 +24,8 @@ def max_diff(l_notsorted):
 
 def get_diffs(l):
   try:
-    l = map(float,l)
-  except (TypeError, ValueError), e:
+    l = list(map(float,l))
+  except (TypeError, ValueError) as e:
     return [ _ == l[0] for _ in l[1:] ]
   if l[0] == 0:
     return [ None for _ in l[1:] ]
@@ -41,7 +41,7 @@ def group(number):
   return s + ','.join(reversed(groups))
 
 def format_value(d):
-  if (type(d) is long) or (type(d) is int):
+  if (type(d) is int) or (type(d) is int):
     if len(group(d)) < 12:
       return '%12s' % group(d)
     else:
@@ -91,9 +91,10 @@ def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = 
     jobs.append(resultdir)
 
   # Find all key names and maximum lenghts
-  def key_map((k, v)):
+  def key_map(xxx_todo_changeme):
+    (k, v) = xxx_todo_changeme
     return (k, len(v) if type(v) is list else 0)
-  allkeys = sum([ map(key_map, s.items()) for s in stats.values() ], [])
+  allkeys = sum([list(map(key_map, s.items())) for s in stats.values()], [])
   keyinfo = {}
   for key, length in allkeys:
     keyinfo[key] = max(keyinfo.get(key, 0), length)
@@ -110,15 +111,15 @@ def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = 
       if average_nz:
         # Find cores for which this statistic is non-zero for at least one of the results
         alldata = [ stats[_statkey][key] for _statkey in stats.keys() ]
-        nonzero = map(any, zip(*alldata))
-        cnt = len(filter(None, nonzero)) or 1
+        nonzero = list(map(any, zip(*alldata)))
+        cnt = len([_f for _f in nonzero if _f]) or 1
       else:
         cnt = len(data)
-      return long(sum(data) / float(cnt))
+      return int(sum(data) / float(cnt))
     else:
       return None
 
-  for key, length in sorted(keyinfo.items(), key = lambda (k, v): k.lower()):
+  for key, length in sorted(keyinfo.items(), key = lambda k_v: k_v[0].lower()):
     if length > 0:
       for core in range(1 if print_average else length):
         if print_average:
@@ -133,7 +134,7 @@ def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = 
             resultstoprint.append((key, core, values, diff, max_percent_diff, diffs))
             max_cores = max(max_cores, core)
     else:
-      diff, max_percent_diff, forceprint = max_diff(map(lambda x: x.get(key, None), stats.itervalues()))
+      diff, max_percent_diff, forceprint = max_diff([x.get(key, None) for x in iter(stats.values())])
       diffs = get_diffs([ stats[statkey].get(key, None) for statkey in jobs ])
       if forceprint or diff != 0:
         maxkeylen = max(len(key), maxkeylen) # Consider this key for the maximum key character length
@@ -146,16 +147,16 @@ def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = 
         resultstoprint.append((key, None, data, diff, max_percent_diff, diffs))
 
   # Iterate through the collected data items and print them out
-  print '%*s ' % (maxkeylen+5, ''),
+  print('%*s ' % (maxkeylen+5, ''), end=' ')
   for statkey in jobs:
-    print '%12s' % (('%s'%statkey)[-12:]),
+    print('%12s' % (('%s'%statkey)[-12:]), end=' ')
   if print_alldiffs:
     for statkey in jobs[1:]:
-      print ' '*max(0, 11 - len(str(statkey))) + u'\u0394'.encode('utf8') + str(statkey)[-11:],
+      print(' '*max(0, 11 - len(str(statkey))) + '\u0394'.encode('utf8') + str(statkey)[-11:], end=' ')
   else:
-    print '%12s' % 'max-%-err',
-    print '%12s' % 'max-abs-err',
-  print
+    print('%12s' % 'max-%-err', end=' ')
+    print('%12s' % 'max-abs-err', end=' ')
+  print()
 
   if parmsort == 'abs':
     resultstoprint = sorted(resultstoprint, key = lambda x: abs(x[3]), reverse = True)
@@ -165,23 +166,23 @@ def print_diff(parmsort = None, restype = 'results', resultdirs = [], partial = 
   for (key, core, datalist, abs_diff, percent_diff, diffs) in resultstoprint:
     if core != None:
       if print_average:
-        print '%-*s[*] =' % (maxkeylen, key),
+        print('%-*s[*] =' % (maxkeylen, key), end=' ')
       else:
-        print '%-*s[%*u] =' % (maxkeylen, key, len(str(max_cores)), core),
+        print('%-*s[%*u] =' % (maxkeylen, key, len(str(max_cores)), core), end=' ')
     else:
-      print '%-*s %s  =' % (maxkeylen, key, ' '*len(str(max_cores))),
+      print('%-*s %s  =' % (maxkeylen, key, ' '*len(str(max_cores))), end=' ')
     for d in datalist:
       if d == None:
-        print '        ----',
+        print('        ----', end=' ')
       else:
-        print format_value(d),
+        print(format_value(d), end=' ')
     if print_alldiffs:
       for d in diffs:
-        print format_diff(d),
+        print(format_diff(d), end=' ')
     else:
-      print format_percent(percent_diff),
-      print '%12.3g' % abs_diff,
-    print
+      print(format_percent(percent_diff), end=' ')
+      print('%12.3g' % abs_diff, end=' ')
+    print()
 
 if __name__ == "__main__":
 
@@ -194,12 +195,12 @@ if __name__ == "__main__":
 
 
   def usage():
-    print 'Usage:', sys.argv[0], '[-h|--help (help)] [--sort-abs] [--sort-percent] [--max-diff] [--average] [--config] [--partial=roi-begin:roi-end] [--] [<dir> [<dirN>]]'
+    print('Usage:', sys.argv[0], '[-h|--help (help)] [--sort-abs] [--sort-percent] [--max-diff] [--average] [--config] [--partial=roi-begin:roi-end] [--] [<dir> [<dirN>]]')
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], 'h', [ 'help', 'sort-abs', 'sort-percent', 'max-diff', 'average', 'config', 'partial=' ])
-  except getopt.GetoptError, e:
-    print e
+  except getopt.GetoptError as e:
+    print(e)
     usage()
     sys.exit(1)
   for o, a in opts:
@@ -224,10 +225,10 @@ if __name__ == "__main__":
       if os.path.isdir(arg):
         resultdirs.append(arg)
       else:
-        print 'Warning: Argument [%s] is not a results directory' % arg
+        print('Warning: Argument [%s] is not a results directory' % arg)
         pass
   else:
-    print 'At least one directory is required'
+    print('At least one directory is required')
     sys.exit(1)
 
   with sniper_lib.OutputToLess():

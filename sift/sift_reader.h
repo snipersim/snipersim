@@ -124,6 +124,8 @@ namespace Sift
          uint64_t getLength();
          bool getTraceHasPhysicalAddresses() const { return m_trace_has_pa; }
          uint64_t va2pa(uint64_t va);
+
+	 void frontEndStop();
    };
 };
 

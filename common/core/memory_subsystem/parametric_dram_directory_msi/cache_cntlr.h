@@ -7,7 +7,7 @@
 #include "address_home_lookup.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/shmem_msg.h"
 #include "mem_component.h"
-#include "semaphore.h"
+#include "sem.h"
 #include "lock.h"
 #include "setlock.h"
 #include "fixed_types.h"

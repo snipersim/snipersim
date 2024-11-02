@@ -57,6 +57,6 @@ class SniperStatsDb(sniper_stats.SniperStatsBase):
 
 if __name__ == '__main__':
   stats = SniperStatsDb()
-  print stats.get_snapshots()
+  print(stats.get_snapshots())
   names = stats.read_metricnames()
-  print stats.read_snapshot('roi-end')
+  print(stats.read_snapshot('roi-end'))
