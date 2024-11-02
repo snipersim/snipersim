@@ -1,3 +1,11 @@
+Version 8.1
+  * Update from Python2 to Python3
+  * Support for c++20
+  * Add Dockerfile for Ubuntu 24.04
+  * Update to use the latest version of SDE (v9.44) as the default, along with the latest Pin (v3.31)
+  * Add libtorch (v2.5.0) and an example implementation of neural-net based branch predictor
+  * Use the warmup-start event of Pin/SDE controller to switch to cache-only mode
+
 Version 8.0
   * Change of license to academic license
   * Add SDE-based frontend (default) support along with Pinplay
