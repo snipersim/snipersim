@@ -1,4 +1,4 @@
-UBUNTU_VERSION?=20.04
+UBUNTU_VERSION?=22.04
 DOCKER_IMAGE?=ubuntu:$(UBUNTU_VERSION)-sniper-$(USER)
 DOCKER_FILE?=Dockerfile-ubuntu-$(UBUNTU_VERSION)
 DOCKER_FILES=$(wildcard Dockerfile*)

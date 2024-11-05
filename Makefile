@@ -198,9 +198,7 @@ $(PIN_ROOT): $(PIN_DEP)
 $(PIN_DEP):
 	$(_MSG) '[DOWNLO] Pin 3.31-98869'
 	$(_CMD) mkdir -p $(PIN_HOME)
-	$(_CMD) wget -O $(shell basename $(PIN_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(PIN_DOWNLOAD)
-	$(_CMD) tar -x -f $(shell basename $(PIN_DOWNLOAD)) --auto-compress --strip-components 1 -C $(PIN_HOME)
-	$(_CMD) rm $(shell basename $(PIN_DOWNLOAD))
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(PIN_DOWNLOAD) | tar -xf - -z --auto-compress --strip-components 1 -C $(PIN_HOME)
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
 sde_kit: $(PIN_ROOT)
 else ifneq (,$(USE_PINPLAY))
@@ -210,25 +208,23 @@ $(PIN_ROOT): $(PIN_DEP)
 $(PIN_DEP):
 	$(_MSG) '[DOWNLO] Pinplay 3.11-97998'
 	$(_CMD) mkdir -p $(PIN_HOME)
-	$(_CMD) wget -O $(shell basename $(PIN_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(PIN_DOWNLOAD)
-	$(_CMD) tar -x -f $(shell basename $(PIN_DOWNLOAD)) --auto-compress --strip-components 1 -C $(PIN_HOME)
-	$(_CMD) rm $(shell basename $(PIN_DOWNLOAD))
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(PIN_DOWNLOAD) | tar -xf - -j --strip-components 1 -C $(PIN_HOME)
 	$(_CMD) touch $(PIN_HOME)/.autodownloaded
 sde_kit: $(PIN_ROOT)
 else
+PINPLAY_GITID=17ccab4f1326fdef96a2621c3c7e374ee26c160a
 SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.44.0-2024-08-22-lin.tar.xz
 PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpindwarf.so
 sde_kit: $(PIN_DEP)
 $(PIN_DEP):
 	$(_MSG) '[DOWNLO] SDE 9.44.0-2024-08-22'
 	$(_CMD) mkdir -p $(SDE_HOME)
-	$(_CMD) wget -O $(shell basename $(SDE_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(SDE_DOWNLOAD)
-	$(_CMD) tar -x -f $(shell basename $(SDE_DOWNLOAD)) --auto-compress --strip-components 1 -C $(SDE_HOME)
-	$(_CMD) rm $(shell basename $(SDE_DOWNLOAD))
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(SDE_DOWNLOAD) | tar -xf - -J --strip-components 1 -C $(SDE_HOME)
 	$(_CMD) rm -r $(SDE_HOME)/pinkit/source/tools/InstLib #It looks like it is missing source files, so it fails to compile but not necessary for sniper
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-tools'
 	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools
+	$(_CMD) git -C $(SDE_HOME)/pinplay-tools reset --quiet --hard $(PINPLAY_GITID)
 $(PIN_ROOT): sde_kit
 endif
 
@@ -243,27 +239,23 @@ mcpat: mcpat/mcpat-1.0
 mcpat/mcpat-1.0:
 	$(_MSG) '[DOWNLO] McPAT'
 	$(_CMD) mkdir -p mcpat
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "http://snipersim.org/packages/mcpat-1.0.tgz" | tar xz -C mcpat
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "https://snipersim.org/packages/mcpat-1.0.tgz" | tar -xf - -z -C mcpat
 endif
 linux: include/linux/perf_event.h
 include/linux/perf_event.h:
 	$(_MSG) '[INSTAL] perf_event.h'
 	$(_CMD) if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
 
-TORCH_HOME=$(SIM_ROOT)/libtorch
 ifneq ($(NO_TORCH),1)
 TORCH_VERSION=2.5.0
-TORCH_DOWNLOAD=http://snipersim.org/packages/libtorch-shared-with-deps-${TORCH_VERSION}-cpu.zip
+TORCH_DOWNLOAD=https://snipersim.org/packages/libtorch-shared-with-deps-${TORCH_VERSION}-cpu.tar.gz
 TORCH_DEP := $(SIM_ROOT)/libtorch/lib/libtorch.so
 ifeq ($(wildcard $(TORCH_DEP)),)
 torch-download:
 	$(_MSG) '[DOWNLO] LIBTORCH $(TORCH_VERSION)';
-	$(_CMD) wget -O $(shell basename $(TORCH_DOWNLOAD)) $(WGET_OPTIONS) --no-verbose --quiet $(TORCH_DOWNLOAD)
+	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(TORCH_DOWNLOAD) | tar -xf - -z -C $(SIM_ROOT);
 
 torch: torch-download
-	$(_CMD) unzip -q $(shell basename $(TORCH_DOWNLOAD)) -d $(SIM_ROOT);
-	$(_CMD) rm $(shell basename $(TORCH_DOWNLOAD));
-all: torch
 endif
 endif
 
