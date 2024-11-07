@@ -1735,9 +1735,13 @@ assert(data_length==getCacheBlockSize());
    }
 
    if (m_cache_writethrough) {
-      acquireStackLock(true);
+      #ifdef PRIVATE_L2_OPTIMIZATION
+      acquireStackLock(address, true);
       m_next_cache_cntlr->writeCacheBlock(address, offset, data_buf, data_length, thread_num);
-      releaseStackLock(true);
+      releaseStackLock(address, true);
+      #else
+      m_next_cache_cntlr->writeCacheBlock(address, offset, data_buf, data_length, thread_num);
+      #endif
    }
 }
 
