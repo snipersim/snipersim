@@ -27,10 +27,10 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 
    // The first thread (master) doesn't need to join with anyone else
    PIN_GetLock(&new_threadid_lock, threadid);
-   if (tidptrs.size() > 0)
+   if (tidptrs[PIN_GetParentTid()].size() > 0)
    {
-      thread_data[threadid].tid_ptr = tidptrs.front();
-      tidptrs.pop_front();
+      thread_data[threadid].tid_ptr = tidptrs[PIN_GetParentTid()].front();
+      tidptrs[PIN_GetParentTid()].pop_front();
    }
    PIN_ReleaseLock(&new_threadid_lock);
 

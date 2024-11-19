@@ -45,7 +45,7 @@ UINT64 fast_forward_target = 0;
 UINT64 detailed_target = 0;
 PIN_LOCK access_memory_lock;
 PIN_LOCK new_threadid_lock;
-std::deque<ADDRINT> tidptrs;
+std::unordered_map<int, std::deque<ADDRINT>> tidptrs;
 PIN_LOCK output_lock;
 INT32 child_app_id = -1;
 BOOL in_roi = false;
