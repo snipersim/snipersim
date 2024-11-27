@@ -439,11 +439,11 @@ char *argv;
   Global->starttime = start;
   printf("\n");
   printf("                 TIMING INFORMATION\n");
-  printf("Start time                        : %16d\n",
+  printf("Start time                        : %16ld\n",
     Global->starttime);
-  printf("Initialization finish time        : %16d\n",
+  printf("Initialization finish time        : %16ld\n",
     Global->initdonetime);
-  printf("Overall finish time               : %16d\n",
+  printf("Overall finish time               : %16ld\n",
     Global->finishtime);
   printf("Total time with initialization    : %16d\n",
     Global->finishtime-Global->starttime);
