@@ -77,9 +77,9 @@ struct {
 
   int *transtimes;
   int *totaltimes;
-  long int starttime;
-  long int finishtime;
-  long int initdonetime;
+  unsigned int starttime;
+  unsigned int finishtime;
+  unsigned int initdonetime;
 } *Global;
 
 
@@ -124,7 +124,7 @@ int log_2(int);
 void printerr(char *);
 
 
-main(argc, argv)
+int main(argc, argv) 
 
 int argc;
 char *argv;
@@ -439,15 +439,15 @@ char *argv;
   Global->starttime = start;
   printf("\n");
   printf("                 TIMING INFORMATION\n");
-  printf("Start time                        : %16ld\n",
+  printf("Start time                        : %16u\n",
     Global->starttime);
-  printf("Initialization finish time        : %16ld\n",
+  printf("Initialization finish time        : %16u\n",
     Global->initdonetime);
-  printf("Overall finish time               : %16ld\n",
+  printf("Overall finish time               : %16u\n",
     Global->finishtime);
-  printf("Total time with initialization    : %16d\n",
+  printf("Total time with initialization    : %16u\n",
     Global->finishtime-Global->starttime);
-  printf("Total time without initialization : %16d\n",
+  printf("Total time without initialization : %16u\n",
     Global->finishtime-Global->initdonetime);
   printf("Overall transpose time            : %16d\n",
          transtime);
