@@ -77,9 +77,9 @@ struct {
 
   int *transtimes;
   int *totaltimes;
-  int starttime;
-  int finishtime;
-  int initdonetime;
+  long int starttime;
+  long int finishtime;
+  long int initdonetime;
 } *Global;
 
 
