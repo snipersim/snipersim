@@ -3,88 +3,96 @@
 #include "pr_l2_cache_block_info.h"
 #include "shared_cache_block_info.h"
 #include "log.h"
+#include "config.hpp"
 
-const char* CacheBlockInfo::option_names[] =
-{
-   "prefetch",
-   "warmup",
+const char *CacheBlockInfo::option_names[] =
+    {
+        "prefetch",
+        "warmup",
 };
 
-const char* CacheBlockInfo::getOptionName(option_t option)
+const char *CacheBlockInfo::getOptionName(option_t option)
 {
-   static_assert(CacheBlockInfo::NUM_OPTIONS == sizeof(CacheBlockInfo::option_names) / sizeof(char*), "Not enough values in CacheBlockInfo::option_names");
+    static_assert(CacheBlockInfo::NUM_OPTIONS == sizeof(CacheBlockInfo::option_names) / sizeof(char *), "Not enough values in CacheBlockInfo::option_names");
 
-   if (option < NUM_OPTIONS)
-      return option_names[option];
-   else
-      return "invalid";
+    if (option < NUM_OPTIONS)
+        return option_names[option];
+    else
+        return "invalid";
 }
 
+CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, UInt64 options) : ppn(0),
+                                                                                          m_tlb_entry(false),
+                                                                                          m_page_size(0),
+                                                                                          m_tag(tag),
+                                                                                          m_cstate(cstate),
+                                                                                          m_owner(0),
+                                                                                          m_used(0),
+                                                                                          m_options(options),
+                                                                                          m_block_type(NON_PAGE_TABLE),
+                                                                                          m_reuse(0),
+                                                                                          utilization(0)
 
-CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, UInt64 options):
-   m_tag(tag),
-   m_cstate(cstate),
-   m_owner(0),
-   m_used(0),
-   m_options(options)
-{}
+{
+}
 
 CacheBlockInfo::~CacheBlockInfo()
-{}
+{
+}
 
-CacheBlockInfo*
+CacheBlockInfo *
 CacheBlockInfo::create(CacheBase::cache_t cache_type)
 {
-   switch (cache_type)
-   {
-      case CacheBase::PR_L1_CACHE:
-         return new PrL1CacheBlockInfo();
+    switch (cache_type)
+    {
+    case CacheBase::PR_L1_CACHE:
+        return new PrL1CacheBlockInfo();
 
-      case CacheBase::PR_L2_CACHE:
-         return new PrL2CacheBlockInfo();
+    case CacheBase::PR_L2_CACHE:
+        return new PrL2CacheBlockInfo();
 
-      case CacheBase::SHARED_CACHE:
-         return new SharedCacheBlockInfo();
+    case CacheBase::SHARED_CACHE:
+        return new SharedCacheBlockInfo();
 
-      default:
-         LOG_PRINT_ERROR("Unrecognized cache type (%u)", cache_type);
-         return NULL;
-   }
+    default:
+        LOG_PRINT_ERROR("Unrecognized cache type (%u)", cache_type);
+        return NULL;
+    }
 }
 
-void
-CacheBlockInfo::invalidate()
+void CacheBlockInfo::invalidate()
 {
-   m_tag = ~0;
-   m_cstate = CacheState::INVALID;
+    m_tag = ~0;
+    m_cstate = CacheState::INVALID;
 }
 
-void
-CacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
+void CacheBlockInfo::clone(CacheBlockInfo *cache_block_info)
 {
-   m_tag = cache_block_info->getTag();
-   m_cstate = cache_block_info->getCState();
-   m_owner = cache_block_info->m_owner;
-   m_used = cache_block_info->m_used;
-   m_options = cache_block_info->m_options;
+    m_tag = cache_block_info->getTag();
+    m_cstate = cache_block_info->getCState();
+    m_owner = cache_block_info->m_owner;
+    m_used = cache_block_info->m_used;
+    m_options = cache_block_info->m_options;
+    m_block_type = cache_block_info->getBlockType();
+    m_reuse = cache_block_info->getReuse();
+    m_page_size = cache_block_info->getPageSize();
+    ppn = cache_block_info->getPPN();
 }
 
-bool
-CacheBlockInfo::updateUsage(UInt32 offset, UInt32 size)
+bool CacheBlockInfo::updateUsage(UInt32 offset, UInt32 size)
 {
-   UInt64 first = offset >> BitsUsedOffset,
-          last  = (offset + size - 1) >> BitsUsedOffset,
-          first_mask = (1ull << first) - 1,
-          last_mask = (1ull << (last + 1)) - 1,
-          usage_mask = last_mask & ~first_mask;
+    UInt64 first = offset >> BitsUsedOffset,
+           last = (offset + size - 1) >> BitsUsedOffset,
+           first_mask = (1ull << first) - 1,
+           last_mask = (1ull << (last + 1)) - 1,
+           usage_mask = last_mask & ~first_mask;
 
-   return updateUsage(usage_mask);
+    return updateUsage(usage_mask);
 }
 
-bool
-CacheBlockInfo::updateUsage(BitsUsedType used)
+bool CacheBlockInfo::updateUsage(BitsUsedType used)
 {
-   bool new_bits_set = used & ~m_used; // Are we setting any bits that were previously unset?
-   m_used |= used;                     // Update usage mask
-   return new_bits_set;
+    bool new_bits_set = used & ~m_used; // Are we setting any bits that were previously unset?
+    m_used |= used;                     // Update usage mask
+    return new_bits_set;
 }
