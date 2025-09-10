@@ -4,13 +4,12 @@
 // NRU: Not Recently Used. Some sort of Pseudo LRU policy.
 
 CacheSetNRU::CacheSetNRU(
-      CacheBase::cache_t cache_type,
-      UInt32 associativity, UInt32 blocksize) :
-   CacheSet(cache_type, associativity, blocksize)
+    CacheBase::cache_t cache_type,
+    UInt32 associativity, UInt32 blocksize, bool is_tlb_set) : CacheSet(cache_type, associativity, blocksize, is_tlb_set)
 {
    m_lru_bits = new UInt8[m_associativity];
    for (UInt32 i = 0; i < m_associativity; i++)
-      m_lru_bits[i] = 0;  // initially, lru bits of each set are set to zero, they are not touched yet
+      m_lru_bits[i] = 0; // initially, lru bits of each set are set to zero, they are not touched yet
 
    m_num_bits_set = 0;
    m_replacement_pointer = 0;
@@ -18,7 +17,7 @@ CacheSetNRU::CacheSetNRU(
 
 CacheSetNRU::~CacheSetNRU()
 {
-   delete [] m_lru_bits;
+   delete[] m_lru_bits;
 }
 
 UInt32
@@ -47,8 +46,7 @@ CacheSetNRU::getReplacementIndex(CacheCntlr *cntlr)
 
    for (UInt32 i = 0; i < m_associativity; i++)
    {
-      if ((m_lru_bits[m_replacement_pointer] == 0 || have_zero_bit == false)
-          && isValidReplacement(m_replacement_pointer))
+      if ((m_lru_bits[m_replacement_pointer] == 0 || have_zero_bit == false) && isValidReplacement(m_replacement_pointer))
       {
          // We choose the first non-touched line as the victim (note that we start searching from the replacement pointer position)
          UInt8 index = m_replacement_pointer;
@@ -65,8 +63,7 @@ CacheSetNRU::getReplacementIndex(CacheCntlr *cntlr)
    LOG_PRINT_ERROR("Error Finding LRU bits");
 }
 
-void
-CacheSetNRU::updateReplacementIndex(UInt32 accessed_index)
+void CacheSetNRU::updateReplacementIndex(UInt32 accessed_index)
 {
    m_lru_bits[accessed_index] = 1;
    m_num_bits_set++;

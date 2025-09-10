@@ -439,12 +439,13 @@ namespace ParametricDramDirectoryMSI
             accessTLB(m_dtlb, address, false, modeled);
 
         return m_cache_cntlrs[mem_component]->processMemOpFromCore(
+            0, // for now we will not change that but this is supposed to be the PC. We will integrate it in the memory_manager.cc commit
             lock_signal,
             mem_op_type,
             address, offset,
             data_buf, data_length,
             modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT ? false : true,
-            modeled == Core::MEM_MODELED_NONE ? false : true);
+            modeled == Core::MEM_MODELED_NONE ? false : true, CacheBlockInfo::block_type_t::NON_PAGE_TABLE, SubsecondTime::Zero());
     }
 
     void

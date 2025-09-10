@@ -183,7 +183,7 @@ DramCache::accessDataArray(Cache::access_t access, core_id_t requester, Subsecon
 void DramCache::callPrefetcher(IntPtr train_address, bool cache_hit, bool prefetch_hit, SubsecondTime t_issue)
 {
     // Always train the prefetcher
-    std::vector<IntPtr> prefetchList = m_prefetcher->getNextAddress(train_address, INVALID_CORE_ID);
+    std::vector<IntPtr> prefetchList = m_prefetcher->getNextAddress(train_address, INVALID_CORE_ID, Core::INVALID_MEM_OP, cache_hit, prefetch_hit, 0xdeadbeef);
 
     // Only do prefetches on misses, or on hits to lines previously brought in by the prefetcher (if enabled)
     if (!cache_hit || (m_prefetch_on_prefetch_hit && prefetch_hit))

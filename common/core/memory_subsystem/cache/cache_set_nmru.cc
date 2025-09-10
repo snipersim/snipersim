@@ -4,9 +4,8 @@
 // NMRU: Not Most Recently Used
 
 CacheSetNMRU::CacheSetNMRU(
-      CacheBase::cache_t cache_type,
-      UInt32 associativity, UInt32 blocksize) :
-   CacheSet(cache_type, associativity, blocksize)
+    CacheBase::cache_t cache_type,
+    UInt32 associativity, UInt32 blocksize, bool is_tlb_set) : CacheSet(cache_type, associativity, blocksize, is_tlb_set)
 {
    m_lru_bits = new UInt8[m_associativity];
    for (UInt32 i = 0; i < m_associativity; i++)
@@ -17,7 +16,7 @@ CacheSetNMRU::CacheSetNMRU(
 
 CacheSetNMRU::~CacheSetNMRU()
 {
-   delete [] m_lru_bits;
+   delete[] m_lru_bits;
 }
 
 UInt32
@@ -51,8 +50,7 @@ CacheSetNMRU::getReplacementIndex(CacheCntlr *cntlr)
    LOG_PRINT_ERROR("Error Finding LRU bits");
 }
 
-void
-CacheSetNMRU::updateReplacementIndex(UInt32 accessed_index)
+void CacheSetNMRU::updateReplacementIndex(UInt32 accessed_index)
 {
    for (UInt32 i = 0; i < m_associativity; i++)
    {

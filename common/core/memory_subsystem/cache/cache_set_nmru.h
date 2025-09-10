@@ -5,17 +5,17 @@
 
 class CacheSetNMRU : public CacheSet
 {
-   public:
-      CacheSetNMRU(CacheBase::cache_t cache_type,
-            UInt32 associativity, UInt32 blocksize);
-      ~CacheSetNMRU();
+public:
+   CacheSetNMRU(CacheBase::cache_t cache_type,
+                UInt32 associativity, UInt32 blocksize, bool is_tlb_set);
+   ~CacheSetNMRU();
 
-      UInt32 getReplacementIndex(CacheCntlr *cntlr);
-      void updateReplacementIndex(UInt32 accessed_index);
+   UInt32 getReplacementIndex(CacheCntlr *cntlr);
+   void updateReplacementIndex(UInt32 accessed_index);
 
-   private:
-      UInt8* m_lru_bits;
-      UInt8  m_replacement_pointer;
+private:
+   UInt8 *m_lru_bits;
+   UInt8 m_replacement_pointer;
 };
 
 #endif /* CACHE_SET_NMRU_H */
