@@ -31,6 +31,10 @@ Lock iolock;
 #  define MYLOG(...) {}
 #endif
 
+// #define HARDCODE_LLC_ENERGY
+
+
+
 namespace ParametricDramDirectoryMSI
 {
 
@@ -279,6 +283,48 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       }
       registerStatsMetric(name, core_id, "uncore-totaltime", &m_shmem_perf_totaltime);
       registerStatsMetric(name, core_id, "uncore-requests", &m_shmem_perf_numrequests);
+
+   // ---- LLC (L3) config + stats (master only) ----
+   
+   if (is_last_level_cache && isMasterCache())
+   {
+   const String llc_base = "perf_model/" + cache_params.configName + "/llc";
+
+   #ifdef HARDCODE_LLC_ENERGY
+      m_llc_read_hit_cyc  = 6;
+      m_llc_write_hit_cyc = 6;
+   #else
+   {
+      // SAFE: accept array or scalar; default to 6/6 if not present
+      String k_rd = llc_base + "/read_hit_latency_cycles";
+      String k_wr = llc_base + "/write_hit_latency_cycles";
+      int rd = 6, wr = 6;
+
+      if (Sim()->getCfg()->hasKey(k_rd, core_id))
+         rd = Sim()->getCfg()->getIntArray(k_rd, core_id);
+      else if (Sim()->getCfg()->hasKey(k_rd))
+         rd = Sim()->getCfg()->getInt(k_rd);
+
+      if (Sim()->getCfg()->hasKey(k_wr, core_id))
+         wr = Sim()->getCfg()->getIntArray(k_wr, core_id);
+      else if (Sim()->getCfg()->hasKey(k_wr))
+         wr = Sim()->getCfg()->getInt(k_wr);
+
+      m_llc_read_hit_cyc  = rd;
+      m_llc_write_hit_cyc = wr;
+   }
+   #endif
+
+   registerStatsMetric(name, core_id, "l3_read_hits",      &m_master->l3_read_hits);
+   registerStatsMetric(name, core_id, "l3_write_hits",     &m_master->l3_write_hits);
+   registerStatsMetric(name, core_id, "l3_misses",         &m_master->l3_misses);
+   registerStatsMetric(name, core_id, "l3_writebacks",     &m_master->l3_writebacks);
+   registerStatsMetric(name, core_id, "l3_evictions",      &m_master->l3_evictions);
+   registerStatsMetric(name, core_id, "llc_dyn_energy_pJ",     &m_master->m_llc_energy.dyn_energy_pJ);
+   registerStatsMetric(name, core_id, "llc_leakage_energy_pJ", &m_master->m_llc_energy.leak_energy_pJ);
+   }
+   
+   // ---- end LLC config + stats ----
    }
 }
 
@@ -451,7 +497,6 @@ MYLOG("L1 hit");
 MYLOG("L1 miss");
       if (!m_passthrough)
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
-
       SubsecondTime t_miss_begin = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
       SubsecondTime t_mshr_avail = t_miss_begin;
 
@@ -851,12 +896,23 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             stats.mshr_latency += latency;
             getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          }
-         else
-         {
-            getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
-         }
+         else {
+   		if (isLastLevel()) {
+      			const bool is_write = (mem_op_type != Core::READ);
+			if (!m_llc_lat_ready) {
+				SubsecondTime T = Sim()->getCoreManager()->getCoreFromID(m_core_id)->getDvfsDomain()->getPeriod();
+				m_llc_read_hit_lat  = T * m_llc_read_hit_cyc;
+				m_llc_write_hit_lat = T * m_llc_write_hit_cyc;
+				m_llc_lat_ready = true;
+			}
+			getMemoryManager()->incrElapsedTime(is_write ? m_llc_write_hit_lat : m_llc_read_hit_lat,ShmemPerfModel::_USER_THREAD);
+		} else {
+      			getMemoryManager()->incrElapsedTime(m_mem_component,
+         		CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);
+   		}
+	}
       }
-
+      
       if (mem_op_type != Core::READ) // write that hits
       {
          /* Invalidate/flush in previous levels */
@@ -1420,6 +1476,16 @@ MYLOG("evicting @%lx", evict_address);
       }
 
       CacheState::cstate_t old_state = evict_block_info.getCState();
+      
+      if (isLastLevel()) {
+	      ++m_master->l3_evictions;
+	      if (old_state == CacheState::MODIFIED) {
+		      ++m_master->l3_writebacks;
+		      m_master->llc_update_leak(getShmemPerfModel()->getElapsedTime(thread_num));
+		      m_master->m_llc_energy.dyn_energy_pJ += (uint64_t)(m_master->m_llc_energy.e_writeback_pJ + 0.5);
+	      }
+      }
+
       MYLOG("evicting @%lx (state %c)", evict_address, CStateString(old_state));
       {
          ScopedLock sl(getLock());
@@ -1711,6 +1777,11 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
       so only when we accessed data should we return any latency */
    if (is_writeback)
       latency += m_writeback_time.getLatency();
+   if (isLastLevel() && is_writeback) {
+   	m_master->llc_update_leak(getShmemPerfModel()->getElapsedTime(thread_num));
+   	m_master->m_llc_energy.dyn_energy_pJ += (uint64_t)(m_master->m_llc_energy.e_writeback_pJ + 0.5);
+   	++m_master->l3_writebacks;
+   }
    return std::pair<SubsecondTime, bool>(latency, sibling_hit);
 }
 
@@ -2303,4 +2374,19 @@ CacheCntlr::getNetworkThreadSemaphore()
    return m_network_thread_sem;
 }
 
+}
+
+// Added by apply_llc_patch.sh
+void ParametricDramDirectoryMSI::CacheMasterCntlr::llc_update_leak(SubsecondTime now)
+{
+   if (m_llc_energy.p_leak_mW == 0.0) return;
+   if (m_llc_energy.last_leak_update == SubsecondTime::Zero()) {
+      m_llc_energy.last_leak_update = now;
+      return;
+   }
+   SubsecondTime dt = now - m_llc_energy.last_leak_update;
+   if (dt > SubsecondTime::Zero()) {
+      m_llc_energy.leak_energy_pJ += (uint64_t)(m_llc_energy.p_leak_mW * (double)dt.getNS() + 0.5);
+      m_llc_energy.last_leak_update = now;
+   }
 }

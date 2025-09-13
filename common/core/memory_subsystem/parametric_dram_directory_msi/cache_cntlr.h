@@ -195,6 +195,27 @@ namespace ParametricDramDirectoryMSI
          {}
          ~CacheMasterCntlr();
 
+      // ---- L3 energy & counters (LLC only; master side) ----
+      struct LlcEnergy {
+         double e_lookup_pJ    = 0.0;
+         double e_read_hit_pJ  = 0.0;
+         double e_write_hit_pJ = 0.0;
+         double e_miss_pJ      = 0.0;
+         double e_writeback_pJ = 0.0;
+         double p_leak_mW      = 0.0;
+	 uint64_t dyn_energy_pJ  = 0;   // dynamic energy in pJ
+         uint64_t leak_energy_pJ = 0;   // leakage energy in pJ
+         SubsecondTime last_leak_update = SubsecondTime::Zero();
+      } m_llc_energy;
+
+      uint64_t l3_read_hits    = 0;
+      uint64_t l3_write_hits   = 0;
+      uint64_t l3_misses       = 0;
+      uint64_t l3_writebacks   = 0;
+      uint64_t l3_evictions    = 0;
+
+      void llc_update_leak(SubsecondTime now);
+      // ---- end L3 energy & counters ----
          friend class CacheCntlr;
    };
 
@@ -261,6 +282,13 @@ namespace ParametricDramDirectoryMSI
          bool m_cache_writethrough;
          ComponentLatency m_writeback_time;
          ComponentBandwidthPerCycle m_next_level_read_bandwidth;
+
+         // LLC per-hit latencies (applied only when isLastLevel())
+         SubsecondTime m_llc_read_hit_lat  = SubsecondTime::Zero();
+	 SubsecondTime m_llc_write_hit_lat = SubsecondTime::Zero();
+	 UInt32 m_llc_read_hit_cyc  = 0;
+	 UInt32 m_llc_write_hit_cyc = 0;
+	 bool   m_llc_lat_ready     = false;
 
          UInt32 m_shared_cores;        /**< Number of cores this cache is shared with */
          core_id_t m_core_id_master;   /**< Core id of the 'master' (actual) cache controller we're proxying */
@@ -411,3 +439,5 @@ namespace ParametricDramDirectoryMSI
    };
 
 }
+
+
