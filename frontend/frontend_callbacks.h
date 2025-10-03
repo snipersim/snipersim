@@ -21,10 +21,10 @@ template <typename T> class FrontendCallbacks
 {
   public:
   /// Constructor
-  FrontendCallbacks<T>(FrontendOptions<T>* opts, FrontendControl<T>* cntrl, thread_data_t* td);
+  FrontendCallbacks(FrontendOptions<T>* opts, FrontendControl<T>* cntrl, thread_data_t* td);
 
   /// Destructor
-  ~FrontendCallbacks<T>();
+  ~FrontendCallbacks();
   
   
   /// Method to update the instruction count in the frontend and the backend.
