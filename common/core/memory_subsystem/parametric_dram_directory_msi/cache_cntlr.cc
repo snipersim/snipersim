@@ -320,10 +320,30 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "l3_misses",         &m_master->l3_misses);
    registerStatsMetric(name, core_id, "l3_writebacks",     &m_master->l3_writebacks);
    registerStatsMetric(name, core_id, "l3_evictions",      &m_master->l3_evictions);
+
+   registerStatsMetric(name, core_id, "l3_read_hits_sram",  &m_master->l3_read_hits_sram);
+	registerStatsMetric(name, core_id, "l3_read_hits_mram",  &m_master->l3_read_hits_mram);
+	registerStatsMetric(name, core_id, "l3_write_hits_sram", &m_master->l3_write_hits_sram);
+	registerStatsMetric(name, core_id, "l3_write_hits_mram", &m_master->l3_write_hits_mram);
+
    registerStatsMetric(name, core_id, "llc_dyn_energy_pJ",     &m_master->m_llc_energy.dyn_energy_pJ);
    registerStatsMetric(name, core_id, "llc_leakage_energy_pJ", &m_master->m_llc_energy.leak_energy_pJ);
    }
-   
+  
+	   {
+      const String hyb_base = "perf_model/" + cache_params.configName + "/hybrid";
+      auto rd = [&](const String& k, int def)->int {
+         if (Sim()->getCfg()->hasKey(k, m_core_id)) return Sim()->getCfg()->getIntArray(k, m_core_id);
+         if (Sim()->getCfg()->hasKey(k))            return Sim()->getCfg()->getInt(k);
+         return def;
+      };
+      m_llc_read_hit_cyc_sram  = rd(hyb_base + "/sram/read_hit_latency_cycles",  m_llc_read_hit_cyc);
+      m_llc_write_hit_cyc_sram = rd(hyb_base + "/sram/write_hit_latency_cycles", m_llc_write_hit_cyc);
+      m_llc_read_hit_cyc_mram  = rd(hyb_base + "/mram/read_hit_latency_cycles",  m_llc_read_hit_cyc);
+      m_llc_write_hit_cyc_mram = rd(hyb_base + "/mram/write_hit_latency_cycles", m_llc_write_hit_cyc);
+   }
+
+
    // ---- end LLC config + stats ----
    }
 }
@@ -903,9 +923,32 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
 				SubsecondTime T = Sim()->getCoreManager()->getCoreFromID(m_core_id)->getDvfsDomain()->getPeriod();
 				m_llc_read_hit_lat  = T * m_llc_read_hit_cyc;
 				m_llc_write_hit_lat = T * m_llc_write_hit_cyc;
+			
+				m_llc_read_hit_lat_sram  = T * (m_llc_read_hit_cyc_sram  ? m_llc_read_hit_cyc_sram  : m_llc_read_hit_cyc);
+				m_llc_write_hit_lat_sram = T * (m_llc_write_hit_cyc_sram ? m_llc_write_hit_cyc_sram : m_llc_write_hit_cyc);
+                                m_llc_read_hit_lat_mram  = T * (m_llc_read_hit_cyc_mram  ? m_llc_read_hit_cyc_mram  : m_llc_read_hit_cyc);
+                                m_llc_write_hit_lat_mram = T * (m_llc_write_hit_cyc_mram ? m_llc_write_hit_cyc_mram : m_llc_write_hit_cyc);
+			
 				m_llc_lat_ready = true;
 			}
 			getMemoryManager()->incrElapsedTime(is_write ? m_llc_write_hit_lat : m_llc_read_hit_lat,ShmemPerfModel::_USER_THREAD);
+
+
+			SharedCacheBlockInfo* sbi = (SharedCacheBlockInfo*)cache_block_info;
+			SharedCacheBlockInfo::TechType tech = sbi ? sbi->getTech() : SharedCacheBlockInfo::TECH_SRAM;
+			SubsecondTime lat = (tech == SharedCacheBlockInfo::TECH_MRAM)? (is_write ? m_llc_write_hit_lat_mram : m_llc_read_hit_lat_mram)  : (is_write ? m_llc_write_hit_lat_sram : m_llc_read_hit_lat_sram);
+			getMemoryManager()->incrElapsedTime(lat, ShmemPerfModel::_USER_THREAD);
+
+
+    const bool mram = (sbi && sbi->getTech() == SharedCacheBlockInfo::TECH_MRAM);
+    if (mem_op_type == Core::READ) {
+        ++m_master->l3_read_hits;
+        if (mram) ++m_master->l3_read_hits_mram; else ++m_master->l3_read_hits_sram;
+    } else {
+        ++m_master->l3_write_hits;
+        if (mram) ++m_master->l3_write_hits_mram; else ++m_master->l3_write_hits_sram;
+    }
+
 		} else {
       			getMemoryManager()->incrElapsedTime(m_mem_component,
          		CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_USER_THREAD);

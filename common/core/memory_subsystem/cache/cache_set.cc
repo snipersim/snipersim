@@ -108,7 +108,7 @@ CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* evicti
       index = getReplacementIndexRestricted(cntlr, allowed_way_mask);
    }
    assert(index < m_associativity);
-
+   LOG_ASSERT_ERROR(((allowed_way_mask >> index) & 1u) != 0, "Picked way %u outside mask 0x%x (assoc=%u)", index, allowed_way_mask, m_associativity);
    assert(eviction != NULL);
 
    if (m_cache_block_info_array[index]->isValid())

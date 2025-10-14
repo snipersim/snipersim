@@ -38,6 +38,11 @@ class Cache : public CacheBase
       UInt32 m_hybrid_allowed_way_mask_data;  // For inserts that carry data (fill_buff != NULL)
       UInt32 m_hybrid_allowed_way_mask_tag;   // For tag-only inserts (fill_buff == NULL)
 
+      String m_cfgname;
+      bool m_hybrid_enabled;
+      bool m_hybrid_fill_to_mram;
+      UInt32 m_sram_way_mask;
+      UInt32 m_mram_way_mask;
       #ifdef ENABLE_SET_USAGE_HIST
       UInt64* m_set_usage_hist;
       #endif

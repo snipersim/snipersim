@@ -42,12 +42,12 @@ SharedCacheBlockInfo::invalidate()
    CacheBlockInfo::invalidate();
 }
 
-void
-SharedCacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
+void SharedCacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
 {
-   #ifdef ENABLE_TRACK_SHARING_PREVCACHES
+#ifdef ENABLE_TRACK_SHARING_PREVCACHES
    m_cached_locs = ((SharedCacheBlockInfo*) cache_block_info)->getCachedLocs();
-   #endif
+#endif
    CacheBlockInfo::clone(cache_block_info);
    m_tech = ((SharedCacheBlockInfo*) cache_block_info)->getTech();
 }
+

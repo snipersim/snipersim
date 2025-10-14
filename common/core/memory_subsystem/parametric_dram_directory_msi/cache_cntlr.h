@@ -213,7 +213,9 @@ namespace ParametricDramDirectoryMSI
       uint64_t l3_misses       = 0;
       uint64_t l3_writebacks   = 0;
       uint64_t l3_evictions    = 0;
-
+      
+      uint64_t l3_read_hits_sram  = 0, l3_read_hits_mram  = 0;
+      uint64_t l3_write_hits_sram = 0, l3_write_hits_mram = 0;
       void llc_update_leak(SubsecondTime now);
       // ---- end L3 energy & counters ----
          friend class CacheCntlr;
@@ -289,6 +291,13 @@ namespace ParametricDramDirectoryMSI
 	 UInt32 m_llc_read_hit_cyc  = 0;
 	 UInt32 m_llc_write_hit_cyc = 0;
 	 bool   m_llc_lat_ready     = false;
+
+	 UInt32 m_llc_read_hit_cyc_sram  = 0, m_llc_write_hit_cyc_sram = 0;
+	 UInt32 m_llc_read_hit_cyc_mram  = 0, m_llc_write_hit_cyc_mram = 0;
+	 SubsecondTime m_llc_read_hit_lat_sram  = SubsecondTime::Zero();
+	 SubsecondTime m_llc_write_hit_lat_sram = SubsecondTime::Zero();
+	 SubsecondTime m_llc_read_hit_lat_mram  = SubsecondTime::Zero();
+	 SubsecondTime m_llc_write_hit_lat_mram = SubsecondTime::Zero();
 
          UInt32 m_shared_cores;        /**< Number of cores this cache is shared with */
          core_id_t m_core_id_master;   /**< Core id of the 'master' (actual) cache controller we're proxying */
