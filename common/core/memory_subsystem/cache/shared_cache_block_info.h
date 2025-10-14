@@ -1,3 +1,4 @@
+#include <cstdint>
 #pragma once
 
 #include "cache_state.h"
@@ -20,6 +21,10 @@ typedef UInt8 PrevCacheIndex; // Should hold an integer up to MAX_NUM_PREVCACHES
 class SharedCacheBlockInfo : public CacheBlockInfo
 {
    private:
+      public:
+	   enum TechType { TECH_SRAM = 0, TECH_MRAM = 1 };
+      private:
+	   TechType m_tech;
       #ifdef ENABLE_TRACK_SHARING_PREVCACHES
       CacheSharersType m_cached_locs;
       #endif
@@ -28,12 +33,15 @@ class SharedCacheBlockInfo : public CacheBlockInfo
       SharedCacheBlockInfo(IntPtr tag = ~0,
             CacheState::cstate_t cstate = CacheState::INVALID)
          : CacheBlockInfo(tag, cstate)
+	 , m_tech(TECH_SRAM)
          #ifdef ENABLE_TRACK_SHARING_PREVCACHES
          , m_cached_locs()
          #endif
       {}
 
       ~SharedCacheBlockInfo() {}
+      void setTech(TechType t) { m_tech = t; }
+      TechType getTech() const { return m_tech; }
 
       #ifdef ENABLE_TRACK_SHARING_PREVCACHES
       PrevCacheIndex getCachedLoc();

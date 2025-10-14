@@ -96,11 +96,17 @@ CacheSet::invalidate(IntPtr& tag)
 }
 
 void
-CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr)
+CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction,
+   CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr, UInt32 allowed_way_mask)
 {
    // This replacement strategy does not take into account the fact that
    // cache blocks can be voluntarily flushed or invalidated due to another write request
-   const UInt32 index = getReplacementIndex(cntlr);
+   UInt32 index;
+   if (allowed_way_mask == 0xFFFFFFFFu) {
+      index = getReplacementIndex(cntlr);
+   } else {
+      index = getReplacementIndexRestricted(cntlr, allowed_way_mask);
+   }
    assert(index < m_associativity);
 
    assert(eviction != NULL);
@@ -123,6 +129,23 @@ CacheSet::insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* evicti
 
    if (fill_buff != NULL && m_blocks != NULL)
       memcpy(&m_blocks[index * m_blocksize], (void*) fill_buff, m_blocksize);
+}
+
+UInt32
+CacheSet::getReplacementIndexRestricted(CacheCntlr *cntlr, UInt32 allowed_way_mask)
+{
+   // 1) Prefer inserting into an INVALID line within the mask
+   for (UInt32 i = 0; i < m_associativity; ++i) {
+      if (((allowed_way_mask >> i) & 1u) && !m_cache_block_info_array[i]->isValid())
+         return i;
+   }
+   // 2) Otherwise, pick the first allowed index that is a valid replacement
+   for (UInt32 i = 0; i < m_associativity; ++i) {
+      if (((allowed_way_mask >> i) & 1u) && isValidReplacement(i))
+         return i;
+   }
+   // 3) Nothing suitable inside the mask—fall back to global policy
+   return getReplacementIndex(cntlr);
 }
 
 char*
@@ -242,3 +265,4 @@ bool CacheSet::isValidReplacement(UInt32 index)
       return true;
    }
 }
+

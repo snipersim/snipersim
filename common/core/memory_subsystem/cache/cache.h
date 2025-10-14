@@ -31,6 +31,13 @@ class Cache : public CacheBase
 
       FaultInjector *m_fault_injector;
 
+      // --- Hybrid insert masks (optional) ---
+      // When enabled, restricts which ways can be chosen on insert.
+      // By default, data inserts use all ways (0xFFFFFFFFu) and tag-only inserts use none (0u).
+      bool   m_use_hybrid_insert_masks;
+      UInt32 m_hybrid_allowed_way_mask_data;  // For inserts that carry data (fill_buff != NULL)
+      UInt32 m_hybrid_allowed_way_mask_tag;   // For tag-only inserts (fill_buff == NULL)
+
       #ifdef ENABLE_SET_USAGE_HIST
       UInt64* m_set_usage_hist;
       #endif
@@ -68,6 +75,37 @@ class Cache : public CacheBase
 
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
+
+      // ---- Hybrid mask configuration ----
+      // Enable hybrid behavior with explicit masks.
+      // Any bit i set to 1 allows choosing way i during insertion.
+      void setHybridInsertMasks(UInt32 data_way_mask, UInt32 tag_only_way_mask)
+      {
+         m_use_hybrid_insert_masks = true;
+         m_hybrid_allowed_way_mask_data = data_way_mask;
+         m_hybrid_allowed_way_mask_tag  = tag_only_way_mask;
+      }
+
+      // Convenience setters if only one mask changes.
+      void setHybridDataInsertMask(UInt32 data_way_mask)
+      {
+         m_use_hybrid_insert_masks = true;
+         m_hybrid_allowed_way_mask_data = data_way_mask;
+      }
+
+      void setHybridTagOnlyInsertMask(UInt32 tag_only_way_mask)
+      {
+         m_use_hybrid_insert_masks = true;
+         m_hybrid_allowed_way_mask_tag = tag_only_way_mask;
+      }
+
+      // Disable hybrid behavior (revert to unrestricted inserts).
+      void clearHybridInsertMasks()
+      {
+         m_use_hybrid_insert_masks = false;
+         m_hybrid_allowed_way_mask_data = 0xFFFFFFFFu;
+         m_hybrid_allowed_way_mask_tag  = 0u;
+      }
 };
 
 template <class T>
@@ -77,3 +115,4 @@ UInt32 moduloHashFn(T key, UInt32 hash_fn_param, UInt32 num_buckets)
 }
 
 #endif /* CACHE_H */
+

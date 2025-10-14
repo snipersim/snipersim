@@ -1,0 +1,71 @@
+﻿#include "log.h"
+{
+core_id_t core_id_master = core_id - core_id % m_shared_cores;
+return core_id_master == m_core_id_master;
+}
+
+
+
+
+/*** threads ***/
+
+
+void
+CacheCntlr::wakeUpUserThread(Semaphore* user_thread_sem)
+{
+(user_thread_sem ? user_thread_sem : m_user_thread_sem)->signal();
+}
+
+
+void
+CacheCntlr::waitForUserThread(Semaphore* network_thread_sem)
+{
+(network_thread_sem ? network_thread_sem : m_network_thread_sem)->wait();
+}
+
+
+void
+CacheCntlr::waitForNetworkThread()
+{
+m_user_thread_sem->wait();
+}
+
+
+void
+CacheCntlr::wakeUpNetworkThread()
+{
+m_network_thread_sem->signal();
+}
+
+
+Semaphore*
+CacheCntlr::getUserThreadSemaphore()
+{
+return m_user_thread_sem;
+}
+
+
+Semaphore*
+CacheCntlr::getNetworkThreadSemaphore()
+{
+return m_network_thread_sem;
+}
+
+
+}
+
+
+// Added by apply_llc_patch.sh
+void ParametricDramDirectoryMSI::CacheMasterCntlr::llc_update_leak(SubsecondTime now)
+{
+if (m_llc_energy.p_leak_mW == 0.0) return;
+if (m_llc_energy.last_leak_update == SubsecondTime::Zero()) {
+m_llc_energy.last_leak_update = now;
+return;
+}
+SubsecondTime dt = now - m_llc_energy.last_leak_update;
+if (dt > SubsecondTime::Zero()) {
+m_llc_energy.leak_energy_pJ += (uint64_t)(m_llc_energy.p_leak_mW * (double)dt.getNS() + 0.5);
+m_llc_energy.last_leak_update = now;
+}
+}

@@ -22,7 +22,11 @@ Cache::Cache(
    m_num_accesses(0),
    m_num_hits(0),
    m_cache_type(cache_type),
-   m_fault_injector(fault_injector)
+   m_fault_injector(fault_injector),
+   // Hybrid masks default: disabled; data inserts unrestricted; tag-only inserts disallowed
+   m_use_hybrid_insert_masks(false),
+   m_hybrid_allowed_way_mask_data(0xFFFFFFFFu),
+   m_hybrid_allowed_way_mask_tag(0u)
 {
    m_set_info = CacheSet::createCacheSetInfo(name, cfgname, core_id, replacement_policy, m_associativity);
    m_sets = new CacheSet*[m_num_sets];
@@ -132,8 +136,23 @@ Cache::insertSingleLine(IntPtr addr, Byte* fill_buff,
    CacheBlockInfo* cache_block_info = CacheBlockInfo::create(m_cache_type);
    cache_block_info->setTag(tag);
 
+   // Determine which ways are allowed for this insertion.
+   // If hybrid masks are enabled, choose data vs tag-only mask based on whether we have a fill buffer.
+   UInt32 allowed_way_mask = 0xFFFFFFFFu;
+   if (m_use_hybrid_insert_masks)
+   {
+      const bool tag_only_insert = (fill_buff == NULL);
+      allowed_way_mask = tag_only_insert ? m_hybrid_allowed_way_mask_tag
+                                         : m_hybrid_allowed_way_mask_data;
+
+      // If no ways are allowed for this path (mask == 0), fall back to unrestricted
+      // to avoid deadlock; this mirrors the CacheSet restricted helper's fallback logic.
+      if (allowed_way_mask == 0u)
+         allowed_way_mask = 0xFFFFFFFFu;
+   }
+
    m_sets[set_index]->insert(cache_block_info, fill_buff,
-         eviction, evict_block_info, evict_buff, cntlr);
+         eviction, evict_block_info, evict_buff, cntlr, allowed_way_mask);
    *evict_addr = tagToAddress(evict_block_info->getTag());
 
    if (m_fault_injector) {
@@ -184,3 +203,4 @@ Cache::updateHits(Core::mem_op_t mem_op_type, UInt64 hits)
       m_num_hits += hits;
    }
 }
+

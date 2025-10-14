@@ -49,4 +49,5 @@ SharedCacheBlockInfo::clone(CacheBlockInfo* cache_block_info)
    m_cached_locs = ((SharedCacheBlockInfo*) cache_block_info)->getCachedLocs();
    #endif
    CacheBlockInfo::clone(cache_block_info);
+   m_tech = ((SharedCacheBlockInfo*) cache_block_info)->getTech();
 }

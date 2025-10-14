@@ -49,7 +49,7 @@ class CacheSet
       void write_line(UInt32 line_index, UInt32 offset, Byte *in_buff, UInt32 bytes, bool update_replacement);
       CacheBlockInfo* find(IntPtr tag, UInt32* line_index = NULL);
       bool invalidate(IntPtr& tag);
-      void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr = NULL);
+      void insert(CacheBlockInfo* cache_block_info, Byte* fill_buff, bool* eviction, CacheBlockInfo* evict_block_info, Byte* evict_buff, CacheCntlr *cntlr = NULL, UInt32 allowed_way_mask = 0xFFFFFFFF);
 
       CacheBlockInfo* peekBlock(UInt32 way) const { return m_cache_block_info_array[way]; }
 
@@ -57,6 +57,7 @@ class CacheSet
       UInt32 getBlockSize(void) const { return m_blocksize; }
 
       virtual UInt32 getReplacementIndex(CacheCntlr *cntlr) = 0;
+      virtual UInt32 getReplacementIndexRestricted(CacheCntlr *cntlr, UInt32 allowed_way_mask);
       virtual void updateReplacementIndex(UInt32) = 0;
 
       bool isValidReplacement(UInt32 index);
