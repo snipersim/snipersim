@@ -12,6 +12,10 @@
 #include "core.h"
 #include "fault_injection.h"
 
+#include <vector>
+#include <utility>
+#include <cstdlib>
+
 // Define to enable the set usage histogram
 //#define ENABLE_SET_USAGE_HIST
 
@@ -43,6 +47,23 @@ class Cache : public CacheBase
       bool m_hybrid_fill_to_mram;
       UInt32 m_sram_way_mask;
       UInt32 m_mram_way_mask;
+
+      // ---- Per-line tech mapping (optional) ----
+      // Two lightweight options:
+      //  (a) set-parity: even sets -> one tech, odd sets -> the other
+      //  (b) address ranges: [start,end) -> tech
+      struct RangeRule {
+         IntPtr start;      // inclusive
+         IntPtr end;        // exclusive
+         bool   to_mram;    // true => MRAM, false => SRAM
+      };
+      bool m_map_use_set_parity = false;
+      bool m_map_even_sets_are_mram = false;
+      std::vector<RangeRule> m_addr_rules;
+
+      // Returns true if a per-line decision exists; writes desired tech in *to_mram.
+      bool decideLineTech(IntPtr addr, UInt32 set_index, bool *to_mram) const;
+
       #ifdef ENABLE_SET_USAGE_HIST
       UInt64* m_set_usage_hist;
       #endif
@@ -120,4 +141,3 @@ UInt32 moduloHashFn(T key, UInt32 hash_fn_param, UInt32 num_buckets)
 }
 
 #endif /* CACHE_H */
-
