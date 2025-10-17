@@ -15,6 +15,7 @@ public:
         NUM_OPTIONS
     };
 
+    //@kanellok: 
     // added some block_type information to every block
     enum block_type_t
     {
@@ -82,8 +83,8 @@ public:
 
     inline void setBlockType(block_type_t bt) { m_block_type = bt; }
     inline block_type_t getBlockType() { return m_block_type; }
-    inline bool isPageTableBlock() { return (m_block_type == block_type_t::PAGE_TABLE); }
-    inline bool isSecurityBlock() { return (m_block_type == block_type_t::SECURITY); }
+    inline bool isPageTableBlock() { return (m_block_type == block_type_t::PAGE_TABLE); } // @kanellok needed only for tagging any piece of page table data
+    inline bool isSecurityBlock() { return (m_block_type == block_type_t::SECURITY); } // @kanellok needed only for memory tagging-based metadata
     inline bool isExpressiveBlock() { return (m_block_type == block_type_t::EXPRESSIVE); } // @kanellok needed only for memory tagging-based metadata
     inline bool isUtopiaBlock() { return (m_block_type == block_type_t::UTOPIA); }         // @kanellok needed only for Utopia
     inline bool isTLBBlock() { return (m_block_type == block_type_t::TLB_ENTRY); }         // @kanellok needed only for Victima

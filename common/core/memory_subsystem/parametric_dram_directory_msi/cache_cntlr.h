@@ -20,7 +20,6 @@
 #include "subsecond_time.h"
 #include "shmem_perf.h"
 #include "boost/tuple/tuple.hpp"
-#include "utopia_cache_template.h"
 
 #include "sem.h"
 class DramCntlrInterface;
@@ -402,7 +401,7 @@ namespace ParametricDramDirectoryMSI
           IntPtr ca_address, UInt32 offset,
           Byte *data_buf, UInt32 data_length,
           bool modeled,
-          bool count, CacheBlockInfo::block_type_t block_type, SubsecondTime TLB_latency, UtopiaCache *shadow_cache = NULL,
+          bool count, CacheBlockInfo::block_type_t block_type, SubsecondTime TLB_latency, 
           Core::mem_origin_t mem_origin = Core::mem_origin_t::NORMAL);
       void updateHits(Core::mem_op_t mem_op_type, UInt64 hits);
 

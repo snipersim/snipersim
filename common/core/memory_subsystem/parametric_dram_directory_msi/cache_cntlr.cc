@@ -9,7 +9,6 @@
 #include "hooks_manager.h"
 #include "cache_atd.h"
 #include "shmem_perf.h"
-// #include "utopia_cache_template.h"
 #include <cstring>
 
 // Define to allow private L2 caches not to take the stack lock.
@@ -421,7 +420,7 @@ namespace ParametricDramDirectoryMSI
         IntPtr ca_address, UInt32 offset,
         Byte *data_buf, UInt32 data_length,
         bool modeled,
-        bool count, CacheBlockInfo::block_type_t block_type, SubsecondTime TLB_latency, UtopiaCache *shadow_cache,
+        bool count, CacheBlockInfo::block_type_t block_type, SubsecondTime TLB_latency,
         Core::mem_origin_t mem_origin)
     {
 
@@ -431,6 +430,7 @@ namespace ParametricDramDirectoryMSI
 
 #ifdef CACHE_DEBUG
         log_file << "[" << m_core_id << "] " << "Address: " << ca_address << " Offset: " << offset << " Data Length: " << data_length << " Lock Signal: " << lock_signal << " Mem Op Type: " << mem_op_type << " EIP: " << eip << std::endl;
+       
         if (metadata_request)
         {
             log_file << "Special metadata request of type: " << block_type << std::endl;
@@ -481,9 +481,9 @@ namespace ParametricDramDirectoryMSI
         bool prefetch_hit = false;
         CacheBlockInfo *cache_block_info;
 
-        if (!shadow_cache || !metadata_request)
+        if (!metadata_request || (metadata_request && (metadata_passthrough_loc == 1)))
         {
-
+            // @kanellok: Metadata requests are not passed through, so we can check the cache
             cache_hit = operationPermissibleinCache(ca_address, mem_op_type, &cache_block_info);
         }
 
@@ -507,15 +507,16 @@ namespace ParametricDramDirectoryMSI
         }
         else if (cache_hit && metadata_request && (metadata_passthrough_loc != 1))
         {
-
+            // @kanellok Metadata request hits in cache, but we need to pass it through anyway
             cache_hit = false;
             cache_block_info->invalidate();
             cache_block_info = NULL;
         }
 
-        if (count && !(shadow_cache && metadata_request))
+        if (count && ((!metadata_request) || (metadata_request && (metadata_passthrough_loc == 1))))
         {
             ScopedLock sl(getLock());
+
             // Update the Cache Counters
             getCache()->updateCounters(cache_hit);
             updateCounters(mem_op_type, ca_address, cache_hit, getCacheState(cache_block_info), block_type, Prefetch::NONE);
@@ -649,13 +650,13 @@ namespace ParametricDramDirectoryMSI
         {
             /* cache miss: either wrong coherency state or not present in the cache */
             MYLOG("L1 miss");
-            if (!m_passthrough && !(block_type == CacheBlockInfo::block_type_t::TLB_ENTRY_PASSTHROUGH))
+            if (!m_passthrough)
                 getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
 
             SubsecondTime t_miss_begin = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
             SubsecondTime t_mshr_avail = t_miss_begin;
 
-            if (modeled && m_l1_mshr && !m_passthrough && m_l1_metadata_mshr && !(block_type == CacheBlockInfo::block_type_t::TLB_ENTRY_PASSTHROUGH))
+            if (modeled && m_l1_mshr && !m_passthrough && m_l1_metadata_mshr)
             {
                 if (!metadata_request)
                 {
@@ -710,9 +711,8 @@ namespace ParametricDramDirectoryMSI
 
             MYLOG("processMemOpFromCore l%d before next", m_mem_component);
             hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, modeled, count, block_type, Prefetch::NONE, t_start, false, mem_origin);
-            bool next_cache_hit = hit_where != HitWhere::MISS;
-            // if(hit_where != HitWhere::MISS && metadata_request &&  (metadata_passthrough_loc > 2))
-            //    std::cout << "Metadata hit in L2 on address:" <<  ca_address << std::endl;
+			bool next_cache_hit = hit_where != HitWhere::MISS;
+
 
             MYLOG("processMemOpFromCore l%d next hit = %d", m_mem_component, next_cache_hit);
 
@@ -741,12 +741,10 @@ namespace ParametricDramDirectoryMSI
 
                 /* have the next cache levels fill themselves with the new data */
                 MYLOG("processMemOpFromCore l%d before next fill", m_mem_component);
-                // if(!(metadata_request &&  (metadata_passthrough_loc > 2))) //If L2 is passthrough, then we wont find the data inside the L2
                 hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, false, false, block_type, Prefetch::NONE, t_start, true, mem_origin);
 
                 MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
 
-                if (!(metadata_request && (metadata_passthrough_loc > 2))) // If L2 is passthrough, then we wont find the data inside the L2
                     LOG_ASSERT_ERROR(hit_where != HitWhere::MISS,
                                      "Tried to read in next-level cache, but data is already gone");
 
@@ -763,7 +761,7 @@ namespace ParametricDramDirectoryMSI
             log_file << "Data must be in the L2 cache now, we will try to access it at time: " << t_now << std::endl;
 #endif
 
-            if (!(metadata_request && (metadata_passthrough_loc != 1)))
+            if ( (!metadata_request) || (metadata_request && (metadata_passthrough_loc == 1)))
             {
 
                 copyDataFromNextLevel(mem_op_type, ca_address, modeled, t_now, block_type);
@@ -797,18 +795,16 @@ namespace ParametricDramDirectoryMSI
                         m_master->m_l1_metadata_mshr.getCompletionTime(t_miss_begin, t_miss_end - t_mshr_avail, ca_address);
                     }
                 }
-
-                // Change Sim()->getConfig()->hasCacheEfficiencyCallbacks()
-                //  if (modeled && m_next_cache_cntlr && !m_perfect && Sim()->getConfig()->hasCacheEfficiencyCallbacks())
-                //  {
-                //     bool new_bits = cache_block_info->updateUsage(offset, data_length);
-                //     if (new_bits)
-                //     {
-                //        m_next_cache_cntlr->updateUsageBits(ca_address, cache_block_info->getUsage());
-                //     }
-                //  }
-
-                // Change Sim()->getConfig()->hasCacheEfficiencyCallbacks()
+#if 0
+                 if (modeled && m_next_cache_cntlr && !m_perfect && Sim()->getConfig()->hasCacheEfficiencyCallbacks())
+                 {
+                    bool new_bits = cache_block_info->updateUsage(offset, data_length);
+                    if (new_bits)
+                    {
+                       m_next_cache_cntlr->updateUsageBits(ca_address, cache_block_info->getUsage());
+                    }
+                 }
+#endif 
                 if (modeled && m_next_cache_cntlr && !m_perfect && Sim()->getCfg()->getBool("perf_model/cache_usage/enabled"))
                 {
                     bool new_bits = cache_block_info->updateUsage(offset, data_length);
