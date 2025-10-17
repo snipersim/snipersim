@@ -41,6 +41,9 @@ class NucaCache
 
       boost::tuple<SubsecondTime, HitWhere::where_t> read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *perf, bool count);
       boost::tuple<SubsecondTime, HitWhere::where_t> write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_address, Byte* evict_buf, SubsecondTime now, bool count);
-};
+      void markTranslationMetadata(IntPtr address, CacheBlockInfo::block_type_t blocktype);
+      Cache* getCache(){return m_cache;}
+      void measureStats();
+   };
 
 #endif // __NUCA_CACHE_H

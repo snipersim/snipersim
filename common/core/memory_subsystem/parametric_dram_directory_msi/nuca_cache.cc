@@ -144,3 +144,31 @@ NucaCache::accessDataArray(Cache::access_t access, SubsecondTime t_start, ShmemP
 
    return queue_delay + m_data_access_time.getLatency();
 }
+
+void NucaCache::markTranslationMetadata(IntPtr address, CacheBlockInfo::block_type_t blocktype){
+
+   
+   IntPtr tag;
+   UInt32 set_index;
+
+
+   m_cache->splitAddress(address, tag, set_index);
+
+
+   for (UInt32 i=0; i < m_cache->getCacheSet(set_index)->getAssociativity(); i++){
+            
+      if(m_cache->peekBlock(set_index,i)->getTag() == tag){
+         m_cache->peekBlock(set_index,i)->setBlockType(blocktype);
+         break;
+      }
+                 
+   }
+
+}
+
+
+void
+NucaCache::measureStats()
+{
+   m_cache->measureStats();
+}

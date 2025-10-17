@@ -12,6 +12,7 @@
 #include "config.hpp"
 #include "distribution.h"
 #include "topology_info.h"
+#include "mmu_factory.h"
 
 #include <algorithm>
 
@@ -45,9 +46,6 @@ namespace ParametricDramDirectoryMSI
                                                                                        m_dram_cache(NULL),
                                                                                        m_dram_directory_cntlr(NULL),
                                                                                        m_dram_cntlr(NULL),
-                                                                                       m_itlb(NULL), m_dtlb(NULL), m_stlb(NULL),
-                                                                                       m_tlb_miss_penalty(NULL, 0),
-                                                                                       m_tlb_miss_parallel(false),
                                                                                        m_tag_directory_present(false),
                                                                                        m_dram_cntlr_present(false),
                                                                                        m_enabled(false)
@@ -73,21 +71,16 @@ namespace ParametricDramDirectoryMSI
 
         try
         {
+            mmu_type = Sim()->getCfg()->getString("perf_model/mmu/type");
+			m_mmu = MMUFactory::createMemoryManagementUnit(mmu_type, core, this, shmem_perf_model, "mmu");
+                
+            log_file_mmu = std::ofstream();
+			log_file_name_mmu = "memorymanager.log." + std::to_string(core->getId());
+			log_file_mmu.open(log_file_name_mmu.c_str()); 
+
             m_cache_block_size = Sim()->getCfg()->getInt("perf_model/l1_icache/cache_block_size");
 
             m_last_level_cache = (MemComponent::component_t)(Sim()->getCfg()->getInt("perf_model/cache/levels") - 2 + MemComponent::L2_CACHE);
-
-            UInt32 stlb_size = Sim()->getCfg()->getInt("perf_model/stlb/size");
-            if (stlb_size)
-                m_stlb = new TLB("stlb", "perf_model/stlb", getCore()->getId(), stlb_size, Sim()->getCfg()->getInt("perf_model/stlb/associativity"), NULL);
-            UInt32 itlb_size = Sim()->getCfg()->getInt("perf_model/itlb/size");
-            if (itlb_size)
-                m_itlb = new TLB("itlb", "perf_model/itlb", getCore()->getId(), itlb_size, Sim()->getCfg()->getInt("perf_model/itlb/associativity"), m_stlb);
-            UInt32 dtlb_size = Sim()->getCfg()->getInt("perf_model/dtlb/size");
-            if (dtlb_size)
-                m_dtlb = new TLB("dtlb", "perf_model/dtlb", getCore()->getId(), dtlb_size, Sim()->getCfg()->getInt("perf_model/dtlb/associativity"), m_stlb);
-            m_tlb_miss_penalty = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/tlb/penalty"));
-            m_tlb_miss_parallel = Sim()->getCfg()->getBool("perf_model/tlb/penalty_parallel");
 
             smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
 
@@ -377,6 +370,22 @@ namespace ParametricDramDirectoryMSI
 
         // Set up core topology information
         getCore()->getTopologyInfo()->setup(smt_cores, cache_parameters[m_last_level_cache].shared_cores);
+   		
+        bzero(&memory_access_stats, sizeof(memory_access_stats));
+
+		registerStatsMetric("memory_manager", core->getId(), "memory_access_latency", &memory_access_stats.m_memory_access_latency);
+		registerStatsMetric("memory_manager", core->getId(), "translation_latency", &memory_access_stats.m_translation_latency);
+		registerStatsMetric("memory_manager", core->getId(), "memory_accesses", &memory_access_stats.m_memory_accesses);
+
+
+		registerStatsMetric("memory_manager", core->getId(), "translation_dram_memory_dram", &memory_access_stats.translation_dram_memory_dram);
+		registerStatsMetric("memory_manager", core->getId(), "translation_dram_memory_cache", &memory_access_stats.translation_dram_memory_cache);
+		registerStatsMetric("memory_manager", core->getId(), "translation_cache_memory_dram", &memory_access_stats.translation_cache_memory_dram);
+		registerStatsMetric("memory_manager", core->getId(), "translation_cache_memory_cache", &memory_access_stats.translation_cache_memory_cache);
+
+		registerStatsMetric("memory_manager", core->getId(), "translation_slower_than_memory_access", &memory_access_stats.translation_slower_than_memory_access);
+		registerStatsMetric("memory_manager", core->getId(), "translation_faster_than_memory_access", &memory_access_stats.translation_faster_than_memory_access);
+
     }
 
     MemoryManager::~MemoryManager()
@@ -387,12 +396,7 @@ namespace ParametricDramDirectoryMSI
 
         // Delete the Models
 
-        if (m_itlb)
-            delete m_itlb;
-        if (m_dtlb)
-            delete m_dtlb;
-        if (m_stlb)
-            delete m_stlb;
+
 
         for (i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)
         {
@@ -421,8 +425,29 @@ namespace ParametricDramDirectoryMSI
             delete m_dram_directory_cntlr;
     }
 
+    /* Core ships the memory request to the memory manager */
+	/**
+	 * @brief Initiates a memory access from the core.
+	 *
+	 * This function handles the initiation of a memory access from the core, including address translation
+	 * and sending the request to the cache hierarchy.
+	 *
+	 * @param eip The instruction pointer.
+	 * @param mem_component The memory component initiating the access (e.g., L1 cache, L2 cache).
+	 * @param lock_signal The lock signal for the memory operation.
+	 * @param mem_op_type The type of memory operation (e.g., read, write).
+	 * @param address The virtual address to be accessed - cache block aligned.
+	 * @param offset The offset within the cache block.
+	 * @param data_buf The buffer to store data for read operations or the data to be written for write operations.
+	 * @param data_length The length of the data buffer.
+	 * @param modeled Indicates whether the memory access should be modeled for performance analysis.
+	 *
+	 * @return The location where the memory access hit (e.g., L1 cache, L2 cache, DRAM).
+	 */
+
     HitWhere::where_t
     MemoryManager::coreInitiateMemoryAccess(
+        IntPtr eip,
         MemComponent::component_t mem_component,
         Core::lock_signal_t lock_signal,
         Core::mem_op_t mem_op_type,
@@ -430,22 +455,134 @@ namespace ParametricDramDirectoryMSI
         Byte *data_buf, UInt32 data_length,
         Core::MemModeled modeled)
     {
-        LOG_ASSERT_ERROR(mem_component <= m_last_level_cache,
-                         "Error: invalid mem_component (%d) for coreInitiateMemoryAccess", mem_component);
 
-        if (mem_component == MemComponent::L1_ICACHE && m_itlb)
-            accessTLB(m_itlb, address, true, modeled);
-        else if (mem_component == MemComponent::L1_DCACHE && m_dtlb)
-            accessTLB(m_dtlb, address, false, modeled);
+		bool translation_enabled;
 
-        return m_cache_cntlrs[mem_component]->processMemOpFromCore(
-            0, // for now we will not change that but this is supposed to be the PC. We will integrate it in the memory_manager.cc commit
-            lock_signal,
-            mem_op_type,
-            address, offset,
-            data_buf, data_length,
-            modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT ? false : true,
-            modeled == Core::MEM_MODELED_NONE ? false : true, CacheBlockInfo::block_type_t::NON_PAGE_TABLE, SubsecondTime::Zero());
+		bool count = (modeled == Core::MEM_MODELED_NONE) ? false : true;
+
+		#ifdef DEBUG_MEM_MANAGER
+			log_file_mmu << "Memory Access: " << address << " Initiating Translation at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << std::endl;
+		#endif
+
+		// Check if translation is enabled
+		translation_enabled = Sim()->getCfg()->getBool("general/translation_enabled");
+
+		bool skip_translation = false;
+
+
+		LOG_ASSERT_ERROR(mem_component <= m_last_level_cache,
+						 "Error: invalid mem_component (%d) for coreInitiateMemoryAccess", mem_component);
+
+		bool is_instruction = (mem_component == MemComponent::L1_ICACHE);
+		IntPtr translation_result; // Pair < How much time the translation took, the physical address >
+
+		SubsecondTime t_start_translation = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+		if (!skip_translation)
+		{
+			// Perform the conventional translation
+			// translation result contains the translated physical address
+			translation_result = m_mmu->performAddressTranslation(eip, address,
+																  is_instruction,
+																  lock_signal,
+																  modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT ? false : true,
+																  modeled == Core::MEM_MODELED_NONE ? false : true);
+		}
+
+		bool performed_dram_access_during_translation = m_mmu->getDramAccessesDuringLastWalk()? true : false;
+		
+        SubsecondTime t_end_translation = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+
+		if(count){
+			memory_access_stats.m_translation_latency += (t_end_translation - t_start_translation);
+		}
+
+		IntPtr physical_address;
+
+		if (!skip_translation)
+		{
+			// Mask the physical address to the cache block size
+			physical_address = translation_result & ~(getCacheBlockSize() - 1);
+		}
+		else
+		{
+			// If we skip translation, the physical address is the same as the virtual address
+			physical_address = address;
+		}
+
+
+		#ifdef DEBUG_MEM_MANAGER
+			log_file_mmu << "Memory Access: " << address  << " Finished Translation at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << std::endl;
+		#endif
+
+		SubsecondTime t_cache_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+		// Perform the memory access -> send the request to the cache hierarchy
+		HitWhere::where_t result = m_cache_cntlrs[mem_component]->processMemOpFromCore(
+			eip,
+			lock_signal,
+			mem_op_type,
+			physical_address, offset,
+			data_buf, data_length,
+			modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT ? false : true,
+			modeled == Core::MEM_MODELED_NONE ? false : true, CacheBlockInfo::block_type_t::NON_PAGE_TABLE, SubsecondTime::Zero());
+
+		#ifdef DEBUG_MEM_MANAGER
+			log_file_mmu << "Memory Access: " << address  << " Finished Memory Access at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << std::endl;
+		#endif
+
+		bool dram_access = false;
+
+		// Check if the memory access resulted in a DRAM access
+		if(result == HitWhere::where_t::DRAM || result == HitWhere::where_t::DRAM_CACHE || result == HitWhere::where_t::DRAM_LOCAL || result == HitWhere::where_t::DRAM_REMOTE){
+			dram_access = true;
+		}
+
+		// Update the memory access latency
+		SubsecondTime t_cache_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+		if(count){
+			memory_access_stats.m_memory_access_latency += (t_cache_done - t_cache_issue);
+			memory_access_stats.m_memory_accesses++;			
+		}
+
+		if (dram_access && performed_dram_access_during_translation && count)
+		{
+			// If we performed a DRAM access during the translation, we need to account for the translation latency
+			memory_access_stats.translation_dram_memory_dram++;
+		}
+		else if (dram_access && !performed_dram_access_during_translation && count)
+		{
+			// If we did not perform a DRAM access during the translation, we need to account for the translation latency
+			memory_access_stats.translation_cache_memory_dram++;
+		}
+		else if (!dram_access && performed_dram_access_during_translation && count)
+		{
+			// If we performed a DRAM access during the translation, we need to account for the translation latency
+			memory_access_stats.translation_dram_memory_cache++;
+		}
+		else if (!dram_access && !performed_dram_access_during_translation && count)
+		{
+			// If we did not perform a DRAM access during the translation, we need to account for the translation latency
+			memory_access_stats.translation_cache_memory_cache++;
+		}
+
+
+		if (((t_cache_done - t_cache_issue) < (t_end_translation - t_start_translation)) && count)
+		{
+			// If the cache access took longer than the translation, we need to account for the translation latency
+			memory_access_stats.translation_slower_than_memory_access++;
+		}
+
+		if (((t_cache_done - t_cache_issue) > (t_end_translation - t_start_translation)) && count)
+		{
+			// If the translation took longer than the cache access, we need to account for the translation latency
+			memory_access_stats.translation_faster_than_memory_access++;
+		}
+
+
+		
+		return result;
     }
 
     void
@@ -594,23 +731,7 @@ namespace ParametricDramDirectoryMSI
         delete[] msg_buf;
     }
 
-    void
-    MemoryManager::accessTLB(TLB *tlb, IntPtr address, bool isIfetch, Core::MemModeled modeled)
-    {
-        bool hit = tlb->lookup(address, getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD));
-        if (hit == false && !(modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT) && m_tlb_miss_penalty.getLatency() != SubsecondTime::Zero())
-        {
-            if (m_tlb_miss_parallel)
-            {
-                incrElapsedTime(m_tlb_miss_penalty.getLatency(), ShmemPerfModel::_USER_THREAD);
-            }
-            else
-            {
-                PseudoInstruction *i = new TLBMissInstruction(m_tlb_miss_penalty.getLatency(), isIfetch);
-                getCore()->getPerformanceModel()->queuePseudoInstruction(i);
-            }
-        }
-    }
+
 
     SubsecondTime
     MemoryManager::getCost(MemComponent::component_t mem_component, CachePerfModel::CacheAccess_t access_type)

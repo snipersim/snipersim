@@ -3,6 +3,7 @@
 #include "memory_manager_base.h"
 #include "cache_base.h"
 #include "cache_cntlr.h"
+#include "nuca_cache.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/dram_directory_cntlr.h"
 #include "../pr_l1_pr_l2_dram_directory_msi/dram_cntlr.h"
 #include "address_home_lookup.h"
@@ -13,6 +14,7 @@
 #include "shmem_perf_model.h"
 #include "shared_cache_block_info.h"
 #include "subsecond_time.h"
+#include "mmu_base.h"
 
 #include <map>
 
@@ -26,6 +28,8 @@ namespace ParametricDramDirectoryMSI
    typedef std::pair<core_id_t, MemComponent::component_t> CoreComponentType;
    typedef std::map<CoreComponentType, CacheCntlr *> CacheCntlrMap;
 
+   class MemoryManagementUnitBase;
+
    class MemoryManager : public MemoryManagerBase
    {
    private:
@@ -36,9 +40,10 @@ namespace ParametricDramDirectoryMSI
       PrL1PrL2DramDirectoryMSI::DramCntlr *m_dram_cntlr;
       AddressHomeLookup *m_tag_directory_home_lookup;
       AddressHomeLookup *m_dram_controller_home_lookup;
-      TLB *m_itlb, *m_dtlb, *m_stlb;
-      ComponentLatency m_tlb_miss_penalty;
-      bool m_tlb_miss_parallel;
+
+		MemoryManagementUnitBase *m_mmu; //	Responsible for handling address translation
+		String mmu_type; // MMU type 
+		bool m_translation_enabled;
 
       core_id_t m_core_id_master;
 
@@ -60,7 +65,20 @@ namespace ParametricDramDirectoryMSI
       // Global map of all caches on all cores (within this process!)
       static CacheCntlrMap m_all_cache_cntlrs;
 
-      void accessTLB(TLB *tlb, IntPtr address, bool isIfetch, Core::MemModeled modeled);
+		std::ofstream log_file_mmu;
+		std::string log_file_name_mmu;
+
+		struct {
+			SubsecondTime m_memory_access_latency;
+			SubsecondTime m_translation_latency;
+			UInt64 m_memory_accesses;
+			UInt64 translation_dram_memory_dram; // Translation required DRAM access and memory access required DRAM access
+			UInt64 translation_dram_memory_cache; // Translation required DRAM access and memory access required cache access
+			UInt64 translation_cache_memory_dram; // Translation required cache access and memory access required DRAM access
+			UInt64 translation_cache_memory_cache; // Translation required cache access and memory access required cache access
+			UInt64 translation_slower_than_memory_access;
+			UInt64 translation_faster_than_memory_access;
+		} memory_access_stats;
 
    public:
       MemoryManager(Core *core, Network *network, ShmemPerfModel *shmem_perf_model);
@@ -84,6 +102,7 @@ namespace ParametricDramDirectoryMSI
       void setCacheCntlrAt(core_id_t core_id, MemComponent::component_t mem_component, CacheCntlr *cache_cntlr) { m_all_cache_cntlrs[CoreComponentType(core_id, mem_component)] = cache_cntlr; }
 
       HitWhere::where_t coreInitiateMemoryAccess(
+          IntPtr eip,
           MemComponent::component_t mem_component,
           Core::lock_signal_t lock_signal,
           Core::mem_op_t mem_op_type,
@@ -115,6 +134,14 @@ namespace ParametricDramDirectoryMSI
       {
          return ((PrL1PrL2DramDirectoryMSI::ShmemMsg *)pkt_data)->getModeledLength();
       }
+
+      void tagCachesBlockType(IntPtr address, CacheBlockInfo::block_type_t btype)
+		{
+			if (m_nuca_cache)
+				m_nuca_cache->markTranslationMetadata(address, btype);
+			this->getCache(MemComponent::component_t::L1_DCACHE)->markMetadata(address, btype);
+			this->getCache(MemComponent::component_t::L2_CACHE)->markMetadata(address, btype);
+		}
 
       SubsecondTime getCost(MemComponent::component_t mem_component, CachePerfModel::CacheAccess_t access_type);
       void incrElapsedTime(SubsecondTime latency, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);

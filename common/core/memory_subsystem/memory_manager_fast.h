@@ -20,6 +20,7 @@ public:
    virtual ~MemoryManagerFast() {}
 
    HitWhere::where_t coreInitiateMemoryAccess(
+       IntPtr eip,
        MemComponent::component_t mem_component,
        Core::lock_signal_t lock_signal,
        Core::mem_op_t mem_op_type,

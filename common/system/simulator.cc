@@ -27,6 +27,7 @@
 #include "instruction_tracer.h"
 #include "memory_tracker.h"
 #include "circular_log.h"
+#include "mimicos.h"
 
 #include <sstream>
 
@@ -35,6 +36,7 @@ config::Config *Simulator::m_config_file;
 bool Simulator::m_config_file_allowed = true;
 Config::SimulationMode Simulator::m_mode;
 dl::Decoder *Simulator::m_decoder;
+class MimicOS;
 
 void Simulator::allocate()
 {
@@ -144,7 +146,6 @@ void Simulator::start()
    m_thread_stats_manager = new ThreadStatsManager();
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();
    m_clock_skew_minimization_server = ClockSkewMinimizationServer::create();
-   m_core_manager = new CoreManager();
    m_sim_thread_manager = new SimThreadManager();
    m_sampling_manager = new SamplingManager();
    m_fastforward_performance_manager = FastForwardPerformanceManager::create();
@@ -155,6 +156,11 @@ void Simulator::start()
       m_trace_manager = new TraceManager();
    else
       m_trace_manager = NULL;
+
+   m_mimicos = new MimicOS(); // Create a new VirtuOS object for the host OS
+   
+   m_core_manager = new CoreManager();
+
 
    CircularLog::enableCallbacks();
 

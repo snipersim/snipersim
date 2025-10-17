@@ -32,6 +32,10 @@ private:
 
       FaultInjector *m_fault_injector;
 
+	//unique ptr since there might be a bug that alters the page size list
+	std::unique_ptr<int[]> m_pagesizes; //@kanellok TLB supported page size vector
+	int m_number_of_page_sizes;
+	bool m_is_tlb;
       
       int reuse_levels[3];
 
@@ -92,19 +96,21 @@ public:
             cache_t cache_type,
             hash_t hash = CacheBase::HASH_MASK,
             FaultInjector *fault_injector = NULL,
-            AddressHomeLookup *ahl = NULL);
+            AddressHomeLookup *ahl = NULL,bool is_tlb = false, int *page_size = NULL, int number_of_page_sizes = 0);
+            
       ~Cache();
 
       Lock &getSetLock(IntPtr addr);
 
       bool invalidateSingleLine(IntPtr addr);
-      CacheBlockInfo *accessSingleLine(IntPtr addr,
-                                       access_t access_type, Byte *buff, UInt32 bytes, SubsecondTime now, bool update_replacement, bool tlb_entry = false, bool is_metadata = false);
-
+      CacheBlockInfo *accessSingleLine(IntPtr addr, access_t access_type, Byte *buff, UInt32 bytes, SubsecondTime now, bool update_replacement, bool tlb_entry = false, bool is_metadata = false);
+	CacheBlockInfo *accessSingleLineTLB(IntPtr addr, access_t access_type, Byte *buff, UInt32 bytes, SubsecondTime now, bool update_replacement);
                                        
       void insertSingleLine(IntPtr addr, Byte *fill_buff,
                             bool *eviction, IntPtr *evict_addr,
                             CacheBlockInfo *evict_block_info, Byte *evict_buff, SubsecondTime now, CacheCntlr *cntlr = NULL, CacheBlockInfo::block_type_t btype = CacheBlockInfo::block_type_t::NON_PAGE_TABLE);
+	
+                            void insertSingleLineTLB(IntPtr addr, Byte *fill_buff,bool *eviction, IntPtr *evict_addr, CacheBlockInfo *evict_block_info, Byte *evict_buff, SubsecondTime now, CacheCntlr *cntlr = NULL, CacheBlockInfo::block_type_t btype = CacheBlockInfo::block_type_t::NON_PAGE_TABLE, int page_size = 12, IntPtr ppn = 0);
 
       CacheBlockInfo *peekSingleLine(IntPtr addr);
       CacheBlockInfo *peekBlock(UInt32 set_index, UInt32 way) const { return m_sets[set_index]->peekBlock(way); }

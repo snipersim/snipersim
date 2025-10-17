@@ -68,12 +68,18 @@ Cache::Cache(
     cache_t cache_type,
     hash_t hash,
     FaultInjector *fault_injector,
-    AddressHomeLookup *ahl)
+    AddressHomeLookup *ahl,
+    bool is_tlb,
+    int *page_size,
+    int number_of_page_sizes)
     : CacheBase(name, num_sets, associativity, cache_block_size, hash, ahl),
       m_enabled(false),
       m_num_accesses(0),
       m_num_hits(0),
       m_cache_type(cache_type),
+      m_fault_injector(fault_injector),
+      m_pagesizes(NULL),
+      m_number_of_page_sizes(number_of_page_sizes),
       average_data_reuse(0),
       average_metadata_reuse(0),
       average_tlb_reuse(0),
@@ -89,6 +95,12 @@ Cache::Cache(
       metadata_passthrough_loc(Sim()->getCfg()->getInt("perf_model/metadata/passthrough_loc"))
 {
 
+	// Use of unique_ptr to avoid memory leaks
+	m_pagesizes = std::unique_ptr<int[]>(new int[m_number_of_page_sizes]);
+	for (int i = 0; i < m_number_of_page_sizes; i++)
+	{
+		m_pagesizes[i] = page_size[i];
+	}
 
    reuse_levels[0] = 5; // @kanellok Fix: these thresholds should be configurable
    reuse_levels[1] = 10;
@@ -217,6 +229,7 @@ Cache::accessSingleLine(IntPtr addr, access_t access_type,
    if (access_type == LOAD)
    {
       // NOTE: assumes error occurs in memory. If we want to model bus errors, insert the error into buff instead
+
       if (m_fault_injector)
          m_fault_injector->preRead(addr, set_index * m_associativity + line_index, bytes, (Byte *)m_sets[set_index]->getDataPtr(line_index, block_offset), now);
 
@@ -339,6 +352,133 @@ void Cache::insertSingleLine(IntPtr addr, Byte *fill_buff,
 
    delete cache_block_info;
 }
+
+CacheBlockInfo *
+Cache::accessSingleLineTLB(IntPtr addr, access_t access_type,
+						   Byte *buff, UInt32 bytes, SubsecondTime now, bool update_replacement)
+{
+	IntPtr tag;
+	UInt32 set_index;
+	UInt32 line_index = -1;
+	UInt32 block_offset;
+	CacheBlockInfo *cache_block_info = NULL;
+	CacheSet *set = NULL;
+	
+	bool found_cache_block = false;
+
+	#ifdef DEBUG_TLB
+		for (int page_size = 0; page_size < m_number_of_page_sizes; page_size++){
+				std::cout << "Testing page size = " << m_pagesizes[page_size];
+			
+		}
+		std::cout << std::endl;
+	#endif
+
+
+	for (int page_size = 0; page_size < m_number_of_page_sizes; page_size++)
+	{ // @kanellok iterate over all possible page sizes
+
+		#ifdef DEBUG_TLB
+			std::cout << m_name << " lookup: Page size = " << m_pagesizes[page_size] << " Number of page sizes = " <<  m_number_of_page_sizes <<  std::endl;
+		#endif
+		
+		splitAddressTLB(addr, tag, set_index, block_offset, m_pagesizes[page_size]); //@kanellok provide the page size to find the index
+		
+		#ifdef DEBUG_TLB
+			std::cout << "Address =  " << addr << std::endl;
+			std::cout << "Set index =  " << set_index << std::endl;
+			std::cout << "Tag =  " << tag  << std::endl;
+			std::cout << std::endl;
+		#endif
+
+		set = m_sets[set_index];
+		cache_block_info = set->find(tag, &line_index);
+
+
+		if (cache_block_info == NULL)
+			continue;
+
+		found_cache_block = true;
+
+		if (access_type == LOAD)
+		{
+			// NOTE: assumes error occurs in memory. If we want to model bus errors, insert the error into buff instead
+			if (m_fault_injector)
+				m_fault_injector->preRead(addr, set_index * m_associativity + line_index, bytes, (Byte *)m_sets[set_index]->getDataPtr(line_index, block_offset), now);
+
+			set->read_line(line_index, block_offset, buff, bytes, update_replacement);
+		}
+		else
+		{
+			set->write_line(line_index, block_offset, buff, bytes, update_replacement);
+
+			if (m_fault_injector)
+				m_fault_injector->postWrite(addr, set_index * m_associativity + line_index, bytes, (Byte *)m_sets[set_index]->getDataPtr(line_index, block_offset), now);
+		}
+		break;
+	}
+
+
+	if (found_cache_block)
+		return cache_block_info;
+	else
+		return NULL;
+}
+
+void Cache::insertSingleLineTLB(IntPtr addr, Byte *fill_buff,
+								bool *eviction, IntPtr *evict_addr,
+								CacheBlockInfo *evict_block_info, Byte *evict_buff,
+								SubsecondTime now, CacheCntlr *cntlr,
+								CacheBlockInfo::block_type_t btype, int page_size, IntPtr ppn)
+{
+	IntPtr tag = 0;
+	UInt32 set_index = 0;
+	splitAddressTLB(addr, tag, set_index, page_size);
+
+	#ifdef DEBUG_TLB
+		std::cout << m_name << " insert: Page size = " << page_size << std::endl;
+		std::cout << "Address =  " << addr << std::endl;
+		std::cout << "Set index =  " << set_index << std::endl;
+		std::cout << "Tag =  " << tag  << std::endl;
+	#endif 
+
+	CacheBlockInfo *cache_block_info = CacheBlockInfo::create(m_cache_type);
+	cache_block_info->setTag(tag);
+	cache_block_info->setBlockType(btype);
+	cache_block_info->setPageSize(page_size);
+	cache_block_info->setPPN(ppn);
+	m_sets[set_index]->insert(cache_block_info, fill_buff,
+							  eviction, evict_block_info, evict_buff, cntlr);
+	if (*eviction == true)
+		page_size = evict_block_info->getPageSize();
+	*evict_addr = tagToAddressTLB(evict_block_info->getTag(), page_size);
+ 
+	#ifdef DEBUG_TLB
+
+		std::cout << "Inserted " << addr << " in set " << set_index << " with tag " << m_sets[set_index]->find(tag)->getTag() << " and page size " << m_sets[set_index]->find(tag)->getPageSize() << std::endl;
+		if(*eviction == true)
+			std::cout << "Evicted  address  " << *evict_addr<< std::endl;
+		std::cout << std::endl;
+
+	#endif 
+
+	if (m_fault_injector)
+	{
+		// NOTE: no callback is generated for read of evicted data
+		UInt32 line_index = -1;
+		__attribute__((unused)) CacheBlockInfo *res = m_sets[set_index]->find(tag, &line_index);
+		LOG_ASSERT_ERROR(res != NULL, "Inserted line no longer there?");
+
+		m_fault_injector->postWrite(addr, set_index * m_associativity + line_index, m_sets[set_index]->getBlockSize(), (Byte *)m_sets[set_index]->getDataPtr(line_index, 0), now);
+	}
+
+#ifdef ENABLE_SET_USAGE_HIST
+	++m_set_usage_hist[set_index];
+#endif
+
+	delete cache_block_info;
+}
+
 
 CacheBlockInfo *
 Cache::peekSingleLine(IntPtr addr)

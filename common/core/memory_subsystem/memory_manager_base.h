@@ -43,6 +43,7 @@ public:
    virtual ~MemoryManagerBase() {}
 
    virtual HitWhere::where_t coreInitiateMemoryAccess(
+       IntPtr eip,
        MemComponent::component_t mem_component,
        Core::lock_signal_t lock_signal,
        Core::mem_op_t mem_op_type,
@@ -59,6 +60,7 @@ public:
       getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, initial_time);
 
       coreInitiateMemoryAccess(
+          address, // Using address as eip for this fast interface
           icache ? MemComponent::L1_ICACHE : MemComponent::L1_DCACHE,
           Core::NONE,
           mem_op_type,
