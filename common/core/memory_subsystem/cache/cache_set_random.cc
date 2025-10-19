@@ -6,9 +6,8 @@
 // RANDOM: Selects the victim line randomly (from among valid lines)
 
 CacheSetRandom::CacheSetRandom(
-      CacheBase::cache_t cache_type,
-      UInt32 associativity, UInt32 blocksize) :
-   CacheSet(cache_type, associativity, blocksize)
+    CacheBase::cache_t cache_type,
+    UInt32 associativity, UInt32 blocksize, bool is_tlb_set) : CacheSet(cache_type, associativity, blocksize, is_tlb_set)
 {
    m_rand.seed(time(NULL));
 }
@@ -24,8 +23,8 @@ CacheSetRandom::getReplacementIndex(CacheCntlr *cntlr)
 
    for (UInt32 i = 0; i < m_associativity; i++)
    {
-       if (!m_cache_block_info_array[i]->isValid())
-          return i;   // if there is an invalid line, use that line
+      if (!m_cache_block_info_array[i]->isValid())
+         return i; // if there is an invalid line, use that line
    }
 
    UInt32 index = (m_rand.next() % m_associativity);
@@ -40,7 +39,6 @@ CacheSetRandom::getReplacementIndex(CacheCntlr *cntlr)
    }
 }
 
-void
-CacheSetRandom::updateReplacementIndex(UInt32 accessed_index)
+void CacheSetRandom::updateReplacementIndex(UInt32 accessed_index)
 {
 }

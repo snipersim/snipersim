@@ -5,16 +5,16 @@
 
 class CacheSetPLRU : public CacheSet
 {
-   public:
-      CacheSetPLRU(CacheBase::cache_t cache_type,
-            UInt32 associativity, UInt32 blocksize);
-      ~CacheSetPLRU();
+public:
+   CacheSetPLRU(CacheBase::cache_t cache_type,
+                UInt32 associativity, UInt32 blocksize, bool is_tlb_set);
+   ~CacheSetPLRU();
 
-      UInt32 getReplacementIndex(CacheCntlr *cntlr);
-      void updateReplacementIndex(UInt32 accessed_index);
+   UInt32 getReplacementIndex(CacheCntlr *cntlr);
+   void updateReplacementIndex(UInt32 accessed_index);
 
-   private:
-      UInt8 b[8];
+private:
+   UInt8 b[8];
 };
 
 #endif /* CACHE_SET_PLRU_H */

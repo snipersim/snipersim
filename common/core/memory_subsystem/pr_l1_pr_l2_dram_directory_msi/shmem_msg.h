@@ -3,6 +3,7 @@
 #include "mem_component.h"
 #include "fixed_types.h"
 #include "hit_where.h"
+#include "cache_block_info.h"
 
 class ShmemPerf;
 
@@ -10,83 +11,84 @@ namespace PrL1PrL2DramDirectoryMSI
 {
    class ShmemMsg
    {
-      public:
-         enum msg_t
-         {
-            INVALID_MSG_TYPE = 0,
-            MIN_MSG_TYPE,
-            // Cache > tag directory
-            EX_REQ = MIN_MSG_TYPE,
-            SH_REQ,
-            UPGRADE_REQ,
-            INV_REQ,
-            FLUSH_REQ,
-            WB_REQ,
-            // Tag directory > cache
-            EX_REP,
-            SH_REP,
-            UPGRADE_REP,
-            INV_REP,
-            FLUSH_REP,
-            WB_REP,
-            NULLIFY_REQ,
-            // Tag directory > DRAM
-            DRAM_READ_REQ,
-            DRAM_WRITE_REQ,
-            // DRAM > tag directory
-            DRAM_READ_REP,
+   public:
+      enum msg_t
+      {
+         INVALID_MSG_TYPE = 0,
+         MIN_MSG_TYPE,
+         // Cache > tag directory
+         EX_REQ = MIN_MSG_TYPE,
+         SH_REQ,
+         UPGRADE_REQ,
+         INV_REQ,
+         FLUSH_REQ,
+         WB_REQ,
+         // Tag directory > cache
+         EX_REP,
+         SH_REP,
+         UPGRADE_REP,
+         INV_REP,
+         FLUSH_REP,
+         WB_REP,
+         NULLIFY_REQ,
+         // Tag directory > DRAM
+         DRAM_READ_REQ,
+         DRAM_WRITE_REQ,
+         // DRAM > tag directory
+         DRAM_READ_REP,
 
-            MAX_MSG_TYPE = NULLIFY_REQ,
-            NUM_MSG_TYPES = MAX_MSG_TYPE - MIN_MSG_TYPE + 1
-         };
+         MAX_MSG_TYPE = NULLIFY_REQ,
+         NUM_MSG_TYPES = MAX_MSG_TYPE - MIN_MSG_TYPE + 1
+      };
 
-      private:
-         msg_t m_msg_type;
-         MemComponent::component_t m_sender_mem_component;
-         MemComponent::component_t m_receiver_mem_component;
-         core_id_t m_requester;
-         HitWhere::where_t m_where;
-         IntPtr m_address;
-         Byte* m_data_buf;
-         UInt32 m_data_length;
-         ShmemPerf* m_perf;
+   private:
+      msg_t m_msg_type;
+      MemComponent::component_t m_sender_mem_component;
+      MemComponent::component_t m_receiver_mem_component;
+      core_id_t m_requester;
+      HitWhere::where_t m_where;
+      IntPtr m_address;
+      Byte *m_data_buf;
+      UInt32 m_data_length;
+      ShmemPerf *m_perf;
+      CacheBlockInfo::block_type_t m_block_type;
 
-      public:
-         ShmemMsg() = delete;
-         ShmemMsg(ShmemPerf* perf);
-         ShmemMsg(msg_t msg_type,
+   public:
+      ShmemMsg() = delete;
+      ShmemMsg(ShmemPerf *perf);
+      ShmemMsg(msg_t msg_type,
                MemComponent::component_t sender_mem_component,
                MemComponent::component_t receiver_mem_component,
                core_id_t requester,
                IntPtr address,
-               Byte* data_buf,
+               Byte *data_buf,
                UInt32 data_length,
-               ShmemPerf* perf);
-         ShmemMsg(ShmemMsg* shmem_msg);
+               ShmemPerf *perf, CacheBlockInfo::block_type_t block_type);
 
-         ~ShmemMsg();
+      ShmemMsg(ShmemMsg *shmem_msg);
 
-         static ShmemMsg* getShmemMsg(Byte* msg_buf, ShmemPerf* perf);
-         Byte* makeMsgBuf();
-         UInt32 getMsgLen();
+      ~ShmemMsg();
 
-         // Modeling
-         UInt32 getModeledLength();
+      static ShmemMsg *getShmemMsg(Byte *msg_buf, ShmemPerf *perf);
+      Byte *makeMsgBuf();
+      UInt32 getMsgLen();
 
-         msg_t getMsgType() { return m_msg_type; }
-         MemComponent::component_t getSenderMemComponent() { return m_sender_mem_component; }
-         MemComponent::component_t getReceiverMemComponent() { return m_receiver_mem_component; }
-         core_id_t getRequester() { return m_requester; }
-         IntPtr getAddress() { return m_address; }
-         Byte* getDataBuf() { return m_data_buf; }
-         UInt32 getDataLength() { return m_data_length; }
-         HitWhere::where_t getWhere() { return m_where; }
+      // Modeling
+      UInt32 getModeledLength();
 
-         void setDataBuf(Byte* data_buf) { m_data_buf = data_buf; }
-         void setWhere(HitWhere::where_t where) { m_where = where; }
+      msg_t getMsgType() { return m_msg_type; }
+      MemComponent::component_t getSenderMemComponent() { return m_sender_mem_component; }
+      MemComponent::component_t getReceiverMemComponent() { return m_receiver_mem_component; }
+      core_id_t getRequester() { return m_requester; }
+      IntPtr getAddress() { return m_address; }
+      Byte *getDataBuf() { return m_data_buf; }
+      UInt32 getDataLength() { return m_data_length; }
+      HitWhere::where_t getWhere() { return m_where; }
+      CacheBlockInfo::block_type_t getBlockType() { return m_block_type; }
+      void setDataBuf(Byte *data_buf) { m_data_buf = data_buf; }
+      void setWhere(HitWhere::where_t where) { m_where = where; }
 
-         ShmemPerf* getPerf() { return m_perf; }
-
+      ShmemPerf *getPerf() { return m_perf; }
    };
 
 }

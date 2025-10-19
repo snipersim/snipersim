@@ -110,6 +110,68 @@ CacheBase::splitAddress(const IntPtr addr, IntPtr& tag, UInt32& set_index) const
 }
 
 void
+CacheBase::splitAddressTLB(const IntPtr addr, IntPtr& tag, UInt32& set_index, int page_size) const
+{
+   tag = addr >> page_size;
+
+  // IntPtr linearAddress = m_ahl ? m_ahl->getLinearAddress(addr) : addr;
+   IntPtr linearAddress = addr;
+   IntPtr block_num = linearAddress >> page_size;
+
+   switch(m_hash)
+   {
+      case CacheBase::HASH_MASK:
+         set_index = block_num & (m_num_sets-1);
+         break;
+      case CacheBase::HASH_MOD:
+         set_index = block_num % m_num_sets;
+         break;
+      case CacheBase::HASH_RNG1_MOD:
+      {
+         UInt64 state = rng_seed(block_num);
+         set_index = rng_next(state) % m_num_sets;
+         break;
+      }
+      case CacheBase::HASH_RNG2_MOD:
+      {
+         UInt64 state = rng_seed(block_num);
+         rng_next(state);
+         set_index = rng_next(state) % m_num_sets;
+         break;
+      }
+      case CacheBase::HASH_PRIME_DIS:
+      {
+
+      	 //Prime Displacement Hashing Function (HPCA04)
+         UInt64 si = block_num % m_num_sets;
+         UInt64 Ti = block_num >> m_log_num_sets;
+         UInt64 rho = 3;
+         set_index = (rho * Ti + si) % m_num_sets;
+         break;
+      }
+      case CacheBase::HASH_XOR_MOD:
+      {
+      	 //Based on related work of "Eliminating Conflict Misses Using Prime Number-Based Cache Indexing" (TC may 2005)
+      	 //XOR based hash function
+      	 UInt64 si = block_num % m_num_sets;
+      	 UInt64 ti = (block_num >> m_log_num_sets) % m_num_sets;
+      	 set_index = (si ^ ti); // ^ -> bitwise XOR
+      	 break;
+      }
+      case CacheBase::HASH_MER_MOD:
+      {
+      	 //Based on related work of "Eliminating Conflict Misses Using Prime Number-Based Cache Indexing" (TC may 2005)
+      	 //Mersenne based hash function
+      	 //Disadvantage of this mod is that we will not use one set in our cache.
+      	 set_index = block_num % (m_num_sets - 1);
+      	 break;
+      }
+      default:
+         LOG_PRINT_ERROR("Invalid hash function %d", m_hash);
+   }
+}
+
+void
 CacheBase::splitAddress(const IntPtr addr, IntPtr& tag, UInt32& set_index,
                   UInt32& block_offset) const
 {
@@ -117,8 +179,21 @@ CacheBase::splitAddress(const IntPtr addr, IntPtr& tag, UInt32& set_index,
    splitAddress(addr, tag, set_index);
 }
 
+void
+CacheBase::splitAddressTLB(const IntPtr addr, IntPtr& tag, UInt32& set_index,
+                  UInt32& block_offset, int m_page_size) const
+{
+   block_offset = 0;
+   splitAddressTLB(addr, tag, set_index,m_page_size);
+}
+
 IntPtr
 CacheBase::tagToAddress(const IntPtr tag)
 {
    return tag << m_log_blocksize;
+}
+IntPtr
+CacheBase::tagToAddressTLB(const IntPtr tag, int pagesize)
+{
+   return tag << pagesize;
 }

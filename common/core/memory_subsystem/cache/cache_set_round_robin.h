@@ -5,16 +5,16 @@
 
 class CacheSetRoundRobin : public CacheSet
 {
-   public:
-      CacheSetRoundRobin(CacheBase::cache_t cache_type,
-            UInt32 associativity, UInt32 blocksize);
-      ~CacheSetRoundRobin();
+public:
+   CacheSetRoundRobin(CacheBase::cache_t cache_type,
+                      UInt32 associativity, UInt32 blocksize, bool is_tlb_set);
+   ~CacheSetRoundRobin();
 
-      UInt32 getReplacementIndex(CacheCntlr *cntlr);
-      void updateReplacementIndex(UInt32 accessed_index);
+   UInt32 getReplacementIndex(CacheCntlr *cntlr);
+   void updateReplacementIndex(UInt32 accessed_index);
 
-   private:
-      UInt32 m_replacement_index;
+private:
+   UInt32 m_replacement_index;
 };
 
 #endif /* CACHE_SET_ROUND_ROBIN_H */

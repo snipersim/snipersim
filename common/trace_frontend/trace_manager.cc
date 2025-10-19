@@ -6,6 +6,7 @@
 #include "config.hpp"
 #include "sim_api.h"
 #include "stats.h"
+#include "mimicos.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -88,6 +89,12 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool init_fifo,
    // Internal version: assume we're already holding the lock
 
    assert(static_cast<decltype(app_id)>(m_num_apps) > app_id);
+
+
+
+
+   Sim()->getMimicOS()->createApplication(app_id);
+   
 
    String tracefile = "", responsefile = "";
    int thread_num;

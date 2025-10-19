@@ -15,7 +15,7 @@ class A53Prefetcher : public Prefetcher
 
 public:
    A53Prefetcher(String configName, core_id_t core_id);
-   std::vector<IntPtr> getNextAddress(IntPtr currentAddress, core_id_t core_id) override;
+   std::vector<IntPtr> getNextAddress(IntPtr currentAddress, core_id_t core_id, Core::mem_op_t mem_op_type, bool cache_hit, bool prefetch_hit, IntPtr eip) override;
 };
 
 #endif // A53PREFETCHER_H
