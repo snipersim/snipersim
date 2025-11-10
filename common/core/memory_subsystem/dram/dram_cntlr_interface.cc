@@ -3,6 +3,8 @@
 #include "shmem_msg.h"
 #include "shmem_perf.h"
 #include "log.h"
+#include "config.hpp"
+#include <unordered_set>
 
 void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {
@@ -49,4 +51,21 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
          LOG_PRINT_ERROR("Unrecognized Shmem Msg Type: %u", shmem_msg_type);
          break;
    }
+}
+
+std::pair<DramCntlrInterface::technology_t, String> DramCntlrInterface::getTechnology()
+{
+   static const std::unordered_set<String> nvm_options = {
+      "nvm", "pcm", "stt-ram", "memristor", "reram", "optane"
+   };
+
+   String param = "perf_model/dram/technology";
+   String value = Sim()->getCfg()->hasKey(param) ? Sim()->getCfg()->getString(param) : "dram";
+
+   if (value == "dram")
+      return std::make_pair(DRAM, value);
+   if (nvm_options.find(value) != nvm_options.end())
+      return std::make_pair(NVM, value);
+
+   LOG_PRINT_ERROR("Parameter [perf_model/dram/technology] is invalid");
 }

@@ -108,7 +108,7 @@ trace_extra_args = []
 verbose = False
 use_pa = True
 use_pinplay = False
-sde_arch = ''
+sde_arch = 'future'
 
 if not sys.argv[1:]:
   usage()
@@ -662,8 +662,7 @@ if tracegen:
     trace_extra_args += [ '--pinplay-addr-trans' ]
   if frontend:
     trace_extra_args += [ '--frontend=%(frontend)s' % locals()]
-  if sde_arch:
-    trace_extra_args += [ '--sde-arch=%(sde_arch)s' % locals() ]
+  trace_extra_args += [ '--sde-arch=%(sde_arch)s' % locals() ]
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
     tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ]
     if enable_pacsim:

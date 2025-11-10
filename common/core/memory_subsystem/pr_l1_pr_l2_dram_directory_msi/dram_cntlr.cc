@@ -6,6 +6,7 @@
 #include "stats.h"
 #include "fault_injection.h"
 #include "shmem_perf.h"
+#include "nvm_perf_model.h"
 
 #if 0
    extern Lock iolock;
@@ -28,9 +29,9 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    , m_reads(0)
    , m_writes(0)
 {
-   m_dram_perf_model = DramPerfModel::createDramPerfModel(
-         memory_manager->getCore()->getId(),
-         cache_block_size);
+   m_dram_perf_model = DramCntlrInterface::getTechnology().first == DramCntlrInterface::DRAM
+      ? DramPerfModel::createDramPerfModel(memory_manager->getCore()->getId(), cache_block_size)
+      : NvmPerfModel::createNvmPerfModel(memory_manager->getCore()->getId(), cache_block_size);
 
    m_fault_injector = Sim()->getFaultinjectionManager()
       ? Sim()->getFaultinjectionManager()->getFaultInjector(memory_manager->getCore()->getId(), MemComponent::DRAM)
