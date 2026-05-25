@@ -118,8 +118,8 @@ env.add_link_dir(pin_lib_dir)
 env.add_link_dir(pin_crt_dir)
 env.add_link_dir('./sift/obj-intel64')
 if env.on_linux():
-    env['LINKFLAGS'] += ' -Wl,--hash-style=sysv '
-    env['LINKFLAGS'] += ' -Wl,--rpath,\$ORIGIN/../../../../%(arch)s/pin_lib:\$ORIGIN/../../../../%(arch)s/xed_lib:\$ORIGIN/pin_lib:\$ORIGIN/xed_lib'
+    env['LINKFLAGS'] += r' -Wl,--hash-style=sysv '
+    env['LINKFLAGS'] += r' -Wl,--rpath,\$ORIGIN/../../../../%(arch)s/pin_lib:\$ORIGIN/../../../../%(arch)s/xed_lib:\$ORIGIN/pin_lib:\$ORIGIN/xed_lib'
 
 # Tools sources
 tool_sources = {}
