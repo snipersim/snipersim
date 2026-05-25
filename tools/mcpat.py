@@ -80,24 +80,20 @@ def mcpat_path():
   return os.path.join(os.path.dirname(__file__), '../mcpat/')
 
 def mcpat_bin():
-  import platform
   mcpatdir = mcpat_path()
-  if platform.architecture()[0] != '64bit':
-    suffix = '.32'
-  elif True: # Disable if you don't want the McPAT/CACTI cache
-    suffix = '.cache'
+  binary = os.path.join(mcpatdir, 'mcpat')
+  if os.path.exists(binary):
+    return binary
   else:
-    suffix = ''
-  bin = os.path.join(mcpatdir, 'mcpat-1.0%s' % suffix)
-  if os.path.exists(bin):
-    # Fancy McPAT versions haven't been downloaded yet, use the plain old one
-    return bin
-  else:
-    os.path.join(mcpatdir, 'mcpat-1.0')
+      return None
 
 def mcpat_run(inputfile, outputfile):
+  binary = mcpat_bin()
+  if not binary:
+      print("McPat Binary was not found")
+      exit(1)
   os.system("LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%s %s -print_level 5 -opt_for_clk 1 -infile %s > %s" % \
-    (mcpat_path(), mcpat_bin(), inputfile, outputfile))
+    (mcpat_path(), binary, inputfile, outputfile))
 
 
 all_items = [
