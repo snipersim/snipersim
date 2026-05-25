@@ -112,6 +112,13 @@ NucaCache::write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_a
          }
       }
 
+
+      if (count) {
+         // The writebacks coming from upper levels and not found here need to be marked MODIFIED
+         // in order to be written back to the DRAM later on
+         ((PrL1CacheBlockInfo*)m_cache->peekSingleLine(address))->setCState(CacheState::MODIFIED);
+      }
+
       if (count) ++m_write_misses;
    }
    if (count) ++m_writes;
