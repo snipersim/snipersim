@@ -11,7 +11,20 @@ LIB_FOLLOW=$(SIM_ROOT)/pin/../lib/follow_execv.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
 LIB_TORCH=$(SIM_ROOT)/libtorch/lib/libtorch.so
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND) $(LIB_TORCH)
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
+
+# Optional dependencies.  Both the target that provides them and the reference to
+# that target have to be conditional, or the documented NO_* opt-outs break the
+# dependency graph instead of trimming it.
+OPTIONAL_DEPS :=
+ifneq ($(NO_MCPAT_DOWNLOAD),1)
+OPTIONAL_DEPS += mcpat
+endif
+ifneq ($(NO_TORCH),1)
+OPTIONAL_DEPS += torch
+SIM_TARGETS += $(LIB_TORCH)
+endif
+export NO_TORCH
 
 PYTHON2=python2
 
@@ -64,7 +77,7 @@ endif
 
 include common/Makefile.common
 
-dependencies: package_deps sde_kit $(PIN_ROOT) pin xed mcpat torch linux builddir showdebugstatus
+dependencies: package_deps sde_kit $(PIN_ROOT) pin xed $(OPTIONAL_DEPS) linux builddir showdebugstatus
 
 BUILD_CAPSTONE ?=
 ifeq ($(BUILD_ARM),1)

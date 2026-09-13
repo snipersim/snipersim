@@ -15,7 +15,11 @@ INCLUDE_DIRECTORIES = $(DIRECTORIES) $(XED_HOME)/include/xed $(SIM_ROOT)/linux $
 
 # libtorch headers use -isystem to prevent collision between common/misc/semaphore.h
 # and the system POSIX semaphore.h (pulled in by C++20 <semaphore> via libtorch)
+ifneq ($(NO_TORCH),1)
 TORCH_INCLUDES = -isystem $(SIM_ROOT)/libtorch/include -isystem $(SIM_ROOT)/libtorch/include/torch/csrc/api/include
+else
+TORCH_INCLUDES =
+endif
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
@@ -71,7 +75,14 @@ PYTHON_LIB_DIR := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LD_FLAGS)))
 PYTHON_RPATH := $(foreach d,$(PYTHON_LIB_DIR),-Wl$(comma)-rpath$(comma)$(d))
 HAVE_LZMA := $(shell printf 'int main() { return 0; }\n' | $(CXX) -xc++ - -llzma >/dev/null 2>&1 && echo 1 || echo 0)
 LZMA_LINK_LIBS := $(if $(filter 1,$(HAVE_LZMA)),-llzma,)
+# Keyed off the option, not off whether a previous build left the tarball behind:
+# probing the filesystem meant NO_TORCH=1 still linked torch on any tree that had
+# ever been built without it.
+ifneq ($(NO_TORCH),1)
 TORCH_LINK_LIBS := $(if $(wildcard $(SIM_ROOT)/libtorch/lib/libtorch.so),-ltorch,) $(if $(wildcard $(SIM_ROOT)/libtorch/lib/libc10.so),-lc10,)
+else
+TORCH_LINK_LIBS :=
+endif
 LD_LIBS += -ldecoder -lsift -lxed -lrt -lz -lbz2 $(LZMA_LINK_LIBS) -lsqlite3 $(PYTHON_LD_LIBS) $(TORCH_LINK_LIBS)
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/decoder_lib/ -L$(SIM_ROOT)/sift -L$(XED_HOME)/lib -L$(SIM_ROOT)/libtorch/lib
