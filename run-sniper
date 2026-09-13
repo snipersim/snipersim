@@ -121,7 +121,10 @@ def findfile(filename, extension, paths, subpaths = ('.')):
     for subpath in subpaths:
       for ext in ('', extension):
         fullname = os.path.realpath(os.path.join(dirname, subpath, filename + ext))
-        if os.path.exists(fullname):
+        # isfile, not exists: with an empty extension a bare name can match a
+        # directory.  `-criscv` resolved to $SNIPER_ROOT/riscv/ rather than
+        # config/riscv.cfg and then failed with IsADirectoryError.
+        if os.path.isfile(fullname):
           return fullname
   return False
 
