@@ -72,32 +72,42 @@ set_target_properties(pin_frontend PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 target_compile_options(pin_frontend PRIVATE ${SNIPER_PIN_NO_HOST_FLAGS})
 
-# --- the SDE SIFT recorder: deliberately not built here ---------------------
+# --- the SDE SIFT recorder -------------------------------------------------
 #
-# It is an SDE tool, not a plain pintool, and Intel builds it with
-# sift/recorder/mfile.py on top of the kit's own mbuild and build_kit modules.
+# Built by Intel's sift/recorder/mfile.py, not by CMake.  It is an SDE tool
+# rather than a plain pintool, and reproducing that link from the probed
+# makefile variables was tried and fails: sift/recorder/makefile.sde.rules
+# specifies -lsde, but that rules file is not what builds the tool -- it
+# delegates to mfile.py, which links -lpin instead.  The result is 2.6 MB larger
+# with ten extra undefined Pin symbols, links cleanly, and dies at run time with
 #
-# Reproducing that link from the probed makefile variables was tried and does not
-# work.  sift/recorder/makefile.sde.rules -- the rules file the recorder's
-# Makefile includes -- specifies
-#     -lpinplay -lsde -lpinplay -lsde -lbz2 -lzlib
-# but that path is not the one that builds this tool: the rule delegates to
-# mfile.py, which links
-#     -lpinplay -lpin -lzlib -lbz2 -lsift
-# instead.  Building against the former produces a tool 2.6 MB larger with ten
-# extra undefined Pin symbols, and Pin refuses to load it:
+#     dlopen failed: cannot locate symbol "PIN_StopApplicationThreads"
 #
-#     E: Unable to load .../sde_sift_recorder.so: dlopen failed: cannot locate
-#        symbol "_ZN15LEVEL_PINCLIENT26PIN_StopApplicationThreadsEj"
-#
-# It links cleanly and fails at run time, which is the worst shape a build bug
-# can take, so the recorder keeps the build Intel supports.  It still needs its
-# own PinCRT libsift until it moves; sift_pincrt above is what it should consume
-# when it does.
+# So the recorder keeps the build Intel supports.  What it no longer keeps is its
+# own private copy of SIFT: SNIPER_SIFT_INCLUDE and SNIPER_SIFT_LIBDIR point
+# mfile.py at sift_pincrt above, so the symlink farm is not needed and SIFT is
+# built once per ABI rather than once per tool.
+if(TARGET Sniper::SdeTool)
+  set(_recorder_dir "${CMAKE_SOURCE_DIR}/sift/recorder")
+  set(_recorder_so "${_recorder_dir}/obj-${Pin_TARGET}/sde_sift_recorder${Pin_TOOL_SUFFIX}")
 
-# Historical note.  It is an SDE tool rather than
-# a plain pintool and Intel builds it with sift/recorder/mfile.py, on top of the
-# kit's own mbuild and build_kit modules; reimplementing that in CMake would mean
-# reimplementing SDE's tool linkage, which is exactly the kind of guesswork this
-# rework is trying to remove.  It keeps its own build and now links the shared
-# sift_pincrt above instead of a private copy.
+  add_custom_command(
+    OUTPUT "${_recorder_so}"
+    COMMAND "${CMAKE_COMMAND}" -E env
+            "SDE_BUILD_KIT=${Pin_SDE_KIT}"
+            # mfile.py only adds the kit's mbuild to sys.path when SDE_BUILD_KIT
+            # is unset; with it set, PYTHONPATH has to supply mbuild and the
+            # pinplay scripts.  makefile.sde.rules did the same.
+            "PYTHONPATH=${CMAKE_SOURCE_DIR}/pinplay-tools/pinplay-scripts:${Pin_SDE_KIT}/pinkit/sde-example/mbuild"
+            "SNIPER_SIFT_INCLUDE=${CMAKE_SOURCE_DIR}/sift:${CMAKE_SOURCE_DIR}/common/misc"
+            "SNIPER_SIFT_LIBDIR=$<TARGET_FILE_DIR:sift_pincrt>"
+            "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}"
+            "PYTHONDONTWRITEBYTECODE=1"
+            "${Python3_EXECUTABLE}" ./mfile.py --host-cpu ${Pin_TARGET}
+    WORKING_DIRECTORY "${_recorder_dir}"
+    DEPENDS sift_pincrt
+    COMMENT "Building sde_sift_recorder (Intel mfile.py, shared sift_pincrt)"
+    VERBATIM)
+
+  add_custom_target(sde_sift_recorder ALL DEPENDS "${_recorder_so}")
+endif()
