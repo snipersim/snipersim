@@ -1,0 +1,95 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 19, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+
+    {
+      "name": "x86-sde-release",
+      "inherits": "base",
+      "displayName": "x86 / SDE / release",
+      "description": "The default configuration: SDE frontend, optimised, libtorch on.",
+      "cacheVariables": {
+        "SNIPER_FRONTEND": "sde",
+        "SNIPER_LINK_INTO_TREE": "ON"
+      }
+    },
+
+    {
+      "name": "x86-sde-debug",
+      "inherits": "x86-sde-release",
+      "displayName": "x86 / SDE / debug",
+      "description": "Same, unoptimised. Coexists with the release build; -DCMAKE_BUILD_TYPE now actually rebuilds.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SNIPER_LINK_INTO_TREE": "OFF"
+      }
+    },
+
+    {
+      "name": "x86-pin-release",
+      "inherits": "base",
+      "displayName": "x86 / Pin / release",
+      "description": "The plain Pin kit rather than SDE. Needs: deps/sniper-deps --frontend pin fetch",
+      "cacheVariables": {
+        "SNIPER_FRONTEND": "pin"
+      }
+    },
+
+    {
+      "name": "x86-modern-abi",
+      "inherits": "base",
+      "displayName": "x86 / SDE / modern libstdc++ ABI",
+      "description": "libtorch off, so the tree builds without -D_GLIBCXX_USE_CXX11_ABI=0. The legacy ABI is forced only by the pre-cxx11 libtorch build; this is the configuration to test before dropping it everywhere.",
+      "cacheVariables": {
+        "SNIPER_FRONTEND": "sde",
+        "SNIPER_ENABLE_TORCH": "OFF"
+      }
+    },
+
+    {
+      "name": "riscv-release",
+      "inherits": "base",
+      "displayName": "RISC-V",
+      "description": "RISC-V decoder. Needs an rv8 checkout: deps/sniper-deps --riscv fetch, or -DSNIPER_RV8_HOME=<path>",
+      "cacheVariables": {
+        "SNIPER_ENABLE_RISCV": "ON"
+      }
+    },
+
+    {
+      "name": "arm64-frontend",
+      "inherits": "base",
+      "displayName": "ARM64 frontend only",
+      "description": "For the ARM board: builds sift and the DynamoRIO frontend, no x86 simulator. Build with --target dr_frontend. README.arm64 walks through this by hand today.",
+      "cacheVariables": {
+        "SNIPER_FRONTEND": "none",
+        "SNIPER_ENABLE_ARM": "ON",
+        "SNIPER_ENABLE_DYNAMORIO": "ON",
+        "SNIPER_ENABLE_TORCH": "OFF"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "x86-sde-release", "configurePreset": "x86-sde-release" },
+    { "name": "x86-sde-debug",   "configurePreset": "x86-sde-debug" },
+    { "name": "x86-pin-release", "configurePreset": "x86-pin-release" },
+    { "name": "x86-modern-abi",  "configurePreset": "x86-modern-abi" },
+    { "name": "riscv-release",   "configurePreset": "riscv-release" },
+    {
+      "name": "arm64-frontend",
+      "configurePreset": "arm64-frontend",
+      "targets": [ "sift", "dr_frontend" ]
+    }
+  ]
+}
