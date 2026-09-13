@@ -2,6 +2,27 @@ SIM_ROOT ?= $(shell readlink -f "$(CURDIR)/../..")
 
 # QSim (the QEMU-based frontend library).  Not fetched by the build; point
 # QSIM_HOME at an existing checkout, or leave it at the default location.
+#
+# NOTE: qsim_frontend.cc does not currently compile against frontend/.  It was
+# last touched 2021-04-15; the frontend framework moved on 2022-10-25 and only
+# pin_frontend.cc was updated with it.  Three things have to change:
+#
+#   1. The framework constructs the frontend with `new T()` (frontend.tcc:23),
+#      so QsimFrontend needs a default constructor.  It has only
+#      QsimFrontend(FrontendISA), which nothing calls -- so the ISA selection is
+#      orphaned and someone has to decide where it now comes from.  This is the
+#      one part that is a design question rather than a mechanical fix.
+#   2. __sendInstructionSpecialized is defined on Frontend<QsimFrontend>::,
+#      which no longer declares it.  pin_frontend.cc defines it on the derived
+#      class (PinFrontend::__sendInstructionSpecialized); qsim should match.
+#   3. The sendInstruction call at qsim_frontend.cc:351 is not in scope.
+#
+# The headers also moved: current QSim keeps qsim.h, qsim-load.h and qsim-regs.h
+# at the repository root, not under include/, which is where CPPFLAGS looks.
+#
+# Everything below -- flags, include paths, the shared-flag inheritance -- has
+# been checked; the source is what needs porting, and it needs someone who can
+# run a QSim build to validate the result.
 QSIM_HOME ?= $(SIM_ROOT)/qsim
 
 default: qsim-frontend
@@ -11,7 +32,9 @@ default: qsim-frontend
 # match libsift.a and libcarbon_sim.a or the link fails on mangled names.
 include $(SIM_ROOT)/common/Makefile.common
 
-CPPFLAGS += -I.. -I. -I$(QSIM_HOME)/include -I$(QSIM_HOME)/distorm/
+# Both: older QSim installed headers under include/, current QSim keeps them at
+# the repository root.
+CPPFLAGS += -I.. -I. -I$(QSIM_HOME) -I$(QSIM_HOME)/include -I$(QSIM_HOME)/distorm/
 LD_FLAGS += -L$(QSIM_HOME)/lib
 QSIM_LIBS = -lqsim $(QSIM_HOME)/distorm/distorm64.a -lcapstone
 
