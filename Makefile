@@ -10,11 +10,20 @@ LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
 LIB_TORCH=$(SIM_ROOT)/libtorch/lib/libtorch.so
 MIMICOS=$(SIM_ROOT)/mimicos/build/startup_mimicos
+QSIM_FRONTEND=$(SIM_ROOT)/frontend/qsim-frontend/qsim-frontend
 SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND) $(MIMICOS)
 
 # Optional dependencies.  Both the target that provides them and the reference to
 # that target have to be conditional, or the documented NO_* opt-outs break the
 # dependency graph instead of trimming it.
+# QEMU/QSim frontend.  Opt-in with BUILD_QSIM=1: QSim is not fetched by the
+# build, and detecting it by looking for a directory would repeat the mistake
+# BUILD_RISCV and BUILD_ARM make, where the presence of a sibling checkout
+# silently changes what gets compiled.
+ifeq ($(BUILD_QSIM),1)
+SIM_TARGETS += $(QSIM_FRONTEND)
+endif
+
 OPTIONAL_DEPS :=
 ifneq ($(NO_MCPAT_DOWNLOAD),1)
 OPTIONAL_DEPS += mcpat
@@ -111,6 +120,9 @@ endif
 ifeq ($(BUILD_RISCV),1)
 	@echo -n " and RISCV"
 endif
+ifeq ($(BUILD_QSIM),1)
+	@echo -n " and QSim"
+endif
 ifeq ($(BUILD_ARM),1)
 	@echo -n " and arm64"
 endif
@@ -139,6 +151,11 @@ $(LIB_SIFT): $(LIB_CARBON)
 
 $(LIB_DECODER): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/decoder_lib 
+
+ifeq ($(BUILD_QSIM),1)
+$(QSIM_FRONTEND): $(LIB_SIFT) $(LIB_CARBON)
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/frontend/qsim-frontend
+endif
 
 # Userspace MimicOS.  Needed whenever general/enable_userspace_mimicos is set,
 # but it was never part of the build: the binary had to be made by hand.
