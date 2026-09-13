@@ -272,6 +272,31 @@ torch: torch-download
 endif
 endif
 
+# Nothing may be downloaded or built until the environment check has passed.
+#
+# package_deps used to be a plain sibling of the download targets in the
+# `dependencies:` list, so under -j make was free to run them together -- and did:
+# a missing Python.h was reported only after ~1.1 GB of SDE, XED, McPAT and
+# libtorch had already been fetched.  Order-only prerequisites (|) gate the leaf
+# rules that actually download, rather than the aggregate names above them: those
+# aggregates have the downloads as their own prerequisites, so gating them would
+# order the recipe but not the fetching.
+$(PIN_DEP) $(MBUILD_INSTALL_DEP) $(XED_INSTALL_DEP) $(XED_DEP): | package_deps
+ifneq ($(NO_MCPAT_DOWNLOAD),1)
+mcpat/mcpat-1.0: | package_deps
+endif
+ifneq ($(NO_TORCH),1)
+ifeq ($(wildcard $(TORCH_DEP)),)
+torch-download: | package_deps
+endif
+endif
+ifeq ($(BUILD_CAPSTONE),1)
+$(CAPSTONE_INSTALL_DEP) $(CAPSTONE_BUILD_DEP): | package_deps
+endif
+ifeq ($(BUILD_DYNAMORIO),1)
+$(DYNAMORIO_INSTALL_DEP) $(DYNAMORIO_BUILD_DEP): | package_deps
+endif
+
 builddir: lib
 lib:
 	@mkdir -p $(SIM_ROOT)/lib
