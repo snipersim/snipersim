@@ -120,8 +120,6 @@ def setup_env(sim_root, pin_home, arch, standalone = False, xed_home = None, tor
 
   # Construct Sniper/Pintool LD_LIBRARY_PATH
   ld_library_path = []
-  # Make sure that our version of Python is used, not the system version normally found in cxx_override
-  ld_library_path.append('%s/python_kit/%s/lib' % (sim_root, arch))
   cxx_override = get_cxx_override(sim_root, pin_home, arch)
   ld_library_path.append(cxx_override)
   if not standalone:

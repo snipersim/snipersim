@@ -13,26 +13,37 @@ void HooksPy::init()
    if (numscripts == 0) return;
 
    //Init the Python Interpreter
-   std::string sim_root = get_root();
    set_env();
 
-#if defined(TARGET_INTEL64) || defined(TARGET_IA32E)
-   std::string python_home = sim_root + "/python_kit/intel64/bin/python";
-#elif defined(TARGET_IA32)
-   std::string python_home = sim_root + "/python_kit/ia32/bin/python";
-#else
-   #error "Unknown TARGET definition"
-#endif
+   // Sniper used to embed its own Python 2.7 kit, built --without-threads so the
+   // whole simulator could run inside Pin.  The front end is a separate binary now
+   // (SIFT channels), the kit is gone, and the build links a real python3 -- but
+   // this code still pointed config.executable at $SIM_ROOT/python_kit/<arch>/bin/python,
+   // a path nothing creates.  CPython fell back to the paths of the libpython it is
+   // linked against, which is in fact the behaviour we want by default.
+   //
+   // Do not override config.executable unless asked.  Forcing it changes prefix and
+   // exec_prefix computation, and for interpreters that build their extension modules
+   // into the executable rather than into lib-dynload (python-build-standalone, for
+   // one) that makes stdlib extensions such as _sqlite3 unimportable.  Set
+   // SNIPER_PYTHON_EXECUTABLE to select an interpreter explicitly -- for a virtualenv,
+   // point it at <venv>/bin/python so CPython finds the pyvenv.cfg beside it.
+   const char *python_exe = getenv("SNIPER_PYTHON_EXECUTABLE");
 
    PyStatus status;
    PyConfig config;
    PyConfig_InitIsolatedConfig(&config);
 	 
-   //This automatically finds pyenv.cfg in directory above (bin) to load the virtual environment
-   status = PyConfig_SetString(&config, &config.executable, std::wstring(python_home.begin(), python_home.end()).c_str());
-   if (PyStatus_Exception(status)){
-   	fprintf(stderr, "Cannot set home string of Python config");
-   	exit(-1);
+   if (python_exe)
+   {
+      // Setting executable lets CPython pick up a pyvenv.cfg in the directory above it.
+      std::string python_exe_str(python_exe);
+      status = PyConfig_SetString(&config, &config.executable,
+                                  std::wstring(python_exe_str.begin(), python_exe_str.end()).c_str());
+      if (PyStatus_Exception(status)){
+         fprintf(stderr, "Cannot set executable path of Python config to '%s'\n", python_exe);
+         exit(-1);
+      }
    }
    
    //This code is not necessary, as run-sniper takes care of setting the path correctly

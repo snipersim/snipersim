@@ -312,8 +312,6 @@ distclean: clean
 	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then rm -rf $(CAPSTONE_INSTALL); fi
 	$(_MSG) '[DISTCL] DynamoRIO'
 	$(_CMD) if [ -e "$(DYNAMORIO_INSTALL)/.autodownloaded" ]; then rm -rf $(DYNAMORIO_INSTALL); fi
-	$(_MSG) '[DISTCL] python_kit'
-	$(_CMD) rm -rf python_kit
 	$(_MSG) '[DISTCL] McPAT'
 	$(_CMD) rm -rf mcpat
 	$(_MSG) '[DISTCL] Xed'
