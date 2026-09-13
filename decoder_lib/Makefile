@@ -38,7 +38,7 @@ CXXFLAGS+=-std=c++1y -fPIC -I$(XED_HOME)/include/xed -I$(RV8_HOME)/src $(CXXFLAG
 
 %.o : %.cc $(wildcard *.h) Makefile
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@)) 
-	$(_CMD) $(CXX) -c -o $@ $< $(CXXFLAGS)
+	$(_CMD) $(CXX) -c -o $@ $< $(CXXFLAGS) $(DEPFLAGS)
 
 $(TARGET) : $(OBJECTS)
 	$(_MSG) '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
