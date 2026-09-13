@@ -72,7 +72,10 @@ target_include_directories(dr_frontend PRIVATE
   "${CMAKE_SOURCE_DIR}/sift"
   "${CMAKE_SOURCE_DIR}/common/misc")
 
-target_link_libraries(dr_frontend PRIVATE sift z)
+# Plain signature, not PRIVATE/PUBLIC: configure_DynamoRIO_client() below calls
+# target_link_libraries() the old way, and CMake refuses to mix the two forms on
+# one target.
+target_link_libraries(dr_frontend sift z)
 
 set_target_properties(dr_frontend PROPERTIES
   CXX_STANDARD 11
@@ -85,7 +88,12 @@ foreach(_ext drmgr droption drreg drutil)
 endforeach()
 
 # Config file telling drrun how to load the client.
-if(X64)
+#
+# Keyed off CMAKE_SIZEOF_VOID_P rather than DynamoRIO's X64: that variable is not
+# defined by the package at this scope, so a 64-bit build wrote a .drrun32 config
+# and named the wrong file.  The compiler's pointer size is the thing actually
+# being asked about, and it does not depend on DynamoRIO's internals.
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(_dr_config "${CMAKE_BINARY_DIR}/lib/dr-frontend.drrun64")
 else()
   set(_dr_config "${CMAKE_BINARY_DIR}/lib/dr-frontend.drrun32")

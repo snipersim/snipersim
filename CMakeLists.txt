@@ -32,16 +32,26 @@ include(SniperDependencies)
 # Shared compile settings
 # ---------------------------------------------------------------------------
 
-add_library(sniper_common INTERFACE)
+# Two layers, deliberately.
+#
+# sniper_base is the language and ABI contract every object in the tree shares.
+# sniper_common adds the simulator's own dependency set on top.
+#
+# They were one target, and that was wrong: libsift linked sniper_common, so
+# anything linking libsift inherited Python, libtorch, sqlite and XED.  The
+# DynamoRIO client is the case that exposed it -- DynamoRIO refused to load the
+# client with "Unable to load client library: libc10.so", a libtorch library a
+# trace frontend has no business depending on.
+add_library(sniper_base INTERFACE)
 
-target_compile_features(sniper_common INTERFACE cxx_std_20)
+target_compile_features(sniper_base INTERFACE cxx_std_20)
 
-target_compile_options(sniper_common INTERFACE
+target_compile_options(sniper_base INTERFACE
   -Wall -Wextra -Wcast-align
   -Wno-unused-parameter -Wno-unknown-pragmas
   -fno-strict-aliasing)
 
-target_compile_definitions(sniper_common INTERFACE
+target_compile_definitions(sniper_base INTERFACE
   TARGET_INTEL64
   TARGET_IA32E
   PIN_REV=${SNIPER_PIN_REV}
@@ -52,8 +62,11 @@ target_compile_definitions(sniper_common INTERFACE
 # same link has to agree.  Confined to the torch-enabled configuration: with
 # torch off, Sniper builds with the platform's normal ABI.
 if(SNIPER_ENABLE_TORCH)
-  target_compile_definitions(sniper_common INTERFACE _GLIBCXX_USE_CXX11_ABI=0)
+  target_compile_definitions(sniper_base INTERFACE _GLIBCXX_USE_CXX11_ABI=0)
 endif()
+
+add_library(sniper_common INTERFACE)
+target_link_libraries(sniper_common INTERFACE sniper_base)
 
 # Every directory under common/ is an include path, matching the historical
 # `find common -type d` behaviour: headers are included by bare name from
@@ -120,11 +133,25 @@ file(GLOB SIFT_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/sift/*.cc"
 list(REMOVE_ITEM SIFT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/sift/siftdump.cc")
 
 add_library(sift STATIC ${SIFT_SOURCES})
-target_link_libraries(sift PUBLIC sniper_common)
+
+# SIFT reads and writes compressed trace files.  That is the whole of it: no
+# Python, no libtorch, no XED.  Keeping this list honest is what lets a
+# DynamoRIO client or a pintool link libsift without dragging the simulator's
+# dependencies in behind it.
+target_include_directories(sift PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/sift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/common/misc")
+target_link_libraries(sift PUBLIC sniper_base z bz2)
+if(SNIPER_HAVE_LZMA)
+  target_link_libraries(sift PUBLIC lzma)
+endif()
+if(SNIPER_CHAMPSIM_INCLUDE)
+  target_include_directories(sift PUBLIC "${SNIPER_CHAMPSIM_INCLUDE}")
+endif()
 set_target_properties(sift PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(siftdump "${CMAKE_CURRENT_SOURCE_DIR}/sift/siftdump.cc")
-target_link_libraries(siftdump PRIVATE sift sniper_common)
+target_link_libraries(siftdump PRIVATE sift)
 
 # Instruction decoders.  RISC-V and ARM sources are compiled only when their
 # option is on -- previously a filter-out driven by whether a sibling checkout
