@@ -192,4 +192,9 @@ set(SNIPER_PIN_NO_HOST_FLAGS "")
 find_package(Pin)
 include(SniperPinTools)
 
+# ---------------------------------------------------------------------------
+# What the runtime tools need to know about this build
+# ---------------------------------------------------------------------------
+include(SniperRuntimeConfig)
+
 sniper_print_configuration()

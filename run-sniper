@@ -82,6 +82,7 @@ use_appdebug = False
 appdebug_manual = False
 appdebug_nowait = False
 follow_execv = False
+build_dir = None
 run_power = False
 save_output = False
 save_patch = False
@@ -223,6 +224,7 @@ try:
       "cache-only", "fast-forward", "no-cache-warming",
       "save-output", "save-patch",
       "curdir=",
+      "build-dir=",
       "pin-stats",
       "traces=", "response-traces=", "trace-manual", "trace-args=", "trace-pin-args=",
       "sim-end=",
@@ -335,6 +337,8 @@ for o, a in opts:
     save_patch = True
   if o == '--pin-stats':
     pin_stats = True
+  if o == '--build-dir':
+    build_dir = a
   if o == '--curdir':
     curdir = a
   if o == '--traces':
@@ -661,7 +665,38 @@ if tracegen:
 
 sniperoptions = ' '.join(sniperoptions)
 
-configfile = os.path.join(HOME, 'config/sniper.py')
+# Which build to run.
+#
+# A build directory is self-contained -- its own config/sniper.py and its own
+# lib/sniper -- so several configurations can exist at once.  Resolution order:
+#
+#   --build-dir=<path>          explicit
+#   $SNIPER_BUILD_DIR           for a shell that has picked one
+#   $SNIPER_ROOT/build/default  the conventional symlink
+#   $SNIPER_ROOT                the in-tree layout a make build produces
+def resolve_build_dir(explicit):
+  candidates = []
+  if explicit:
+    candidates.append(('--build-dir', explicit))
+  if os.getenv('SNIPER_BUILD_DIR'):
+    candidates.append(('$SNIPER_BUILD_DIR', os.getenv('SNIPER_BUILD_DIR')))
+  candidates.append(('build/default', os.path.join(HOME, 'build', 'default')))
+  candidates.append(('the source tree', HOME))
+  for origin, path in candidates:
+    if os.path.isfile(os.path.join(path, 'config', 'sniper.py')):
+      return os.path.abspath(path)
+    if origin in ('--build-dir', '$SNIPER_BUILD_DIR'):
+      print('Error: %s is %s, which has no config/sniper.py' % (origin, path), file=sys.stderr)
+      print('       Configure and build it first.', file=sys.stderr)
+      sys.exit(-1)
+  print('Error: no build found.', file=sys.stderr)
+  print('       Build in the source tree (make), or configure one and point', file=sys.stderr)
+  print('       --build-dir / $SNIPER_BUILD_DIR / build/default at it.', file=sys.stderr)
+  sys.exit(-1)
+
+BUILD_DIR = resolve_build_dir(build_dir)
+
+configfile = os.path.join(BUILD_DIR, 'config/sniper.py')
 config = {}
 exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
 
@@ -701,13 +736,13 @@ if standalone:
       f.write('end\n')
     f.close()
     sniper_bin = 'sniper_dev' if use_dev else 'sniper'
-    gdbcmd = 'gdb -quiet --command=%(fn)s %(HOME)s/lib/%(sniper_bin)s --args ' % locals()
+    gdbcmd = 'gdb -quiet --command=%(fn)s %(BUILD_DIR)s/lib/%(sniper_bin)s --args ' % locals()
   elif use_wrap_sim:
     gdbcmd = '%(use_wrap_sim)s ' % locals()
   else:
     gdbcmd = ''
   sniper_bin = 'sniper_dev' if use_dev else 'sniper'
-  cmd = gdbcmd + '%(HOME)s/lib/%(sniper_bin)s' % locals() + optcmd
+  cmd = gdbcmd + '%(BUILD_DIR)s/lib/%(sniper_bin)s' % locals() + optcmd
 
 queue = queue.Queue()
 
