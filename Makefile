@@ -364,7 +364,7 @@ distclean: clean
 # for you (a git hook, a cron job, your own runner).
 .PHONY: regress regress_quick regress_scripting
 
-regress: regress_scripting
+regress: regress_scripting regress_configs
 
 # Exercises the embedded Python interpreter from simulator threads.  This is the
 # suite that catches missing GIL guards in hook callbacks, which only fail under
@@ -372,6 +372,12 @@ regress: regress_scripting
 regress_scripting:
 	$(_MSG) '[REGRES] scripting hooks'
 	$(_CMD) $(SIM_ROOT)/testing/test_scripting.py
+
+# Runs every shipped configuration at several core counts.  Nothing else covers
+# config/base.cfg, which every simulation loads.
+regress_configs:
+	$(_MSG) '[REGRES] shipped configurations'
+	$(_CMD) $(SIM_ROOT)/testing/test_configs.py
 
 regress_quick: regress
 
