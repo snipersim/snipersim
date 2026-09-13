@@ -215,7 +215,10 @@ XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
 xed: mbuild xed_install $(XED_DEP)
 $(XED_DEP): $(XED_INSTALL_DEP)
 	$(_MSG) '[INSTAL] xed'
-	$(_CMD) cd $(XED_INSTALL) ; ./mfile.py --silent --extra-flags=-fPIC --shared --install-dir $(XED_HOME) install
+	$(_CMD) cd $(XED_INSTALL) ; \
+	        PYTHONPATH=$(MBUILD_INSTALL) PYTHONDONTWRITEBYTECODE=1 \
+	        ./mfile.py --silent --extra-flags=-fPIC --shared \
+	                   --build-dir $(SIM_ROOT)/xed_build --install-dir $(XED_HOME) install
 
 ifneq (,$(USE_PIN))
 PIN_DOWNLOAD=https://snipersim.org/packages/pin-external-3.31-98869-gfa6f126a8-gcc-linux.tar.gz
@@ -249,8 +252,8 @@ $(PIN_DEP):
 	$(_CMD) rm -r $(SDE_HOME)/pinkit/source/tools/InstLib #It looks like it is missing source files, so it fails to compile but not necessary for sniper
 	$(_CMD) touch $(SDE_HOME)/.autodownloaded
 	$(_MSG) '[DOWNLO] pinplay-tools'
-	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SDE_HOME)/pinplay-tools
-	$(_CMD) git -C $(SDE_HOME)/pinplay-tools reset --quiet --hard $(PINPLAY_GITID)
+	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SIM_ROOT)/pinplay-tools
+	$(_CMD) git -C $(SIM_ROOT)/pinplay-tools reset --quiet --hard $(PINPLAY_GITID)
 $(PIN_ROOT): sde_kit
 endif
 

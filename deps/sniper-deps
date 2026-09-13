@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""
+Acquire Sniper's external dependencies.
+
+Splits acquisition out of the build.  Previously `make` downloaded 1.1 GB of
+SDE, XED, McPAT and libtorch directly into the source tree, with no checksums,
+no way to see what was needed, no offline mode, and a private copy per checkout.
+
+  sniper-deps status            what is needed, present, missing
+  sniper-deps fetch             download and verify whatever is missing
+  sniper-deps pin [name ...]    record sha256 digests in the manifest
+  sniper-deps cache             print the cache directory
+  sniper-deps gc                remove cache entries no manifest version names
+
+Downloads land in a shared content-addressed cache -- $SNIPER_DEPS_CACHE, or
+~/.cache/sniper/deps -- and the path the build expects in the source tree becomes
+a symlink into it.  Several checkouts then share one copy, and `rm -rf` on a
+build tree stops being a 20-minute mistake.
+
+Feature selection matches the Makefile: --frontend, --torch/--no-torch,
+--mcpat/--no-mcpat, --arm, --riscv, --dynamorio.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SNIPER_ROOT = os.path.dirname(HERE)
+MANIFEST = os.path.join(HERE, 'manifest.json')
+
+CHUNK = 1 << 20
+
+
+def cache_root():
+    env = os.environ.get('SNIPER_DEPS_CACHE')
+    if env:
+        return os.path.abspath(env)
+    xdg = os.environ.get('XDG_CACHE_HOME') or os.path.join(os.path.expanduser('~'), '.cache')
+    return os.path.join(xdg, 'sniper', 'deps')
+
+
+def load_manifest():
+    with open(MANIFEST) as f:
+        return json.load(f)
+
+
+def enabled_features(args):
+    feats = {'frontend:' + args.frontend}
+    if args.torch:
+        feats.add('torch')
+    if args.mcpat:
+        feats.add('mcpat')
+    for name in ('arm', 'riscv', 'dynamorio'):
+        if getattr(args, name):
+            feats.add(name)
+    return feats
+
+
+def is_needed(dep, feats):
+    when = dep.get('when', [])
+    if not when:
+        return True
+    if dep.get('when_any'):
+        return any(w in feats for w in when)
+    return all(w in feats for w in when)
+
+
+def cache_key(name, dep):
+    """Identity of a dependency version: digest if pinned, else revision/version."""
+    if dep['kind'] == 'git':
+        return '%s-%s' % (name, dep['rev'][:16])
+    if dep.get('sha256'):
+        return '%s-%s' % (name, dep['sha256'][:16])
+    return '%s-%s-unpinned' % (name, dep.get('version', 'none'))
+
+
+def cache_path(name, dep):
+    return os.path.join(cache_root(), cache_key(name, dep))
+
+
+def install_path(dep):
+    return os.path.join(SNIPER_ROOT, dep['install_path'])
+
+
+def present(name, dep):
+    """Is the dependency usable where the build expects it?"""
+    marker = dep.get('marker')
+    base = install_path(dep)
+    if not os.path.exists(base):
+        return False
+    return os.path.exists(os.path.join(base, marker)) if marker else True
+
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for block in iter(lambda: f.read(CHUNK), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def download(url, dest, quiet=False):
+    if not quiet:
+        print('  downloading %s' % url)
+    with urllib.request.urlopen(url) as r, open(dest, 'wb') as f:
+        total = int(r.headers.get('Content-Length') or 0)
+        got = 0
+        while True:
+            block = r.read(CHUNK)
+            if not block:
+                break
+            f.write(block)
+            got += len(block)
+            if not quiet and total:
+                pct = 100.0 * got / total
+                sys.stdout.write('\r  %5.1f%%  %.0f/%.0f MiB' %
+                                 (pct, got / 1048576.0, total / 1048576.0))
+                sys.stdout.flush()
+    if not quiet and total:
+        sys.stdout.write('\r' + ' ' * 40 + '\r')
+
+
+def link_into_tree(name, dep, target):
+    """Point the path the build expects at the cache entry."""
+    dest = install_path(dep)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    if os.path.islink(dest):
+        os.unlink(dest)
+    elif os.path.isdir(dest):
+        print('  %s exists and is not a symlink; leaving it alone' % dep['install_path'],
+              file=sys.stderr)
+        return False
+    os.symlink(target, dest)
+    return True
+
+
+def fetch_tarball(name, dep, offline):
+    target = cache_path(name, dep)
+    if os.path.exists(os.path.join(target, '.complete')):
+        return target
+    if offline:
+        raise SystemExit('error: %s is not in the cache and --offline was given' % name)
+
+    os.makedirs(cache_root(), exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=cache_root()) as tmp:
+        archive = os.path.join(tmp, 'archive')
+        download(dep['url'], archive)
+        digest = sha256_file(archive)
+        want = dep.get('sha256')
+        if want and digest != want:
+            raise SystemExit(
+                'error: %s failed verification\n  expected %s\n  got      %s' %
+                (name, want, digest))
+        if not want:
+            print('  warning: %s is not pinned; got sha256 %s' % (name, digest),
+                  file=sys.stderr)
+            print('           record it with: deps/sniper-deps pin %s' % name,
+                  file=sys.stderr)
+
+        unpacked = os.path.join(tmp, 'unpacked')
+        os.makedirs(unpacked)
+        strip = dep.get('strip_components', 0)
+        with tarfile.open(archive) as tf:
+            members = []
+            for m in tf.getmembers():
+                parts = m.name.split('/')
+                if len(parts) <= strip:
+                    continue
+                m.name = '/'.join(parts[strip:])
+                members.append(m)
+            # extraction filter: refuse anything that escapes the destination
+            for m in members:
+                if m.name.startswith('/') or '..' in m.name.split('/'):
+                    raise SystemExit('error: %s contains an unsafe path %r' % (name, m.name))
+            tf.extractall(unpacked, members=members)
+
+        for rel in dep.get('post_prune', []):
+            victim = os.path.join(unpacked, rel)
+            if os.path.exists(victim):
+                shutil.rmtree(victim, ignore_errors=True)
+
+        open(os.path.join(unpacked, '.complete'), 'w').close()
+        if os.path.exists(target):
+            shutil.rmtree(target, ignore_errors=True)
+        os.rename(unpacked, target)
+    return target
+
+
+def fetch_git(name, dep, offline):
+    target = cache_path(name, dep)
+    if os.path.exists(os.path.join(target, '.complete')):
+        return target
+    if offline:
+        raise SystemExit('error: %s is not in the cache and --offline was given' % name)
+
+    os.makedirs(cache_root(), exist_ok=True)
+    tmp = target + '.tmp'
+    shutil.rmtree(tmp, ignore_errors=True)
+    print('  cloning %s' % dep['url'])
+    cmd = ['git', 'clone', '--quiet']
+    if dep.get('recursive'):
+        cmd.append('--recursive')
+    subprocess.run(cmd + [dep['url'], tmp], check=True)
+    subprocess.run(['git', '-C', tmp, 'reset', '--quiet', '--hard', dep['rev']], check=True)
+    open(os.path.join(tmp, '.complete'), 'w').close()
+    if os.path.exists(target):
+        shutil.rmtree(target, ignore_errors=True)
+    os.rename(tmp, target)
+    return target
+
+
+def cmd_status(args):
+    man = load_manifest()
+    feats = enabled_features(args)
+    need = missing = 0
+    print('cache: %s' % cache_root())
+    print()
+    for name, dep in man['dependencies'].items():
+        if not is_needed(dep, feats):
+            join = ' or ' if dep.get('when_any') else ' + '
+            print('  %-9s %-16s skipped   (needs %s)' %
+                  ('skip', name, join.join(dep.get('when', [])) or '-'))
+            continue
+        need += 1
+        if present(name, dep):
+            if dep['kind'] == 'git':
+                pin = 'pinned by revision'
+            else:
+                pin = 'sha256 verified' if dep.get('sha256') else 'NOT PINNED'
+            print('  %-9s %-16s %-22s %s' % ('ok', name, dep.get('version') or dep.get('rev', '')[:12], pin))
+        else:
+            missing += 1
+            print('  %-9s %-16s %-22s -> %s' % ('MISSING', name,
+                                                dep.get('version') or dep.get('rev', '')[:12],
+                                                dep['url']))
+    print()
+    print('%d needed, %d missing' % (need, missing))
+    unpinned = [n for n, d in man['dependencies'].items()
+                if d['kind'] == 'tarball' and not d.get('sha256') and is_needed(d, feats)]
+    if unpinned:
+        print('not pinned to a digest: %s' % ', '.join(unpinned))
+    return 1 if missing else 0
+
+
+def cmd_fetch(args):
+    man = load_manifest()
+    feats = enabled_features(args)
+    for name, dep in man['dependencies'].items():
+        if not is_needed(dep, feats):
+            continue
+        if present(name, dep) and not args.force:
+            continue
+        print('%s %s' % (name, dep.get('version') or dep.get('rev', '')[:12]))
+        target = (fetch_git if dep['kind'] == 'git' else fetch_tarball)(name, dep, args.offline)
+        if link_into_tree(name, dep, target):
+            print('  %s -> %s' % (dep['install_path'], target))
+    return 0
+
+
+def cmd_pin(args):
+    """Download each named tarball once and record its digest."""
+    man = load_manifest()
+    raw = open(MANIFEST).read()
+    names = args.names or [n for n, d in man['dependencies'].items()
+                           if d['kind'] == 'tarball' and not d.get('sha256')]
+    changed = False
+    for name in names:
+        dep = man['dependencies'][name]
+        if dep['kind'] != 'tarball':
+            print('%s: not a tarball, nothing to pin' % name)
+            continue
+        print('%s' % name)
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, 'a')
+            download(dep['url'], archive)
+            digest = sha256_file(archive)
+        print('  sha256 %s' % digest)
+        old = '"url": "%s",\n      "sha256": null' % dep['url']
+        new = '"url": "%s",\n      "sha256": "%s"' % (dep['url'], digest)
+        if old not in raw:
+            print('  could not locate the sha256 field to update; set it by hand',
+                  file=sys.stderr)
+            continue
+        raw = raw.replace(old, new)
+        changed = True
+    if changed:
+        open(MANIFEST, 'w').write(raw)
+        print('\nmanifest updated')
+    return 0
+
+
+def cmd_cache(args):
+    print(cache_root())
+    return 0
+
+
+def cmd_gc(args):
+    man = load_manifest()
+    keep = {cache_key(n, d) for n, d in man['dependencies'].items()}
+    root = cache_root()
+    if not os.path.isdir(root):
+        return 0
+    for entry in sorted(os.listdir(root)):
+        if entry in keep:
+            continue
+        path = os.path.join(root, entry)
+        size = subprocess.run(['du', '-sh', path], stdout=subprocess.PIPE,
+                              text=True).stdout.split()[0]
+        if args.dry_run:
+            print('would remove %s (%s)' % (entry, size))
+        else:
+            print('removing %s (%s)' % (entry, size))
+            shutil.rmtree(path, ignore_errors=True)
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--frontend', default='sde', choices=('sde', 'pin', 'pinplay', 'none'))
+    ap.add_argument('--torch', action='store_true', default=True)
+    ap.add_argument('--no-torch', dest='torch', action='store_false')
+    ap.add_argument('--mcpat', action='store_true', default=True)
+    ap.add_argument('--no-mcpat', dest='mcpat', action='store_false')
+    ap.add_argument('--arm', action='store_true')
+    ap.add_argument('--riscv', action='store_true')
+    ap.add_argument('--dynamorio', action='store_true')
+
+    sub = ap.add_subparsers(dest='cmd')
+    sub.add_parser('status')
+    f = sub.add_parser('fetch')
+    f.add_argument('--offline', action='store_true', help='fail instead of downloading')
+    f.add_argument('--force', action='store_true', help='re-link even if already present')
+    p = sub.add_parser('pin')
+    p.add_argument('names', nargs='*')
+    sub.add_parser('cache')
+    g = sub.add_parser('gc')
+    g.add_argument('--dry-run', action='store_true')
+
+    args = ap.parse_args()
+    if not args.cmd:
+        ap.print_help()
+        return 2
+    return {'status': cmd_status, 'fetch': cmd_fetch, 'pin': cmd_pin,
+            'cache': cmd_cache, 'gc': cmd_gc}[args.cmd](args)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -3,7 +3,7 @@
 *.o
 *.pyc
 *.a
-xed/
+xed
 tags
 tmp/
 *.json
@@ -57,6 +57,8 @@ riscv/riscv-tools
 riscv/rv8
 riscv/Speckle
 xed_kit
+xed_build
+pinplay-tools
 mbuild
 sde_kit
 capstone

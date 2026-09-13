@@ -94,7 +94,10 @@ sift/$(OBJDIR)libsift.a: sift/sift_reader.h $(wildcard sift/*.h) $(wildcard sift
 CC ?= gcc
 CXX ?= g++
 # export PYTHONPATH := $(SDE_BUILD_KIT)/pinplay-tools/pinplay-scripts:$(SIM_ROOT)/mbuild
-export PYTHONPATH := $(SDE_BUILD_KIT)/pinplay-tools/pinplay-scripts:$(SDE_BUILD_KIT)/pinkit/sde-example/mbuild
+# pinplay-tools lives at the top level, not under sde_kit: sde_kit is a symlink
+# into the shared dependency cache, and writing into it would leak one checkout's
+# state into every other checkout sharing that entry.
+export PYTHONPATH := $(SIM_ROOT)/pinplay-tools/pinplay-scripts:$(SDE_BUILD_KIT)/pinkit/sde-example/mbuild
 $(OBJDIR)sde_sift_recorder$(PINTOOL_SUFFIX): $(wildcard *.cc *.h sift/*.cc sift/*.h)
 ifeq ($(ARCH_QUERY),x86_64)
 	@CC=$(CC) CXX=$(CXX) ./mfile.py --host-cpu intel64
