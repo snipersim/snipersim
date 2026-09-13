@@ -35,8 +35,6 @@ tools/cpistack-collect/cpistack-*
 
 # compiled libraries
 lib/libcarbon_sim.a
-lib/pin_sim.so
-lib/libgraphite_user.a
 lib/sniper
 config/buildconf.*
 config/sniper.py
