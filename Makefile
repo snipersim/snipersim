@@ -9,7 +9,8 @@ LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
 LIB_TORCH=$(SIM_ROOT)/libtorch/lib/libtorch.so
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
+MIMICOS=$(SIM_ROOT)/mimicos/build/startup_mimicos
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND) $(MIMICOS)
 
 # Optional dependencies.  Both the target that provides them and the reference to
 # that target have to be conditional, or the documented NO_* opt-outs break the
@@ -138,6 +139,12 @@ $(LIB_SIFT): $(LIB_CARBON)
 
 $(LIB_DECODER): $(LIB_CARBON)
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/decoder_lib 
+
+# Userspace MimicOS.  Needed whenever general/enable_userspace_mimicos is set,
+# but it was never part of the build: the binary had to be made by hand.
+.PHONY: $(MIMICOS)
+$(MIMICOS):
+	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/mimicos
 
 DYNAMORIO_GITID=246ddb28e7848b2d09d2b9909f99a6da9b2ce35e
 DYNAMORIO_INSTALL=$(SIM_ROOT)/dynamorio
@@ -315,6 +322,8 @@ empty_config:
 clean: empty_config empty_deps
 	$(_MSG) '[CLEAN ] standalone'
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C standalone clean
+	$(_MSG) '[CLEAN ] mimicos'
+	$(_CMD) $(MAKE) $(MAKE_QUIET) -C mimicos clean
 	$(_MSG) '[CLEAN ] common'
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C common clean
 	$(_MSG) '[CLEAN ] sift'

@@ -1,9 +1,14 @@
 # Compiler and flags
-CC = gcc
-CXX = g++
-CFLAGS = -Wall -Wextra -g
-CXXFLAGS = -Wall -Wextra -g
-LDFLAGS =
+# ?= so that CC/CXX from the environment or the top-level make are honoured;
+# these were plain = and silently ignored the compiler the rest of the tree used.
+CC ?= gcc
+CXX ?= g++
+CFLAGS += -Wall -Wextra -g
+CXXFLAGS += -Wall -Wextra -g
+# Emit dependency files during compilation so header edits trigger a rebuild;
+# there was no header tracking here at all.
+DEPFLAGS = -MMD -MP
+LDFLAGS ?=
 
 # Directories
 SRC_DIR = ./src
@@ -53,16 +58,18 @@ $(BUILD_DIR):
 # Build C object files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
-	$(CC) $(INCLUDE_DIR) $(CFLAGS) -c $< -o $@
+	$(CC) $(INCLUDE_DIR) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # Build C++ object files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cc | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
-	$(CXX) $(INCLUDE_DIR) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(INCLUDE_DIR) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # Link main binary (will include build/obj/virtuos/virtuos.o automatically)
 $(MAIN_BINARY): $(OBJ_FILES) startup_mimicos.cc | $(BUILD_DIR)
 	$(CXX) $(INCLUDE_DIR) $^ -o $@ -lrt
+
+-include $(OBJ_FILES:.o=.d)
 
 # Clean build artifacts
 clean:
