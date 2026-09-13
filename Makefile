@@ -321,7 +321,21 @@ distclean: clean
 	$(_MSG) '[DISTCL] libtorch'
 	$(_CMD) rm -rf libtorch
 
-regress_quick: regress_unit regress_apps
+# Regression tests.  These run against a completed build, so run `make` first.
+# There is no hosted CI: wire `make regress` into whatever runs automatically
+# for you (a git hook, a cron job, your own runner).
+.PHONY: regress regress_quick regress_scripting
+
+regress: regress_scripting
+
+# Exercises the embedded Python interpreter from simulator threads.  This is the
+# suite that catches missing GIL guards in hook callbacks, which only fail under
+# a threaded interpreter and only under load.
+regress_scripting:
+	$(_MSG) '[REGRES] scripting hooks'
+	$(_CMD) $(SIM_ROOT)/testing/test_scripting.py
+
+regress_quick: regress
 
 empty_deps:
 	$(_MSG) '[CLEAN ] deps'
