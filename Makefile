@@ -6,12 +6,10 @@ STANDALONE=$(SIM_ROOT)/lib/sniper
 PIN_FRONTEND=$(SIM_ROOT)/frontend/pin-frontend/obj-intel64/pin_frontend
 DYNAMORIO_FRONTEND=$(SIM_ROOT)/frontend/dr-frontend/build/libdr-frontend.so
 LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a
-LIB_PIN_SIM=$(SIM_ROOT)/pin/../lib/pin_sim.so
-LIB_FOLLOW=$(SIM_ROOT)/pin/../lib/follow_execv.so
 LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
 LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
 LIB_TORCH=$(SIM_ROOT)/libtorch/lib/libtorch.so
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(LIB_PIN_SIM) $(LIB_FOLLOW) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
+SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND)
 
 # Optional dependencies.  Both the target that provides them and the reference to
 # that target have to be conditional, or the documented NO_* opt-outs break the
@@ -132,14 +130,6 @@ else
 $(DYNAMORIO_FRONTEND):
 	$(_CMD) true
 endif
-
-# Disable original frontend
-
-#$(LIB_PIN_SIM): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)
-#	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
-
-#$(LIB_FOLLOW):
-#	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/pin $@
 
 $(LIB_CARBON): 
 	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
@@ -326,8 +316,6 @@ empty_config:
 clean: empty_config empty_deps
 	$(_MSG) '[CLEAN ] standalone'
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C standalone clean
-	$(_MSG) '[CLEAN ] pin'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C pin clean
 	$(_MSG) '[CLEAN ] common'
 	$(_CMD) $(MAKE) $(MAKE_QUIET) -C common clean
 	$(_MSG) '[CLEAN ] sift'

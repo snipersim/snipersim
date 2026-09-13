@@ -32,7 +32,6 @@ def usage():
         '  [--appdebug]' + \
         '  [--appdebug-manual]' + \
         '  [--appdebug-enable]' + \
-        '  [--follow-execv=1]' + \
         '  [--power]' + \
         '  [--cache-only]' + \
         '  [--fast-forward]' + \
@@ -98,7 +97,6 @@ resptraces = []
 trace_manual = False
 heteroconfig = None
 pinballs = None
-pinball_sift = True
 pinplay_addrtrans = False
 use_sift = True
 frontend = None
@@ -229,7 +227,7 @@ try:
       "traces=", "response-traces=", "trace-manual", "trace-args=", "trace-pin-args=",
       "sim-end=",
       "mpi", "mpi-ranks=", "mpi-exec=",
-      "pinballs=", "pinball-non-sift", "pinplay-addr-trans",
+      "pinballs=", "pinplay-addr-trans",
       "sift",
       "pid=",
       "frontend=",
@@ -360,8 +358,6 @@ for o, a in opts:
     mpiexec_cmd = a
   if o == '--pinballs':
     pinballs = a.split(',')
-  if o == '--pinball-non-sift':
-    pinball_sift = False
   if o == '--pinplay-addr-trans':
     pinplay_addrtrans = True
   if o == '--sift':
@@ -383,10 +379,10 @@ for o, a in opts:
 
 
 if cmdline:
-  if use_mpi or use_sift:
-    standalone = True
-  else:
-    standalone = False
+  # Sniper always runs as its own binary, reading SIFT.  Running the whole
+  # simulator inside Pin (lib/pin_sim.so) was retired when the front end became
+  # a separate process over SIFT channels.
+  standalone = True
   if traces or trace_manual:
     print('Cannot combine traces with running a benchmark', file=sys.stderr)
     usage()
@@ -394,13 +390,10 @@ if cmdline:
     print('Cannot combine pinball use with running a benchmark', file=sys.stderr)
     usage()
 elif pinballs:
-  if len(pinballs) > 1 and not pinball_sift:
-    print('Cannot run multiple non-SIFT pinballs', file=sys.stderr)
-    usage()
   if sim_end.endswith('-restart'):
     print('Restart not supported in PinPlay mode', file=sys.stderr)
     usage()
-  standalone = pinball_sift
+  standalone = True
   if traces or trace_manual:
     print('Cannot combine a pinball with tracing (--traces= or --trace-manual)', file=sys.stderr)
     usage()
@@ -439,14 +432,9 @@ if standalone:
     print('Cannot use both --wrap-sim and --gdb at the same time [wrap-cmd="%(use_wrap_sim)s"]' % locals(), file=sys.stderr)
     sys.exit(-1)
   if follow_execv:
-    print('--follow-execv not supported in standalone mode', file=sys.stderr)
-    sys.exit(-1)
-else:
-  if use_wrap_sim:
-    print('--wrap-sim only supported in standalone mode [wrap-cmd="%(use_wrap_sim)s"]' % locals(), file=sys.stderr)
-    sys.exit(-1)
-  if follow_execv and use_gdb:
-    print('Cannot use both --follow-execv and --gdb at the same time', file=sys.stderr)
+    print('--follow-execv required running the simulator inside Pin, which has been removed.',
+          file=sys.stderr)
+    print('Use --sift (the default) and record child processes with record-trace.', file=sys.stderr)
     sys.exit(-1)
 
 if use_profile and use_memory_profile:
@@ -598,7 +586,7 @@ elif use_mpi:
   applications = [
     (mpiexec, other_options + [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]
-elif pinballs and pinball_sift:
+elif pinballs:
   tracegen = {}
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'false'
@@ -690,60 +678,9 @@ arch = config.get('target', 'intel64')
 env = run_sniper.setup_env(sim_root, pin_home, arch, standalone, xed_home, torch_home)
 
 optcmd = ''
+# Recorded into the results.  Only the retired in-Pin mode ever queried the kit
+# for a version, so this has been 'unknown' for SIFT runs all along.
 pin_version = 'unknown'
-pinoptions = ''
-if not standalone:
-  try:
-    pin_version = subprocess.Popen(['%(HOME)s/tools/pinversion.py' % locals(), pin_home], stdout = subprocess.PIPE).communicate()[0]
-    pin_version = int(pin_version.split('.')[2])
-    assert 10000 < pin_version < 1000000
-  except Exception as e:
-    print('Cannot get Pin version', file=sys.stderr)
-    print(file=sys.stderr)
-    print(e, file=sys.stderr)
-    print(pin_version, file=sys.stderr)
-    sys.exit(-1)
-
-  pinoptions = '-mt -injection child -ifeellucky'
-  if pin_version >= 49303:
-    pinoptions += ' -xyzzy' # TODO: Enable vsm once OpenMP thread exit is solved (Redmine #148)
-
-  if arch == 'ia32':
-    # Running Jikes (which is 32-bit) on Sandy Bridge machines sometimes seem to suffer from data corruption,
-    # leading to weird application crashes. This problem is gone when disabling AVX support.
-    # Note that this was on Pin 2.12.55942, later versions (up to 2.12.58423) have even worse problems
-    # (broken SMC or something, see http://groups.yahoo.com/neo/groups/pinheads/conversations/topics/9147 )
-    pinoptions += ' -xyzzy -allow_AVX_support 0'
-
-  if pin_stats:
-    pinoptions += ' -xyzzy -profile -statistic -log_inline'
-
-  if use_gdb:
-    pinoptions += ' -pause_tool 1'
-
-  if use_appdebug:
-    if appdebug_nowait:
-      pinoptions += ' -appdebug_enable -appdebug_silent'
-    else:
-      pinoptions += ' -appdebug'
-
-  if follow_execv:
-    pinoptions += ' -follow_execv 1'
-
-if pinballs and not pinball_sift:
-  optcmd += ' -replay -replay:basename "%s" -pinplay:msgfile "%s" -replay:resultfile "%s" --general/enable_pinplay=true' % (pinballs[0], os.path.join(outputdir,'pinball_replay'), os.path.join(outputdir,'pinball_result'))
-  if pinplay_addrtrans:
-    optcmd += " -replay:addr_trans"
-  else:
-    pinoptions += ' -xyzzy -reserve_memory "%s.address"' % (pinballs[0])
-  # Overwrite the cmdline with the nullapp, as the pinball will handle the appropriate processing
-  nullapp_path = '%(sde_home)s/%(arch)s/nullapp' % locals()
-  if use_pinplay:
-    nullapp_path = '%(pin_home)s/extras/pinplay/bin/%(arch)s/nullapp' % locals()
-  if not os.path.exists(nullapp_path):
-    print("Error: Unable to locate PinPlay's nullapp to play back a pinball", file=sys.stderr)
-    sys.exit(1)
-  cmdline = [nullapp_path]
 
 optcmd += ' -c %(sim_root)s/config/base.cfg --general/total_cores=%(ncores)u --general/output_dir=%(outputdir)s %(sniperoptions)s' % locals()
 if standalone:
@@ -771,12 +708,6 @@ if standalone:
     gdbcmd = ''
   sniper_bin = 'sniper_dev' if use_dev else 'sniper'
   cmd = gdbcmd + '%(HOME)s/lib/%(sniper_bin)s' % locals() + optcmd
-else:
-  if follow_execv:
-    pintool = 'follow_execv'
-  else:
-    pintool = 'pin_sim'
-  cmd = '%(pin_home)s/%(arch)s/bin/pinbin %(pinoptions)s -t %(sim_root)s/lib/%(pintool)s' % locals() + optcmd + ' -- ' + ' '.join(cmdline)
 
 queue = queue.Queue()
 
