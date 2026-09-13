@@ -81,3 +81,4 @@ sift/recorder/obj-intel64/
 
 # CMake build directories
 build/
+pin-log.txt
