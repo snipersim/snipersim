@@ -24,7 +24,6 @@ SIM_TARGETS += $(LIB_TORCH)
 endif
 export NO_TORCH
 
-PYTHON2=python2
 
 .PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed torch
 # Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
@@ -326,7 +325,6 @@ clean: empty_config empty_deps
 	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C frontend/pin-frontend clean ; fi
 	$(_MSG) '[CLEAN ] frontend/dr-frontend'
 	$(_CMD) if [ -d "$(SIM_ROOT)/frontend/dr-frontend/build" ]; then rm -rf $(SIM_ROOT)/frontend/dr-frontend/build ; fi
-	$(_CMD) rm -f .build_os
 
 distclean: clean
 	$(_MSG) '[DISTCL] Pin kit'

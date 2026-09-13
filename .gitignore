@@ -41,7 +41,6 @@ lib/sniper
 config/buildconf.*
 config/sniper.py
 docs
-.build_os
 include/linux/perf_event.h
 sift/libsift.a
 sift/siftdump
@@ -53,7 +52,6 @@ results/
 !results/.DO_NOT_DELETE
 
 # dependencies
-boost_1_38_0
 pin_kit
 linux_2_6_32
 mcpat
