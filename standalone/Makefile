@@ -26,8 +26,24 @@ TARGET = $(SIM_ROOT)/lib/sniper
 
 all: $(TARGET)
 
-$(SIM_ROOT)/lib/libcarbon_sim.a:
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
+# The libraries below are built by the top-level Makefile, which orders them
+# before recursing here ($(STANDALONE): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)).
+#
+# This used to recurse into common/ to build libcarbon_sim.a, and pin/Makefile
+# declared the very same rule, so under -j two make processes could write one
+# 200 MiB archive at the same time.  sift/libsift.a and decoder_lib/libdecoder.a
+# meanwhile were listed as prerequisites with no rule at all, which worked only
+# because the parent happened to build them first -- `make -n` from the top level
+# failed outright on it.
+#
+# Make the top level the single owner of all three, and fail with something
+# actionable rather than a bare "No rule to make target" if one is missing.
+$(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a $(SIM_ROOT)/decoder_lib/libdecoder.a:
+	@echo >&2
+	@echo "        $@ is missing." >&2
+	@echo "        Build from the top level:  make -C $(SIM_ROOT)" >&2
+	@echo >&2
+	@false
 
 $(TARGET): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a $(SIM_ROOT)/decoder_lib/libdecoder.a
 $(TARGET): $(OBJECTS)
