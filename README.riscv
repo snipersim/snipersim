@@ -81,7 +81,7 @@ Assumptions: You’ve own copy of SPEC CPU2006 v1.2 installed at $CPU2006_HOME
 2c. Sniper
 
 	cd $SNIPER_ROOT
-	make # Parallel builds currently broken
+	make -j $NPROC
 
 2d. Speckle
 
