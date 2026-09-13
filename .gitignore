@@ -78,3 +78,6 @@ testing/test_results/
 mimicos/build/
 pin-tool-log.txt
 sift/recorder/obj-intel64/
+
+# CMake build directories
+build/

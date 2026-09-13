@@ -1,0 +1,184 @@
+
+# Sniper — host-side build.
+#
+# Phase 1 of the build rework: this builds the parts of Sniper that use the host
+# toolchain (libcarbon_sim, libsift, libdecoder, lib/sniper, siftdump).  The
+# Pin/SDE recorder, the Pin frontend and the DynamoRIO frontend are still built
+# by the Makefile; the two coexist.
+#
+#   cmake -S . -B build/release -G Ninja
+#   cmake --build build/release
+#
+# The point of moving here is not the syntax.  It is that the build system
+# tracks the flags each object was compiled with, so changing a configuration
+# option rebuilds what that option affects.  With the recursive makefiles it did
+# not: `make DEBUG=1` on a release tree recompiled nothing and handed back the
+# release binary, and enabling RISC-V left all 237 core objects compiled with
+# SNIPER_RISCV=0 while the decoder was built with it set.
+
+cmake_minimum_required(VERSION 3.16)
+
+project(sniper
+  VERSION 8.1
+  DESCRIPTION "Sniper multi-core simulator"
+  LANGUAGES C CXX)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+include(SniperOptions)
+include(SniperDependencies)
+
+# ---------------------------------------------------------------------------
+# Shared compile settings
+# ---------------------------------------------------------------------------
+
+add_library(sniper_common INTERFACE)
+
+target_compile_features(sniper_common INTERFACE cxx_std_20)
+
+target_compile_options(sniper_common INTERFACE
+  -Wall -Wextra -Wcast-align
+  -Wno-unused-parameter -Wno-unknown-pragmas
+  -fno-strict-aliasing)
+
+target_compile_definitions(sniper_common INTERFACE
+  TARGET_INTEL64
+  TARGET_IA32E
+  PIN_REV=${SNIPER_PIN_REV}
+  SNIPER_RISCV=$<BOOL:${SNIPER_ENABLE_RISCV}>
+  SNIPER_ARM=$<BOOL:${SNIPER_ENABLE_ARM}>)
+
+# libtorch ships a pre-cxx11-ABI build, and every object that may end up in the
+# same link has to agree.  Confined to the torch-enabled configuration: with
+# torch off, Sniper builds with the platform's normal ABI.
+if(SNIPER_ENABLE_TORCH)
+  target_compile_definitions(sniper_common INTERFACE _GLIBCXX_USE_CXX11_ABI=0)
+endif()
+
+# Every directory under common/ is an include path, matching the historical
+# `find common -type d` behaviour: headers are included by bare name from
+# anywhere in the tree.
+file(GLOB_RECURSE _sniper_common_dirs LIST_DIRECTORIES true
+     "${CMAKE_CURRENT_SOURCE_DIR}/common/*")
+set(SNIPER_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/common")
+foreach(_d IN LISTS _sniper_common_dirs)
+  if(IS_DIRECTORY "${_d}")
+    list(APPEND SNIPER_INCLUDE_DIRS "${_d}")
+  endif()
+endforeach()
+list(APPEND SNIPER_INCLUDE_DIRS
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/sift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/decoder_lib"
+  "${CMAKE_CURRENT_SOURCE_DIR}/linux")
+
+target_include_directories(sniper_common INTERFACE ${SNIPER_INCLUDE_DIRS})
+
+if(SNIPER_CHAMPSIM_INCLUDE)
+  target_include_directories(sniper_common INTERFACE "${SNIPER_CHAMPSIM_INCLUDE}")
+endif()
+
+target_link_libraries(sniper_common INTERFACE
+  Sniper::Xed
+  Python3::Python
+  ${CMAKE_DL_LIBS}
+  rt z bz2 sqlite3 pthread)
+
+if(SNIPER_HAVE_LZMA)
+  target_link_libraries(sniper_common INTERFACE lzma)
+endif()
+
+if(SNIPER_ENABLE_TORCH)
+  target_link_libraries(sniper_common INTERFACE Sniper::Torch)
+endif()
+
+if(SNIPER_ENABLE_ARM OR SNIPER_ENABLE_DYNAMORIO)
+  target_include_directories(sniper_common INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/capstone/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/capstone/include/capstone")
+endif()
+
+# perf_event.h: copied from the running kernel's headers when available, with a
+# vendored fallback.  The Makefile did this with a shell conditional.
+set(_perf_event "${CMAKE_CURRENT_SOURCE_DIR}/include/linux/perf_event.h")
+if(NOT EXISTS "${_perf_event}")
+  if(EXISTS "/usr/include/linux/perf_event.h")
+    configure_file("/usr/include/linux/perf_event.h" "${_perf_event}" COPYONLY)
+  else()
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/include/linux/perf_event_2.6.32.h"
+                   "${_perf_event}" COPYONLY)
+  endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# Targets
+# ---------------------------------------------------------------------------
+
+# SIFT, host ABI.  An object library so the trace reader and siftdump share one
+# compile; the PinCRT variant is a separate target, added in phase 2.
+file(GLOB SIFT_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/sift/*.cc")
+list(REMOVE_ITEM SIFT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/sift/siftdump.cc")
+
+add_library(sift STATIC ${SIFT_SOURCES})
+target_link_libraries(sift PUBLIC sniper_common)
+set_target_properties(sift PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_executable(siftdump "${CMAKE_CURRENT_SOURCE_DIR}/sift/siftdump.cc")
+target_link_libraries(siftdump PRIVATE sift sniper_common)
+
+# Instruction decoders.  RISC-V and ARM sources are compiled only when their
+# option is on -- previously a filter-out driven by whether a sibling checkout
+# happened to exist next to the repository.
+file(GLOB DECODER_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decoder_lib/*.cc")
+if(NOT SNIPER_ENABLE_RISCV)
+  list(FILTER DECODER_SOURCES EXCLUDE REGEX "/riscv[^/]*\\.cc$")
+endif()
+if(NOT SNIPER_ENABLE_ARM)
+  list(FILTER DECODER_SOURCES EXCLUDE REGEX "/arm[^/]*\\.cc$")
+endif()
+
+add_library(decoder STATIC ${DECODER_SOURCES})
+target_link_libraries(decoder PUBLIC sniper_common)
+set_target_properties(decoder PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(SNIPER_ENABLE_RISCV)
+  target_include_directories(decoder PRIVATE "${SNIPER_RV8_HOME}/src")
+endif()
+
+# The simulator core.
+file(GLOB_RECURSE CARBON_SOURCES CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/common/*.cc"
+     "${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp")
+
+add_library(carbon STATIC ${CARBON_SOURCES})
+target_link_libraries(carbon PUBLIC sniper_common sift decoder)
+set_target_properties(carbon PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The simulator binary.
+file(GLOB STANDALONE_SOURCES CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/standalone/*.cc")
+
+add_executable(sniper ${STANDALONE_SOURCES})
+target_link_libraries(sniper PRIVATE carbon sift decoder sniper_common)
+target_link_options(sniper PRIVATE -no-pie)
+
+# Artifacts stay inside the build directory.  That is the whole point of the
+# exercise: two configurations can exist at once, which they cannot while every
+# path in the tree is fixed.
+set_target_properties(sniper siftdump PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+set_target_properties(carbon PROPERTIES OUTPUT_NAME carbon_sim)
+
+# run-sniper still looks for $SNIPER_ROOT/lib/sniper, so until it learns to
+# resolve a build directory (phase 3) there has to be a way to point it at one.
+# Opt in, and only one build directory may claim the tree at a time.
+option(SNIPER_LINK_INTO_TREE
+       "Point <source>/lib/sniper at this build directory, for run-sniper" OFF)
+if(SNIPER_LINK_INTO_TREE)
+  add_custom_command(TARGET sniper POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+    COMMAND "${CMAKE_COMMAND}" -E create_symlink
+            "$<TARGET_FILE:sniper>" "${CMAKE_CURRENT_SOURCE_DIR}/lib/sniper"
+    COMMENT "Linking lib/sniper -> ${CMAKE_BINARY_DIR}/lib/sniper")
+endif()
+
+sniper_print_configuration()
