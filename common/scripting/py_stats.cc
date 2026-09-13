@@ -106,6 +106,11 @@ writeStats(PyObject *self, PyObject *args)
 
 static UInt64 statsCallback(String objectName, UInt32 index, String metricName, UInt64 _pFunc)
 {
+   // This callback is invoked from simulator context (e.g. an automatic roi-begin/roi-end
+   // snapshot), where the GIL is NOT held: HooksPy::init() ends with PyEval_SaveThread().
+   // Every callback in py_hooks.cc already does this; this one was missing it.
+   PyGILState_STATE state = PyGILState_Ensure();
+
    PyObject *pFunc = (PyObject*)_pFunc;
    PyObject *pResult = HooksPy::callPythonFunction(pFunc, Py_BuildValue("(sls)", objectName.c_str(), index, metricName.c_str()));
 
@@ -113,12 +118,14 @@ static UInt64 statsCallback(String objectName, UInt32 index, String metricName, 
       LOG_PRINT_WARNING("Stats callback: return value must be (convertable into) 64-bit unsigned integer");
       if (pResult)
          Py_XDECREF(pResult);
+      PyGILState_Release(state);
       return 0;
    }
 
    UInt64 val = PyLong_AsLongLong(pResult);
    Py_XDECREF(pResult);
 
+   PyGILState_Release(state);
    return val;
 }
 
