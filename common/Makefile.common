@@ -49,14 +49,33 @@ ifneq ($(BOOST_INCLUDE),)
 	CPPFLAGS += -I$(BOOST_INCLUDE)
 endif
 
-# Assuming python3 include dir is within the gcc search path
-PYTHON_LD_LIBS := $(shell python3-config --libs --embed)
+# Python interpreter used for the embedded scripting hooks (common/scripting).
+# Override PYTHON_CONFIG to build against an interpreter that is not the system
+# python3 -- conda, pyenv, spack, an HPC `module load python`, etc:
+#   make PYTHON_CONFIG=/opt/python-3.12/bin/python3-config
+comma := ,
+PYTHON_CONFIG ?= python3-config
+ifeq ($(CLEAN),)
+  ifeq ($(shell command -v $(PYTHON_CONFIG) 2>/dev/null),)
+    $(error Cannot find '$(PYTHON_CONFIG)'. Install python3-dev / python3-devel, or set \
+            PYTHON_CONFIG to the python3-config of the interpreter to build against.)
+  endif
+endif
+PYTHON_LD_LIBS := $(shell $(PYTHON_CONFIG) --libs --embed)
+# --ldflags carries the -L for libpython; --libs alone does not, so linking against
+# any interpreter outside the default linker search path fails without this.
+PYTHON_LD_FLAGS := $(shell $(PYTHON_CONFIG) --ldflags)
+# Record libpython's directory in the binary so it is also found at run time,
+# without each caller having to set LD_LIBRARY_PATH by hand.
+PYTHON_LIB_DIR := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LD_FLAGS)))
+PYTHON_RPATH := $(foreach d,$(PYTHON_LIB_DIR),-Wl$(comma)-rpath$(comma)$(d))
 HAVE_LZMA := $(shell printf 'int main() { return 0; }\n' | $(CXX) -xc++ - -llzma >/dev/null 2>&1 && echo 1 || echo 0)
 LZMA_LINK_LIBS := $(if $(filter 1,$(HAVE_LZMA)),-llzma,)
 TORCH_LINK_LIBS := $(if $(wildcard $(SIM_ROOT)/libtorch/lib/libtorch.so),-ltorch,) $(if $(wildcard $(SIM_ROOT)/libtorch/lib/libc10.so),-lc10,)
 LD_LIBS += -ldecoder -lsift -lxed -lrt -lz -lbz2 $(LZMA_LINK_LIBS) -lsqlite3 $(PYTHON_LD_LIBS) $(TORCH_LINK_LIBS)
 
 LD_FLAGS += -L$(SIM_ROOT)/lib -L$(SIM_ROOT)/decoder_lib/ -L$(SIM_ROOT)/sift -L$(XED_HOME)/lib -L$(SIM_ROOT)/libtorch/lib
+LD_FLAGS += $(PYTHON_LD_FLAGS) $(PYTHON_RPATH)
 
 ifneq ($(SQLITE_PATH),)
 	CPPFLAGS += -I$(SQLITE_PATH)/include
@@ -66,7 +85,7 @@ endif
 export LD_LIBRARY_PATH := $(SIM_ROOT)/lib:$(LD_LIBRARY_PATH)
 
 # Include paths
-PYTHON_INCLUD_PATH := $(shell python3-config --includes)
+PYTHON_INCLUD_PATH := $(shell $(PYTHON_CONFIG) --includes)
 CPPFLAGS+=$(foreach dir,$(INCLUDE_DIRECTORIES),-I$(dir)) \
 	  $(PYTHON_INCLUD_PATH) \
           -I$(SIM_ROOT)/capstone/include -I$(SIM_ROOT)/capstone/include/capstone \
