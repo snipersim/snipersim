@@ -1,3 +1,10 @@
+# common/Makefile and standalone/ and pin/ each include this three times, sift/
+# and decoder_lib/ twice.  The pattern rules are idempotent but the probes at the
+# top of the file are not: each pass re-ran python3-config twice, pinversion.py,
+# a compiler version query, a find over common/, and a live test compile.
+ifndef SNIPER_MAKEFILE_COMMON_INCLUDED
+SNIPER_MAKEFILE_COMMON_INCLUDED := 1
+
 SIM_ROOT ?= $(shell readlink -f "$(CURDIR)/../")
 
 include $(SIM_ROOT)/Makefile.config
@@ -127,13 +134,15 @@ DEPFLAGS = -MMD -MP
 
 # Build rules for object generation
 %.o: %.cpp
-	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[CXX   ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 %.o : %.cc
-	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[CXX   ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 %.o : %.c
-	$(_MSG) '[CC    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[CC    ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CC) $(CPPFLAGS) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
+
+endif # SNIPER_MAKEFILE_COMMON_INCLUDED

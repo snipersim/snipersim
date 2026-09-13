@@ -34,15 +34,15 @@ include ../common/Makefile.common
 CXXFLAGS+=-fPIC $(CXXFLAGS_ARCH)
 
 %.o : %.cc $(wildcard *.h)
-	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[CXX   ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) -c -o $@ $< $(CXXFLAGS) $(DEPFLAGS)
 
 $(TARGET) : $(OBJECTS)
-	$(_MSG) '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[AR    ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(AR) rcs $@ $^
 
 siftdump : siftdump.o $(TARGET)
-	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[CXX   ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L. -lsift -lz -lbz2 $(LZMA_LIBS)
 
 recorder : $(TARGET)

@@ -31,7 +31,7 @@ $(SIM_ROOT)/lib/libcarbon_sim.a:
 
 $(TARGET): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a $(SIM_ROOT)/decoder_lib/libdecoder.a
 $(TARGET): $(OBJECTS)
-	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[LD    ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(OPT_CFLAGS) -std=c++0x
 
 # This include must be here

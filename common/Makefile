@@ -21,7 +21,7 @@ include $(SIM_ROOT)/common/Makefile.common
 #  - OBJECTS depends on DIRECTORIES which is in the Makefile.common make file
 #  - Therefore, we need to include the other makefile first before setting this target
 $(TARGET): $(OBJECTS)
-	$(_MSG) '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[AR    ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) ar rcs $@ $^
 
 ifneq ($(CLEAN),clean)

@@ -63,11 +63,11 @@ $(SIM_ROOT)/lib/libcarbon_sim.a:
 
 $(TARGET_LIB): $(SIM_ROOT)/lib/libcarbon_sim.a $(SIM_ROOT)/sift/libsift.a $(CONTROLLERLIB)
 $(TARGET_LIB): $(OBJECTS)
-	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[LD    ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ $(OBJECTS) $(LD_LIBS) $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) $(CONTROLLERLIB) -std=c++0x
 
 $(FOLLOW_LIB): follow_execv/follow_execv.o $(CONTROLLERLIB)
-	$(_MSG) '[LD    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[LD    ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) $(TOOL_LDFLAGS) $(LD_FLAGS) -o $@ follow_execv/follow_execv.o $(TOOL_LPATHS) $(TOOL_LIBS) $(OPT_CFLAGS) $(CONTROLLERLIB) -std=c++0x
 
 # Build the Pin controller library when necessary

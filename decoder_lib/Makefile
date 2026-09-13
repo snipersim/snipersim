@@ -22,7 +22,7 @@ ifeq ($(BUILD_ARM),0)
 OBJECTS:=$(filter-out arm%,$(OBJECTS))
 endif
 
-all : $(TARGET) 
+all : $(TARGET)
 
 include ../common/Makefile.common
 
@@ -37,16 +37,16 @@ CXXFLAGS+=-std=c++1y -fPIC -I$(XED_HOME)/include/xed -I$(RV8_HOME)/src $(CXXFLAG
 #CXXFLAHS+=-fabi-version=2
 
 %.o : %.cc $(wildcard *.h) Makefile
-	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@)) 
+	$(_MSG) '[CXX   ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(CXX) -c -o $@ $< $(CXXFLAGS) $(DEPFLAGS)
 
 $(TARGET) : $(OBJECTS)
-	$(_MSG) '[AR    ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_MSG) '[AR    ]' $(subst $(SIM_ROOT_ABS)/,,$(abspath $@))
 	$(_CMD) $(AR) rcs $@ $^
 
 clean :
 #	@echo $(XED_HOME)
-	$(_CMD) rm -f *.o *.d $(TARGET) 
+	$(_CMD) rm -f *.o *.d $(TARGET)
 	$(_MSG) '[CLEAN ] libdecoder'
 
 ifneq ($(CLEAN),clean)
