@@ -181,4 +181,15 @@ if(SNIPER_LINK_INTO_TREE)
     COMMENT "Linking lib/sniper -> ${CMAKE_BINARY_DIR}/lib/sniper")
 endif()
 
+# ---------------------------------------------------------------------------
+# Pin-side targets
+# ---------------------------------------------------------------------------
+
+# Pin's flags carry their own optimisation level, their own C++ runtime and
+# -nostdlib.  CMake's per-configuration flags on top of that produce a link that
+# mixes two runtimes, so strip them for Pin-side targets.
+set(SNIPER_PIN_NO_HOST_FLAGS "")
+find_package(Pin)
+include(SniperPinTools)
+
 sniper_print_configuration()

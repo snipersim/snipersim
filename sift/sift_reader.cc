@@ -8,6 +8,7 @@
 #include <fstream>
 #include <cassert>
 #include <cstring>
+#include <cstdlib>
 #include <algorithm>
 #include <string>
 #include <sys/types.h>
