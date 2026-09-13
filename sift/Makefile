@@ -1,7 +1,8 @@
 SOURCES=$(filter-out siftdump.cc,$(wildcard *.cc))
 OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
 TARGET=libsift.a
-HAVE_LZMA:=$(shell printf '#include <lzma.h>\nint main() { lzma_stream s = LZMA_STREAM_INIT; return (int)s.avail_in; }\n' | $(CXX) -xc++ - -llzma >/dev/null 2>&1 && echo 1 || echo 0)
+# -o /dev/null: without it this probe leaves an a.out behind in sift/.
+HAVE_LZMA:=$(shell printf '#include <lzma.h>\nint main() { lzma_stream s = LZMA_STREAM_INIT; return (int)s.avail_in; }\n' | $(CXX) -xc++ - -llzma -o /dev/null >/dev/null 2>&1 && echo 1 || echo 0)
 LZMA_LIBS=$(if $(filter 1,$(HAVE_LZMA)),-llzma,)
 
 include ../common/Makefile.common

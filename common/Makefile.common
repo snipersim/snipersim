@@ -73,7 +73,10 @@ PYTHON_LD_FLAGS := $(shell $(PYTHON_CONFIG) --ldflags)
 # without each caller having to set LD_LIBRARY_PATH by hand.
 PYTHON_LIB_DIR := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LD_FLAGS)))
 PYTHON_RPATH := $(foreach d,$(PYTHON_LIB_DIR),-Wl$(comma)-rpath$(comma)$(d))
-HAVE_LZMA := $(shell printf 'int main() { return 0; }\n' | $(CXX) -xc++ - -llzma >/dev/null 2>&1 && echo 1 || echo 0)
+# Probe for liblzma.  Without -o the probe drops an a.out into whatever directory
+# make happens to be running in, and it must include <lzma.h> -- testing only that
+# -llzma links says nothing about whether the header is installed.
+HAVE_LZMA := $(shell printf '#include <lzma.h>\nint main() { lzma_stream s = LZMA_STREAM_INIT; return (int)s.avail_in; }\n' | $(CXX) -xc++ - -llzma -o /dev/null >/dev/null 2>&1 && echo 1 || echo 0)
 LZMA_LINK_LIBS := $(if $(filter 1,$(HAVE_LZMA)),-llzma,)
 # Keyed off the option, not off whether a previous build left the tarball behind:
 # probing the filesystem meant NO_TORCH=1 still linked torch on any tree that had
