@@ -1,0 +1,128 @@
+{
+  "_comment": [
+    "Every external dependency Sniper fetches, declared in one place.",
+    "",
+    "Previously these were ~100 lines of ad-hoc wget and git rules scattered",
+    "through the top-level Makefile, with no checksums, no inventory, and a",
+    "private copy downloaded into every checkout.",
+    "",
+    "'sha256' is verified after download.  null means not yet pinned; run",
+    "  deps/sniper-deps pin <name>",
+    "to download once and record the digest.",
+    "",
+    "'when' lists build options that must be enabled for the dependency to be",
+    "needed.  An empty list means always.  'frontend:sde' matches the frontend",
+    "selection; a bare name like 'torch' matches an enabled feature.",
+    "",
+    "'install_path' is where the source tree expects to find it.  The fetcher",
+    "unpacks into a shared content-addressed cache and symlinks this path at it,",
+    "so several checkouts share one copy and the existing makefiles keep working."
+  ],
+  "version": 1,
+  "dependencies": {
+    "sde": {
+      "kind": "tarball",
+      "version": "9.44.0-2024-08-22",
+      "url": "https://snipersim.org/packages/sde-external-9.44.0-2024-08-22-lin.tar.xz",
+      "sha256": "c6bc16fc6d1855049ea22daf214a8c00331713bc6a7b0c4d6955d6ed84148b9b",
+      "strip_components": 1,
+      "install_path": "sde_kit",
+      "when": ["frontend:sde"],
+      "marker": "intel64/pin_lib/libpindwarf.so",
+      "post_prune": ["pinkit/source/tools/InstLib"],
+      "description": "Intel Software Development Emulator; provides the Pin kit used by the SIFT recorder"
+    },
+    "pinplay-tools": {
+      "kind": "git",
+      "url": "https://github.com/intel/pinplay-tools",
+      "rev": "17ccab4f1326fdef96a2621c3c7e374ee26c160a",
+      "install_path": "pinplay-tools",
+      "when": ["frontend:sde"],
+      "marker": "pinplay-scripts",
+      "description": "PinPlay helper scripts used by the SDE recorder build. Kept at the top level rather than under sde_kit/, which is a symlink into the shared cache"
+    },
+    "pin": {
+      "kind": "tarball",
+      "version": "3.31-98869-gfa6f126a8",
+      "url": "https://snipersim.org/packages/pin-external-3.31-98869-gfa6f126a8-gcc-linux.tar.gz",
+      "sha256": "82216144e3df768f0203b671ff48605314f13266903eb42dac01b91310eba956",
+      "strip_components": 1,
+      "install_path": "pin_kit",
+      "when": ["frontend:pin"],
+      "marker": "intel64/lib/libpindwarf.so",
+      "description": "Intel Pin kit, for the plain-Pin frontend"
+    },
+    "pinplay": {
+      "kind": "tarball",
+      "version": "3.11-pin-3.11-97998-g7ecce2dac",
+      "url": "https://snipersim.org/packages/pinplay-dcfg-3.11-pin-3.11-97998-g7ecce2dac-gcc-linux.tar.bz2",
+      "sha256": "d584efb868217fea1ca2796ad5f41eb61679c2769fc859dd299a6fd5bf175f45",
+      "strip_components": 1,
+      "install_path": "pin_kit",
+      "when": ["frontend:pinplay"],
+      "marker": "intel64/lib-ext/libpin3dwarf.so",
+      "description": "PinPlay-enabled Pin kit"
+    },
+    "xed": {
+      "kind": "git",
+      "url": "https://github.com/intelxed/xed.git",
+      "rev": "b86dd5014463d954bc8898d2376b14852d26facd",
+      "install_path": "xed",
+      "when": [],
+      "marker": "src/common/xed-init.c",
+      "description": "Intel X86 Encoder Decoder; built into xed_kit by mfile.py"
+    },
+    "mbuild": {
+      "kind": "git",
+      "url": "https://github.com/intelxed/mbuild.git",
+      "rev": "f32bc9b31f9fc5a0be3dc88cd2086b70270295ab",
+      "install_path": "mbuild",
+      "when": [],
+      "marker": "mbuild/arar.py",
+      "description": "Build system XED's mfile.py requires"
+    },
+    "mcpat": {
+      "kind": "tarball",
+      "version": "1.0",
+      "url": "https://snipersim.org/packages/mcpat-1.0.tgz",
+      "sha256": "1e230fc90c1621833724b27f57f5170d2cf33c1e9ec50cc33b9ee71902f21128",
+      "strip_components": 0,
+      "install_path": "mcpat",
+      "when": ["mcpat"],
+      "marker": "mcpat-1.0",
+      "description": "Power and area model. Was the one dependency pinned to no version at all"
+    },
+    "libtorch": {
+      "kind": "tarball",
+      "version": "2.5.0",
+      "url": "https://snipersim.org/packages/libtorch-shared-with-deps-2.5.0-cpu.tar.gz",
+      "sha256": "006c5eaa2026331235c4ef88b5b5bca771b6a8e1051439f885d67b10599ecdc4",
+      "strip_components": 1,
+      "install_path": "libtorch",
+      "when": ["torch"],
+      "marker": "lib/libtorch.so",
+      "abi": "pre-cxx11",
+      "description": "CPU libtorch for the neural-net branch predictor. This is the pre-cxx11-ABI build, which is why the whole tree is compiled -D_GLIBCXX_USE_CXX11_ABI=0"
+    },
+    "capstone": {
+      "kind": "git",
+      "url": "https://github.com/aquynh/capstone.git",
+      "rev": "f9c6a90489be7b3637ff1c7298e45efafe7cf1b9",
+      "install_path": "capstone",
+      "when": ["arm", "dynamorio"],
+      "when_any": true,
+      "marker": "arch/AArch64/ARMMappingInsnOp.inc",
+      "description": "Disassembly framework used by the ARM decoder and the DynamoRIO frontend"
+    },
+    "dynamorio": {
+      "kind": "git",
+      "url": "https://github.com/DynamoRIO/dynamorio.git",
+      "rev": "246ddb28e7848b2d09d2b9909f99a6da9b2ce35e",
+      "recursive": true,
+      "install_path": "dynamorio",
+      "when": ["dynamorio"],
+      "marker": "CMakeLists.txt",
+      "description": "DynamoRIO, for the ARM/DR frontend"
+    }
+  }
+}

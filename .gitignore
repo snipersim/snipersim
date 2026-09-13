@@ -7,6 +7,10 @@ xed
 tags
 tmp/
 *.json
+# ...but the build's own JSON is source, not output.
+!CMakePresets.json
+!CMakeUserPresets.json
+!deps/manifest.json
 # emacs temp files
 *~
 

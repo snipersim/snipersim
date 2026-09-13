@@ -2,7 +2,7 @@
 # Copyright (c) 2010-2015 Google, Inc.    All rights reserved.
 # Copyright (c) 2009-2010 VMware, Inc.    All rights reserved.
 # **********************************************************
-
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
@@ -11,7 +11,7 @@
 #
 # * Redistributions in binary form must reproduce the above copyright notice,
 #   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
+#   and/or other materials distributed with the distribution.
 #
 # * Neither the name of VMware, Inc. nor the names of its contributors may be
 #   used to endorse or promote products derived from this software without
@@ -29,68 +29,71 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 # DAMAGE.
 
-cmake_minimum_required(VERSION 2.6...2.8.12)
-
-project(dr-frontend)
-
-get_filename_component(SNIPER_FE_HOME ${CMAKE_CURRENT_LIST_DIR} PATH)
-get_filename_component(SNIPER_HOME ${SNIPER_FE_HOME} PATH)
-
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g")
-
-set(SNIPER_FRONTEND ${SNIPER_HOME}/frontend)
-set(SNIPER_SIFT ${SNIPER_HOME}/sift)
-
-include_directories(${SNIPER_FRONTEND} ${SNIPER_SIFT})
-
-set(HEADER_FILES ${SNIPER_FRONTEND}/frontend.h ${SNIPER_FRONTEND}/frontend_threads.h ${SNIPER_FRONTEND}/frontend_defs.h ${SNIPER_FRONTEND}/bbv_count.h ${SNIPER_FRONTEND}/frontend_callbacks.h ${SNIPER_FRONTEND}/frontend_control.h ${SNIPER_FRONTEND}/frontend_options.h ${SNIPER_FRONTEND}/frontend_syscall.h ${SNIPER_FRONTEND}/frontend_utils.h)
-
-#todo: include options and defs headers
+# Built as part of the main project when SNIPER_ENABLE_DYNAMORIO is on, rather
+# than as a standalone project configured by hand into its own build/ directory
+# with a cmake invocation buried in the top-level Makefile.
+#
+# Changes from the standalone version:
+#  - no project() call, since this is now a subdirectory
+#  - links the `sift` target instead of a hardcoded path to sift/libsift.a, so
+#    the dependency is expressed rather than assumed to have been built already
+#  - SNIPER_FRONTEND_DIR, not SNIPER_FRONTEND: the latter is now the option that
+#    selects the instrumentation frontend
 
 find_package(DynamoRIO)
-if (NOT DynamoRIO_FOUND)
-  message(FATAL_ERROR "DynamoRIO package required to build")
-endif(NOT DynamoRIO_FOUND)
+if(NOT DynamoRIO_FOUND)
+  message(FATAL_ERROR
+    "DynamoRIO not found.\n"
+    "  Fetch it:  deps/sniper-deps --dynamorio fetch\n"
+    "  then build it, and configure with -DDynamoRIO_DIR=<dynamorio>/build/cmake\n"
+    "  or turn the frontend off with -DSNIPER_ENABLE_DYNAMORIO=OFF.")
+endif()
 
-add_library(dr-frontend SHARED
-       dr_frontend.cc 
-       ${SNIPER_FRONTEND}/bbv_count.cc 
-       ${HEADER_FILES})
+set(SNIPER_FRONTEND_DIR "${CMAKE_SOURCE_DIR}/frontend")
 
-# sniper's libraries and others
-find_library(libz z)
-target_link_libraries(dr-frontend 
-        ${SNIPER_HOME}/sift/libsift.a
-        ${libz})
+set(DR_FRONTEND_HEADERS
+  ${SNIPER_FRONTEND_DIR}/frontend.h
+  ${SNIPER_FRONTEND_DIR}/frontend_threads.h
+  ${SNIPER_FRONTEND_DIR}/frontend_defs.h
+  ${SNIPER_FRONTEND_DIR}/bbv_count.h
+  ${SNIPER_FRONTEND_DIR}/frontend_callbacks.h
+  ${SNIPER_FRONTEND_DIR}/frontend_control.h
+  ${SNIPER_FRONTEND_DIR}/frontend_options.h
+  ${SNIPER_FRONTEND_DIR}/frontend_syscall.h
+  ${SNIPER_FRONTEND_DIR}/frontend_utils.h)
 
-configure_DynamoRIO_client(dr-frontend)
-use_DynamoRIO_extension(dr-frontend drmgr)
-use_DynamoRIO_extension(dr-frontend droption)
-use_DynamoRIO_extension(dr-frontend drreg)
-use_DynamoRIO_extension(dr-frontend drutil)
+add_library(dr_frontend SHARED
+  dr_frontend.cc
+  ${SNIPER_FRONTEND_DIR}/bbv_count.cc
+  ${DR_FRONTEND_HEADERS})
 
-# Provide a hint for how to use the client
-if (NOT DynamoRIO_INTERNAL OR NOT "${CMAKE_GENERATOR}" MATCHES "Ninja")
-  add_custom_command(TARGET dr-frontend
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND}
-    ARGS -E echo "Usage: pass to drconfig or drrun: -t dr-frontend"
-    VERBATIM)
-endif ()
+target_include_directories(dr_frontend PRIVATE
+  "${SNIPER_FRONTEND_DIR}"
+  "${CMAKE_SOURCE_DIR}/sift"
+  "${CMAKE_SOURCE_DIR}/common/misc")
 
-set(INSTALL_DRLTRACE_CONFIG ${INSTALL_CLIENTS_BASE})
+target_link_libraries(dr_frontend PRIVATE sift z)
 
-if (X64)
-  set(CONFIG ${PROJECT_BINARY_DIR}/dr-frontend.drrun64)
-else (X64)
-  set(CONFIG ${PROJECT_BINARY_DIR}/dr-frontend.drrun32)
-endif (X64)
+set_target_properties(dr_frontend PROPERTIES
+  CXX_STANDARD 11
+  CXX_EXTENSIONS OFF
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
-file(WRITE  ${CONFIG} "# dr-frontend tool config file\n")
-file(APPEND ${CONFIG} "# DynamoRIO options: may as well optimize the bb lock\n")
-file(APPEND ${CONFIG} "DR_OP=-nop_initial_bblock\n")
-file(APPEND ${CONFIG} "# client tool path\n")
-file(APPEND ${CONFIG} "CLIENT_REL=${INSTALL_CLIENTS_LIB}/${LIB_PFX}dr-frontend${LIB_EXT}\n")
-file(APPEND ${CONFIG} "# client tool options\n")
-file(APPEND ${CONFIG} "TOOL_OP=\n")
+configure_DynamoRIO_client(dr_frontend)
+foreach(_ext drmgr droption drreg drutil)
+  use_DynamoRIO_extension(dr_frontend ${_ext})
+endforeach()
+
+# Config file telling drrun how to load the client.
+if(X64)
+  set(_dr_config "${CMAKE_BINARY_DIR}/lib/dr-frontend.drrun64")
+else()
+  set(_dr_config "${CMAKE_BINARY_DIR}/lib/dr-frontend.drrun32")
+endif()
+file(WRITE  ${_dr_config} "# dr-frontend tool config file\n")
+file(APPEND ${_dr_config} "# DynamoRIO options: may as well optimize the bb lock\n")
+file(APPEND ${_dr_config} "DR_OP=-nop_initial_bblock\n")
+file(APPEND ${_dr_config} "# client tool path\n")
+file(APPEND ${_dr_config} "CLIENT_REL=${INSTALL_CLIENTS_LIB}/${LIB_PFX}dr-frontend${LIB_EXT}\n")
+file(APPEND ${_dr_config} "# client tool options\n")
+file(APPEND ${_dr_config} "TOOL_OP=\n")

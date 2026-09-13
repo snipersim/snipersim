@@ -192,6 +192,12 @@ set(SNIPER_PIN_NO_HOST_FLAGS "")
 find_package(Pin)
 include(SniperPinTools)
 
+# The DynamoRIO frontend, built in the same tree rather than configured by hand
+# into its own build directory from a rule in the Makefile.
+if(SNIPER_ENABLE_DYNAMORIO)
+  add_subdirectory(frontend/dr-frontend)
+endif()
+
 # ---------------------------------------------------------------------------
 # What the runtime tools need to know about this build
 # ---------------------------------------------------------------------------
