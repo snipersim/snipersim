@@ -40,6 +40,9 @@ RISCV ?= OFF
 ARM ?= OFF
 DYNAMORIO ?= OFF
 BUILD_TYPE ?= Release
+RV8_HOME ?=
+DYNAMORIO_DIR ?=
+CMAKE_ARGS ?=
 
 _deps_flags := --frontend $(FRONTEND)
 _deps_flags += $(if $(filter ON,$(TORCH)),,--no-torch)
@@ -55,6 +58,13 @@ _cmake_flags += -DSNIPER_ENABLE_MCPAT=$(MCPAT)
 _cmake_flags += -DSNIPER_ENABLE_RISCV=$(RISCV)
 _cmake_flags += -DSNIPER_ENABLE_ARM=$(ARM)
 _cmake_flags += -DSNIPER_ENABLE_DYNAMORIO=$(DYNAMORIO)
+
+# Locations that are not always where the build would guess.
+_cmake_flags += $(if $(RV8_HOME),-DSNIPER_RV8_HOME=$(RV8_HOME),)
+_cmake_flags += $(if $(DYNAMORIO_DIR),-DDynamoRIO_DIR=$(DYNAMORIO_DIR),)
+
+# Escape hatch: anything else, straight through.  `make CMAKE_ARGS=-DFoo=Bar`.
+_cmake_flags += $(CMAKE_ARGS)
 
 # Ninja when it is available; CMake's default generator otherwise.
 #
