@@ -28,6 +28,24 @@ Measured 3,003,008 — exact, and unchanged across repeated runs and under
 `-smp 4`. Cross-checked against the DynamoRIO frontend on the same user-mode
 binary: 32,057,806 (DR) vs 32,049,836 (QEMU), 0.025% apart.
 
+**Paged VA -> PA translation is correct.** `boot64.S` enters long mode with
+4-level paging and maps VA `0x40000000` to PA `0x200000` -- deliberately not an
+identity mapping, so no shortcut can produce the right answer.
+
+```
+qemu-system-x86_64 -nographic -accel tcg -m 128 \
+  -drive file=boot64.img,format=raw,if=floppy \
+  -plugin ./probe.so,watch=0x40000000 -no-reboot
+```
+
+```
+PROBE WATCH va=0x40000000 hwaddr_pa=0x200000 translate_vaddr=0x200000 store
+PROBE WATCH va=0x40000000 hwaddr_pa=0x200000 translate_vaddr=0x200000 load
+```
+
+Both `qemu_plugin_hwaddr_phys_addr()` and `qemu_plugin_translate_vaddr()` --
+independent paths -- agree with the page tables the guest built.
+
 **Time control works.** `qemu_plugin_request_time_control()` is granted in
 system mode and `qemu_plugin_update_ns()` drives guest time. This is what lets
 Sniper own simulated time without holding a vCPU.
@@ -62,6 +80,7 @@ blockfrom=N   only block vCPUs with index >= N
 barrier       block until a peer vCPU advances (models Sniper flow control)
 time          request time control and drive guest time (system mode)
 lo=,hi=       count only instructions in [lo, hi)
+watch=VA      report the physical address a virtual address resolves to
 ```
 
 ## API versions

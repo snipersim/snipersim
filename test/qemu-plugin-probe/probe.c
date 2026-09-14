@@ -39,6 +39,7 @@ static uint64_t total_traps, total_mem, total_flush;
 static uint64_t range_lo, range_hi, range_count;
 static uint64_t syscalls;
 static int have_pa; static uint64_t first_pa, first_pa_va; static uint64_t pa_ok, pa_io;
+static uint64_t watch_va; static int watch_hits;
 static int64_t first_sys_num = -1;
 static uint64_t first_sys_a1;
 
@@ -116,6 +117,25 @@ static void mem_cb(unsigned int cpu_index, qemu_plugin_meminfo_t info,
     g_mutex_lock(&lock);
     total_mem++;
     /* Physical address: only meaningful in system emulation. */
+    /* A watched virtual address: report what the two independent translation
+     * paths say, so a known mapping can be checked rather than assumed. */
+    if (watch_va && vaddr == watch_va && watch_hits < 4) {
+        watch_hits++;
+        struct qemu_plugin_hwaddr *w = qemu_plugin_get_hwaddr(info, vaddr);
+        uint64_t pa_hw = w ? qemu_plugin_hwaddr_phys_addr(w) : 0;
+#if QEMU_PLUGIN_VERSION >= 5
+        uint64_t pa_tr = 0;
+        int ok = qemu_plugin_translate_vaddr(vaddr, &pa_tr);
+        fprintf(stderr, "PROBE WATCH va=0x%" PRIx64 " hwaddr_pa=0x%" PRIx64
+                        " translate_vaddr=%s0x%" PRIx64 " %s\n",
+                vaddr, pa_hw, ok ? "" : "(failed) ", pa_tr,
+                qemu_plugin_mem_is_store(info) ? "store" : "load");
+#else
+        fprintf(stderr, "PROBE WATCH va=0x%" PRIx64 " hwaddr_pa=0x%" PRIx64 " %s\n",
+                vaddr, pa_hw, qemu_plugin_mem_is_store(info) ? "store" : "load");
+#endif
+    }
+
     struct qemu_plugin_hwaddr *hw = qemu_plugin_get_hwaddr(info, vaddr);
     if (hw) {
         if (qemu_plugin_hwaddr_is_io(hw)) {
@@ -218,6 +238,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
         else if (!g_strcmp0(t[0], "barrier")) mode_barrier = 1;
         else if (!g_strcmp0(t[0], "lo")) range_lo = g_ascii_strtoull(t[1], NULL, 0);
         else if (!g_strcmp0(t[0], "hi")) range_hi = g_ascii_strtoull(t[1], NULL, 0);
+        else if (!g_strcmp0(t[0], "watch")) watch_va = g_ascii_strtoull(t[1], NULL, 0);
         else { fprintf(stderr, "bad option %s\n", argv[i]); return -1; }
     }
 

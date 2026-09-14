@@ -19,7 +19,7 @@ PLUGIN_INC := $(firstword $(wildcard $(QEMU_SRC)/include/plugins) \
 
 CFLAGS  += -O2 -Wall -fPIC -I$(PLUGIN_INC) $(shell pkg-config --cflags glib-2.0)
 
-all: probe.so boot.img st mt mtfork
+all: probe.so boot.img boot64.img st mt mtfork
 
 probe.so: probe.c compat.h
 	$(CC) $(CFLAGS) -shared -o $@ probe.c
@@ -29,9 +29,15 @@ boot.img: boot.S
 	$(AS) --32 -o boot.o boot.S
 	$(LD) -m elf_i386 -Ttext 0x7c00 --oformat binary -o $@ boot.o
 
+# A guest that enables paging with a mapping we choose, so VA -> PA can be
+# checked against a known answer.
+boot64.img: boot64.S
+	$(AS) --64 -o boot64.o boot64.S
+	$(LD) -m elf_x86_64 -Ttext 0x7c00 --oformat binary -o $@ boot64.o
+
 st mt mtfork: %: %.c
 	$(CC) -O1 -static -o $@ $< $(if $(filter-out st,$*),-lpthread)
 
 clean:
-	rm -f probe.so boot.o boot.img st mt mtfork
+	rm -f probe.so boot.o boot.img boot64.o boot64.img st mt mtfork
 .PHONY: all clean
