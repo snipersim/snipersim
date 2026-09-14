@@ -61,6 +61,7 @@ pinplay-tools
 mbuild
 sde_kit
 capstone
+capstone-src
 dynamorio
 libtorch
 

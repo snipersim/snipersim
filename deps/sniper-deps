@@ -73,8 +73,16 @@ def is_needed(dep, feats):
     return all(w in feats for w in when)
 
 
-def cache_key(name, dep):
+def cache_key(name, dep, man=None):
     """Identity of a dependency version: digest if pinned, else revision/version."""
+    if dep['kind'] == 'build':
+        # A built artifact is identified by what went into it, so bumping XED's
+        # revision produces a different kit rather than silently reusing the old
+        # one, and two checkouts on the same revisions share the build.
+        man = man or load_manifest()
+        inputs = ''.join(cache_key(src, man['dependencies'][src], man)
+                         for src in dep['from'])
+        return '%s-%s' % (name, hashlib.sha256(inputs.encode()).hexdigest()[:16])
     if dep['kind'] == 'git':
         return '%s-%s' % (name, dep['rev'][:16])
     if dep.get('sha256'):
@@ -217,6 +225,73 @@ def fetch_git(name, dep, offline):
     return target
 
 
+def fetch_build(name, dep, offline):
+    """Build a dependency that ships as source.
+
+    XED is not usable as it arrives: mfile.py has to turn it into a kit, and the
+    old top-level Makefile had an `xed` target that did so.  With the build
+    moved to CMake that target is gone, and CMake cannot do it either -- it
+    needs the kit to exist at configure time.  So it belongs here, with the rest
+    of acquisition: a dependency is not acquired until it is usable.
+
+    --offline does not prevent this; building needs no network.
+    """
+    target = cache_path(name, dep)
+    if os.path.exists(os.path.join(target, '.complete')):
+        return target
+
+    man = load_manifest()
+
+    def resolve(text):
+        out = text.replace('{python}', sys.executable)
+        out = out.replace('{install}', target + '.tmp')
+        out = out.replace('{build}', target + '.build')
+        for src in dep['from']:
+            out = out.replace('{dep:%s}' % src, cache_path(src, man['dependencies'][src]))
+        return out
+
+    for src in dep['from']:
+        src_dep = man['dependencies'][src]
+        if not os.path.exists(cache_path(src, src_dep)):
+            raise SystemExit('error: %s needs %s, which is not in the cache' % (name, src))
+
+    os.makedirs(cache_root(), exist_ok=True)
+    tmp = target + '.tmp'
+    build = target + '.build'
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree(build, ignore_errors=True)
+
+    # Some dependencies only know how to build in place (capstone's make.sh,
+    # DynamoRIO's cmake).  Copy the source into the cache entry and build there,
+    # so the entry is the artifact and the pristine source stays pristine.
+    if dep.get('copy_from'):
+        shutil.copytree(cache_path(dep['copy_from'], man['dependencies'][dep['copy_from']]),
+                        tmp, symlinks=True)
+        os.remove(os.path.join(tmp, '.complete'))
+
+    env = dict(os.environ)
+    for k, v in dep.get('env', {}).items():
+        env[k] = resolve(v)
+    cmd = [resolve(a) for a in dep['command']]
+    workdir = resolve(dep['workdir'])
+
+    print('  building (this takes a few minutes, and only happens once per version)')
+    result = subprocess.run(cmd, cwd=workdir, env=env)
+    if result.returncode != 0:
+        raise SystemExit('error: building %s failed' % name)
+
+    marker = dep.get('marker')
+    if marker and not os.path.exists(os.path.join(tmp, marker)):
+        raise SystemExit('error: %s built without producing %s' % (name, marker))
+
+    open(os.path.join(tmp, '.complete'), 'w').close()
+    shutil.rmtree(build, ignore_errors=True)
+    if os.path.exists(target):
+        shutil.rmtree(target, ignore_errors=True)
+    os.rename(tmp, target)
+    return target
+
+
 def cmd_status(args):
     man = load_manifest()
     feats = enabled_features(args)
@@ -230,17 +305,19 @@ def cmd_status(args):
                   ('skip', name, join.join(dep.get('when', [])) or '-'))
             continue
         need += 1
+        if dep['kind'] == 'build':
+            what, pin = 'built here', 'from ' + ', '.join(dep['from'])
+        elif dep['kind'] == 'git':
+            what, pin = dep.get('rev', '')[:12], 'pinned by revision'
+        else:
+            what = dep.get('version') or ''
+            pin = 'sha256 verified' if dep.get('sha256') else 'NOT PINNED'
         if present(name, dep):
-            if dep['kind'] == 'git':
-                pin = 'pinned by revision'
-            else:
-                pin = 'sha256 verified' if dep.get('sha256') else 'NOT PINNED'
-            print('  %-9s %-16s %-22s %s' % ('ok', name, dep.get('version') or dep.get('rev', '')[:12], pin))
+            print('  %-9s %-16s %-22s %s' % ('ok', name, what, pin))
         else:
             missing += 1
-            print('  %-9s %-16s %-22s -> %s' % ('MISSING', name,
-                                                dep.get('version') or dep.get('rev', '')[:12],
-                                                dep['url']))
+            source = dep['url'] if dep['kind'] != 'build' else 'built from ' + ', '.join(dep['from'])
+            print('  %-9s %-16s %-22s -> %s' % ('MISSING', name, what, source))
     print()
     print('%d needed, %d missing' % (need, missing))
     unpinned = [n for n, d in man['dependencies'].items()
@@ -259,7 +336,8 @@ def cmd_fetch(args):
         if present(name, dep) and not args.force:
             continue
         print('%s %s' % (name, dep.get('version') or dep.get('rev', '')[:12]))
-        target = (fetch_git if dep['kind'] == 'git' else fetch_tarball)(name, dep, args.offline)
+        handler = {'git': fetch_git, 'build': fetch_build}.get(dep['kind'], fetch_tarball)
+        target = handler(name, dep, args.offline)
         if link_into_tree(name, dep, target):
             print('  %s -> %s' % (dep['install_path'], target))
     return 0

@@ -31,7 +31,7 @@ find_path(SNIPER_XED_INCLUDE_DIR NAMES xed-interface.h
 if(NOT SNIPER_XED_LIBRARY OR NOT SNIPER_XED_INCLUDE_DIR)
   message(FATAL_ERROR
     "XED not found under ${SNIPER_XED_HOME}.\n"
-    "  Fetch and build it first:  deps/sniper-deps fetch && make xed\n"
+    "  Acquire it first:  deps/sniper-deps fetch\n"
     "  or point SNIPER_XED_HOME at an existing kit.")
 endif()
 
