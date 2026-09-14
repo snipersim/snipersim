@@ -34,7 +34,6 @@
 #define SIM_OPT_INSTRUMENT_WARMUP 1
 #define SIM_OPT_INSTRUMENT_FASTFORWARD 2
 
-#include <unordered_map>
 
 #if defined(ARM_64)
 
