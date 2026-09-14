@@ -71,6 +71,9 @@ libtorch
 sift/recorder/obj-intel64/
 
 testing/test_results/
+test/qemu-plugin-probe/probe.so
+test/qemu-plugin-probe/boot.img
+test/qemu-plugin-probe/boot.o
 pin-tool-log.txt
 
 # CMake build directories
