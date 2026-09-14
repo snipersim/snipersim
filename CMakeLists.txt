@@ -105,10 +105,24 @@ if(SNIPER_ENABLE_TORCH)
   target_link_libraries(sniper_common INTERFACE Sniper::Torch)
 endif()
 
+# Capstone.  The include directories were here already; the library was not, so
+# an ARM build compiled arm_decoder.cc and then failed to link on cs_open,
+# cs_option and the rest.  The old decoder_lib/Makefile named
+# ../../capstone/libcapstone.a explicitly and that went with it.
 if(SNIPER_ENABLE_ARM OR SNIPER_ENABLE_DYNAMORIO)
-  target_include_directories(sniper_common INTERFACE
-    "${CMAKE_CURRENT_SOURCE_DIR}/capstone/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/capstone/include/capstone")
+  find_library(SNIPER_CAPSTONE_LIBRARY NAMES capstone
+               HINTS "${CMAKE_CURRENT_SOURCE_DIR}/capstone" NO_DEFAULT_PATH)
+  if(NOT SNIPER_CAPSTONE_LIBRARY)
+    message(FATAL_ERROR
+      "Capstone not found under ${CMAKE_CURRENT_SOURCE_DIR}/capstone.\n"
+      "  Acquire it first:  deps/sniper-deps --arm fetch")
+  endif()
+  add_library(Sniper::Capstone UNKNOWN IMPORTED)
+  set_target_properties(Sniper::Capstone PROPERTIES
+    IMPORTED_LOCATION "${SNIPER_CAPSTONE_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES
+      "${CMAKE_CURRENT_SOURCE_DIR}/capstone/include;${CMAKE_CURRENT_SOURCE_DIR}/capstone/include/capstone")
+  target_link_libraries(sniper_common INTERFACE Sniper::Capstone)
 endif()
 
 # perf_event.h: copied from the running kernel's headers when available, with a
