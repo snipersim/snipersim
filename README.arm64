@@ -57,16 +57,18 @@ We refer to the directories containing Sniper's code as SIM_ROOT_ARM and SIM_ROO
 
 2.1. Install frontend on ARM64
 --------------------------------
-- Compile Sniper's sift library libsift.a (ignore errors about not being able to compile the dump sift executable):
-    > cd $(SIM_ROOT_ARM)/sift; make
-- Create a symbolic link to the DynamoRIO frontend source from DynamoRIO clients (use full paths):
-    > ln -s $(SIM_ROOT_ARM)/frontend/dr-frontend $(DR_ROOT)/clients/dr-frontend
-- Create a build directory in DR_ROOT:
-    > cd $(DR_ROOT); mkdir build; cd build
-- Set up the SNIPER_HOME environment variable:
-    > export SNIPER_HOME=$(SIM_ROOT_ARM)
-- Configure within 'build' directory and compile:
-    > cmake -DDEBUG=ON .. ; make
+The board builds the frontend only: libsift and the DynamoRIO client, no
+simulator.  That is what the arm64-frontend preset is for.  The client is built
+as part of the tree, so it no longer has to be symlinked into DynamoRIO's own
+clients directory and configured there by hand.
+
+- Point Sniper at the DynamoRIO build and configure:
+    > cd $(SIM_ROOT_ARM)
+    > cmake --preset arm64-frontend -DDynamoRIO_DIR=$(DR_ROOT)/build/cmake
+- Build:
+    > cmake --build --preset arm64-frontend
+  This produces build/arm64-frontend/lib/libdr-frontend.so and the .drrun64
+  config file beside it.
 - Create a symbolic link to the DynamoRIO build directory from Sniper home:
     > ln -s $(DR_ROOT)/build $(SIM_ROOT_ARM)/dynamorio
 
@@ -74,10 +76,9 @@ We refer to the directories containing Sniper's code as SIM_ROOT_ARM and SIM_ROO
 ----------------------------------
 - Create a symbolic link to the Capstone source and installation directory from Sniper:
     > ln -s $(CAPSTONE_ROOT) $(SIM_ROOT_HOST)/capstone
-- Compile decoder library:
-    > cd $(SIM_ROOT_HOST)/decoder_lib; make
-- Compile Sniper as usual:
-    > cd $(SIM_ROOT_HOST); make
+- Compile Sniper with the ARM decoder:
+    > cd $(SIM_ROOT_HOST); make ARM=ON -j$(nproc)
+  The decoder library is part of the build; there is nothing to make separately.
 
 
 ========================================

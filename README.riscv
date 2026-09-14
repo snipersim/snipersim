@@ -81,7 +81,12 @@ Assumptions: You’ve own copy of SPEC CPU2006 v1.2 installed at $CPU2006_HOME
 2c. Sniper
 
 	cd $SNIPER_ROOT
-	make -j $NPROC
+	make RISCV=ON -j $NPROC
+
+RISCV=ON is required.  The build used to decide this for itself by looking for
+an rv8 checkout next to the source directory, so having one lying around
+silently changed what got built.  If rv8 is somewhere else, add
+RV8_HOME=/path/to/rv8, or configure with -DSNIPER_RV8_HOME=... directly.
 
 2d. Speckle
 

@@ -35,18 +35,37 @@ A good starting point is <https://snipersim.org/w/Getting_Started>, and for
 more information about building the simulator and usage, please see 
 <https://snipersim.org/w/Manual>.
 
-For a minimal post-build smoke test, the following commands have been verified
-to run successfully:
+## Building
 
 ```bash
-./run-sniper -n 1 --fast-forward -d /tmp/sniper-smoke-$$ -caddress_translation_schemes/baseline -- /bin/true
-
-./run-sniper -n 1 -d /tmp/sniper-smoke-$$ -caddress_translation_schemes/baseline -- /bin/true
+make -j$(nproc)          # fetch dependencies, configure, build
+./run-sniper -n 1 -c gainestown -- ./test/fft/fft
 ```
 
-In the current environment, both the fast-forward and detailed runs complete
-and generate output successfully with the baseline address-translation
-configuration.
+`make` is a forwarder: the build itself is CMake, and it puts its output in
+`build/default` rather than in the source tree.  Several build directories can
+exist at once, and `./run-sniper --build-dir=<path>` chooses between them.
+
+```bash
+cmake --list-presets                        # what is on offer
+cmake --preset x86-sde-debug                # configure one
+cmake --build --preset x86-sde-debug        # build it
+./run-sniper --build-dir=build/x86-sde-debug -n 1 -c gainestown -- ./test/fft/fft
+```
+
+`make regress` runs the regression suites.  `make help` lists what the
+forwarder accepts; anything beyond that is better said to CMake directly.
+
+For a minimal post-build smoke test:
+
+```bash
+make -C test/fft run
+```
+
+This builds a real workload and runs it under the simulator.  A trivial
+program such as `/bin/true` is not a useful check: it exits before the
+simulator has anything to model, and it has been seen to pass while the
+simulator was in fact broken.
 
 ## Publications
 
