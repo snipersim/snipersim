@@ -37,6 +37,37 @@ def resolve_build_dir(home, explicit = None):
   sys.exit(-1)
 
 
+def decode_wait_status(rc, tag = 'SNIPER'):
+  """Turn a raw os.wait4() status into an exit code, explaining signals.
+
+  Lives here because both run-sniper and record-trace collect a status and
+  both must exit with it.  record-trace collected it and then fell off the
+  end of the file, so a recorder that failed to load its Pin tool -- no
+  trace written -- still exited 0."""
+  if os.WIFSIGNALED(rc):
+    signum = os.WTERMSIG(rc)
+    signal_names = {
+      1: 'SIGHUP', 2: 'SIGINT', 3: 'SIGQUIT', 4: 'SIGILL',
+      6: 'SIGABRT', 8: 'SIGFPE', 9: 'SIGKILL', 11: 'SIGSEGV',
+      13: 'SIGPIPE', 14: 'SIGALRM', 15: 'SIGTERM'
+    }
+    signame = signal_names.get(signum, 'signal %d' % signum)
+    print('[%s] ERROR: Process killed by %s (signal %d)' % (tag, signame, signum))
+    if signum == 9:
+      print('[%s] SIGKILL often indicates Out-Of-Memory (OOM) killer terminated the process.' % tag)
+      print('[%s] Check: dmesg | grep -i "killed process" or /var/log/kern.log' % tag)
+    elif signum == 11:
+      print('[%s] SIGSEGV indicates a segmentation fault (memory access error).' % tag)
+    elif signum == 6:
+      print('[%s] SIGABRT indicates the process aborted (assertion failure or abort() call).' % tag)
+    return 128 + signum  # Standard convention for signal-killed processes
+  elif os.WIFEXITED(rc):
+    return os.WEXITSTATUS(rc)
+  else:
+    print('[%s] WARNING: Unknown process termination status: %d' % (tag, rc))
+    return rc >> 8
+
+
 def load_build_config(build_dir):
   """Read a build directory's config/sniper.py."""
   configfile = os.path.join(build_dir, 'config', 'sniper.py')

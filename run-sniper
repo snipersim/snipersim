@@ -779,32 +779,7 @@ def execute():
       pass
     return 9
 
-  # Decode the wait status properly
-  if os.WIFSIGNALED(rc):
-    # Process was killed by a signal
-    signum = os.WTERMSIG(rc)
-    signal_names = {
-      1: 'SIGHUP', 2: 'SIGINT', 3: 'SIGQUIT', 4: 'SIGILL',
-      6: 'SIGABRT', 8: 'SIGFPE', 9: 'SIGKILL', 11: 'SIGSEGV',
-      13: 'SIGPIPE', 14: 'SIGALRM', 15: 'SIGTERM'
-    }
-    signame = signal_names.get(signum, 'signal %d' % signum)
-    print('[SNIPER] ERROR: Process killed by %s (signal %d)' % (signame, signum))
-    if signum == 9:
-      print('[SNIPER] SIGKILL often indicates Out-Of-Memory (OOM) killer terminated the process.')
-      print('[SNIPER] Check: dmesg | grep -i "killed process" or /var/log/kern.log')
-    elif signum == 11:
-      print('[SNIPER] SIGSEGV indicates a segmentation fault (memory access error).')
-    elif signum == 6:
-      print('[SNIPER] SIGABRT indicates the process aborted (assertion failure or abort() call).')
-    return 128 + signum  # Standard convention for signal-killed processes
-  elif os.WIFEXITED(rc):
-    # Process exited normally
-    return os.WEXITSTATUS(rc)
-  else:
-    # Unknown status
-    print('[SNIPER] WARNING: Unknown process termination status: %d' % rc)
-    return rc >> 8
+  return run_sniper.decode_wait_status(rc)
 
 def execute_appdebug():
   if verbose:
