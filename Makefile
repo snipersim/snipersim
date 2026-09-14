@@ -139,6 +139,14 @@ regress_configs:
 regress_qemu:
 	@$(SIM_ROOT)/testing/test_qemu.py
 
+# Validation, not regression: it simulates a workload twice -- once in full
+# detail as the baseline, once sampled -- so it costs minutes, not seconds, and
+# is deliberately left out of `regress`.  Run it when changing the sampling
+# path or before trusting sampled numbers.  Skips with a reason if the recorder
+# has no Pac-Sim support.
+validate_pacsim:
+	@$(SIM_ROOT)/testing/test_pacsim.py
+
 # The header comment is the help text: print it up to the first line that is not
 # a comment, so the two cannot drift apart.
 help:
