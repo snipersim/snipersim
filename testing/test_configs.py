@@ -24,10 +24,16 @@ Two things this test is deliberately strict about, both learned the hard way:
     libc, and prints a checksum so a run that quietly produced nothing is not
     mistaken for one that worked.
 
+Every configuration is run twice: once with --fast-forward and once with the
+timing model attached.  The suite used to do only the first, which meant the
+thing Sniper exists to do had no coverage: a configuration could deadlock or
+abort the instant a core model was attached and still report a clean run.
+
 Usage:
   python3 testing/test_configs.py
   python3 testing/test_configs.py --only gainestown
   python3 testing/test_configs.py --cores 1,4,8
+  python3 testing/test_configs.py --mode detailed
 """
 
 import argparse
@@ -70,6 +76,12 @@ EXPECT_PASS_LAYERED = [
 ]
 LAYER_BASE = 'gainestown'
 
+# ... except in detailed mode, where gainestown deadlocks (see
+# EXPECT_FAIL_DETAILED).  Layering onto it there would mark all seventeen
+# overlays as known failures and give them no timing coverage at all, so use a
+# base that works.
+LAYER_BASE_BY_MODE = {'detailed': 'nehalem-lite'}
+
 # oneipc replaces the core model, and on gainestown's topology that trips the
 # same tag-directory placement check as gainestown -n 4.  It layers cleanly onto
 # nehalem-lite, so test it there rather than pretend it is broken.
@@ -90,6 +102,49 @@ EXPECT_FAIL = {
     'sampling': 'sampling is only supported with the Pin frontend',
 }
 
+# Modes.  Until this suite grew the second one it ran everything with
+# --fast-forward, so detailed timing -- what Sniper is for -- had no coverage at
+# all, and configurations that deadlock or abort the moment a timing model is
+# attached passed every run.
+MODES = ('fast-forward', 'detailed')
+
+# Known to fail once a timing model is attached, with the reason.  Keyed by
+# config name: a case is expected to fail in detailed mode if any of the configs
+# it layers is listed here.
+#
+# All of these are the same bug, and it is not the configs' fault.  It needs two
+# things together: a cache shared between cores (shared_cores > 1 at any level)
+# *and* the detailed core model.  Either alone is fine.
+#
+#   The user and network threads hand a cache set lock between them without
+#   releasing it ("Pass stack lock through to user thread", cache_cntlr.cc), an
+#   upstream protocol that predates the MMU.  The MMU's page-table walk then
+#   performs its own cache accesses from inside coreInitiateMemoryAccess, which
+#   acquire set locks while one is already held in that borrowed state.  The
+#   network thread ends up blocked re-acquiring a mutex it still owns:
+#   _SetLock keeps one mutex per sharer and acquire_exclusive() takes them all,
+#   so with shared_cores > 1 there is more than one to trip over.
+#
+#   Verified with gdb: both mutexes report the same __owner, and the owner is
+#   the thread blocked on one of them.
+#
+#   Workaround: -g --perf_model/l3_cache/shared_cores=1
+_SHARED_CACHE_DEADLOCK = ('deadlock in the shared-cache set lock during a '
+                          'page-table walk (workaround: set every '
+                          'shared_cores to 1)')
+EXPECT_FAIL_DETAILED = {
+    'dunnington':   _SHARED_CACHE_DEADLOCK,  # l2 = 2, l3 = 6
+    'dunnington16': _SHARED_CACHE_DEADLOCK,  # l2 = 2, l3 = 4
+    'gainestown':   _SHARED_CACHE_DEADLOCK,  # l3 = 4
+    'silvermont':   _SHARED_CACHE_DEADLOCK,  # l2 = 2
+    # nehalem-lite is "#include gainestown" + "#include cacheonly", so it has
+    # gainestown's shared L3 and survives only because cacheonly takes the
+    # detailed core model out of the picture.  Layering nehalem back on puts it
+    # back, and the deadlock returns -- which is what makes the pairing the
+    # clearest evidence that both halves are needed.
+    'nehalem':      _SHARED_CACHE_DEADLOCK,
+}
+
 # Not a configuration to run on its own.
 EXCLUDE = {'base'}
 
@@ -106,12 +161,13 @@ def build_workload(workdir):
     return exe
 
 
-def run_config(names, ncores, workdir, workload, timeout):
+def run_config(names, ncores, workdir, workload, timeout, mode):
     tag = '+'.join(names)
-    outdir = os.path.join(workdir, 'out-%s-n%d' % (tag, ncores))
+    outdir = os.path.join(workdir, 'out-%s-%s-n%d' % (tag, mode, ncores))
     shutil.rmtree(outdir, ignore_errors=True)
-    cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'),
-           '-n', str(ncores), '--fast-forward']
+    cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', str(ncores)]
+    if mode == 'fast-forward':
+        cmd.append('--fast-forward')
     cmd += ['-c' + n for n in names]
     cmd += ['-d', outdir, '--', workload]
     try:
@@ -144,6 +200,13 @@ def main():
     ap.add_argument('--cores', default=','.join(str(c) for c in DEFAULT_CORES),
                     help='comma-separated core counts (default: %(default)s)')
     ap.add_argument('--timeout', type=int, default=300)
+    # A healthy detailed run of this workload is about ten seconds, so a
+    # configuration that has not finished in two minutes has deadlocked.  The
+    # shorter limit matters because the configs that do deadlock spend the whole
+    # timeout proving it.
+    ap.add_argument('--timeout-detailed', type=int, default=120)
+    ap.add_argument('--mode', action='append', choices=MODES,
+                    help='run only this mode (repeatable; default: both)')
     args = ap.parse_args()
 
     if not os.path.exists(os.path.join(SNIPER_ROOT, 'lib', 'sniper')):
@@ -154,34 +217,61 @@ def main():
     classified = set(EXPECT_PASS) | set(EXPECT_PASS_LAYERED) | set(EXPECT_FAIL) | EXCLUDE
     unclassified = [c for c in shipped_configs() if c not in classified]
 
-    cases = []   # (label, [config names], expect_ok, note)
-    for n in EXPECT_PASS:
-        cases.append((n, [n], True, None))
-    for n in EXPECT_PASS_LAYERED:
-        base = LAYER_BASE_OVERRIDE.get(n, LAYER_BASE)
-        cases.append(('%s + %s' % (base, n), [base, n], True, None))
-    for n in sorted(EXPECT_FAIL):
-        cases.append((n, [n], False, EXPECT_FAIL[n]))
-    if args.only:
-        cases = [c for c in cases if any(o in c[1] for o in args.only)]
+    def build_cases(mode):
+        layer_base = LAYER_BASE_BY_MODE.get(mode, LAYER_BASE)
+        out = []   # (label, [config names], expect_ok, note)
+        for n in EXPECT_PASS:
+            out.append((n, [n], True, None))
+        for n in EXPECT_PASS_LAYERED:
+            base = LAYER_BASE_OVERRIDE.get(n, layer_base)
+            if base == n:          # nehalem-lite layered onto itself is not a case
+                continue
+            out.append(('%s + %s' % (base, n), [base, n], True, None))
+        for n in sorted(EXPECT_FAIL):
+            out.append((n, [n], False, EXPECT_FAIL[n]))
+        if args.only:
+            out = [c for c in out if any(o in c[1] for o in args.only)]
+        return out
+
+    modes = args.mode or list(MODES)
 
     workdir = tempfile.mkdtemp(prefix='sniper-configs-')
     failures = []
+    checks = 0
     try:
         workload = build_workload(workdir)
-        for label, names, expect_ok, note in cases:
-            for ncores in cores:
-                full = '%s -n %d' % (label, ncores)
-                ok, detail = run_config(names, ncores, workdir, workload, args.timeout)
-                if ok == expect_ok:
-                    status = 'PASS' if expect_ok else 'PASS (known: %s)' % note
-                elif expect_ok:
-                    status = 'FAIL: ' + detail
-                    failures.append(full)
-                else:
-                    status = 'FAIL: now runs -- move it out of EXPECT_FAIL'
-                    failures.append(full)
-                print('%-34s %s' % (full, status))
+        for mode in modes:
+            print('=== %s ===' % mode)
+            for label, names, expect_ok, note in build_cases(mode):
+                # A configuration can be fine in fast-forward and broken once a
+                # timing model is attached; that is the whole reason this suite
+                # runs both.
+                mode_note = None
+                if mode == 'detailed':
+                    for n in names:
+                        if n in EXPECT_FAIL_DETAILED:
+                            mode_note = EXPECT_FAIL_DETAILED[n]
+                            break
+                want_ok = expect_ok and mode_note is None
+                why = note if not expect_ok else mode_note
+
+                for ncores in cores:
+                    full = '%s -n %d' % (label, ncores)
+                    checks += 1
+                    limit = (args.timeout_detailed if mode == 'detailed'
+                             else args.timeout)
+                    ok, detail = run_config(names, ncores, workdir, workload,
+                                            limit, mode)
+                    if ok == want_ok:
+                        status = 'PASS' if want_ok else 'PASS (known: %s)' % why
+                    elif want_ok:
+                        status = 'FAIL: ' + detail
+                        failures.append('%s [%s]' % (full, mode))
+                    else:
+                        status = 'FAIL: now runs -- move it out of EXPECT_FAIL'
+                        failures.append('%s [%s]' % (full, mode))
+                    print('%-34s %s' % (full, status))
+            print()
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
@@ -190,11 +280,10 @@ def main():
         print('unclassified configs (add to EXPECT_PASS or EXPECT_FAIL): %s'
               % ', '.join(unclassified))
         failures.append('classification')
-    total = len(cases) * len(cores)
     if failures:
-        print('%d of %d checks FAILED' % (len(failures), total))
+        print('%d of %d checks FAILED' % (len(failures), checks))
         return 1
-    print('all %d checks passed' % total)
+    print('all %d checks passed' % checks)
     return 0
 
 
