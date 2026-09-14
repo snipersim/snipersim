@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import collections
 import os
 import re
 import shutil
@@ -223,12 +224,67 @@ def case_system_vapa(p, g, workdir):
     return True, '%d accesses, both APIs give 0x%x' % (len(hits), PA_EXPECT)
 
 
+def case_system_modes(p, g, workdir):
+    """The frontend tracks x86 mode switches through a real BIOS boot.
+
+    The boot floppy runs in 16-bit real mode, but it only gets there after
+    SeaBIOS, which switches to 32-bit protected mode and back hundreds of times
+    to run its own 32-bit code.  Getting this wrong is not a cosmetic problem:
+    the mode selects the XED decode tables, so a misidentified block is decoded
+    against the wrong instruction set and either aborts the simulator or feeds
+    the timing model instructions the guest never executed.
+
+    The assertions below are about structure rather than exact counts, because
+    the counts move with the SeaBIOS build:
+
+      - the very first mode seen is 16-bit, at the reset vector 0xfffffff0;
+      - no block is ever called 64-bit, because SeaBIOS never enters long mode;
+      - the switches concentrate at a handful of addresses.  SeaBIOS changes
+        mode in one pair of routines, so hundreds of switches share two static
+        addresses.  Many distinct addresses would mean the detector is flapping
+        on ambiguous encodings instead of following the machine.
+    """
+    out_base = os.path.join(workdir, 'modes')
+    rc, out = run([p['system'], '-nographic', '-display', 'none', '-no-reboot',
+                   '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04',
+                   '-drive', 'file=%s,format=raw,if=floppy' % g['boot.img'],
+                   '-plugin', '%s,verbose=true,output=%s' % (p['frontend'], out_base)],
+                  300, cwd=workdir)
+    if rc is None:
+        return False, 'timed out'
+
+    sw = re.findall(r'now in (\d+)-bit mode at 0x([0-9a-f]+)', out)
+    if not sw:
+        return False, 'no mode switches reported (exit %s)' % rc
+
+    if sw[0] != ('16', 'fffffff0'):
+        return False, 'first mode is %s-bit at 0x%s, expected 16-bit at the ' \
+                      'reset vector 0xfffffff0' % sw[0]
+
+    if any(bits == '64' for bits, _ in sw):
+        return False, 'reported 64-bit mode; SeaBIOS never enters long mode'
+
+    addrs = collections.Counter(a for _, a in sw)
+    top2 = sum(n for _, n in addrs.most_common(2))
+    if len(sw) > 20 and top2 < 0.8 * len(sw):
+        return False, 'switches scattered over %d addresses (top two are only ' \
+                      '%d of %d) -- detector is flapping' % (len(addrs), top2, len(sw))
+
+    trace = out_base + '.app0.th0.sift'
+    if not os.path.isfile(trace):
+        return False, 'no trace written'
+
+    return True, '%d switches, %d-bit first, %d of %d at two addresses' % (
+        len(sw), int(sw[0][0]), top2, len(sw))
+
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
     'user-mt-streams':  case_user_mt_streams,
     'system-exact':     case_system_exact,
     'system-vapa':      case_system_vapa,
+    'system-modes':     case_system_modes,
 }
 
 

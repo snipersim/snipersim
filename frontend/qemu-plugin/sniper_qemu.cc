@@ -40,6 +40,11 @@ extern "C" {
 #include <xed-interface.h>
 }
 
+/* dl_isa, for the values RecOtherISAChange carries.  Included rather than
+ * restated: the numbering is a wire format shared with the reader, and a copy
+ * here would be one more place to get it wrong. */
+#include "decoder.h"
+
 #include "sift_writer.h"
 #include "sift_format.h"
 
@@ -110,12 +115,47 @@ bool xed_is_conditional_branch(const uint8_t *bytes, size_t len)
    }
 }
 
+/* Which x86 modes decode these bytes to exactly the length QEMU decoded them
+ * to.  QEMU has already settled the true length, so a mode that disagrees is
+ * not the mode this instruction ran in.
+ *
+ * Runs once per static instruction, at translation time, so it costs nothing at
+ * execution time.  Most instructions are consistent with more than one mode --
+ * `cli` is one byte in all three -- so this never identifies a mode by itself;
+ * tb_mode_check() intersects the whole block's masks with what the control
+ * registers permit, and that pair is what decides.
+ */
+enum { MODE_16 = 1, MODE_32 = 2, MODE_64 = 4 };
+
+unsigned mode_mask_for(const uint8_t *bytes, size_t len, uint8_t qemu_len)
+{
+   static const struct { unsigned bit; xed_machine_mode_enum_t mm; xed_address_width_enum_t aw; }
+   modes[] = {
+      { MODE_16, XED_MACHINE_MODE_REAL_16,       XED_ADDRESS_WIDTH_16b },
+      { MODE_32, XED_MACHINE_MODE_LONG_COMPAT_32, XED_ADDRESS_WIDTH_32b },
+      { MODE_64, XED_MACHINE_MODE_LONG_64,        XED_ADDRESS_WIDTH_64b },
+   };
+
+   unsigned mask = 0;
+   for (unsigned i = 0; i < sizeof(modes) / sizeof(modes[0]); i++)
+   {
+      xed_decoded_inst_t xedd;
+      xed_state_t st = { modes[i].mm, modes[i].aw };
+      xed_decoded_inst_zero_set_mode(&xedd, &st);
+      if (xed_decode(&xedd, bytes, (unsigned int)len) == XED_ERROR_NONE &&
+          xed_decoded_inst_get_length(&xedd) == qemu_len)
+         mask |= modes[i].bit;
+   }
+   return mask;
+}
+
 /* Filled once per translation, shared by every execution of that instruction. */
 struct InsnInfo
 {
    uint64_t vaddr;
    uint8_t  size;
    bool     is_branch;
+   unsigned mode_mask;
 };
 
 /* ------------------------------------------------------------- per-vCPU */
@@ -124,6 +164,9 @@ struct VCPU
 {
    Sift::Writer *writer   = nullptr;
    bool          closed   = false;
+   unsigned      mode     = 0;   /* 0 until the first instruction settles it */
+   struct qemu_plugin_register *reg_cr0  = nullptr;
+   struct qemu_plugin_register *reg_efer = nullptr;
    uint64_t      icount   = 0;
    uint64_t      flow_next = 0;
 
@@ -158,6 +201,58 @@ VCPU *vcpu_get(unsigned int idx)
    if (!vcpus[idx])
       vcpus[idx] = new VCPU();
    return vcpus[idx];
+}
+
+/* Ask the machine what mode it is in.
+ *
+ * Returns the SET of decode modes the machine state permits, not a single
+ * guess, because the two are genuinely different amounts of knowledge:
+ *
+ *   CR0.PE == 0            real mode          -> 16, and nothing else
+ *   EFER.LMA == 0          protected mode     -> 32 or 16, by CS.D
+ *   EFER.LMA == 1          long mode          -> 64, or 32/16 if CS.L == 0
+ *
+ * CS.D and CS.L live in the CS descriptor, which a plugin cannot reach: the
+ * gdbstub that backs qemu_plugin_get_registers() exposes "cs" as the bare
+ * selector (target/i386/gdbstub.c), and the GDT base register is not exposed
+ * at all.  So the register file settles real/protected/long exactly and leaves
+ * the operand-size split to the caller.
+ *
+ * Returns 0 when the registers are unavailable, as in user mode, where there
+ * are no control registers to read.
+ */
+unsigned mode_from_registers(VCPU *v)
+{
+   if (!v->reg_cr0 || !v->reg_efer)
+      return 0;
+
+   GByteArray *buf = g_byte_array_new();
+   uint64_t cr0 = 0, efer = 0;
+
+   if (!qemu_plugin_read_register(v->reg_cr0, buf) || buf->len == 0)
+   {
+      g_byte_array_free(buf, TRUE);
+      return 0;
+   }
+   memcpy(&cr0, buf->data, buf->len < sizeof(cr0) ? buf->len : sizeof(cr0));
+
+   g_byte_array_set_size(buf, 0);
+   if (!qemu_plugin_read_register(v->reg_efer, buf) || buf->len == 0)
+   {
+      g_byte_array_free(buf, TRUE);
+      return 0;
+   }
+   memcpy(&efer, buf->data, buf->len < sizeof(efer) ? buf->len : sizeof(efer));
+   g_byte_array_free(buf, TRUE);
+
+   const bool protected_mode = cr0 & 1;          /* CR0.PE   */
+   const bool long_mode      = (efer >> 10) & 1; /* EFER.LMA */
+
+   if (!protected_mode)
+      return MODE_16;
+   if (long_mode)
+      return MODE_64 | MODE_32 | MODE_16;   /* 64, or compatibility mode */
+   return MODE_32 | MODE_16;                /* CS.D decides, see above */
 }
 
 /* ------------------------------------------------------------- SIFT glue */
@@ -240,6 +335,7 @@ void insn_exec(unsigned int cpu_index, void *udata)
    /* The previous instruction's fate is now known. */
    flush_pending(v, ii->vaddr);
 
+
    v->pend_addr   = ii->vaddr;
    v->pend_size   = ii->size;
    v->pend_branch = ii->is_branch;
@@ -267,6 +363,82 @@ void insn_exec(unsigned int cpu_index, void *udata)
          }
       }
    }
+}
+
+/* Decide the decode mode for one translation block.
+ *
+ * Once per block is the exact granularity, not an approximation of one.  QEMU
+ * keys every TB on env->hflags (target/i386/tcg/tcg-cpu.c,
+ * x86_get_tb_cpu_state), and hflags carries HF_PE/HF_CS32/HF_CS64 -- so a
+ * block that changed mode partway through would be a block whose lookup key
+ * changed partway through, which cannot happen.  QEMU's own decoder relies on
+ * this: CODE64(s) and CODE32(s) are read straight out of the block's flags.  A
+ * mode switch therefore always ends a block, and checking here cannot miss one
+ * or place one in the wrong instruction.
+ *
+ * Registered QEMU_PLUGIN_CB_R_REGS so the control registers are live, and it
+ * runs before the block's first instruction callback, so the ISAChange record
+ * precedes the instructions it governs.
+ */
+struct TBInfo
+{
+   uint64_t vaddr    = 0;   /* first instruction, for diagnostics */
+   unsigned mode_mask = 0;  /* modes every instruction here is consistent with */
+};
+
+void tb_mode_check(unsigned int cpu_index, void *udata)
+{
+   const TBInfo *ti = (const TBInfo *)udata;
+   const unsigned encoded = ti->mode_mask;
+   VCPU *v = vcpu_get(cpu_index);
+
+   /* Two independent sources, consulted every block.
+    *
+    * The architectural one is authoritative but incomplete: it cannot see CS.D,
+    * so it cannot split 32 from 16.  The encoding one is complete but not
+    * authoritative: it reports every mode in which all of this block's bytes
+    * decode to the lengths QEMU used, which is usually more than one mode
+    * because most encodings are legal in several.
+    *
+    * Intersecting them is what makes this exact wherever exactness is
+    * available -- the registers rule out modes the encodings allow, and the
+    * encodings rule out modes the registers allow. */
+   const unsigned arch = mode_from_registers(v);
+   unsigned cand = arch & encoded;
+
+   /* Disagreement means one side is blind, not that the state is impossible:
+    * user mode has no control registers (arch == 0), and a block XED could not
+    * decode has no encoding evidence (encoded == 0).  Prefer the architectural
+    * answer, which is never wrong when it is available at all. */
+   if (!cand)
+      cand = arch ? arch : encoded;
+   if (!cand)
+      return;                      /* neither source said anything */
+
+   /* Mode changes are rare, so hold the current mode whenever it is still
+    * consistent.  This is what keeps an ambiguous block -- one whose bytes
+    * decode identically in 16 and 32, say -- from flipping the mode back and
+    * forth and filling the trace with records that describe nothing. */
+   if (v->mode & cand)
+      return;
+
+   /* Forced to move.  Where the candidates still leave a choice it is always
+    * the operand-size split the registers could not see, and the wider one is
+    * right in every case that reaches here: protected mode is 32-bit unless a
+    * 16-bit code segment says otherwise, long mode is 64-bit unless a
+    * compatibility segment says otherwise, and in both cases "otherwise" would
+    * have shown up as a narrower encoding mask. */
+   const unsigned m = (cand & MODE_64) ? MODE_64
+                    : (cand & MODE_32) ? MODE_32 : MODE_16;
+
+   v->mode = m;
+   if (v->writer)
+      v->writer->ISAChange(m == MODE_64 ? dl::DL_ISA_X86_64
+                         : m == MODE_32 ? dl::DL_ISA_IA32 : dl::DL_ISA_IA16);
+   if (opt_verbose)
+      fprintf(stderr, "[SNIPER-QEMU] vcpu %u now in %s mode at 0x%" PRIx64 "\n",
+              cpu_index, m == MODE_64 ? "64-bit" : m == MODE_32 ? "32-bit" : "16-bit",
+              ti->vaddr);
 }
 
 void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
@@ -323,6 +495,21 @@ void vcpu_init(SNP_VCPU_ARGS)
 
    if (!v->writer)
       writer_open(v, cpu_index);
+
+   /* Register handles are per-vCPU and only obtainable in vCPU context.  Absent
+    * in user mode, where the mode never changes anyway. */
+   GArray *regs = qemu_plugin_get_registers();
+   for (guint i = 0; regs && i < regs->len; i++)
+   {
+      qemu_plugin_reg_descriptor *d =
+         &g_array_index(regs, qemu_plugin_reg_descriptor, i);
+      if (!strcmp(d->name, "cr0"))
+         v->reg_cr0 = d->handle;
+      else if (!strcmp(d->name, "efer"))
+         v->reg_efer = d->handle;
+   }
+   if (regs)
+      g_array_free(regs, TRUE);
 }
 
 /* Close a vCPU's stream exactly once.  End() must be the last record: writing
@@ -345,6 +532,8 @@ void vcpu_exit(SNP_VCPU_ARGS)
 void tb_trans(SNP_TB_TRANS_ARGS)
 {
    const size_t n = qemu_plugin_tb_n_insns(tb);
+   TBInfo *ti = new TBInfo();
+   ti->mode_mask = MODE_16 | MODE_32 | MODE_64;
 
    for (size_t i = 0; i < n; i++)
    {
@@ -353,6 +542,8 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       /* One record per static instruction, reused by every execution. */
       InsnInfo *ii = new InsnInfo();
       ii->vaddr = qemu_plugin_insn_vaddr(insn);
+      if (i == 0)
+         ti->vaddr = ii->vaddr;
       ii->size  = (uint8_t)qemu_plugin_insn_size(insn);
 
       /* Decoded once per translation, so the cost is amortised over every
@@ -360,6 +551,9 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       uint8_t bytes[XED_MAX_INSTRUCTION_BYTES] = {0};
       size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(bytes));
       ii->is_branch = got ? xed_is_conditional_branch(bytes, got) : false;
+      ii->mode_mask = got ? mode_mask_for(bytes, got, ii->size) : 0;
+      if (ii->mode_mask)
+         ti->mode_mask &= ii->mode_mask;  /* one mode governs the whole block */
 
       qemu_plugin_register_vcpu_insn_exec_cb(insn, insn_exec,
                                              QEMU_PLUGIN_CB_NO_REGS, ii);
@@ -367,6 +561,12 @@ void tb_trans(SNP_TB_TRANS_ARGS)
                                        QEMU_PLUGIN_CB_NO_REGS,
                                        QEMU_PLUGIN_MEM_RW, nullptr);
    }
+
+   /* R_REGS so mode_from_registers() has something to read; it runs before the
+    * block's first instruction callback, so an ISAChange precedes the
+    * instructions it applies to. */
+   qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_mode_check,
+                                        QEMU_PLUGIN_CB_R_REGS, ti);
 }
 
 void at_exit(SNP_UDATA_ARGS)

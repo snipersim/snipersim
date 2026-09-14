@@ -34,7 +34,9 @@ add_library(qemu_frontend MODULE sniper_qemu.cc)
 target_include_directories(qemu_frontend PRIVATE
   "${SNIPER_QEMU_PLUGIN_INCLUDE}"
   "${CMAKE_SOURCE_DIR}/sift"
-  "${CMAKE_SOURCE_DIR}/common/misc")
+  "${CMAKE_SOURCE_DIR}/common/misc"
+  # for dl_isa: the ISA numbering RecOtherISAChange carries
+  "${CMAKE_SOURCE_DIR}/decoder_lib")
 
 # sniper_base, not sniper_common: the language and ABI contract, without the
 # simulator's libraries.
