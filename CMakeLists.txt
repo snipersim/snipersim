@@ -239,6 +239,11 @@ if(SNIPER_ENABLE_DYNAMORIO)
   add_subdirectory(frontend/dr-frontend)
 endif()
 
+# The QEMU frontend: a TCG plugin, loaded into a stock QEMU with -plugin.
+if(SNIPER_ENABLE_QEMU)
+  add_subdirectory(frontend/qemu-plugin)
+endif()
+
 # Userspace MimicOS: a guest binary, built here so that it exists without a
 # separate hand-run make and so each build directory gets its own.
 add_subdirectory(mimicos)
