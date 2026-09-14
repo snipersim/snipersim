@@ -59,6 +59,7 @@ def usage():
 
 standalone = False
 ncores = 1
+ncores_explicit = False   # was -n given?  A config may set total_cores; -n must win over it
 outputdir = '.'
 configfiles = []
 sniperoptions = []
@@ -251,6 +252,7 @@ for o, a in opts:
     use_dev = True
   if o == '-n':
     ncores = int(a)
+    ncores_explicit = True
   if o == '-d':
     outputdir = a
   if o == '-c':
@@ -504,6 +506,18 @@ if not configfiles:
   configfiles.extend(add_config_file('rob'))
 # Prepend config files to options, so -g options are always later on the command line and override config files
 sniperoptions = [ '--config=%s' % cfgfile for cfgfile in configfiles ] + sniperoptions
+
+# An explicit -n must win over a config file that sets general/total_cores.
+# The core count is also emitted before the config files (below), which is the
+# right precedence when -n was NOT given: a config named for its core count --
+# parametric_baseline_8c, kingscross -- supplies it, and base.cfg supplies the
+# default.  But with -n given, a shared include such as
+# common_configs/base_system_sniperspace.cfg (total_cores = 1) silently reduced
+# an eight-core request to one core; the pinned scheduler hid it by time-slicing
+# every thread onto that core, and the static scheduler reported it as "No cores
+# available for spawnThread request".
+if ncores_explicit:
+  sniperoptions.append('-g --general/total_cores=%u' % ncores)
 
 if roi_only or use_mpi:
   sniperoptions.append('-g --general/magic=true')
