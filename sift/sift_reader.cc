@@ -267,9 +267,18 @@ bool Reader::initStream()
    }
 #endif
 
+   // The ISA every instruction is decoded in until a RecOtherISAChange says
+   // otherwise.  This used to be left at 0 -- DL_ISA_IA32 -- for every trace,
+   // which was harmless only because the decoder ignored the value it was
+   // given.  Now that it honours it, a 64-bit trace has to start out saying so.
    if (hdr.options & ArchIA32)
    {
+      m_isa = 0;   // DL_ISA_IA32
       hdr.options &= ~ArchIA32;
+   }
+   else
+   {
+      m_isa = 1;   // DL_ISA_X86_64
    }
 
    if (hdr.options & PhysicalAddress)

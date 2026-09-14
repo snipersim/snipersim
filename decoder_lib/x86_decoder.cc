@@ -8,6 +8,8 @@ extern "C"
   #include <xed-interface.h>
 }
 
+#include "log.h"
+
 namespace dl 
 {
 
@@ -60,12 +62,57 @@ void X86Decoder::decode(DecodedInst * inst)
   inst->set_already_decoded(true);
 }
 
+/* Decode in the ISA the trace says this instruction was executed in.
+ *
+ * This used to ignore `isa` and call the fixed-mode decode() above, so every
+ * instruction was decoded as whatever the decoder was constructed with.  For a
+ * user-space trace that is harmless -- the process never leaves long mode.  For
+ * a full-system trace it is fatal: a machine starts in 16-bit real mode and
+ * reaches long mode through 32-bit protected mode, and the first real-mode
+ * instruction failed the assert in decode().
+ *
+ * The rest of the path was already in place: Sift::Writer::ISAChange() records
+ * a change, Sift::Reader stamps every instruction with the ISA in force, and
+ * TraceThread passes it here.  Only this function ignored it.
+ */
 void X86Decoder::decode(DecodedInst * inst, dl_isa isa)
 {
-  this->decode(inst);
+  xed_state_t xed_state;
+  xed_error_enum_t res_decode;
+  xed_decoded_inst_t* xi;
+
+  if(inst->get_already_decoded())
+    return;
+
+  switch(isa)
+  {
+    case DL_ISA_IA16:
+      xed_state = { XED_MACHINE_MODE_REAL_16, XED_ADDRESS_WIDTH_16b };
+      break;
+    case DL_ISA_IA32:
+      xed_state = { XED_MACHINE_MODE_LONG_COMPAT_32, XED_ADDRESS_WIDTH_32b };
+      break;
+    case DL_ISA_X86_64:
+      xed_state = { XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b };
+      break;
+    default:
+      // Not an x86 ISA; fall back to how this decoder was constructed.
+      xed_state = m_xed_state_init;
+  }
+
+  xi = ((X86DecodedInst *)inst)->get_xed_inst();
+  xed_decoded_inst_zero_set_mode(const_cast<xed_decoded_inst_t*>(xi), &xed_state);
+  res_decode = xed_decode(const_cast<xed_decoded_inst_t*>(xi), inst->get_code(), inst->get_size());
+  LOG_ASSERT_ERROR(res_decode == XED_ERROR_NONE,
+                   "XED could not decode %u bytes at %p as isa %d (%s)",
+                   inst->get_size(), (void *)inst->get_address(), (int)isa,
+                   xed_error_enum_t2str(res_decode));
+
+  inst->set_already_decoded(true);
 }
 
-// This function has no real effect for XED, because the initialization is already done
+// Records the mode for callers that decode without passing one explicitly;
+// decode(inst, isa) sets the mode per instruction and does not consult this.
 void X86Decoder::change_isa_mode(dl_isa new_isa)
 {
   this->m_isa = new_isa;

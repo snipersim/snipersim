@@ -40,7 +40,12 @@ typedef enum dl_isa {
   DL_ISA_ARM32,   // ARM ISA on ARMv7 architecture
   DL_ISA_THUMB,   // ARM's Thumb and Thumb2
   DL_ISA_AARCH64,
-  DL_ISA_V8_32   // ARMv8 32-bit mode
+  DL_ISA_V8_32,  // ARMv8 32-bit mode
+  DL_ISA_IA16    // x86 16-bit real mode: where a machine starts before it
+                 // switches to protected and then to long mode.  Appended
+                 // rather than inserted: these values travel in SIFT traces
+                 // as the payload of a RecOtherISAChange record, so renumbering
+                 // the existing ones would change what an old trace means.
 } dl_isa;
   
 class DecodedInst;
