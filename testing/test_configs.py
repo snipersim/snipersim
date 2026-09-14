@@ -75,12 +75,7 @@ EXPECT_PASS_LAYERED = [
     'smt1', 'smt2', 'smt4', 'smt8',
 ]
 LAYER_BASE = 'gainestown'
-
-# ... except in detailed mode, where gainestown deadlocks (see
-# EXPECT_FAIL_DETAILED).  Layering onto it there would mark all seventeen
-# overlays as known failures and give them no timing coverage at all, so use a
-# base that works.
-LAYER_BASE_BY_MODE = {'detailed': 'nehalem-lite'}
+LAYER_BASE_BY_MODE = {}
 
 # oneipc replaces the core model, and on gainestown's topology that trips the
 # same tag-directory placement check as gainestown -n 4.  It layers cleanly onto
@@ -112,38 +107,15 @@ MODES = ('fast-forward', 'detailed')
 # config name: a case is expected to fail in detailed mode if any of the configs
 # it layers is listed here.
 #
-# All of these are the same bug, and it is not the configs' fault.  It needs two
-# things together: a cache shared between cores (shared_cores > 1 at any level)
-# *and* the detailed core model.  Either alone is fine.
-#
-#   The user and network threads hand a cache set lock between them without
-#   releasing it ("Pass stack lock through to user thread", cache_cntlr.cc), an
-#   upstream protocol that predates the MMU.  The MMU's page-table walk then
-#   performs its own cache accesses from inside coreInitiateMemoryAccess, which
-#   acquire set locks while one is already held in that borrowed state.  The
-#   network thread ends up blocked re-acquiring a mutex it still owns:
-#   _SetLock keeps one mutex per sharer and acquire_exclusive() takes them all,
-#   so with shared_cores > 1 there is more than one to trip over.
-#
-#   Verified with gdb: both mutexes report the same __owner, and the owner is
-#   the thread blocked on one of them.
-#
-#   Workaround: -g --perf_model/l3_cache/shared_cores=1
-_SHARED_CACHE_DEADLOCK = ('deadlock in the shared-cache set lock during a '
-                          'page-table walk (workaround: set every '
-                          'shared_cores to 1)')
-EXPECT_FAIL_DETAILED = {
-    'dunnington':   _SHARED_CACHE_DEADLOCK,  # l2 = 2, l3 = 6
-    'dunnington16': _SHARED_CACHE_DEADLOCK,  # l2 = 2, l3 = 4
-    'gainestown':   _SHARED_CACHE_DEADLOCK,  # l3 = 4
-    'silvermont':   _SHARED_CACHE_DEADLOCK,  # l2 = 2
-    # nehalem-lite is "#include gainestown" + "#include cacheonly", so it has
-    # gainestown's shared L3 and survives only because cacheonly takes the
-    # detailed core model out of the picture.  Layering nehalem back on puts it
-    # back, and the deadlock returns -- which is what makes the pairing the
-    # clearest evidence that both halves are needed.
-    'nehalem':      _SHARED_CACHE_DEADLOCK,
-}
+# Empty at the moment, and it was not always: every config with a cache shared
+# between cores (shared_cores > 1) under parametric_dram_directory_msi --
+# gainestown, dunnington, dunnington16, silvermont, and nehalem-lite once
+# nehalem was layered back onto it -- deadlocked the first time a page-table
+# walk missed to the directory.  A pass-through metadata request skipped the
+# set-lock downgrade along with the data copy, leaking shared_cores-1 mutexes
+# to the network thread; see the comment at the release in cache_cntlr.cc.
+# If a config lands back here with "timed out", look there first.
+EXPECT_FAIL_DETAILED = {}
 
 # Not a configuration to run on its own.
 EXCLUDE = {'base'}
