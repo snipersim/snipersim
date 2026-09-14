@@ -20,6 +20,7 @@ def usage():
         '  [--dev]' + \
         '  [--roi]' + \
         '  [--roi-script]' + \
+        '  [--pacsim|--dynamic-sampling]' + \
         '  [--viz]' + \
         '  [--viz-aso]' + \
         '  [--profile]' + \
@@ -85,6 +86,7 @@ appdebug_nowait = False
 follow_execv = False
 build_dir = None
 run_power = False
+enable_pacsim = False
 save_output = False
 save_patch = False
 pin_stats = False
@@ -214,6 +216,7 @@ try:
     [
       "dev",
       "roi", "roi-script",
+      "pacsim", "dynamic-sampling",
       "viz", "viz-aso",
       "profile", "memory-profile", "cheetah",
       "perf", "valgrind", "wrap-sim=",
@@ -323,6 +326,11 @@ for o, a in opts:
       print('Please use --follow-execv=1 to ensure future compatibility', file=sys.stderr)
       sys.exit(-1)
     follow_execv = True
+  if o in ('--pacsim', '--dynamic-sampling'):
+    # Two spellings, one path.  --pacsim names the published methodology and
+    # --dynamic-sampling says what it does; they must never drift apart, so
+    # neither one configures anything here beyond setting the flag.
+    enable_pacsim = True
   if o == '--power':
     run_power = True
     use_viz_mcpat = '--mcpat'
@@ -382,6 +390,29 @@ for o, a in opts:
     trace_extra_args.append(o)
   if o.startswith('--') and o[2:]+'=' in record_trace_passthrough:
     trace_extra_args += [o, a]
+
+
+# Pac-Sim / dynamic sampling.
+#
+# Applied once, after parsing, so that --pacsim and --dynamic-sampling cannot
+# configure a run differently.  Two things have to line up or the run is not
+# the methodology it claims to be:
+#
+#   - the simulator starts in fast-forward rather than cache warm-up, because
+#     Pac-Sim decides for itself when to warm and when to detail, and a warm-up
+#     it did not ask for perturbs the intervals it is measuring;
+#   - the recorder does the live BBV clustering and intra-barrier analysis,
+#     which is what makes the sampling adaptive rather than periodic.
+#
+# The second is the one that can be missing, so it is checked rather than
+# assumed -- see record-trace.  A run that quietly fell back to unsampled
+# tracing would still produce a sim.out, and nothing in it would say the
+# sampling never happened.
+if enable_pacsim:
+  print('[PacSim] Dynamic sampling enabled.')
+  print('[PacSim] inst_mode_init is set to fast_forward rather than cache_warmup,')
+  print('[PacSim] because Pac-Sim schedules its own warm-up.')
+  sniperoptions.append('-g --general/inst_mode_init=fast_forward')
 
 
 # Which build to run.  Settled here, before anything is launched: run-sniper
@@ -693,7 +724,9 @@ if tracegen:
   if sde_arch:
     trace_extra_args += [ '--sde-arch=%(sde_arch)s' % locals() ]
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
-    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] + (['-v'] if verbose else []) + trace_extra_args + app_cmd
+    tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] \
+             + (['--pacsim'] if enable_pacsim else []) \
+             + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     tracecmds.append(tracecmd)
     if tracegen['redirect']: # redirect output
       threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, tracecmd, outputdir)).start()
@@ -896,6 +929,20 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
   if use_cheetah:
     os.system('%(sim_root)s/tools/gen_cheetah.py -d %(outputdir)s -o %(outputdir)s/cheetah' % locals())
+
+  if enable_pacsim:
+    # Imported, not shelled out to pacsim.py.  The estimate is part of the run,
+    # so it should not be reachable only by remembering to invoke a second
+    # script afterwards -- and the moment there are two entry points they
+    # disagree about which output directory and which Sniper root to read.
+    print('[SNIPER] Estimating Pac-Sim run time')
+    try:
+      from pacsimscripts import mtng_dumpjson
+      sim_time, wall_time, l2_miss_rate = mtng_dumpjson.get_full_time(outputdir, sim_root, False)
+      print('[PacSim] Estimated sim time %.3fs, wall time %.3fs, L2 miss rate %.4f'
+            % (sim_time, wall_time, l2_miss_rate))
+    except Exception as e:
+      print('[PacSim] Could not estimate run time:', e, file=sys.stderr)
 
   if run_power:
     print('[SNIPER] Running McPAT')
