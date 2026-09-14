@@ -31,11 +31,25 @@
  * Deterministic: the permutation is generated from a fixed seed with an
  * explicit LCG rather than rand(), so the checksum does not depend on the
  * platform's libc, and the same build always simulates the same instructions.
+ *
+ * The phase loop is marked as the region of interest, and that is not a
+ * detail.  Building the chase cycles is a Fisher-Yates shuffle over every slot
+ * of every thread's buffer, and measurement showed it costs more instructions
+ * than all the phases put together -- 70.2M simulated, of which only ~16M were
+ * phases.  Sampling that would mean spending the detailed budget on a one-off
+ * region with no phase structure at all, and reporting an accuracy figure
+ * dominated by it.  SimRoiStart/SimRoiEnd confine both the baseline and the
+ * sampled run to the part of the program this test is actually about.
+ *
+ * The markers compile to `xchg %bx, %bx`, which is a no-op on real hardware,
+ * so the workload still runs and checksums correctly outside the simulator.
  */
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "sim_api.h"
 
 #ifndef NTHREADS
 #define NTHREADS 4
@@ -139,10 +153,14 @@ int main(void)
       build_cycle(chase[i], CHASE_SLOTS, 12345u + (uint32_t)i);
    }
 
+   /* Thread creation is inside the region: the barriers between phases are
+    * part of what is being measured. */
+   SimRoiStart();
    for (long i = 0; i < NTHREADS; i++)
       pthread_create(&th[i], NULL, work, (void *)i);
    for (int i = 0; i < NTHREADS; i++)
       pthread_join(th[i], NULL);
+   SimRoiEnd();
 
    for (int i = 0; i < NTHREADS; i++)
    {

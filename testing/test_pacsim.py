@@ -25,6 +25,10 @@ phases across barriers.  That shape matters -- see the comment at the top of
 that file.  Against a uniform workload any sampler is accurate and this test
 would prove nothing.
 
+Both runs are ROI-scoped to the phase loop.  Building the workload's chase
+cycles costs more instructions than all the phases together, and none of it
+has phase structure, so measuring it would bury the thing being tested.
+
 This is a validation, not a smoke test: the baseline is a full detailed
 simulation and takes minutes.  It is deliberately not part of `make regress`.
 
@@ -118,6 +122,7 @@ def build_workload(workdir, threads, phases):
     exe = os.path.join(workdir, 'phased')
     cc = os.environ.get('CC', 'gcc')
     subprocess.run([cc, '-O1',
+                    '-I', os.path.join(SNIPER_ROOT, 'include'),
                     '-DNTHREADS=%d' % threads,
                     '-DNPHASES=%d' % phases,
                     '-o', exe, WORKLOAD_SRC, '-lpthread'], check=True)
@@ -143,7 +148,15 @@ def elapsed_seconds(resultsdir):
 
 
 def simulate(exe, outputdir, threads, extra, timeout):
-    cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'),
+    """Both runs are ROI-scoped, and both the same way.
+
+    Without --roi the measurement is swamped by setup: building the chase
+    cycles costs more instructions than every phase combined, and it has no
+    phase structure for a sampler to work with.  Confining both runs to the
+    phase loop is what makes the two numbers comparable and the accuracy figure
+    mean what it says.
+    """
+    cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'), '--roi',
            '-n', str(threads), '-c', 'gainestown', '-d', outputdir] + extra + ['--', exe]
     return run(cmd, timeout)
 
