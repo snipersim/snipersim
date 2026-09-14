@@ -106,8 +106,20 @@ Reader::~Reader()
 {
    free(m_filename);
    free(m_response_filename);
+
+   // Ownership: vifstream deletes the ifstream it was constructed from, and
+   // izstream (the compressed case) deletes the vifstream, so deleting `input`
+   // takes `inputstream` with it.  Deleting it again here was a double free
+   // that crashed every reader of an uncompressed trace on the way out --
+   // siftdump exited 139 after printing the whole trace correctly.
+   //
+   // The ChampSim path is the exception: IfstreamChampSimStream only borrows
+   // the stream, so there `inputstream` is still ours to delete.
    if (input)
+   {
       delete input;
+      inputstream = NULL;
+   }
    if (response)
       delete response;
    if (inputstream)
