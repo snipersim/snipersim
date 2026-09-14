@@ -191,10 +191,17 @@ DramCache::accessDataArray(Cache::access_t access, core_id_t requester, Subsecon
       queue_delay = SubsecondTime::Zero();
    }
 
-   perf->updateTime(t_start);
-   perf->updateTime(t_start + queue_delay, ShmemPerf::DRAM_CACHE_QUEUE);
-   perf->updateTime(t_start + queue_delay + processing_time, ShmemPerf::DRAM_CACHE_BUS);
-   perf->updateTime(t_start + queue_delay + processing_time + m_data_access_time, ShmemPerf::DRAM_CACHE_DATA);
+   // insertLine() passes NULL here on purpose: a line fill is not charged to
+   // any requester's breakdown.  Every other caller passes the request's
+   // ShmemPerf.  Dereferencing it unconditionally segfaulted on the first
+   // DRAM-cache fill of every detailed-mode run with dram-cache layered on.
+   if (perf)
+   {
+      perf->updateTime(t_start);
+      perf->updateTime(t_start + queue_delay, ShmemPerf::DRAM_CACHE_QUEUE);
+      perf->updateTime(t_start + queue_delay + processing_time, ShmemPerf::DRAM_CACHE_BUS);
+      perf->updateTime(t_start + queue_delay + processing_time + m_data_access_time, ShmemPerf::DRAM_CACHE_DATA);
+   }
 
    return queue_delay + processing_time + m_data_access_time;
 }
