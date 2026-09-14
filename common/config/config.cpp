@@ -21,7 +21,10 @@ namespace config
       vfprintf(stderr, format, args);
       va_end(args);
       fprintf(stderr, "\n\n");
-      exit(0);
+      // Fatal by construction -- nothing after a configuration error is a
+      // simulation.  This exited 0, so run-sniper reported success for a run
+      // that never started, and anything scripted on top of it agreed.
+      exit(1);
    }
 
     bool Config::isLeaf(const String & path)
