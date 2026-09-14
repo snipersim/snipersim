@@ -32,6 +32,39 @@ set(SNIPER_RV8_HOME "${CMAKE_CURRENT_SOURCE_DIR}/../rv8" CACHE PATH
 set(SNIPER_CHAMPSIM_INCLUDE "" CACHE PATH
     "ChampSim include directory, if ChampSim trace support is wanted")
 
+# Compiler cache.
+#
+# This matters more here than in most projects: with several build directories
+# and a legacy ABI that a preset can turn on or off, the same translation unit
+# gets compiled in more than one configuration, and switching between them used
+# to mean a full rebuild from zero.  ccache makes the second and later builds of
+# an already-seen configuration nearly free.
+set(SNIPER_COMPILER_LAUNCHER "auto" CACHE STRING
+    "Compiler cache: auto, ccache, sccache, or none")
+set_property(CACHE SNIPER_COMPILER_LAUNCHER PROPERTY STRINGS auto ccache sccache none)
+
+if(NOT SNIPER_COMPILER_LAUNCHER STREQUAL "none")
+  if(SNIPER_COMPILER_LAUNCHER STREQUAL "auto")
+    find_program(_sniper_launcher NAMES ccache sccache)
+  else()
+    find_program(_sniper_launcher NAMES ${SNIPER_COMPILER_LAUNCHER})
+    if(NOT _sniper_launcher)
+      message(FATAL_ERROR
+        "SNIPER_COMPILER_LAUNCHER=${SNIPER_COMPILER_LAUNCHER} but it is not on PATH.\n"
+        "  Install it, or configure with -DSNIPER_COMPILER_LAUNCHER=none.")
+    endif()
+  endif()
+  if(_sniper_launcher)
+    set(CMAKE_C_COMPILER_LAUNCHER   "${_sniper_launcher}" CACHE STRING "" FORCE)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${_sniper_launcher}" CACHE STRING "" FORCE)
+    set(SNIPER_LAUNCHER_IN_USE "${_sniper_launcher}")
+  else()
+    set(SNIPER_LAUNCHER_IN_USE "none found")
+  endif()
+else()
+  set(SNIPER_LAUNCHER_IN_USE "disabled")
+endif()
+
 function(sniper_print_configuration)
   message(STATUS "")
   message(STATUS "Sniper ${PROJECT_VERSION}")
@@ -45,6 +78,7 @@ function(sniper_print_configuration)
   message(STATUS "  McPAT .............. ${SNIPER_ENABLE_MCPAT}")
   message(STATUS "  Pin revision ....... ${SNIPER_PIN_REV}")
   message(STATUS "  liblzma ............ ${SNIPER_HAVE_LZMA}")
+  message(STATUS "  compiler cache ..... ${SNIPER_LAUNCHER_IN_USE}")
   message(STATUS "  Python ............. ${Python3_VERSION} (${Python3_EXECUTABLE})")
   message(STATUS "")
 endfunction()
