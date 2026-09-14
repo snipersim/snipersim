@@ -388,6 +388,22 @@ for o, a in opts:
 BUILD_DIR = run_sniper.resolve_build_dir(HOME, build_dir)
 os.environ['SNIPER_BUILD_DIR'] = BUILD_DIR
 
+# Read it and check it here too, rather than several hundred lines further down.
+# The recorder threads are started before that point, and they are not daemons,
+# so sys.exit() could not end the process: a build whose dependency symlinks had
+# gone stale printed "Cannot find xed_home ..." and then hung until something
+# killed it, leaving record-trace and the workload behind.  Now it exits.
+configfile, config = run_sniper.load_build_config(BUILD_DIR)
+
+for d in ('pin_home', 'xed_home', 'torch_home'):
+  absdir = os.path.join(HOME, config[d])
+  if not os.path.isdir(absdir):
+    sys.stderr.write('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
+    sys.exit(-1)
+  exec("%s = '%s'" % (d, absdir))
+sim_root = HOME
+arch = config.get('target', 'intel64')
+
 
 if cmdline:
   # Sniper always runs as its own binary, reading SIFT.  Running the whole
@@ -671,18 +687,6 @@ if tracegen:
       threading.Thread(target = run_sift_recorder, args = (tracecmd,)).start()
 
 sniperoptions = ' '.join(sniperoptions)
-
-configfile, config = run_sniper.load_build_config(BUILD_DIR)
-
-# convert paths in config to absolute paths
-for d in ('pin_home','xed_home', 'torch_home'):
-  absdir = os.path.join(HOME, config[d])
-  if not os.path.isdir(absdir):
-    sys.stderr.write('Cannot find %s %s, please check %s\n' % (d, absdir, configfile))
-    sys.exit(-1)
-  exec("%s = '%s'" % (d, absdir))
-sim_root = HOME
-arch = config.get('target', 'intel64')
 
 env = run_sniper.setup_env(sim_root, pin_home, arch, standalone, xed_home, torch_home)
 
