@@ -15,7 +15,6 @@ import sys, os, time, subprocess, threading, tempfile, sniper_lib
 #   $SNIPER_BUILD_DIR           for a shell that has picked one, and how
 #                               run-sniper tells record-trace what it chose
 #   $SNIPER_ROOT/build/default  the conventional symlink
-#   $SNIPER_ROOT                the in-tree layout the make build produces
 def resolve_build_dir(home, explicit = None):
   candidates = []
   if explicit:
@@ -23,7 +22,6 @@ def resolve_build_dir(home, explicit = None):
   if os.getenv('SNIPER_BUILD_DIR'):
     candidates.append(('$SNIPER_BUILD_DIR', os.getenv('SNIPER_BUILD_DIR')))
   candidates.append(('build/default', os.path.join(home, 'build', 'default')))
-  candidates.append(('the source tree', home))
 
   for origin, path in candidates:
     if os.path.isfile(os.path.join(path, 'config', 'sniper.py')):

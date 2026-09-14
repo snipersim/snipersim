@@ -1,404 +1,125 @@
-SIM_ROOT ?= $(shell readlink -f "$(CURDIR)")
-
-CLEAN=$(findstring clean,$(MAKECMDGOALS))
-
-STANDALONE=$(SIM_ROOT)/lib/sniper
-PIN_FRONTEND=$(SIM_ROOT)/frontend/pin-frontend/obj-intel64/pin_frontend
-DYNAMORIO_FRONTEND=$(SIM_ROOT)/frontend/dr-frontend/build/libdr-frontend.so
-LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a
-LIB_SIFT=$(SIM_ROOT)/sift/libsift.a
-LIB_DECODER=$(SIM_ROOT)/decoder_lib/libdecoder.a
-LIB_TORCH=$(SIM_ROOT)/libtorch/lib/libtorch.so
-MIMICOS=$(SIM_ROOT)/mimicos/build/startup_mimicos
-QSIM_FRONTEND=$(SIM_ROOT)/frontend/qsim-frontend/qsim-frontend
-SIM_TARGETS=$(LIB_DECODER) $(LIB_CARBON) $(LIB_SIFT) $(STANDALONE) $(PIN_FRONTEND) $(DYNAMORIO_FRONTEND) $(MIMICOS)
-
-# Optional dependencies.  Both the target that provides them and the reference to
-# that target have to be conditional, or the documented NO_* opt-outs break the
-# dependency graph instead of trimming it.
-# QEMU/QSim frontend.  Opt-in with BUILD_QSIM=1: QSim is not fetched by the
-# build, and detecting it by looking for a directory would repeat the mistake
-# BUILD_RISCV and BUILD_ARM make, where the presence of a sibling checkout
-# silently changes what gets compiled.
-ifeq ($(BUILD_QSIM),1)
-SIM_TARGETS += $(QSIM_FRONTEND)
-endif
-
-OPTIONAL_DEPS :=
-ifneq ($(NO_MCPAT_DOWNLOAD),1)
-OPTIONAL_DEPS += mcpat
-endif
-ifneq ($(NO_TORCH),1)
-OPTIONAL_DEPS += torch
-SIM_TARGETS += $(LIB_TORCH)
-endif
-export NO_TORCH
-
-
-.PHONY: all message dependencies compile_simulator configscripts package_deps pin linux builddir showdebugstatus distclean mbuild xed_install xed torch
-# Remake LIB_CARBON on each make invocation, as only its Makefile knows if it needs to be rebuilt
-.PHONY: $(LIB_CARBON)
-
-all: message dependencies $(SIM_TARGETS) configscripts
-
-#NOTE PINPLAY: This is not updated to the latest version: 1) SDE already contains pinplay, 2) the pinplay-driver (inside the pinplay_toolkit github) cannot easily be build for PIN. 3) The latest pinplay version has a bug preventing to read pinballs.
-#KNOWN ISSUE WITH SDE: It cannot run properly inside virtualbox
-
-# Check for errors. Only one value should be set
-TARGET_COUNT:=0
-# For Pin
-ifeq (,$(USE_PIN))
-# Do nothing
-else ifeq ($(USE_PIN),1)
-TARGET_COUNT:=$(shell echo $$(($(TARGET_COUNT)+1)))
-else # USE_PIN != "1"
-$(error If using, set USE_PIN to "1", not "$(USE_PIN)")
-endif
-# For Pinplay
-ifeq (,$(USE_PINPLAY))
-# Do nothing
-else ifeq ($(USE_PINPLAY),1)
-TARGET_COUNT:=$(shell echo $$(($(TARGET_COUNT)+1)))
-else # USE_PINPLAY != "1"
-$(error If using, set USE_PINPLAY to "1", not "$(USE_PINPLAY)")
-endif
-# For SDE
-ifeq (,$(USE_SDE))
-# Do nothing
-else ifeq ($(USE_SDE),1)
-TARGET_COUNT:=$(shell echo $$(($(TARGET_COUNT)+1)))
-else # USE_SDE != "1"
-$(error If using, set USE_SDE to "1", not "$(USE_SDE)")
-endif
-# Set the default if no values are set
-ifeq ($(TARGET_COUNT),0)
-# USE_PIN=1
-USE_SDE=1
-export USE_SDE #Makefile.config needs that variable
-else ifeq ($(TARGET_COUNT),1)
-# Input is valid. Use user-supplied default
-else
-# Error, cannot be >= 2
-$(error One or more tools requested for build. Only one supported USE_PIN=$(USE_PIN) USE_PINPLAY=$(USE_PINPLAY) USE_SDE=$(USE_SDE))
-endif
-
-include common/Makefile.common
-
-dependencies: package_deps sde_kit $(PIN_ROOT) pin xed $(OPTIONAL_DEPS) linux builddir showdebugstatus
-
-BUILD_CAPSTONE ?=
-ifeq ($(BUILD_ARM),1)
-BUILD_CAPSTONE=1
-else ifeq ($(BUILD_DYNAMORIO),1)
-BUILD_CAPSTONE=1
-endif
-
-ifeq ($(BUILD_CAPSTONE),1)
-dependencies: capstone
-.PHONY: capstone
-endif
-
-ifeq ($(BUILD_DYNAMORIO),1)
-dependencies: dynamorio
-.PHONY: dynamorio
-endif
-
-$(SIM_TARGETS): dependencies
-
-message:
-	@echo -n Building for x86 \($(SNIPER_TARGET_ARCH)\)
-ifneq (,$(USE_PIN))
-	@echo -n " with Pin"
-else ifneq (,$(USE_PINPLAY))
-	@echo -n " with Pinplay"
-else
-	@echo -n " with SDE"
-endif
-ifeq ($(BUILD_DYNAMORIO),1)
-	@echo -n " and DynamoRIO"
-endif
-ifeq ($(BUILD_RISCV),1)
-	@echo -n " and RISCV"
-endif
-ifeq ($(BUILD_QSIM),1)
-	@echo -n " and QSim"
-endif
-ifeq ($(BUILD_ARM),1)
-	@echo -n " and arm64"
-endif
-	@echo ""
-
-$(STANDALONE): $(LIB_CARBON) $(LIB_SIFT) $(LIB_DECODER)
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/standalone
-
-$(PIN_FRONTEND):
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/frontend/pin-frontend
-
-ifeq ($(BUILD_DYNAMORIO),1)
-$(DYNAMORIO_FRONTEND): $(LIB_SIFT)
-	@if [ ! -e "$(SIM_ROOT)/frontend/dr-frontend/build/Makefile" ]; then mkdir -p $(SIM_ROOT)/frontend/dr-frontend/build && cd $(SIM_ROOT)/frontend/dr-frontend/build && cmake -DDEBUG=ON -DDynamoRIO_DIR=$(DYNAMORIO_INSTALL)/build/cmake .. ; fi
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/frontend/dr-frontend/build
-else
-$(DYNAMORIO_FRONTEND):
-	$(_CMD) true
-endif
-
-$(LIB_CARBON): 
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/common
-
-$(LIB_SIFT): $(LIB_CARBON)
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/sift
-
-$(LIB_DECODER): $(LIB_CARBON)
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/decoder_lib 
-
-ifeq ($(BUILD_QSIM),1)
-$(QSIM_FRONTEND): $(LIB_SIFT) $(LIB_CARBON)
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/frontend/qsim-frontend
-endif
-
-# Userspace MimicOS.  Needed whenever general/enable_userspace_mimicos is set,
-# but it was never part of the build: the binary had to be made by hand.
-.PHONY: $(MIMICOS)
-$(MIMICOS):
-	@$(MAKE) $(MAKE_QUIET) -C $(SIM_ROOT)/mimicos
-
-DYNAMORIO_GITID=246ddb28e7848b2d09d2b9909f99a6da9b2ce35e
-DYNAMORIO_INSTALL=$(SIM_ROOT)/dynamorio
-DYNAMORIO_INSTALL_DEP=$(DYNAMORIO_INSTALL)/CMakeLists.txt
-$(DYNAMORIO_INSTALL_DEP):
-	$(_MSG) '[DOWNLO] dynamorio'
-	$(_CMD) git clone --quiet --recursive https://github.com/DynamoRIO/dynamorio.git $(DYNAMORIO_INSTALL)
-	$(_CMD) git -C $(DYNAMORIO_INSTALL) reset --quiet --hard $(DYNAMORIO_GITID)
-	$(_CMD) touch $(DYNAMORIO_INSTALL)/.autodownloaded
-
-DYNAMORIO_BUILD_DEP=$(DYNAMORIO_INSTALL)/build/bin64/drrun
-dynamorio: $(DYNAMORIO_BUILD_DEP)
-$(DYNAMORIO_BUILD_DEP): $(DYNAMORIO_INSTALL_DEP)
-	$(_MSG) '[INSTAL] dynamorio'
-	$(_CMD) if [ ! -e "$(SIM_ROOT)/dynamorio/build/Makefile" ]; then cd dynamorio && mkdir build && cd build && cmake -DDEBUG=ON .. ; fi
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C dynamorio/build
-
-CAPSTONE_GITID=f9c6a90489be7b3637ff1c7298e45efafe7cf1b9
-CAPSTONE_INSTALL=$(SIM_ROOT)/capstone
-CAPSTONE_INSTALL_DEP=$(CAPSTONE_INSTALL)/arch/AArch64/ARMMappingInsnOp.inc
-$(CAPSTONE_INSTALL_DEP):
-	$(_MSG) '[DOWNLO] capstone'
-	$(_CMD) git clone --quiet https://github.com/aquynh/capstone.git $(CAPSTONE_INSTALL)
-	$(_CMD) git -C $(CAPSTONE_INSTALL) reset --quiet --hard $(CAPSTONE_GITID)
-	$(_CMD) touch $(CAPSTONE_INSTALL)/.autodownloaded
-
-CAPSTONE_BUILD_DEP=$(CAPSTONE_INSTALL)/libcapstone.so.4
-capstone: $(CAPSTONE_BUILD_DEP)
-$(CAPSTONE_BUILD_DEP): $(CAPSTONE_INSTALL_DEP)
-	$(_MSG) '[INSTAL] capstone'
-	$(_CMD) cd $(CAPSTONE_INSTALL) ; ./make.sh
-
-MBUILD_GITID=f32bc9b31f9fc5a0be3dc88cd2086b70270295ab
-MBUILD_INSTALL=$(SIM_ROOT)/mbuild
-MBUILD_INSTALL_DEP=$(MBUILD_INSTALL)/mbuild/arar.py
-mbuild: $(MBUILD_INSTALL_DEP)
-$(MBUILD_INSTALL_DEP):
-	$(_MSG) '[DOWNLO] mbuild'
-	$(_CMD) git clone --quiet https://github.com/intelxed/mbuild.git $(MBUILD_INSTALL)
-	$(_CMD) git -C $(MBUILD_INSTALL) reset --quiet --hard $(MBUILD_GITID)
-
-XED_GITID=b86dd5014463d954bc8898d2376b14852d26facd
-XED_INSTALL_DEP=$(XED_INSTALL)/src/common/xed-init.c
-xed_install: $(XED_INSTALL_DEP)
-$(XED_INSTALL_DEP):
-	$(_MSG) '[DOWNLO] xed'
-	$(_CMD) git clone --quiet https://github.com/intelxed/xed.git $(XED_INSTALL)
-	$(_CMD) git -C $(XED_INSTALL) reset --quiet --hard $(XED_GITID)
-
-XED_DEP=$(XED_HOME)/include/xed/xed-iclass-enum.h
-xed: mbuild xed_install $(XED_DEP)
-$(XED_DEP): $(XED_INSTALL_DEP)
-	$(_MSG) '[INSTAL] xed'
-	$(_CMD) cd $(XED_INSTALL) ; \
-	        PYTHONPATH=$(MBUILD_INSTALL) PYTHONDONTWRITEBYTECODE=1 \
-	        ./mfile.py --silent --extra-flags=-fPIC --shared \
-	                   --build-dir $(SIM_ROOT)/xed_build --install-dir $(XED_HOME) install
-
-ifneq (,$(USE_PIN))
-PIN_DOWNLOAD=https://snipersim.org/packages/pin-external-3.31-98869-gfa6f126a8-gcc-linux.tar.gz
-PIN_DEP=$(PIN_HOME)/intel64/lib/libpindwarf.so
-$(PIN_ROOT): $(PIN_DEP)
-$(PIN_DEP):
-	$(_MSG) '[DOWNLO] Pin 3.31-98869'
-	$(_CMD) mkdir -p $(PIN_HOME)
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(PIN_DOWNLOAD) | tar -xf - -z --auto-compress --strip-components 1 -C $(PIN_HOME)
-	$(_CMD) touch $(PIN_HOME)/.autodownloaded
-sde_kit: $(PIN_ROOT)
-else ifneq (,$(USE_PINPLAY))
-PIN_DOWNLOAD=https://snipersim.org/packages/pinplay-dcfg-3.11-pin-3.11-97998-g7ecce2dac-gcc-linux.tar.bz2
-PIN_DEP=$(PIN_HOME)/intel64/lib-ext/libpin3dwarf.so
-$(PIN_ROOT): $(PIN_DEP)
-$(PIN_DEP):
-	$(_MSG) '[DOWNLO] Pinplay 3.11-97998'
-	$(_CMD) mkdir -p $(PIN_HOME)
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(PIN_DOWNLOAD) | tar -xf - -j --strip-components 1 -C $(PIN_HOME)
-	$(_CMD) touch $(PIN_HOME)/.autodownloaded
-sde_kit: $(PIN_ROOT)
-else
-PINPLAY_GITID=17ccab4f1326fdef96a2621c3c7e374ee26c160a
-SDE_DOWNLOAD=https://snipersim.org/packages/sde-external-9.44.0-2024-08-22-lin.tar.xz
-PIN_DEP=$(SDE_HOME)/intel64/pin_lib/libpindwarf.so
-sde_kit: $(PIN_DEP)
-$(PIN_DEP):
-	$(_MSG) '[DOWNLO] SDE 9.44.0-2024-08-22'
-	$(_CMD) mkdir -p $(SDE_HOME)
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(SDE_DOWNLOAD) | tar -xf - -J --strip-components 1 -C $(SDE_HOME)
-	$(_CMD) rm -r $(SDE_HOME)/pinkit/source/tools/InstLib #It looks like it is missing source files, so it fails to compile but not necessary for sniper
-	$(_CMD) touch $(SDE_HOME)/.autodownloaded
-	$(_MSG) '[DOWNLO] pinplay-tools'
-	$(_CMD) git clone --quiet https://github.com/intel/pinplay-tools $(SIM_ROOT)/pinplay-tools
-	$(_CMD) git -C $(SIM_ROOT)/pinplay-tools reset --quiet --hard $(PINPLAY_GITID)
-$(PIN_ROOT): sde_kit
-endif
-
-ifneq ($(NO_PIN_CHECK),1)
-PIN_REV_MINIMUM=71313
-pin: $(PIN_DEP)
-	@if [ "$$(tools/pinversion.py $(PIN_HOME) | cut -d. -f3)" -lt "$(PIN_REV_MINIMUM)" ]; then echo; echo "Found Pin version $$(tools/pinversion.py $(PIN_HOME)) in $(PIN_HOME)"; echo "but at least revision $(PIN_REV_MINIMUM) is required."; echo; false; fi
-endif
-
-ifneq ($(NO_MCPAT_DOWNLOAD),1)
-mcpat: mcpat/mcpat-1.0
-mcpat/mcpat-1.0:
-	$(_MSG) '[DOWNLO] McPAT'
-	$(_CMD) mkdir -p mcpat
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet "https://snipersim.org/packages/mcpat-1.0.tgz" | tar -xf - -z -C mcpat
-endif
-linux: include/linux/perf_event.h
-include/linux/perf_event.h:
-	$(_MSG) '[INSTAL] perf_event.h'
-	$(_CMD) if [ -e /usr/include/linux/perf_event.h ]; then cp /usr/include/linux/perf_event.h include/linux/perf_event.h; else cp include/linux/perf_event_2.6.32.h include/linux/perf_event.h; fi
-
-ifneq ($(NO_TORCH),1)
-TORCH_VERSION=2.5.0
-TORCH_DOWNLOAD=https://snipersim.org/packages/libtorch-shared-with-deps-${TORCH_VERSION}-cpu.tar.gz
-TORCH_DEP := $(SIM_ROOT)/libtorch/lib/libtorch.so
-ifeq ($(wildcard $(TORCH_DEP)),)
-torch-download:
-	$(_MSG) '[DOWNLO] LIBTORCH $(TORCH_VERSION)';
-	$(_CMD) wget -O - $(WGET_OPTIONS) --no-verbose --quiet --show-progress $(TORCH_DOWNLOAD) | tar -xf - -z -C $(SIM_ROOT);
-
-torch: torch-download
-endif
-endif
-
-# Nothing may be downloaded or built until the environment check has passed.
+# Sniper — `make` for people who type `make`.
 #
-# package_deps used to be a plain sibling of the download targets in the
-# `dependencies:` list, so under -j make was free to run them together -- and did:
-# a missing Python.h was reported only after ~1.1 GB of SDE, XED, McPAT and
-# libtorch had already been fetched.  Order-only prerequisites (|) gate the leaf
-# rules that actually download, rather than the aggregate names above them: those
-# aggregates have the downloads as their own prerequisites, so gating them would
-# order the recipe but not the fetching.
-$(PIN_DEP) $(MBUILD_INSTALL_DEP) $(XED_INSTALL_DEP) $(XED_DEP): | package_deps
-ifneq ($(NO_MCPAT_DOWNLOAD),1)
-mcpat/mcpat-1.0: | package_deps
-endif
-ifneq ($(NO_TORCH),1)
-ifeq ($(wildcard $(TORCH_DEP)),)
-torch-download: | package_deps
-endif
-endif
-ifeq ($(BUILD_CAPSTONE),1)
-$(CAPSTONE_INSTALL_DEP) $(CAPSTONE_BUILD_DEP): | package_deps
-endif
-ifeq ($(BUILD_DYNAMORIO),1)
-$(DYNAMORIO_INSTALL_DEP) $(DYNAMORIO_BUILD_DEP): | package_deps
-endif
+# The build is CMake now.  This forwards to it so that existing habits, scripts
+# and papers keep working:
+#
+#     make                 acquire dependencies, configure, build
+#     make -j8             passed through
+#     make clean           clean the build directory
+#     make distclean       remove build directories and the fetched dependencies
+#     make regress         run the regression suites
+#     make deps            acquire dependencies only
+#     make configure       configure only
+#
+# Anything more than that is better said directly:
+#
+#     cmake --preset x86-sde-debug && cmake --build --preset x86-sde-debug
+#     cmake --list-presets
+#
+# and a build directory is selected at run time with
+#
+#     ./run-sniper --build-dir=build/x86-sde-debug ...
+#
+# The three phases -- acquire, configure, compile -- are separate commands on
+# purpose.  Fusing them is what let the old build download 1.1 GB before the
+# check that was supposed to prevent it had finished.
 
-builddir: lib
-lib:
-	@mkdir -p $(SIM_ROOT)/lib
+SIM_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+BUILD_DIR ?= $(SIM_ROOT)/build/default
+PRESET ?=
 
-showdebugstatus:
-ifneq ($(DEBUG),)
-	@echo Using flags: $(OPT_CFLAGS)
-endif
+CMAKE ?= cmake
+DEPS := $(SIM_ROOT)/deps/sniper-deps
 
-configscripts: dependencies
-	@mkdir -p config
-	@> config/sniper.py
-	@echo '# This file is auto-generated, changes made to it will be lost. Please edit Makefile instead.' >> config/sniper.py
-	@echo "target=\"$(SNIPER_TARGET_ARCH)\"" >> config/sniper.py
-	@./tools/makerelativepath.py sde_home "$(SIM_ROOT)" "$(SDE_HOME)" >> config/sniper.py
-	@./tools/makerelativepath.py pin_home "$(SIM_ROOT)" "$(PIN_HOME)" >> config/sniper.py
-	@./tools/makerelativepath.py xed_home "$(SIM_ROOT)" "$(XED_HOME)" >> config/sniper.py
-	@./tools/makerelativepath.py dynamorio_home "$(SIM_ROOT)" "$(DYNAMORIO_INSTALL)/build" >> config/sniper.py
-	@./tools/makerelativepath.py torch_home "$(SIM_ROOT)" "$(TORCH_HOME)" >> config/sniper.py
-	@if [ $$(which git) ]; then if [ -e "$(SIM_ROOT)/.git" ]; then echo "git_revision=\"$$(git --git-dir='$(SIM_ROOT)/.git' rev-parse HEAD)\"" >> config/sniper.py; fi ; fi
-	@./tools/makebuildscripts.py "$(SIM_ROOT)" "$(SDE_HOME)" "$(PIN_HOME)" "$(DYNAMORIO_INSTALL)/build" "$(CC)" "$(CXX)" "$(SNIPER_TARGET_ARCH)"
+# Feature selection, forwarded to both the dependency fetcher and CMake so the
+# two cannot disagree about what this build needs.
+FRONTEND ?= sde
+TORCH ?= ON
+MCPAT ?= ON
+RISCV ?= OFF
+ARM ?= OFF
+DYNAMORIO ?= OFF
+BUILD_TYPE ?= Release
 
-empty_config:
-	$(_MSG) '[CLEAN ] config'
-	$(_CMD) rm -f config/sniper.py config/buildconf.sh config/buildconf.makefile
+_deps_flags := --frontend $(FRONTEND)
+_deps_flags += $(if $(filter ON,$(TORCH)),,--no-torch)
+_deps_flags += $(if $(filter ON,$(MCPAT)),,--no-mcpat)
+_deps_flags += $(if $(filter ON,$(RISCV)),--riscv,)
+_deps_flags += $(if $(filter ON,$(ARM)),--arm,)
+_deps_flags += $(if $(filter ON,$(DYNAMORIO)),--dynamorio,)
 
-clean: empty_config empty_deps
-	$(_MSG) '[CLEAN ] standalone'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C standalone clean
-	$(_MSG) '[CLEAN ] mimicos'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C mimicos clean
-	$(_MSG) '[CLEAN ] common'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C common clean
-	$(_MSG) '[CLEAN ] sift'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C sift clean
-	$(_MSG) '[CLEAN ] tools'
-	$(_CMD) $(MAKE) $(MAKE_QUIET) -C tools clean
-	$(_MSG) '[CLEAN ] frontend/pin-frontend'
-	$(_CMD) if [ -d "$(PIN_HOME)" ]; then $(MAKE) $(MAKE_QUIET) -C frontend/pin-frontend clean ; fi
-	$(_MSG) '[CLEAN ] frontend/dr-frontend'
-	$(_CMD) if [ -d "$(SIM_ROOT)/frontend/dr-frontend/build" ]; then rm -rf $(SIM_ROOT)/frontend/dr-frontend/build ; fi
+_cmake_flags := -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
+_cmake_flags += -DSNIPER_FRONTEND=$(FRONTEND)
+_cmake_flags += -DSNIPER_ENABLE_TORCH=$(TORCH)
+_cmake_flags += -DSNIPER_ENABLE_MCPAT=$(MCPAT)
+_cmake_flags += -DSNIPER_ENABLE_RISCV=$(RISCV)
+_cmake_flags += -DSNIPER_ENABLE_ARM=$(ARM)
+_cmake_flags += -DSNIPER_ENABLE_DYNAMORIO=$(DYNAMORIO)
 
-distclean: clean
-	$(_MSG) '[DISTCL] Pin kit'
-	$(_CMD) if [ -e "$(PIN_HOME)/.autodownloaded" ]; then rm -rf $(PIN_HOME); fi
-	$(_CMD) if [ -e "pin_kit/.autodownloaded" ]; then rm -rf pin_kit; fi
-	$(_MSG) '[DISTCL] SDE kit'
-	$(_CMD) if [ -e "$(SDE_HOME)/.autodownloaded" ]; then rm -rf $(SDE_HOME); fi
-	$(_MSG) '[DISTCL] Capstone'
-	$(_CMD) if [ -e "$(CAPSTONE_INSTALL)/.autodownloaded" ]; then rm -rf $(CAPSTONE_INSTALL); fi
-	$(_MSG) '[DISTCL] DynamoRIO'
-	$(_CMD) if [ -e "$(DYNAMORIO_INSTALL)/.autodownloaded" ]; then rm -rf $(DYNAMORIO_INSTALL); fi
-	$(_MSG) '[DISTCL] McPAT'
-	$(_CMD) rm -rf mcpat
-	$(_MSG) '[DISTCL] Xed'
-	$(_CMD) rm -rf xed xed_kit mbuild
-	$(_MSG) '[DISTCL] perf_event.h'
-	$(_CMD) rm -f include/linux/perf_event.h
-	$(_MSG) '[DISTCL] libtorch'
-	$(_CMD) rm -rf libtorch
+# Ninja when it is available; CMake's default generator otherwise.
+#
+# Only for a directory that has not been configured yet.  CMake refuses to
+# change generator under an existing cache, so passing -G unconditionally turned
+# "ninja has since been installed" into a hard error on every build directory
+# that predated it.  Reconfiguring an existing directory keeps whatever it was
+# built with; to switch, delete it.
+_generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
+             $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-# Regression tests.  These run against a completed build, so run `make` first.
-# There is no hosted CI: wire `make regress` into whatever runs automatically
-# for you (a git hook, a cron job, your own runner).
-.PHONY: regress regress_quick regress_scripting
+.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs help
+
+all: build
+
+deps:
+	@$(DEPS) $(_deps_flags) fetch
+
+configure: deps
+	@$(CMAKE) -S $(SIM_ROOT) -B $(BUILD_DIR) $(_generator) $(_cmake_flags) \
+	          -DSNIPER_LINK_INTO_TREE=ON
+
+# Parallelism.
+#
+# GNU Make advertises its jobserver in MAKEFLAGS but only hands the descriptors
+# to recipes it considers recursive.  This one is not, so ninja read the
+# advertisement, failed to open the descriptors, printed
+#
+#     ninja: error: Could not initialize jobserver: Invalid file descriptors
+#
+# and then quietly built at its own default width -- an alarming message and a
+# -j that was not the one asked for.  Translate -jN into an explicit --parallel
+# and take the jobserver back out of the environment instead.
+#
+# Deferred (=) rather than immediate (:=): make appends -j and the jobserver to
+# MAKEFLAGS after the makefile has been read, so an immediate assignment sees
+# neither.
+_jflag = $(filter -j%,$(MAKEFLAGS))
+_parallel = --parallel $(patsubst -j%,%,$(_jflag))
+
+# Depends on configure rather than on the cache file: re-running CMake on an
+# already-configured directory costs about a second and re-runs nothing else,
+# and it avoids a recursive $(MAKE) that would pick up the wrong makefile.
+build: configure
+	@MAKEFLAGS= MFLAGS= $(CMAKE) --build $(BUILD_DIR) $(_parallel)
+
+clean:
+	@if [ -d "$(BUILD_DIR)" ]; then $(CMAKE) --build $(BUILD_DIR) --target clean; fi
+
+distclean:
+	@rm -rf $(SIM_ROOT)/build $(SIM_ROOT)/lib/sniper
+	@echo "Build directories removed."
+	@echo "Fetched dependencies live in a shared cache and are left alone;"
+	@echo "  $(DEPS) cache      shows where"
+	@echo "  $(DEPS) gc         removes versions no manifest names"
 
 regress: regress_scripting regress_configs
 
-# Exercises the embedded Python interpreter from simulator threads.  This is the
-# suite that catches missing GIL guards in hook callbacks, which only fail under
-# a threaded interpreter and only under load.
 regress_scripting:
-	$(_MSG) '[REGRES] scripting hooks'
-	$(_CMD) $(SIM_ROOT)/testing/test_scripting.py
+	@$(SIM_ROOT)/testing/test_scripting.py
 
-# Runs every shipped configuration at several core counts.  Nothing else covers
-# config/base.cfg, which every simulation loads.
 regress_configs:
-	$(_MSG) '[REGRES] shipped configurations'
-	$(_CMD) $(SIM_ROOT)/testing/test_configs.py
+	@$(SIM_ROOT)/testing/test_configs.py
 
-regress_quick: regress
-
-empty_deps:
-	$(_MSG) '[CLEAN ] deps'
-	$(_CMD) find . -name \*.d -exec rm {} \;
-
-package_deps:
-	@BOOST_INCLUDE=$(BOOST_INCLUDE) ./tools/checkdependencies.py
+# The header comment is the help text: print it up to the first line that is not
+# a comment, so the two cannot drift apart.
+help:
+	@sed -n '/^#/!q; s/^#\{1\} \{0,1\}//p' $(lastword $(MAKEFILE_LIST))
