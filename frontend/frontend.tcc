@@ -19,7 +19,6 @@ ExecFrontend <T>::ExecFrontend(int argc, const char * argv [])
       << m_options->cmd_summary() << std::endl;
   // If everything goes fine with the parsing of arguments create the frontend
   } else {
-    //m_frontend = new T(m_options->get_theISA());  // For QSim
     m_frontend = new T();
   }
 }
