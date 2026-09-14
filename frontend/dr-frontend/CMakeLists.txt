@@ -77,7 +77,10 @@ target_include_directories(dr_frontend PRIVATE
 # one target.
 target_link_libraries(dr_frontend sift z)
 
+# OUTPUT_NAME dr-frontend, not the target name: drrun loads libdr-frontend.so,
+# which is what README.arm64 and the tool config below both name.
 set_target_properties(dr_frontend PROPERTIES
+  OUTPUT_NAME dr-frontend
   CXX_STANDARD 11
   CXX_EXTENSIONS OFF
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -98,10 +101,21 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 else()
   set(_dr_config "${CMAKE_BINARY_DIR}/lib/dr-frontend.drrun32")
 endif()
-file(WRITE  ${_dr_config} "# dr-frontend tool config file\n")
-file(APPEND ${_dr_config} "# DynamoRIO options: may as well optimize the bb lock\n")
-file(APPEND ${_dr_config} "DR_OP=-nop_initial_bblock\n")
-file(APPEND ${_dr_config} "# client tool path\n")
-file(APPEND ${_dr_config} "CLIENT_REL=${INSTALL_CLIENTS_LIB}/${LIB_PFX}dr-frontend${LIB_EXT}\n")
-file(APPEND ${_dr_config} "# client tool options\n")
-file(APPEND ${_dr_config} "TOOL_OP=\n")
+
+# CLIENT_ABS with the path the build actually produced, written by
+# file(GENERATE) so the generator expression resolves.
+#
+# It used to be CLIENT_REL=${INSTALL_CLIENTS_LIB}/${LIB_PFX}dr-frontend${LIB_EXT}
+# -- three variables that DynamoRIO defines inside its own build, not here, so
+# they all expanded to nothing and the file said "CLIENT_REL=/dr-frontend".
+# CLIENT_REL is relative to the DynamoRIO installation anyway, and the client
+# is not installed into it: it lives in this build directory.
+file(GENERATE OUTPUT "${_dr_config}" CONTENT
+"# dr-frontend tool config file
+# DynamoRIO options: may as well optimize the bb lock
+DR_OP=-nop_initial_bblock
+# client tool path
+CLIENT_ABS=$<TARGET_FILE:dr_frontend>
+# client tool options
+TOOL_OP=
+")
