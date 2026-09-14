@@ -77,12 +77,11 @@ EXPECT_PASS_LAYERED = [
 LAYER_BASE = 'gainestown'
 LAYER_BASE_BY_MODE = {}
 
-# oneipc replaces the core model, and on gainestown's topology that trips the
-# same tag-directory placement check as gainestown -n 4.  It layers cleanly onto
-# nehalem-lite, so test it there rather than pretend it is broken.
-LAYER_BASE_OVERRIDE = {
-    'oneipc': 'nehalem-lite',
-}
+# Per-overlay layering base, for overlays that cannot sit on the default one.
+# Empty: oneipc used to be sent to nehalem-lite because it tripped the
+# tag-directory placement check on gainestown; it no longer does, at either
+# core count, in either mode.
+LAYER_BASE_OVERRIDE = {}
 
 # Cannot work in a plain x86 SDE build, with the reason.  Listed rather than
 # skipped, so that one starting to work is reported too.
