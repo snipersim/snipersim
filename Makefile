@@ -26,7 +26,6 @@
 
 SIM_ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 BUILD_DIR ?= $(SIM_ROOT)/build/default
-PRESET ?=
 
 CMAKE ?= cmake
 DEPS := $(SIM_ROOT)/deps/sniper-deps

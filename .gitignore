@@ -63,6 +63,7 @@ sde_kit
 capstone
 capstone-src
 dynamorio
+dynamorio-src
 libtorch
 
 # The SDE recorder is built in place by mfile.py, which is the kit's own build

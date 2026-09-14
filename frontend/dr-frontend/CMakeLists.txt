@@ -40,12 +40,18 @@
 #  - SNIPER_FRONTEND_DIR, not SNIPER_FRONTEND: the latter is now the option that
 #    selects the instrumentation frontend
 
+# deps/sniper-deps builds DynamoRIO and links it in at dynamorio/, so look
+# there by default; -DDynamoRIO_DIR still wins for a DynamoRIO built elsewhere.
+if(NOT DynamoRIO_DIR AND EXISTS "${CMAKE_SOURCE_DIR}/dynamorio/build/cmake")
+  set(DynamoRIO_DIR "${CMAKE_SOURCE_DIR}/dynamorio/build/cmake")
+endif()
+
 find_package(DynamoRIO)
 if(NOT DynamoRIO_FOUND)
   message(FATAL_ERROR
     "DynamoRIO not found.\n"
-    "  Fetch it:  deps/sniper-deps --dynamorio fetch\n"
-    "  then build it, and configure with -DDynamoRIO_DIR=<dynamorio>/build/cmake\n"
+    "  Acquire it:  deps/sniper-deps --dynamorio fetch\n"
+    "  or point -DDynamoRIO_DIR at an existing <dynamorio>/build/cmake,\n"
     "  or turn the frontend off with -DSNIPER_ENABLE_DYNAMORIO=OFF.")
 endif()
 

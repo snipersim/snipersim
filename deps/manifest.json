@@ -184,12 +184,32 @@
       "url": "https://github.com/DynamoRIO/dynamorio.git",
       "rev": "246ddb28e7848b2d09d2b9909f99a6da9b2ce35e",
       "recursive": true,
-      "install_path": "dynamorio",
+      "install_path": "dynamorio-src",
       "when": [
         "dynamorio"
       ],
       "marker": "CMakeLists.txt",
-      "description": "DynamoRIO, for the ARM/DR frontend"
+      "description": "DynamoRIO source; built into dynamorio/ by dynamorio-build"
+    },
+    "dynamorio-build": {
+      "kind": "build",
+      "from": [
+        "dynamorio"
+      ],
+      "copy_from": "dynamorio",
+      "install_path": "dynamorio",
+      "when": [
+        "dynamorio"
+      ],
+      "marker": "build/bin64/drrun",
+      "workdir": "{install}",
+      "env": {},
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p build && cd build && cmake -DDEBUG=ON .. && make -j$(nproc)"
+      ],
+      "description": "DynamoRIO built in place; DynamoRIO_DIR points at dynamorio/build/cmake"
     }
   }
 }

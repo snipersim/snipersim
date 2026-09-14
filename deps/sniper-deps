@@ -244,7 +244,7 @@ def fetch_build(name, dep, offline):
 
     def resolve(text):
         out = text.replace('{python}', sys.executable)
-        out = out.replace('{install}', target + '.tmp')
+        out = out.replace('{install}', target)
         out = out.replace('{build}', target + '.build')
         for src in dep['from']:
             out = out.replace('{dep:%s}' % src, cache_path(src, man['dependencies'][src]))
@@ -255,19 +255,27 @@ def fetch_build(name, dep, offline):
         if not os.path.exists(cache_path(src, src_dep)):
             raise SystemExit('error: %s needs %s, which is not in the cache' % (name, src))
 
+    # Built in the final location rather than staged and renamed.  DynamoRIO's
+    # exported CMake config records absolute paths from where it was configured,
+    # so a rename afterwards left it naming a directory that no longer existed:
+    #
+    #   ninja: error: '<cache>/dynamorio-build-....tmp/build/ext/lib64/debug/
+    #   libdrreg.so', needed by 'lib/libdr-frontend.so', missing
+    #
+    # Validity is the .complete marker, checked above, so an interrupted build
+    # is discarded and redone rather than half-used.
     os.makedirs(cache_root(), exist_ok=True)
-    tmp = target + '.tmp'
     build = target + '.build'
-    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree(target, ignore_errors=True)
     shutil.rmtree(build, ignore_errors=True)
 
     # Some dependencies only know how to build in place (capstone's make.sh,
-    # DynamoRIO's cmake).  Copy the source into the cache entry and build there,
-    # so the entry is the artifact and the pristine source stays pristine.
+    # DynamoRIO's cmake).  Copy the source in, so the cache entry is the
+    # artifact and the pristine source stays pristine.
     if dep.get('copy_from'):
         shutil.copytree(cache_path(dep['copy_from'], man['dependencies'][dep['copy_from']]),
-                        tmp, symlinks=True)
-        os.remove(os.path.join(tmp, '.complete'))
+                        target, symlinks=True)
+        os.remove(os.path.join(target, '.complete'))
 
     env = dict(os.environ)
     for k, v in dep.get('env', {}).items():
@@ -281,14 +289,11 @@ def fetch_build(name, dep, offline):
         raise SystemExit('error: building %s failed' % name)
 
     marker = dep.get('marker')
-    if marker and not os.path.exists(os.path.join(tmp, marker)):
+    if marker and not os.path.exists(os.path.join(target, marker)):
         raise SystemExit('error: %s built without producing %s' % (name, marker))
 
-    open(os.path.join(tmp, '.complete'), 'w').close()
     shutil.rmtree(build, ignore_errors=True)
-    if os.path.exists(target):
-        shutil.rmtree(target, ignore_errors=True)
-    os.rename(tmp, target)
+    open(os.path.join(target, '.complete'), 'w').close()
     return target
 
 
