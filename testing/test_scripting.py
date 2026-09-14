@@ -46,6 +46,12 @@ CASES = {
     'ipcthreadtrace': ('ipcthreadtrace',             None),
     'markers':        ('markers',                    None),
     'no-script':      (None,                         None),
+    # The static scheduler needs a free core per thread, so it is the one
+    # scheduler that notices when -n is quietly overridden: a shared config
+    # include setting total_cores = 1 once turned this -n 8 run into a one-core
+    # run, and pinned hid it by time-slicing.  Kept as a canary.
+    'static-scheduler': ('statscb',                  r'\[STATSCB\] statsCallback invocations: [1-9]',
+                         ['-g', '--scheduler/type=static']),
 }
 
 
@@ -57,12 +63,13 @@ def build_app(workdir):
 
 
 def run_case(name, exe, workdir, timeout):
-    script, extra_re = CASES[name]
+    script, extra_re = CASES[name][:2]
+    extra_args = CASES[name][2] if len(CASES[name]) > 2 else []
     outdir = os.path.join(workdir, 'out-' + name)
     if os.path.isdir(outdir):
         shutil.rmtree(outdir)
 
-    cmd = [os.path.join(SNIPER_ROOT, 'run-sniper')] + SNIPER_ARGS
+    cmd = [os.path.join(SNIPER_ROOT, 'run-sniper')] + SNIPER_ARGS + extra_args
     if script:
         cmd += ['-s', script]
     cmd += ['-d', outdir, '--', exe]
