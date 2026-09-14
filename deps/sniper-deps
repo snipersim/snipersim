@@ -19,6 +19,10 @@ build tree stops being a 20-minute mistake.
 
 Feature selection matches the Makefile: --frontend, --torch/--no-torch,
 --mcpat/--no-mcpat, --arm, --riscv, --dynamorio.
+
+Some dependencies ship as source and have to be built.  --jobs bounds that;
+the top-level make forwards its own -j, so a dependency build does not quietly
+take more parallelism than the build that asked for it.
 """
 
 import argparse
@@ -225,7 +229,7 @@ def fetch_git(name, dep, offline):
     return target
 
 
-def fetch_build(name, dep, offline):
+def fetch_build(name, dep, offline, jobs=None):
     """Build a dependency that ships as source.
 
     XED is not usable as it arrives: mfile.py has to turn it into a kit, and the
@@ -246,6 +250,7 @@ def fetch_build(name, dep, offline):
         out = text.replace('{python}', sys.executable)
         out = out.replace('{install}', target)
         out = out.replace('{build}', target + '.build')
+        out = out.replace('{jobs}', str(jobs or os.cpu_count() or 1))
         for src in dep['from']:
             out = out.replace('{dep:%s}' % src, cache_path(src, man['dependencies'][src]))
         return out
@@ -341,8 +346,11 @@ def cmd_fetch(args):
         if present(name, dep) and not args.force:
             continue
         print('%s %s' % (name, dep.get('version') or dep.get('rev', '')[:12]))
-        handler = {'git': fetch_git, 'build': fetch_build}.get(dep['kind'], fetch_tarball)
-        target = handler(name, dep, args.offline)
+        if dep['kind'] == 'build':
+            target = fetch_build(name, dep, args.offline, args.jobs)
+        else:
+            handler = fetch_git if dep['kind'] == 'git' else fetch_tarball
+            target = handler(name, dep, args.offline)
         if link_into_tree(name, dep, target):
             print('  %s -> %s' % (dep['install_path'], target))
     return 0
@@ -416,6 +424,9 @@ def main():
     ap.add_argument('--arm', action='store_true')
     ap.add_argument('--riscv', action='store_true')
     ap.add_argument('--dynamorio', action='store_true')
+    ap.add_argument('--jobs', type=int, default=os.cpu_count() or 1,
+                    help='parallelism for dependencies that have to be built '
+                         '(default: one per core)')
 
     sub = ap.add_subparsers(dest='cmd')
     sub.add_parser('status')

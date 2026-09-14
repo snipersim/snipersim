@@ -109,6 +109,8 @@
         "{python}",
         "./mfile.py",
         "--silent",
+        "--jobs",
+        "{jobs}",
         "--extra-flags=-fPIC",
         "--shared",
         "--build-dir",
@@ -207,7 +209,7 @@
       "command": [
         "sh",
         "-c",
-        "mkdir -p build && cd build && cmake -DDEBUG=ON .. && make -j$(nproc)"
+        "mkdir -p build && cd build && cmake -DDEBUG=ON .. && make -j{jobs}"
       ],
       "description": "DynamoRIO built in place; DynamoRIO_DIR points at dynamorio/build/cmake"
     }

@@ -79,8 +79,11 @@ _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
 
 all: build
 
+# The same -j the build was asked for: some dependencies ship as source and
+# have to be compiled, and XED's mfile.py otherwise takes one job per core --
+# eighty parallel compilers on a large host, from a build asked for eight.
 deps:
-	@$(DEPS) $(_deps_flags) fetch
+	@$(DEPS) $(_deps_flags) $(_deps_jobs) fetch
 
 configure: deps
 	@$(CMAKE) -S $(SIM_ROOT) -B $(BUILD_DIR) $(_generator) $(_cmake_flags) \
@@ -103,6 +106,7 @@ configure: deps
 # neither.
 _jflag = $(filter -j%,$(MAKEFLAGS))
 _parallel = --parallel $(patsubst -j%,%,$(_jflag))
+_deps_jobs = $(if $(patsubst -j,,$(_jflag)),--jobs $(patsubst -j%,%,$(_jflag)),)
 
 # Depends on configure rather than on the cache file: re-running CMake on an
 # already-configured directory costs about a second and re-runs nothing else,
