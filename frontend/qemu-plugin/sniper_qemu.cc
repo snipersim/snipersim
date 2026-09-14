@@ -136,12 +136,25 @@ struct VCPU
    std::vector<uint64_t> pend_addrs;
 };
 
-std::vector<VCPU *> vcpus;
+/* One slot per vCPU, sized once and never resized.
+ *
+ * In user mode a guest thread is a host thread and its callbacks run on it, so
+ * several vCPUs call in at the same time.  Growing a shared std::vector from
+ * those callbacks raced and crashed the moment a guest started a second
+ * thread.  A fixed table of pointers avoids it without locking the hot path:
+ * a slot is only ever written by the vCPU it belongs to, so nothing needs to
+ * be shared. */
+const unsigned int MAX_VCPUS = 4096;
+VCPU *vcpus[MAX_VCPUS];
 
 VCPU *vcpu_get(unsigned int idx)
 {
-   if (idx >= vcpus.size())
-      vcpus.resize(idx + 1, nullptr);
+   if (idx >= MAX_VCPUS)
+   {
+      fprintf(stderr, "[SNIPER-QEMU] error: vcpu %u exceeds the %u this frontend tracks\n",
+              idx, MAX_VCPUS);
+      exit(1);
+   }
    if (!vcpus[idx])
       vcpus[idx] = new VCPU();
    return vcpus[idx];
@@ -288,10 +301,12 @@ void syscall_enter(SNP_SYSCALL_ARGS)
 void vcpu_init(SNP_VCPU_ARGS)
 {
    VCPU *v = vcpu_get(cpu_index);
-   if (!v->writer)
-      writer_open(v, cpu_index);
 
-   /* A second guest thread in user mode is the configuration that deadlocks:
+   /* Checked before anything is opened, so a user who asks for this gets the
+    * explanation rather than whatever the SIFT writer says about its response
+    * channel.
+    *
+    * A second guest thread in user mode is the configuration that deadlocks:
     * a vCPU blocked in Sync() still counts as running, so anything needing an
     * exclusive section waits for it.  Refuse it rather than hang. */
    if (!in_system_mode && opt_response && cpu_index > 0)
@@ -305,6 +320,9 @@ void vcpu_init(SNP_VCPU_ARGS)
               "  or the Pin/DynamoRIO frontends.\n");
       exit(1);
    }
+
+   if (!v->writer)
+      writer_open(v, cpu_index);
 }
 
 /* Close a vCPU's stream exactly once.  End() must be the last record: writing
@@ -354,7 +372,7 @@ void tb_trans(SNP_TB_TRANS_ARGS)
 void at_exit(SNP_UDATA_ARGS)
 {
    uint64_t total = 0;
-   for (size_t i = 0; i < vcpus.size(); i++)
+   for (size_t i = 0; i < MAX_VCPUS; i++)
    {
       VCPU *v = vcpus[i];
       if (!v || !v->writer)

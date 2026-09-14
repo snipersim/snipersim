@@ -127,6 +127,11 @@ long_mode:
     mov  $MARK_PHYS, %rax
     mov  (%rax), %rdx
 
+    /* Exit QEMU so the test does not wait out a timeout; see boot.S. */
+    mov  $0xf4, %dx
+    mov  $0x11, %eax
+    out  %eax, (%dx)
+
 hang:
     hlt
     jmp  hang

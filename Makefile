@@ -78,7 +78,7 @@ _cmake_flags += $(CMAKE_ARGS)
 _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
              $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs help
+.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs regress_qemu help
 
 all: build
 
@@ -127,13 +127,17 @@ distclean:
 	@echo "  $(DEPS) cache      shows where"
 	@echo "  $(DEPS) gc         removes versions no manifest names"
 
-regress: regress_scripting regress_configs
+regress: regress_scripting regress_configs regress_qemu
 
 regress_scripting:
 	@$(SIM_ROOT)/testing/test_scripting.py
 
 regress_configs:
 	@$(SIM_ROOT)/testing/test_configs.py
+
+# Skips itself with a reason unless QEMU and the frontend are built (QEMU=ON).
+regress_qemu:
+	@$(SIM_ROOT)/testing/test_qemu.py
 
 # The header comment is the help text: print it up to the first line that is not
 # a comment, so the two cannot drift apart.

@@ -30,7 +30,15 @@ inner:
     jnz  outer              /* 6 */
 
 done:
-    hlt                     /* halt; counted once, then loops */
+    /* Ask QEMU to exit, so the test does not wait out a timeout.  With
+     * -device isa-debug-exit,iobase=0xf4,iosize=0x04 a write of V exits QEMU
+     * with status (V << 1) | 1.  Three instructions here, and the hlt below
+     * is then never reached, so the expected count moves by +3-1 = +2. */
+    mov  $0xf4, %dx         /* 1 */
+    mov  $0x11, %eax        /* 2 */
+    outl %eax, %dx          /* 3  -> QEMU exits 35 */
+
+    hlt                     /* reached only without isa-debug-exit */
     jmp  done
 
     .org 510
