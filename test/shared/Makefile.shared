@@ -1,7 +1,14 @@
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 ifneq ($(CLEAN),clean)
 
-include ../../config/buildconf.makefile
+# Where the build put buildconf.makefile.  There is one per build directory, so
+# honour $SNIPER_BUILD_DIR -- run-sniper sets it, and a shell that has picked a
+# build exports it -- and fall back to the conventional build/default.
+SNIPER_ROOT ?= ../..
+SNIPER_BUILD_DIR ?= $(SNIPER_ROOT)/build/default
+SNIPER_BUILDCONF := $(SNIPER_BUILD_DIR)/config/buildconf.makefile
+
+include $(SNIPER_BUILDCONF)
 
 ifeq ($(TARGET),)
 $(error The TARGET variable must be set to use the shared Makefile)
@@ -22,10 +29,11 @@ run: $(TARGET) run_$(TARGET)
 	@echo "Optional: Run '../../tools/gen_topology.py' in this directory to view the system topology for this run"
 	@echo
 
-../../config/buildconf.makefile:
+$(SNIPER_BUILDCONF):
 	@echo
 	@echo
 	@echo 'Error: A compiled version of Sniper is required to run the test applications'
+	@echo '       Looked in $(SNIPER_BUILD_DIR); build one, or set SNIPER_BUILD_DIR.'
 	@echo
 	@false
 

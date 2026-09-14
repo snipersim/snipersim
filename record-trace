@@ -156,9 +156,12 @@ if use_pa:
     print('[SIFT_RECORDER]', 'Unable to use physical address translation with this kernel and current user capabilities, aborting.', file=sys.stderr)
     sys.exit(1)
 
-configfile = os.path.join(HOME, 'config/sniper.py')
-config = {}
-exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
+# Same build directory as the simulator that will read this trace.  run-sniper
+# resolves it once and passes it down in $SNIPER_BUILD_DIR; run standalone, this
+# falls back to build/default.  Reading config/sniper.py out of the source tree,
+# as this did, meant a recorder built from whatever was last built in-place.
+BUILD_DIR = run_sniper.resolve_build_dir(HOME)
+configfile, config = run_sniper.load_build_config(BUILD_DIR)
 
 arch = config.get('target', 'intel64')
 

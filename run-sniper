@@ -382,6 +382,13 @@ for o, a in opts:
     trace_extra_args += [o, a]
 
 
+# Which build to run.  Settled here, before anything is launched: run-sniper
+# starts record-trace as a subprocess further down, and both have to agree on
+# the build, so the answer goes into the environment the children inherit.
+BUILD_DIR = run_sniper.resolve_build_dir(HOME, build_dir)
+os.environ['SNIPER_BUILD_DIR'] = BUILD_DIR
+
+
 if cmdline:
   # Sniper always runs as its own binary, reading SIFT.  Running the whole
   # simulator inside Pin (lib/pin_sim.so) was retired when the front end became
@@ -665,40 +672,7 @@ if tracegen:
 
 sniperoptions = ' '.join(sniperoptions)
 
-# Which build to run.
-#
-# A build directory is self-contained -- its own config/sniper.py and its own
-# lib/sniper -- so several configurations can exist at once.  Resolution order:
-#
-#   --build-dir=<path>          explicit
-#   $SNIPER_BUILD_DIR           for a shell that has picked one
-#   $SNIPER_ROOT/build/default  the conventional symlink
-#   $SNIPER_ROOT                the in-tree layout a make build produces
-def resolve_build_dir(explicit):
-  candidates = []
-  if explicit:
-    candidates.append(('--build-dir', explicit))
-  if os.getenv('SNIPER_BUILD_DIR'):
-    candidates.append(('$SNIPER_BUILD_DIR', os.getenv('SNIPER_BUILD_DIR')))
-  candidates.append(('build/default', os.path.join(HOME, 'build', 'default')))
-  candidates.append(('the source tree', HOME))
-  for origin, path in candidates:
-    if os.path.isfile(os.path.join(path, 'config', 'sniper.py')):
-      return os.path.abspath(path)
-    if origin in ('--build-dir', '$SNIPER_BUILD_DIR'):
-      print('Error: %s is %s, which has no config/sniper.py' % (origin, path), file=sys.stderr)
-      print('       Configure and build it first.', file=sys.stderr)
-      sys.exit(-1)
-  print('Error: no build found.', file=sys.stderr)
-  print('       Build in the source tree (make), or configure one and point', file=sys.stderr)
-  print('       --build-dir / $SNIPER_BUILD_DIR / build/default at it.', file=sys.stderr)
-  sys.exit(-1)
-
-BUILD_DIR = resolve_build_dir(build_dir)
-
-configfile = os.path.join(BUILD_DIR, 'config/sniper.py')
-config = {}
-exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
+configfile, config = run_sniper.load_build_config(BUILD_DIR)
 
 # convert paths in config to absolute paths
 for d in ('pin_home','xed_home', 'torch_home'):

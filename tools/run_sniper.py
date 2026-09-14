@@ -1,5 +1,51 @@
 import sys, os, time, subprocess, threading, tempfile, sniper_lib
 
+
+# Which build to run.
+#
+# A build directory is self-contained -- its own config/sniper.py and its own
+# lib/sniper -- so several configurations can exist side by side.  Lives here
+# rather than in run-sniper because record-trace has to reach the same answer:
+# run-sniper launches it as a subprocess, and a recorder from one build feeding
+# a simulator from another is the kind of mismatch that shows up as a corrupt
+# trace much later.
+#
+# Resolution order:
+#   explicit (--build-dir)
+#   $SNIPER_BUILD_DIR           for a shell that has picked one, and how
+#                               run-sniper tells record-trace what it chose
+#   $SNIPER_ROOT/build/default  the conventional symlink
+#   $SNIPER_ROOT                the in-tree layout the make build produces
+def resolve_build_dir(home, explicit = None):
+  candidates = []
+  if explicit:
+    candidates.append(('--build-dir', explicit))
+  if os.getenv('SNIPER_BUILD_DIR'):
+    candidates.append(('$SNIPER_BUILD_DIR', os.getenv('SNIPER_BUILD_DIR')))
+  candidates.append(('build/default', os.path.join(home, 'build', 'default')))
+  candidates.append(('the source tree', home))
+
+  for origin, path in candidates:
+    if os.path.isfile(os.path.join(path, 'config', 'sniper.py')):
+      return os.path.abspath(path)
+    if origin in ('--build-dir', '$SNIPER_BUILD_DIR'):
+      print('Error: %s is %s, which has no config/sniper.py' % (origin, path), file=sys.stderr)
+      print('       Configure and build it first.', file=sys.stderr)
+      sys.exit(-1)
+
+  print('Error: no build found.', file=sys.stderr)
+  print('       Build one with `make`, or point --build-dir / $SNIPER_BUILD_DIR', file=sys.stderr)
+  print('       at an existing build directory.', file=sys.stderr)
+  sys.exit(-1)
+
+
+def load_build_config(build_dir):
+  """Read a build directory's config/sniper.py."""
+  configfile = os.path.join(build_dir, 'config', 'sniper.py')
+  config = {}
+  exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
+  return configfile, config
+
 def Tee(filename, prefix = ''):
   open(filename, 'w').close() # Make sure is writeable and empty
   obj = subprocess.Popen(['bash', '-c', 'while read line; do echo "%s"$line; echo $line >> %s; done' % (prefix, filename)], stdin = subprocess.PIPE)
