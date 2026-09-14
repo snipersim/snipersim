@@ -212,6 +212,38 @@
         "mkdir -p build && cd build && cmake -DDEBUG=ON .. && make -j{jobs}"
       ],
       "description": "DynamoRIO built in place; DynamoRIO_DIR points at dynamorio/build/cmake"
+    },
+    "qemu": {
+      "kind": "git",
+      "url": "https://gitlab.com/qemu-project/qemu.git",
+      "rev": "c3d48b7d1e89604920e5b81b91140c2ad39a1943",
+      "tag": "v11.1.1",
+      "install_path": "qemu-src",
+      "when": [
+        "qemu"
+      ],
+      "marker": "include/plugins/qemu-plugin.h",
+      "description": "QEMU 11.1.1 source; plugin API v7. Cloned shallow at the tag, verified against rev"
+    },
+    "qemu-build": {
+      "kind": "build",
+      "from": [
+        "qemu"
+      ],
+      "copy_from": "qemu",
+      "install_path": "qemu",
+      "when": [
+        "qemu"
+      ],
+      "marker": "build/qemu-system-x86_64",
+      "workdir": "{install}",
+      "env": {},
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=x86_64-softmmu,x86_64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
+      ],
+      "description": "QEMU built with TCG plugin support; the frontend is loaded with -plugin"
     }
   }
 }

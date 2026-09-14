@@ -38,6 +38,7 @@ MCPAT ?= ON
 RISCV ?= OFF
 ARM ?= OFF
 DYNAMORIO ?= OFF
+QEMU ?= OFF
 BUILD_TYPE ?= Release
 RV8_HOME ?=
 DYNAMORIO_DIR ?=
@@ -49,6 +50,7 @@ _deps_flags += $(if $(filter ON,$(MCPAT)),,--no-mcpat)
 _deps_flags += $(if $(filter ON,$(RISCV)),--riscv,)
 _deps_flags += $(if $(filter ON,$(ARM)),--arm,)
 _deps_flags += $(if $(filter ON,$(DYNAMORIO)),--dynamorio,)
+_deps_flags += $(if $(filter ON,$(QEMU)),--qemu,)
 
 _cmake_flags := -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
 _cmake_flags += -DSNIPER_FRONTEND=$(FRONTEND)
@@ -57,6 +59,7 @@ _cmake_flags += -DSNIPER_ENABLE_MCPAT=$(MCPAT)
 _cmake_flags += -DSNIPER_ENABLE_RISCV=$(RISCV)
 _cmake_flags += -DSNIPER_ENABLE_ARM=$(ARM)
 _cmake_flags += -DSNIPER_ENABLE_DYNAMORIO=$(DYNAMORIO)
+_cmake_flags += -DSNIPER_ENABLE_QEMU=$(QEMU)
 
 # Locations that are not always where the build would guess.
 _cmake_flags += $(if $(RV8_HOME),-DSNIPER_RV8_HOME=$(RV8_HOME),)

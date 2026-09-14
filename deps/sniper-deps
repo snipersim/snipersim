@@ -18,7 +18,7 @@ a symlink into it.  Several checkouts then share one copy, and `rm -rf` on a
 build tree stops being a 20-minute mistake.
 
 Feature selection matches the Makefile: --frontend, --torch/--no-torch,
---mcpat/--no-mcpat, --arm, --riscv, --dynamorio.
+--mcpat/--no-mcpat, --arm, --riscv, --dynamorio, --qemu.
 
 Some dependencies ship as source and have to be built.  --jobs bounds that;
 the top-level make forwards its own -j, so a dependency build does not quietly
@@ -62,7 +62,7 @@ def enabled_features(args):
         feats.add('torch')
     if args.mcpat:
         feats.add('mcpat')
-    for name in ('arm', 'riscv', 'dynamorio'):
+    for name in ('arm', 'riscv', 'dynamorio', 'qemu'):
         if getattr(args, name):
             feats.add(name)
     return feats
@@ -220,8 +220,26 @@ def fetch_git(name, dep, offline):
     cmd = ['git', 'clone', '--quiet']
     if dep.get('recursive'):
         cmd.append('--recursive')
+
+    # A "tag" lets us clone one commit instead of the whole history.  QEMU's
+    # history is gigabytes; the tag is a convenience and the rev is still the
+    # pin, so the two are checked against each other below.
+    tag = dep.get('tag')
+    if tag:
+        cmd += ['--depth', '1', '--branch', tag]
+
     subprocess.run(cmd + [dep['url'], tmp], check=True)
-    subprocess.run(['git', '-C', tmp, 'reset', '--quiet', '--hard', dep['rev']], check=True)
+
+    if tag:
+        head = subprocess.run(['git', '-C', tmp, 'rev-parse', 'HEAD'],
+                              stdout=subprocess.PIPE, text=True, check=True).stdout.strip()
+        if head != dep['rev']:
+            raise SystemExit(
+                'error: %s tag %s is %s, but the manifest pins %s.\n'
+                '       The tag moved, or the manifest is wrong.  Refusing to continue.'
+                % (name, tag, head, dep['rev']))
+    else:
+        subprocess.run(['git', '-C', tmp, 'reset', '--quiet', '--hard', dep['rev']], check=True)
     open(os.path.join(tmp, '.complete'), 'w').close()
     if os.path.exists(target):
         shutil.rmtree(target, ignore_errors=True)
@@ -424,6 +442,8 @@ def main():
     ap.add_argument('--arm', action='store_true')
     ap.add_argument('--riscv', action='store_true')
     ap.add_argument('--dynamorio', action='store_true')
+    ap.add_argument('--qemu', action='store_true',
+                    help='QEMU frontend: builds QEMU with TCG plugin support')
     ap.add_argument('--jobs', type=int, default=os.cpu_count() or 1,
                     help='parallelism for dependencies that have to be built '
                          '(default: one per core)')
