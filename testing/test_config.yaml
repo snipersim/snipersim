@@ -115,7 +115,7 @@ experiment_suites:
     description: "Full test suite: smoke + telemetry + frag sweep"
 
   # Userspace MimicOS: runs MimicOS as a native pinned process
-  # Requires: mimicos/build/startup_mimicos (run 'make -C mimicos' first)
+  # Requires: startup_mimicos, built by the normal build into <build>/bin/
   # Requires: SIFT traces with .sift.vma files
   # NOTE: Currently the SDE recorder's synchronous Magic() call for
   # SimStartProcess deadlocks before the Sniper SIFT reader enters
@@ -128,7 +128,7 @@ experiment_suites:
     trace_suite: smoke_sift
     instruction_count: 1000000
     userspace_mimicos: true
-    mimicos_binary: "mimicos/build/startup_mimicos"
+    # mimicos_binary: left unset so it is taken from the build directory in use.
     mimicos_config: "mimicos/configs/reservethp_32GB.ini"
     description: "Userspace MimicOS smoke test with SIFT trace"
 

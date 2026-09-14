@@ -225,6 +225,10 @@ if(SNIPER_ENABLE_DYNAMORIO)
   add_subdirectory(frontend/dr-frontend)
 endif()
 
+# Userspace MimicOS: a guest binary, built here so that it exists without a
+# separate hand-run make and so each build directory gets its own.
+add_subdirectory(mimicos)
+
 # ---------------------------------------------------------------------------
 # What the runtime tools need to know about this build
 # ---------------------------------------------------------------------------

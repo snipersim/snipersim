@@ -154,6 +154,31 @@ def run_single_test(
         return False, elapsed, str(e)
 
 
+def resolve_mimicos_binary(sniper_root, override=None):
+    """Locate startup_mimicos.
+
+    CMake builds it into the build directory, so there is one per build
+    configuration; the old makefile put it in mimicos/build/ and the suite
+    definitions still name that path.  Honour an explicit setting first, then
+    the selected build directory, then the legacy location.
+    """
+    if override:
+        return os.path.join(sniper_root, override)
+
+    candidates = []
+    env_build = os.environ.get("SNIPER_BUILD_DIR")
+    if env_build:
+        candidates.append(env_build)
+    candidates.append(os.path.join(sniper_root, "build", "default"))
+
+    for build_dir in candidates:
+        path = os.path.join(build_dir, "bin", "startup_mimicos")
+        if os.path.isfile(path):
+            return path
+
+    return os.path.join(sniper_root, "mimicos", "build", "startup_mimicos")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run Sniper MMU tests locally",
@@ -213,7 +238,7 @@ def main():
         trace_suite_name = suite.get("trace_suite", trace_suite_name)
         if suite.get("userspace_mimicos", False):
             userspace_mimicos = True
-            mimicos_binary = os.path.join(sniper_root, suite.get("mimicos_binary", "mimicos/build/startup_mimicos"))
+            mimicos_binary = resolve_mimicos_binary(sniper_root, suite.get("mimicos_binary"))
             mimicos_config = os.path.join(sniper_root, suite.get("mimicos_config", "mimicos/configs/reservethp_32GB.ini"))
 
     if args.instruction_count:
