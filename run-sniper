@@ -402,7 +402,11 @@ for o, a in opts:
 #     Pac-Sim decides for itself when to warm and when to detail, and a warm-up
 #     it did not ask for perturbs the intervals it is measuring;
 #   - the recorder does the live BBV clustering and intra-barrier analysis,
-#     which is what makes the sampling adaptive rather than periodic.
+#     which is what makes the sampling adaptive rather than periodic, and
+#     writes its per-region data where the estimate below can find it.  The
+#     recorder's directory knob defaulted to ".", so the data landed wherever
+#     the user happened to be standing while this looked in the output
+#     directory; record-trace is told the output directory for that reason.
 #
 # The second is the one that can be missing, so it is checked rather than
 # assumed -- see record-trace.  A run that quietly fell back to unsampled
@@ -725,7 +729,7 @@ if tracegen:
     trace_extra_args += [ '--sde-arch=%(sde_arch)s' % locals() ]
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
     tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] \
-             + (['--pacsim'] if enable_pacsim else []) \
+             + (['--pacsim', '--outputdir', outputdir] if enable_pacsim else []) \
              + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     tracecmds.append(tracecmd)
     if tracegen['redirect']: # redirect output

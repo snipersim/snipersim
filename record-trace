@@ -226,18 +226,39 @@ pinoptions += (' ' + ' '.join(extra_pin_args))
 # the methodology the user asked for.
 PACSIM_KNOB = b'sniper:pacsim'
 
+# Where the recorder writes intra_mtng.json, the per-region data the analysis
+# scripts read.  MTNG and Pac-Sim are the same thing under two names, which is
+# why the knob and the file are spelled one way and the flag another.
+#
+# The historical knob defaulted to ".", so the JSON landed in whatever
+# directory the user happened to run from while run-sniper looked for it in the
+# output directory -- the two never met.  Pointing it at the output directory is
+# what makes the estimate findable.
+MTNGDIR_KNOB = b'sniper:mtng-dir'
+
 def recorder_has_pacsim(tool_path):
+  return has_knob(tool_path, PACSIM_KNOB)
+
+def has_knob(tool_path, knob):
   try:
     with open(tool_path, 'rb') as f:
-      return PACSIM_KNOB in f.read()
+      return knob in f.read()
   except IOError:
     return False
 
-def pacsim_knob():
+
+def pacsim_knob(tool_path):
   # Emitted only when enabled.  Pin treats an unrecognised knob as fatal, so a
   # recorder built without Pac-Sim must not be handed the knob at all -- not
   # even set to zero, which would break every ordinary trace.
-  return (' -%s 1' % PACSIM_KNOB.decode()) if enable_pacsim else ''
+  if not enable_pacsim:
+    return ''
+  opts = ' -%s 1' % PACSIM_KNOB.decode()
+  # Asked for rather than assumed, for the same reason: a port that spells this
+  # knob differently should lose the output-directory default, not fail to run.
+  if has_knob(tool_path, MTNGDIR_KNOB):
+    opts += ' -%s %s' % (MTNGDIR_KNOB.decode(), outputdir)
+  return opts
 
 def require_pacsim(tool_path):
   if recorder_has_pacsim(tool_path):
@@ -331,12 +352,12 @@ else:
     print('[RECORD-TRACE] Using the SDE frontend (sift/recorder)')
     if enable_pacsim:
       require_pacsim('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals())
-    cmd = '%(sde_home)s/sde64 %(sde_arch)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob() + ' -- ' + ' '.join(cmdline)
+    cmd = '%(sde_home)s/sde64 %(sde_arch)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals()) + ' -- ' + ' '.join(cmdline)
   else:
     print('[RECORD-TRACE] Using the Pin frontend (sift/recorder)')
     if enable_pacsim:
       require_pacsim('%(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder' % locals())
-    cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d -sniper:pa %(value_pa)d -sniper:rtntrace %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob() + ' -- ' + ' '.join(cmdline)
+    cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d -sniper:pa %(value_pa)d -sniper:rtntrace %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder' % locals()) + ' -- ' + ' '.join(cmdline)
 
 
 if verbose:
