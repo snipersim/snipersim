@@ -38,7 +38,9 @@ target_include_directories(qemu_frontend PRIVATE
 
 # sniper_base, not sniper_common: the language and ABI contract, without the
 # simulator's libraries.
-target_link_libraries(qemu_frontend PRIVATE sniper_base sift z PkgConfig::GLIB2)
+# XED so the plugin can answer "is this a branch?" the same way Sniper's own
+# decoder does.  Disagreeing is not a fidelity question: Sniper asserts on it.
+target_link_libraries(qemu_frontend PRIVATE sniper_base sift z PkgConfig::GLIB2 Sniper::Xed)
 
 set_target_properties(qemu_frontend PROPERTIES
   OUTPUT_NAME sniper-qemu

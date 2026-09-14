@@ -36,6 +36,10 @@
 
 #include "qemu_compat.h"
 
+extern "C" {
+#include <xed-interface.h>
+}
+
 #include "sift_writer.h"
 #include "sift_format.h"
 
@@ -59,6 +63,52 @@ uint64_t getcode_calls = 0, getcode_fail = 0;
 const void *time_handle = nullptr;
 
 /* --------------------------------------------------------- per-instruction */
+
+/* Is this a *conditional* branch?
+ *
+ * SIFT's is_branch is narrower than "transfers control".  Both existing
+ * frontends restrict it to branches with a fall-through path:
+ *
+ *   sift/recorder/recorder_base.cc:297  INS_IsBranch(ins) && INS_HasFallThrough(ins)
+ *   frontend/dr-frontend/dr_frontend.cc:576  instr_is_cbr(instr)
+ *
+ * so jmp, call and ret are excluded even though they are control transfers and
+ * even though decoder_lib's is_branch_opcode() lists them.  Marking them
+ * aborts the simulation: an unconditional transfer decomposes into several
+ * micro-ops and the one at exec_base_index is not the branch, so
+ *
+ *   *ERROR* Expected to find a branch here.
+ *
+ * The taken flag only means something for an instruction that could have gone
+ * either way, which is the same set.
+ */
+bool xed_is_conditional_branch(const uint8_t *bytes, size_t len)
+{
+   xed_decoded_inst_t xedd;
+   xed_decoded_inst_zero(&xedd);
+   xed_decoded_inst_set_mode(&xedd, XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b);
+   if (xed_decode(&xedd, bytes, (unsigned int)len) != XED_ERROR_NONE)
+      return false;
+
+   /* Spelled out rather than taken from XED_CATEGORY_COND_BR, which also
+    * covers LOOP/LOOPE/LOOPNE -- and decoder_lib does not list those, so
+    * Sniper's decoder would disagree and assert. */
+   switch (xed_decoded_inst_get_iclass(&xedd))
+   {
+      case XED_ICLASS_JB:    case XED_ICLASS_JBE:
+      case XED_ICLASS_JL:    case XED_ICLASS_JLE:
+      case XED_ICLASS_JNB:   case XED_ICLASS_JNBE:
+      case XED_ICLASS_JNL:   case XED_ICLASS_JNLE:
+      case XED_ICLASS_JNO:   case XED_ICLASS_JNP:
+      case XED_ICLASS_JNS:   case XED_ICLASS_JNZ:
+      case XED_ICLASS_JO:    case XED_ICLASS_JP:
+      case XED_ICLASS_JRCXZ: case XED_ICLASS_JS:
+      case XED_ICLASS_JZ:
+         return true;
+      default:
+         return false;
+   }
+}
 
 /* Filled once per translation, shared by every execution of that instruction. */
 struct InsnInfo
@@ -287,12 +337,11 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       ii->vaddr = qemu_plugin_insn_vaddr(insn);
       ii->size  = (uint8_t)qemu_plugin_insn_size(insn);
 
-      /* A branch is any instruction that is not followed, statically, by the
-       * next one in the block.  The last instruction of a translation block is
-       * the only one that can redirect control, so it is the candidate; the
-       * rest fall through by construction.  This costs no decoder and is what
-       * the taken/not-taken test below refines at run time. */
-      ii->is_branch = (i + 1 == n);
+      /* Decoded once per translation, so the cost is amortised over every
+       * execution of the block. */
+      uint8_t bytes[XED_MAX_INSTRUCTION_BYTES] = {0};
+      size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(bytes));
+      ii->is_branch = got ? xed_is_conditional_branch(bytes, got) : false;
 
       qemu_plugin_register_vcpu_insn_exec_cb(insn, insn_exec,
                                              QEMU_PLUGIN_CB_NO_REGS, ii);
@@ -331,6 +380,9 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                                            int argc, char **argv)
 {
    in_system_mode = info->system_emulation;
+
+   /* Needed before any xed_decode(). */
+   xed_tables_init();
 
    for (int i = 0; i < argc; i++)
    {

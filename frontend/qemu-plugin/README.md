@@ -83,9 +83,20 @@ vs 0.72. Full-system instruction counting matches a hand-computed ground truth
 exactly, and paged VA -> PA agrees with guest page tables. See
 `test/qemu-plugin-probe`.
 
-## Known limitation
+## is_branch means *conditional* branch
 
-A branch is taken to be the last instruction of a translation block. That is
-right for the common case and wrong when a block ends for another reason. It
-affects branch-predictor input, not the instruction stream; the fix is to
-decode with XED (x86) or Capstone (ARM), both already dependencies.
+Narrower than "transfers control", and it matters. Both existing frontends
+restrict it the same way -- Pin uses `INS_IsBranch(ins) && INS_HasFallThrough(ins)`,
+DynamoRIO uses `instr_is_cbr(instr)` -- so `jmp`, `call` and `ret` are excluded
+even though `decoder_lib`'s `is_branch_opcode()` lists them.
+
+Marking an unconditional transfer aborts the simulation: it decomposes into
+several micro-ops and the one at `exec_base_index` is not the branch, so Sniper
+fails its own assertion, `*ERROR* Expected to find a branch here.`
+
+The plugin decodes with XED at translation time and matches that set exactly.
+Checked against the DynamoRIO frontend on the same binary: 5,241 shared
+addresses, zero disagreements in either direction.
+
+ARM guests will need the equivalent through Capstone; only x86-64 is handled
+today.
