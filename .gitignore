@@ -74,8 +74,11 @@ sift/recorder/obj-intel64/
 
 testing/test_results/
 test/qemu-plugin-probe/probe.so
-test/qemu-plugin-probe/boot.img
-test/qemu-plugin-probe/boot.o
+test/qemu-plugin-probe/*.img
+test/qemu-plugin-probe/*.o
+test/qemu-plugin-probe/st
+test/qemu-plugin-probe/mt
+test/qemu-plugin-probe/mtfork
 pin-tool-log.txt
 
 # CMake build directories
