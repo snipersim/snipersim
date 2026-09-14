@@ -40,6 +40,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -130,6 +131,32 @@ def build_workload(workdir):
     return exe
 
 
+
+def run_in_own_group(cmd, timeout, **kwargs):
+    """subprocess.run(), but kill the whole process group on timeout.
+
+    subprocess.run(timeout=) kills only the direct child.  That child is
+    run-sniper, a Python script, and the simulator it launches is a grandchild:
+    on a timeout the simulator survived, detached, and kept running.  A suite
+    run against a configuration that deadlocks therefore leaked one stuck
+    simulator per timed-out case -- six of them, still resident after eleven
+    hours, were what prompted this.
+
+    start_new_session puts the child in its own process group so the whole
+    tree can be signalled.
+    """
+    with subprocess.Popen(cmd, start_new_session=True, **kwargs) as p:
+        try:
+            out, _ = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                p.kill()
+            p.communicate()
+            raise
+        return subprocess.CompletedProcess(cmd, p.returncode, out, None)
+
 def run_config(names, ncores, workdir, workload, timeout, mode):
     tag = '+'.join(names)
     outdir = os.path.join(workdir, 'out-%s-%s-n%d' % (tag, mode, ncores))
@@ -140,8 +167,8 @@ def run_config(names, ncores, workdir, workload, timeout, mode):
     cmd += ['-c' + n for n in names]
     cmd += ['-d', outdir, '--', workload]
     try:
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                           timeout=timeout, text=True, cwd=SNIPER_ROOT)
+        p = run_in_own_group(cmd, timeout, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, cwd=SNIPER_ROOT)
     except subprocess.TimeoutExpired:
         return False, 'timed out after %ds' % timeout
 

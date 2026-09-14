@@ -19,6 +19,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -62,6 +63,32 @@ def build_app(workdir):
     return exe
 
 
+
+def run_in_own_group(cmd, timeout, **kwargs):
+    """subprocess.run(), but kill the whole process group on timeout.
+
+    subprocess.run(timeout=) kills only the direct child.  That child is
+    run-sniper, a Python script, and the simulator it launches is a grandchild:
+    on a timeout the simulator survived, detached, and kept running.  A suite
+    run against a configuration that deadlocks therefore leaked one stuck
+    simulator per timed-out case -- six of them, still resident after eleven
+    hours, were what prompted this.
+
+    start_new_session puts the child in its own process group so the whole
+    tree can be signalled.
+    """
+    with subprocess.Popen(cmd, start_new_session=True, **kwargs) as p:
+        try:
+            out, _ = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                p.kill()
+            p.communicate()
+            raise
+        return subprocess.CompletedProcess(cmd, p.returncode, out, None)
+
 def run_case(name, exe, workdir, timeout):
     script, extra_re = CASES[name][:2]
     extra_args = CASES[name][2] if len(CASES[name]) > 2 else []
@@ -80,9 +107,9 @@ def run_case(name, exe, workdir, timeout):
         [os.path.join(HERE, 'scripts'), env.get('PYTHONPATH', '')])
 
     try:
-        p = subprocess.run(cmd, cwd=os.path.join(HERE, 'scripts'),
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                           timeout=timeout, env=env, text=True)
+        p = run_in_own_group(cmd, timeout, cwd=os.path.join(HERE, 'scripts'),
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             env=env, text=True)
     except subprocess.TimeoutExpired:
         return False, 'timed out after %ds (deadlock?)' % timeout
 
