@@ -950,13 +950,27 @@ namespace ParametricDramDirectoryMSI
 				copyDataFromNextLevel(mem_op_type, ca_address, modeled, t_now, block_type);
 
 				cache_block_info = getCacheBlockInfo(ca_address);
+			}
 
 #ifdef PRIVATE_L2_OPTIMIZATION
 #else
-				if (!lock_all)
-					releaseStackLock(ca_address, true);
+			// Undo the upgrade taken at the L1 miss, on every miss path.
+			//
+			// This used to sit inside the block above, so a pass-through metadata
+			// request -- a page-table walk, with perf_model/metadata/passthrough_loc
+			// != 1 -- skipped the data copy (correctly) and the downgrade (not).
+			// The upgrade itself is unconditional, so such a request left
+			// shared_cores-1 of the set's per-sharer mutexes held: owned by the
+			// network thread after a last-level miss, since it passes its exclusive
+			// hold through to us.  The next acquire_exclusive() on that set then
+			// blocked on a mutex its own thread already owned.  With shared_cores=1
+			// the downgrade releases nothing, which is why only shared caches hung.
+			if (!lock_all)
+				releaseStackLock(ca_address, true);
 #endif
 
+			if (!(metadata_request && (metadata_passthrough_loc != 1)))
+			{
 				LOG_ASSERT_ERROR(operationPermissibleinCache(ca_address, mem_op_type),
 								 "Expected %x to be valid in L1", ca_address);
 
