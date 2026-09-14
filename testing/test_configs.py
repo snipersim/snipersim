@@ -53,13 +53,11 @@ WORKLOAD_SRC = os.path.join(HERE, 'apps', 'workload.c')
 # produced nothing even if the exit status was zero.
 WORKLOAD_OUTPUT = re.compile(r'workload isum=1419064784 fsum=100638720\.000')
 
-# 1 and 2, not 1 and 4: gainestown gives its L3 shared_cores = 4, and at -n 4 the
-# tag-directory placement check rejects the topology --
-#   *ERROR* Tag directories may only be at 'master' node of shared caches
-# -- so a quad-core Xeon config cannot be run with four cores.  That is a real
-# wart, tracked separately; it is not something this suite should trip over on
-# every config layered onto gainestown.
-DEFAULT_CORES = (1, 2)
+# 1, 2 and 4.  Four used to be left out because gainestown -- an L3 shared by
+# four cores -- aborted at -n 4 on the tag-directory placement check.  That was
+# an uninitialised flag in the memory manager, fixed, and a quad-core config
+# that is never run at four cores is exactly the gap this suite exists to close.
+DEFAULT_CORES = (1, 2, 4)
 
 # Complete machines: must run on their own.
 EXPECT_PASS = [
