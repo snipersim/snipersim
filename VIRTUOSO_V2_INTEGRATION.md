@@ -244,8 +244,40 @@ As the source plan concludes, plus §2.4: Midgard (dead), `address_space.{h,cc}`
 ## 5. Per-step discipline
 
 1. One step, one commit, always building.
-2. `testing/test_virtuoso.py --invariance` after every step. T0/T1: byte-identical.
-3. A T2 commit message states which statistics move and why.
-4. Copy files verbatim from `09c00ea`, then apply the source plan's §2.2 (Sniper
-   formatting wins) and §2.3 (debug-output policy) as a separate, reviewable pass.
-5. Re-derive rather than apply any hunk against the five files in §2.1.
+2. `testing/test_virtuoso.py` after every step. T0/T1: existing counters
+   unchanged within tolerance, with any new counters listed separately.
+3. **A feature step is not done until it has been run and shown to activate.**
+   Building it and leaving the baselines alone proves only that it is harmless.
+   Every `F*` step therefore lands three things together: the code, the
+   configuration that selects it, and a `--feature` check asserting on counters
+   the feature is specified to move. Without that, a feature that silently does
+   nothing is indistinguishable from one that works -- Revelator disables itself
+   in its constructor when the allocator does not suit it, and then runs to
+   completion with a plausible IPC and every counter registered reading zero.
+4. A T2 commit message states which statistics move and why.
+5. Copy files verbatim from `09c00ea`, then apply the source plan's 2.2 (Sniper
+   formatting wins) and 2.3 (debug-output policy) as a separate, reviewable pass.
+6. Re-derive rather than apply any hunk against the five files in 2.1.
+
+### 5.1 What running the features has already turned up
+
+Findings that appeared only once a feature was actually executed. They are
+recorded because they say what the remaining steps should expect.
+
+- **The two trees initialise in different orders.** Virtuoso constructs MimicOS
+  before CoreManager; Sniper did the opposite. CoreManager builds the cores, and
+  with them the MMUs and any speculative engine, which query MimicOS as they are
+  constructed. Revelator compiled, left every configuration byte-identical, and
+  then segfaulted during startup. Fixed by moving the construction (`d671d1a`).
+  Expect more of this: ported code that reaches for a global during construction
+  is assuming an order this tree does not necessarily share.
+- **F2 and F3 cannot be separated.** `revelator_thp_policy.h` dynamic_casts its
+  spec engine to `RevelatorTHP*` and calls a method on it, so the allocator side
+  does not compile without the engine side. They landed as one step.
+- **Three shared-header edits the source plan lists for C3 are not needed**, and
+  the compiler rather than a reading says so: `last_alloc_fastpath` is read only
+  by `linux_buddy_anon.h`, and the "buddy" in the Revelator files is an enum
+  value name, `ReservedBuddy`. `physical_memory_allocator.h`, `buddy.h` and
+  `buddy_policy.h` are untouched, which is what keeps Revelator a T1 step.
+- **Each Revelator engine header carried five stale includes, not two**, as 2.5
+  predicted.
