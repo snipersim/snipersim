@@ -84,7 +84,7 @@ _cmake_flags += $(CMAKE_ARGS)
 _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
              $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs regress_qemu help
+.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs regress_qemu regress_virtuoso help
 
 all: build
 
@@ -139,7 +139,7 @@ distclean:
 # the moment you most want the rest of the picture and the moment the report
 # would not have printed.  SNIPER_REGRESS_LOG is where the suites append their
 # per-check timings; see testing/common/runlog.py.
-REGRESS_SUITES = scripting configs qemu pacsim apps
+REGRESS_SUITES = scripting configs qemu pacsim apps virtuoso
 
 # FAILFAST=ON stops at the first failing check, keeps the work directory it ran
 # in, and skips the remaining suites.  For debugging one failure, not for a
@@ -183,6 +183,16 @@ regress_qemu:
 # run` only ever reported whether the simulator crashed.
 regress_apps:
 	@$(SIM_ROOT)/testing/test_apps.py
+
+# The Virtuoso v2 integration: prove the additions changed nothing else, and
+# check each landed feature's counters.  Skips with a reason until the baselines
+# are blessed, which is deliberate -- they are host-specific, so they are made
+# locally rather than committed:
+#
+#     testing/test_virtuoso.py --bless
+#
+regress_virtuoso:
+	@$(SIM_ROOT)/testing/test_virtuoso.py
 
 # Sampled simulation, in two sizes.
 #

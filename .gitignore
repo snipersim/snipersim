@@ -85,3 +85,6 @@ pin-tool-log.txt
 build/
 pin-log.txt
 .sift_done
+
+# Blessed statistics baselines: host-specific, see testing/test_virtuoso.py
+testing/goldens/
