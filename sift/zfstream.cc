@@ -180,7 +180,9 @@ cvifstream::cvifstream(const char * filename, std::ios_base::openmode mode)
 
 	this->stream = std::fopen(filename, mode_str.c_str());
 	assert(this->stream != NULL);
+	this->peek_buffer = 0;
 	this->buffer_in_use = false;
+	this->read_failed = false;
 }
 
 cvifstream::~cvifstream()
@@ -202,13 +204,25 @@ void cvifstream::read(char* s, std::streamsize n)
 	if(nr_to_read > 0)
     {
 		ssize_t num_read = std::fread(start_buffer, sizeof(char), nr_to_read, this->stream);
+
 		// Against nr_to_read, not n.  A peek()ed byte is served from
 		// peek_buffer and nr_to_read is one short of n, so a completely
-		// successful read returned n-1 and this test was false -- leaving the
-		// assertion to pass only by falling through to the ferror() clause.
+		// successful read returned n-1 and a test against n was false --
+		// leaving the old assertion to pass only via its ferror() clause.
 		// peek() is how the reader dispatches on record type, so that was the
-		// ordinary path, and the first half of the check never did anything.
-		assert(num_read == (ssize_t)nr_to_read || std::ferror(this->stream) == 0);
+		// ordinary path, and that half of the check never did anything.
+		if (num_read != (ssize_t)nr_to_read)
+		{
+			// Short read.  A stream error was already fatal; end of file was
+			// not, and that was the worse case of the two: fread() leaves the
+			// unfilled remainder of the caller's buffer untouched, so the
+			// caller went on to parse whatever happened to be there as though
+			// it had arrived over the connection.  Recorded instead, so that
+			// fail() reports it -- which is what callers already test after
+			// reading a response.
+			this->read_failed = true;
+			assert(std::ferror(this->stream) == 0);
+		}
 	}
 }
 
@@ -224,5 +238,5 @@ int cvifstream::peek()
 
 bool cvifstream::fail() const 
 {
-	return this->stream == NULL;
+	return this->stream == NULL || this->read_failed;
 }

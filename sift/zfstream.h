@@ -98,10 +98,13 @@ class cvifstream : public vistream
 	   std::FILE *stream;
 	   char peek_buffer;
 	   bool buffer_in_use;
+	   // Sticky: set when a read returns fewer bytes than asked for, whether
+	   // from end of file or from a stream error, and reported by fail().
+	   bool read_failed;
    public:
 	   cvifstream(const char * filename, std::ios_base::openmode mode = std::ios_base::in);
 	   cvifstream(std::FILE *stream)
-		   : stream(stream) {}
+		   : stream(stream), peek_buffer(0), buffer_in_use(false), read_failed(false) {}
 	   virtual ~cvifstream();
 	   virtual void read(char* s, std::streamsize n);
 	   virtual int peek();
