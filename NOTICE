@@ -16,6 +16,15 @@ Files based on the Cheetah cache simulation model include:
    common/core/memory_subsystem/cheetah/util.h
    common/core/memory_subsystem/cheetah/util.cc
 
+Portions of this software vendor two permissively licensed third-party
+libraries, used by the Revelator speculative-translation engines:
+   common/core/memory_subsystem/parametric_dram_directory_msi/misc/bloom_filter.h
+      Open Bloom Filter, Arash Partow, MIT license
+      http://www.partow.net/programming/hashfunctions/index.html
+   common/core/memory_subsystem/parametric_dram_directory_msi/misc/city.h
+   common/core/memory_subsystem/parametric_dram_directory_msi/misc/city.cc
+      CityHash, Copyright (c) 2011 Google, Inc., MIT license, via cityhash-c
+
 The interval core simulation model is licensed under an academic-use only
 license, see the file LICENSE.academic in this directory.
 All files in the following directories are covered under this license
