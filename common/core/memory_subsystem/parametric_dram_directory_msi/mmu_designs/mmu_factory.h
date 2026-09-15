@@ -4,6 +4,7 @@
 #include "mmu_base.h"
 #include "mmu_spec.h"
 #include "mmu_victima.h"
+#include "mmu_hw_faults.h"
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -27,6 +28,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "victima") // Victima: cache lines used as TLB blocks
 			{
 				return new MemoryManagementUnitVictima(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "hw_fault") // Page faults handled in hardware
+			{
+				return new MemoryManagementUnitHWFault(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{
