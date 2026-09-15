@@ -1,12 +1,31 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
+#
+# Experiment driver for the Pac-Sim paper's comparisons.  NOT an in-tree entry
+# point, and it does not run as it stands:
+#
+#   - it builds `--mtng=N` arguments for run-sniper, selecting between the
+#     methodologies the paper compares against (1 Pac-Sim, 2 hybrid, 100
+#     SMARTS, 200 time-based, 1004 fast-forward, 1005 analysis, 1006/1007 MTR).
+#     run-sniper has never accepted --mtng, in any revision of this repository;
+#     these target a separate driver.
+#   - it imports iqmtnglib, which is not in this tree, and defaults to remote
+#     paths on a particular cluster.
+#
+# The --mtng spellings are left alone deliberately: they are a protocol with
+# something outside this repository, so renaming them here would only invent a
+# name nothing answers to.  Everything that is ours has moved to "pacsim"; MTNG
+# was the earlier name for the same methodology.
+#
+# To run Pac-Sim from this tree, use `run-sniper --pacsim` (or
+# --dynamic-sampling); for the estimate afterwards, pacsim.py.
 import os, sys
 
 # class to hold representative stats
 
 #from prepare import npbdatasize
 from . import dumpstats
-from . import mtng_dump
-from . import mtng_dumpjson
+from . import pacsim_dump
+from . import pacsim_dumpjson
 import json
 import copy
 import argparse
@@ -238,17 +257,17 @@ def check_result( bench,ci,cmd,args):
 #            if args.check == 'sql': ##old inference
 #                full_program_path = os.path.join(full_program_path,"mtng_output","sniper")
 #                print(full_program_path)
-#                time_mtng, wall_mtng = mtng_dump.get_full_time( full_program_path,os.environ.get("SNIPER_ROOT") )
+#                time_mtng, wall_mtng = pacsim_dump.get_full_time( full_program_path,os.environ.get("SNIPER_ROOT") )
 #            elif
              if args.check :
                 which_bench = "%s_%s"%(bench,ci)
                 if which_bench in threshold:
-                    mtng_dumpjson.threshold_in = threshold[which_bench]
+                    pacsim_dumpjson.threshold_in = threshold[which_bench]
                 full_program_path = datadir
                 if args.check_type == "time":
                     #print( full_program_path )
                     try :
-                        time_mtng, wall_mtng,l2missrate = mtng_dumpjson.get_full_time( full_program_path,os.environ.get("SNIPER_ROOT"),args.parallel )
+                        time_mtng, wall_mtng,l2missrate = pacsim_dumpjson.get_full_time( full_program_path,os.environ.get("SNIPER_ROOT"),args.parallel )
                         print(wall_mtng)
                         print(l2missrate)
                     except IndexError:
@@ -257,9 +276,9 @@ def check_result( bench,ci,cmd,args):
                         print( "value error")
                 elif   args.check_type == "pin":
 
-                    time_mtng, wall_mtng = mtng_dumpjson.get_ref_full_version_time( full_program_path,os.environ.get("SNIPER_ROOT"),args.parallel )
+                    time_mtng, wall_mtng = pacsim_dumpjson.get_ref_full_version_time( full_program_path,os.environ.get("SNIPER_ROOT"),args.parallel )
                 elif args.check_type == "marker":
-                    time_mtng, wall_mtng = mtng_dumpjson.get_marker_distribution( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
+                    time_mtng, wall_mtng = pacsim_dumpjson.get_marker_distribution( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
 
                 elif args.check_type == "regionsize":
                     cmd = "cp -r %s %s"%( full_program_path,os.path.join("~/tmp/collect/","%s_%d"%(bench,ci)))
@@ -267,16 +286,16 @@ def check_result( bench,ci,cmd,args):
                     os.system(cmd)
                 elif args.check_type == "predict":
                     try:
-                        time_mtng, wall_mtng = mtng_dumpjson.predictaccuracy( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
+                        time_mtng, wall_mtng = pacsim_dumpjson.predictaccuracy( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
                     except ValueError:
                         time_mtng,wall_mtng=[0,0,0,0],0
                     print(time_mtng,wall_mtng)
                 elif args.check_type == "extrapolate":
-                    time_mtng, wall_mtng = mtng_dumpjson.extrapolatedistribution( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
+                    time_mtng, wall_mtng = pacsim_dumpjson.extrapolatedistribution( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
                     print(time_mtng)
                 elif args.check_type == "timedistribute":
                     try:
-                        time_mtng, wall_mtng = mtng_dumpjson.timedistribution( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
+                        time_mtng, wall_mtng = pacsim_dumpjson.timedistribution( full_program_path,os.environ.get("SNIPER_ROOT") ) #barrierpoint, looppoint
                     except ValueError:
                         time_mtng = [0,0,1]
                         wall_mtng=0

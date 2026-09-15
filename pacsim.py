@@ -10,18 +10,18 @@
 #
 # which prints the same estimate at the end, computed by the same function.
 # There is deliberately no second implementation here: both call
-# pacsimscripts.mtng_dumpjson.get_full_time(), so the two paths cannot report
+# pacsimscripts.pacsim_dumpjson.get_full_time(), so the two paths cannot report
 # different numbers for the same directory.
 
 import argparse
 import os
 import sys
 
-from pacsimscripts import mtng_dumpjson
+from pacsimscripts import pacsim_dumpjson
 
 
 def report(outputdir, sniper_root, parallel=False):
-    sim_time, wall_time, l2_miss_rate = mtng_dumpjson.get_full_time(
+    sim_time, wall_time, l2_miss_rate = pacsim_dumpjson.get_full_time(
         outputdir, sniper_root, parallel)
     return sim_time, wall_time, l2_miss_rate
 
@@ -48,8 +48,12 @@ def main():
               file=sys.stderr)
         return 2
 
-    sim_time, wall_time, l2_miss_rate = report(
-        args.outputdir, args.sniper_root, args.parallel)
+    try:
+        sim_time, wall_time, l2_miss_rate = report(
+            args.outputdir, args.sniper_root, args.parallel)
+    except FileNotFoundError as e:
+        print('pacsim.py: %s' % e, file=sys.stderr)
+        return 1
     print('[PacSim] Estimated sim time %.3fs, wall time %.3fs, L2 miss rate %.4f'
           % (sim_time, wall_time, l2_miss_rate))
     return 0

@@ -4,7 +4,7 @@ import os, sys
 # class to hold representative stats
 
 import argparse
-from .mtng_dumpstats import PerformStats
+from .pacsim_dumpstats import PerformStats
 # dumpstats for Detailed Running
 class DumpStats:
 
@@ -123,8 +123,8 @@ def get_full_version_time( output_sniper_dir, sniper_root_dir ):
     config["sniper_root"] = sniper_root_dir
     hyper_dump_stat = DumpStats( config )
 
-    total_time_mtng_for_each_region = hyper_dump_stat.print_overall_runtime()
-    return  total_time_mtng_for_each_region
+    total_time_for_each_region = hyper_dump_stat.print_overall_runtime()
+    return  total_time_for_each_region
 
 def get_full_time( output_sniper_dir, sniper_root_dir ):
     config = dict()
@@ -134,19 +134,19 @@ def get_full_time( output_sniper_dir, sniper_root_dir ):
     config["only-full-time"] = True
     hyper_dump_stat = DumpStats( config )
 
-    total_time_mtng_for_each_region = hyper_dump_stat.print_full_time()
+    total_time_for_each_region = hyper_dump_stat.print_full_time()
     walltime = hyper_dump_stat.print_wall_time()
     
-    return  total_time_mtng_for_each_region,walltime,hyper_dump_stat.print_l3_missrate()
+    return  total_time_for_each_region,walltime,hyper_dump_stat.print_l3_missrate()
 
 if __name__ == "__main__":
     config = get_args(  )
 #    print(config)
     dump_stat = DumpStats( config )
 
-    total_time_mtng_for_each_region = dump_stat.print_full_time()
+    total_time_for_each_region = dump_stat.print_full_time()
     wall_time = dump_stat.print_wall_time()
-    print( total_time_mtng_for_each_region)
+    print( total_time_for_each_region)
     print( "Wall Time:", wall_time)
  # def populate_cluster_stats(self):
 

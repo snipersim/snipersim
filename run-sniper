@@ -941,8 +941,8 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
     # disagree about which output directory and which Sniper root to read.
     print('[SNIPER] Estimating Pac-Sim run time')
     try:
-      from pacsimscripts import mtng_dumpjson
-      sim_time, wall_time, l2_miss_rate = mtng_dumpjson.get_full_time(outputdir, sim_root, False)
+      from pacsimscripts import pacsim_dumpjson
+      sim_time, wall_time, l2_miss_rate = pacsim_dumpjson.get_full_time(outputdir, sim_root, False)
       print('[PacSim] Estimated sim time %.3fs, wall time %.3fs, L2 miss rate %.4f'
             % (sim_time, wall_time, l2_miss_rate))
     except Exception as e:

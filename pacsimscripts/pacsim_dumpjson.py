@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 import os, sys
 
-from .mtng_dumpstats import PerformStats
+from .pacsim_dumpstats import PerformStats
 # class to hold representative stats
 import json
 import argparse
@@ -61,7 +61,7 @@ class SegmentData:
             time = stats.time0
         return time
 
-class MtngDumpStats:
+class PacSimDumpStats:
 
   def __init__(self, config):
     self.config = config;
@@ -84,9 +84,28 @@ class MtngDumpStats:
     self.time_each_feature_level = [ 0 ] * 5
     self.num_each_feature_level = [ 0 ] * 5
     return
+  # The per-region data the recorder writes.  MTNG was Pac-Sim's earlier name,
+  # so the file has been called intra_mtng.json; the current name is
+  # pacsim_regions.json.  Both are accepted -- the recorder that writes it is
+  # not currently in the tree (see the README), so whichever name a port emits
+  # will be read.
+  REGION_FILES = ("pacsim_regions.json", "intra_mtng.json")
+
+  def region_file(self):
+    import os.path
+    d = self.config["output_sniper_validate_dir"]
+    for name in self.REGION_FILES:
+        path = os.path.join(d, name)
+        if os.path.isfile(path):
+            return path
+    raise FileNotFoundError(
+        "no Pac-Sim region data in %s: looked for %s.  This file is written by "
+        "the SIFT recorder during a sampled run; see pacsimscripts/README.md "
+        "for its status." % (d, " or ".join(self.REGION_FILES)))
+
   def populate_cluster_stats(self):
 ############init sim mode and segment type
-    with open( "%(output_sniper_validate_dir)s/intra_mtng.json"%self.config ) as f:
+    with open( self.region_file() ) as f:
         json_raw = f.read()
         record = json.loads(json_raw)
     ##( record type, sim mode, pc)
@@ -349,7 +368,7 @@ class MtngDumpStats:
         if flush:
             self.record["feature_stack"][idx]["fs"] = feature["fs"]
     if flush:
-        with open( "%(output_sniper_validate_dir)s/intra_mtng2.json"%self.config,"w" ) as f:
+        with open( "%(output_sniper_validate_dir)s/pacsim_regions_extrapolated.json"%self.config,"w" ) as f:
             record = json.dumps( self.record )
             f.write(record)
 
@@ -484,23 +503,23 @@ def get_full_version_time( output_sniper_dir, sniper_root_dir ):
     config[ "output_sniper_validate_dir"] = output_sniper_dir
     config["sniper_root"] = sniper_root_dir
     config["flush"] = True
-    hyper_dump_stat = MtngDumpStats( config )
+    hyper_dump_stat = PacSimDumpStats( config )
 
-    total_time_mtng_for_each_region = hyper_dump_stat.print_overall_runtime()
-    return  total_time_mtng_for_each_region
+    total_time_for_each_region = hyper_dump_stat.print_overall_runtime()
+    return  total_time_for_each_region
 
 def get_ref_full_version_time( output_sniper_dir, sniper_root_dir ,parallel=False):
 
-#    total_time_mtng_for_each_region = hyper_dump_stat.print_overall_runtime()
+#    total_time_for_each_region = hyper_dump_stat.print_overall_runtime()
     hyper_dump_stat = get_dump_state(output_sniper_dir,sniper_root_dir,True)
 
-    total_time_mtng_for_each_region = hyper_dump_stat.print_ref_full_time(parallel)
+    total_time_for_each_region = hyper_dump_stat.print_ref_full_time(parallel)
     walltime = hyper_dump_stat.print_wall_time()
     if parallel :
-        return total_time_mtng_for_each_region[0],walltime
-    return  total_time_mtng_for_each_region[0],total_time_mtng_for_each_region[1]#walltime
+        return total_time_for_each_region[0],walltime
+    return  total_time_for_each_region[0],total_time_for_each_region[1]#walltime
 
-#    return  total_time_mtng_for_each_region
+#    return  total_time_for_each_region
 
 def get_dump_state(output_sniper_dir,sniper_root_dir,disable_sniper_file = False):
     config = dict()
@@ -514,15 +533,15 @@ def get_dump_state(output_sniper_dir,sniper_root_dir,disable_sniper_file = False
         config["sniper_file_enable"] = False
     else:
         config["sniper_file_enable"] = True
-    hyper_dump_stat = MtngDumpStats( config )
+    hyper_dump_stat = PacSimDumpStats( config )
     return hyper_dump_stat
 
 def get_full_time( output_sniper_dir, sniper_root_dir, parallel=False ):
     hyper_dump_stat = get_dump_state(output_sniper_dir,sniper_root_dir)
-    total_time_mtng_for_each_region,l2missrate = hyper_dump_stat.print_full_time()
+    total_time_for_each_region,l2missrate = hyper_dump_stat.print_full_time()
     walltime = hyper_dump_stat.print_wall_time(parallel)
 
-    return  total_time_mtng_for_each_region,walltime,l2missrate
+    return  total_time_for_each_region,walltime,l2missrate
 def get_marker_distribution( output_sniper_dir, sniper_root_dir ):
 
     hyper_dump_stat = get_dump_state(output_sniper_dir,sniper_root_dir)
@@ -557,11 +576,11 @@ def predictaccuracy( output_sniper_dir, sniper_root_dir ):
 if __name__ == "__main__":
     config = get_args(  )
 #    print(config)
-    dump_stat = MtngDumpStats( config )
+    dump_stat = PacSimDumpStats( config )
 
-    total_time_mtng_for_each_region,l2missrate = dump_stat.print_full_time()
+    total_time_for_each_region,l2missrate = dump_stat.print_full_time()
     wall_time = dump_stat.print_wall_time()
-    print( total_time_mtng_for_each_region)
+    print( total_time_for_each_region)
     #print("l2missrate:",l2missrate)
     #print( "Wall Time:", wall_time)
  # def populate_cluster_stats(self):

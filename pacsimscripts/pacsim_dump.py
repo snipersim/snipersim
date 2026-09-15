@@ -4,7 +4,7 @@ import os, sys
 # class to hold representative stats
 import json
 import argparse
-from .mtng_dumpstats import PerformStats
+from .pacsim_dumpstats import PerformStats
 # dumpstats for Detailed Running
 #from tqdm import tqdm
 #from multiprocessing import Pool, cpu_count
@@ -52,7 +52,7 @@ class SegmentData:
             time = stats.time0
         return time
 
-class MtngDumpStats:
+class PacSimDumpStats:
 
   def __init__(self, config):
     self.config = config;
@@ -86,6 +86,10 @@ class MtngDumpStats:
                 markers.append(elem)
     markers.append(snapshots[-1])
 ############init sim mode and segment type
+    # Reachable only from toolset.py, which does not run in this tree (see the
+    # header there).  The live reader is pacsim_dumpjson, which accepts both
+    # pacsim_regions.json and the older intra_mtng.json; this one is left on the
+    # older name rather than renamed to something nothing writes.
     with open( "%(output_sniper_validate_dir)s/mtng.json"%self.config ) as f:
         json_raw = f.read()
         record = json.loads(json_raw)['record']
@@ -177,10 +181,10 @@ def get_full_version_time( output_sniper_dir, sniper_root_dir ):
 
     config[ "output_sniper_validate_dir"] = output_sniper_dir
     config["sniper_root"] = sniper_root_dir
-    hyper_dump_stat = MtngDumpStats( config )
+    hyper_dump_stat = PacSimDumpStats( config )
 
-    total_time_mtng_for_each_region = hyper_dump_stat.print_overall_runtime()
-    return  total_time_mtng_for_each_region
+    total_time_for_each_region = hyper_dump_stat.print_overall_runtime()
+    return  total_time_for_each_region
 
 def get_full_time( output_sniper_dir, sniper_root_dir ):
     config = dict()
@@ -189,21 +193,21 @@ def get_full_time( output_sniper_dir, sniper_root_dir ):
     config[ "output_sniper_dir"] = output_sniper_dir
     config["sniper_root"] = sniper_root_dir
     config["only-full-time"] = True
-    hyper_dump_stat = MtngDumpStats( config )
+    hyper_dump_stat = PacSimDumpStats( config )
 
-    total_time_mtng_for_each_region = hyper_dump_stat.print_full_time()
+    total_time_for_each_region = hyper_dump_stat.print_full_time()
     walltime = hyper_dump_stat.print_wall_time()
 
-    return  total_time_mtng_for_each_region,walltime
+    return  total_time_for_each_region,walltime
 
 if __name__ == "__main__":
     config = get_args(  )
 #    print(config)
-    dump_stat = MtngDumpStats( config )
+    dump_stat = PacSimDumpStats( config )
 
-    total_time_mtng_for_each_region = dump_stat.print_full_time()
+    total_time_for_each_region = dump_stat.print_full_time()
     wall_time = dump_stat.print_wall_time()
-    print( total_time_mtng_for_each_region)
+    print( total_time_for_each_region)
     print( "Wall Time:", wall_time)
  # def populate_cluster_stats(self):
 

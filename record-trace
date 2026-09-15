@@ -226,15 +226,15 @@ pinoptions += (' ' + ' '.join(extra_pin_args))
 # the methodology the user asked for.
 PACSIM_KNOB = b'sniper:pacsim'
 
-# Where the recorder writes intra_mtng.json, the per-region data the analysis
-# scripts read.  MTNG and Pac-Sim are the same thing under two names, which is
-# why the knob and the file are spelled one way and the flag another.
+# Where the recorder writes its per-region data, the file the analysis scripts
+# read.  MTNG was Pac-Sim's earlier name; the knob is spelled both ways here so
+# that whichever a ported recorder defines, the directory still gets set.
 #
-# The historical knob defaulted to ".", so the JSON landed in whatever
-# directory the user happened to run from while run-sniper looked for it in the
-# output directory -- the two never met.  Pointing it at the output directory is
-# what makes the estimate findable.
-MTNGDIR_KNOB = b'sniper:mtng-dir'
+# The historical knob defaulted to ".", so the data landed in whatever directory
+# the user happened to run from while run-sniper looked for it in the output
+# directory -- the two never met.  Pointing it at the output directory is what
+# makes the estimate findable.
+DIR_KNOBS = (b'sniper:pacsim-dir', b'sniper:mtng-dir')
 
 def recorder_has_pacsim(tool_path):
   return has_knob(tool_path, PACSIM_KNOB)
@@ -256,8 +256,10 @@ def pacsim_knob(tool_path):
   opts = ' -%s 1' % PACSIM_KNOB.decode()
   # Asked for rather than assumed, for the same reason: a port that spells this
   # knob differently should lose the output-directory default, not fail to run.
-  if has_knob(tool_path, MTNGDIR_KNOB):
-    opts += ' -%s %s' % (MTNGDIR_KNOB.decode(), outputdir)
+  for knob in DIR_KNOBS:
+    if has_knob(tool_path, knob):
+      opts += ' -%s %s' % (knob.decode(), outputdir)
+      break
   return opts
 
 def require_pacsim(tool_path):
