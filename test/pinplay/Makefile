@@ -1,5 +1,5 @@
 TARGET=fft
-CLEAN_EXTRA=fft.c
+CLEAN_EXTRA=fft.c fft-pinball
 include ../shared/Makefile.shared
 
 fft.c:
@@ -10,14 +10,27 @@ $(TARGET): $(TARGET).o
 
 run_$(TARGET): make_pinball run_pinball
 
-PIN_HOME?=../../pin_kit
-PINPLAY_HOME?=$(PIN_HOME)/extras/pinplay
+# PinPlay comes with SDE rather than as a separate driver.
+#
+# This used to build extras/pinplay/examples out of a pin_kit and run
+# pinplay-driver.so.  Neither exists: the tree ships an SDE kit, whose
+# pinkit has no extras/pinplay, so the recording step failed and the replay
+# had nothing to read.  SDE has the logger and the replayer built in, as the
+# -log and -replay knobs on sde64 itself -- which is what record-trace has
+# always used for the replay half.
+#
+# PIN_HOME comes from buildconf.makefile and points at sde_kit/pinkit.
+SDE_HOME ?= $(PIN_HOME)/..
 
-$(PINPLAY_HOME)/bin/intel64/pinplay-driver.so:
-	-make -C $(PINPLAY_HOME)/examples
+fft-pinball/pinball.address: fft
+	@mkdir -p fft-pinball
+	$(SDE_HOME)/sde64 -log -log:basename fft-pinball/pinball -log:compressed bzip2 -- ./fft -p 1 -m 6
 
-make_pinball: fft $(PINPLAY_HOME)/bin/intel64/pinplay-driver.so
-	$(PIN_HOME)/pin -t $(PINPLAY_HOME)/bin/intel64/pinplay-driver.so -log -log:basename fft-pinball/pinball -log:compressed bzip2  -- ./fft
+make_pinball: fft-pinball/pinball.address
 
-run_pinball:
-	../../run-sniper -n 1 -c gainestown --pinballs=fft-pinball/pinball.address
+# --pinplay-addr-trans is required, not optional: a pinball recorded on one run
+# is replayed into a different address layout, and without it the replay stops
+# with "Cannot read page into address ... please use -replay:addr_trans knob"
+# and simulates zero instructions.
+run_pinball: fft-pinball/pinball.address
+	../../run-sniper -n 1 -c gainestown --pinballs=fft-pinball/pinball.address --pinplay-addr-trans
