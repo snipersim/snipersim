@@ -126,7 +126,8 @@ def get_name(jobid = None, resultsdir = None):
 # genuinely distinct counters such as load-misses-E-data, which splits by
 # coherence state as well and must not be folded in.
 CACHE_BLOCK_TYPES = ('', 'data', 'instruction',
-                     'page_table_data', 'page_table_instruction')
+                     'page_table_data', 'page_table_instruction',
+                     'victima_tlb')
 
 
 # The old per-core TLB objects -- itlb, dtlb, stlb -- were deleted when the MMU

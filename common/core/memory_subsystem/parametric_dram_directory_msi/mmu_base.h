@@ -146,6 +146,14 @@ namespace ParametricDramDirectoryMSI
 		virtual BaseFilter* getPTWFilter() { return nullptr; }
 		virtual void discoverVMAs() = 0;
         
+		// Called when a TLB level evicts an entry to make room for a new one.
+		// Default no-op; Victima overrides it to fetch metadata for the evicted
+		// VPN in the background.
+		virtual void onTLBLevelEviction(int /*level*/, IntPtr /*evicted_address*/,
+		                                int /*evicted_page_size*/, IntPtr /*evicted_ppn*/,
+		                                IntPtr /*eip*/, Core::lock_signal_t /*lock*/,
+		                                bool /*instruction*/) {}
+
 		virtual PTWOutcome performPTW(IntPtr address, bool modeled, bool count, bool is_prefetch, IntPtr eip, Core::lock_signal_t lock, PageTable *page_table, bool restart_walk, bool instruction = false);
         
         /**

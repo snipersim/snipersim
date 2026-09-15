@@ -3,6 +3,7 @@
 #include "mmu.h"
 #include "mmu_base.h"
 #include "mmu_spec.h"
+#include "mmu_victima.h"
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -22,6 +23,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "spec") // MMU with a speculative-translation engine
 			{
 				return new MemoryManagementUnitSpec(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "victima") // Victima: cache lines used as TLB blocks
+			{
+				return new MemoryManagementUnitVictima(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{

@@ -290,6 +290,8 @@ namespace ParametricDramDirectoryMSI
 			return "instruction";
 		case CacheBlockInfo::block_type_t::DATA:
 			return "data";
+		case CacheBlockInfo::block_type_t::VICTIMA_TLB_BLOCK:
+			return "victima_tlb";
 
 		default:
 			return "??";

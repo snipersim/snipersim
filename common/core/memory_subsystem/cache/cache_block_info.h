@@ -21,13 +21,15 @@ public:
 		PAGE_TABLE_INSTRUCTION, // Page table data (e.g., PTEs for instruction pages)
 		INSTRUCTION,         // Instruction fetches
 		DATA,                // Regular data accesses
+		VICTIMA_TLB_BLOCK,   // Victima: a leaf PTE line used as a TLB block (8 PTEs / 64B)
 		NUM_BLOCK_TYPES
 	};
 
 	// Helper function to check if a block type is metadata (any translation-related block)
 	static inline bool isMetadataBlockType(block_type_t block_type) {
 		return (block_type == PAGE_TABLE_DATA ||
-		        block_type == PAGE_TABLE_INSTRUCTION);
+		        block_type == PAGE_TABLE_INSTRUCTION ||
+		        block_type == VICTIMA_TLB_BLOCK);
 	}
 	
 	// For backward compatibility - PAGE_TABLE is an alias for PAGE_TABLE_DATA

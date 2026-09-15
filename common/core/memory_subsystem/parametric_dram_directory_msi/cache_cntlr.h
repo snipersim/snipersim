@@ -369,6 +369,18 @@ namespace ParametricDramDirectoryMSI
          void Prefetch(IntPtr eip, SubsecondTime t_start);
          // Cache meta-data operations
          SharedCacheBlockInfo* getCacheBlockInfo(IntPtr address);
+         /* Tag lookup for a speculative probe: is this line resident here?
+          * Note this does update replacement state -- Virtuoso's interface
+          * comment says otherwise, but its implementation passes
+          * update_replacement=true and Victima's hit rates depend on it, so the
+          * behaviour is kept and the comment corrected. */
+         bool isLinePresent(IntPtr address) override
+         {
+            return m_master->m_cache->accessSingleLine(
+                       address, Cache::LOAD, /*buff=*/nullptr, /*bytes=*/0,
+                       getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD),
+                       /*update_replacement=*/true) != nullptr;
+         }
          CacheBlockInfo::block_type_t getCacheBlockType(IntPtr address);
          CacheState::cstate_t getCacheState(IntPtr address);
          CacheState::cstate_t getCacheState(CacheBlockInfo *cache_block_info);

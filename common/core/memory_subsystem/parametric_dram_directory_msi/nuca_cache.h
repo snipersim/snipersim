@@ -43,6 +43,10 @@ class NucaCache
       boost::tuple<SubsecondTime, HitWhere::where_t> write(IntPtr address, Byte* data_buf, bool& eviction, IntPtr& evict_address, Byte* evict_buf, SubsecondTime now, bool count, bool is_metadata = false);
       void markTranslationMetadata(IntPtr address, CacheBlockInfo::block_type_t blocktype);
       void measureStats();
+
+      // Tag-level access for speculative probes (Victima); the cache itself
+      // stays owned here.
+      Cache* getCache() { return m_cache; }
 };
 
 #endif // __NUCA_CACHE_H

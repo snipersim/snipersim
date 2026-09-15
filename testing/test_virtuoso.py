@@ -152,6 +152,15 @@ FEATURES = {
                         'revelator_allocator.hash1_tries',
                         'revelator_allocator.hash1_hits')),
 
+    # F5: Victima probes the cache for leaf PTE lines.  leaf_hits is the
+    # discriminating counter: MMUCacheInterface::isLinePresent has a default
+    # implementation returning false, so an incorrectly wired Victima still
+    # probes -- and misses every single time.  Requiring hits as well as probes
+    # is what separates "the probe is asking" from "the cache is answering".
+    'victima': (
+        ['address_translation_schemes/victima'], 1,
+        require_nonzero('mmu.victima_leaf_probes', 'mmu.victima_leaf_hits')),
+
     'radix_fault_split': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
