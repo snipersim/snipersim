@@ -38,6 +38,14 @@ defaults sit just above the measured floor, which keeps the check able to notice
 a real change (an unintended behaviour change moves many counters, or moves one
 by far more than a count) without failing on the one that will not sit still.
 
+The workload is built at a fixed path, and that matters more than it looks.
+With ASLR off the guest's addresses are determined by its environment, and the
+program path is part of that: the same binary run from two paths of different
+lengths differs in 303 of 2342 counters here.  Compiling it into a fresh
+temporary directory per run -- which this suite did at first -- therefore
+produced a different answer every invocation and made the comparison
+meaningless.
+
 Baselines are local, not committed: they depend on the host toolchain (the
 workload is compiled here) so a checked-in copy would be noise on any other
 machine.  Bless once at the start of a series, check after every step:
@@ -146,11 +154,18 @@ FEATURES = {
 }
 
 
-def build_workload(workdir):
-    exe = os.path.join(workdir, 'workload')
-    cc = os.environ.get('CC', 'gcc')
-    subprocess.run([cc, '-O1', '-o', exe, WORKLOAD_SRC], check=True)
-    return exe
+# Fixed, so that the guest's environment -- and therefore its addresses -- are
+# the same on every run.  See the module docstring.
+WORKLOAD_BIN = os.path.join(GOLDEN_DIR, 'workload')
+
+
+def build_workload():
+    os.makedirs(GOLDEN_DIR, exist_ok=True)
+    if (not os.path.exists(WORKLOAD_BIN)
+            or os.path.getmtime(WORKLOAD_BIN) < os.path.getmtime(WORKLOAD_SRC)):
+        cc = os.environ.get('CC', 'gcc')
+        subprocess.run([cc, '-O1', '-o', WORKLOAD_BIN, WORKLOAD_SRC], check=True)
+    return WORKLOAD_BIN
 
 
 def have_setarch():
@@ -341,7 +356,7 @@ def main():
     failures = 0
     stopped_early = False
     try:
-        workload = build_workload(workdir)
+        workload = build_workload()
 
         cases = INVARIANCE
         if args.only:
