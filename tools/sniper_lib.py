@@ -23,12 +23,38 @@ except ImportError:
 class SniperResultsException(Exception): pass
 
 
+def resolve_resultsdir(resultsdir):
+  """Accept either a run directory or the simulation/ inside it.
+
+  run-sniper sorts its output into subdirectories -- simulation/, logs/,
+  telemetry/ -- and sim.cfg now lands in simulation/ rather than at the top.
+  Every tool here defaults to '.', and the documented workflow is to run them
+  from the directory the simulation was run in (test/shared/Makefile.shared
+  prints exactly that advice for cpistack.py, mcpat.py, dumpstats.py and
+  gen_topology.py).  Those invocations all started raising
+
+      SniperResultsException: No valid configuration found
+
+  Looking one level down when the top level has no sim.cfg keeps both layouts
+  working, and keeps the advice true.
+  """
+  if os.path.exists(os.path.join(resultsdir, 'sim.cfg')):
+    return resultsdir
+  nested = os.path.join(resultsdir, 'simulation')
+  if os.path.exists(os.path.join(nested, 'sim.cfg')):
+    return nested
+  return resultsdir
+
+
 def get_config(jobid = None, resultsdir = None, force_deleted = True):
   if jobid:
     if ic_invalid:
       raise RuntimeError('Cannot fetch results from server, make sure BENCHMARKS_ROOT points to a valid copy of benchmarks+iqlib')
     simcfg = ic.job_output(jobid, 'sim.cfg', force_deleted)
   elif resultsdir:
+    # Here rather than only in get_results(): gen_topology.py and mcpat.py call
+    # get_config() directly, so a fix confined to get_results() left them broken.
+    resultsdir = resolve_resultsdir(resultsdir)
     cfgfile = os.path.join(resultsdir, 'sim.cfg')
     if not os.path.exists(cfgfile):
       raise ValueError('Cannot find config file at %s' % resultsdir)
@@ -44,6 +70,10 @@ def get_results(jobid = None, resultsdir = None, config = None, stats = None, pa
     results = ic.graphite_results(jobid, partial, metrics)
     config = get_config(jobid = jobid, force_deleted = force)
   elif resultsdir:
+    # Resolved once, here, because both calls below need the same answer:
+    # get_config() reads sim.cfg directly and does not go through
+    # parse_results_from_dir().
+    resultsdir = resolve_resultsdir(resultsdir)
     results = parse_results_from_dir(resultsdir, partial = partial, metrics = metrics)
     config = get_config(resultsdir = resultsdir)
   elif stats:
@@ -144,6 +174,8 @@ def stats_process(config, results):
 
 def parse_results_from_dir(resultsdir, partial = None, metrics = None):
   results = []
+
+  resultsdir = resolve_resultsdir(resultsdir)
 
   ## sim.cfg
   simcfg = os.path.join(resultsdir, 'sim.cfg')
