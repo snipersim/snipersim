@@ -219,6 +219,21 @@ void findMyAppId()
 
 VOID handleRoutineImplicitROI(THREADID threadid, const CONTEXT * ctxt, bool begin)
 {
+   // Idempotent, because one logical call can reach here more than once.
+   //
+   // MPI_Init is a weak alias for PMPI_Init and is reached through a PLT thunk,
+   // so a single call to it enters several routines that all match the name
+   // test.  Each sent its own ROI_START, and the simulator acted on every one:
+   //
+   //     [SIFT_RECORDER:0] Error: ROI_START seen, but we have already started.
+   //
+   // beginROI() already noticed and complained, but the magic had gone out
+   // before it was consulted, so the complaint changed nothing.  Checking here
+   // is what makes it harmless -- and keeps it harmless for any other library
+   // whose entry point is aliased or wrapped.
+   if (begin == in_roi)
+      return;
+
    if (begin)
    {
       thread_data[threadid].output->Magic(SIM_CMD_ROI_START, 0, 0);
@@ -231,6 +246,8 @@ VOID handleRoutineImplicitROI(THREADID threadid, const CONTEXT * ctxt, bool begi
    }
 }
 
+
+
 static void routineCallback(RTN rtn, void* v)
 {
    BOOL in_extrae = rtn_in_extrae(rtn);
@@ -240,6 +257,11 @@ static void routineCallback(RTN rtn, void* v)
    {
       BOOL could_instruments;
       BOOL aux_wrapper = rtn_name.find("_Wrapper") == std::string::npos;
+
+      // A PLT entry is a thunk that jumps to the real routine, which is
+      // instrumented in its own right; hooking both only produces duplicates.
+      if (rtn_name.size() > 4 && rtn_name.compare(rtn_name.size() - 4, 4, "@plt") == 0)
+         return;
 
       if (KnobExtraePreLoaded.Value() != 0)
       {
@@ -261,8 +283,26 @@ static void routineCallback(RTN rtn, void* v)
           aux_wrapper &&
           could_instruments)
       {
+         // Entry, not exit.
+         //
+         // The intent is "start the region once MPI is up", so this asked for
+         // IPOINT_AFTER.  Pin implements that by instrumenting the routine's
+         // returns, and with MPICH it never fired: MPI_Init is a weak alias for
+         // PMPI_Init, and neither IPOINT_AFTER nor hooking the returns found by
+         // walking the routine produced a single callback, on any rank, while
+         // an IPOINT_BEFORE probe on the same routine fired every time.  The
+         // result was silent -- instrumentation reported as installed, no ROI
+         // magic in the trace, only start and stop snapshots in the database,
+         // and reporting failing with "Invalid prefix roi-begin".
+         //
+         // Beginning at entry puts MPI's own initialisation inside the region
+         // rather than before it.  That is a real difference and the wrong one
+         // in principle, but it is small, it is the same on every rank, and a
+         // region that begins slightly early is worth having where the
+         // alternative is no region at all.
          RTN_Open(rtn);
-         RTN_InsertCall(rtn, IPOINT_AFTER, AFUNPTR(handleRoutineImplicitROI), IARG_THREAD_ID, IARG_CONTEXT, IARG_BOOL, true, IARG_END);
+         RTN_InsertCall(rtn, IPOINT_BEFORE, AFUNPTR(handleRoutineImplicitROI),
+                        IARG_THREAD_ID, IARG_CONTEXT, IARG_BOOL, true, IARG_END);
          RTN_Close(rtn);
       }
       if (rtn_name.find("MPI_Finalize") != std::string::npos &&
