@@ -41,6 +41,7 @@ namespace ParametricDramDirectoryMSI
                 m_log->log("After zeroing out stats");
 
                 registerStatsMetric(name, core_id, "page_faults", &stats.page_faults);
+                registerStatsMetric(name, core_id, "prefetch_page_faults", &stats.prefetch_page_faults);
                 registerStatsMetric(name, core_id, "page_table_walks", &stats.page_table_walks);
                 registerStatsMetric(name, core_id, "ptw_num_cache_accesses", &stats.ptw_num_cache_accesses);
                 registerStatsMetric(name, core_id, "pf_num_cache_accesses", &stats.pf_num_cache_accesses);
@@ -174,7 +175,8 @@ namespace ParametricDramDirectoryMSI
                                                 sniper_handler->handle_page_fault(fault_ctx);
                                         }
 
-                                        stats.page_faults++;
+                                        if (!is_prefetch) stats.page_faults++;
+                                        else stats.prefetch_page_faults++;
                                         is_pagefault = true;
 
                                         m_log->detailed("PAGE FAULT RESOLVED for address: ", SimLog::hex(address));
@@ -227,7 +229,8 @@ namespace ParametricDramDirectoryMSI
                                                 sniper_handler->handle_page_fault(fault_ctx);
                                         }
 
-                                        stats.page_faults++;
+                                        if (!is_prefetch) stats.page_faults++;
+                                        else stats.prefetch_page_faults++;
                                         is_pagefault = true;
 
                                         m_log->detailed("Page fault resolved for address: ", SimLog::hex(address));

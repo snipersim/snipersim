@@ -193,6 +193,12 @@ class DramPerfModelDetailed : public DramPerfModel
       UInt64 m_bank_conflicts_data;
       UInt64 m_bank_conflicts_metadata;
 
+      // Per-stage delay accounting (debugging the source of per-access lat)
+      SubsecondTime m_total_bank_pending_wait_data;     // Stage 3: bank busy wait
+      SubsecondTime m_total_rank_avail_delay_data;      // Stage 5: rank command bus queue
+      SubsecondTime m_total_bank_group_avail_delay_data;// Stage 6: bank-group queue (tCCD_L)
+      SubsecondTime m_total_dram_bus_queue_delay_data;  // Stage 8: data bus queue (channel)
+
       //=========================================================================
       // Inter-arrival time tracking
       //=========================================================================

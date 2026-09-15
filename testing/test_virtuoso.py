@@ -90,10 +90,6 @@ INVARIANCE = [
                              'parametric_baseline_4c'],                          4),
 ]
 
-# Feature checks.  Each entry is (config list, ncores, check) where check takes
-# the statistics dict and returns (ok, detail).  Populated by the integration
-# steps as they land; see VIRTUOSO_V2_INTEGRATION.md.
-FEATURES = {}
 
 
 def counter(stats, name):
@@ -117,6 +113,37 @@ def require_nonzero(*names):
             return False, 'counter stayed zero: %s' % ', '.join(zero)
         return True, ', '.join('%s=%d' % (n, counter(stats, n)) for n in names)
     return check
+
+
+# Feature checks.  Each entry is (config list, ncores, check) where check takes
+# the statistics dict and returns (ok, detail).  Populated by the integration
+# steps as they land; see VIRTUOSO_V2_INTEGRATION.md.
+FEATURES = {
+    # O5: the detailed DRAM model's per-stage queueing breakdown.  baseline
+    # drives real DRAM traffic, so every stage should accumulate; a stage stuck
+    # at zero means its accumulation site was missed.
+    'dram_queueing': (
+        ['address_translation_schemes/baseline'], 1,
+        require_nonzero('ddr.total-bank-pending-wait-data',
+                        'ddr.total-rank-avail-delay-data',
+                        'ddr.total-bank-group-avail-delay-data',
+                        'ddr.total-dram-bus-queue-delay-data')),
+
+    # O5: the radix page table counts prefetch-walk faults apart from demand
+    # faults.  Nothing prefetches yet, so the counter must exist and read zero
+    # while demand faults keep being counted -- which is what tells "registered"
+    # apart from "absent".
+    'radix_fault_split': (
+        ['address_translation_schemes/baseline'], 1,
+        lambda stats: (
+            ('radix_4level.prefetch_page_faults' in stats
+             and counter(stats, 'radix_4level.prefetch_page_faults') == 0
+             and counter(stats, 'radix_4level.page_faults') > 0),
+            'demand=%d prefetch=%d' % (counter(stats, 'radix_4level.page_faults'),
+                                       counter(stats, 'radix_4level.prefetch_page_faults'))
+            if 'radix_4level.prefetch_page_faults' in stats
+            else 'prefetch_page_faults not registered')),
+}
 
 
 def build_workload(workdir):

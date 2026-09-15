@@ -125,6 +125,10 @@ DramPerfModelDetailed::DramPerfModelDetailed(core_id_t core_id, UInt32 cache_blo
    , m_total_bank_conflict_delay_metadata(SubsecondTime::Zero())
    , m_bank_conflicts_data(0)
    , m_bank_conflicts_metadata(0)
+   , m_total_bank_pending_wait_data(SubsecondTime::Zero())
+   , m_total_rank_avail_delay_data(SubsecondTime::Zero())
+   , m_total_bank_group_avail_delay_data(SubsecondTime::Zero())
+   , m_total_dram_bus_queue_delay_data(SubsecondTime::Zero())
    // Inter-arrival time tracking
    , m_last_access_time_data(SubsecondTime::Zero())
    , m_last_access_time_metadata(SubsecondTime::Zero())
@@ -363,6 +367,10 @@ DramPerfModelDetailed::DramPerfModelDetailed(core_id_t core_id, UInt32 cache_blo
    // Register bank conflict delay statistics
    registerStatsMetric(ddr_name, core_id, "total-bank-conflict-delay-data", &m_total_bank_conflict_delay_data);
    registerStatsMetric(ddr_name, core_id, "total-bank-conflict-delay-metadata", &m_total_bank_conflict_delay_metadata);
+   registerStatsMetric(ddr_name, core_id, "total-bank-pending-wait-data",      &m_total_bank_pending_wait_data);
+   registerStatsMetric(ddr_name, core_id, "total-rank-avail-delay-data",       &m_total_rank_avail_delay_data);
+   registerStatsMetric(ddr_name, core_id, "total-bank-group-avail-delay-data", &m_total_bank_group_avail_delay_data);
+   registerStatsMetric(ddr_name, core_id, "total-dram-bus-queue-delay-data",   &m_total_dram_bus_queue_delay_data);
    registerStatsMetric(ddr_name, core_id, "bank-conflicts-data", &m_bank_conflicts_data);
    registerStatsMetric(ddr_name, core_id, "bank-conflicts-metadata", &m_bank_conflicts_metadata);
 
@@ -920,8 +928,10 @@ SubsecondTime DramPerfModelDetailed::getAccessLatency(SubsecondTime pkt_time, UI
       // ROW HIT: Row buffer already contains the correct page
       if (bank_info.t_avail > t_now)
       {
+         SubsecondTime pending = bank_info.t_avail - t_now;
          t_now = bank_info.t_avail;
          perf->updateTime(t_now, ShmemPerf::DRAM_BANK_PENDING);
+         if (!is_metadata) m_total_bank_pending_wait_data += pending;
          m_log.trace("Row hit, bank busy until:", t_now.getNS(), "ns");
       }
       ++m_page_hits;
@@ -1025,7 +1035,11 @@ SubsecondTime DramPerfModelDetailed::getAccessLatency(SubsecondTime pkt_time, UI
 
       // Wait for bank to become available
       if (bank_info.t_avail > t_now)
+      {
+         SubsecondTime pending = bank_info.t_avail - t_now;
          t_now = bank_info.t_avail;
+         if (!is_metadata) m_total_bank_pending_wait_data += pending;
+      }
 
       // Check if row is still open (needs closing) or already closed
       if (bank_info.t_avail + m_bank_keep_open >= t_now)
@@ -1147,6 +1161,7 @@ SubsecondTime DramPerfModelDetailed::getAccessLatency(SubsecondTime pkt_time, UI
    SubsecondTime rank_avail_delay = m_rank_avail.size()
       ? m_rank_avail[cr]->computeQueueDelay(t_now, rank_avail_request, requester)
       : SubsecondTime::Zero();
+   if (!is_metadata) m_total_rank_avail_delay_data += rank_avail_delay;
 
    //--- Stage 6: Bank Group Timing (tCCD_L) ---
    UInt64 crbg = (addr.channel * m_num_ranks * m_num_bank_groups) + (addr.rank * m_num_bank_groups) + addr.bank_group;
@@ -1154,6 +1169,7 @@ SubsecondTime DramPerfModelDetailed::getAccessLatency(SubsecondTime pkt_time, UI
    SubsecondTime group_avail_delay = m_bank_group_avail.size()
       ? m_bank_group_avail[crbg]->computeQueueDelay(t_now, m_intercommand_delay_long, requester)
       : SubsecondTime::Zero();
+   if (!is_metadata) m_total_bank_group_avail_delay_data += group_avail_delay;
 
    //--- Stage 7: Column Access (CAS) ---
    t_now += m_dram_access_cost;
@@ -1196,6 +1212,7 @@ SubsecondTime DramPerfModelDetailed::getAccessLatency(SubsecondTime pkt_time, UI
    }
 
    t_now += ddr_queue_delay;
+   if (!is_metadata) m_total_dram_bus_queue_delay_data += ddr_queue_delay;
    perf->updateTime(t_now, ShmemPerf::DRAM_QUEUE);
 
    t_now += ddr_processing_time;

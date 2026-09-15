@@ -51,6 +51,7 @@ namespace ParametricDramDirectoryMSI
 			UInt64 ptw_num_cache_accesses; // Number of cache accesses for page table walks
 			UInt64 pf_num_cache_accesses;  // Number of cache accesses for page faults
 			UInt64 page_faults;
+			UInt64 prefetch_page_faults; // faults on a prefetch walk, counted apart from demand
 			UInt64 *page_size_discovery; // Number of times each page size is discovered
 			UInt64 allocated_frames;	 // Number of frames allocated for the page table
 		} stats;
