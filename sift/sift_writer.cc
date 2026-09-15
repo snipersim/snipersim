@@ -167,7 +167,21 @@ Sift::Writer::~Writer()
 {
    End();
 
-   delete m_response_filename;
+   // free(), not delete: m_response_filename comes from strdup(), which
+   // allocates with malloc().  Freeing it with operator delete is undefined,
+   // and not harmlessly so here -- the recorder is built against PinCRT, whose
+   // allocator is not the one strdup() used, and the mismatch showed up at
+   // every shutdown as
+   //
+   //     free(): invalid pointer
+   //
+   // followed by glibc calling abort().  Under MPI that abort was fatal to the
+   // whole job: the process manager saw a rank die abnormally, killed the rest
+   // with SIGKILL, and every other rank's SIFT pipe broke mid-stream.
+   //
+   // sift_reader.cc pairs its own strdup()s with free() correctly; only the
+   // writer was mismatched.
+   free(m_response_filename);
 
    #if VERBOSE > 3
    printf("instrs %lu hsize", ninstrs);
