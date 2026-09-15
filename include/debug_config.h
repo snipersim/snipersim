@@ -71,3 +71,31 @@
 #define DEBUG_TRACE_CHAMPSIM        DEBUG_NONE /* 0, 1 or 2 */
 #define DEBUG_CHAMPSIM_CACHE        DEBUG_NONE /* 0, 1 or 2 */ // ChampSim instruction cache hits/misses
 #define DEBUG_DYNAMIC_MICROOP       DEBUG_NONE /* 0, 1 or 2 */ // DynamicMicroOp alloc/dealloc and refcount
+
+// --- Virtuoso v2 -----------------------------------------------------------
+//
+// Added ahead of the code that uses them so that each feature step lands
+// without also editing this file.  All default to off, so they change nothing
+// until a step turns one on.
+
+// TRAIL: the temporal PTE TLB prefetcher (Phase I).
+#define DEBUG_TEMPORAL_PTE_PREFETCHER DEBUG_NONE /* 0, 1 or 2 */
+
+// TRAIL's optional bookkeeping.  The first two cost simulation wall-clock time
+// and are off; the third is a plain allocation optimisation and is on.
+#define ENABLE_TPTE_UNIQUE_VPN_TRACKING 0  // unbounded unique-VPN sets
+#define ENABLE_TPTE_PERIODIC_FINALIZE   0  // rescan those sets every 10K queries
+#define ENABLE_TPTE_ALLOC_OPT           1  // stack buffers instead of per-query heap
+
+// Linux daemon models on the Sniper-side MimicOS (Phase F).
+#define DEBUG_COMPACTD              DEBUG_NONE /* 0, 1 or 2 */ // kcompactd, compaction
+#define DEBUG_KHUGEPAGED            DEBUG_NONE /* 0, 1 or 2 */ // khugepaged, THP coalescing
+#define DEBUG_KSWAPD                DEBUG_NONE /* 0, 1 or 2 */ // kswapd, reclaim
+
+// Destinations for output the Virtuoso drop prints unconditionally.  The port
+// keeps real error paths on stderr and puts instrumentation, progress and
+// per-event tracing behind these instead, including the getenv() switches
+// (PREFETCH_PF_DEBUG, RECENCY_DEBUG) the original used.
+#define DEBUG_MAGIC_SERVER          DEBUG_NONE /* 0, 1 or 2 */ // magic-instruction handling
+#define DEBUG_TRACE_THREAD          DEBUG_NONE /* 0, 1 or 2 */ // thread create/exit, context switches
+#define DEBUG_MMU_PREFETCH          DEBUG_NONE /* 0, 1 or 2 */ // MMU-driven page-table prefetch
