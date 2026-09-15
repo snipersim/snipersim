@@ -8,11 +8,17 @@
 #include "memory_management/policies/buddy_policy.h"
 #include "memory_management/policies/reserve_thp_policy.h"
 #include "memory_management/policies/baseline_policy.h"
+#include "memory_management/policies/revelator_policy.h"
+#include "memory_management/policies/revelator_simple_policy.h"
+#include "memory_management/policies/revelator_thp_policy.h"
 
 // include/memory_management/physical_memory_allocators/
 #include "../../include/memory_management/physical_memory_allocators/reserve_thp.h"
 #include "../../include/memory_management/physical_memory_allocators/baseline.h"
 #include "../../include/memory_management/physical_memory_allocators/numa_reserve_thp.h"
+#include "../../include/memory_management/physical_memory_allocators/revelator.h"
+#include "../../include/memory_management/physical_memory_allocators/revelator_simple.h"
+#include "../../include/memory_management/physical_memory_allocators/revelator_thp.h"
 // PhysicalMemoryAllocator*
 #include "../../include/memory_management/physical_memory_allocators/physical_memory_allocator.h"
 
@@ -23,6 +29,9 @@
 using SniperBaselineAllocator = BaselineAllocator<Sniper::Baseline::MetricsPolicy>;
 using SniperReserveTHPAllocator = ReservationTHPAllocator<Sniper::ReserveTHP::MetricsPolicy>;
 using SniperNumaReserveTHPAllocator = NumaReservationTHPAllocator<Sniper::NumaReserveTHP::NumaReserveTHPSniperPolicy>;
+using SniperRevelatorAllocator       = RevelatorAllocator<Sniper::Revelator::RevelatorSniperPolicy>;
+using SniperRevelatorTHPAllocator    = RevelatorTHPAllocator<Sniper::RevelatorTHP::RevelatorTHPSniperPolicy>;
+using SniperRevelatorSimpleAllocator = RevelatorSimpleAllocator<Sniper::RevelatorSimple::RevelatorSimpleSniperPolicy>;
 
 // --------------------------------------------------------------------------
 // Helper: parse a comma-separated integer list from a config string
@@ -107,6 +116,40 @@ public:
                 threshold_for_promotion,
                 num_numa_nodes, numa_policy, utilization_threshold,
                 per_node_cap, per_node_kern);
+        }
+        else if (allocator_type == "revelator")
+        { // Revelator: hash-placed frames a speculative engine can predict
+            UInt64 rev_memory_size = (UInt64)Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/memory_size");
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            int number_of_hashes = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/number_of_hashes");
+            double targ_frag = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/target_fragmentation");
+            bool enable_aggressive_swapouts = Sim()->getCfg()->getBool("perf_model/" + allocator_name + "/enable_aggressive_swapouts");
+            int infrequency_threshold = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/infrequency_threshold");
+            double hash1_usage_threshold = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/hash1_usage_threshold");
+            return new SniperRevelatorAllocator(allocator_name, max_order, kernel_size, frag_type,
+                                                number_of_hashes, rev_memory_size, targ_frag,
+                                                enable_aggressive_swapouts, infrequency_threshold,
+                                                hash1_usage_threshold);
+        }
+        else if (allocator_type == "revelator_thp")
+        { // Revelator with transparent huge pages
+            UInt64 rev_memory_size = (UInt64)Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/memory_size");
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            int number_of_hashes = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/number_of_hashes");
+            float threshold_for_promotion = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/threshold_for_promotion");
+            return new SniperRevelatorTHPAllocator(allocator_name, rev_memory_size, max_order, kernel_size,
+                                                   frag_type, number_of_hashes, threshold_for_promotion);
+        }
+        else if (allocator_type == "revelator_simple")
+        { // Revelator without the reservation machinery
+            UInt64 rev_memory_size = (UInt64)Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/memory_size");
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            int number_of_hashes = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/number_of_hashes");
+            return new SniperRevelatorSimpleAllocator(allocator_name, rev_memory_size, max_order,
+                                                      kernel_size, frag_type, number_of_hashes);
         }
         else
         {

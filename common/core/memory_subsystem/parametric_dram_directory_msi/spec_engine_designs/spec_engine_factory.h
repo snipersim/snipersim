@@ -5,6 +5,9 @@
 #include "config.hpp"
 #include "mmu_spec.h"
 #include "spec_engine_base.h"
+#include "revelator.h"
+#include "revelator_open_addressing_engine.h"
+#include "revelator_thp_engine.h"
 
 namespace ParametricDramDirectoryMSI
 {
@@ -36,12 +39,26 @@ namespace ParametricDramDirectoryMSI
             ShmemPerfModel *shmem_perf_model,
             String name)
         {
-            // No speculative engines are registered yet.  Each engine adds its
-            // own branch here together with its include: the Revelator family
-            // in F3/F6, and specTLB / asap / SpOT / oracle only if the deferred
-            // comparison engines (G4) are ever pulled in.
-            std::cerr << "Invalid SpecEngine type: " << type << std::endl;
-            abort();
+            if (type == "revelator")
+            {
+                return new Revelator(core, memory_manager, shmem_perf_model, name);
+            }
+            else if (type == "revelator_open_addressing")
+            {
+                return new RevelatorOpenAddressingEngine(core, memory_manager, shmem_perf_model, name);
+            }
+            else if (type == "revelator_thp")
+            {
+                return new RevelatorTHP(core, memory_manager, shmem_perf_model, name);
+            }
+            // numa_revelator arrives with the NUMA allocator; specTLB, asap,
+            // SpOT and oracle only if the deferred comparison engines (G4) are
+            // ever pulled in.
+            else
+            {
+                std::cerr << "Invalid SpecEngine type: " << type << std::endl;
+                abort();
+            }
         }
     };
 }

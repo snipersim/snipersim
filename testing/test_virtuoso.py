@@ -141,6 +141,17 @@ FEATURES = {
     # faults.  Nothing prefetches yet, so the counter must exist and read zero
     # while demand faults keep being counted -- which is what tells "registered"
     # apart from "absent".
+    # F2: Revelator must actually speculate, not silently soft-disable itself.
+    # Its constructor disables the engine when the allocator is not a Revelator
+    # one, and a disabled engine still runs, still produces a plausible IPC and
+    # still registers every counter -- reading zero.  So the check is that the
+    # engine issued prefetches and that the allocator's hash placement was used.
+    'revelator': (
+        ['address_translation_schemes/revelator'], 1,
+        require_nonzero('revelator.total_prefetches',
+                        'revelator_allocator.hash1_tries',
+                        'revelator_allocator.hash1_hits')),
+
     'radix_fault_split': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
