@@ -26,7 +26,22 @@ SDE_HOME ?= $(PIN_HOME)/..
 # line, so changing that command has to invalidate it.  Without this, adding the
 # workload's -t self-check left the old pinball in place and the replay went on
 # faithfully replaying a run made without it.
-fft-pinball/pinball.address: fft Makefile
+#
+# So is the kit stamp.  A pinball is not portable across SDE versions, and
+# updating the kit under one recorded by the previous version left the replay
+# producing no output at all -- which reads as a workload failure rather than as
+# a stale recording.  The kit's own mtime is no use here (it is the tarball's,
+# always older than the pinball), so the stamp holds the resolved kit path,
+# which is content-addressed and therefore changes exactly when the kit does.
+fft-pinball/.sde-kit: FORCE
+	@mkdir -p fft-pinball
+	@echo '$(realpath $(SDE_HOME))' | cmp -s - $@ 2>/dev/null \
+	  || echo '$(realpath $(SDE_HOME))' > $@
+
+.PHONY: FORCE
+FORCE:
+
+fft-pinball/pinball.address: fft Makefile fft-pinball/.sde-kit
 	@mkdir -p fft-pinball
 	$(SDE_HOME)/sde64 -log -log:basename fft-pinball/pinball -log:compressed bzip2 -- ./fft -p 1 -m 6 -t
 
