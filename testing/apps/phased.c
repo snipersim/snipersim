@@ -69,7 +69,8 @@
 #define COMPUTE_ITERS 400000
 #endif
 
-static pthread_barrier_t barrier;
+static pthread_barrier_t barrier;   /* between phases: the workers       */
+static pthread_barrier_t gate;      /* main + workers: brackets the ROI   */
 static size_t *chase[NTHREADS];
 static double  result[NTHREADS];
 static uint64_t visited[NTHREADS];
@@ -109,6 +110,10 @@ static void *work(void *arg)
    uint64_t seen = 0;
    size_t p = 0;
 
+   /* Wait for every thread to exist, then for main to open the region. */
+   pthread_barrier_wait(&gate);
+   pthread_barrier_wait(&gate);
+
    for (int phase = 0; phase < NPHASES; phase++)
    {
       pthread_barrier_wait(&barrier);
@@ -130,6 +135,9 @@ static void *work(void *arg)
       }
    }
 
+   /* Phases done; main closes the region before joining. */
+   pthread_barrier_wait(&gate);
+
    result[id]  = acc;
    visited[id] = seen;
    return NULL;
@@ -142,6 +150,7 @@ int main(void)
    uint64_t seen = 0;
 
    pthread_barrier_init(&barrier, NULL, NTHREADS);
+   pthread_barrier_init(&gate, NULL, NTHREADS + 1);
    for (long i = 0; i < NTHREADS; i++)
    {
       chase[i] = malloc(CHASE_SLOTS * sizeof(size_t));
@@ -153,14 +162,28 @@ int main(void)
       build_cycle(chase[i], CHASE_SLOTS, 12345u + (uint32_t)i);
    }
 
-   /* Thread creation is inside the region: the barriers between phases are
-    * part of what is being measured. */
-   SimRoiStart();
+   /* Thread creation and join are kept OUT of the region.
+    *
+    * Measured: with them inside, an otherwise empty run -- every phase body
+    * compiled away -- still cost 205.7M cycles at zero instructions, which was
+    * 69% of the four-phase run.  Spawning and reaping threads is modelled as a
+    * large, one-off stretch of elapsed time with no phase structure in it, so
+    * leaving it in would hand a sampler most of the answer for free and let a
+    * lazy one score well.  The gate barrier lets main open the region only once
+    * every worker exists, and close it once they have all finished their
+    * phases. */
    for (long i = 0; i < NTHREADS; i++)
       pthread_create(&th[i], NULL, work, (void *)i);
+
+   pthread_barrier_wait(&gate);      /* every worker is up */
+   SimRoiStart();
+   pthread_barrier_wait(&gate);      /* let them run */
+
+   pthread_barrier_wait(&gate);      /* every worker has finished its phases */
+   SimRoiEnd();
+
    for (int i = 0; i < NTHREADS; i++)
       pthread_join(th[i], NULL);
-   SimRoiEnd();
 
    for (int i = 0; i < NTHREADS; i++)
    {
@@ -169,6 +192,7 @@ int main(void)
    }
 
    pthread_barrier_destroy(&barrier);
+   pthread_barrier_destroy(&gate);
    for (int i = 0; i < NTHREADS; i++)
       free(chase[i]);
 
