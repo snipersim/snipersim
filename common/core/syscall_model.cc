@@ -265,7 +265,25 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
          // On success: return size of affinity mask (in bytes) needed to represent however many cores we're modeling
          // (returning a value that is too large can cause a segfault in the application's libc)
-         m_ret_val = success ? (Sim()->getConfig()->getApplicationCores()+7)/8 : -EINVAL;
+         //
+         // Both arms are widened to IntPtr before the conditional chooses between
+         // them.  Without that, getApplicationCores() returns UInt32 and drags the
+         // whole expression to unsigned int, so the failure arm -- -EINVAL -- was
+         // converted to 4294967274 and then zero-extended into m_ret_val.  The
+         // application received that as the return value of sched_getaffinity, and
+         // glibc's wrapper does
+         //
+         //     if (res != -1) memset ((char *) cpuset + res, 0, cpusetsize - res);
+         //
+         // so a huge positive "success" made cpusetsize - res underflow and memset
+         // a colossal region, destroying the heap:
+         //
+         //     free(): invalid pointer
+         //
+         // which killed the process partway through simulation.  The comment above
+         // was already warning about exactly this failure mode.
+         m_ret_val = success ? (IntPtr)((Sim()->getConfig()->getApplicationCores()+7)/8)
+                             : (IntPtr)(-EINVAL);
          m_emulated = true;
 
          break;
