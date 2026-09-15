@@ -103,11 +103,27 @@ def install_path(dep):
 
 
 def present(name, dep):
-    """Is the dependency usable where the build expects it?"""
+    """Is the dependency usable where the build expects it, at this version?
+
+    The version half matters as much as the usable half.  The install path is a
+    symlink into the content-addressed cache, and the cache key comes from the
+    manifest, so a manifest that has moved on to a new version wants a
+    different cache entry.  This used to check only that the path existed and
+    held the marker file, both of which stay true of the old version -- so
+    editing a url, a version or a sha256 and running `fetch` did nothing at
+    all, reported "ok", and left the previous version in place.
+    """
     marker = dep.get('marker')
     base = install_path(dep)
     if not os.path.exists(base):
         return False
+
+    # Pointing at some other version's cache entry is not "present".
+    if os.path.islink(base):
+        want = cache_path(name, dep)
+        if os.path.realpath(base) != os.path.realpath(want):
+            return False
+
     return os.path.exists(os.path.join(base, marker)) if marker else True
 
 
