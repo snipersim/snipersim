@@ -105,6 +105,76 @@ def get_name(jobid = None, resultsdir = None):
   }
 
 
+# Cache counters are reported per block type: a load of ordinary data, of
+# instructions, or of page-table memory is counted separately, so what used to
+# be
+#
+#     L1-D.loads
+#
+# is now L1-D.loads-data, L1-D.loads-instruction, L1-D.loads-page_table_data
+# and L1-D.loads-page_table_instruction, with no total anywhere.
+#
+# Every consumer that asked for the total broke.  mcpat.py died with
+#
+#     KeyError: 'L1-D.loads'
+#
+# on any run at all, which is why power modelling stopped working.
+#
+# The totals are synthesised here rather than in each tool, so that a script
+# asking for L1-D.loads gets the number it has always meant.  Only these
+# suffixes are aggregated -- matching any trailing "-word" would merge
+# genuinely distinct counters such as load-misses-E-data, which splits by
+# coherence state as well and must not be folded in.
+CACHE_BLOCK_TYPES = ('', 'data', 'instruction',
+                     'page_table_data', 'page_table_instruction')
+
+
+# The old per-core TLB objects -- itlb, dtlb, stlb -- were deleted when the MMU
+# framework was integrated (commit eb4d16c), and the stats they registered went
+# with them.  The MMU reports the same events under its own names, split by
+# whether the translation was for instructions or for data.
+#
+# mcpat.py still asks for itlb.miss and died with KeyError on every run.  The
+# names are mapped back rather than patched at each use site, so that anything
+# else written against the old names keeps working too.
+TLB_ALIASES = {
+  'itlb.miss': 'mmu.tlb_misses_instruction',
+  'dtlb.miss': 'mmu.tlb_misses_data',
+  'itlb.access': 'mmu.num_translations_instruction',
+  'dtlb.access': 'mmu.num_translations_data',
+}
+
+
+def add_tlb_aliases(stats):
+  for old_name, new_name in TLB_ALIASES.items():
+    if old_name not in stats and new_name in stats:
+      stats[old_name] = stats[new_name]
+  return stats
+
+
+def add_block_type_totals(stats):
+  """Provide the un-suffixed total alongside the per-block-type counters."""
+  bases = {}
+  for key in list(stats):
+    for suffix in CACHE_BLOCK_TYPES:
+      tail = '-' + suffix
+      if key.endswith(tail) and len(key) > len(tail):
+        bases.setdefault(key[:-len(tail)], []).append(key)
+        break
+
+  for base, keys in bases.items():
+    if base in stats:
+      continue                      # a real total already exists; leave it
+    parts = [stats[k] for k in keys]
+    if all(isinstance(v, list) for v in parts):
+      width = max(len(v) for v in parts)
+      stats[base] = [sum(v[i] if i < len(v) else 0 for v in parts)
+                     for i in range(width)]
+    elif all(not isinstance(v, list) for v in parts):
+      stats[base] = sum(parts)
+  return stats
+
+
 def stats_process(config, results):
   ncores = int(config['general/total_cores'])
   stats = {}
@@ -119,6 +189,9 @@ def stats_process(config, results):
        else:
          nskipped = core - len(stats[key])
          stats[key] += [0]*nskipped + [value]
+  add_block_type_totals(stats)
+  add_tlb_aliases(stats)
+
   # Figure out when the interval of time, represented by partial, actually begins/ends
   # Since cores can account for time in chunks, per-core time can be
   # both before (``wakeup at future time X'') or after (``sleep until woken up'')

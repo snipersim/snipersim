@@ -9,4 +9,6 @@ $(TARGET): $(TARGET).o
 run_$(TARGET):
 	../../run-sniper -n 2 -c gainestown --roi -gcore/spin_loop_detection=true -- ./spinloop
 	../../tools/dumpstats.py | grep spin
-	head -n 4 sim.out
+	@# sim.out moved into simulation/ when run-sniper started sorting its
+	@# output into subdirectories; accept either layout.
+	head -n 4 simulation/sim.out 2>/dev/null || head -n 4 sim.out

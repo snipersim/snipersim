@@ -33,4 +33,4 @@ run-iter2: fft
 	../../run-sniper -n 1 -s markers -s roi-iter::2:3 --roi-script --no-cache-warming -- ./fft -p 1 -m 6
 
 clean:
-	rm -f fft fft.c sim.cfg sim.stats* *.log *.out
+	rm -rf fft fft.c sim.cfg sim.stats* *.log *.out simulation logs telemetry sim.info

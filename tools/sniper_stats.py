@@ -51,6 +51,12 @@ class SniperStatsBase:
 
 
 def SniperStats(resultsdir = '.', jobid = None):
+  # Resolved here too.  Which backend gets chosen depends on which files are
+  # found, so an unresolved directory does not fail loudly -- it silently
+  # selects the compatibility backend, which has no topology, and gen_topology.py
+  # then reported "Failed getting topology information" from behind a bare
+  # except.  The run directory holds sim.stats.sqlite3 in simulation/.
+  resultsdir = sniper_lib.resolve_resultsdir(resultsdir)
   if jobid:
     import sniper_stats_jobid
     stats = sniper_stats_jobid.SniperStatsJobid(jobid)
