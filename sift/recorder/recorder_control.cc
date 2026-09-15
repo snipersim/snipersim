@@ -206,6 +206,12 @@ void findMyAppId()
       int fd = open(filename, O_CREAT | O_EXCL, 0600);
       if (fd != -1)
       {
+         // The file is a claim marker, not something to read or write: the
+         // atomic O_EXCL create is the whole point, so the descriptor has no
+         // further use and was simply leaked.  One per rank, for the life of
+         // the process.
+         close(fd);
+
          // Success: use this app_id
          app_id = id;
          std::cerr << "[SIFT_RECORDER:" << app_id << "] Application started" << std::endl;
