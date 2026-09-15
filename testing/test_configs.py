@@ -234,6 +234,19 @@ def run_config(names, ncores, workdir, workload, timeout, mode):
 
 
 def main():
+    # Line-buffer stdout.
+    #
+    # Python block-buffers when stdout is a file, so a redirected run writes
+    # nothing for 8KB at a time.  A sweep that takes an hour then looks
+    # identical to one that has hung -- same file size, same mtime, for twenty
+    # minutes at a stretch -- and the only way to tell them apart is to go
+    # looking at process tables.  Progress output is worth nothing if it
+    # arrives after the run.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:      # pragma: no cover - Python < 3.7
+        pass
+
     ap = argparse.ArgumentParser()
     ap.add_argument('--only', action='append', help='check only this config (repeatable)')
     ap.add_argument('--cores', default=','.join(str(c) for c in DEFAULT_CORES),
