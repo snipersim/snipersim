@@ -51,6 +51,8 @@ import sys
 import tempfile
 import time
 
+from common.runlog import RunLog
+
 SNIPER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APPS = os.path.join(SNIPER_ROOT, 'testing', 'apps')
 
@@ -313,9 +315,12 @@ def main():
     ap.add_argument('--keep', action='store_true', help='keep the working directory')
     args = ap.parse_args()
 
+    log = RunLog('pacsim')
+
     p, reason = prerequisites()
     if not p:
         print('SKIP: %s' % reason)
+        log.finish()
         return 0
 
     modes = args.mode or sorted(MODES)
@@ -335,10 +340,14 @@ def main():
             try:
                 r = measure(p, workdir, mode, args)
             except RuntimeError as e:
+                log.record('%s (simulate)' % mode, time.time() - started, 'FAIL')
                 print('ERROR (%s)' % e)
                 failures += 1
                 continue
-            print('done [%ds]' % round(time.time() - started))
+            # The simulation is the unit worth timing: it runs the workload
+            # twice, and the checks below only read what it left behind.
+            took = log.record('%s (simulate)' % mode, time.time() - started)
+            print('done [%ds]' % round(took))
             for name in names:
                 ok, detail = CASES[name](r, args)
                 print('  %-12s %s (%s)' % (name, 'PASS' if ok else 'FAIL', detail))
@@ -352,6 +361,7 @@ def main():
         print('all %d checks passed' % checks)
         return 0
     finally:
+        log.finish()
         if args.keep:
             print('working directory kept: %s' % workdir)
         else:

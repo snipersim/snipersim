@@ -36,6 +36,8 @@ import subprocess
 import sys
 import time
 
+from common.runlog import RunLog
+
 SNIPER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_DIR = os.path.join(SNIPER_ROOT, 'test')
 
@@ -199,6 +201,7 @@ def main():
 
     names = args.only or sorted(CASES)
     failures = skipped = 0
+    log = RunLog('apps')
     for name in names:
         check, needs = CASES[name]
         why = unavailable(needs) if needs else None
@@ -211,21 +214,28 @@ def main():
         sys.stdout.flush()
         rc, out, took = run(name, args.timeout)
         if rc is None:
+            # A timeout is the most expensive check there is; record it, or the
+            # suite total quietly omits the worst case.
+            log.record(name, took, 'TIMEOUT')
             print('FAIL: timed out after %ds' % args.timeout)
             failures += 1
             continue
         ok, detail = check(out, rc)
         known = EXPECT_FAIL.get(name)
         if known and not ok:
+            log.record(name, took, 'PASS')
             print('PASS (known: %s) [%ds]' % (known, round(took)))
         elif known and ok:
+            log.record(name, took, 'FAIL')
             print('FAIL: now works -- remove it from EXPECT_FAIL [%ds]' % round(took))
             failures += 1
         else:
+            log.record(name, took, 'PASS' if ok else 'FAIL')
             print('%s (%s) [%ds]' % ('PASS' if ok else 'FAIL', detail, round(took)))
             if not ok:
                 failures += 1
 
+    log.finish()
     print()
     ran = len(names) - skipped
     if failures:

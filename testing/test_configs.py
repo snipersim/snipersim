@@ -46,6 +46,8 @@ import sys
 import tempfile
 import time
 
+from common.runlog import RunLog
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 SNIPER_ROOT = os.path.dirname(HERE)
 CONFIG_DIR = os.path.join(SNIPER_ROOT, 'config')
@@ -295,6 +297,7 @@ def main():
 
     workdir = tempfile.mkdtemp(prefix='sniper-configs-')
     failures = []
+    log = RunLog('configs')
     checks = 0
     try:
         workload = build_workload(workdir)
@@ -335,6 +338,8 @@ def main():
                     ok, detail = run_config(names, ncores, workdir, workload,
                                             limit, mode)
                     took = time.time() - started
+                    log.record('%s [%s]' % (full, mode), took,
+                               'PASS' if ok == want_ok else 'FAIL')
                     if ok == want_ok:
                         status = 'PASS' if want_ok else 'PASS (known: %s)' % why
                     elif want_ok:
@@ -347,6 +352,7 @@ def main():
             print()
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+        log.finish()
 
     print()
     if unclassified:

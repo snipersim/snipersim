@@ -23,6 +23,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
+
+from common.runlog import RunLog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SNIPER_ROOT = os.path.dirname(HERE)
@@ -159,6 +162,7 @@ def main():
     cases = args.case or sorted(CASES)
     workdir = tempfile.mkdtemp(prefix='sniper-scripting-')
     failures = []
+    log = RunLog('scripting')
     try:
         exe = build_app(workdir)
         for name in cases:
@@ -166,8 +170,11 @@ def main():
                 label = name if args.repeat == 1 else '%s [%d/%d]' % (name, it + 1, args.repeat)
                 sys.stdout.write('%-28s ' % label)
                 sys.stdout.flush()
+                started = time.time()
                 ok, msg = run_case(name, exe, workdir, args.timeout)
-                print('PASS' if ok else 'FAIL: ' + msg)
+                took = log.record(label, time.time() - started,
+                                  'PASS' if ok else 'FAIL')
+                print('%s [%ds]' % ('PASS' if ok else 'FAIL: ' + msg, round(took)))
                 if not ok:
                     failures.append((label, msg))
     finally:
@@ -175,6 +182,7 @@ def main():
             print('work directory kept at %s' % workdir)
         else:
             shutil.rmtree(workdir, ignore_errors=True)
+        log.finish()
 
     print()
     if failures:

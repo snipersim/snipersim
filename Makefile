@@ -7,7 +7,10 @@
 #     make -j8             passed through
 #     make clean           clean the build directory
 #     make distclean       remove build directories and the fetched dependencies
-#     make regress         run the regression suites
+#     make regress         run the regression suites, then report where the
+#                          time went.  SNIPER_REGRESS_LOG=<file> keeps the
+#                          per-check timings; testing/regress_report.py reads
+#                          one back, so two runs can be compared.
 #     make deps            acquire dependencies only
 #     make configure       configure only
 #
@@ -127,7 +130,29 @@ distclean:
 	@echo "  $(DEPS) cache      shows where"
 	@echo "  $(DEPS) gc         removes versions no manifest names"
 
-regress: regress_scripting regress_configs regress_qemu regress_pacsim regress_apps
+# Every suite runs, then the timing report, then the run fails if any suite did.
+#
+# As a prerequisite list this stopped at the first failing suite, which is both
+# the moment you most want the rest of the picture and the moment the report
+# would not have printed.  SNIPER_REGRESS_LOG is where the suites append their
+# per-check timings; see testing/common/runlog.py.
+REGRESS_SUITES = scripting configs qemu pacsim apps
+
+# Pass SNIPER_REGRESS_LOG=<file> to keep the timings and compare two runs with
+#   testing/regress_report.py <file>
+regress:
+	@log="$(SNIPER_REGRESS_LOG)"; keep=1; \
+	if [ -z "$$log" ]; then \
+	  log=$$(mktemp "$${TMPDIR:-/tmp}/sniper-regress-XXXXXX.jsonl"); keep=; \
+	fi; \
+	: > "$$log"; rc=0; export SNIPER_REGRESS_LOG="$$log"; \
+	for s in $(REGRESS_SUITES); do \
+	  $(SIM_ROOT)/testing/test_$$s.py || rc=$$?; \
+	done; \
+	$(SIM_ROOT)/testing/regress_report.py "$$log" || true; \
+	if [ -z "$$keep" ]; then rm -f "$$log"; \
+	else echo "timings kept in $$log"; fi; \
+	exit $$rc
 
 regress_scripting:
 	@$(SIM_ROOT)/testing/test_scripting.py

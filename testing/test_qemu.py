@@ -29,6 +29,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
+
+from common.runlog import RunLog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SNIPER_ROOT = os.path.dirname(HERE)
@@ -313,16 +316,23 @@ def main():
 
     workdir = tempfile.mkdtemp(prefix='sniper-qemu-')
     failures = []
+    log = RunLog('qemu')
     try:
         g = build_guests(workdir)
         for name in (args.case or sorted(CASES)):
+            started = time.time()
             ok, detail = CASES[name](p, g, workdir)
-            print('%-20s %s' % (name, 'PASS (%s)' % detail if ok else 'FAIL: ' + detail))
+            took = log.record(name, time.time() - started,
+                              'PASS' if ok else 'FAIL')
+            print('%-20s %s [%ds]'
+                  % (name, 'PASS (%s)' % detail if ok else 'FAIL: ' + detail,
+                     round(took)))
             if not ok:
                 failures.append(name)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
         run(['make', '-s', 'clean'], 60, cwd=PROBE_DIR)
+        log.finish()
 
     print()
     total = len(args.case or CASES)
