@@ -75,31 +75,36 @@ static size_t *chase[NTHREADS];
 static double  result[NTHREADS];
 static uint64_t visited[NTHREADS];
 
-/* Deterministic LCG -- the Numerical Recipes constants. */
-static uint32_t lcg(uint32_t *s)
-{
-   *s = (*s * 1664525u) + 1013904223u;
-   return *s;
-}
-
-/* Build a single cycle visiting every slot exactly once, so the chase cannot
- * fall into a short loop that fits in cache. */
+/* Build a single cycle visiting every slot exactly once.
+ *
+ * A full-period LCG over 0..n-1 is a permutation that is one n-cycle, so
+ * a[x] = (A*x + C) mod n is the cycle, written in a single pass with no
+ * scratch allocation.  Hull-Dobell gives full period for a power-of-two
+ * modulus when C is odd and A = 1 (mod 4), which is why n must be a power of
+ * two and why these constants are the ones used.
+ *
+ * This replaces a Fisher-Yates shuffle, which needed three passes and an
+ * n-sized scratch array.  That mattered: the shuffle runs before the region of
+ * interest, and at 2^19 slots per thread it was 151s of the 260s a four-phase
+ * run took -- pure fixed cost, paid identically by a sampled run and a full
+ * one, so it diluted any speedup measured between them.
+ *
+ * Successive slots land far apart, so the chase still defeats prefetching; the
+ * seed shifts where in the cycle a given slot points, keeping per-thread
+ * buffers distinct.
+ */
 static void build_cycle(size_t *a, size_t n, uint32_t seed)
 {
-   size_t *order = malloc(n * sizeof(size_t));
-   uint32_t s = seed;
+   const uint64_t A = 1664525u, C = 1013904223u;
+   const size_t mask = n - 1;        /* n is a power of two */
+   size_t x = seed & mask;
 
    for (size_t i = 0; i < n; i++)
-      order[i] = i;
-   for (size_t i = n - 1; i > 0; i--)
    {
-      size_t j = lcg(&s) % (i + 1);
-      size_t t = order[i]; order[i] = order[j]; order[j] = t;
+      size_t next = (size_t)((A * (uint64_t)x + C) & mask);
+      a[x] = next;
+      x = next;
    }
-   for (size_t i = 0; i < n; i++)
-      a[order[i]] = order[(i + 1) % n];
-
-   free(order);
 }
 
 static void *work(void *arg)
