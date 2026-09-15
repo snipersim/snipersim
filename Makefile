@@ -127,7 +127,7 @@ distclean:
 	@echo "  $(DEPS) cache      shows where"
 	@echo "  $(DEPS) gc         removes versions no manifest names"
 
-regress: regress_scripting regress_configs regress_qemu regress_pacsim
+regress: regress_scripting regress_configs regress_qemu regress_pacsim regress_apps
 
 regress_scripting:
 	@$(SIM_ROOT)/testing/test_scripting.py
@@ -138,6 +138,12 @@ regress_configs:
 # Skips itself with a reason unless QEMU and the frontend are built (QEMU=ON).
 regress_qemu:
 	@$(SIM_ROOT)/testing/test_qemu.py
+
+# The workloads under test/.  Each has always had a `make run` target and
+# nothing ran them; each now also has a check on what came out, because `make
+# run` only ever reported whether the simulator crashed.
+regress_apps:
+	@$(SIM_ROOT)/testing/test_apps.py
 
 # Sampled simulation, in two sizes.
 #

@@ -22,9 +22,13 @@ run_$(TARGET): make_pinball run_pinball
 # PIN_HOME comes from buildconf.makefile and points at sde_kit/pinkit.
 SDE_HOME ?= $(PIN_HOME)/..
 
-fft-pinball/pinball.address: fft
+# Makefile is a prerequisite: the pinball is a recording of a particular command
+# line, so changing that command has to invalidate it.  Without this, adding the
+# workload's -t self-check left the old pinball in place and the replay went on
+# faithfully replaying a run made without it.
+fft-pinball/pinball.address: fft Makefile
 	@mkdir -p fft-pinball
-	$(SDE_HOME)/sde64 -log -log:basename fft-pinball/pinball -log:compressed bzip2 -- ./fft -p 1 -m 6
+	$(SDE_HOME)/sde64 -log -log:basename fft-pinball/pinball -log:compressed bzip2 -- ./fft -p 1 -m 6 -t
 
 make_pinball: fft-pinball/pinball.address
 
