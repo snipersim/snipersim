@@ -244,6 +244,37 @@
         "mkdir -p build && cd build && ../configure --enable-plugins --target-list=x86_64-softmmu,x86_64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
       "description": "QEMU built with TCG plugin support; the frontend is loaded with -plugin"
+    },
+    "mpich-src": {
+      "kind": "tarball",
+      "version": "4.2.3",
+      "url": "https://www.mpich.org/static/downloads/4.2.3/mpich-4.2.3.tar.gz",
+      "sha256": "7a019180c51d1738ad9c5d8d452314de65e828ee240bcb2d1f80de9a65be88a8",
+      "strip_components": 1,
+      "install_path": "mpich-src",
+      "when": [
+        "mpi"
+      ],
+      "marker": "configure",
+      "description": "MPICH source. Needed only for the MPI tests in test/mpi and test/mpi-omp, which need an mpicc to build with and an mpirun to launch under; no distribution MPI is assumed"
+    },
+    "mpich": {
+      "kind": "build",
+      "from": [
+        "mpich-src"
+      ],
+      "install_path": "mpich",
+      "when": [
+        "mpi"
+      ],
+      "marker": "bin/mpicc",
+      "workdir": "{dep:mpich-src}",
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p {build} && cd {build} && {dep:mpich-src}/configure --prefix={install} --with-device=ch3:nemesis --disable-fortran --disable-cxx --disable-opencl --without-cuda --without-hip --disable-doc && make -j{jobs} && make install"
+      ],
+      "description": "MPICH built for the MPI tests. Configured out of tree so the shared source cache stays clean, and cut down to what those tests use: the nemesis/tcp device, no Fortran, no C++ bindings, no GPU support"
     }
   }
 }

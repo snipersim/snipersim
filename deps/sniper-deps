@@ -62,7 +62,7 @@ def enabled_features(args):
         feats.add('torch')
     if args.mcpat:
         feats.add('mcpat')
-    for name in ('arm', 'riscv', 'dynamorio', 'qemu'):
+    for name in ('arm', 'riscv', 'dynamorio', 'qemu', 'mpi'):
         if getattr(args, name):
             feats.add(name)
     return feats
@@ -444,6 +444,8 @@ def main():
     ap.add_argument('--dynamorio', action='store_true')
     ap.add_argument('--qemu', action='store_true',
                     help='QEMU frontend: builds QEMU with TCG plugin support')
+    ap.add_argument('--mpi', action='store_true',
+                    help='MPI tests: builds MPICH, since no system MPI is assumed')
     ap.add_argument('--jobs', type=int, default=os.cpu_count() or 1,
                     help='parallelism for dependencies that have to be built '
                          '(default: one per core)')

@@ -658,7 +658,16 @@ elif use_mpi:
   if mpiexec_cmd:
     mpiexec = mpiexec_cmd.split(' ')
   else:
-    mpiexec = ['mpiexec']
+    # Prefer the MPI that deps/sniper-deps --mpi builds into mpich/, and fall
+    # back to whatever is on PATH.  Without this, --mpi died with
+    #
+    #     FileNotFoundError: No such file or directory: 'mpiexec'
+    #
+    # on any machine without a system MPI -- which is the situation the
+    # dependency exists to fix, so it has to be looked for here as well as in
+    # the test makefiles.
+    bundled = os.path.join(HOME, 'mpich', 'bin', 'mpiexec')
+    mpiexec = [bundled if os.path.exists(bundled) else 'mpiexec']
   mpiexec.extend(['-np', str(mpi_ranks)])
   # Set trace recorder options
   other_options = []

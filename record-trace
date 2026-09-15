@@ -377,7 +377,17 @@ if verbose:
   sys.stdout.flush()
 if use_gdb:
   debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit)
-subproc = subprocess.Popen([ 'bash', '-c', cmd ], env = env)
+# close_fds=False: an MPI rank inherits its process manager's socket as an
+# open file descriptor, named in PMI_FD, and Python closes every descriptor
+# above 2 by default.  With it closed the rank cannot talk to mpiexec:
+#
+#   [cli_0]: PMIU_write error; fd=9 buf=:cmd=init pmi_version=1
+#   [cli_0]: PMIU_write error; fd=9 buf=:cmd=abort exitcode=-1 message=PMI_Init failed
+#
+# The environment survived already -- setup_env copies os.environ -- so the
+# variable pointing at the descriptor arrived while the descriptor itself did
+# not.
+subproc = subprocess.Popen([ 'bash', '-c', cmd ], env = env, close_fds = False)
 if use_pid and pid_continue:
   import signal
   while procStatus(use_pid).strip() != 'T':

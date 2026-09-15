@@ -1,9 +1,14 @@
 TARGET=pi
 include ../shared/Makefile.shared
 
-MPICC=mpicc
-MPILD=mpicc
-MPIRUN=mpirun
+# MPI comes from deps/sniper-deps --mpi, which builds MPICH into mpich/ at the
+# top level.  No system MPI is assumed -- this machine had none, and installing
+# one needs root -- but a system MPI is still used if the dependency is absent,
+# so anyone who already has one keeps working.
+MPI_HOME ?= $(SNIPER_ROOT)/mpich
+MPICC=$(if $(wildcard $(MPI_HOME)/bin/mpicc),$(MPI_HOME)/bin/mpicc,mpicc)
+MPILD=$(MPICC)
+MPIRUN=$(if $(wildcard $(MPI_HOME)/bin/mpirun),$(MPI_HOME)/bin/mpirun,mpirun)
 
 MPI_CFLAGS=$(GRAPHITE_CFLAGS)
 MPI_LDFLAGS=$(filter-out -static,$(GRAPHITE_LDFLAGS))
