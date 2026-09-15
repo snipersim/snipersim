@@ -325,13 +325,20 @@ def main():
     checks = 0
     try:
         for mode in modes:
+            # Announced before the work, flushed, so the log always names what
+            # is in flight: measure() simulates the workload twice and is where
+            # all the time goes.
             print('=== %s: %s ===' % (mode, MODES[mode]['what']))
+            print('  simulating (full detailed baseline, then sampled) ... ', end='')
+            sys.stdout.flush()
+            started = time.time()
             try:
                 r = measure(p, workdir, mode, args)
             except RuntimeError as e:
-                print('%-14s ERROR (%s)' % (mode, e))
+                print('ERROR (%s)' % e)
                 failures += 1
                 continue
+            print('done [%ds]' % round(time.time() - started))
             for name in names:
                 ok, detail = CASES[name](r, args)
                 print('  %-12s %s (%s)' % (name, 'PASS' if ok else 'FAIL', detail))

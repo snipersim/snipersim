@@ -44,6 +44,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SNIPER_ROOT = os.path.dirname(HERE)
@@ -317,8 +318,23 @@ def main():
                     checks += 1
                     limit = (args.timeout_detailed if mode == 'detailed'
                              else args.timeout)
+
+                    # The case name goes out BEFORE the case runs, unterminated
+                    # and flushed, and the verdict finishes the line.
+                    #
+                    # This is the heartbeat: whatever is running is always the
+                    # last thing in the log, so a stuck case shows up as a
+                    # dangling line naming itself rather than as silence.  This
+                    # sweep is 318 checks over more than an hour, and until now
+                    # the only way to tell a slow case from a hung one was to
+                    # watch PIDs turn over in a process table.
+                    print('%-34s ' % full, end='')
+                    sys.stdout.flush()
+
+                    started = time.time()
                     ok, detail = run_config(names, ncores, workdir, workload,
                                             limit, mode)
+                    took = time.time() - started
                     if ok == want_ok:
                         status = 'PASS' if want_ok else 'PASS (known: %s)' % why
                     elif want_ok:
@@ -327,7 +343,7 @@ def main():
                     else:
                         status = 'FAIL: now runs -- move it out of EXPECT_FAIL'
                         failures.append('%s [%s]' % (full, mode))
-                    print('%-34s %s' % (full, status))
+                    print('%s [%ds]' % (status, round(took)))
             print()
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
