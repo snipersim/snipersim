@@ -78,6 +78,9 @@
 // without also editing this file.  All default to off, so they change nothing
 // until a step turns one on.
 
+// The speculative-translation MMU (F1) and the engines that plug into it.
+#define DEBUG_MMU_SPEC              DEBUG_NONE /* 0, 1 or 2 */
+
 // TRAIL: the temporal PTE TLB prefetcher (Phase I).
 #define DEBUG_TEMPORAL_PTE_PREFETCHER DEBUG_NONE /* 0, 1 or 2 */
 
