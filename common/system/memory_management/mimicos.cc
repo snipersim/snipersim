@@ -135,6 +135,109 @@ MimicOS::MimicOS(bool is_guest)
         }
     }
     
+
+    // ---- Linux daemon models -------------------------------------------
+    //
+    // Each is off unless its configuration turns it on, and each runs from
+    // HOOK_PERIODIC at its own simulated interval rather than on a host thread,
+    // so an enabled daemon costs simulated time in the run it belongs to.
+    // Individual parameters are read defensively: a daemon that is enabled but
+    // under-specified falls back to its own defaults rather than failing the run.
+
+    {   // kcompactd: memory compaction
+        CompactdConfig cfg;
+        cfg.enabled = Sim()->getCfg()->getBoolDefault("perf_model/" + m_name + "/kcompactd_enabled", false);
+        if (cfg.enabled)
+        {
+            cfg.scan_interval_us = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/kcompactd_scan_interval_us", cfg.scan_interval_us);
+            cfg.low_util_threshold = Sim()->getCfg()->getFloatDefault("perf_model/" + m_name + "/kcompactd_low_util_threshold", cfg.low_util_threshold);
+            cfg.high_util_threshold = Sim()->getCfg()->getFloatDefault("perf_model/" + m_name + "/kcompactd_high_util_threshold", cfg.high_util_threshold);
+            cfg.max_pages_per_scan = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/kcompactd_max_pages_per_scan", cfg.max_pages_per_scan);
+
+            m_kcompactd = std::make_unique<SniperKcompactd>(cfg);
+            m_kcompactd_interval_ns = (UInt64)cfg.scan_interval_us * 1000;
+            m_kcompactd_last_scan_ns = 0;
+
+            // Compaction works on the 2MB map, which only the reservation
+            // allocator maintains.
+            auto* rthp = dynamic_cast<SniperReserveTHPAllocator*>(m_memory_allocator.get());
+            if (rthp)
+            {
+                // bind only: start() would spawn a host pthread that scans in
+                // wall-clock time, independently of the simulated-time hook
+                // below, which both inflates the scan count and makes the run
+                // depend on how fast the host is.
+                m_kcompactd->bind(&rthp->getTwoMbMap(), rthp->getBuddyAllocator());
+                Sim()->getHooksManager()->registerHook(
+                    HookType::HOOK_PERIODIC, MimicOS::hookKcompactdPeriodic, (UInt64)this);
+            }
+            else
+            {
+                std::cerr << "[MimicOS] kcompactd is enabled but the allocator is not reserve_thp; "
+                             "it has no 2MB map to compact and stays idle" << std::endl;
+                m_kcompactd.reset();
+            }
+        }
+    }
+
+    {   // khugepaged: THP coalescing
+        KhugepagedConfig cfg;
+        cfg.enabled = Sim()->getCfg()->getBoolDefault("perf_model/" + m_name + "/khugepaged_enabled", false);
+        if (cfg.enabled)
+        {
+            cfg.scan_interval_us = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/khugepaged_scan_interval_us", cfg.scan_interval_us);
+            cfg.promotion_threshold = Sim()->getCfg()->getFloatDefault("perf_model/" + m_name + "/khugepaged_promotion_threshold", cfg.promotion_threshold);
+            cfg.max_promotions_per_scan = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/khugepaged_max_promotions_per_scan", cfg.max_promotions_per_scan);
+
+            m_khugepaged = std::make_unique<SniperKhugepaged>(cfg);
+            m_khugepaged_interval_ns = (UInt64)cfg.scan_interval_us * 1000;
+            m_khugepaged_last_scan_ns = 0;
+
+            auto* rthp = dynamic_cast<SniperReserveTHPAllocator*>(m_memory_allocator.get());
+            if (rthp)
+            {
+                m_khugepaged->bind(&rthp->getTwoMbMap());
+                Sim()->getHooksManager()->registerHook(
+                    HookType::HOOK_PERIODIC, MimicOS::hookKhugepagedPeriodic, (UInt64)this);
+            }
+            else
+            {
+                std::cerr << "[MimicOS] khugepaged is enabled but the allocator is not reserve_thp; "
+                             "it has nothing to promote and stays idle" << std::endl;
+                m_khugepaged.reset();
+            }
+        }
+    }
+
+    {   // kswapd: page reclamation
+        KswapdConfig cfg;
+        cfg.enabled = Sim()->getCfg()->getBoolDefault("perf_model/" + m_name + "/kswapd_enabled", false);
+        if (cfg.enabled && m_memory_allocator)
+        {
+            cfg.scan_interval_us = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/kswapd_scan_interval_us", cfg.scan_interval_us);
+            cfg.pages_high = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/kswapd_pages_high", cfg.pages_high);
+            cfg.pages_low = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/kswapd_pages_low", cfg.pages_low);
+            cfg.pages_min = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/kswapd_pages_min", cfg.pages_min);
+            cfg.batch_size = Sim()->getCfg()->getIntDefault("perf_model/" + m_name + "/kswapd_batch_size", cfg.batch_size);
+
+            m_kswapd = std::make_unique<SniperKswapd>(cfg);
+            m_kswapd_interval_ns = (UInt64)cfg.scan_interval_us * 1000;
+            m_kswapd_last_scan_ns = 0;
+            // No free-page source: bind() takes a pointer to the allocator's
+            // free-page count, and no allocator here exposes one.  Virtuoso
+            // passes nullptr too, and the consequence is visible in the
+            // statistics -- with free_pages reading zero and nothing on the LRU
+            // to reclaim, kswapd records an oom_event on every scan.  It is
+            // ported so the userspace MimicOS work has it, but it models
+            // nothing until an allocator offers a free-page count.
+            m_kswapd->bind(nullptr, 0);
+            std::cerr << "[MimicOS] kswapd enabled, but no allocator here exposes a free-page "
+                         "count; it will scan and report OOM without reclaiming" << std::endl;
+            Sim()->getHooksManager()->registerHook(
+                HookType::HOOK_PERIODIC, MimicOS::hookKswapdPeriodic, (UInt64)this);
+        }
+    }
+
     std::cout << "[MimicOS] Initialization complete" << std::endl;
 }
 

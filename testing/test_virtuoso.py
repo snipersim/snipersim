@@ -175,6 +175,18 @@ FEATURES = {
                counter(stats, 'mmu.page_faults_os_handled'),
                counter(stats, 'mmu.total_hw_fault_latency')))),
 
+    # F7: the Linux daemon models run from HOOK_PERIODIC at a simulated
+    # interval.  Their default interval is 10ms and a smoke workload finishes in
+    # well under one, so an unconfigured daemon registers every counter and
+    # never scans -- which is why the scheme shortens the interval and why the
+    # check is on scans rather than on the counters merely existing.
+    #
+    # kswapd is deliberately not asserted on: nothing here exposes a free-page
+    # count to bind it to, so it scans without reclaiming.  See mimicos.cc.
+    'os_daemons': (
+        ['address_translation_schemes/os_daemons'], 1,
+        require_nonzero('kcompactd.scans', 'khugepaged.scans')),
+
     'radix_fault_split': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (

@@ -6,6 +6,13 @@
 #include "page_fault_state.h"
 #include "mimicos_message.h"
 #include "swap_space.h"
+#include "memory_management/kcompactd.h"
+#include "memory_management/policies/kcompactd_policy.h"
+#include "memory_management/khugepaged.h"
+#include "memory_management/policies/khugepaged_policy.h"
+#include "memory_management/kswapd.h"
+#include "memory_management/policies/kswapd_policy.h"
+#include "hooks_manager.h"
 #include "hugetlbfs/hugetlbfs.h"
 #include "subsecond_time.h"
 #include "fixed_types.h"
@@ -135,6 +142,11 @@ struct PerCoreStats {
  * - MimicOSMessage/Protocol: userspace communication
  */
 
+// The Linux daemon models, bound to their Sniper metrics policies.
+using SniperKcompactd  = ::Kcompactd<Sniper::Kcompactd::MetricsPolicy>;
+using SniperKhugepaged = ::Khugepaged<Sniper::Khugepaged::MetricsPolicy>;
+using SniperKswapd     = ::Kswapd<Sniper::Kswapd::MetricsPolicy>;
+
 class MimicOS
 {
 public:
@@ -189,6 +201,26 @@ public:
     // ============ Memory Allocator ============
     
     PhysicalMemoryAllocator* getMemoryAllocator() { return m_memory_allocator.get(); }
+
+    // ============ OS daemons ============
+    SniperKcompactd*  getKcompactd()  { return m_kcompactd.get(); }
+    SniperKhugepaged* getKhugepaged() { return m_khugepaged.get(); }
+    SniperKswapd*     getKswapd()     { return m_kswapd.get(); }
+    bool isKcompactdRunning() const { return m_kcompactd && m_kcompactd->isRunning(); }
+
+    /**
+     * @brief Bind kcompactd to an allocator and start it.
+     *
+     * Called once the allocator has been fragmented, since kcompactd works on
+     * the 2MB map that fragmentation populates.
+     */
+    template <typename AllocatorType>
+    void startKcompactd(AllocatorType* allocator)
+    {
+        if (!m_kcompactd) return;
+        m_kcompactd->bind(&allocator->getTwoMbMap(), allocator->getBuddyAllocator());
+        m_kcompactd->start();
+    }
 
     /**
      * @brief Get the NUMA node ID for a given physical page number.
@@ -413,6 +445,57 @@ private:
     // ============ Subsystems ============
     std::unique_ptr<PhysicalMemoryAllocator> m_memory_allocator;
     std::unique_ptr<SwapCache> m_swap_cache;
+
+    // Linux daemon models.  Each runs from HOOK_PERIODIC at its own simulated
+    // interval; absent a configuration enabling it, the pointer stays null and
+    // the hook returns immediately.
+    std::unique_ptr<SniperKcompactd> m_kcompactd;
+    UInt64 m_kcompactd_interval_ns = 0;
+    UInt64 m_kcompactd_last_scan_ns = 0;
+
+    std::unique_ptr<SniperKhugepaged> m_khugepaged;
+    UInt64 m_khugepaged_interval_ns = 0;
+    UInt64 m_khugepaged_last_scan_ns = 0;
+
+    std::unique_ptr<SniperKswapd> m_kswapd;
+    UInt64 m_kswapd_interval_ns = 0;
+    UInt64 m_kswapd_last_scan_ns = 0;
+
+    static SInt64 hookKcompactdPeriodic(UInt64 self_ptr, UInt64 time_ns)
+    {
+        auto* self = reinterpret_cast<MimicOS*>(self_ptr);
+        if (!self->m_kcompactd || self->m_kcompactd_interval_ns == 0)
+            return 0;
+        if (time_ns >= self->m_kcompactd_last_scan_ns + self->m_kcompactd_interval_ns) {
+            self->m_kcompactd->compact_once();
+            self->m_kcompactd_last_scan_ns = time_ns;
+        }
+        return 0;
+    }
+
+    static SInt64 hookKhugepagedPeriodic(UInt64 self_ptr, UInt64 time_ns)
+    {
+        auto* self = reinterpret_cast<MimicOS*>(self_ptr);
+        if (!self->m_khugepaged || self->m_khugepaged_interval_ns == 0)
+            return 0;
+        if (time_ns >= self->m_khugepaged_last_scan_ns + self->m_khugepaged_interval_ns) {
+            self->m_khugepaged->scan_once();
+            self->m_khugepaged_last_scan_ns = time_ns;
+        }
+        return 0;
+    }
+
+    static SInt64 hookKswapdPeriodic(UInt64 self_ptr, UInt64 time_ns)
+    {
+        auto* self = reinterpret_cast<MimicOS*>(self_ptr);
+        if (!self->m_kswapd || self->m_kswapd_interval_ns == 0)
+            return 0;
+        if (time_ns >= self->m_kswapd_last_scan_ns + self->m_kswapd_interval_ns) {
+            self->m_kswapd->scan_once();
+            self->m_kswapd_last_scan_ns = time_ns;
+        }
+        return 0;
+    }
     std::unique_ptr<HugeTLBfs> m_hugetlbfs;
     
     // ============ Per-Application State ============

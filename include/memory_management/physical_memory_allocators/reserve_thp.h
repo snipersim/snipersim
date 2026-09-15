@@ -330,6 +330,9 @@ public:
         return -1;
     }
 
+    // Accessors for kcompactd and other OS daemons
+    BuddyType* getBuddyAllocator() { return buddy_allocator; }
+    std::map<UInt64, std::tuple<UInt64, std::bitset<512>, bool>>& getTwoMbMap() { return two_mb_map; }
 protected:
     BuddyType* buddy_allocator;
     std::map<UInt64, std::tuple<UInt64, std::bitset<512>, bool>> two_mb_map;
