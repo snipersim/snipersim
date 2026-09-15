@@ -85,6 +85,29 @@ def mpi_pi(out, rc):
     return True, 'pi correct to %.1e' % err
 
 
+def hybrid_sum(out, rc):
+    """MPI + OpenMP: every rank's slabs, summed by MPI_Reduce on rank 0.
+
+    process_slab() returns the same value for each of the 16 slabs, so the total
+    is fixed regardless of how the ranks and threads divide them up -- which is
+    the point: it checks that every slab was processed exactly once, across both
+    levels of parallelism.  The check used to look for a word the workload never
+    printed, so it could only ever fail.
+    """
+    m = re.search(r'Sum is (\S+)', out)
+    if not m:
+        return False, 'the workload printed no sum'
+    got = float(m.group(1))
+    want = 167736.67102662913      # 16 slabs x 10483.54193916432
+    # The workload prints with %lg, so what arrives here is rounded to six
+    # significant digits: 167737.  The tolerance has to clear that rounding
+    # (~3e-6 relative here) without being loose enough to miss a lost slab,
+    # which would move the total by 1/16th.
+    if abs(got - want) > 1e-5 * want:
+        return False, 'sum is %g, expected %g' % (got, want)
+    return True, 'sum %g over 16 slabs' % got
+
+
 def smc_result(out, rc):
     """Self-modifying code: the rewritten instruction must be the one that ran."""
     if 'Good morning!' not in out:
@@ -123,7 +146,7 @@ CASES = {
     'api':             (api_in_simulator, None),
     'dvfs':            (dvfs_readback, None),
     'mpi':             (mpi_pi, 'mpich'),
-    'mpi-omp':         (prints('Hybrid', 'hybrid run completed'), 'mpich'),
+    'mpi-omp':         (hybrid_sum, 'mpich'),
     'smc':             (smc_result, None),
     'fork':            (prints('Hello world', 'forked child ran'), None),
     'spinloop':        (prints('done', 'threads finished'), None),

@@ -19,7 +19,10 @@ int read_slab_info() {
 double process_slab(int snum)
 {
   int i, j;
-  double x;
+  /* Accumulated into below, so it has to start somewhere.  Uninitialised, the
+     sum this workload exists to compute was undefined behaviour and no test
+     could check its value -- only that the program had printed something. */
+  double x = 0.0;
 
   for (i = 0; i < 20; i++)
     for (j = 0; j < 100; j++)
@@ -41,7 +44,9 @@ int main(int argc, char **argv)
 {
   int i, j, p, me, nprocs, num_threads, num_slabs, spp;
   int *my_slabs, *count;
-  double x, sum;
+  /* x is the reduction variable below, and OpenMP folds its initial value into
+     the result, so it has to start at zero for the same reason. */
+  double x = 0.0, sum = 0.0;
 #ifdef _OPENMP
   int np;
 #endif /* _OPENMP */
