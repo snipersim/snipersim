@@ -193,7 +193,23 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
 
    if (m_requires_icache_per_insn)
    {
-      if (! icache[addr])
+      // Fetch first, then decide: with self-modifying code the bytes at an
+      // address change under us, so "have we sent this address" is the wrong
+      // question.  The right one is "are these the bytes we last sent".
+      uint8_t current[16] = {0};
+      if (getCodeFunc2) {
+         getCodeFunc2(current, reinterpret_cast<const uint8_t *>(addr), size, getCodeFunc2Data);
+      } else {
+         getCodeFunc(current, reinterpret_cast<const uint8_t *>(addr), size);
+      }
+
+      bool changed = true;
+      std::unordered_map<uint64_t, std::array<uint8_t, 16> >::const_iterator seen =
+         icache_bytes.find(addr);
+      if (seen != icache_bytes.end())
+         changed = (memcmp(seen->second.data(), current, size) != 0);
+
+      if (changed)
       {
          #if VERBOSE_ICACHE
          std::cerr << "[DEBUG:" << m_id << "] Write icache per instruction addr=0x" << std::hex << addr << std::dec << std::endl;
@@ -205,19 +221,15 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
          output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
          output->write(reinterpret_cast<char*>(&addr), sizeof(uint64_t));
 
-         uint8_t buffer[16] = {0};
-         if (getCodeFunc2) {
-            getCodeFunc2(buffer, reinterpret_cast<const uint8_t *>(addr), size, getCodeFunc2Data);
-         } else {
-            getCodeFunc(buffer, reinterpret_cast<const uint8_t *>(addr), size);
-         }
-         output->write(reinterpret_cast<char*>(buffer), size);
+         output->write(reinterpret_cast<char*>(current), size);
 
          #if VERBOSE_ICACHE
-         hexdump((char*)buffer, sizeof(buffer));
+         hexdump((char*)current, sizeof(current));
          #endif
 
-         icache[addr] = true;
+         std::array<uint8_t, 16> keep;
+         memcpy(keep.data(), current, sizeof(current));
+         icache_bytes[addr] = keep;
       }
    }
    else

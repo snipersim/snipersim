@@ -370,7 +370,7 @@ void openFile(THREADID threadid)
    #else
       const bool arch32 = false;
    #endif
-   thread_data[threadid].output = new Sift::Writer(filename, getCode, KnobUseResponseFiles.Value() ? false : true, response_filename, threadid, arch32, false, KnobSendPhysicalAddresses.Value());
+   thread_data[threadid].output = new Sift::Writer(filename, getCode, KnobUseResponseFiles.Value() ? false : true, response_filename, threadid, arch32, KnobSmcSupport.Value(), KnobSendPhysicalAddresses.Value());
 
    if (!thread_data[threadid].output->IsOpen())
    {

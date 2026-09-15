@@ -94,6 +94,7 @@ Reader::Reader(const char *filename, const char *response_filename, uint32_t id,
    , m_trace_has_pa(false)
    , m_seen_end(false)
    , m_last_sinst(NULL)
+   , m_code_may_change(false)
    , m_isa(0)
    , m_format(format)
    , m_champsim_stream()
@@ -287,6 +288,9 @@ bool Reader::initStream()
       hdr.options &= ~PhysicalAddress;
    }
 
+   // Remember it rather than only clearing it: this is the trace telling us
+   // the program rewrites its own code.
+   m_code_may_change = (hdr.options & IcacheVariable) != 0;
    hdr.options &= ~IcacheVariable;
 
    // Make sure there are no unrecognized options
@@ -402,6 +406,15 @@ bool Reader::Read(Instruction &inst)
                uint64_t address;
                size_t size = rec.Other.size - sizeof(uint64_t);
                input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
+
+               // New bytes for this address: anything already decoded from the
+               // old ones describes an instruction that no longer exists.
+               // Dropped rather than rewritten -- the old entry may still be
+               // referenced as some other instruction's "next", and that
+               // shortcut is disabled for these traces for exactly this reason.
+               scache.erase(address);
+               m_last_sinst = NULL;
+
                size_t size_left = size;
                while (size_left > 0)
                {
@@ -981,14 +994,13 @@ const StaticInstruction* Reader::getStaticInstruction(uint64_t addr, uint8_t siz
 
    // Lookup in a large unordered_map is quite expensive if we have to do this for every dynamic instruction
    // Therefore, keep a pointer to the probable next instruction in each (static) instruction
-   if (m_last_sinst && m_last_sinst->next && m_last_sinst->next->addr == addr)
+   if (!m_code_may_change && m_last_sinst && m_last_sinst->next && m_last_sinst->next->addr == addr)
    {
       sinst = m_last_sinst->next;
    }
-   else if (scache.count(addr))
+   else if (scache.count(addr) && scache[addr]->size == size)
    {
       sinst = scache[addr];
-      assert(sinst->size == size);
    }
    else
    {

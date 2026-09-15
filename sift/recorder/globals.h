@@ -30,6 +30,7 @@ extern KNOB<UINT64> KnobDetailedTarget;
 extern KNOB<UINT64> KnobUseResponseFiles;
 extern KNOB<UINT64> KnobEmulateSyscalls;
 extern KNOB<BOOL>   KnobSendPhysicalAddresses;
+extern KNOB<BOOL>   KnobSmcSupport;
 extern KNOB<UINT64> KnobFlowControl;
 extern KNOB<UINT64> KnobFlowControlFF;
 extern KNOB<INT64> KnobSiftAppId;

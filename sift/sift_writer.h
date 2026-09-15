@@ -5,6 +5,7 @@
 #include "sift_format.h"
 
 #include <unordered_map>
+#include <array>
 #include <fstream>
 #include <assert.h>
 
@@ -31,6 +32,10 @@ namespace Sift
 
          uint64_t last_address;
          std::unordered_map<uint64_t, bool> icache;
+         // Per-instruction mode remembers the bytes, not just that an address
+         // was seen: self-modifying code reuses an address with new contents,
+         // and a seen/not-seen cache can never notice that.
+         std::unordered_map<uint64_t, std::array<uint8_t, 16> > icache_bytes;
          int fd_va;
          std::unordered_map<intptr_t, bool> m_va2pa;
          char *m_response_filename;

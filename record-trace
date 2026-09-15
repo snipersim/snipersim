@@ -60,9 +60,10 @@ if not sys.argv[1:]:
   usage()
 
 enable_pacsim = False
+enable_smc = False
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "use-pinplay", "sde-arch=", "pacsim" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "use-pinplay", "sde-arch=", "pacsim", "smc" ])
 except getopt.GetoptError as e:
   # print help information and exit:
   print(e)
@@ -137,10 +138,12 @@ for o, a in opts:
     use_pinplay = True
   if o == '--sde-arch':
     sde_arch = a
-  if o == '--pacsim':
-    enable_pacsim = True
     if not sde_arch.startswith('-'):
       sde_arch = '-' + sde_arch
+  if o == '--pacsim':
+    enable_pacsim = True
+  if o == '--smc':
+    enable_smc = True
   if o == '--vma':
     log_vma = True
 
@@ -245,6 +248,13 @@ def has_knob(tool_path, knob):
       return knob in f.read()
   except IOError:
     return False
+
+
+def smc_knob():
+  # Self-modifying code: the recorder must re-send an instruction's bytes when
+  # they change, which it only does in per-instruction icache mode.  Emitted
+  # only when asked for, since it makes every instruction carry its bytes.
+  return ' -sniper:smc 1' if enable_smc else ''
 
 
 def pacsim_knob(tool_path):
@@ -354,12 +364,12 @@ else:
     print('[RECORD-TRACE] Using the SDE frontend (sift/recorder)')
     if enable_pacsim:
       require_pacsim('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals())
-    cmd = '%(sde_home)s/sde64 %(sde_arch)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals()) + ' -- ' + ' '.join(cmdline)
+    cmd = '%(sde_home)s/sde64 %(sde_arch)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals()) + smc_knob() + ' -- ' + ' '.join(cmdline)
   else:
     print('[RECORD-TRACE] Using the Pin frontend (sift/recorder)')
     if enable_pacsim:
       require_pacsim('%(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder' % locals())
-    cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d -sniper:pa %(value_pa)d -sniper:rtntrace %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder' % locals()) + ' -- ' + ' '.join(cmdline)
+    cmd = '%(pin_home)s/pin %(pinoptions)s -t %(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d -sniper:pa %(value_pa)d -sniper:rtntrace %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sift_recorder' % locals()) + smc_knob() + ' -- ' + ' '.join(cmdline)
 
 
 if verbose:

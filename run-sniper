@@ -21,6 +21,7 @@ def usage():
         '  [--roi]' + \
         '  [--roi-script]' + \
         '  [--pacsim|--dynamic-sampling]' + \
+        '  [--smc]' + \
         '  [--viz]' + \
         '  [--viz-aso]' + \
         '  [--profile]' + \
@@ -87,6 +88,7 @@ follow_execv = False
 build_dir = None
 run_power = False
 enable_pacsim = False
+enable_smc = False
 save_output = False
 save_patch = False
 pin_stats = False
@@ -217,6 +219,7 @@ try:
       "dev",
       "roi", "roi-script",
       "pacsim", "dynamic-sampling",
+      "smc",
       "viz", "viz-aso",
       "profile", "memory-profile", "cheetah",
       "perf", "valgrind", "wrap-sim=",
@@ -326,6 +329,13 @@ for o, a in opts:
       print('Please use --follow-execv=1 to ensure future compatibility', file=sys.stderr)
       sys.exit(-1)
     follow_execv = True
+  if o == '--smc':
+    # Both halves, from one flag.  The simulator knob alone is not enough: the
+    # recorder decides what goes into the trace, and without the matching knob
+    # it sends an instruction's bytes once and never again, so the simulator is
+    # handed the original bytes of code that has since rewritten itself.
+    enable_smc = True
+    sniperoptions.append('-g --general/enable_smc_support=true')
   if o in ('--pacsim', '--dynamic-sampling'):
     # Two spellings, one path.  --pacsim names the published methodology and
     # --dynamic-sampling says what it does; they must never drift apart, so
@@ -730,6 +740,7 @@ if tracegen:
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
     tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] \
              + (['--pacsim', '--outputdir', outputdir] if enable_pacsim else []) \
+             + (['--smc'] if enable_smc else []) \
              + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     tracecmds.append(tracecmd)
     if tracegen['redirect']: # redirect output

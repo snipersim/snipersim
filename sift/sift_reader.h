@@ -125,6 +125,11 @@ namespace Sift
          bool m_trace_has_pa;
          bool m_seen_end;
          const StaticInstruction *m_last_sinst;
+         // Set when the trace declares IcacheVariable: the writer is sending
+         // each instruction's bytes because they can change at the same
+         // address.  Static instructions then cannot be cached by address
+         // alone, and the pointer-to-next shortcut cannot be trusted either.
+         bool m_code_may_change;
 
          int m_isa;
          TraceFormat m_format;
