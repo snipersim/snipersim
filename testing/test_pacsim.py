@@ -29,14 +29,17 @@ Both runs are ROI-scoped to the phase loop.  Building the workload's chase
 cycles costs more instructions than all the phases together, and none of it
 has phase structure, so measuring it would bury the thing being tested.
 
-This is a validation, not a smoke test: the baseline is a full detailed
-simulation and takes minutes.  It is deliberately not part of `make regress`.
+Two sizes.  `make regress_pacsim` runs the quick profile, sized so a regression
+pass still notices if sampling stops helping or starts disagreeing; `make
+validate_pacsim` runs the full one, whose numbers are meant to be quotable and
+which simulates a full detailed baseline for each of the three modes.
 
 Skips cleanly, with a reason, when the recorder has no Pac-Sim support.
 
 Usage:
-  python3 testing/test_pacsim.py
-  python3 testing/test_pacsim.py --phases 24 --tolerance 0.10
+  python3 testing/test_pacsim.py                       # all three modes, full size
+  python3 testing/test_pacsim.py --profile quick
+  python3 testing/test_pacsim.py --mode loop --tolerance 0.05
 """
 
 import argparse
@@ -49,7 +52,47 @@ import tempfile
 import time
 
 SNIPER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WORKLOAD_SRC = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'phased.c')
+APPS = os.path.join(SNIPER_ROOT, 'testing', 'apps')
+
+# The three region shapes Pac-Sim has to cope with.
+#
+# Pac-Sim types each region it records (sift/recorder/mtng.h): MultiThread and
+# SingleThread records are delimited by global barriers, IntraBarrier records
+# are found inside a barrier interval.  A workload that only ever offers
+# barriers exercises one of those paths and says nothing about the other, so
+# each mode below removes a structure the previous one relied on.
+#
+# 'task' has no counterpart in the RecordType enum as it stands -- the recorder
+# that would produce such records is not in the tree -- but the workload shape
+# is the one task-parallel code presents, and it is the case with the least
+# structure of the three, so it is worth having ready.
+#
+# Sizes come in two profiles.  'quick' is for the regression pass, where the
+# question is only whether sampling still helps and still agrees; 'full' is the
+# study, where the numbers are meant to be quotable.
+MODES = {
+    'barrier': {
+        'src': 'phased.c',
+        'what': 'barrier between every phase: a global cut point always exists',
+        'quick': ['-DNPHASES=6',  '-DCHASE_SLOTS=131072', '-DCHASE_STEPS=60000',
+                  '-DCOMPUTE_ITERS=120000'],
+        'full':  ['-DNPHASES=16'],
+    },
+    'loop': {
+        'src': 'looped.c',
+        'what': 'synchronised only on entry and exit: cuts must come from loops',
+        'quick': ['-DNITERS=9',   '-DCHASE_SLOTS=131072', '-DCHASE_STEPS=40000',
+                  '-DCOMPUTE_ITERS=80000'],
+        'full':  ['-DNITERS=24'],
+    },
+    'task': {
+        'src': 'tasked.c',
+        'what': 'work queue, no barriers and no outer loop: cuts come from tasks',
+        'quick': ['-DNTASKS=18',  '-DCHASE_SLOTS=524288', '-DCHASE_UNIT=8000',
+                  '-DCOMPUTE_UNIT=16000'],
+        'full':  ['-DNTASKS=48'],
+    },
+}
 
 sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
 
@@ -118,19 +161,22 @@ def run(cmd, timeout, **kwargs):
         return proc.returncode, out or '', time.time() - t0
 
 
-def build_workload(workdir, threads, phases):
-    exe = os.path.join(workdir, 'phased')
+def build_workload(workdir, mode, threads, profile):
+    spec = MODES[mode]
+    exe = os.path.join(workdir, mode)
     cc = os.environ.get('CC', 'gcc')
     subprocess.run([cc, '-O1',
                     '-I', os.path.join(SNIPER_ROOT, 'include'),
-                    '-DNTHREADS=%d' % threads,
-                    '-DNPHASES=%d' % phases,
-                    '-o', exe, WORKLOAD_SRC, '-lpthread'], check=True)
+                    '-DNTHREADS=%d' % threads] + spec[profile] +
+                   ['-o', exe, os.path.join(APPS, spec['src']), '-lpthread'],
+                   check=True)
     return exe
 
 
 def checksum_of(out):
-    m = re.search(r'phased: threads=\d+ phases=\d+ checksum=(\S+) visited=(\d+)', out)
+    """The workload's self-report, whichever of the three produced it."""
+    m = re.search(r'^(?:phased|looped|tasked): .*checksum=(\S+) visited=(\d+)',
+                  out, re.M)
     return m.groups() if m else None
 
 
@@ -161,11 +207,11 @@ def simulate(exe, outputdir, threads, extra, timeout):
     return run(cmd, timeout)
 
 
-def measure(p, workdir, args):
-    """Run the workload twice -- full, then sampled -- and return both results."""
-    exe = build_workload(workdir, args.threads, args.phases)
+def measure(p, workdir, mode, args):
+    """Run one mode's workload twice -- full, then sampled -- and return both."""
+    exe = build_workload(workdir, mode, args.threads, args.profile)
 
-    full_dir = os.path.join(workdir, 'full')
+    full_dir = os.path.join(workdir, mode + '-full')
     rc, out, wall_full = simulate(exe, full_dir, args.threads, [], args.timeout)
     if rc is None:
         raise RuntimeError('the full detailed run timed out after %ds' % args.timeout)
@@ -174,7 +220,7 @@ def measure(p, workdir, args):
     truth_sum = checksum_of(out)
     truth = elapsed_seconds(os.path.join(full_dir, 'simulation'))
 
-    samp_dir = os.path.join(workdir, 'sampled')
+    samp_dir = os.path.join(workdir, mode + '-sampled')
     rc, out, wall_samp = simulate(exe, samp_dir, args.threads, ['--pacsim'], args.timeout)
     if rc is None:
         raise RuntimeError('the sampled run timed out after %ds' % args.timeout)
@@ -239,9 +285,13 @@ CASES = {
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--mode', action='append', choices=sorted(MODES),
+                    help='region shape to test (repeatable; default: all three)')
     ap.add_argument('--case', action='append', choices=sorted(CASES))
+    ap.add_argument('--profile', choices=('quick', 'full'), default='full',
+                    help='workload size (default: %(default)s); quick is what '
+                         'the regression pass uses')
     ap.add_argument('--threads', type=int, default=4)
-    ap.add_argument('--phases', type=int, default=16)
     ap.add_argument('--tolerance', type=float, default=0.10,
                     help='allowed relative error in the estimate (default: %(default)s)')
     ap.add_argument('--min-speedup', type=float, default=1.0,
@@ -255,27 +305,31 @@ def main():
         print('SKIP: %s' % reason)
         return 0
 
+    modes = args.mode or sorted(MODES)
+    names = args.case or sorted(CASES)
     workdir = tempfile.mkdtemp(prefix='sniper-pacsim-')
+    failures = 0
+    checks = 0
     try:
-        print('Simulating the workload twice; the full detailed run is the slow one.')
-        try:
-            r = measure(p, workdir, args)
-        except RuntimeError as e:
-            print('ERROR: %s' % e, file=sys.stderr)
-            return 1
+        for mode in modes:
+            print('=== %s: %s ===' % (mode, MODES[mode]['what']))
+            try:
+                r = measure(p, workdir, mode, args)
+            except RuntimeError as e:
+                print('%-14s ERROR (%s)' % (mode, e))
+                failures += 1
+                continue
+            for name in names:
+                ok, detail = CASES[name](r, args)
+                print('  %-12s %s (%s)' % (name, 'PASS' if ok else 'FAIL', detail))
+                checks += 1
+                failures += 0 if ok else 1
+            print()
 
-        names = args.case or sorted(CASES)
-        failures = 0
-        for name in names:
-            ok, detail = CASES[name](r, args)
-            print('%-14s %s (%s)' % (name, 'PASS' if ok else 'FAIL', detail))
-            failures += 0 if ok else 1
-
-        print()
         if failures:
-            print('%d of %d checks FAILED' % (failures, len(names)))
+            print('%d of %d checks FAILED' % (failures, checks))
             return 1
-        print('all %d checks passed' % len(names))
+        print('all %d checks passed' % checks)
         return 0
     finally:
         if args.keep:

@@ -127,7 +127,7 @@ distclean:
 	@echo "  $(DEPS) cache      shows where"
 	@echo "  $(DEPS) gc         removes versions no manifest names"
 
-regress: regress_scripting regress_configs regress_qemu
+regress: regress_scripting regress_configs regress_qemu regress_pacsim
 
 regress_scripting:
 	@$(SIM_ROOT)/testing/test_scripting.py
@@ -139,13 +139,24 @@ regress_configs:
 regress_qemu:
 	@$(SIM_ROOT)/testing/test_qemu.py
 
-# Validation, not regression: it simulates a workload twice -- once in full
-# detail as the baseline, once sampled -- so it costs minutes, not seconds, and
-# is deliberately left out of `regress`.  Run it when changing the sampling
-# path or before trusting sampled numbers.  Skips with a reason if the recorder
-# has no Pac-Sim support.
+# Sampled simulation, in two sizes.
+#
+# Both run the same three region shapes -- barrier-delimited, loop-delimited and
+# task-queue -- and both check the same three things: that the two runs executed
+# the same program, that sampling was faster, and that its estimate agreed with
+# the full run.  They differ only in workload size.
+#
+# regress_pacsim is the small one, sized so that a regression pass still notices
+# if sampling stops helping or starts disagreeing.  validate_pacsim is the study
+# version, whose numbers are meant to be quotable; it simulates a full detailed
+# baseline three times over and costs accordingly.
+#
+# Both skip themselves, with a reason, if the recorder has no Pac-Sim support.
+regress_pacsim:
+	@$(SIM_ROOT)/testing/test_pacsim.py --profile quick
+
 validate_pacsim:
-	@$(SIM_ROOT)/testing/test_pacsim.py
+	@$(SIM_ROOT)/testing/test_pacsim.py --profile full
 
 # The header comment is the help text: print it up to the first line that is not
 # a comment, so the two cannot drift apart.
