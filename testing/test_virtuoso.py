@@ -161,6 +161,20 @@ FEATURES = {
         ['address_translation_schemes/victima'], 1,
         require_nonzero('mmu.victima_leaf_probes', 'mmu.victima_leaf_hits')),
 
+    # F6: page faults handled in hardware rather than by the OS.  The split is
+    # the whole point of the design, so the check is that faults were taken and
+    # that hardware took them -- the same workload routes all 91 to the OS under
+    # baseline.
+    'hw_fault': (
+        ['address_translation_schemes/hw_fault'], 1,
+        lambda stats: (
+            counter(stats, 'mmu.page_faults_hw_handled') > 0
+            and counter(stats, 'mmu.total_hw_fault_latency') > 0,
+            'hw=%d os=%d latency=%d'
+            % (counter(stats, 'mmu.page_faults_hw_handled'),
+               counter(stats, 'mmu.page_faults_os_handled'),
+               counter(stats, 'mmu.total_hw_fault_latency')))),
+
     'radix_fault_split': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
@@ -371,6 +385,23 @@ def main():
         print('warning: setarch not found; ASLR stays on and statistics will '
               'not be reproducible', file=sys.stderr)
 
+    # One run at a time.  Two instances share the baselines and the workload
+    # binary, and a --bless overlapping a build or a check blesses a mixture of
+    # two binaries -- which then reads as a behaviour change in whatever step
+    # comes next.  This has cost two false positives already, so it is refused
+    # rather than documented.
+    os.makedirs(GOLDEN_DIR, exist_ok=True)
+    lock = os.path.join(GOLDEN_DIR, '.lock')
+    try:
+        lock_fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(lock_fd, ('pid %d\n' % os.getpid()).encode())
+        os.close(lock_fd)
+    except FileExistsError:
+        print('error: another run holds %s.\n'
+              '       Wait for it, or remove the file if it is stale.' % lock,
+              file=sys.stderr)
+        return 1
+
     log = RunLog('virtuoso')
     workdir = tempfile.mkdtemp(prefix='sniper-virtuoso-')
     failures = 0
@@ -455,6 +486,10 @@ def main():
         else:
             shutil.rmtree(workdir, ignore_errors=True)
         log.finish()
+        try:
+            os.unlink(lock)
+        except OSError:
+            pass
 
     print()
     ran = len(log.checks)
