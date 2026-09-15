@@ -118,6 +118,49 @@ EXPECT_FAIL_DETAILED = {}
 # Not a configuration to run on its own.
 EXCLUDE = {'base'}
 
+# Fragments in config/ subdirectories.
+#
+# shipped_configs() lists config/*.cfg and so never saw these: 24 files across
+# eight directories, and the newer work is almost all of it -- CXL, DRAM models,
+# page tables, physical memory allocators, address translation, the MMU, a core
+# model, and both MimicOS system configs.  They layer the same way the overlays
+# above do; they were simply never enumerated.
+#
+# Probed rather than assumed: every one was run layered and standalone, and the
+# results are recorded here.
+FRAGMENT_DIRS = ('address_translation_schemes', 'common_configs', 'core_configs',
+                 'cxl_configs', 'dram_configs', 'mmu_configs', 'pagetable_configs',
+                 'physical_memory_allocators')
+
+# Fragments needing something in front of them beyond the usual base.
+FRAGMENT_EXTRA_BASE = {
+    # Deltas on cxl.cfg: they override a few keys and need it for the rest.
+    'cxl_configs/cxl-asic': ['cxl_configs/cxl'],
+    'cxl_configs/cxl-fpga': ['cxl_configs/cxl'],
+}
+
+# Fragments that cannot work, with the reason.  Listed rather than skipped, so
+# that one starting to work is reported too.
+FRAGMENT_EXPECT_FAIL = {
+    'dram_configs/m3d':
+        'needs perf_model/dram/ddr/address_mapping, which no shipped config sets',
+    'dram_configs/readwrite_2ctrl_153gbps':
+        'two memory controllers, but they may only sit at the master node of a '
+        'shared cache, which no shipped base provides',
+}
+
+
+def shipped_fragments():
+    out = []
+    for d in FRAGMENT_DIRS:
+        path = os.path.join(CONFIG_DIR, d)
+        if not os.path.isdir(path):
+            continue
+        for f in sorted(os.listdir(path)):
+            if f.endswith('.cfg'):
+                out.append('%s/%s' % (d, os.path.splitext(f)[0]))
+    return out
+
 
 def shipped_configs():
     return sorted(os.path.splitext(f)[0]
@@ -225,6 +268,11 @@ def main():
             out.append(('%s + %s' % (base, n), [base, n], True, None))
         for n in sorted(EXPECT_FAIL):
             out.append((n, [n], False, EXPECT_FAIL[n]))
+        for n in shipped_fragments():
+            names = [layer_base] + FRAGMENT_EXTRA_BASE.get(n, []) + [n]
+            out.append((' + '.join(names), names,
+                        n not in FRAGMENT_EXPECT_FAIL,
+                        FRAGMENT_EXPECT_FAIL.get(n)))
         if args.only:
             out = [c for c in out if any(o in c[1] for o in args.only)]
         return out
