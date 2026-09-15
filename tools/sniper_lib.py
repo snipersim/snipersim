@@ -1,6 +1,6 @@
 # A copy of this file is distributed with the binaries of Sniper and Benchmarks
 
-import sys, os, re, subprocess, io, sniper_stats, sniper_config
+import sys, os, re, signal, subprocess, io, sniper_stats, sniper_config
 try:
   import json
 except ImportError:
@@ -396,6 +396,61 @@ def find_children(pid):
         ret.extend(__find_children(pid))
     return ret
   return __find_children(pid)
+
+
+def kill_stragglers(marker, sig = signal.SIGKILL):
+  """Kill any process whose command line mentions `marker`, by process group.
+
+  kill_children() walks /proc by parent pid, starting from us.  That misses
+  anything that has been reparented, and the SIFT recorder is started from a
+  multiprocessing child, so it is reparented to init the moment that child
+  exits.  A recorder still waiting on an application that never finishes was
+  therefore invisible to the cleanup and outlived the run -- six of them, each
+  holding a spinning workload, turned up a day later.
+
+  Two things make this reliable where the parent-pid walk is not.  The marker
+  is the run's own temporary directory, which is unique per run and appears in
+  every recorder command line, so nothing belonging to another run is matched.
+  Each match is killed along with everything below it, so the Pin tool and the
+  application under the recorder go too.
+
+  Returns the number of processes signalled.
+  """
+  matched = []
+  for entry in os.listdir('/proc'):
+    if not entry.isdigit():
+      continue
+    pid = int(entry)
+    if pid == os.getpid():
+      continue
+    try:
+      with open('/proc/%u/cmdline' % pid, 'rb') as f:
+        cmdline = f.read().replace(b'\0', b' ').decode('utf-8', 'replace')
+    except (IOError, OSError):
+      continue                      # exited while we looked
+    if marker in cmdline:
+      matched.append(pid)
+
+  # Each match and everything below it, killed individually rather than by
+  # process group: the recorder deliberately stays in our own group so that a
+  # caller can signal the whole run on a timeout, and signalling that group
+  # here would kill us too.  Children first, so nothing is reparented out of
+  # the list while we work through it.
+  victims = []
+  for pid in matched:
+    victims.extend(find_children(pid))
+    victims.append(pid)
+
+  killed = 0
+  for pid in reversed(victims):
+    if pid == os.getpid():
+      continue
+    try:
+      os.kill(pid, sig)
+      killed += 1
+    except OSError:
+      pass
+  return killed
 
 
 def kill_children():

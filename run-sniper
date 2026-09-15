@@ -739,6 +739,25 @@ if tracegen:
     sys.stdout.flush()
     sys.stderr.flush()
     time.sleep(1)
+    # Its own process group, and the group id recorded where the cleanup can
+    # find it.
+    #
+    # The recorder is started from a multiprocessing child, so when that child
+    # exits the recorder is reparented to init.  kill_children() walks /proc by
+    # parent pid starting from this process, and a reparented process is simply
+    # not in that tree any more -- so a recorder still waiting on an
+    # application that never exits was invisible to the cleanup and survived
+    # the run.  Six of them, each still holding a spinning workload, were found
+    # a day later.
+    #
+    # Process group membership is inherited and is not disturbed by
+    # reparenting, so the group is what the cleanup should be aiming at.
+    # Deliberately left in this process group.  Putting the recorder in a
+    # session of its own would take it out of the group the caller signals on a
+    # timeout -- and a timed-out run is exactly the case where nothing else is
+    # left alive to clean up, because run-sniper has been killed and never
+    # reaches its own cleanup.  The reparenting problem is solved at cleanup
+    # time instead, by finding these processes by name rather than by lineage.
     subprocess.Popen(tracecmd).communicate()
   if pinplay_addrtrans:
     trace_extra_args += [ '--pinplay-addr-trans' ]
@@ -931,6 +950,16 @@ print('[SNIPER] Elapsed time:', '%.02f' % t_elapsed, 'seconds')
 if tracegen:
   # If we get here, there might still be some front-end processes running (maybe a deadlocked sift recorder trace?). If so, kill those processes
   sniper_lib.kill_children()
+  # kill_children() only sees processes still descended from us.  The recorder
+  # is started from a multiprocessing child and is reparented to init when that
+  # child exits, which took it out of that tree and left it running after the
+  # run finished -- waiting forever on an application that never exits, with
+  # the application still spinning.  Matching on this run's temporary directory
+  # finds it wherever it has been reparented to, and signalling the group takes
+  # the Pin tool and the application with it.
+  left = sniper_lib.kill_stragglers(tracegen['tracetempdir'])
+  if left:
+    print('[SNIPER] Cleaned up %d stray recorder process group(s)' % left)
   # Cleanup the pipes and temporary directory
   try:
     for f in tracegen['tracefiles_created']:
