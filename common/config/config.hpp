@@ -121,6 +121,13 @@ namespace config
              */
             SInt64 getInt(const String & path) { return getIntArray(path, UINT64_MAX); }
             SInt64 getIntArray(const String & path, UInt64 index);
+            // The same exception to the no-defaults rule as getBoolDefault, for
+            // the same reason: an optional component whose parameters have
+            // sensible defaults should not force every one to be spelled out.
+            SInt64 getIntDefault(const String & path, SInt64 defaultValue)
+            {
+               return hasKey(path) ? getInt(path) : defaultValue;
+            }
 
             /*! \brief Look up the key at the given path, and return the value of that key as a bool.
              * \param path - Path for key to look up
@@ -138,6 +145,10 @@ namespace config
              */
             double getFloat(const String & path) { return getFloatArray(path, UINT64_MAX); }
             double getFloatArray(const String & path, UInt64 index);
+            double getFloatDefault(const String & path, double defaultValue)
+            {
+               return hasKey(path) ? getFloat(path) : defaultValue;
+            }
 
             /*! \brief Returns a string representation of the tree starting at the specified section
              * \param current The root of the tree for which we are creating a string representation.
