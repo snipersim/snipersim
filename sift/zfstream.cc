@@ -202,7 +202,13 @@ void cvifstream::read(char* s, std::streamsize n)
 	if(nr_to_read > 0)
     {
 		ssize_t num_read = std::fread(start_buffer, sizeof(char), nr_to_read, this->stream);
-		assert(num_read == n || std::ferror(this->stream) == 0);
+		// Against nr_to_read, not n.  A peek()ed byte is served from
+		// peek_buffer and nr_to_read is one short of n, so a completely
+		// successful read returned n-1 and this test was false -- leaving the
+		// assertion to pass only by falling through to the ferror() clause.
+		// peek() is how the reader dispatches on record type, so that was the
+		// ordinary path, and the first half of the check never did anything.
+		assert(num_read == (ssize_t)nr_to_read || std::ferror(this->stream) == 0);
 	}
 }
 
