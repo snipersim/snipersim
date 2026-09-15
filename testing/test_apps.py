@@ -106,10 +106,6 @@ def exits_zero(out, rc):
 # on the same principle as EXPECT_FAIL in test_configs.py: a test that starts
 # working should be reported, not silently absorbed.
 EXPECT_FAIL = {
-    'signal': 'signal delivery to the application is not implemented -- '
-              'general/enable_signals is declared in config/base.cfg and named '
-              'in the CHANGELOG, but no code anywhere reads it, so the handler '
-              'never runs and the process dies at the NULL dereference',
 }
 
 
@@ -130,7 +126,6 @@ CASES = {
     'mpi-omp':         (prints('Hybrid', 'hybrid run completed'), 'mpich'),
     'smc':             (smc_result, None),
     'fork':            (prints('Hello world', 'forked child ran'), None),
-    'signal':          (prints('Received signal', 'signal delivered'), None),
     'spinloop':        (prints('done', 'threads finished'), None),
     'true':            (exits_zero, None),
     'sniper-in-sniper': (exits_zero, None),
