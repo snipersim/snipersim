@@ -4,9 +4,12 @@
 #include "pin.H"
 #include "sift_writer.h"
 
-// Early versions of Pin and SDE do not include clone3 support
-
-#if !defined(SYS_clone3)
+// Early versions of Pin and SDE do not include clone3 support.  Later ones do,
+// so take the real number where it exists rather than only defining the fallback
+// when it does not -- the switch below always spells it SYS_clone3_sniper.
+#if defined(SYS_clone3)
+#define SYS_clone3_sniper SYS_clone3
+#else
 // x86_64 specific
 #define SYS_clone3_sniper 435
 #endif

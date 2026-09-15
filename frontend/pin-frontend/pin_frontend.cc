@@ -206,8 +206,13 @@ template <> class FrontendSyscallModel<PinFrontend> : public FrontendSyscallMode
   public:
     void initSyscallModeling();
     static void emulateSyscallFunc(threadid_t threadid, CONTEXT *ctxt);
-    static void syscallExitCallback(threadid_t threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, VOID *v);
-    static void syscallEntryCallback(threadid_t threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, void *v);
+    // Pin's own THREADID, not Sniper's threadid_t: these are registered with
+    // PIN_AddSyscall{Entry,Exit}Function, so the signature has to match Pin's
+    // typedef exactly.  It is signed from SDE 10.x on and was unsigned before,
+    // which spelling threadid_t here would get wrong on one kit or the other.
+    // handleThreadStart and handleThreadFinish below already do it this way.
+    static void syscallExitCallback(THREADID threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, VOID *v);
+    static void syscallEntryCallback(THREADID threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, void *v);
 };
 
 // template specialization of the Syscall callback
@@ -245,7 +250,7 @@ void FrontendSyscallModel<PinFrontend>::emulateSyscallFunc(threadid_t threadid, 
 }
 
 void FrontendSyscallModel<PinFrontend>::syscallEntryCallback
-  (threadid_t threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, void *v)
+  (THREADID threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, void *v)
 {
    if (!m_thread_data[threadid].last_syscall_emulated)
    {
@@ -256,7 +261,7 @@ void FrontendSyscallModel<PinFrontend>::syscallEntryCallback
 }
 
 void FrontendSyscallModel<PinFrontend>::syscallExitCallback
-  (threadid_t threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, VOID *v)
+  (THREADID threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, VOID *v)
 {
    if (!m_thread_data[threadid].last_syscall_emulated)
    {

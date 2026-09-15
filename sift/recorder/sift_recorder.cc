@@ -56,17 +56,6 @@ VOID Detach(VOID *v)
 {
 }
 
-BOOL followChild(CHILD_PROCESS childProcess, VOID *val)
-{
-   if (any_thread_in_detail)
-   {
-      fprintf(stderr, "EXECV ignored while in ROI\n");
-      return false; // Cannot fork/execv after starting ROI
-   }
-   else
-      return true;
-}
-
 VOID forkBefore(THREADID threadid, const CONTEXT *ctxt, VOID *v)
 {
    if(thread_data[threadid].output)
@@ -292,7 +281,12 @@ int main(int argc, char **argv)
    PIN_AddFiniFunction(Fini, 0);
    PIN_AddDetachFunction(Detach, 0);
 
-   PIN_AddFollowChildProcessFunction(followChild, 0);
+   // No PIN_AddFollowChildProcessFunction here.  Pin has always documented that
+   // only one follow-child callback may be registered, and SDE registers its own;
+   // from SDE 10.x that is an assertion, and the tool aborts before it runs.
+   // Following an exec-ed process is SDE's -follow_subprocess knob instead.  Its
+   // default of 0 never follows, which is stricter than the callback this
+   // replaces: that one followed before ROI and refused once ROI had begun.
    if (KnobEmulateSyscalls.Value())
    {
       PIN_AddForkFunction(FPOINT_BEFORE, forkBefore, 0);

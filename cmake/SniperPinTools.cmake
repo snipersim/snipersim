@@ -91,6 +91,10 @@ if(TARGET Sniper::SdeTool)
   set(_recorder_dir "${CMAKE_SOURCE_DIR}/sift/recorder")
   set(_recorder_so "${_recorder_dir}/obj-${Pin_TARGET}/sde_sift_recorder${Pin_TOOL_SUFFIX}")
 
+  # Kept in step with tool_sources[] in mfile.py, plus the headers beside them.
+  file(GLOB _recorder_sources
+       "${_recorder_dir}/*.cc" "${_recorder_dir}/*.h")
+
   add_custom_command(
     OUTPUT "${_recorder_so}"
     COMMAND "${CMAKE_COMMAND}" -E env
@@ -98,14 +102,24 @@ if(TARGET Sniper::SdeTool)
             # mfile.py only adds the kit's mbuild to sys.path when SDE_BUILD_KIT
             # is unset; with it set, PYTHONPATH has to supply mbuild and the
             # pinplay scripts.  makefile.sde.rules did the same.
-            "PYTHONPATH=${CMAKE_SOURCE_DIR}/pinplay-tools/pinplay-scripts:${Pin_SDE_KIT}/pinkit/sde-example/mbuild"
+            # The kit's own sde-example comes first so build_kit.py is the one shipped
+            # with the kit being built against.  pinplay-tools carries a vendored copy
+            # frozen at an older SDE, and it knows nothing of the 10.x layout.
+            "PYTHONPATH=${Pin_SDE_KIT}/pinkit/sde-example:${CMAKE_SOURCE_DIR}/pinplay-tools/pinplay-scripts:${Pin_SDE_KIT}/pinkit/sde-example/mbuild"
             "SNIPER_SIFT_INCLUDE=${CMAKE_SOURCE_DIR}/sift:${CMAKE_SOURCE_DIR}/common/misc"
             "SNIPER_SIFT_LIBDIR=$<TARGET_FILE_DIR:sift_pincrt>"
             "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}"
+            # From SDE 10.x the kit compiles through pin-gcc, which otherwise
+            # execs whatever "gcc" is on PATH -- not the compiler this build was
+            # configured with.  Ignored by kits that have no wrapper.
+            "PIN_WRAPPER_GCC=${CMAKE_C_COMPILER}"
             "PYTHONDONTWRITEBYTECODE=1"
             "${Python3_EXECUTABLE}" ./mfile.py --host-cpu ${Pin_TARGET}
     WORKING_DIRECTORY "${_recorder_dir}"
-    DEPENDS sift_pincrt
+    # The tool's own sources have to be listed: mfile.py is opaque to CMake, so
+    # without them an edit to the recorder rebuilds nothing and the stale .so is
+    # silently kept.
+    DEPENDS sift_pincrt ${_recorder_sources} "${_recorder_dir}/mfile.py"
     COMMENT "Building sde_sift_recorder (Intel mfile.py, shared sift_pincrt)"
     VERBATIM)
 

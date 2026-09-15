@@ -72,7 +72,7 @@ bool pinboost_backtrace(EXCEPTION_INFO *pExceptInfo, PHYSICAL_CONTEXT *pPhysCtxt
    //);
 
    char backtrace_filename[1024];
-   sprintf(backtrace_filename, "/tmp/debug_backtrace_%ld.out", syscall(__NR_gettid));
+   sprintf(backtrace_filename, "/tmp/debug_backtrace_%ld.out", syscall(SYS_gettid));
 
    FILE* fp = fopen(backtrace_filename, "w");
    // so addr2line can calculate the offset where we're really mapped

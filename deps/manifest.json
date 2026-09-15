@@ -22,9 +22,9 @@
   "dependencies": {
     "sde": {
       "kind": "tarball",
-      "version": "9.44.0-2024-08-22",
-      "url": "https://snipersim.org/packages/sde-external-9.44.0-2024-08-22-lin.tar.xz",
-      "sha256": "c6bc16fc6d1855049ea22daf214a8c00331713bc6a7b0c4d6955d6ed84148b9b",
+      "version": "10.13.1-2026-07-28",
+      "url": "https://snipersim.org/packages/sde-external-10.13.1-2026-07-28-lin.tar.xz",
+      "sha256": "94e97d623fec54385686e1e7ba65ebc9941748c05ee451423948334892bf2b50",
       "strip_components": 1,
       "install_path": "sde_kit",
       "when": [

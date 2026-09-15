@@ -1,3 +1,9 @@
+// off64_t and lseek64 are used below for /proc/self/pagemap, whose offsets run
+// past 2GB.  glibc also exposes them under _GNU_SOURCE, which g++ defines on its
+// own, so the host build never had to ask; PinCRT looks only at this one.  It
+// has to precede every header.
+#define _LARGEFILE64_SOURCE 1
+
 #include "fixed_types.h"
 #include "sift_writer.h"
 #include "sift_format.h"
@@ -13,6 +19,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/param.h>
+#include <unistd.h>   // getcwd, read, lseek64 -- previously leaked in by the host headers
 
 #ifdef __GNUC__
 # include <features.h>

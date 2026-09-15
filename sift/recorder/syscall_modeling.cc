@@ -51,7 +51,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 
       Sift::EmuRequest req;
       Sift::EmuReply res;
-      req.setthreadinfo.tid = syscall(__NR_gettid);
+      req.setthreadinfo.tid = syscall(SYS_gettid);
       thread_data[threadid].output->Emulate(Sift::EmuTypeSetThreadInfo, req, res);
    }
 

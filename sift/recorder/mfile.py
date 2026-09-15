@@ -9,6 +9,7 @@ import sys
 import os
 import re
 import copy
+import inspect
 import shutil
 import platform
 
@@ -66,7 +67,14 @@ if env.on_windows():
 else:
    env.parse_args({'shared':True})
 
-build_kit.late_init(env)
+# gcc_spec points at a spec file that only exists when Pin is built from source;
+# a binary kit does not ship one, so ask for it to be left alone.  Kits older
+# than SDE 10.x have no such parameter -- and no such behaviour to switch off.
+env['gcc_spec'] = False
+if 'gcc_spec' in inspect.signature(build_kit.late_init).parameters:
+    build_kit.late_init(env, gcc_spec=False)
+else:
+    build_kit.late_init(env)
 
 if 'clean' in env['targets']:
     mbuild.remove_tree(env['build_dir'])
@@ -88,7 +96,32 @@ pinplay_link_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit','pinplay',e
 example_link_dir = os.path.join(os.environ['SDE_BUILD_KIT'], 'pinkit','sde-example',
                                                              'lib',env['arch'])
 pin_lib_dir = os.path.join(os.environ['SDE_BUILD_KIT'],env['arch'],'pin_lib')
-pin_crt_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit',env['arch'],'runtime','pincrt')
+# PinCRT, the private libc that tools link instead of the system one, moved in
+# SDE 10.x: pinkit/<arch>/runtime/pincrt became pinkit/<arch>/pinrt/lib, and the
+# kit now drives the build through the pin-gcc/pin-g++ wrappers in
+# pinkit/<arch>/pinrt/bin rather than through raw gcc with hand-assembled flags.
+# Those wrappers pass -nostdinc and the PinCRT header and library paths; without
+# them the PinCRT libc++ headers #include_next their way into /usr/include and
+# the compile fails on redeclarations.  Both layouts are recognised so a kit
+# older than 10.x still builds.
+_pinrt_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit',env['arch'],'pinrt')
+_pinrt_lib_dir = os.path.join(_pinrt_dir,'lib')
+_legacy_crt_dir = os.path.join(os.environ['SDE_BUILD_KIT'],'pinkit',env['arch'],
+                               'runtime','pincrt')
+if os.path.isdir(_pinrt_lib_dir):
+    pin_crt_dir = _pinrt_lib_dir
+    pinrt_bin_dir = os.path.join(_pinrt_dir,'bin')
+else:
+    pin_crt_dir = _legacy_crt_dir
+    pinrt_bin_dir = None
+have_pin_crt = os.path.isdir(pin_crt_dir)
+
+def crt_objs(*names):
+    """CRT objects to prepend to a link, empty on kits that have no PinCRT."""
+    if not have_pin_crt:
+        return []
+    return [mbuild.join(pin_crt_dir, n) for n in names
+            if os.path.exists(mbuild.join(pin_crt_dir, n))]
 
 ####################################################
 # Start to collect info for the build
@@ -127,7 +160,8 @@ add_link_libs(env)
 
 # Support PIN CRT
 env.add_link_dir(pin_lib_dir)
-env.add_link_dir(pin_crt_dir)
+if have_pin_crt:
+    env.add_link_dir(pin_crt_dir)
 env.add_link_dir(os.environ.get('SNIPER_SIFT_LIBDIR', './sift/obj-intel64'))
 if env.on_linux():
     env['LINKFLAGS'] += ' -Wl,--hash-style=sysv '
@@ -139,6 +173,14 @@ tool_sources['sde_sift_recorder'] =  ['bbv_count.cc', 'emulation.cc','globals.cc
 
 # Programs sources
 programs_sources = {}
+
+# The wrapper compilers know where PinCRT lives; plain gcc does not.  Only newer
+# kits ship them, so older kits keep using whatever mbuild picked.
+if pinrt_bin_dir and os.path.exists(os.path.join(pinrt_bin_dir,'pin-g++')):
+    env['toolchain']    = pinrt_bin_dir + os.sep
+    env['CC_COMPILER']  = 'pin-gcc'
+    env['CXX_COMPILER'] = 'pin-g++'
+    env['LINKER']       = 'pin-g++'
 
 # Build tools
 for tool in tools:
@@ -161,12 +203,12 @@ for tool in tools:
 
     # Support PIN CRT - add crtbeginS and crtendS objects
     if not env.on_windows():
-        all_objs = [mbuild.join(pin_crt_dir,'crtbeginS.o')]
+        all_objs = crt_objs('crtbeginS.o')
         all_objs.extend(objs)
         if not env.on_mac():
-            all_objs.append(mbuild.join(pin_crt_dir,'crtendS.o'))
+            all_objs.extend(crt_objs('crtendS.o'))
     else:
-        all_objs = [mbuild.join(pin_crt_dir,'crtbeginS.obj')]
+        all_objs = crt_objs('crtbeginS.obj')
         all_objs.extend(objs)
     objs = all_objs
 
@@ -198,12 +240,12 @@ for program in programs:
 
     # Support PIN CRT - add crtbegin and crtend objects for standalone
     if not env_sa.on_windows():
-        all_objs = [mbuild.join(pin_crt_dir,'crtbegin.o')]
+        all_objs = crt_objs('crtbegin.o')
         all_objs.extend(objs)
         if not env_sa.on_mac():
-            all_objs.append(mbuild.join(pin_crt_dir,'crtend.o'))
+            all_objs.extend(crt_objs('crtend.o'))
     else:
-        all_objs = [mbuild.join(pin_crt_dir,'crtbegin.obj')]
+        all_objs = crt_objs('crtbegin.obj')
         all_objs.extend(objs)
     objs = all_objs
 

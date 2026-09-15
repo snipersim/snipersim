@@ -74,7 +74,7 @@ void FrontendSyscallModelBase <T>::setTID(threadid_t threadid)
 
       Sift::EmuRequest req;
       //Sift::EmuReply res;
-      req.setthreadinfo.tid = syscall(__NR_gettid);  // obtains unique thread identifier on Linux
+      req.setthreadinfo.tid = syscall(SYS_gettid);  // obtains unique thread identifier on Linux
       if (m_options->get_verbose())
       {
          std::cerr << "Setting TID: " << req.setthreadinfo.tid << std::endl;

@@ -115,6 +115,90 @@ if(_sde_kit)
   separate_arguments(_sde_libs   NATIVE_COMMAND "${_sde_libs}")
 endif()
 
+# --- PinCRT wrapper compilers (SDE 10.x and later) --------------------------
+#
+# Older kits put the whole PinCRT command line in TOOL_CXXFLAGS, so probing that
+# was enough.  From SDE 10.x the kit builds tools through wrapper scripts --
+# TOOL_CXX is pinrt/bin/pin-g++, not the host compiler -- and the wrappers add
+# flags of their own plus a gcc spec file they generate at each invocation.  That
+# spec file is what turns on -nostdinc/-nostdinc++, points the search at PinCRT's
+# headers and libraries, and selects PinCRT's dynamic linker.
+#
+# CMake compiles a target with one compiler, and the recorder is built by Intel's
+# mfile.py rather than by CMake, so the two have to agree on ABI without sharing
+# a compiler.  Generate the spec file once here and lift the wrappers' own flags
+# out of the scripts, so the host compiler reproduces what pin-g++ would have
+# done.  The flags are read from the scripts rather than written out here: they
+# differ between intel64 and ia32, and a kit is free to change them.
+#
+# Without this, libsift compiles against the host libstdc++ while the tool links
+# PinCRT's libc++, and the link fails on every std:: symbol.
+function(_pin_wrapper_flags script out)
+  set(_flags "")
+  if(EXISTS "${script}")
+    file(READ "${script}" _text)
+    # The last line is: exec <compiler> <flags...> "$@"
+    if(_text MATCHES "\nexec ([^\n]*)")
+      set(_line "${CMAKE_MATCH_1}")
+      string(REPLACE "\"$@\"" "" _line "${_line}")
+      separate_arguments(_line NATIVE_COMMAND "${_line}")
+      list(POP_FRONT _line)          # the program being exec'd
+      foreach(_a IN LISTS _line)
+        # Drop what we supply ourselves: the generated spec file, and anything
+        # naming a variable the script computed at run time.
+        if(_a MATCHES "^-specs" OR _a MATCHES "\\$pin_gcc_spec" OR _a STREQUAL "")
+          continue()
+        endif()
+        string(REPLACE "$thisdir" "${_wrapper_bin}" _a "${_a}")
+        list(APPEND _flags "${_a}")
+      endforeach()
+    endif()
+  endif()
+  set(${out} "${_flags}" PARENT_SCOPE)
+endfunction()
+
+_pin_probe(TOOL_CXX _tool_cxx)
+get_filename_component(_wrapper_bin "${_tool_cxx}" DIRECTORY)
+if(_tool_cxx MATCHES "/pin-(g\\+\\+|gcc|icx\\+\\+|icx)$"
+   AND EXISTS "${_wrapper_bin}/mk-gcc-specs.sh")
+
+  set(_pin_specs "${CMAKE_BINARY_DIR}/pin-gcc.specs")
+  execute_process(
+    COMMAND sh "${_wrapper_bin}/mk-gcc-specs.sh"
+            "${_wrapper_bin}/../include" "${_wrapper_bin}/../lib"
+            "${_wrapper_bin}/pin.ld.so" "long"
+    OUTPUT_FILE "${_pin_specs}"
+    RESULT_VARIABLE _rc ERROR_VARIABLE _err)
+  if(NOT _rc EQUAL 0)
+    message(FATAL_ERROR "Generating the PinCRT gcc specs failed:\n${_err}")
+  endif()
+
+  _pin_wrapper_flags("${_wrapper_bin}/pin-gcc" _w_cc)
+  _pin_wrapper_flags("${_tool_cxx}"            _w_cxx)
+
+  # -Wl,... belongs on the link line only; the rest applies to both.
+  set(_w_compile "")
+  set(_w_link    "")
+  foreach(_a IN LISTS _w_cc _w_cxx)
+    if(_a MATCHES "^-Wl," OR _a MATCHES "^-l")
+      list(APPEND _w_link "${_a}")
+    else()
+      list(APPEND _w_compile "${_a}")
+    endif()
+  endforeach()
+  _pin_pair_options(_w_compile _w_compile)
+
+  # pin-g++ execs pin-gcc, which execs gcc -- the C driver, which does not append
+  # -lstdc++ -lm.  CMake links C++ targets with g++, which does, and the spec file
+  # above has replaced the default library search path, so the appended -lm is not
+  # even findable.  PinCRT supplies its own C++ runtime (-lc++ -lc++abi, below)
+  # and its own libc (-lpincrt, from the spec), so suppress the driver's set.
+  list(PREPEND _tool_cxxflags ${_w_compile} "-specs=${_pin_specs}")
+  list(PREPEND _tool_ldflags  ${_w_compile} "-specs=${_pin_specs}" "-nodefaultlibs")
+  list(APPEND  _tool_libs     ${_w_link})
+  set(Pin_WRAPPER_CXX "${_tool_cxx}")
+endif()
+
 set(Pin_ROOT_DIR "${_pin_root}")
 set(Pin_SDE_KIT  "${_sde_kit}")
 
