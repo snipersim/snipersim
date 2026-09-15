@@ -1,4 +1,16 @@
-include ../../config/buildconf.makefile
+# Resolve buildconf the way ../shared/Makefile.shared does.
+#
+# This directory does not include that file -- it has its own targets and sets
+# no TARGET -- so when the build moved buildconf.makefile from config/ into the
+# per-build-directory tree, this Makefile was left pointing at the old path and
+# stopped working entirely:
+#
+#   Makefile:1: ../../config/buildconf.makefile: No such file or directory
+#
+# Every other test directory was carried across by the shared include.
+SNIPER_ROOT ?= ../..
+SNIPER_BUILD_DIR ?= $(SNIPER_ROOT)/build/default
+include $(SNIPER_BUILD_DIR)/config/buildconf.makefile
 
 CC=$(SNIPER_CC)
 
