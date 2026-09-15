@@ -148,21 +148,29 @@ void Simulator::start()
    m_thread_stats_manager = new ThreadStatsManager();
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create();
    m_clock_skew_minimization_server = ClockSkewMinimizationServer::create();
-   m_core_manager = new CoreManager();
-   m_sim_thread_manager = new SimThreadManager();
-   m_sampling_manager = new SamplingManager();
-   m_fastforward_performance_manager = FastForwardPerformanceManager::create();
-   m_rtn_tracer = RoutineTracer::create();
-   m_thread_manager = new ThreadManager();
-
    // Initialize MimicOS: simulated OS for page table management, physical
-   // memory allocation, and page fault handling
+   // memory allocation, and page fault handling.
+   //
+   // Before CoreManager, which builds the cores and with them the memory
+   // managers, MMUs and any speculative-translation engine.  Those query the
+   // MimicOS allocator as they are constructed -- Revelator asks it which
+   // allocator is in use, to decide whether to disable itself -- so a MimicOS
+   // that does not exist yet is a null dereference during startup.  Its own
+   // constructor needs only the config and the DVFS manager, both of which are
+   // already up.  Virtuoso orders it this way for the same reason.
    m_mimicos = new MimicOS(false); // Host OS
 
    virtualized_system = Sim()->getCfg()->getBool("general/virtualized_environment");
    if (virtualized_system) {
       m_mimicos_vm = new MimicOS(true); // Guest OS
    }
+
+   m_core_manager = new CoreManager();
+   m_sim_thread_manager = new SimThreadManager();
+   m_sampling_manager = new SamplingManager();
+   m_fastforward_performance_manager = FastForwardPerformanceManager::create();
+   m_rtn_tracer = RoutineTracer::create();
+   m_thread_manager = new ThreadManager();
 
    // Initialize per-core stats in MimicOS (for adaptive policies)
    assert(m_mimicos != NULL && "MimicOS (host) must be constructed before per-core init");
