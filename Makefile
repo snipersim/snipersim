@@ -11,6 +11,9 @@
 #                          time went.  SNIPER_REGRESS_LOG=<file> keeps the
 #                          per-check timings; testing/regress_report.py reads
 #                          one back, so two runs can be compared.
+#     make regress FAILFAST=ON
+#                          stop at the first failing check and keep its work
+#                          directory, for debugging that one failure
 #     make deps            acquire dependencies only
 #     make configure       configure only
 #
@@ -138,6 +141,13 @@ distclean:
 # per-check timings; see testing/common/runlog.py.
 REGRESS_SUITES = scripting configs qemu pacsim apps
 
+# FAILFAST=ON stops at the first failing check, keeps the work directory it ran
+# in, and skips the remaining suites.  For debugging one failure, not for a
+# regression pass: a pass is worth running for the whole picture, and the first
+# failure is rarely the only thing worth seeing.
+FAILFAST ?= OFF
+_failfast := $(if $(filter ON,$(FAILFAST)),--failfast,)
+
 # Pass SNIPER_REGRESS_LOG=<file> to keep the timings and compare two runs with
 #   testing/regress_report.py <file>
 regress:
@@ -147,7 +157,11 @@ regress:
 	fi; \
 	: > "$$log"; rc=0; export SNIPER_REGRESS_LOG="$$log"; \
 	for s in $(REGRESS_SUITES); do \
-	  $(SIM_ROOT)/testing/test_$$s.py || rc=$$?; \
+	  $(SIM_ROOT)/testing/test_$$s.py $(_failfast) || rc=$$?; \
+	  if [ $$rc -ne 0 ] && [ -n "$(_failfast)" ]; then \
+	    echo "FAILFAST: stopping; $$s failed and the remaining suites are skipped"; \
+	    break; \
+	  fi; \
 	done; \
 	$(SIM_ROOT)/testing/regress_report.py "$$log" || true; \
 	if [ -z "$$keep" ]; then rm -f "$$log"; \

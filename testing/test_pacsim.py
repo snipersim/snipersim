@@ -51,6 +51,7 @@ import sys
 import tempfile
 import time
 
+from common.failfast import FailFast, add_argument as add_failfast
 from common.runlog import RunLog
 
 SNIPER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -313,9 +314,11 @@ def main():
                     help='minimum acceptable wall-clock speedup (default: %(default)s)')
     ap.add_argument('--timeout', type=int, default=3600)
     ap.add_argument('--keep', action='store_true', help='keep the working directory')
+    add_failfast(ap)
     args = ap.parse_args()
 
     log = RunLog('pacsim')
+    stopped_early = False
 
     p, reason = prerequisites()
     if not p:
@@ -343,6 +346,8 @@ def main():
                 log.record('%s (simulate)' % mode, time.time() - started, 'FAIL')
                 print('ERROR (%s)' % e)
                 failures += 1
+                if args.failfast:
+                    raise FailFast()
                 continue
             # The simulation is the unit worth timing: it runs the workload
             # twice, and the checks below only read what it left behind.
@@ -353,6 +358,8 @@ def main():
                 print('  %-12s %s (%s)' % (name, 'PASS' if ok else 'FAIL', detail))
                 checks += 1
                 failures += 0 if ok else 1
+                if not ok and args.failfast:
+                    raise FailFast()
             print()
 
         if failures:
@@ -360,9 +367,15 @@ def main():
             return 1
         print('all %d checks passed' % checks)
         return 0
+    except FailFast:
+        stopped_early = True
+        print('%d of %d checks FAILED' % (failures, checks))
+        return 1
     finally:
         log.finish()
-        if args.keep:
+        if args.keep or stopped_early:
+            if stopped_early:
+                print('stopped at the first failure;', end=' ')
             print('working directory kept: %s' % workdir)
         else:
             import shutil

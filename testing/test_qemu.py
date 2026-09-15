@@ -31,6 +31,7 @@ import sys
 import tempfile
 import time
 
+from common.failfast import FailFast, add_argument as add_failfast
 from common.runlog import RunLog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -307,6 +308,7 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument('--case', action='append', choices=sorted(CASES))
+    add_failfast(ap)
     args = ap.parse_args()
 
     p, why = prerequisites()
@@ -317,6 +319,7 @@ def main():
     workdir = tempfile.mkdtemp(prefix='sniper-qemu-')
     failures = []
     log = RunLog('qemu')
+    stopped_early = False
     try:
         g = build_guests(workdir)
         for name in (args.case or sorted(CASES)):
@@ -329,9 +332,19 @@ def main():
                      round(took)))
             if not ok:
                 failures.append(name)
+                if args.failfast:
+                    raise FailFast()
+    except FailFast:
+        stopped_early = True
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
-        run(['make', '-s', 'clean'], 60, cwd=PROBE_DIR)
+        if stopped_early:
+            # The guest binaries live here too, so the failing case can be
+            # re-run by hand exactly as it ran.
+            print('\nstopped at the first failure; work directory kept at %s'
+                  % workdir)
+        else:
+            shutil.rmtree(workdir, ignore_errors=True)
+            run(['make', '-s', 'clean'], 60, cwd=PROBE_DIR)
         log.finish()
 
     print()

@@ -25,6 +25,7 @@ import sys
 import tempfile
 import time
 
+from common.failfast import FailFast, add_argument as add_failfast
 from common.runlog import RunLog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -153,6 +154,7 @@ def main():
     ap.add_argument('--repeat', type=int, default=1)
     ap.add_argument('--timeout', type=int, default=600)
     ap.add_argument('--keep', action='store_true', help='keep the work directory')
+    add_failfast(ap)
     args = ap.parse_args()
 
     if not os.path.exists(os.path.join(SNIPER_ROOT, 'lib', 'sniper')):
@@ -163,6 +165,7 @@ def main():
     workdir = tempfile.mkdtemp(prefix='sniper-scripting-')
     failures = []
     log = RunLog('scripting')
+    stopped_early = False
     try:
         exe = build_app(workdir)
         for name in cases:
@@ -177,8 +180,14 @@ def main():
                 print('%s [%ds]' % ('PASS' if ok else 'FAIL: ' + msg, round(took)))
                 if not ok:
                     failures.append((label, msg))
+                    if args.failfast:
+                        raise FailFast()
+    except FailFast:
+        stopped_early = True
     finally:
-        if args.keep:
+        if args.keep or stopped_early:
+            if stopped_early:
+                print('\nstopped at the first failure;', end=' ')
             print('work directory kept at %s' % workdir)
         else:
             shutil.rmtree(workdir, ignore_errors=True)

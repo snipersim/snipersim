@@ -36,6 +36,7 @@ import subprocess
 import sys
 import time
 
+from common.failfast import FailFast, add_argument as add_failfast
 from common.runlog import RunLog
 
 SNIPER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -193,6 +194,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--only', action='append', choices=sorted(CASES))
     ap.add_argument('--timeout', type=int, default=900)
+    add_failfast(ap)
     args = ap.parse_args()
 
     if not os.path.isfile(os.path.join(SNIPER_ROOT, 'lib', 'sniper')):
@@ -202,6 +204,7 @@ def main():
     names = args.only or sorted(CASES)
     failures = skipped = 0
     log = RunLog('apps')
+    stopped_early = None
     for name in names:
         check, needs = CASES[name]
         why = unavailable(needs) if needs else None
@@ -219,6 +222,9 @@ def main():
             log.record(name, took, 'TIMEOUT')
             print('FAIL: timed out after %ds' % args.timeout)
             failures += 1
+            if args.failfast:
+                stopped_early = name
+                break
             continue
         ok, detail = check(out, rc)
         known = EXPECT_FAIL.get(name)
@@ -234,10 +240,20 @@ def main():
             print('%s (%s) [%ds]' % ('PASS' if ok else 'FAIL', detail, round(took)))
             if not ok:
                 failures += 1
+        if args.failfast and failures:
+            stopped_early = name
+            break
 
+    if stopped_early:
+        # Each case runs in its own test/<name>, which is where the output and
+        # the logs already are; nothing to keep, only somewhere to point.
+        print('\nstopped at the first failure; %s ran in %s'
+              % (stopped_early, os.path.join(SNIPER_ROOT, 'test', stopped_early)))
     log.finish()
     print()
-    ran = len(names) - skipped
+    # len(names) would be wrong after --failfast: the checks it never reached
+    # are not checks that ran.
+    ran = len(log.checks)
     if failures:
         print('%d of %d checks FAILED (%d skipped)' % (failures, ran, skipped))
         return 1

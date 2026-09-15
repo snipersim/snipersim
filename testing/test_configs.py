@@ -46,6 +46,7 @@ import sys
 import tempfile
 import time
 
+from common.failfast import FailFast, add_argument as add_failfast
 from common.runlog import RunLog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -260,6 +261,7 @@ def main():
     # shorter limit matters because the configs that do deadlock spend the whole
     # timeout proving it.
     ap.add_argument('--timeout-detailed', type=int, default=120)
+    add_failfast(ap)
     ap.add_argument('--mode', action='append', choices=MODES,
                     help='run only this mode (repeatable; default: both)')
     args = ap.parse_args()
@@ -299,6 +301,7 @@ def main():
     failures = []
     log = RunLog('configs')
     checks = 0
+    stopped_early = False
     try:
         workload = build_workload(workdir)
         for mode in modes:
@@ -349,9 +352,17 @@ def main():
                         status = 'FAIL: now runs -- move it out of EXPECT_FAIL'
                         failures.append('%s [%s]' % (full, mode))
                     print('%s [%ds]' % (status, round(took)))
+                    if args.failfast and ok != want_ok:
+                        raise FailFast()
             print()
+    except FailFast:
+        stopped_early = True
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        if stopped_early:
+            print('\nstopped at the first failure; work directory kept at %s'
+                  % workdir)
+        else:
+            shutil.rmtree(workdir, ignore_errors=True)
         log.finish()
 
     print()
