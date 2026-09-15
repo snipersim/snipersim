@@ -47,7 +47,13 @@ if(SNIPER_ENABLE_TORCH)
                HINTS "${SNIPER_TORCH_HOME}/lib" NO_DEFAULT_PATH)
   find_library(SNIPER_C10_LIBRARY NAMES c10
                HINTS "${SNIPER_TORCH_HOME}/lib" NO_DEFAULT_PATH)
-  if(NOT SNIPER_TORCH_LIBRARY OR NOT SNIPER_C10_LIBRARY)
+  # libtorch.so is a thin dispatcher in current libtorch: the C++ API lives in
+  # libtorch_cpu.so.  Linking only the first two leaves every torch::nn::Module
+  # symbol undefined, which is what happened the moment anything actually used
+  # the branch predictor.
+  find_library(SNIPER_TORCH_CPU_LIBRARY NAMES torch_cpu
+               HINTS "${SNIPER_TORCH_HOME}/lib" NO_DEFAULT_PATH)
+  if(NOT SNIPER_TORCH_LIBRARY OR NOT SNIPER_C10_LIBRARY OR NOT SNIPER_TORCH_CPU_LIBRARY)
     message(FATAL_ERROR
       "libtorch not found under ${SNIPER_TORCH_HOME}.\n"
       "  Fetch it:  deps/sniper-deps fetch\n"
@@ -57,7 +63,7 @@ if(SNIPER_ENABLE_TORCH)
   # -isystem: libtorch pulls in <semaphore> via C++20, which collides with
   # common/misc/semaphore.h if its headers are searched as normal includes.
   set_target_properties(Sniper::Torch PROPERTIES
-    INTERFACE_LINK_LIBRARIES "${SNIPER_TORCH_LIBRARY};${SNIPER_C10_LIBRARY}"
+    INTERFACE_LINK_LIBRARIES "${SNIPER_TORCH_LIBRARY};${SNIPER_TORCH_CPU_LIBRARY};${SNIPER_C10_LIBRARY}"
     INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
       "${SNIPER_TORCH_HOME}/include;${SNIPER_TORCH_HOME}/include/torch/csrc/api/include"
     INTERFACE_INCLUDE_DIRECTORIES

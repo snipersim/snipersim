@@ -63,6 +63,12 @@ target_compile_definitions(sniper_base INTERFACE
 # torch off, Sniper builds with the platform's normal ABI.
 if(SNIPER_ENABLE_TORCH)
   target_compile_definitions(sniper_base INTERFACE _GLIBCXX_USE_CXX11_ABI=0)
+  # The libtorch branch predictor guards its entire implementation, its header
+  # and its use in the factory behind HAS_LIBTORCH.  Nothing had ever defined
+  # it -- not this build, not the makefiles before it -- so nn_branch_predictor
+  # compiled to an empty translation unit and the predictor was unreachable
+  # while libtorch was still linked in.
+  target_compile_definitions(sniper_base INTERFACE HAS_LIBTORCH=1)
 endif()
 
 add_library(sniper_common INTERFACE)

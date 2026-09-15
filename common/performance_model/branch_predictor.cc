@@ -54,6 +54,18 @@ BranchPredictor* BranchPredictor::create(core_id_t core_id)
       else if (type == "a53") {
           return new A53BranchPredictor("branch_predictor", core_id);
       }
+#if HAS_LIBTORCH
+      else if (type == "nn")
+      {
+         // The class was written, compiled and linked, but never constructed:
+         // the factory had no case for it, so perf_model/branch_predictor/type=nn
+         // -- which test/fft-nn asks for -- failed with "Invalid branch
+         // predictor type".
+         size_t batch_length = cfg->getIntArray("perf_model/branch_predictor/batch_length", core_id);
+         double learning_rate = cfg->getFloatArray("perf_model/branch_predictor/learning_rate", core_id);
+         return new NNBranchPredictor("branch_predictor", core_id, batch_length, learning_rate);
+      }
+#endif
       else
       {
          LOG_PRINT_ERROR("Invalid branch predictor type.");
