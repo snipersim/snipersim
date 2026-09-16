@@ -228,11 +228,7 @@ FEATURES = {
             'measured %d instructions (phase 1 alone is ~32.5M, so the '
             'barrier held); enabled once, disabled once'
             % counter(stats, 'performance_model.instruction_count')),
-        # The guest's closing line never prints, and that is the barrier
-        # working: the last thread to leave stops the TraceManager, so the
-        # simulation ends before the application returns from main.  Phase 1's
-        # marker is the last output that is guaranteed to appear.
-        ('roi_barrier.c', r'roi_barrier phase1 done')),
+        ('roi_barrier.c', r'roi_barrier done sink=')),
 
     # K3: a forked child gets its own SIFT FIFO.  The recorder opens it from
     # forkAfterInChild; Virtuoso drops that call so a child that goes on to
@@ -313,6 +309,31 @@ FEATURES = {
             'atid -1 before inject and 2 after; miss answered without '
             'stranding the caller'),
         ('app_reader_pool.c', r'pool done s=')),
+
+    # K6: fast-fault replay, and the magic ABI underneath it.  The guest
+    # passes a seven-word payload by address and the simulator must read back
+    # exactly those words, so the check asserts the values rather than that
+    # the call survived.
+    #
+    # That distinction is the whole point.  Two defects in the magic macros
+    # were invisible to every check that only looked at survival: the result
+    # register was not earlyclobber, so the payload pointer could be
+    # allocated to the register the asm overwrites first and the simulator
+    # read from the command number instead of the pointer; and there was no
+    # "memory" clobber, so a local payload's stores were dead code.  Both
+    # delivered a well-formed call carrying nothing.
+    'fast_fault': (
+        ['address_translation_schemes/baseline'], 1,
+        lambda stats: (
+            'fp_id=42' in stats['__stdout__']
+            and 'mean_cyc=5000' in stats['__stdout__']
+            and 'frame_pa=0xcafe000' in stats['__stdout__']
+            and 'trace_len=4' in stats['__stdout__']
+            and 'cursor=7' in stats['__stdout__']
+            and 'SetFastFaultCharge] cycles=1234' in stats['__stdout__'],
+            'payload arrived intact (fp_id, mean_cycles, frame_pa, '
+            'trace_len, cursor) and the per-fault charge was set'),
+        ('fast_fault.c', r'fast_fault done s=')),
 
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,

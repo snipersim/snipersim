@@ -126,14 +126,32 @@
 #define MAGIC_REG_C "rcx"
 #endif
 
+/* "=&a" rather than "=a" is required, not stylistic.  The asm writes
+   MAGIC_REG_A from its first input before it has read the later ones, so
+   without the earlyclobber the compiler may place an input in that same
+   register and the first mov destroys it.  That is not theoretical: the
+   userspace MimicOS kernel's fast-fault payload pointer was allocated to
+   RAX, and the simulator received the command number where the pointer
+   should have been -- argv read as seven zeroes from address 0x1b.
+   Virtuoso sidesteps this by binding inputs to registers directly
+   ("a", "b", "c") so no movs are needed at all. */
+/* The "memory" clobber is load-bearing, not defensive.  Several commands pass
+   a pointer and expect the simulator to read or write what it points at --
+   SIM_CMD_FAST_FAULT reads a payload array, SIM_CMD_RECEIVE_MESSAGE writes
+   one, SIM_CMD_START_PROCESS reads a path.  Without it the compiler is told
+   only that some registers change, so stores into a local payload are dead
+   (nothing visible reads them) and it is free to drop them.  At -O2 it does:
+   the userspace MimicOS kernel's fast-fault smoke probe, which fills a
+   seven-word payload and passes its address, arrived at the simulator as
+   seven zeroes.  Virtuoso has the same omission. */
 #define SimMagic0(cmd) ({            \
    unsigned long _cmd = (cmd), _res; \
    __asm__ __volatile__(             \
        "mov %1, %%" MAGIC_REG_A "\n" \
        "\txchg %%bx, %%bx\n"         \
-       : "=a"(_res) /* output    */  \
+       : "=&a"(_res) /* output    */  \
        : "g"(_cmd)  /* input     */  \
-   );               /* clobbered */  \
+       : "memory"); /* clobbered */  \
    _res;                             \
 })
 
@@ -143,10 +161,10 @@
        "mov %1, %%" MAGIC_REG_A "\n"                 \
        "\tmov %2, %%" MAGIC_REG_B "\n"               \
        "\txchg %%bx, %%bx\n"                         \
-       : "=a"(_res) /* output    */                  \
+       : "=&a"(_res) /* output    */                  \
        : "g"(_cmd),                                  \
          "g"(_arg0)        /* input     */           \
-       : "%" MAGIC_REG_B); /* clobbered */           \
+       : "%" MAGIC_REG_B, "memory"); /* clobbered */  \
    _res;                                             \
 })
 
@@ -157,11 +175,11 @@
        "\tmov %2, %%" MAGIC_REG_B "\n"                               \
        "\tmov %3, %%" MAGIC_REG_C "\n"                               \
        "\txchg %%bx, %%bx\n"                                         \
-       : "=a"(_res) /* output    */                                  \
+       : "=&a"(_res) /* output    */                                  \
        : "g"(_cmd),                                                  \
          "g"(_arg0),                                                 \
          "g"(_arg1)                         /* input     */          \
-       : "%" MAGIC_REG_B, "%" MAGIC_REG_C); /* clobbered */          \
+       : "%" MAGIC_REG_B, "%" MAGIC_REG_C, "memory"); /* clobbered */ \
    _res;                                                             \
 })
 

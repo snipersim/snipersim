@@ -22,6 +22,7 @@
 #include <vector>
 #include <deque>
 #include <mutex>
+#include <atomic>
 #include <fstream>
 
 // Backward compatibility: old code used MimicOS_NS::Message
@@ -339,6 +340,17 @@ public:
     // ============ Userspace Communication ============
     
     bool isUserspaceMimicosEnabled() const { return m_userspace_enabled; }
+
+    /* Per-fault charge, in simulated cycles, that the MMU queues on the app
+       thread when the userspace kernel handles a fault instead of the
+       simulator.  The kernel sets it once its fault profile is trained, and
+       resets it to 0 if the profile is abandoned, which falls back to the
+       kernel-pthread-does-the-work path.  Atomic because the kernel pthread
+       and the faulting thread are different host threads. */
+    void setFastFaultChargeCycles(uint64_t cycles)
+        { m_fast_fault_charge_cycles.store(cycles, std::memory_order_relaxed); }
+    uint64_t getFastFaultChargeCycles() const
+        { return m_fast_fault_charge_cycles.load(std::memory_order_relaxed); }
     
     /* Per-core event queue.
        
@@ -577,6 +589,7 @@ private:
     /* Landing slot for the deprecated getMessage() shim; real delivery pops
        into a caller-provided buffer. */
     std::vector<MimicOSMessage> m_scratch_messages;
+    std::atomic<uint64_t> m_fast_fault_charge_cycles{0};
     bool m_last_pf_caused_swapping;
     
     // ============ Configuration ============

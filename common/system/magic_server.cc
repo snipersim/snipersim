@@ -40,9 +40,13 @@ UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, 
    if (cmd == SIM_CMD_WAIT_FOR_ROI)
       return waitForRoi();
 
-   ScopedLock sl(Sim()->getThreadManager()->getLock());
+   UInt64 res;
+   {
+      ScopedLock sl(Sim()->getThreadManager()->getLock());
+      res = Magic_unlocked(thread_id, core_id, cmd, arg0, arg1);
+   }
 
-   return Magic_unlocked(thread_id, core_id, cmd, arg0, arg1);
+   return res;
 }
 
 UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
@@ -221,6 +225,79 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
 #endif
          return 42;
       }
+      case SIM_CMD_FAST_FAULT:
+      {
+         /* Fast-fault replay, first phase.
+            The userspace kernel, once its fault profile is trained, stops
+            executing the fault-handling work itself and ships the profile
+            across instead.  This phase reads the payload and charges the
+            profile's mean cost; walking the memory trace through the cache
+            hierarchy is a later phase, which is why trace_len and trace_ptr
+            are read and reported but not yet followed.
+
+            Payload (see sim_api.h):
+              argv[0] marker, argv[1] fp_id, argv[2] frame_pa,
+              argv[3] mean_cycles, argv[4] trace_len, argv[5] trace_ptr,
+              argv[6] cursor */
+         Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
+
+         int ff_argc = (int)arg0;
+         if (ff_argc < 7)
+         {
+            std::cerr << "[Virtuoso: SimFastFault] malformed payload, argc="
+                      << ff_argc << " (expected >=7)" << std::endl;
+            return 0;
+         }
+
+         uint64_t ffargv[7] = {0};
+         for (int i = 0; i < 7; i++)
+         {
+            core->accessMemory(Core::NONE, Core::READ,
+                               arg1 + i * sizeof(uint64_t),
+                               (char*)&ffargv[i], sizeof(uint64_t),
+                               Core::MEM_MODELED_NONE);
+         }
+         const uint64_t fp_id       = ffargv[1];
+         const uint64_t frame_pa    = ffargv[2];
+         const uint64_t mean_cycles = ffargv[3];
+         const uint64_t trace_len   = ffargv[4];
+         const uint64_t cursor      = ffargv[6];
+
+         /* Charge the profile's cost to the calling thread by advancing its
+            elapsed time, which is how the work it is standing in for would
+            have shown up. */
+         if (mean_cycles > 0)
+         {
+            ShmemPerfModel *spm = core->getShmemPerfModel();
+            const ComponentPeriod *period = core->getDvfsDomain();
+            SubsecondTime now = spm->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+            spm->setElapsedTime(ShmemPerfModel::_USER_THREAD,
+                                now + (*period) * mean_cycles);
+         }
+
+         static uint64_t s_fast_fault_count = 0;
+         ++s_fast_fault_count;
+         std::cerr << "[Virtuoso: SimFastFault] #" << s_fast_fault_count
+                   << " core=" << core_id
+                   << " fp_id=" << fp_id
+                   << " mean_cyc=" << mean_cycles
+                   << " frame_pa=0x" << std::hex << frame_pa << std::dec
+                   << " trace_len=" << trace_len
+                   << " cursor=" << cursor
+                   << " argc=" << ff_argc
+                   << " payload=0x" << std::hex << arg1 << std::dec
+                   << std::endl;
+         return 0;
+      }
+      case SIM_CMD_SET_FAST_FAULT_CHARGE:
+      {
+         /* The per-fault charge the MMU should queue on the app thread when
+            the userspace kernel handles a fault.  Set to the profile's mean
+            once it is trained; 0 puts the work back on the kernel. */
+         Sim()->getMimicOS()->setFastFaultChargeCycles(arg0);
+         std::cerr << "[Virtuoso: SetFastFaultCharge] cycles=" << arg0 << std::endl;
+         return 0;
+      }
       case SIM_CMD_CONTEXT_SWITCH_TO:
       {
          /* Schedule the user thread named by arg0 onto the calling core.
@@ -384,8 +461,6 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
       // this build instead of tripping the assert in `default:` below.
       // Each is filled in by a later step: the ROI barrier by K2, the
       // scheduling pair by K5, the fast-fault pair by K6.
-      case SIM_CMD_FAST_FAULT:            // K6
-      case SIM_CMD_SET_FAST_FAULT_CHARGE: // K6
       {
          return 0;
       }
@@ -596,14 +671,22 @@ UInt64 MagicServer::threadRoiLeave(thread_id_t thread_id)
          no trace-based application is still running: in mixed mode the legacy
          SimRoiStart path owns shutdown, and stopping here would cut those
          applications short. */
-      if (!m_legacy_roi_active)
-      {
-#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
-         printf("[SNIPER] Last app left ROI; stopping TraceManager\n");
-         fflush(NULL);
-#endif
-         Sim()->getTraceManager()->stop();
-      }
+      /* Virtuoso stops the TraceManager here, on the reasoning that the last
+         participant leaving ROI means the run is over.  That is not taken
+         yet, and the reason is a crash rather than caution: stopping the
+         simulation from this point races a spawned app thread that is still
+         exiting, and roughly one run in three died with a null dereference
+         in StatsManager::logEvent, reached from ThreadManager::onThreadExit
+         as the thread tore down.  Deferring the stop until after Magic()
+         released the thread manager lock did not help, because the race is
+         with thread exit rather than with the lock.
+         
+         Sequencing that safely is what the shutdown machinery in the next
+         step is for -- a shutdown flag the trace threads observe,
+         frontEndStop on each registered reader, and a live-thread count that
+         says when the last one has really gone.  Until that exists, the
+         barrier closes ROI and lets the application finish on its own, which
+         is the part it can do correctly. */
 #if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
       else
       {
