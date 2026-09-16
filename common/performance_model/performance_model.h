@@ -141,6 +141,7 @@ private:
    SubsecondTime m_cpiSyncSyscall;
    SubsecondTime m_cpiSyncUnscheduled;
    SubsecondTime m_cpiSyncDvfsTransition;
+   SubsecondTime m_cpiFastFault;
    SubsecondTime m_cpiRecv;
 
    InstructionQueue m_instruction_queue;

@@ -338,9 +338,19 @@ FEATURES = {
             and 'frame_pa=0xcafe000' in stats['__stdout__']
             and 'trace_len=4' in stats['__stdout__']
             and 'cursor=7' in stats['__stdout__']
-            and 'SetFastFaultCharge] cycles=1234' in stats['__stdout__'],
-            'payload arrived intact (fp_id, mean_cycles, frame_pa, '
-            'trace_len, cursor) and the per-fault charge was set'),
+            and 'SetFastFaultCharge] cycles=1234' in stats['__stdout__']
+            # The cost has to land on the core's timeline, in its own bucket.
+            # 10 faults x 1M cycles against a ~200k baseline; anything within
+            # 10%% of 10M can only be the charge.
+            and abs(counter(stats, 'performance_model.cpiFastFault')
+                    * float(stats.get('fs_to_cycles', 0) or 0)
+                    - 10000000) < 1000000
+            # and not misattributed to the DVFS transition counter
+            and counter(stats, 'performance_model.cpiSyncDvfsTransition') == 0,
+            'payload arrived intact and %d cycles were charged to '
+            'cpiFastFault, cpiSyncDvfsTransition untouched'
+            % round(counter(stats, 'performance_model.cpiFastFault')
+                    * float(stats.get('fs_to_cycles', 0) or 0))),
         ('fast_fault.c', r'fast_fault done s=')),
 
     'magic_reserved': (

@@ -22,6 +22,9 @@
 #include <stdint.h>
 #include "sim_api.h"
 
+#define CHARGE_FAULTS 10
+#define CHARGE_CYCLES 1000000
+
 int main(void)
 {
    uint64_t payload[7] = {
@@ -36,6 +39,21 @@ int main(void)
 
    SimFastFault(7, payload);
    printf("fast_fault probe sent\n");
+   fflush(stdout);
+
+   /* Charge a known amount of time, so the check can assert the cost lands
+      and not merely that the payload arrived.  Ten faults of a million
+      cycles is ten million, against a baseline run of about two hundred
+      thousand -- far too large to be anything else.
+      
+      The first version of this handler advanced ShmemPerfModel's elapsed
+      time, which moved nothing at all: that clock belongs to the memory
+      subsystem rather than to the core's instruction timeline.  A check
+      that only looked at the payload could not tell. */
+   uint64_t charged[7] = { 27, 43, 0, CHARGE_CYCLES, 0, 0, 0 };
+   for (int i = 0; i < CHARGE_FAULTS; i++)
+      SimFastFault(7, charged);
+   printf("fast_fault charged %d x %d cycles\n", CHARGE_FAULTS, CHARGE_CYCLES);
    fflush(stdout);
 
    /* The charge the MMU should queue per fault once a profile is trained. */

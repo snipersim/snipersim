@@ -257,6 +257,11 @@ class DelayInstruction : public PseudoInstruction
 public:
    enum delay_type_t {
       DVFS_TRANSITION,
+      /* Time charged for fault handling that the userspace kernel reported
+         instead of executing.  Its own type so the cost is attributed to
+         fault handling rather than inflating the DVFS transition counter,
+         which has nothing to do with it. */
+      FAST_FAULT,
       NUM_TYPES
    };
    DelayInstruction(SubsecondTime cost, delay_type_t delay_type)

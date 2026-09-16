@@ -4,6 +4,7 @@
 #include "thread_manager.h"
 #include "logmem.h"
 #include "performance_model.h"
+#include "instruction.h"
 #include "fastforward_performance_model.h"
 #include "core_manager.h"
 #include "dvfs_manager.h"
@@ -263,16 +264,22 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          const uint64_t trace_len   = ffargv[4];
          const uint64_t cursor      = ffargv[6];
 
-         /* Charge the profile's cost to the calling thread by advancing its
-            elapsed time, which is how the work it is standing in for would
-            have shown up. */
+         /* Charge the profile's cost to the calling core's timeline, the way
+            the DVFS transition latency is charged: a pseudo-instruction the
+            performance model accounts for.
+
+            Advancing ShmemPerfModel's elapsed time instead does nothing
+            visible.  That clock belongs to the memory subsystem, not to the
+            core's instruction timeline, so the cycle count the run reports is
+            unmoved by it -- 100 faults of 100,000 cycles each left the total
+            at 0.2M cycles either way. */
          if (mean_cycles > 0)
          {
-            ShmemPerfModel *spm = core->getShmemPerfModel();
             const ComponentPeriod *period = core->getDvfsDomain();
-            SubsecondTime now = spm->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-            spm->setElapsedTime(ShmemPerfModel::_USER_THREAD,
-                                now + (*period) * mean_cycles);
+            PseudoInstruction *delay =
+               new DelayInstruction((*period) * mean_cycles,
+                                    DelayInstruction::FAST_FAULT);
+            core->getPerformanceModel()->queuePseudoInstruction(delay);
          }
 
          static uint64_t s_fast_fault_count = 0;
