@@ -200,6 +200,27 @@ FEATURES = {
     # that it runs and the TLB is used -- every other configuration here has a
     # power-of-two set count, where the two hashes are the same expression and
     # the difference cannot be seen.
+    # I3/I4: the MMU prefetch path, under enough TLB pressure to use it.  The
+    # default TLB geometry takes 91 misses in 1.9M instructions, at which point
+    # every prefetch counter reads zero and a change here is unobservable.
+    #
+    # The assertion is an invariant rather than a value: sub-line prefetch
+    # credit can never exceed the number of lines actually prefetched, because
+    # credit is only ever granted on a line that was marked.  It held at 0 <= 0
+    # while nothing marked lines, and it keeps holding once the MMU starts
+    # tagging them.  It is what catches m_prefetch_pending going uninitialised:
+    # heap garbage credited 171 hits against 0 prefetches.
+    'tlb_prefetch_stress': (
+        ['address_translation_schemes/tlb_prefetch_stress'], 1,
+        lambda stats: (
+            counter(stats, 'mmu.tlb_misses_data') > 0
+            and (counter(stats, 'L2.hits-prefetch-subline')
+                 <= counter(stats, 'L2.prefetches') + counter(stats, 'L2.hits-prefetch')),
+            'tlb_misses=%d subline_credit=%d prefetches=%d'
+            % (counter(stats, 'mmu.tlb_misses_data'),
+               counter(stats, 'L2.hits-prefetch-subline'),
+               counter(stats, 'L2.prefetches')))),
+
     'nonpow2_tlb': (
         ['address_translation_schemes/nonpow2_tlb'], 1,
         require_nonzero('mmu.tlb_hits_data', 'mmu.tlb_misses_data')),

@@ -29,6 +29,7 @@ CacheBlockInfo::CacheBlockInfo(IntPtr tag, CacheState::cstate_t cstate, UInt64 o
                                                                                           m_cstate(cstate),
                                                                                           m_owner(0),
                                                                                           m_used(0),
+                                                                                          m_prefetch_pending(0),
                                                                                           m_options(options),
                                                                                           m_block_type(DATA),
                                                                                           m_reuse(0),
