@@ -169,7 +169,68 @@ void MimicOS::poll_for_signal()
         // msg->argv[3..] = unused
 
         SimReceiveMessage(&msg->argc, msg->argv);
-        assert(msg->argc >= 2);
+        assert(msg->argc >= 1);
+
+        /* Dispatch on the event type before assuming anything about the rest
+           of the payload.  This loop used to read argv[0] and then treat
+           argv[1] as a faulting address and argv[2] as a frame count
+           regardless of what had actually arrived.  That held while page
+           faults were the only event the simulator posted; it stopped
+           holding as soon as the scheduler events did, and a two-word
+           new_thread message was read as a fault at address 2 with a frame
+           count taken from past the end of the array.
+
+           Codes match MimicOSProtocol in the simulator: 1 page_fault,
+           3 new_thread, 4 thread_exit, 5 quantum_expired, 6 shutdown. */
+        int event_type = msg->argv[0];
+
+        if (event_type == 6)          /* shutdown */
+        {
+            std::cout << "[MimicOS] shutdown event; leaving poll_for_signal"
+                      << std::endl;
+            break;
+        }
+
+        if (event_type == 3)          /* new_thread: argv[1] = app_thread_id */
+        {
+            uint64_t atid = msg->argv[1];
+            m_running_atid = atid;
+            std::cout << "[MimicOS] new_thread event, atid=0x" << std::hex
+                      << atid << std::dec << " -> SimContextSwitchTo"
+                      << std::endl;
+            SimContextSwitchTo(atid);
+            continue;
+        }
+
+        if (event_type == 5)          /* quantum_expired: argv[1] = app_thread_id */
+        {
+            uint64_t atid = msg->argv[1] ? msg->argv[1] : m_running_atid;
+            /* No runqueue here: one application per core, so the thread whose
+               slice expired is also the one to resume.  A kernel with more
+               than one runnable thread would pick the next instead. */
+            if (atid)
+                SimContextSwitchTo(atid);
+            continue;
+        }
+
+        if (event_type == 4)          /* thread_exit: argv[1] = app_thread_id */
+        {
+            std::cout << "[MimicOS] thread_exit event, atid=0x" << std::hex
+                      << msg->argv[1] << std::dec << std::endl;
+            if (msg->argv[1] == m_running_atid)
+                m_running_atid = 0;
+            continue;
+        }
+
+        /* Everything below handles a page fault, which needs all three
+           words. */
+        if (event_type != 1 || msg->argc < 3)
+        {
+            std::cout << "[MimicOS] ignoring event type " << event_type
+                      << " with argc=" << msg->argc << std::endl;
+            continue;
+        }
+
         int exception_type_code = msg->argv[0];
         std::string exception_type = std::to_string(exception_type_code);
         IntPtr va = msg->argv[1];

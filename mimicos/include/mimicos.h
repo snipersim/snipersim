@@ -49,6 +49,11 @@ class MimicOS {
 
 
         
+
+        /* The application thread currently scheduled on this kernel, as an
+           AppReaderPool id, or 0 when none is.  Used to resume the right one
+           when its quantum expires. */
+        uint64_t m_running_atid = 0;
         mm_package* get_mm_package(){ return mmpackage; }
         PhysicalMemoryAllocator* get_physical_memory_allocator(){ return physical_memory_allocator; }
 
