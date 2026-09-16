@@ -210,9 +210,21 @@ Ordered so each is individually attributable.
 | **I6** | `mmu.cc` | A10 | **fixes** an uncharged L2-TLB hit latency when page-size prediction is off |
 | **I7** | `pagetable.h` shadow-payload type change to `PayloadWord` | rest of B1 | |
 | **I8** | `TLBPrefetcherBase` signature + `tlb.cc` prefetch queue | B2 | touches every existing prefetcher |
-| **I9** | `tlb_prefetcher_factory` restructure | B4 | |
-| **I10** | **TRAIL** (`TemporalPTEPrefetcher`) + Berti | B5, B6 | the payoff for I1–I9 |
-| **I11** | Optional: `atp`/`recency`/`dp`, data prefetchers | B7, B9 | only for paper-exact comparison |
+| **I9** | `tlb_prefetcher_factory` restructure | B4 | done, `51db1ef` |
+| **I10** | **TRAIL** (`TemporalPTEPrefetcher`) + Berti | B5, B6 | done, `51db1ef` -- the payoff for I1–I9 |
+| **I11** | `atp`/`recency`/`dp` | B7 | done, `bddd119`; all eight dispatch names now match upstream |
+
+Stage I is complete. `b079771` sits between I10 and I11, deleting the legacy
+`parametric_dram_directory_msi/tlb.{h,cc}`: it declares a second
+`ParametricDramDirectoryMSI::TLB` behind the same `TLB_H` guard as the real one
+in `translation_components/`, so whichever a translation unit reached first won
+and the guard silently discarded the other. Nothing constructed it. I11's
+prefetchers are what exposed it -- they include a bare `"tlb.h"`, resolved to
+the legacy class, and failed to compile against a `contains()` that had been
+present in the real header all along.
+
+B9 (data prefetchers, `prefetcher.cc`) is not ported: it is a data-cache
+change rather than a TLB one, and nothing in Stage I or K depends on it.
 
 ### Stage K — frontend surgery (T2, highest risk, last)
 
@@ -281,3 +293,29 @@ recorded because they say what the remaining steps should expect.
   `buddy_policy.h` are untouched, which is what keeps Revelator a T1 step.
 - **Each Revelator engine header carried five stale includes, not two**, as 2.5
   predicted.
+- **A prefetcher that is merely constructed proves nothing, and the default TLB
+  geometry hides that.** Four of the five prefetchers added in I10 and I11 run to
+  completion at the shipped geometry with every prefetch counter reading zero,
+  each for its own reason, and none of the reasons is visible in the source.
+  TRAIL is confidence-gated and never sees a delta repeat across ~20 demand
+  accesses; ATP gates on an 8-bit enable counter that just oscillates, 58
+  increments against 54 decrements, and never crosses its threshold; Recency
+  builds its list out of TLB *victims*, and a geometry that never evicts leaves
+  the list permanently empty. Only Berti and `dp` activate as shipped. Hence
+  `temporal_pte_stress`, `atp_stress` and `recency_stress`, alongside the
+  `tlb_prefetch_stress` that ASP already needed.
+- **An activation check can pass on one machine and fail on the harness.** TRAIL
+  at the default geometry issues exactly one prediction run by hand and none
+  under the regression's whitelisted environment, at an identical 90 TLB misses:
+  the environment block size shifts the guest addresses, and the deltas shift
+  with them. A check sitting on a count of one is measuring the address layout,
+  not the feature. The stress geometry is what makes it measure the feature.
+- **The walk counts are a free end-to-end cross-check.**
+  `radix_4level.page_table_walks` exceeds `mmu.page_table_walks` by exactly the
+  prefetch work issued, so a prefetcher whose own counters look healthy but
+  whose walks never reach the page table is caught without extra
+  instrumentation.
+- **Upstream ships parameter blocks for prefetchers a configuration does not
+  select**, commented as required by the config parser. They are not required:
+  the factory only reads the section belonging to the prefetcher it dispatches.
+  They are omitted here rather than carried as dead configuration.
