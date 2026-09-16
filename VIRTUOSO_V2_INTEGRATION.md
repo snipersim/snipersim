@@ -231,15 +231,31 @@ change rather than a TLB one, and nothing in Stage I or K depends on it.
 The trace frontend and magic interface. This is where a mistake breaks every
 configuration, not just a new one, so it lands after everything else is known good.
 
-| Step | Content | Source |
-|---|---|---|
-| **K1** | Reserve the eight new magic commands as no-op stubs | E1 |
-| **K2** | Per-thread ROI barrier | E2 |
-| **K3** | SIFT recorder follows fork+execve children | E3 (re-derive, §2.1) |
-| **K4** | Per-core MimicOS event queues | E4 |
-| **K5** | Multi-core kernel pthreads, `AppReaderPool`, live-app scheduling | E5 |
-| **K6** | Fast-fault replay path | E6 |
-| **K7** | Userspace MimicOS v2 kernel integration | E7d |
+| Step | Content | Source | Status |
+|---|---|---|---|
+| **K1** | Reserve the eight new magic commands as no-op stubs | E1 | done, `d29a509` |
+| **K2** | Per-thread ROI barrier | E2 | done, `6d5739c`, narrowed by `e2134ec` |
+| **K3** | SIFT recorder follows fork+execve children | E3 (re-derive, §2.1) | partly, `05f262d` |
+| **K4** | Per-core MimicOS event queues | E4 | done, `caf1e43` |
+| **K5a** | `AppReaderPool`, `SimContextSwitchTo`, `SimGetInjectedAppId` | E5 | done, `7b2e445` |
+| **K5b** | Shutdown: `m_shutdown_requested`, `isDone()`, `stopAll()` | E5 | **next** |
+| **K5c** | Quantum preemption and app exit | E5 | pending |
+| **K5d** | Live-app spawn, `registerSpawnedAppThread` | E5 | pending |
+| **K6** | Fast-fault replay path | E6 | phase 1 done, `e2134ec` |
+| **K7** | Userspace MimicOS v2 kernel integration | E7d | headers in `4df7f88` |
+
+K5 was split once its shape was visible, as the plan asked. The split is not
+the one first sketched: `SimContextSwitchTo` turned out to belong with the pool
+rather than after it, and shutdown turned out to be a prerequisite for the rest
+rather than a tidy-up at the end -- see below.
+
+**The kernel is the thing that makes the rest testable, and it is reachable.**
+`virtuoso/mimicos` is ~7,800 lines with its own Makefile, builds against this
+tree's `include/` once `4df7f88`'s four shared headers are in, and runs as a
+guest under the simulator. It links only with `-no-pie`: this toolchain
+defaults to PIE and the `#pragma GCC optimize` blocks in the allocator headers
+reset code generation. Its `MIMICOS_FAST_FAULT_SMOKE` mode exists to prove a
+magic reaches the simulator without the full kernel, and it is what drove K6.
 
 K5 is the single largest item in the whole migration (`trace_manager` +
 `trace_thread`, ~1,000 changed lines against files this branch has already modified).
@@ -293,6 +309,30 @@ recorded because they say what the remaining steps should expect.
   `buddy_policy.h` are untouched, which is what keeps Revelator a T1 step.
 - **Each Revelator engine header carried five stale includes, not two**, as 2.5
   predicted.
+- **Two defects in the magic ABI, either of which delivers a well-formed call
+  carrying nothing.** The asm writes `MAGIC_REG_A` from its first input before
+  reading the later ones, and with a plain `"=a"` output the compiler may put an
+  input in that register, so the first `mov` destroys it -- the userspace
+  kernel's payload pointer was allocated to RAX and the simulator read seven
+  words from address `0x1b`. And there was no `"memory"` clobber, so stores into
+  a local payload are dead code and may be dropped. Both are ABI-wide:
+  `RECEIVE_MESSAGE` and `START_PROCESS` pass pointers too. Neither is visible to
+  a check that only asserts the call survived, which is what every check did.
+- **Commands that return 42 cannot be called by a guest on its own behalf.**
+  `Sift::Reader` treats 42 as "send no response record", so the caller is never
+  resumed. That is right for a successful `SimContextSwitchTo` -- another stream
+  takes over -- but Virtuoso returns it on the miss path too, stranding a kernel
+  that asked for a thread that has since exited. It also turned K1's check from
+  a 10-second run into a 10-minute hang the moment the handler became real.
+- **Shutdown is a prerequisite, not a finishing touch.** Stopping the
+  TraceManager when the last ROI participant leaves races a spawned thread that
+  is still exiting: about one run in three died in `StatsManager::logEvent` from
+  `ThreadManager::onThreadExit`. Deferring the stop outside the thread manager
+  lock does not help, because the race is with thread exit. Anything that ends a
+  simulation from a magic handler needs the shutdown machinery first.
+- **A refactor of a dormant path cannot be shown to activate, and saying so is
+  better than implying otherwise.** K4's queues have four producers, all behind
+  the kernel; the page-fault one was probed directly and fires zero times today.
 - **A prefetcher that is merely constructed proves nothing, and the default TLB
   geometry hides that.** Four of the five prefetchers added in I10 and I11 run to
   completion at the shipped geometry with every prefetch counter reading zero,
