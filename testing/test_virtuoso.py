@@ -187,6 +187,48 @@ FEATURES = {
     # the default TLB geometry, because Berti learns over 256KB regions and the
     # workload's page footprint does not depend on TLB size -- shrinking the
     # TLBs moves its counters not at all.
+    # I11: the Agile TLB Prefetcher.  ATP arbitrates between three child
+    # prefetchers, so the check has to see a child actually chosen and a real
+    # prefetch walk issued -- not just the demand walks it observes.  It needs
+    # the stress geometry: at the default one its 8-bit enable counter
+    # oscillates across 112 queries and never crosses the threshold, leaving
+    # every query recorded as atp_choice_disable.
+    'atp': (
+        ['address_translation_schemes/atp_stress'], 1,
+        require_nonzero('tlb_atp.queries',
+                        'tlb_atp.demand_walks_successful',
+                        'tlb_atp.atp_choice_stp',
+                        'tlb_atp.real_prefetch_candidates_stp',
+                        'tlb_atp.real_prefetch_walks_issued',
+                        'tlb_atp.real_prefetch_successful')),
+
+    # I11: the Recency TLB prefetcher.  This one needs the stress geometry for
+    # a different reason than the rest: it builds its list out of TLB victims,
+    # and the default geometry never evicts anything over a smoke workload, so
+    # the list stays empty and it cannot prefetch however many misses it sees.
+    # The check therefore covers the whole chain -- victim, push, prediction,
+    # prefetch -- and all three neighbour directions.
+    'recency': (
+        ['address_translation_schemes/recency_stress'], 1,
+        require_nonzero('recency_tlb.queries',
+                        'recency_tlb.recency_victim_insertions',
+                        'recency_tlb.recency_pushes',
+                        'recency_tlb.predictions_same_issued',
+                        'recency_tlb.predictions_plus1_issued',
+                        'recency_tlb.predictions_minus1_issued',
+                        'recency_tlb.prefetch_successful',
+                        'recency_tlb.pointer_chase_accesses')),
+
+    # I11: the Distance TLB prefetcher.  Unlike atp and recency this activates
+    # at the default geometry, so no stress scheme is added for it.
+    'dp': (
+        ['address_translation_schemes/baseline_dp'], 1,
+        require_nonzero('dp_tlb.queries',
+                        'dp_tlb.distance_computed',
+                        'dp_tlb.table_hits',
+                        'dp_tlb.predictions_issued',
+                        'dp_tlb.prefetch_successful')),
+
     'berti': (
         ['address_translation_schemes/baseline_berti'], 1,
         require_nonzero('tlb_berti.strides_learned',

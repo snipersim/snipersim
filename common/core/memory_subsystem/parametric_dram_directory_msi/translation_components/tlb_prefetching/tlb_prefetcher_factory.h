@@ -6,6 +6,9 @@
 #include "arbitrary_stride_prefetcher.h"
 #include "TemporalPTEPrefetcher.h"
 #include "BertiTLBPrefetcher.h"
+#include "AgileTLBPrefetcher.h"
+#include "RecencyTLBPrefetcher.h"
+#include "DistanceTLBPrefetcher.h"
 
 namespace ParametricDramDirectoryMSI
 {
@@ -134,6 +137,66 @@ namespace ParametricDramDirectoryMSI
 				region_bits, current_pages, prev_requests, record_pages,
 				ip_table_entries, num_berti, max_burst);
 		}
+		static TLBPrefetcherBase *createAgileTLBPrefetcher(String mmu_name, String prefetcher_name, String pq_index, Core *core, MemoryManagerBase *memory_manager, ShmemPerfModel *shmem_perf_model)
+		{
+			String cfg_base = "perf_model/" + mmu_name + "/tlb_prefetch/pq" + pq_index + "/atp_prefetcher/";
+
+			uint32_t pq_size          = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "pq_size"));
+			uint32_t sampler_size     = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "sampler_size"));
+			uint32_t fpq_size         = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "fpq_size"));
+			uint32_t fdt_counter_bits = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "fdt_counter_bits"));
+			uint16_t fdt_threshold    = static_cast<uint16_t>(Sim()->getCfg()->getInt(cfg_base + "fdt_threshold"));
+			uint32_t enable_pref_bits = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "enable_pref_bits"));
+			uint32_t select1_bits     = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "select1_bits"));
+			uint32_t select2_bits     = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "select2_bits"));
+			uint32_t masp_entries     = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "masp_entries"));
+			uint32_t masp_assoc       = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "masp_assoc"));
+			uint32_t page_shift       = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "page_shift"));
+			uint32_t masp_lookahead   = Sim()->getCfg()->hasKey(cfg_base + "masp_lookahead")
+				? static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "masp_lookahead")) : 1;
+			uint32_t masp_degree      = Sim()->getCfg()->hasKey(cfg_base + "masp_degree")
+				? static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "masp_degree")) : 1;
+
+			return new AgileTLBPrefetcher(core, memory_manager, shmem_perf_model, prefetcher_name,
+				pq_size, sampler_size, fpq_size, fdt_counter_bits, fdt_threshold,
+				enable_pref_bits, select1_bits, select2_bits,
+				masp_entries, masp_assoc, page_shift,
+				masp_lookahead, masp_degree);
+		}
+
+		static TLBPrefetcherBase *createRecencyTLBPrefetcher(String mmu_name, String prefetcher_name, String pq_index, Core *core, MemoryManagerBase *memory_manager, ShmemPerfModel *shmem_perf_model)
+		{
+			String cfg_base = "perf_model/" + mmu_name + "/tlb_prefetch/pq" + pq_index + "/recency_prefetcher/";
+
+			uint32_t page_shift              = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "page_shift"));
+			bool     prefetch_same_recency    = Sim()->getCfg()->getBool(cfg_base + "prefetch_same_recency");
+			bool     prefetch_recency_minus_1 = Sim()->getCfg()->getBool(cfg_base + "prefetch_recency_minus_1");
+			bool     prefetch_recency_plus_1  = Sim()->getCfg()->getBool(cfg_base + "prefetch_recency_plus_1");
+			bool     prefetch_on_tlb_hit      = Sim()->getCfg()->getBool(cfg_base + "prefetch_on_tlb_hit");
+			bool     model_prefetch_walks     = Sim()->getCfg()->getBool(cfg_base + "model_prefetch_walks");
+			bool     consume_pq_on_hit        = Sim()->getCfg()->getBool(cfg_base + "consume_pq_on_hit");
+			bool     model_pointer_chase       = Sim()->getCfg()->getBool(cfg_base + "model_pointer_chase");
+
+			return new RecencyTLBPrefetcher(core, memory_manager, shmem_perf_model, prefetcher_name,
+				page_shift, prefetch_same_recency, prefetch_recency_minus_1,
+				prefetch_recency_plus_1, prefetch_on_tlb_hit,
+				model_prefetch_walks, consume_pq_on_hit, model_pointer_chase);
+		}
+
+		static TLBPrefetcherBase *createDistanceTLBPrefetcher(String mmu_name, String prefetcher_name, String pq_index, Core *core, MemoryManagerBase *memory_manager, ShmemPerfModel *shmem_perf_model)
+		{
+			String cfg_base = "perf_model/" + mmu_name + "/tlb_prefetch/pq" + pq_index + "/dp_prefetcher/";
+
+			uint32_t page_shift          = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "page_shift"));
+			uint32_t num_rows            = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "num_rows"));
+			uint32_t num_slots           = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "num_slots"));
+			uint32_t assoc               = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "assoc"));
+			bool     model_prefetch_walks = Sim()->getCfg()->getBool(cfg_base + "model_prefetch_walks");
+			uint32_t max_depth           = static_cast<uint32_t>(Sim()->getCfg()->getInt(cfg_base + "max_depth"));
+
+			return new DistanceTLBPrefetcher(core, memory_manager, shmem_perf_model, prefetcher_name,
+				page_shift, num_rows, num_slots, assoc, model_prefetch_walks, max_depth);
+		}
 		static TLBPrefetcherBase *createTLBPrefetcher(String mmu_name, String prefetcher_name, String pq_index, Core *core, MemoryManagerBase *memory_manager, ShmemPerfModel *shmem_perf_model)
 		{
 			if (prefetcher_name == "stride")
@@ -156,6 +219,18 @@ namespace ParametricDramDirectoryMSI
 			else if (prefetcher_name == "berti")
 			{
 				return createBertiTLBPrefetcher(mmu_name, prefetcher_name, pq_index, core, memory_manager, shmem_perf_model);
+			}
+			else if (prefetcher_name == "atp")
+			{
+				return createAgileTLBPrefetcher(mmu_name, prefetcher_name, pq_index, core, memory_manager, shmem_perf_model);
+			}
+			else if (prefetcher_name == "recency")
+			{
+				return createRecencyTLBPrefetcher(mmu_name, prefetcher_name, pq_index, core, memory_manager, shmem_perf_model);
+			}
+			else if (prefetcher_name == "dp")
+			{
+				return createDistanceTLBPrefetcher(mmu_name, prefetcher_name, pq_index, core, memory_manager, shmem_perf_model);
 			}
 			else
 			{
