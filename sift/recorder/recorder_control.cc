@@ -165,12 +165,13 @@ ADDRINT handleMagic(THREADID threadid, const CONTEXT * ctxt, ADDRINT gax, ADDRIN
       res = thread_data[threadid].output->Magic(gax, gbx, gcx);
    }
 
-   if (gax == SIM_CMD_ROI_START)
+   if (gax == SIM_CMD_ROI_START || gax == SIM_CMD_THREAD_ROI_START
+       || gax == SIM_CMD_WAIT_FOR_ROI)
    {
       if (KnobUseROI.Value() && !in_roi)
          beginROI(threadid, ctxt);
    }
-   else if (gax == SIM_CMD_ROI_END)
+   else if (gax == SIM_CMD_ROI_END || gax == SIM_CMD_THREAD_ROI_END)
    {
       if (KnobUseROI.Value() && in_roi)
          endROI(threadid, ctxt);

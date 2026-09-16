@@ -193,6 +193,26 @@ FEATURES = {
     # the stress geometry: at the default one its 8-bit enable counter
     # oscillates across 112 queries and never crosses the threshold, leaving
     # every query recorded as atp_choice_disable.
+    # K1: the eight reserved magic commands.  MagicServer's switch ends in a
+    # default: that asserts on an unrecognised command, so before K1 a guest
+    # built against the new sim_api.h took the simulator down -- "Got invalid
+    # Magic 27" -- rather than running.  The guest issues all eight and must
+    # come out the other side.
+    #
+    # It also issues SIM_CMD_THREAD_ID, which is handled rather than stubbed.
+    # That is what distinguishes a magic path that is live and returning 0
+    # from the stubs, from one that is not reaching MagicServer at all: a
+    # stub-only check would pass just as well if every magic instruction were
+    # being dropped on the floor.
+    'magic_reserved': (
+        ['address_translation_schemes/baseline'], 1,
+        lambda stats: (
+            'magic_k1 survived all eight reserved commands' in stats['__stdout__']
+            and 'magic_k1 thread_id=0' in stats['__stdout__']
+            and 'invalid Magic' not in stats['__stdout__'],
+            'all eight reserved commands returned; thread_id handled'),
+        ('magic_k1.c', r'magic_k1 survived all eight reserved commands')),
+
     'atp': (
         ['address_translation_schemes/atp_stress'], 1,
         require_nonzero('tlb_atp.queries',
@@ -340,6 +360,25 @@ FEATURES = {
 WORKLOAD_BIN = os.path.join(GOLDEN_DIR, 'workload')
 
 
+def build_app(src_name, out_name):
+    """Compile one testing/apps/*.c into the golden directory.
+
+    Feature checks that need a guest doing something specific -- issuing a
+    magic instruction, say -- build their own binary here rather than reusing
+    the shared workload.  The path is fixed for the same reason WORKLOAD_BIN
+    is: the guest's program path length shifts its address layout, and a
+    mkdtemp() path would move counters between runs.
+    """
+    src = os.path.join(HERE, 'apps', src_name)
+    out = os.path.join(GOLDEN_DIR, out_name)
+    if (not os.path.exists(out)
+            or os.path.getmtime(out) < os.path.getmtime(src)):
+        cc = os.environ.get('CC', 'gcc')
+        subprocess.run([cc, '-O1', '-I', os.path.join(SNIPER_ROOT, 'include'),
+                        '-o', out, src], check=True)
+    return out
+
+
 def build_workload():
     os.makedirs(GOLDEN_DIR, exist_ok=True)
     if (not os.path.exists(WORKLOAD_BIN)
@@ -376,7 +415,7 @@ def env_digest():
     ).hexdigest()[:12]
 
 
-def run_sniper(names, ncores, outdir, workload, timeout):
+def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT):
     """One simulation, with ASLR pinned so the statistics are reproducible."""
     shutil.rmtree(outdir, ignore_errors=True)
     cmd = []
@@ -395,7 +434,7 @@ def run_sniper(names, ncores, outdir, workload, timeout):
         err = re.search(r'\*ERROR\*\s*(.{0,60})', p.stdout)
         return None, err.group(1).strip() if err else 'exit %d' % p.returncode
     # run-sniper exits 0 even when the simulator refuses to start.
-    if not WORKLOAD_OUTPUT.search(p.stdout):
+    if not expect.search(p.stdout):
         return None, 'exit 0 but the workload produced no output'
     return p.stdout, None
 
@@ -628,12 +667,23 @@ def main():
             if fname not in FEATURES:
                 print('%-22s SKIP (no such feature check)' % fname)
                 continue
-            cfgs, ncores, check = FEATURES[fname]
+            entry = FEATURES[fname]
+            # A feature may name its own guest binary: (cfgs, ncores, check,
+            # (source, output_pattern)).  Checks that only need counters keep
+            # the three-element form and run the shared workload.
+            if len(entry) == 4:
+                cfgs, ncores, check, guest = entry
+                src, pattern = guest
+                app = build_app(src, os.path.splitext(src)[0])
+                expect = re.compile(pattern)
+            else:
+                cfgs, ncores, check = entry
+                app, expect = workload, WORKLOAD_OUTPUT
             print('%-22s ' % fname, end='')
             sys.stdout.flush()
             started = time.time()
             outdir = os.path.join(workdir, 'feat-' + fname)
-            out, err = run_sniper(cfgs, ncores, outdir, workload, args.timeout)
+            out, err = run_sniper(cfgs, ncores, outdir, app, args.timeout, expect)
             took = time.time() - started
             if err:
                 log.record('feature:' + fname, took, 'FAIL')
@@ -642,7 +692,13 @@ def main():
                 if args.failfast:
                     raise FailFast()
                 continue
-            ok, detail = check(read_stats(outdir))
+            feat_stats = read_stats(outdir)
+            # Checks on frontend behaviour read the guest's output rather than
+            # a counter; it rides along under a name no statistic can collide
+            # with.  Only feature checks see it -- the invariance goldens are
+            # blessed from read_stats() untouched.
+            feat_stats['__stdout__'] = out
+            ok, detail = check(feat_stats)
             log.record('feature:' + fname, took, 'PASS' if ok else 'FAIL')
             print('%s (%s) [%ds]' % ('PASS' if ok else 'FAIL', detail, round(took)))
             if not ok:

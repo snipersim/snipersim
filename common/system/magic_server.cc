@@ -266,6 +266,23 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          // Placeholder for malloc tracking
          return 0;
       }
+
+      // K1: the magic protocol numbers are reserved here ahead of the
+      // handlers, so a guest built against the new sim_api.h runs against
+      // this build instead of tripping the assert in `default:` below.
+      // Each is filled in by a later step: the ROI barrier by K2, the
+      // scheduling pair by K5, the fast-fault pair by K6.
+      case SIM_CMD_ROI_EXPECT:            // K2
+      case SIM_CMD_THREAD_ROI_START:      // K2
+      case SIM_CMD_THREAD_ROI_END:        // K2
+      case SIM_CMD_WAIT_FOR_ROI:          // K2
+      case SIM_CMD_CONTEXT_SWITCH_TO:     // K5
+      case SIM_CMD_GET_INJECTED_APP_ID:   // K5
+      case SIM_CMD_FAST_FAULT:            // K6
+      case SIM_CMD_SET_FAST_FAULT_CHARGE: // K6
+      {
+         return 0;
+      }
       default:
          LOG_ASSERT_ERROR(false, "Got invalid Magic %lu, arg0(%lu) arg1(%lu)", cmd, arg0, arg1);
    }
