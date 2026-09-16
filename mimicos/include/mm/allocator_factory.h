@@ -2,22 +2,25 @@
 
 
 // mimicos/src/
-#include "physical_allocator/policies/buddy_policy.h"           
-#include "physical_allocator/policies/reserve_thp_policy.h"           
+#include "physical_allocator/policies/buddy_policy.h"
+#include "physical_allocator/policies/reserve_thp_policy.h"
 #include "physical_allocator/policies/baseline_allocator_policy.h"
+#include "physical_allocator/policies/linux_buddy_anon_policy.h"
 
-//We include the relevant headers from sniper/include/ - we added the core 
+// We include the relevant headers from sniper/include/ - we added the core
 // implementations of the allocators there to be accessible from both MimicOS and Sniper
 
-#include "memory_management/physical_memory_allocators/reserve_thp.h" 
+#include "memory_management/physical_memory_allocators/reserve_thp.h"
 #include "memory_management/physical_memory_allocators/baseline.h"
+#include "memory_management/physical_memory_allocators/linux_buddy_anon.h"
 
 // C++ libs
 #include <string>
 #include <iostream>
 
-using VirtuosoBaselineAllocator = BaselineAllocator<Virtuoso::Baseline::NoMetricsPolicy>;
-using VirtuosoTHPAllocator      = ReservationTHPAllocator<Virtuoso::ReserveTHP::NoMetricsPolicy>;
+using VirtuosoBaselineAllocator       = BaselineAllocator<Virtuoso::Baseline::NoMetricsPolicy>;
+using VirtuosoTHPAllocator            = ReservationTHPAllocator<Virtuoso::ReserveTHP::NoMetricsPolicy>;
+using VirtuosoLinuxBuddyAnonAllocator = LinuxBuddyAnonAllocator<Virtuoso::LinuxBuddyAnon::NoMetricsPolicy>;
 
 class AllocatorFactory
 {
@@ -36,6 +39,11 @@ public:
         {
             std::cout << "[MimicOS] [createAllocator] Created VirtuosoTHPAllocator" << std::endl;
             return new VirtuosoTHPAllocator(allocator_name, memory_size, max_order, kernel_size, frag_type, threshold_for_promotion);
+        }
+        else if (allocator_name == "linux_buddy_anon")
+        {
+            std::cout << "[MimicOS] [createAllocator] Created VirtuosoLinuxBuddyAnonAllocator" << std::endl;
+            return new VirtuosoLinuxBuddyAnonAllocator(allocator_name, memory_size, max_order, kernel_size, frag_type);
         }
         else
         {

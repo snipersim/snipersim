@@ -8,6 +8,7 @@
 /* Policies that depend on Buddy Policy */
 #include "physical_allocator/policies/reserve_thp_policy.h"
 #include "physical_allocator/policies/baseline_allocator_policy.h"
+#include "physical_allocator/policies/linux_buddy_anon_policy.h"
 
 namespace Virtuoso {
     namespace Buddy {
@@ -40,9 +41,12 @@ namespace Virtuoso {
         namespace ReserveTHP {
             struct NoMetricsPolicy; // forward declared elsewhere
         }
+        namespace LinuxBuddyAnon {
+            struct NoMetricsPolicy; // forward declared elsewhere
+        }
     }
 }
-    
+
 // Specialize the mapping here (after full definition of Virtuoso::Buddy::NoMetricsPolicy)
 template <>
 struct BuddyPolicyFor<Virtuoso::ReserveTHP::NoMetricsPolicy> {
@@ -51,6 +55,11 @@ struct BuddyPolicyFor<Virtuoso::ReserveTHP::NoMetricsPolicy> {
 
 template <>
 struct BuddyPolicyFor<Virtuoso::Baseline::NoMetricsPolicy> {
+    using type = Virtuoso::Buddy::NoMetricsPolicy;
+};
+
+template <>
+struct BuddyPolicyFor<Virtuoso::LinuxBuddyAnon::NoMetricsPolicy> {
     using type = Virtuoso::Buddy::NoMetricsPolicy;
 };
 
