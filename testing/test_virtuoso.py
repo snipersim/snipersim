@@ -38,6 +38,16 @@ defaults sit just above the measured floor, which keeps the check able to notice
 a real change (an unintended behaviour change moves many counters, or moves one
 by far more than a count) without failing on the one that will not sit still.
 
+The child's environment is fixed too, and for the same reason.  The guest's
+stack sits above its environment block, so anything that changes that block
+moves every address below it: adding the three variables `make` exports
+(MAKELEVEL, MAKEFLAGS, MFLAGS) moves 108 counters here.  Baselines blessed from
+a shell would then never match a run under `make regress`, which is the way the
+regression actually invokes this.  So run_sniper() passes an explicit
+environment built from a fixed whitelist rather than inheriting one, and the
+baseline records a digest of it -- a mismatch is then reported as a mismatch
+rather than looking like a behaviour change.
+
 The workload is built at a fixed path, and that matters more than it looks.
 With ASLR off the guest's addresses are determined by its environment, and the
 program path is part of that: the same binary run from two paths of different
@@ -229,6 +239,29 @@ def have_setarch():
     return shutil.which('setarch') is not None
 
 
+# Variables the child is allowed to see.  Everything else is dropped, so the
+# result does not depend on who invoked the suite.  See the module docstring.
+ENV_KEEP = ('PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'SHELL',
+            'CC', 'CXX', 'PYTHONPATH')
+
+
+def child_env():
+    env = {k: os.environ[k] for k in ENV_KEEP if k in os.environ}
+    # SNIPER_* selects the build and the dependency cache, so it has to survive.
+    env.update({k: v for k, v in os.environ.items() if k.startswith('SNIPER_')})
+    # Not this one: it points at the regression run's timing log, and its value
+    # changes per invocation.
+    env.pop('SNIPER_REGRESS_LOG', None)
+    return env
+
+
+def env_digest():
+    e = child_env()
+    return hashlib.sha1(
+        '\n'.join('%s=%s' % kv for kv in sorted(e.items())).encode()
+    ).hexdigest()[:12]
+
+
 def run_sniper(names, ncores, outdir, workload, timeout):
     """One simulation, with ASLR pinned so the statistics are reproducible."""
     shutil.rmtree(outdir, ignore_errors=True)
@@ -241,7 +274,7 @@ def run_sniper(names, ncores, outdir, workload, timeout):
     try:
         p = subprocess.run(cmd, timeout=timeout, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True, cwd=SNIPER_ROOT,
-                           start_new_session=True)
+                           env=child_env(), start_new_session=True)
     except subprocess.TimeoutExpired:
         return None, 'timed out after %ds' % timeout
     if p.returncode != 0:
@@ -274,6 +307,7 @@ def bless(name, stats, workload):
         'blessed_at': time.strftime('%Y-%m-%d %H:%M:%S'),
         'commit': git_head(),
         'workload_sha1': file_sha1(workload),
+        'env_digest': env_digest(),
     }
     with open(golden_path(name), 'w') as f:
         json.dump(rec, f, indent=1, sort_keys=True)
@@ -316,6 +350,9 @@ def compare(name, stats, tol_abs=TOL_ABS, tol_rel=TOL_REL):
     if not os.path.exists(path):
         return None, 'no baseline (run --bless at the base commit)'
     rec = json.load(open(path))
+    if rec.get('env_digest') not in (None, env_digest()):
+        return None, ('baseline was blessed under a different environment '
+                      '(%s, now %s); re-bless' % (rec['env_digest'], env_digest()))
     want = rec['stats']
     got = {k: repr(v) for k, v in comparable(stats).items()}
 
