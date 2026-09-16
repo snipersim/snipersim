@@ -93,7 +93,11 @@ CacheBase::splitAddress(const IntPtr addr, IntPtr& tag, UInt32& set_index) const
       	 //XOR based hash function
       	 UInt64 si = block_num % m_num_sets;
       	 UInt64 ti = (block_num >> m_log_num_sets) % m_num_sets;
-      	 set_index = (si ^ ti); // ^ -> bitwise XOR
+      	 // Both terms are already below m_num_sets, but their XOR need not be:
+      	 // with 3 sets, si=2 ^ ti=1 is 3, one past the end.  The modulo brings
+      	 // it back in range.  For a power-of-2 count the XOR cannot leave the
+      	 // range, so this is a no-op there and compiles to a mask.
+      	 set_index = (si ^ ti) % m_num_sets;
       	 break;
       }
       case CacheBase::HASH_MER_MOD:
@@ -155,7 +159,9 @@ CacheBase::splitAddressTLB(const IntPtr addr, IntPtr& tag, UInt32& set_index, in
       	 //XOR based hash function
       	 UInt64 si = block_num % m_num_sets;
       	 UInt64 ti = (block_num >> m_log_num_sets) % m_num_sets;
-      	 set_index = (si ^ ti); // ^ -> bitwise XOR
+      	 // See splitAddress: the XOR of two in-range terms can still land
+      	 // one past the end when m_num_sets is not a power of two.
+      	 set_index = (si ^ ti) % m_num_sets;
       	 break;
       }
       case CacheBase::HASH_MER_MOD:
