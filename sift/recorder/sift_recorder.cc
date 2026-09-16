@@ -72,8 +72,36 @@ VOID forkAfterInChild(THREADID threadid, const CONTEXT *ctxt, VOID *v)
    // Assume identity of child process
    app_id = child_app_id;
    num_threads = 1;
-   // Open new SIFT pipe for thread 0
    thread_data[0].bbv = new Bbv();
+
+   /* Carry the child's app_id across the execve that is about to follow.
+      The tool's main() runs again in the new image with a fresh address
+      space, so the app_id just assigned above does not survive; the
+      post-execve main() recovers it from the environment. */
+   char buf[32];
+   snprintf(buf, sizeof(buf), "%d", app_id);
+   setenv("SIFT_CHILD_APP_ID", buf, 1);
+
+   /* Open the child's own FIFO.  Virtuoso drops this call, because a child
+      that goes on to execve replaces its process image: the Writer opened
+      here is destroyed and the header it already wrote is stranded, and the
+      post-execve main() then writes a second one into the same FIFO.
+
+      That removal is deliberately NOT taken here, because it would regress
+      the case this tree actually exercises.  A child that forks without
+      execing has no second main() to open the file for it -- threads.cc
+      opens only for threadid > 0, and the lazy path in recorder_base.cc is
+      reached only outside ROI -- so dropping this leaves it recording
+      nothing.  Today that child records and simulates correctly.
+
+      The two cases are not distinguishable from here: a child runs a good
+      deal of libc between fork() and execve(), so neither a flag nor a
+      lazy open at first instruction can tell them apart.  What makes the
+      conflict moot for now is that exec'd children are not followed at all
+      -- see the -follow_subprocess note in main() -- so the doubled header
+      cannot arise.  Whichever step turns following on has to resolve this
+      properly, most likely by discarding the Writer when the child's
+      execve is seen in syscall_modeling.cc. */
    openFile(0);
 }
 
@@ -191,6 +219,19 @@ int main(int argc, char **argv)
    PIN_InitLock(&new_threadid_lock);
 
    app_id = KnobSiftAppId.Value();
+   /* A recorder instance that came up after an execve in a followed child
+      inherits SIFT_CHILD_APP_ID from forkAfterInChild, holding the app_id
+      Sniper allocated for it.  It overrides the knob, which would otherwise
+      leave the child reusing the parent's app_id and writing over the
+      parent's FIFOs. */
+   if (const char *env_app_id = getenv("SIFT_CHILD_APP_ID"))
+   {
+      app_id = atoi(env_app_id);
+      std::cerr << "[SIFT_RECORDER] Using app_id=" << app_id
+                << " from SIFT_CHILD_APP_ID env" << std::endl;
+      /* Consume it, so a further descendant does not inherit this one. */
+      unsetenv("SIFT_CHILD_APP_ID");
+   }
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();

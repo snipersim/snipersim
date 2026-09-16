@@ -234,6 +234,40 @@ FEATURES = {
         # marker is the last output that is guaranteed to appear.
         ('roi_barrier.c', r'roi_barrier phase1 done')),
 
+    # K3: a forked child gets its own SIFT FIFO.  The recorder opens it from
+    # forkAfterInChild; Virtuoso drops that call so a child that goes on to
+    # execve does not strand a header in the FIFO, but nothing would then open
+    # it for a child that does not exec -- threads.cc opens only for
+    # threadid > 0 -- and that child would record nothing at all.  A child
+    # recording into nothing is silent, so the check is that both processes
+    # produced output and both traces finished.
+    'fork_child': (
+        ['address_translation_schemes/baseline'], 2,
+        lambda stats: (
+            'fork_child parent sum=' in stats['__stdout__']
+            and 'fork_child child sum=' in stats['__stdout__']
+            and stats['__stdout__'].count('-- DONE --') == 2,
+            'parent and child both recorded; %d traces finished'
+            % stats['__stdout__'].count('-- DONE --')),
+        ('fork_child.c', r'fork_child parent sum=')),
+
+    # K3: the recorder takes its app_id from SIFT_CHILD_APP_ID when the
+    # environment carries one.  forkAfterInChild sets it so a followed child
+    # keeps the app_id Sniper allocated instead of reusing the parent's and
+    # writing over the parent's FIFOs -- the recorder's main() runs again
+    # after an execve with a fresh address space, so the variable is the only
+    # thing that survives.
+    #
+    # The value is 0, which is what the knob would have given anyway: the
+    # point is to prove the branch executes, without moving the run off the
+    # FIFO names Sniper is waiting on.
+    'sift_child_app_id': (
+        ['address_translation_schemes/baseline'], 1,
+        lambda stats: (
+            'Using app_id=0 from SIFT_CHILD_APP_ID env' in stats['__stdout__'],
+            'recorder took its app_id from the environment'),
+        ('workload.c', r'workload isum=', {'SIFT_CHILD_APP_ID': '0'})),
+
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
@@ -441,6 +475,20 @@ def child_env():
     return env
 
 
+def run_env(extra=None):
+    """child_env() plus anything a feature check needs the guest to see.
+
+    Only feature checks pass extra: the invariance runs are compared against
+    goldens blessed under a recorded digest of child_env(), so adding to the
+    environment there would change the guest's address layout and move
+    counters.
+    """
+    env = child_env()
+    if extra:
+        env.update(extra)
+    return env
+
+
 def env_digest():
     e = child_env()
     return hashlib.sha1(
@@ -448,7 +496,8 @@ def env_digest():
     ).hexdigest()[:12]
 
 
-def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT):
+def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
+               extra_env=None):
     """One simulation, with ASLR pinned so the statistics are reproducible."""
     shutil.rmtree(outdir, ignore_errors=True)
     cmd = []
@@ -460,7 +509,7 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT)
     try:
         p = subprocess.run(cmd, timeout=timeout, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True, cwd=SNIPER_ROOT,
-                           env=child_env(), start_new_session=True)
+                           env=run_env(extra_env), start_new_session=True)
     except subprocess.TimeoutExpired:
         return None, 'timed out after %ds' % timeout
     if p.returncode != 0:
@@ -706,17 +755,21 @@ def main():
             # the three-element form and run the shared workload.
             if len(entry) == 4:
                 cfgs, ncores, check, guest = entry
-                src, pattern = guest
+                # (source, output_pattern) or (source, output_pattern, env)
+                src, pattern = guest[0], guest[1]
+                extra_env = guest[2] if len(guest) > 2 else None
                 app = build_app(src, os.path.splitext(src)[0])
                 expect = re.compile(pattern)
             else:
                 cfgs, ncores, check = entry
                 app, expect = workload, WORKLOAD_OUTPUT
+                extra_env = None
             print('%-22s ' % fname, end='')
             sys.stdout.flush()
             started = time.time()
             outdir = os.path.join(workdir, 'feat-' + fname)
-            out, err = run_sniper(cfgs, ncores, outdir, app, args.timeout, expect)
+            out, err = run_sniper(cfgs, ncores, outdir, app, args.timeout,
+                                  expect, extra_env)
             took = time.time() - started
             if err:
                 log.record('feature:' + fname, took, 'FAIL')
