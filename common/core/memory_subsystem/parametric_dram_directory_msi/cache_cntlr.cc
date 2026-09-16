@@ -490,6 +490,7 @@ namespace ParametricDramDirectoryMSI
 			registerStatsMetric(name, core_id, String("stores-prefetch-") + BlockTypeString(type), &stats.stores_prefetch[type]);
 		}
 		registerStatsMetric(name, core_id, "hits-prefetch", &stats.hits_prefetch);
+		registerStatsMetric(name, core_id, "hits-prefetch-subline", &stats.hits_prefetch_subline);
 		registerStatsMetric(name, core_id, "evict-prefetch", &stats.evict_prefetch);
 		registerStatsMetric(name, core_id, "invalidate-prefetch", &stats.invalidate_prefetch);
 		registerStatsMetric(name, core_id, "hits-warmup", &stats.hits_warmup);
@@ -1318,6 +1319,12 @@ namespace ParametricDramDirectoryMSI
 				cache_block_info->clearOption(CacheBlockInfo::PREFETCH);
 
 			}
+			// Per-PTE credit.  The line-level bit above is cleared by the first
+			// demand access; this counts each distinct 8-byte sub-region the
+			// prefetch supplied, so a region prefetch serving several PTEs from
+			// one line is credited for each of them rather than once.
+			if (isPrefetch == Prefetch::NONE && cache_block_info->consumePrefetch(offset, data_length))
+				stats.hits_prefetch_subline++;
 			if (cache_block_info->hasOption(CacheBlockInfo::WARMUP) && Sim()->getInstrumentationMode() != InstMode::CACHE_ONLY)
 			{
 				stats.hits_warmup++;

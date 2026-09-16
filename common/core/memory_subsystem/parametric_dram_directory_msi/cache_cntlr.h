@@ -285,7 +285,10 @@ namespace ParametricDramDirectoryMSI
            UInt64 loads_prefetch[CacheBlockInfo::block_type_t::NUM_BLOCK_TYPES], stores_prefetch[CacheBlockInfo::block_type_t::NUM_BLOCK_TYPES];
            UInt64 hits_prefetch, // lines which were prefetched and subsequently used by a non-prefetch access
                   evict_prefetch, // lines which were prefetched and evicted before being used
-                  invalidate_prefetch; // lines which were prefetched and invalidated before being used
+                  invalidate_prefetch, // lines which were prefetched and invalidated before being used
+                  // Per-PTE credit: one prefetched 64B line can supply eight PTEs,
+                  // and hits_prefetch can only ever count the first.
+                  hits_prefetch_subline;
                   // Note: hits_prefetch+evict_prefetch+invalidate_prefetch will not account for all prefetched lines,
                   // some may still be in the cache, or could have been removed for some other reason.
                   // Also, in a shared cache, the prefetch may have been triggered by another core than the one
@@ -381,6 +384,60 @@ namespace ParametricDramDirectoryMSI
                        getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD),
                        /*update_replacement=*/true) != nullptr;
          }
+         /* Tag a line the MMU prefetched so a later demand hit is credited as a
+          * prefetch hit -- but only when the walk brought it in from beyond this
+          * cache.  If it was already resident the prefetch was redundant, and
+          * tagging it would count every later demand hit on that line as useful. */
+         void tagMMUPrefetch(IntPtr cache_address,
+                             HitWhere::where_t hit_where = HitWhere::UNKNOWN) override
+         {
+            if (hit_where == HitWhere::L1_OWN || hit_where == HitWhere::L2_OWN)
+               return;
+            SharedCacheBlockInfo* info = getCacheBlockInfo(cache_address);
+            if (info)
+            {
+               info->setOption(CacheBlockInfo::PREFETCH);
+               info->markPrefetchedLine();
+               ++stats.prefetches;
+               bool from_dram = (hit_where == HitWhere::DRAM_LOCAL
+                              || hit_where == HitWhere::DRAM_REMOTE
+                              || hit_where == HitWhere::DRAM);
+               if (from_dram)
+               {
+                  info->setOption(CacheBlockInfo::PREFETCH_FROM_DRAM);
+                  ++stats.prefetches_fillup;
+               }
+               else
+                  info->clearOption(CacheBlockInfo::PREFETCH_FROM_DRAM);
+            }
+         }
+
+         /* Sub-line credit only, for the level demand walks land on.  Same
+          * redundancy guard as above. */
+         void markMMUPrefetchSubline(IntPtr cache_address,
+                                     HitWhere::where_t hit_where = HitWhere::UNKNOWN) override
+         {
+            if (hit_where == HitWhere::L1_OWN || hit_where == HitWhere::L2_OWN)
+               return;
+            SharedCacheBlockInfo* info = getCacheBlockInfo(cache_address);
+            if (info)
+               info->markPrefetchedLine();
+         }
+
+         /* Model the writeback caused by updating a prefetch payload held in a
+          * PTE: dirty the line if resident, so the ordinary eviction path writes
+          * it back.  A miss does not fetch. */
+         int markMMUPayloadDirty(IntPtr cache_address) override
+         {
+            SharedCacheBlockInfo* info = getCacheBlockInfo(cache_address);
+            if (!info || info->getCState() == CacheState::INVALID)
+               return 0;
+            if (info->getCState() == CacheState::MODIFIED)
+               return 2;
+            info->setCState(CacheState::MODIFIED);
+            return 1;
+         }
+
          CacheBlockInfo::block_type_t getCacheBlockType(IntPtr address);
          CacheState::cstate_t getCacheState(IntPtr address);
          CacheState::cstate_t getCacheState(CacheBlockInfo *cache_block_info);
