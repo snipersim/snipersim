@@ -73,7 +73,7 @@ namespace ParametricDramDirectoryMSI
 	}
 
 	std::vector<query_entry> ArbitraryStridePrefetcher::performPrefetch(
-		IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction, bool tlb_hit, bool pq_hit)
+		IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction, bool tlb_hit, bool pq_hit, int /*page_size*/)
 	{
 		std::vector<query_entry> result;
 		int index = eip % table_size;

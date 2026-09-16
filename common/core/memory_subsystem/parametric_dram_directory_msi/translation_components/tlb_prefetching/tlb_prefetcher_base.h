@@ -50,6 +50,19 @@ namespace ParametricDramDirectoryMSI
 		// Defined in tlb_prefetcher_base.cc: it needs the full MMU definition,
 		// which cannot be included here without a cycle.
 		virtual query_entry PTWTransparent(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt);
-		virtual std::vector<query_entry> performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction = false, bool tlb_hit = false, bool pq_hit = false) = 0;
+		// A prefetcher is told which page size the hit was for, so that one
+		// working on the 2MB plane does not have to infer it.  Prefetchers that
+		// do not care name the parameter and ignore it; the compiler names every
+		// one of them if this signature changes again, because they all say
+		// override.
+		virtual std::vector<query_entry> performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction = false, bool tlb_hit = false, bool pq_hit = false, int page_size = 12) = 0;
+
+		// Called when a prefetched entry is installed in the TLB, so a
+		// prefetcher can tell a materialised prediction from a discarded one.
+		virtual void notifyInstall(IntPtr /*address*/, int /*page_size*/) {}
+
+		// Flush any payload updates the prefetcher has been holding back, at a
+		// point where writing them is safe.
+		virtual void flushPendingPayloadWritebacks(PageTable * /*pt*/) {}
 	};
 }

@@ -13,7 +13,7 @@ namespace ParametricDramDirectoryMSI
 		B_address = 0;
 		C_address = 0;
 	}
-	std::vector<query_entry> H2Prefetcher::performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction, bool tlb_hit, bool pq_hit)
+	std::vector<query_entry> H2Prefetcher::performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction, bool tlb_hit, bool pq_hit, int /*page_size*/)
 	{
 		vector<query_entry> result;
 		A_address = B_address;

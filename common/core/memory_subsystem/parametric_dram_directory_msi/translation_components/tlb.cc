@@ -183,7 +183,10 @@ namespace ParametricDramDirectoryMSI
             {
                 tlb_log->debug("Using prefetcher ", i, " at time: ", now.getNS(), " ns");
 
-                std::vector<query_entry> generated_prefetches = prefetchers[i]->performPrefetch(address, eip, lock_signal, modeled, count, pt, instruction, /*tlb_hit=*/(hit != NULL), /*pq_hit=*/pq_hit);
+                // 0 means unknown: on a miss there is no entry to read a page size from,
+                // and the prefetcher discovers it during the walk.
+                int hit_page_size = hit ? hit->getPageSize() : 0;
+                std::vector<query_entry> generated_prefetches = prefetchers[i]->performPrefetch(address, eip, lock_signal, modeled, count, pt, instruction, /*tlb_hit=*/(hit != NULL), /*pq_hit=*/pq_hit, /*page_size=*/hit_page_size);
                 tlb_log->debug("Prefetcher ", i, " generated ", generated_prefetches.size(), " prefetches at time: ", now.getNS(), " ns");
 
                 // PQ dedup: check at region granularity BEFORE inserting the batch.

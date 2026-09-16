@@ -22,7 +22,7 @@ namespace ParametricDramDirectoryMSI
 		registerStatsMetric("tlb_stride", core->getId(), "failed_prefetches", &stats.failed_prefetches);
 
 	}
-	std::vector<query_entry> StridePrefetcher::performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction, bool tlb_hit, bool pq_hit)
+	std::vector<query_entry> StridePrefetcher::performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction, bool tlb_hit, bool pq_hit, int /*page_size*/)
 	{
 		vector<query_entry> result;
 		IntPtr VPN = address >> 12; // We assume that the page size is 4KB
