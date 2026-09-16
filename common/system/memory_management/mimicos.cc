@@ -52,6 +52,39 @@ MimicOS::MimicOS(bool is_guest)
     
     bool swap_enabled = Sim()->getCfg()->getBool("perf_model/" + m_name + "/swap_enabled");
     m_userspace_enabled = Sim()->getCfg()->getBool("general/enable_userspace_mimicos");
+
+    /* Userspace MimicOS schedules on a different axis from Sniper's own
+       scheduler.  Sniper's decides which core a thread runs on; MimicOS's
+       decides which application's instruction stream a TraceThread reads.
+       They do not talk to each other, and one assumption connects them: a
+       core's event queue is chosen from the posting thread's current core,
+       while the kernel waits on a fixed core.  If Sniper moves a thread
+       between those two points, the event is delivered to a core nobody is
+       polling.
+
+       Today that cannot happen -- the userspace path runs one TraceThread,
+       with the application's reader swapped onto the kernel's own thread, so
+       Sniper's scheduler has nothing to move.  static, pinned and roaming all
+       produce identical results.  It becomes reachable with multi-core kernel
+       threads, where each core polls its own queue, so the mismatch is worth
+       naming now rather than after it produces a hang nobody can place.
+
+       A warning, not an error: the configurations that exist today are
+       correct under any of these schedulers. */
+    if (m_userspace_enabled)
+    {
+        String sched = Sim()->getCfg()->getString("scheduler/type");
+        if (sched != "static" && sched != "sequential")
+        {
+            std::cerr << "[MimicOS] Note: userspace MimicOS with scheduler/type="
+                      << sched << ", which can migrate threads between cores. "
+                      << "Per-core event queues assume a thread stays put "
+                      << "between posting and polling; that assumption only "
+                      << "binds once kernel threads run per core. Prefer "
+                      << "scheduler/type=static for userspace runs."
+                      << std::endl;
+        }
+    }
     
 #if DEBUG_MIMICOS >= DEBUG_BASIC
     m_log << "[MimicOS] Page Table Type: " << m_page_table_type << std::endl;

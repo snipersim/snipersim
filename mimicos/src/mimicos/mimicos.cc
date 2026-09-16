@@ -286,6 +286,31 @@ void MimicOS::poll_for_signal()
             exit(1);
         }
 
+        /* Report which path the allocator took for this fault.  Allocators
+           that model a per-CPU pool set last_alloc_fastpath to 1 on a pool
+           hit and 0 on a refill; ones that do not distinguish leave it at 2.
+           Without this the pool is entirely unobservable from outside -- the
+           allocator keeps pcp_hits, pcp_misses and pcp_refills, and nothing
+           ever read them, so selecting it could be shown to construct an
+           allocator but not to use one.
+
+           Printed per fault rather than at exit because poll_for_signal does
+           not return: no shutdown event reaches this kernel, so the loop runs
+           until the simulation tears the process down, and anything deferred
+           to the end would never print. */
+        {
+            const char *path_name = "unknown";
+            switch (physical_memory_allocator->last_alloc_fastpath)
+            {
+                case 0: path_name = "slow"; break;   /* pool refilled from buddy */
+                case 1: path_name = "fast"; break;   /* served from the per-CPU pool */
+                default: break;                      /* allocator does not say */
+            }
+            std::cout << "[MimicOS] alloc_path=" << path_name
+                      << " va=0x" << std::hex << va << std::dec
+                      << " core=" << core_id << std::endl;
+        }
+
         // kanellok@VTW25: Store the allocated physical address of the data frame    
         frames.push_back(pa);
         // Allocate page table frames

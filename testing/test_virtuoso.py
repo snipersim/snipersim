@@ -353,6 +353,43 @@ FEATURES = {
                     * float(stats.get('fs_to_cycles', 0) or 0))),
         ('fast_fault.c', r'fast_fault done s=')),
 
+    # The linux_buddy_anon allocator's per-CPU page pool, exercised through the
+    # in-repo MimicOS kernel.  Selecting an allocator only proves the factory
+    # built one; what makes this allocator different from the others is that a
+    # fault either hits its per-CPU pool or refills the pool from the buddy in
+    # a batch, and that distinction was invisible until the kernel reported
+    # which path each fault took.
+    #
+    # Both paths have to appear.  All-fast would mean the pool never drains and
+    # the refill path is dead; all-slow would mean the pool never serves
+    # anything and the allocator is a buddy with extra steps.  With a
+    # 32-page refill batch, 59 faults come out as 57 hits and 2 refills.
+    'mimicos_pcp_allocator': (
+        ['address_translation_schemes/userspace_baseline'], 2,
+        lambda stats: (
+            stats['__stdout__'].count('alloc_path=fast') > 0
+            and stats['__stdout__'].count('alloc_path=slow') > 0
+            # every fault classified: an unknown here means the allocator
+            # stopped reporting and the check would otherwise pass on silence
+            and stats['__stdout__'].count('alloc_path=unknown') == 0
+            and (stats['__stdout__'].count('alloc_path=fast')
+                 > stats['__stdout__'].count('alloc_path=slow'))
+            # and the shipped userspace configuration keeps Sniper's own
+            # scheduler on a non-migrating type.  MimicOS picks a core's event
+            # queue from the posting thread's current core while the kernel
+            # waits on a fixed one, so a migration between those points would
+            # deliver an event to a core nobody polls.  base_system_userspace
+            # sets scheduler/type=static; this fails if that is ever loosened.
+            and 'userspace MimicOS with scheduler/type' not in stats['__stdout__'],
+            '%d faults: %d served from the per-CPU pool, %d refilled it; '
+            'scheduler type is non-migrating'
+            % (stats['__stdout__'].count('alloc_path='),
+               stats['__stdout__'].count('alloc_path=fast'),
+               stats['__stdout__'].count('alloc_path=slow'))),
+        ('startup_mimicos', r'alloc_path=', None,
+         ['mimicos/configs/linux_buddy_anon_32GB.ini',
+          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_pcp_check.txt'])),
+
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
@@ -582,7 +619,7 @@ def env_digest():
 
 
 def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
-               extra_env=None):
+               extra_env=None, app_args=None):
     """One simulation, with ASLR pinned so the statistics are reproducible."""
     shutil.rmtree(outdir, ignore_errors=True)
     cmd = []
@@ -591,6 +628,7 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
     cmd += [os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', str(ncores)]
     cmd += ['-c' + n for n in names]
     cmd += ['-d', outdir, '--', workload]
+    cmd += list(app_args or [])
     try:
         p = subprocess.run(cmd, timeout=timeout, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True, cwd=SNIPER_ROOT,
@@ -843,18 +881,36 @@ def main():
                 # (source, output_pattern) or (source, output_pattern, env)
                 src, pattern = guest[0], guest[1]
                 extra_env = guest[2] if len(guest) > 2 else None
-                app = build_app(src, os.path.splitext(src)[0])
+                app_args = guest[3] if len(guest) > 3 else None
+                if src.endswith('.c'):
+                    app = build_app(src, os.path.splitext(src)[0])
+                elif src == 'startup_mimicos':
+                    # The kernel lands in whichever build directory is in use;
+                    # run_tests.py already knows how to find it, so use its
+                    # resolver rather than keeping a second rule here.
+                    sys.path.insert(0, HERE)
+                    from run_tests import resolve_mimicos_binary
+                    app = resolve_mimicos_binary(SNIPER_ROOT)
+                    if not os.path.isfile(app):
+                        print('SKIP (startup_mimicos not built)')
+                        continue
+                else:
+                    app = os.path.join(SNIPER_ROOT, src)
+                    if not os.path.exists(app):
+                        print('SKIP (%s not built)' % src)
+                        continue
                 expect = re.compile(pattern)
             else:
                 cfgs, ncores, check = entry
                 app, expect = workload, WORKLOAD_OUTPUT
                 extra_env = None
+                app_args = None
             print('%-22s ' % fname, end='')
             sys.stdout.flush()
             started = time.time()
             outdir = os.path.join(workdir, 'feat-' + fname)
             out, err = run_sniper(cfgs, ncores, outdir, app, args.timeout,
-                                  expect, extra_env)
+                                  expect, extra_env, app_args)
             took = time.time() - started
             if err:
                 log.record('feature:' + fname, took, 'FAIL')
