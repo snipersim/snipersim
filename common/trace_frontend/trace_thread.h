@@ -111,19 +111,10 @@ class TraceThread : public Runnable
       String m_responsefile_kernel;
       
       app_id_t m_app_id;
-      /* The AppReaderPool id of the reader currently injected into this
-         TraceThread, or -1 when none is.  A kernel asks for this right after
-         injecting an application, to learn the id it must schedule.
-
-         Virtuoso returns a bare app_id here and has its kernel derive the
-         thread id as app_id << 16, because there injection allocates a fresh
-         app_id per live app.  Injection in this tree does not allocate one --
-         createTraceBasedApplication attaches the reader to app 0 and returns
-         0 -- so the registered pool id is carried directly, which is the same
-         value the kernel would have computed.  If injection later allocates
-         real app_ids, this becomes the derived form. */
-      AppReaderPool::app_thread_id_t m_injected_app_thread_id =
-         (AppReaderPool::app_thread_id_t)-1;
+      /* The application injected into this TraceThread, or -1 when none is.
+         A kernel asks for this straight after injecting one and derives the
+         thread id as app_id << 16, which is how the pool is keyed. */
+      app_id_t m_injected_app_id = (app_id_t)-1;
 
       /* The user thread this TraceThread is currently running, as a pool id,
          or 0 when none has been scheduled onto it. */
@@ -171,6 +162,7 @@ class TraceThread : public Runnable
       void m_run_func_default();
       void m_run_func_with_userpace_mimicos();
       void accountQuantumInstruction();
+      void notifyAppExitAndSwitchToKernel();
 
       Sift::Mode handleInstructionCountFunc(uint32_t icount);
       void handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address);
@@ -255,14 +247,12 @@ class TraceThread : public Runnable
       Sift::Reader* getAppSiftReader() { return m_app_trace; }
       void setAppSiftReader(Sift::Reader *reader) { m_app_trace = reader; }
 
-      void setInjectedAppThreadId(AppReaderPool::app_thread_id_t id)
-         { m_injected_app_thread_id = id; }
+      void setInjectedAppId(app_id_t id) { m_injected_app_id = id; }
       void setRunningAppTid(AppReaderPool::app_thread_id_t id)
          { m_running_app_tid = id; m_instrs_this_quantum = 0; }
       AppReaderPool::app_thread_id_t getRunningAppTid() const
          { return m_running_app_tid; }
-      AppReaderPool::app_thread_id_t getInjectedAppThreadId() const
-         { return m_injected_app_thread_id; }
+      app_id_t getInjectedAppId() const { return m_injected_app_id; }
 
 
       Sift::Reader* getCurrentSiftReader() { return m_current_sift_reader; }

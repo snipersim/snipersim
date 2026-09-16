@@ -368,7 +368,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             tt = Sim()->getTraceManager()->getTraceThread(0, 0);
          if (!tt)
             return (UInt64)-1;
-         return (UInt64)tt->getInjectedAppThreadId();
+         return (UInt64)tt->getInjectedAppId();
       }
       case SIM_CMD_RECEIVE_MESSAGE:
       {
@@ -397,7 +397,16 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          MimicOS_NS::Message *message = &popped;
          if (!Sim()->getMimicOS()->popEvent((int)core_id, popped))
          {
-            popped.argc = 0;
+            /* Nothing queued.  If the simulation is winding down, say so
+               rather than answering "no event": a kernel waiting for work has
+               no other way to learn that none is coming, and would otherwise
+               sit in its dispatch loop until the process was torn down --
+               taking everything it reports at exit with it, since that
+               reporting runs after the loop returns. */
+            if (Sim()->getTraceManager()->isDone())
+               MimicOSProtocol::buildMessage(popped, "shutdown");
+            else
+               popped.argc = 0;
          }
 
          // Write argc to the core's memory

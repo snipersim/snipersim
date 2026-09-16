@@ -1215,6 +1215,59 @@ void TraceThread::unblock()
    instruction pair when it is scheduled again, and there is no kernel to hand
    it to yet; doing half of that would strand the application.  What is saved
    is the pair, so the switch has something to resume from when it lands. */
+/* The application this thread was running has reached the end of its trace.
+   Tell the kernel, drop the reader, and hand the thread back.
+
+   Without this the application simply stops and nothing else happens: the
+   kernel is not told, the reader stays registered, and because kernel and
+   application share one TraceThread here, the kernel is not running either
+   when the simulation is torn down.  Anything the kernel reports after its
+   dispatch loop -- its fault profiles, among others -- is lost with it. */
+void TraceThread::notifyAppExitAndSwitchToKernel()
+{
+   if (!getKernelSiftReader())
+      return;
+
+   if (m_running_app_tid != 0)
+   {
+      core_id_t my_core = m_thread->getCore() ? m_thread->getCore()->getId() : 0;
+      Sim()->getMimicOS()->buildMessageWithArgs((int)my_core, "thread_exit",
+                                                m_running_app_tid);
+
+      auto &pool = Sim()->getTraceManager()->getAppReaderPool();
+      pool.unregisterReader(m_running_app_tid);
+      m_running_app_tid = 0;
+
+      /* When the last injected application has gone there is nothing left to
+         run, so the simulation winds down.
+
+         The kernel does not get to see that happen, and cannot while it
+         shares this TraceThread with the application.  stop() halts this
+         thread, which is the one the kernel runs on, so the thread_exit
+         posted just above is never drained and neither is the shutdown that
+         would follow -- taking with it everything the kernel reports once its
+         dispatch loop returns, its fault-profile CSV included.  Leaving stop()
+         out is not an alternative: nothing else ends the run, and it hangs
+         until the timeout.  Measured both ways.
+
+         What resolves it is a kernel thread per core, where halting the
+         application's thread leaves the kernel's own still running to drain
+         the queue.  That is also the point at which the per-core queues stop
+         being safe under a migrating Sniper scheduler. */
+      if (Sim()->getTraceManager()->lastInjectedAppExited())
+      {
+         std::cout << "[TRACE:" << m_thread->getId()
+                   << "] -- last application exited; stopping" << std::endl;
+         Sim()->getTraceManager()->stop();
+      }
+   }
+
+   /* Hand the thread back to the kernel so it can drain what was just
+      posted, rather than leaving a stale application reader in place. */
+   setAppSiftReader(NULL);
+   setCurrentSiftReader(getKernelSiftReader());
+}
+
 void TraceThread::accountQuantumInstruction()
 {
    if (m_quantum_instrs == 0)
@@ -1358,13 +1411,19 @@ void TraceThread::m_run_func_with_userpace_mimicos()
                   {
                      // First time: read both inst_app and next_inst_app
                      if (!m_current_sift_reader->Read(inst_app))
+                     {
+                        notifyAppExitAndSwitchToKernel();
                         break;
+                     }
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
                      std::cout << "[TRACE:" << m_thread->getId() << "] -- First instruction from App SIFT reader: inst = "
                                << std::hex << inst_app.sinst->addr << std::dec << std::endl;
 #endif
                      if (!m_current_sift_reader->Read(next_inst_app))
+                     {
+                        notifyAppExitAndSwitchToKernel();
                         break;
+                     }
                      app_initialized = true;
                   }
                   else
@@ -1372,7 +1431,10 @@ void TraceThread::m_run_func_with_userpace_mimicos()
                      // Continue: shift lookahead then read a new next_inst_app
                      inst_app = next_inst_app;
                      if (!m_current_sift_reader->Read(next_inst_app))
+                     {
+                        notifyAppExitAndSwitchToKernel();
                         break;
+                     }
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
                      std::cout << "[TRACE:" << m_thread->getId() << "] -- Restored instruction from App SIFT reader: inst = "
                                << std::hex << inst_app.sinst->addr << std::dec << std::endl;
@@ -1398,10 +1460,35 @@ void TraceThread::m_run_func_with_userpace_mimicos()
             // We assume app_initialized is true when we get here
             inst_app = next_inst_app;
             if (!m_current_sift_reader->Read(next_inst_app))
-               break;   // EOF on app trace
+            {
+               /* EOF on the application's trace.  Hand the core back to the
+                  kernel and keep running rather than leaving the loop: the
+                  exit just posted a thread_exit, and stopping here means
+                  nobody ever collects it -- nor the shutdown that follows,
+                  nor anything the kernel reports once its dispatch loop
+                  returns.
+
+                  The kernel's stream has to be re-primed before falling
+                  through, because `inst` still holds the last application
+                  instruction and the kernel branch above only reads the
+                  lookahead. */
+               notifyAppExitAndSwitchToKernel();
+               app_initialized = false;
+
+               if (!m_current_sift_reader->Read(inst_kernel))
+                  break;
+               if (!m_current_sift_reader->Read(next_inst_kernel))
+                  break;
+               inst      = inst_kernel;
+               next_inst = next_inst_kernel;
+               have_next = true;
+            }
+            else
+            {
 
             next_inst = next_inst_app;
             have_next = true;
+            }
          }
 
          if (!m_started)

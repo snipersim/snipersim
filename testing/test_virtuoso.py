@@ -310,12 +310,16 @@ FEATURES = {
         ['address_translation_schemes/userspace_baseline'], 2,
         lambda stats: (
             'pool before_inject atid=-1' in stats['__stdout__']
-            and 'pool after_inject atid=2' in stats['__stdout__']
-            and 'Registered injected reader as app_thread_id 2' in stats['__stdout__']
+            # the first injected application gets app id 1, and its main
+            # thread is keyed at encodeId(1, 0) = 65536; a kernel reads the
+            # app id and derives the thread id by shifting, so the two must
+            # agree or it schedules an id nobody registered
+            and 'pool after_inject atid=1' in stats['__stdout__']
+            and 'Registered injected reader as app_thread_id 65536' in stats['__stdout__']
             and 'no reader in pool' in stats['__stdout__']
             and 'pool survived_miss' in stats['__stdout__'],
-            'atid -1 before inject and 2 after; miss answered without '
-            'stranding the caller'),
+            'app id -1 before inject and 1 after, keyed at 65536; miss '
+            'answered without stranding the caller'),
         ('app_reader_pool.c', r'pool done s=')),
 
     # K6: fast-fault replay, and the magic ABI underneath it.  The guest
@@ -398,17 +402,20 @@ FEATURES = {
     # per-core FIFO runqueue, which is what every other configuration here
     # uses -- so this is the only check that exercises the scheduler at all.
     #
-    # Enabling it is visible in the work done, not just in the announcement:
-    # the same workload faults 28 times under the scheduler against 59 under
-    # the fallback, because a scheduled task yields after a fault.
+    # The task has to carry the application's real thread id.  The scheduler
+    # hands whatever it holds straight to SimContextSwitchTo, so a task
+    # registered with the default 0 asks for a thread nobody registered, the
+    # application never runs, and the run hangs -- which is exactly what
+    # happened once id 0 stopped naming a reader by accident.
     'mimicos_scheduler': (
         ['address_translation_schemes/userspace_baseline'], 2,
         lambda stats: (
             'Scheduler] Configured: policy=rr_simple' in stats['__stdout__']
             and 'Registered app trace as Task' in stats['__stdout__']
+            and 'atid=0x10000' in stats['__stdout__']
             and counter(stats, 'trace_thread.quanta_expired') > 0,
-            'rr policy configured, task registered, %d quanta expired'
-            % counter(stats, 'trace_thread.quanta_expired')),
+            'rr policy configured, task registered at atid 0x10000, '
+            '%d quanta expired' % counter(stats, 'trace_thread.quanta_expired')),
         ('startup_mimicos', r'Scheduler\] Configured', None,
          ['mimicos/configs/linux_buddy_anon_sched_rr.ini',
           'test/sniper-in-sniper/fft.sift', '/tmp/sniper_sched_check.txt'])),

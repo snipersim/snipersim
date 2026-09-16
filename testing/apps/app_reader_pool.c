@@ -1,8 +1,10 @@
 /* K5a: the AppReaderPool and the magic commands that read it.
  *
- * SimGetInjectedAppId reports the pool id of the reader injected into the
- * calling TraceThread: -1 before anything is injected, and the registered id
- * afterwards, which is how a kernel learns what it may schedule.
+ * SimGetInjectedAppId reports the application injected into the calling
+ * TraceThread: -1 before anything is injected, and its app id afterwards.  A
+ * kernel reads that and derives the thread id as app_id << 16, which is how
+ * the reader pool is keyed, so the first injected application reports 1 and
+ * is registered at 65536.
  *
  * SimContextSwitchTo is only exercised here through its miss path.  On a hit
  * it returns 42, which tells the SIFT reader to send no response record --

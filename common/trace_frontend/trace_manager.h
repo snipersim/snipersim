@@ -195,6 +195,13 @@ class TraceManager
       /* Readers for injected applications, keyed by app_thread_id. */
       AppReaderPool m_app_reader_pool;
 
+      /* Ids handed to injected applications, counting from 1. */
+      app_id_t m_injected_app_count = 0;
+
+      /* Injected applications still running.  Separate from the pool,
+         which also holds kernel threads' own readers. */
+      std::atomic<int> m_injected_live_count{0};
+
       /* Set once stop() has been entered.  stop() is reachable from more
          than one place -- the end of a run, and a magic handler deciding the
          last application has finished -- and running it twice writes to
@@ -235,6 +242,10 @@ class TraceManager
       TraceThread *getTraceThread(app_id_t app_id, thread_id_t th);
 
       AppReaderPool &getAppReaderPool() { return m_app_reader_pool; }
+
+      /* True when the last injected application has just exited. */
+      bool lastInjectedAppExited()
+         { return m_injected_live_count.fetch_sub(1, std::memory_order_acq_rel) == 1; }
 
       /* True once shutdown has begun.  A handler that waits for an event has
          to stop waiting when no more will arrive. */

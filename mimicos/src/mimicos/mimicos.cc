@@ -768,11 +768,21 @@ void MimicOS::start_application()
        so the scheduler has a real runnable entity to track.  Per-fault
        charging happens inside poll_for_signal(). */
     if (m_scheduler.is_enabled()) {
-        Task* app_task = m_scheduler.create_task(path_to_app);
+        /* Register the task against the application's real thread id, the way
+           the live-spawn path does.  create_task() leaves app_thread_id at 0,
+           and the scheduler hands that straight to SimContextSwitchTo, so the
+           kernel asks for a thread that was never registered: nothing is
+           installed, the application never runs, and the run hangs.  That was
+           hidden while id 0 happened to name a registered reader. */
+        uint64_t app_id = SimGetInjectedAppId();
+        uint64_t main_atid = (app_id == (uint64_t)-1) ? 0 : (app_id << 16);
+        Task* app_task = m_scheduler.create_task_for_atid(path_to_app, main_atid, 0);
+        if (!app_task) app_task = m_scheduler.create_task(path_to_app);
         m_scheduler.wake_up(app_task, 0);
         m_scheduler.schedule(0);
         std::cout << "[MimicOS] Registered app trace as Task id="
-                  << app_task->task_id << " in scheduler" << std::endl;
+                  << app_task->task_id << " atid=0x" << std::hex << main_atid
+                  << std::dec << " in scheduler" << std::endl;
     }
 }
 

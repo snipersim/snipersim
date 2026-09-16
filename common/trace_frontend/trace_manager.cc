@@ -178,8 +178,10 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool init_fifo,
    TraceThread *tthread = new TraceThread(thread, time, tracefile, responsefile, app_id, init_fifo /*cleaup*/);
    m_threads.push_back(tthread);
 
-   /* Every thread's own reader goes in the pool, so a kernel can schedule any
-      of them by id rather than only readers that were injected later. */
+   /* Every thread's reader goes in the pool, so stop() can reach all of them
+      -- see the note there.  Whether the last *application* has exited is
+      tracked separately, in m_injected_live_count, because this count
+      includes kernel threads and so never falls to zero. */
    m_app_reader_pool.registerReader(AppReaderPool::encodeId(app_id, thread_num),
                                     tthread->getSiftReader());
 
@@ -287,10 +289,17 @@ app_id_t TraceManager::createTraceBasedApplication(SubsecondTime time, char *tra
       The reader attaches to app 0 -- this function does not allocate an
       app_id, and returns 0 -- so the id is app 0 with the reader's own
       thread number. */
+   /* Give the injected application its own id, and key the pool by
+      encodeId(app_id, 0).  A kernel asks for the app id and derives the
+      thread id as app_id << 16, so the two have to agree: keying by the
+      reader's thread number instead leaves the kernel scheduling an id that
+      was never registered. */
+   const app_id_t injected_app_id = ++m_injected_app_count;
    const AppReaderPool::app_thread_id_t atid =
-      AppReaderPool::encodeId(0, reader_thread_num);
+      AppReaderPool::encodeId(injected_app_id, 0);
    m_app_reader_pool.registerReader(atid, app_trace_reader);
-   mimicos_trace_thread->setInjectedAppThreadId(atid);
+   ++m_injected_live_count;
+   mimicos_trace_thread->setInjectedAppId(injected_app_id);
 
    std::cout << "[TraceManager] Registered injected reader as app_thread_id "
              << atid << " (pool size " << m_app_reader_pool.size() << ")"
@@ -439,10 +448,17 @@ void TraceManager::stop()
    for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
      (*it)->stop();
 
-   /* Tell every registered reader's front end to shut down as well.  A
-      descheduled application thread's recorder can otherwise sit blocked
-      waiting for a magic-instruction response that will never come, and fail
-      on a short read during teardown rather than exiting. */
+   /* Tell every registered reader's front end to shut down.  A recorder can
+      otherwise sit blocked waiting for a magic-instruction response that will
+      never come, and fail on a short read during teardown -- which showed up
+      as a crash in StatsManager::logEvent from ThreadManager::onThreadExit,
+      about one run in three.
+
+      This is why every thread's reader is registered, not only injected ones:
+      going through the pool is what reaches them.  Stopping the threads'
+      readers directly instead, outside the pool, fixed the crash but hung one
+      run in ten -- a thread still reading its own stream does not take kindly
+      to having its front end stopped from under it. */
    m_app_reader_pool.stopAll();
 
    // Give threads some time to end.
