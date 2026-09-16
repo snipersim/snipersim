@@ -29,5 +29,21 @@ target_include_directories(startup_mimicos PRIVATE
 target_compile_options(startup_mimicos PRIVATE -Wall -Wextra)
 target_link_libraries(startup_mimicos PRIVATE rt)
 
+# Built non-PIE, and not by preference.
+#
+# The fault-path headers pin their own optimisation level with
+# `#pragma GCC optimize ("O0")` -- linux_phase_work.h does it unguarded, and
+# buddy.h and linux_buddy_anon.h do it behind MIMICOS_CALIBRATION_O0 -- so the
+# instructions the simulator sees for an allocation match what those paths
+# were calibrated against.  GCC's optimize pragma resets code generation for
+# the region it covers, position independence included, so objects containing
+# those functions carry absolute relocations and will not go into a PIE.
+#
+# This is a guest program, not a library, so nothing is lost by linking it
+# fixed-position.  The alternative -- dropping the pragmas -- would change the
+# instruction counts the fault paths were calibrated to produce.
+set_target_properties(startup_mimicos PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+target_link_options(startup_mimicos PRIVATE -no-pie)
+
 set_target_properties(startup_mimicos PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

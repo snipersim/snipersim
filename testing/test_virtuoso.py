@@ -390,6 +390,29 @@ FEATURES = {
          ['mimicos/configs/linux_buddy_anon_32GB.ini',
           'test/sniper-in-sniper/fft.sift', '/tmp/sniper_pcp_check.txt'])),
 
+    # MimicOS's own scheduler, which is a separate scheduler from Sniper's and
+    # configured separately: Sniper's scheduler/type decides which core a
+    # thread runs on, this decides which application thread a core runs, and
+    # the kernel reads none of the simulator's configuration.  With no
+    # [scheduler] section the policy is DISABLED and the kernel falls back to a
+    # per-core FIFO runqueue, which is what every other configuration here
+    # uses -- so this is the only check that exercises the scheduler at all.
+    #
+    # Enabling it is visible in the work done, not just in the announcement:
+    # the same workload faults 28 times under the scheduler against 59 under
+    # the fallback, because a scheduled task yields after a fault.
+    'mimicos_scheduler': (
+        ['address_translation_schemes/userspace_baseline'], 2,
+        lambda stats: (
+            'Scheduler] Configured: policy=rr_simple' in stats['__stdout__']
+            and 'Registered app trace as Task' in stats['__stdout__']
+            and counter(stats, 'trace_thread.quanta_expired') > 0,
+            'rr policy configured, task registered, %d quanta expired'
+            % counter(stats, 'trace_thread.quanta_expired')),
+        ('startup_mimicos', r'Scheduler\] Configured', None,
+         ['mimicos/configs/linux_buddy_anon_sched_rr.ini',
+          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_sched_check.txt'])),
+
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
