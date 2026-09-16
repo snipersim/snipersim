@@ -344,6 +344,12 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          trace_thread->setAppSiftReader(target);
          trace_thread->setCurrentSiftReader(target);
 
+         /* Record which user thread this TraceThread is now running, and
+            restart its quantum.  Without this the thread runs the
+            application but reports no owner, so a quantum_expired event
+            names nothing and the kernel has nothing to reschedule. */
+         trace_thread->setRunningAppTid(app_tid);
+
          /* 42, like SIM_CMD_CONTEXT_SWITCH: the Sift::Reader path takes it as
             "send no response record", because the caller is not meant to
             resume -- the newly installed stream runs next.  That makes this a

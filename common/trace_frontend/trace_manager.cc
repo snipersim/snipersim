@@ -296,6 +296,23 @@ app_id_t TraceManager::createTraceBasedApplication(SubsecondTime time, char *tra
              << atid << " (pool size " << m_app_reader_pool.size() << ")"
              << std::endl;
 
+   /* Announce the new thread to the core that asked for it.  Registering the
+      reader only makes it reachable; a kernel still has to be told it exists
+      before it will schedule it, and this is the event it waits for.  Without
+      it an injected application sits in the pool and never runs -- which is
+      what left quantum_expired naming an idle thread. */
+   if (Sim()->getMimicOS()->isUserspaceMimicosEnabled())
+   {
+      core_id_t creator_core = 0;
+      if (mimicos_trace_thread && mimicos_trace_thread->getThread()
+          && mimicos_trace_thread->getThread()->getCore())
+      {
+         creator_core = mimicos_trace_thread->getThread()->getCore()->getId();
+      }
+      Sim()->getMimicOS()->buildMessageWithArgs((int)creator_core,
+                                                "new_thread", atid);
+   }
+
    return 0;
 }
 void TraceManager::signalStarted()
