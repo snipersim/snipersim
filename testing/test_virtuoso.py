@@ -183,6 +183,17 @@ FEATURES = {
     #
     # kswapd is deliberately not asserted on: nothing here exposes a free-page
     # count to bind it to, so it scans without reclaiming.  See mimicos.cc.
+    # I2: a TLB whose set count is not a power of two.  CacheBase asserts
+    # "Caches of non-power of 2 size need funky hash function" when such a cache
+    # uses HASH_MASK, so before the TLBs were switched to HASH_MOD this
+    # configuration aborted with SIGABRT during startup.  The check is simply
+    # that it runs and the TLB is used -- every other configuration here has a
+    # power-of-two set count, where the two hashes are the same expression and
+    # the difference cannot be seen.
+    'nonpow2_tlb': (
+        ['address_translation_schemes/nonpow2_tlb'], 1,
+        require_nonzero('mmu.tlb_hits_data', 'mmu.tlb_misses_data')),
+
     'os_daemons': (
         ['address_translation_schemes/os_daemons'], 1,
         require_nonzero('kcompactd.scans', 'khugepaged.scans')),

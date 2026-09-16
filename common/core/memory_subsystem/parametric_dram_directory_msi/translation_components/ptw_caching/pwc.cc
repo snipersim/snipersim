@@ -27,7 +27,10 @@ namespace ParametricDramDirectoryMSI
 		for (int i = 0; i < num_caches; i++)
 		{
 
-			m_cache[i] = new Cache(name + "_L" + itostr((num_caches + 1) - i), cfgname, core_id, entries[i] / associativities[i], associativities[i], 8, "lru", CacheBase::PR_L1_CACHE, CacheBase::hash_t::HASH_MASK, NULL, NULL, true, page_sizes, 1);
+			// HASH_MOD for the same reason as the TLBs: a page-walk cache with a
+			// set count that is not a power of two would index off the end under
+			// HASH_MASK.  Identical for the power-of-two geometries used here.
+			m_cache[i] = new Cache(name + "_L" + itostr((num_caches + 1) - i), cfgname, core_id, entries[i] / associativities[i], associativities[i], 8, "lru", CacheBase::PR_L1_CACHE, CacheBase::hash_t::HASH_MOD, NULL, NULL, true, page_sizes, 1);
 			registerStatsMetric(name + "_L" + itostr((num_caches + 1) - i), core_id, "access", &m_access[i]);
 			registerStatsMetric(name + "_L" + itostr((num_caches + 1) - i), core_id, "miss", &m_miss[i]);
 		}

@@ -37,7 +37,13 @@ namespace ParametricDramDirectoryMSI
                   associativity, entry_size,
                   Sim()->getCfg()->hasKey(cfgname + "/replacement_policy")
                      ? Sim()->getCfg()->getString(cfgname + "/replacement_policy") : "lru",
-                  CacheBase::PR_L1_CACHE, CacheBase::HASH_MASK,
+                  CacheBase::PR_L1_CACHE, CacheBase::HASH_MOD,
+                  // HASH_MOD rather than HASH_MASK so a TLB may have a set count
+                  // that is not a power of two -- real TLB geometries often are
+                  // not (48, 96, 1280, 3072 entries).  HASH_MASK's & (n-1) is
+                  // only equivalent to % n when n is a power of two; for the
+                  // power-of-two TLBs configured here the two are identical and
+                  // the compiler emits the same mask.
                   NULL,
                   NULL, true, page_size_list, page_sizes),
           m_type(tlb_type),
