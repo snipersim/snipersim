@@ -28,6 +28,18 @@ MagicServer::~MagicServer()
 
 UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
 {
+   /* SIM_CMD_WAIT_FOR_ROI blocks until some other thread completes the ROI
+      barrier, so it must not be holding the thread manager lock while it
+      waits -- the thread it is waiting for needs that same lock to reach
+      threadRoiJoin(), and the two would deadlock in exactly the multi-thread
+      case the command exists for.  Handled here, before the lock is taken.
+
+      Virtuoso avoids the deadlock by commenting the lock out for every magic
+      command; that is a much wider change than this one command needs, so the
+      lock stays for everything else. */
+   if (cmd == SIM_CMD_WAIT_FOR_ROI)
+      return waitForRoi();
+
    ScopedLock sl(Sim()->getThreadManager()->getLock());
 
    return Magic_unlocked(thread_id, core_id, cmd, arg0, arg1);
@@ -47,6 +59,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             return 0;
          }
       case SIM_CMD_ROI_START:
+         m_legacy_roi_active = true;
          Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_ROI_BEGIN, 0);
          if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
          {
@@ -267,15 +280,29 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          return 0;
       }
 
+      case SIM_CMD_ROI_EXPECT:
+         return roiExpect(arg0);
+      case SIM_CMD_THREAD_ROI_START:
+         /* arg0 is a caller-chosen participant handle, not a thread_id: a
+            single Sniper TraceThread can carry several live processes under
+            the inject-forked-app model, and a PID would drift under syscall
+            emulation. */
+         return threadRoiJoin((thread_id_t)arg0);
+      case SIM_CMD_THREAD_ROI_END:
+         return threadRoiLeave((thread_id_t)arg0);
+      case SIM_CMD_WAIT_FOR_ROI:
+         /* Guests never arrive here: Magic() intercepts this command before
+            taking the thread manager lock, precisely so the wait does not
+            hold it.  This branch is reachable only from the scripting entry
+            points, which call Magic_unlocked() directly and may already hold
+            the lock, so it answers without blocking. */
+         return roiReady() ? 0 : 1;
+
       // K1: the magic protocol numbers are reserved here ahead of the
       // handlers, so a guest built against the new sim_api.h runs against
       // this build instead of tripping the assert in `default:` below.
       // Each is filled in by a later step: the ROI barrier by K2, the
       // scheduling pair by K5, the fast-fault pair by K6.
-      case SIM_CMD_ROI_EXPECT:            // K2
-      case SIM_CMD_THREAD_ROI_START:      // K2
-      case SIM_CMD_THREAD_ROI_END:        // K2
-      case SIM_CMD_WAIT_FOR_ROI:          // K2
       case SIM_CMD_CONTEXT_SWITCH_TO:     // K5
       case SIM_CMD_GET_INJECTED_APP_ID:   // K5
       case SIM_CMD_FAST_FAULT:            // K6
@@ -356,6 +383,12 @@ UInt64 MagicServer::setPerformance(bool enabled)
 
    m_performance_enabled = enabled;
 
+   /* Publish readiness for SimWaitForRoi.  Virtuoso sets this only in
+      threadRoiJoin(), which leaves a waiter spinning forever when ROI was
+      opened by the legacy SimRoiStart path -- despite WAIT_FOR_ROI being
+      documented as waiting for either.  Setting it here covers both. */
+   m_roi_ready.store(enabled, std::memory_order_release);
+
    //static bool enabled = false;
    static Timer t_start;
    //ScopedLock sl(l_alloc);
@@ -384,6 +417,141 @@ UInt64 MagicServer::setPerformance(bool enabled)
    else
       disablePerformance();
 
+   return 0;
+}
+
+/* Per-thread ROI barrier (Apr 15 2026).
+
+   The coordinator announces how many threads will take part; each thread then
+   joins and leaves from its own context.  Performance models turn on exactly
+   when the last expected joiner arrives, and off when the last joiner leaves.
+   That is what the single-threaded SimRoiStart/SimRoiEnd pair cannot express:
+   with several threads it opens ROI on whichever thread got there first. */
+UInt64 MagicServer::roiExpect(UInt64 n)
+{
+   std::lock_guard<std::mutex> lk(m_roi_lock);
+   /* Raising the count is allowed -- a live app may be spawned late -- but not
+      shrinking it below the threads that have already joined, which would
+      strand them. */
+   if (n < m_roi_joined.size())
+   {
+      std::cerr << "[MagicServer] SimRoiExpect(" << n << ") rejected: "
+                << m_roi_joined.size() << " threads already joined" << std::endl;
+      return 1;
+   }
+   m_roi_expected = n;
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+   printf("[SNIPER] ROI barrier: expecting %zu threads\n", m_roi_expected);
+   fflush(NULL);
+#endif
+   /* Nothing happens to the performance models until the last joiner lands. */
+   return 0;
+}
+
+UInt64 MagicServer::threadRoiJoin(thread_id_t thread_id)
+{
+   bool should_enable = false;
+   {
+      std::lock_guard<std::mutex> lk(m_roi_lock);
+      m_roi_joined.insert(thread_id);
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+      printf("[SNIPER] ROI join: thread %d (%zu/%zu)\n",
+             thread_id, m_roi_joined.size(), m_roi_expected);
+      fflush(NULL);
+#endif
+      /* Only act when ROI is actually under magic control.  Under ROI_FULL
+         the performance models are already on for the whole application and
+         the barrier has nothing to gate, exactly as SIM_CMD_ROI_START is
+         inert there.  The bookkeeping above still runs, so a guest that uses
+         the barrier reads the same counts either way. */
+      if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC
+          && m_roi_expected > 0 && m_roi_joined.size() >= m_roi_expected
+          && !m_performance_enabled)
+      {
+         should_enable = true;
+      }
+   }
+   /* Outside the lock: the hooks and setPerformance run arbitrary code. */
+   if (should_enable)
+   {
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_ROI_BEGIN, 0);
+      if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
+         setPerformance(true);
+      /* Release any thread spinning in SimWaitForRoi.  setPerformance has
+         already done this when ROI_MAGIC is in force; this covers the case
+         where it is not, where the barrier is still the event being waited
+         for even though no performance model changes state. */
+      m_roi_ready.store(true, std::memory_order_release);
+   }
+   return 0;
+}
+
+UInt64 MagicServer::threadRoiLeave(thread_id_t thread_id)
+{
+   bool should_disable = false;
+   {
+      std::lock_guard<std::mutex> lk(m_roi_lock);
+      m_roi_joined.erase(thread_id);
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+      printf("[SNIPER] ROI leave: thread %d (%zu/%zu)\n",
+             thread_id, m_roi_joined.size(), m_roi_expected);
+      fflush(NULL);
+#endif
+      /* Same gate as the join side, and it matters more here: this path
+         stops the TraceManager.  Under ROI_FULL the models are enabled from
+         the start, so an unguarded check would see "joined set empty and
+         performance on" the first time any guest called SimThreadRoiEnd and
+         tear the run down mid-application. */
+      if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC
+          && m_roi_joined.empty() && m_performance_enabled)
+      {
+         should_disable = true;
+      }
+   }
+   if (should_disable)
+   {
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_APPLICATION_ROI_END, 0);
+      if (Sim()->getConfig()->getSimulationROI() == Config::ROI_MAGIC)
+         setPerformance(false);
+      /* The last barrier participant has left.  Stop the TraceManager only if
+         no trace-based application is still running: in mixed mode the legacy
+         SimRoiStart path owns shutdown, and stopping here would cut those
+         applications short. */
+      if (!m_legacy_roi_active)
+      {
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+         printf("[SNIPER] Last app left ROI; stopping TraceManager\n");
+         fflush(NULL);
+#endif
+         Sim()->getTraceManager()->stop();
+      }
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+      else
+      {
+         printf("[SNIPER] Last live app left ROI (trace apps still active)\n");
+         fflush(NULL);
+      }
+#endif
+   }
+   return 0;
+}
+
+/* Block until the ROI barrier has opened.  Called from Magic() before the
+   thread manager lock is taken -- see the comment there. */
+UInt64 MagicServer::waitForRoi()
+{
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+   printf("[SNIPER] WaitForRoi: waiting for perf model to enable...\n");
+   fflush(NULL);
+#endif
+   while (!m_roi_ready.load(std::memory_order_acquire))
+   {
+      usleep(1000);  // 1ms poll; the waiting core has nothing else to do
+   }
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+   printf("[SNIPER] WaitForRoi: perf model is on, proceeding\n");
+   fflush(NULL);
+#endif
    return 0;
 }
 

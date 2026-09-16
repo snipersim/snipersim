@@ -204,6 +204,36 @@ FEATURES = {
     # from the stubs, from one that is not reaching MagicServer at all: a
     # stub-only check would pass just as well if every magic instruction were
     # being dropped on the floor.
+    # K2: the per-thread ROI barrier.  SimRoiStart cannot express "start
+    # measuring once all my threads are ready" -- whichever thread arrives
+    # first opens ROI.  The barrier holds it shut until the last expected
+    # joiner arrives.
+    #
+    # The guest runs 4M iterations with only one of two expected threads
+    # joined, then 20k with both.  Asserting that the models enabled once is
+    # not enough: a barrier that opened on the first join would also enable
+    # once.  What separates the two is how much was measured -- ~136k
+    # instructions when the barrier gates, ~32.5M when it does not -- so the
+    # instruction count is the assertion and the enable count rides along.
+    #
+    # Needs general/magic: under the default ROI_FULL the simulator measures
+    # the whole application and every ROI magic command is accepted and
+    # ignored, so this check would pass without the barrier working at all.
+    'roi_barrier': (
+        ['address_translation_schemes/roi_barrier'], 2,
+        lambda stats: (
+            stats['__stdout__'].count('Enabling performance models') == 1
+            and stats['__stdout__'].count('Disabling performance models') == 1
+            and counter(stats, 'performance_model.instruction_count') < 1000000,
+            'measured %d instructions (phase 1 alone is ~32.5M, so the '
+            'barrier held); enabled once, disabled once'
+            % counter(stats, 'performance_model.instruction_count')),
+        # The guest's closing line never prints, and that is the barrier
+        # working: the last thread to leave stops the TraceManager, so the
+        # simulation ends before the application returns from main.  Phase 1's
+        # marker is the last output that is guaranteed to appear.
+        ('roi_barrier.c', r'roi_barrier phase1 done')),
+
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
@@ -374,7 +404,10 @@ def build_app(src_name, out_name):
     if (not os.path.exists(out)
             or os.path.getmtime(out) < os.path.getmtime(src)):
         cc = os.environ.get('CC', 'gcc')
-        subprocess.run([cc, '-O1', '-I', os.path.join(SNIPER_ROOT, 'include'),
+        # -pthread unconditionally: harmless for a single-threaded guest, and
+        # required by any that spawns threads to reach the barrier.
+        subprocess.run([cc, '-O1', '-pthread',
+                        '-I', os.path.join(SNIPER_ROOT, 'include'),
                         '-o', out, src], check=True)
     return out
 
