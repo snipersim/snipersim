@@ -405,12 +405,29 @@ void TraceManager::start()
 
 void TraceManager::stop()
 {
+   /* Enter once.  A second pass tells each reader's front end to stop again,
+      writing to response pipes the first pass already closed, which
+      dereferences a null response stream. */
+   bool expected = false;
+   if (!m_shutdown_requested.compare_exchange_strong(expected, true,
+                                                     std::memory_order_acq_rel))
+   {
+      return;
+   }
+
    // End of region-of-interest when running Sniper inside Sniper
    SimRoiEnd();
 
    // Signal threads to stop.
    for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
      (*it)->stop();
+
+   /* Tell every registered reader's front end to shut down as well.  A
+      descheduled application thread's recorder can otherwise sit blocked
+      waiting for a magic-instruction response that will never come, and fail
+      on a short read during teardown rather than exiting. */
+   m_app_reader_pool.stopAll();
+
    // Give threads some time to end.
    sleep(1);
    

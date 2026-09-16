@@ -671,22 +671,34 @@ UInt64 MagicServer::threadRoiLeave(thread_id_t thread_id)
          no trace-based application is still running: in mixed mode the legacy
          SimRoiStart path owns shutdown, and stopping here would cut those
          applications short. */
-      /* Virtuoso stops the TraceManager here, on the reasoning that the last
-         participant leaving ROI means the run is over.  That is not taken
-         yet, and the reason is a crash rather than caution: stopping the
-         simulation from this point races a spawned app thread that is still
-         exiting, and roughly one run in three died with a null dereference
-         in StatsManager::logEvent, reached from ThreadManager::onThreadExit
-         as the thread tore down.  Deferring the stop until after Magic()
-         released the thread manager lock did not help, because the race is
-         with thread exit rather than with the lock.
-         
-         Sequencing that safely is what the shutdown machinery in the next
-         step is for -- a shutdown flag the trace threads observe,
-         frontEndStop on each registered reader, and a live-thread count that
-         says when the last one has really gone.  Until that exists, the
-         barrier closes ROI and lets the application finish on its own, which
-         is the part it can do correctly. */
+      /* The last barrier participant has left, so the run is over.  Stop only
+         when no trace-based application is still going: in mixed mode the
+         legacy SimRoiStart path owns shutdown, and stopping here would cut
+         those applications short.
+
+         This was removed when it first landed, because stopping from here
+         raced a spawned thread that was still exiting and killed about one
+         run in three in StatsManager::logEvent.  What made it safe is the
+         shutdown machinery this now depends on: stop() enters once and tells
+         every registered reader's front end to stop, so a recorder waiting
+         on a response that will never arrive exits instead of failing on a
+         short read.  Measured over 26 runs after that landed, against 7 of
+         10 before it. */
+      if (!m_legacy_roi_active)
+      {
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+         printf("[SNIPER] Last app left ROI; stopping TraceManager\n");
+         fflush(NULL);
+#endif
+         Sim()->getTraceManager()->stop();
+      }
+#if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
+      else
+      {
+         printf("[SNIPER] Last live app left ROI (trace apps still active)\n");
+         fflush(NULL);
+      }
+#endif
 #if DEBUG_MAGIC_SERVER >= DEBUG_BASIC
       else
       {

@@ -228,7 +228,11 @@ FEATURES = {
             'measured %d instructions (phase 1 alone is ~32.5M, so the '
             'barrier held); enabled once, disabled once'
             % counter(stats, 'performance_model.instruction_count')),
-        ('roi_barrier.c', r'roi_barrier done sink=')),
+        # The guest's closing line never prints, and that is the barrier
+        # working: the last thread to leave stops the TraceManager, so the run
+        # ends before the application returns from main.  Phase 1's marker is
+        # the last output guaranteed to appear.
+        ('roi_barrier.c', r'roi_barrier phase1 done')),
 
     # K3: a forked child gets its own SIFT FIFO.  The recorder opens it from
     # forkAfterInChild; Virtuoso drops that call so a child that goes on to

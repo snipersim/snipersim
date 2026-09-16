@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <cstdint>
+#include <atomic>
 
 class TraceThread;
 
@@ -194,6 +195,12 @@ class TraceManager
       /* Readers for injected applications, keyed by app_thread_id. */
       AppReaderPool m_app_reader_pool;
 
+      /* Set once stop() has been entered.  stop() is reachable from more
+         than one place -- the end of a run, and a magic handler deciding the
+         last application has finished -- and running it twice writes to
+         response pipes that the first pass already closed. */
+      std::atomic<bool> m_shutdown_requested{false};
+
       String getFifoName(app_id_t app_id, UInt64 thread_num, bool response, bool create);
       thread_id_t newThread(app_id_t app_id, bool first, bool init_fifo, bool spawn, SubsecondTime time, thread_id_t creator_thread_id);
 
@@ -228,6 +235,11 @@ class TraceManager
       TraceThread *getTraceThread(app_id_t app_id, thread_id_t th);
 
       AppReaderPool &getAppReaderPool() { return m_app_reader_pool; }
+
+      /* True once shutdown has begun.  A handler that waits for an event has
+         to stop waiting when no more will arrive. */
+      bool isDone() const
+         { return m_shutdown_requested.load(std::memory_order_acquire); }
 
       Sift::Reader *getKernelTraceReader() const { return m_kernel_trace_reader; }
       void setKernelTraceReader(Sift::Reader *reader) { m_kernel_trace_reader = reader; }
