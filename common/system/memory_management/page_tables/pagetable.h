@@ -12,6 +12,7 @@
 #include <bitset>
 
 // #define DEBUG
+#include "payload_word.h"
 using namespace std;
 
 namespace ParametricDramDirectoryMSI
@@ -65,7 +66,7 @@ namespace ParametricDramDirectoryMSI
 		SubsecondTime pwc_latency;      ///< Page walk cache latency for intermediate levels
 		bool fault_happened;            ///< True if a page fault occurred during the walk
 		int requested_frames;           ///< Number of frames needed for page fault (PT frames + data frame)
-		uint64_t payload_bits;          ///< Shadow PTE payload (temporal offset entries for prefetching)
+		PayloadWord payload_bits;       ///< Shadow PTE payload (temporal offset entries for prefetching)
 
 		PTWResult() 
 			: page_size(0), accesses(), ppn(0), pwc_latency(SubsecondTime::Zero()), fault_happened(false), requested_frames(0), payload_bits(0) {}
@@ -114,7 +115,7 @@ namespace ParametricDramDirectoryMSI
 
 		// Shadow PTE payload: stores per-VPN temporal offset data for the
 		// TLB prefetchers.  Keyed by VPN (address >> 12).
-		std::unordered_map<uint64_t, __uint128_t> shadow_pte_payload;
+		std::unordered_map<uint64_t, PayloadWord> shadow_pte_payload;
 
 	public:
 		PageTable(int core_id, String name, String type, int page_sizes, int *page_size_list, bool is_guest = false)
@@ -141,22 +142,34 @@ namespace ParametricDramDirectoryMSI
 		// ----------------------------------------------------------------
 
 		/** Read the shadow payload word for a given VPN. Returns 0 if none stored. */
-		__uint128_t readPayloadBits(uint64_t vpn) const
+		PayloadWord readPayloadBits(uint64_t vpn) const
 		{
 			auto it = shadow_pte_payload.find(vpn);
-			return (it != shadow_pte_payload.end()) ? it->second : 0;
+			return (it != shadow_pte_payload.end()) ? it->second : PayloadWord();
 		}
 
 		/** Write (overwrite) the shadow payload word for a given VPN. */
-		void writePayloadBits(uint64_t vpn, __uint128_t payload)
+		void writePayloadBits(uint64_t vpn, const PayloadWord& payload)
 		{
 			shadow_pte_payload[vpn] = payload;
 		}
 
-		/** Convenience: read payload during a walk and set it in the PTWResult. */
-		void fillPayloadBits(uint64_t vpn, PTWResult& result) const
+		// ----------------------------------------------------------------
+		// Shadow PMD payload: the 2MB plane, keyed by address >> 21.
+		// Replaces fillPayloadBits, which had no caller and truncated a
+		// 128-bit payload into a 64-bit PTWResult field on the way past.
+		// ----------------------------------------------------------------
+		std::unordered_map<uint64_t, PayloadWord> shadow_pmd_payload;
+
+		PayloadWord readPMDPayloadBits(uint64_t vpn_2mb) const
 		{
-			result.payload_bits = readPayloadBits(vpn);
+			auto it = shadow_pmd_payload.find(vpn_2mb);
+			return (it != shadow_pmd_payload.end()) ? it->second : PayloadWord();
+		}
+
+		void writePMDPayloadBits(uint64_t vpn_2mb, const PayloadWord& payload)
+		{
+			shadow_pmd_payload[vpn_2mb] = payload;
 		}
 		UInt64 getAccessesPerVPN(IntPtr vpn)
 		{

@@ -620,7 +620,7 @@ namespace ParametricDramDirectoryMSI
 			int requested_frames = ptw_result.requested_frames;
 
 			// Read shadow PTE payload for temporal prefetching
-			uint64_t leaf_payload_bits = 0;
+			PayloadWord leaf_payload_bits;
 			if (!is_pagefault) {
 				uint64_t vpn = address >> 12;
 				leaf_payload_bits = page_table->readPayloadBits(vpn);

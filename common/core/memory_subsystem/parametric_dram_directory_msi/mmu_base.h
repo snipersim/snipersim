@@ -6,6 +6,7 @@
 #include "core.h"
 #include "shmem_perf_model.h"
 #include "pagetable.h"
+#include "payload_word.h"
 #include "cache_block_info.h"
 #include "stats.h"
 #include "sim_log.h"
@@ -28,11 +29,11 @@ namespace ParametricDramDirectoryMSI
         IntPtr ppn;             ///< Physical page number (translation result)
         int page_size;          ///< Page size in bits (12=4KB, 21=2MB, 30=1GB)
         int requested_frames;   ///< Number of frames needed for page fault (PT frames + data frame)
-        uint64_t payload_bits;  ///< Shadow PTE payload (temporal offset entries for prefetching)
+        PayloadWord payload_bits;  ///< Shadow PTE payload (temporal offset entries for prefetching)
 
         PTWOutcome() : latency(SubsecondTime::Zero()), page_fault(false), ppn(0), page_size(0), requested_frames(0), payload_bits(0) {}
 
-        PTWOutcome(SubsecondTime latency, bool page_fault, IntPtr ppn, int page_size, int requested_frames = 0, uint64_t payload_bits = 0)
+        PTWOutcome(SubsecondTime latency, bool page_fault, IntPtr ppn, int page_size, int requested_frames = 0, PayloadWord payload_bits = PayloadWord())
             : latency(latency), page_fault(page_fault), ppn(ppn), page_size(page_size), requested_frames(requested_frames), payload_bits(payload_bits) {}
     };
 

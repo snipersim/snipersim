@@ -1,3 +1,4 @@
+#include "payload_word.h"
 #ifndef __TRANS_TYPES_H
 #define __TRANS_TYPES_H
 
@@ -9,7 +10,7 @@ typedef struct queue_entry_s
     int page_size;
     IntPtr ppn;
     IntPtr address;
-    uint64_t payload_bits;  ///< Shadow PTE payload from leaf (for temporal prefetching)
+    ParametricDramDirectoryMSI::PayloadWord payload_bits;  ///< Shadow PTE payload from leaf (for temporal prefetching)
 } query_entry;
 
 
