@@ -9,6 +9,7 @@ const char *CacheBlockInfo::option_names[] =
     {
         "prefetch",
         "warmup",
+        "prefetch_from_dram",
 };
 
 const char *CacheBlockInfo::getOptionName(option_t option)
@@ -65,6 +66,7 @@ void CacheBlockInfo::invalidate()
 {
    m_tag = ~0;
    m_cstate = CacheState::INVALID;
+   m_prefetch_pending = 0;
 }
 
 void CacheBlockInfo::clone(CacheBlockInfo *cache_block_info)
@@ -78,6 +80,7 @@ void CacheBlockInfo::clone(CacheBlockInfo *cache_block_info)
    m_reuse = cache_block_info->getReuse();
    m_page_size = cache_block_info->getPageSize();
    ppn = cache_block_info->getPPN();
+   m_prefetch_pending = cache_block_info->m_prefetch_pending;
 
 }
 
@@ -90,6 +93,19 @@ bool CacheBlockInfo::updateUsage(UInt32 offset, UInt32 size)
           usage_mask = last_mask & ~first_mask;
 
    return updateUsage(usage_mask);
+}
+
+bool CacheBlockInfo::consumePrefetch(UInt32 offset, UInt32 size)
+{
+   UInt64 first = offset >> BitsUsedOffset,
+          last = (offset + size - 1) >> BitsUsedOffset,
+          first_mask = (1ull << first) - 1,
+          last_mask = (1ull << (last + 1)) - 1,
+          usage_mask = last_mask & ~first_mask;
+
+   BitsUsedType hit = m_prefetch_pending & (BitsUsedType)usage_mask;
+   m_prefetch_pending &= ~(BitsUsedType)usage_mask;   // credited once, then cleared
+   return hit != 0;
 }
 
 bool CacheBlockInfo::updateUsage(BitsUsedType used)

@@ -12,6 +12,9 @@ public:
 	{
 		PREFETCH,
 		WARMUP,
+		// Appended rather than inserted after PREFETCH, where Virtuoso has it:
+		// options are a bitmask and inserting would renumber WARMUP.
+		PREFETCH_FROM_DRAM,   // set with PREFETCH when the fill came from DRAM rather than NUCA/LLC
 		NUM_OPTIONS
 	};
 
@@ -50,6 +53,9 @@ private:
 	CacheState::cstate_t m_cstate;
 	UInt64 m_owner;
 	BitsUsedType m_used;
+	// Per 8-byte sub-region: parts of an MMU-prefetched line that a demand
+	// access has not yet been credited for.
+	BitsUsedType m_prefetch_pending;
 	UInt8 m_options; // large enough to hold a bitfield for all available option_t's
 	block_type_t m_block_type;
 	int m_reuse; // tracking reuse
@@ -100,6 +106,14 @@ public:
 
 	BitsUsedType getUsage() const { return m_used; };
 	bool updateUsage(UInt32 offset, UInt32 size);
+
+	// A prefetched 64-byte PTE line carries up to eight PTEs, so the single
+	// PREFETCH bit can only be spent once and undercounts what the prefetch
+	// supplied.  markPrefetchedLine() marks every 8-byte sub-region as awaiting
+	// credit; consumePrefetch() credits the ones a demand access touches and
+	// clears them, so each PTE is counted at most once.
+	void markPrefetchedLine() { m_prefetch_pending = (BitsUsedType)~0; }
+	bool consumePrefetch(UInt32 offset, UInt32 size);
 	bool updateUsage(BitsUsedType used);
 
 	static const char *getOptionName(option_t option);
