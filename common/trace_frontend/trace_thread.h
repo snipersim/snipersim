@@ -124,6 +124,19 @@ class TraceThread : public Runnable
          real app_ids, this becomes the derived form. */
       AppReaderPool::app_thread_id_t m_injected_app_thread_id =
          (AppReaderPool::app_thread_id_t)-1;
+
+      /* The user thread this TraceThread is currently running, as a pool id,
+         or 0 when none has been scheduled onto it. */
+      AppReaderPool::app_thread_id_t m_running_app_tid = 0;
+
+      /* Scheduling quantum, counted in detailed application instructions.
+         When m_instrs_this_quantum reaches m_quantum_instrs the thread has
+         used its slice and a quantum_expired event is posted to its core, so
+         a kernel can rotate its runqueue.  Configured by
+         scheduler/quantum_instructions. */
+      uint64_t m_quantum_instrs      = 10000;
+      uint64_t m_instrs_this_quantum = 0;
+      uint64_t m_quanta_expired      = 0;   //< for the statistic below
       bool m_blocked;
       bool m_cleanup;
       bool m_started;
@@ -157,6 +170,7 @@ class TraceThread : public Runnable
 
       void m_run_func_default();
       void m_run_func_with_userpace_mimicos();
+      void accountQuantumInstruction();
 
       Sift::Mode handleInstructionCountFunc(uint32_t icount);
       void handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address);
@@ -243,6 +257,10 @@ class TraceThread : public Runnable
 
       void setInjectedAppThreadId(AppReaderPool::app_thread_id_t id)
          { m_injected_app_thread_id = id; }
+      void setRunningAppTid(AppReaderPool::app_thread_id_t id)
+         { m_running_app_tid = id; m_instrs_this_quantum = 0; }
+      AppReaderPool::app_thread_id_t getRunningAppTid() const
+         { return m_running_app_tid; }
       AppReaderPool::app_thread_id_t getInjectedAppThreadId() const
          { return m_injected_app_thread_id; }
 

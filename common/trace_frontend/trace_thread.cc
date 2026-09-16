@@ -99,6 +99,14 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    if (userspace_mimicos_enabled)
    {
       m_current_run_func = &TraceThread::m_run_func_with_userpace_mimicos;
+
+      /* Scheduling quantum, in detailed application instructions.  0 turns
+         quantum accounting off entirely. */
+      if (Sim()->getCfg()->hasKey("scheduler/quantum_instructions"))
+      {
+         SInt64 q = Sim()->getCfg()->getInt("scheduler/quantum_instructions");
+         m_quantum_instrs = (q > 0) ? (uint64_t)q : 0;
+      }
    }
    else
    {
@@ -152,6 +160,14 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
       registerStatsMetric("trace_thread", m_app_id, "kernel_time", &stats.kernel_time);
    else
       static_cast<StatsMetric<SubsecondTime>*>(existing)->metric = &stats.kernel_time;
+
+   /* Same duplicate-registration guard as above. */
+   StatsMetricBase *q_existing =
+      Sim()->getStatsManager()->getMetricObject("trace_thread", m_app_id, "quanta_expired");
+   if (q_existing == NULL)
+      registerStatsMetric("trace_thread", m_app_id, "quanta_expired", &m_quanta_expired);
+   else
+      static_cast<StatsMetric<uint64_t>*>(q_existing)->metric = &m_quanta_expired;
 }
 
 TraceThread::~TraceThread()
@@ -1182,6 +1198,39 @@ void TraceThread::unblock()
    m_blocked = false;
 }
 
+/* Count one detailed application instruction against the scheduling quantum,
+   and post a quantum_expired event to this core when the slice is used up.
+
+   This does not fire yet, and the reason is worth stating rather than
+   discovering again.  The loop that calls it classifies every instruction by
+   `getCurrentSiftReader() != getAppSiftReader()`, and treats kernel-mode
+   instructions as fast-forward.  Under userspace MimicOS nothing sets an app
+   reader until an application is injected and scheduled onto the thread, so
+   the comparison is true for everything and this branch is never reached.
+   It starts firing when a kernel schedules an application -- which is the
+   step after this one.
+
+   Preemption itself is not done here.  Handing the core back means switching
+   this thread to the kernel's reader and replaying the application's saved
+   instruction pair when it is scheduled again, and there is no kernel to hand
+   it to yet; doing half of that would strand the application.  What is saved
+   is the pair, so the switch has something to resume from when it lands. */
+void TraceThread::accountQuantumInstruction()
+{
+   if (m_quantum_instrs == 0)
+      return;
+
+   if (++m_instrs_this_quantum < m_quantum_instrs)
+      return;
+
+   m_instrs_this_quantum = 0;
+
+   core_id_t my_core = m_thread->getCore() ? m_thread->getCore()->getId() : 0;
+   Sim()->getMimicOS()->buildMessageWithArgs((int)my_core, "quantum_expired",
+                                             m_running_app_tid);
+   ++m_quanta_expired;
+}
+
 void TraceThread::m_run_func_with_userpace_mimicos()
 {
    // Set thread name for Sniper-in-Sniper simulations
@@ -1439,6 +1488,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
                case InstMode::DETAILED:
                   handleInstructionDetailed(inst, next_inst, prfmdl);
+                  accountQuantumInstruction();
                   break;
 
                default:
