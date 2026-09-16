@@ -283,7 +283,11 @@ FEATURES = {
             'mimicos_event first argc=0' in stats['__stdout__']
             and 'mimicos_event second argc=0' in stats['__stdout__']
             and '1515870810' not in stats['__stdout__'],   # 0x5A5A5A5A
-            'empty queue reported as argc=0 twice, sentinel overwritten'),
+            'argc reported as %s; sentinel %s'
+            % (', '.join(re.findall(r'mimicos_event \w+ argc=(-?\d+)',
+                                    stats['__stdout__'])) or 'nothing',
+               'left in place -- the handler did not write'
+               if '1515870810' in stats['__stdout__'] else 'overwritten')),
         ('mimicos_event.c', r'mimicos_event done')),
 
     # K5a: the AppReaderPool, and the magic commands that read it.  Readers

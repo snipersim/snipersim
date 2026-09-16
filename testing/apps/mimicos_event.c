@@ -23,7 +23,13 @@
 
 int main(void)
 {
-   volatile int argc_slot = SENTINEL;
+   /* Deliberately not volatile.  This was volatile while the magic macros
+      lacked a "memory" clobber, which made the store below dead as far as
+      the compiler could see; that workaround is exactly why this check kept
+      passing against a broken ABI.  With the clobber in place the store
+      survives on its own, and leaving it plain means this check now fails if
+      the clobber is ever lost again. */
+   int argc_slot = SENTINEL;
    uint64_t argv_slot[8] = { 0 };
 
    SimReceiveMessage((unsigned long)&argc_slot, (unsigned long)argv_slot);
