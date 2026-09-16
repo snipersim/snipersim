@@ -15,6 +15,19 @@
 // Enable duplicate allocation detection for debugging (set to 0 for production)
 #define BUDDY_DUPLICATE_DETECTION 0
 
+/* Apr 19 2026: macro-gated -O0 for MimicOS-side calibration.
+ * When this header is included from the MimicOS userspace binary, we
+ * compile the allocator at -O0 so the simulated x86 instructions emitted
+ * for each buddy operation match what we calibrated against real Linux
+ * (phys_alloc mean ~2 300 cyc).  When included from Sniper's sniper-
+ * space path, we stay at whatever optimisation level Sniper was built
+ * at (typically -O3) so native in-simulator fault handling stays fast.
+ * MimicOS defines MIMICOS_CALIBRATION_O0 via its Makefile. */
+#ifdef MIMICOS_CALIBRATION_O0
+#pragma GCC push_options
+#pragma GCC optimize ("O0")
+#endif
+
 using namespace std;
 
 template <typename Policy>
@@ -81,6 +94,8 @@ public:
         }
 
     }
+
+    int getMaxOrder() const { return m_max_order; }
 
     bool checkIfFree(UInt64 physical_page, bool allocate)
     {
@@ -187,6 +202,9 @@ public:
         return true;
     }
 
+#ifdef MIMICOS_CALIBRATION_O0
+    __attribute__((noinline, optimize("O0")))
+#endif
     UInt64 allocate(UInt64 bytes, UInt64 address = 0, UInt64 core_id = -1)
     {
         int ind = ceil(log2(bytes / 4096));
@@ -244,6 +262,78 @@ public:
 #endif
         m_free_pages -= (1ULL << ind);
         return allocated_page;
+    }
+
+    /* ------------------------------------------------------------------
+     *  allocate_batch_order0
+     * ------------------------------------------------------------------
+     *  Pulls up to `batch_size` × 4 KB pages in a single, tight loop and
+     *  appends their PFNs to `out_pfns`.  Structurally mimics Linux's
+     *  rmqueue_bulk in mm/page_alloc.c: one zone_lock acquire, N cheap
+     *  pops from the order-0 list, an occasional expand()-style split
+     *  chain when that list runs dry.
+     *
+     *  The reason this exists: the linux_buddy_anon allocator's per-CPU
+     *  pageset refill used to call allocate(4096) in a 32-iteration loop,
+     *  paying the per-call overhead (ceil/log2, full order-list scan,
+     *  stats atomics, function-call/stack-frame setup) on every iteration.
+     *  Sniper-simulated that at ~2 500 cyc/page ⇒ ~80 000 cyc per refill,
+     *  vs real Linux's ~2 500 cyc for the whole 32-page batch.  Using this
+     *  tight loop brings per-refill cost ~30× closer to measured Linux.
+     *  Returns the number of pages actually appended (< batch_size only
+     *  if the buddy ran out of memory).
+     * ------------------------------------------------------------------ */
+#ifdef MIMICOS_CALIBRATION_O0
+    __attribute__((noinline, optimize("O0")))
+#endif
+    UInt64 allocate_batch_order0(UInt64 batch_size,
+                                 std::vector<UInt64>& out_pfns,
+                                 UInt64 core_id = (UInt64)-1)
+    {
+        UInt64 allocated = 0;
+        out_pfns.reserve(out_pfns.size() + batch_size);
+
+        while (allocated < batch_size) {
+            if (!free_list[0].empty()) {
+                /* Hot path: pop a pre-split order-0 block.  Linux equivalent:
+                   list_first_entry + list_del in __rmqueue_smallest(order=0). */
+                auto block = free_list[0].back();
+                free_list[0].pop_back();
+                out_pfns.push_back(std::get<0>(block));
+                m_free_pages -= 1;
+                allocated++;
+                continue;
+            }
+
+            /* Cold path: order-0 empty, split down from the lowest non-empty
+               higher order.  Mirrors expand() in mm/page_alloc.c. */
+            int i = 1;
+            while (i <= m_max_order && free_list[i].empty()) i++;
+            if (i > m_max_order) {
+                Policy::on_out_of_memory(4096, 0, core_id);
+                return allocated;
+            }
+            auto block = free_list[i].back();
+            free_list[i].pop_back();
+
+            while (i > 0) {
+                auto lo  = std::get<0>(block);
+                auto hi  = std::get<1>(block);
+                auto mid = lo + (hi - lo) / 2;
+                auto pair1 = std::make_tuple(lo,       mid, false, (UInt64)-1);
+                auto pair2 = std::make_tuple(mid + 1,  hi,  false, (UInt64)-1);
+                i--;
+                free_list[i].push_back(pair1);
+                free_list[i].push_back(pair2);
+                block = free_list[i].back();
+                free_list[i].pop_back();
+            }
+
+            out_pfns.push_back(std::get<0>(block));
+            m_free_pages -= 1;
+            allocated++;
+        }
+        return allocated;
     }
 
     std::tuple<UInt64, UInt64, bool, UInt64> reserve_2mb_page(UInt64 address, UInt64 core_id)
@@ -607,4 +697,8 @@ private:
     UInt64 m_2mb_duplicate_count = 0;
 #endif
 };
+
+#ifdef MIMICOS_CALIBRATION_O0
+#pragma GCC pop_options
+#endif
 

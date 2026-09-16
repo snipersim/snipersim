@@ -105,6 +105,23 @@ public:
      */
     virtual void dumpFinalStats() {}
     
+    /* Which path the last allocate() took, for allocators that distinguish a
+     * per-CPU pool hit from a slow-path refill:
+     *   0 = slow path (buddy refill / zone lock)
+     *   1 = fast path (per-CPU pool hit)
+     *   2 = the allocator does not distinguish
+     *
+     * Read by the userspace MimicOS fault profile, which learns a separate mean
+     * cost per class.  Only linux_buddy_anon sets it today; everything else
+     * leaves it at 2, which is why it is a plain field with a default rather
+     * than a virtual.
+     *
+     * Public, not protected: the reader is the userspace kernel, which is not
+     * a derived class.  It was protected here while linux_buddy_anon was the
+     * only thing that touched it.
+     */
+    uint8_t last_alloc_fastpath = 2;
+
 protected:
     String m_name;
     UInt64 m_memory_size; // in mbytes
@@ -117,18 +134,5 @@ protected:
     UInt64 instruction_start_address;
     UInt64 instruction_current_address;
     UInt64 instruction_end_address;
-
-    /* Which path the last allocate() took, for allocators that distinguish a
-     * per-CPU pool hit from a slow-path refill:
-     *   0 = slow path (buddy refill / zone lock)
-     *   1 = fast path (per-CPU pool hit)
-     *   2 = the allocator does not distinguish
-     *
-     * Read by the userspace MimicOS fault profile, which learns a separate mean
-     * cost per class.  Only linux_buddy_anon sets it today; everything else
-     * leaves it at 2, which is why it is a plain field with a default rather
-     * than a virtual.
-     */
-    uint8_t last_alloc_fastpath = 2;
 
 };
