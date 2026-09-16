@@ -247,17 +247,13 @@ namespace ParametricDramDirectoryMSI
 
 		mmu_base_log->debug("Accessing cache with address:", SimLog::hex(packet.address), "at time", t_start.getNS(), "ns");
 		HitWhere::where_t hit_where = HitWhere::UNKNOWN;
-		if(is_prefetch){
-
-			mmu_base_log->debug("Prefetching address:", SimLog::hex(packet.address), "at time", t_start.getNS(), "ns");
-			IntPtr cache_address = ((IntPtr)(packet.address)) & (~((64 - 1)));
-
-			MMUCacheInterface *l2_cache = memory_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
-			// Use PAGE_TABLE_DATA for page table prefetch (we don't distinguish here)
-			if (l2_cache) l2_cache->handleMMUPrefetch(packet.eip, cache_address, shmem_perf_model->getElapsedTime(ShmemPerfModel::_USER_THREAD), CacheBlockInfo::block_type_t::PAGE_TABLE_DATA);
-
-		}
-		else {
+		{
+			// Demand and prefetch page-table walks take the same L1D -> L2 -> LLC
+			// path, so latency and hit_where are computed the same way for both.
+			// Previously a prefetch walk went straight to L2 through
+			// handleMMUPrefetch, which charged no latency and recorded none of
+			// the walker statistics, so a prefetched walk cost nothing and was
+			// invisible in the counters.  The line is tagged afterwards, below.
 			hit_where = l1d_cache->handleMMUCacheAccess(
 			packet.eip,
 			packet.lock_signal,
@@ -298,6 +294,17 @@ namespace ParametricDramDirectoryMSI
 			if (hit_where == HitWhere::where_t::L1_OWN)
 				walker_stats.L1D_accesses++;				
 				
+
+			// Tag the line a prefetch walk just brought into L2, so that a later
+			// demand walk hitting it is credited as a prefetch hit.  tagMMUPrefetch
+			// declines when the walk hit in L1 or L2, where the prefetch was
+			// redundant.
+			if (is_prefetch)
+			{
+				MMUCacheInterface *l2_cache = memory_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+				if (l2_cache)
+					l2_cache->tagMMUPrefetch(cache_address, hit_where);
+			}
 		}
 
 		out_hit_where = hit_where;
@@ -447,7 +454,10 @@ namespace ParametricDramDirectoryMSI
 							MetadataContext::set(core->getId(), ptw_info);
 							
 							mmu_base_log->debug("Metadata context set for PTW access - address:", SimLog::hex(current_address), "level:", level, "table:", tab, "ptw_id:", current_ptw_id);
-							latency = accessCache(packet, t_now+fetch_delay[tab], false, temp_hit_where);
+							// Propagate is_prefetch.  It was hardcoded false, so a prefetch walk was
+							// indistinguishable from a demand walk inside accessCache: the line was
+							// never tagged, and the prefetch walker statistics below could never fire.
+							latency = accessCache(packet, t_now+fetch_delay[tab], is_prefetch, temp_hit_where);
 							
 							// Track prefetch-specific walker stats
 							if (is_prefetch) {

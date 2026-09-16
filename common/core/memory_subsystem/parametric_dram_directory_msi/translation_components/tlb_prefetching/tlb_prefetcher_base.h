@@ -47,11 +47,9 @@ namespace ParametricDramDirectoryMSI
 		// Override in prefetchers that need victim info (e.g., recency stack).
 		virtual void notifyVictim(IntPtr /*victim_address*/, int /*page_size*/, IntPtr /*ppn*/) {}
 
-		virtual query_entry PTWTransparent(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt)
-		{
-			(void)address; (void)eip; (void)lock; (void)modeled; (void)count; (void)pt;
-			return query_entry();
-		}
+		// Defined in tlb_prefetcher_base.cc: it needs the full MMU definition,
+		// which cannot be included here without a cycle.
+		virtual query_entry PTWTransparent(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt);
 		virtual std::vector<query_entry> performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction = false, bool tlb_hit = false, bool pq_hit = false) = 0;
 	};
 }

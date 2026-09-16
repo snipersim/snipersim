@@ -213,13 +213,20 @@ FEATURES = {
     'tlb_prefetch_stress': (
         ['address_translation_schemes/tlb_prefetch_stress'], 1,
         lambda stats: (
-            counter(stats, 'mmu.tlb_misses_data') > 0
+            counter(stats, 'L2.prefetches') > 0
+            and counter(stats, 'L2.hits-prefetch-subline') > 0
+            # Eight 8-byte PTEs share a 64-byte line, so one prefetched line can
+            # be credited at most eight times -- and exactly zero times if it was
+            # never prefetched, which is what catches an uninitialised
+            # m_prefetch_pending crediting heap garbage.
             and (counter(stats, 'L2.hits-prefetch-subline')
-                 <= counter(stats, 'L2.prefetches') + counter(stats, 'L2.hits-prefetch')),
-            'tlb_misses=%d subline_credit=%d prefetches=%d'
+                 <= 8 * counter(stats, 'L2.prefetches')),
+            'tlb_misses=%d walks=%d prefetches=%d line_credit=%d subline_credit=%d'
             % (counter(stats, 'mmu.tlb_misses_data'),
-               counter(stats, 'L2.hits-prefetch-subline'),
-               counter(stats, 'L2.prefetches')))),
+               counter(stats, 'radix_4level.page_table_walks'),
+               counter(stats, 'L2.prefetches'),
+               counter(stats, 'L2.hits-prefetch'),
+               counter(stats, 'L2.hits-prefetch-subline')))),
 
     'nonpow2_tlb': (
         ['address_translation_schemes/nonpow2_tlb'], 1,
