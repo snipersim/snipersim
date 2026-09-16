@@ -167,6 +167,33 @@ FEATURES = {
     # implementation returning false, so an incorrectly wired Victima still
     # probes -- and misses every single time.  Requiring hits as well as probes
     # is what separates "the probe is asking" from "the cache is answering".
+    # I10: TRAIL, the temporal PTE prefetcher.  The chain has to run end to end --
+    # observe a demand access, learn a delta from it, turn the learned deltas
+    # into a prediction, and prefetch pages off that prediction.  Asserting only
+    # that it was constructed would pass for a prefetcher that learns nothing,
+    # and asserting only on learning would pass for one that never predicts.
+    'trail': (
+        ['address_translation_schemes/temporal_pte_stress'], 1,
+        require_nonzero('tlb_temporal_pte.demand_accesses',
+                        'tlb_temporal_pte.learning_inserts',
+                        'tlb_temporal_pte.predictions_issued',
+                        'tlb_temporal_pte.depth0_predictions',
+                        'tlb_temporal_pte.depth0_pages_prefetched',
+                        'tlb_temporal_pte.prefetch_successful',
+                        'tlb_temporal_pte.demand_hit_inflight')),
+
+    # I10: Berti, the stride-learning TLB prefetcher.  Learn a stride, turn it
+    # into a prediction, and issue the prefetch.  Unlike TRAIL this activates at
+    # the default TLB geometry, because Berti learns over 256KB regions and the
+    # workload's page footprint does not depend on TLB size -- shrinking the
+    # TLBs moves its counters not at all.
+    'berti': (
+        ['address_translation_schemes/baseline_berti'], 1,
+        require_nonzero('tlb_berti.strides_learned',
+                        'tlb_berti.predictions_from_current',
+                        'tlb_berti.prefetch_attempts',
+                        'tlb_berti.successful_prefetches')),
+
     'victima': (
         ['address_translation_schemes/victima'], 1,
         require_nonzero('mmu.victima_leaf_probes', 'mmu.victima_leaf_hits')),
