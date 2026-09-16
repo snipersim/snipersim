@@ -689,6 +689,19 @@ namespace ParametricDramDirectoryMSI
 					// L2 latency charged once based on prediction, exit loop
 					break;
 				}
+				// An L2 TLB hit with page-size prediction switched off.  This
+				// charged nothing at all: the branch above is the only one that
+				// handles hit_level 1, and it is guarded on prediction being
+				// enabled, so an L2 hit came back free.  Charge the TLB's own
+				// configured latency.
+				else if (hit_level == 1 && !page_size_prediction_enabled)
+				{
+					SubsecondTime l2_lat = tlb_path[hit_level][j]->getLatency();
+					translation_stats.total_tlb_latency += l2_lat;
+					charged_tlb_latency += l2_lat;
+					translation_stats.tlb_latency_per_level[hit_level] += l2_lat;
+					break;
+				}
 
             }
 

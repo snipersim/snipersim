@@ -228,6 +228,23 @@ FEATURES = {
                counter(stats, 'L2.hits-prefetch'),
                counter(stats, 'L2.hits-prefetch-subline')))),
 
+    # I6: an L2 TLB hit has to cost something.  The only branch handling
+    # hit_level 1 was guarded on page-size prediction being enabled, and every
+    # configuration here has it disabled, so L2 hits were free and
+    # mmu.tlb_latency_1 was exactly zero.  Asserting it is non-zero while L2 hits
+    # happen is the regression test; the level-0 latency is checked alongside so
+    # that a config which simply stopped using the TLB cannot pass.
+    'l2_tlb_latency': (
+        ['address_translation_schemes/baseline'], 1,
+        lambda stats: (
+            counter(stats, 'mmu.tlb_hits_data') > 0
+            and counter(stats, 'mmu.tlb_latency_0') > 0
+            and counter(stats, 'mmu.tlb_latency_1') > 0,
+            'hits=%d l1_latency=%d l2_latency=%d'
+            % (counter(stats, 'mmu.tlb_hits_data'),
+               counter(stats, 'mmu.tlb_latency_0'),
+               counter(stats, 'mmu.tlb_latency_1')))),
+
     'nonpow2_tlb': (
         ['address_translation_schemes/nonpow2_tlb'], 1,
         require_nonzero('mmu.tlb_hits_data', 'mmu.tlb_misses_data')),
