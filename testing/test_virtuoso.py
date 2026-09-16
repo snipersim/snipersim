@@ -268,6 +268,28 @@ FEATURES = {
             'recorder took its app_id from the environment'),
         ('workload.c', r'workload isum=', {'SIFT_CHILD_APP_ID': '0'})),
 
+    # K4: SimReceiveMessage reads a per-core event queue rather than a single
+    # shared MimicOSMessage slot.  With one slot a core got the last event
+    # posted on any core, and whatever was left in it when nothing had been
+    # posted at all.
+    #
+    # This checks the consumer, not the queueing.  Nothing posts events yet --
+    # every producer (new_thread, thread_exit, quantum_expired, and the
+    # page-fault path) sits behind the userspace kernel -- so FIFO order and
+    # per-core isolation cannot be observed from a guest until K5.  What is
+    # observable is that the handler runs and answers definitely: the guest
+    # writes a sentinel into argc and the handler must overwrite it with 0.
+    # A handler that never ran, or returned without writing, leaves the
+    # sentinel and this fails.
+    'mimicos_event_queue': (
+        ['address_translation_schemes/userspace_baseline'], 1,
+        lambda stats: (
+            'mimicos_event first argc=0' in stats['__stdout__']
+            and 'mimicos_event second argc=0' in stats['__stdout__']
+            and '1515870810' not in stats['__stdout__'],   # 0x5A5A5A5A
+            'empty queue reported as argc=0 twice, sentinel overwritten'),
+        ('mimicos_event.c', r'mimicos_event done')),
+
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (

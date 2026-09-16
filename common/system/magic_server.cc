@@ -227,7 +227,29 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          std::cout << "[MimicOS: Magic] Receive message command" << std::endl;
 #endif
          Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
-         MimicOS_NS::Message* message = Sim()->getMimicOS()->getMessage();
+
+         /* Take the next event off this core's queue.  Previously this read a
+            single shared slot, which returned the last event posted on any
+            core -- and whatever was left there when nothing had been posted
+            at all.  An empty queue now delivers a well-formed message with
+            argc == 0, so the guest can tell "no event" from a stale one.
+
+            Virtuoso blocks here until an event arrives, which it can do
+            because it holds no lock.  That spin is not taken yet: Magic()
+            holds the thread manager lock, and the events this would wait for
+            are posted by other TraceThreads that need the same lock, so it
+            would deadlock exactly as the ROI barrier's wait did.  The
+            producers that make blocking meaningful -- new_thread,
+            thread_exit, quantum_expired -- arrive with the multi-core kernel
+            pthreads in K5, and the wait belongs with them, together with the
+            TraceManager::isDone() shutdown synthesis that lets a blocked
+            kernel pthread leave its loop. */
+         MimicOS_NS::Message popped;
+         MimicOS_NS::Message *message = &popped;
+         if (!Sim()->getMimicOS()->popEvent((int)core_id, popped))
+         {
+            popped.argc = 0;
+         }
 
          // Write argc to the core's memory
          core->accessMemory(Core::NONE, Core::WRITE, arg0, (char*)&message->argc, sizeof(int), Core::MEM_MODELED_NONE);

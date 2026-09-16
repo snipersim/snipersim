@@ -67,6 +67,19 @@ public:
     static constexpr uint64_t INVALID_CODE = 0;
     static constexpr uint64_t PAGE_FAULT = 1;
     static constexpr uint64_t SYSCALL = 2;
+    /* Scheduler lifecycle events.  Posted per core and consumed by the
+       userspace kernel's dispatch loop; the producers land with K5. */
+    static constexpr uint64_t NEW_THREAD = 3;
+    static constexpr uint64_t THREAD_EXIT = 4;
+    /* Quantum-based preemption.  Posted by the TraceThread once it has run
+       `quantum` detailed instructions in app mode; argv[1] is the running
+       app_thread_id. */
+    static constexpr uint64_t QUANTUM_EXPIRED = 5;
+    /* Simulation shutdown, synthesized by the SimReceiveMessage handler when
+       the TraceManager has stopped and the core's queue is empty, so a
+       kernel pthread waiting for an event leaves its loop rather than
+       asserting on an invalid message. */
+    static constexpr uint64_t SHUTDOWN = 6;
     
     /**
      * @brief Encode a protocol name to its code

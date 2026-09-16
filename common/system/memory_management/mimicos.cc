@@ -521,6 +521,17 @@ void MimicOS::initPerCorePageFaultState(UInt32 num_cores)
     if (m_pf_states.empty()) {
         m_pf_states.resize(num_cores);
     }
+    /* Per-core event queues, one deque and one mutex each.  Sized here
+       rather than in the constructor because the core count is not known
+       until the CoreManager has built them. */
+    if (m_event_queues.empty()) {
+        m_event_queues.resize(num_cores);
+        m_event_queue_locks.reserve(num_cores);
+        for (UInt32 i = 0; i < num_cores; ++i) {
+            m_event_queue_locks.emplace_back(new std::mutex());
+        }
+        m_scratch_messages.resize(num_cores);
+    }
 }
 
 const PerCoreStats& MimicOS::getPerCoreStats(core_id_t core_id) const

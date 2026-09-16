@@ -1488,7 +1488,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
                       << num_requested_frames << " frames for page fault handling" << std::endl;
 #endif
 
-            mimic_os->buildMessageWithArgs("page_fault",
+            mimic_os->buildMessageWithArgs(pf_core_id, "page_fault",
                                            mimic_os->getVaTriggeredPageFault(pf_core_id),
                                            num_requested_frames);
 

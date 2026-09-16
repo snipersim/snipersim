@@ -20,6 +20,8 @@
 #include <unordered_map>
 #include <memory>
 #include <vector>
+#include <deque>
+#include <mutex>
 #include <fstream>
 
 // Backward compatibility: old code used MimicOS_NS::Message
@@ -338,12 +340,74 @@ public:
     
     bool isUserspaceMimicosEnabled() const { return m_userspace_enabled; }
     
-    MimicOSMessage* getMessage() { return &m_message; }
-    
+    /* Per-core event queue.
+       
+       This replaces a single shared MimicOSMessage slot, which could hold
+       exactly one event at a time.  That is enough while only one thing ever
+       posts -- a page fault, handled before the next one arrives -- but not
+       once several events can be outstanding on a core at once: a new_thread
+       for one worker arriving while the core is still running another, with
+       a quantum_expired for the first landing on top.  With one slot the
+       second event overwrites the first and it is simply lost.
+       
+       Each core gets its own deque, so ordering is FIFO per core and cores do
+       not contend with each other, protected by its own mutex because the
+       producers are different Sniper TraceThreads from the consumer. */
+
+    /* Post an event to a core's queue. */
     template <typename... Args>
-    void buildMessageWithArgs(const std::string& message_type, Args&&... args) {
-        MimicOSProtocol::buildMessage(m_message, message_type, std::forward<Args>(args)...);
+    void buildMessageWithArgs(int core_id, const std::string& message_type, Args&&... args) {
+        if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) core_id = 0;
+        MimicOSMessage msg;
+        MimicOSProtocol::buildMessage(msg, message_type, std::forward<Args>(args)...);
+        std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
+        m_event_queues[core_id].push_back(std::move(msg));
     }
+
+    /* True when the core has at least one event waiting. */
+    bool isEventReady(int core_id) {
+        if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) return false;
+        std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
+        return !m_event_queues[core_id].empty();
+    }
+
+    /* Move the front event into `out`.  False when the queue was empty. */
+    bool popEvent(int core_id, MimicOSMessage& out) {
+        if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) return false;
+        std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
+        if (m_event_queues[core_id].empty()) return false;
+        out = std::move(m_event_queues[core_id].front());
+        m_event_queues[core_id].pop_front();
+        return true;
+    }
+
+    /* Look at the front event without removing it.  The pointer is valid
+       only until the next push or pop on this core. */
+    MimicOSMessage* peekFront(int core_id) {
+        if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) core_id = 0;
+        std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
+        if (m_event_queues[core_id].empty()) return nullptr;
+        return &m_event_queues[core_id].front();
+    }
+
+    /* Number of events waiting on a core.  Exposed so a test can observe
+       that queueing happened at all -- with one slot there was nothing to
+       count. */
+    size_t eventQueueDepth(int core_id) {
+        if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) return 0;
+        std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
+        return m_event_queues[core_id].size();
+    }
+
+    /* Shims for call sites that still hold a MimicOSMessage*.  The scratch
+       slot holds the event most recently popped for that core.
+       DEPRECATED -- new code uses popEvent or peekFront. */
+    MimicOSMessage* getMessage(int core_id) {
+        if (core_id < 0 || (size_t)core_id >= m_scratch_messages.size()) core_id = 0;
+        return &m_scratch_messages[core_id];
+    }
+    bool isMessageReady(int core_id) { return isEventReady(core_id); }
+    void consumeMessage(int /*core_id*/) { /* no-op: popEvent already removed it */ }
     
     // ============ Configuration ============
     
@@ -503,7 +567,16 @@ private:
     
     // ============ Page Fault State (per-core) ============
     std::vector<PageFaultState> m_pf_states;
-    MimicOSMessage m_message;
+
+    /* Per-core event queues, sized in initPerCorePageFaultState().  Each
+       deque is guarded by its own mutex, held through unique_ptr because
+       std::mutex is neither copyable nor movable and the vector needs to
+       grow once at construction. */
+    std::vector<std::deque<MimicOSMessage>>  m_event_queues;
+    std::vector<std::unique_ptr<std::mutex>> m_event_queue_locks;
+    /* Landing slot for the deprecated getMessage() shim; real delivery pops
+       into a caller-provided buffer. */
+    std::vector<MimicOSMessage> m_scratch_messages;
     bool m_last_pf_caused_swapping;
     
     // ============ Configuration ============
