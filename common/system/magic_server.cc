@@ -221,6 +221,65 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
 #endif
          return 42;
       }
+      case SIM_CMD_CONTEXT_SWITCH_TO:
+      {
+         /* Schedule the user thread named by arg0 onto the calling core.
+            SIM_CMD_CONTEXT_SWITCH above can only go back to whatever this
+            TraceThread already had as its app reader; this picks a reader
+            out of the pool by id, so a kernel can run any injected thread on
+            any core. */
+         AppReaderPool::app_thread_id_t app_tid = arg0;
+         Sift::Reader *target =
+            Sim()->getTraceManager()->getAppReaderPool().lookup(app_tid);
+         if (!target)
+         {
+            std::cerr << "[MagicServer] SimContextSwitchTo(" << app_tid
+                      << "): no reader in pool; ignoring (thread_id="
+                      << thread_id << ", core_id=" << core_id << ")"
+                      << std::endl;
+            /* 0, not 42.  42 suppresses the SIFT response record, which is
+               right when the switch succeeded -- the caller is not resumed
+               and another stream takes over.  Nothing was installed here, so
+               the caller's own stream is still current and must be answered,
+               or it blocks forever waiting for a response that is never
+               sent.  Virtuoso returns 42 on this path, which strands a
+               kernel that asked for a thread that has since exited. */
+            return 0;
+         }
+
+         auto trace_thread = Sim()->getTraceManager()->getTraceThread(0, thread_id);
+         if (!trace_thread)
+            trace_thread = Sim()->getTraceManager()->getTraceThread(0, 0);
+
+         /* Re-bind the reader's record handlers to this TraceThread.  The
+            reader was bound to whichever TraceThread injected it, and
+            handlers must dispatch to the one actually reading the stream --
+            otherwise a magic instruction in this stream would be handled on
+            the wrong TraceThread. */
+         Sim()->getTraceManager()->setTraceReaderHandlers(target, trace_thread);
+         trace_thread->setAppSiftReader(target);
+         trace_thread->setCurrentSiftReader(target);
+
+         /* 42, like SIM_CMD_CONTEXT_SWITCH: the Sift::Reader path takes it as
+            "send no response record", because the caller is not meant to
+            resume -- the newly installed stream runs next.  That makes this a
+            kernel-only command: a guest that calls it for itself is never
+            answered and blocks, which is why the check below exercises the
+            lookup through the miss path and leaves the install to a kernel. */
+         return 42;
+      }
+      case SIM_CMD_GET_INJECTED_APP_ID:
+      {
+         /* The pool id of the reader injected into this TraceThread, so a
+            kernel can schedule it straight after injecting it.  -1 when
+            nothing has been injected here. */
+         auto tt = Sim()->getTraceManager()->getTraceThread(0, thread_id);
+         if (!tt)
+            tt = Sim()->getTraceManager()->getTraceThread(0, 0);
+         if (!tt)
+            return (UInt64)-1;
+         return (UInt64)tt->getInjectedAppThreadId();
+      }
       case SIM_CMD_RECEIVE_MESSAGE:
       {
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
@@ -325,8 +384,6 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
       // this build instead of tripping the assert in `default:` below.
       // Each is filled in by a later step: the ROI barrier by K2, the
       // scheduling pair by K5, the fast-fault pair by K6.
-      case SIM_CMD_CONTEXT_SWITCH_TO:     // K5
-      case SIM_CMD_GET_INJECTED_APP_ID:   // K5
       case SIM_CMD_FAST_FAULT:            // K6
       case SIM_CMD_SET_FAST_FAULT_CHARGE: // K6
       {

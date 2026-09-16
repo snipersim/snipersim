@@ -178,6 +178,11 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool init_fifo,
    TraceThread *tthread = new TraceThread(thread, time, tracefile, responsefile, app_id, init_fifo /*cleaup*/);
    m_threads.push_back(tthread);
 
+   /* Every thread's own reader goes in the pool, so a kernel can schedule any
+      of them by id rather than only readers that were injected later. */
+   m_app_reader_pool.registerReader(AppReaderPool::encodeId(app_id, thread_num),
+                                    tthread->getSiftReader());
+
 #ifdef DEBUG
    std::cout << "[TraceManager] Trace Thread (tthread)'s current SiftReader is IDentified by name: " << tthread->getSiftReader()->getFilename() << std::endl;
    std::cout << "[TraceManager] Number of Trace Threads in the system: " << m_threads.size()  << std::endl;
@@ -264,13 +269,32 @@ app_id_t TraceManager::createTraceBasedApplication(SubsecondTime time, char *tra
                  " can create trace-based applications" << std::endl;
 #endif
 
-   Sift::Reader *app_trace_reader = new Sift::Reader(trace, "",(m_app_info[0].num_threads+1));
+   const UInt32 reader_thread_num = m_app_info[0].num_threads + 1;
+   Sift::Reader *app_trace_reader = new Sift::Reader(trace, "", reader_thread_num);
 
    // App 0 and Thread 0 are always the MimicOS thread
    TraceThread* mimicos_trace_thread = getTraceThread(0, creator_thread_id);
 
    setTraceReaderHandlers(app_trace_reader, mimicos_trace_thread);
    mimicos_trace_thread->setAppSiftReader(app_trace_reader);
+
+   /* Register the reader so it can be scheduled onto a core later by id.
+      Until now an injected reader was reachable only as the injecting
+      TraceThread's app reader, so exactly one could exist and only the
+      thread that created it could run it.  The pool makes it addressable:
+      SimContextSwitchTo(id) installs it on whichever core asks.
+
+      The reader attaches to app 0 -- this function does not allocate an
+      app_id, and returns 0 -- so the id is app 0 with the reader's own
+      thread number. */
+   const AppReaderPool::app_thread_id_t atid =
+      AppReaderPool::encodeId(0, reader_thread_num);
+   m_app_reader_pool.registerReader(atid, app_trace_reader);
+   mimicos_trace_thread->setInjectedAppThreadId(atid);
+
+   std::cout << "[TraceManager] Registered injected reader as app_thread_id "
+             << atid << " (pool size " << m_app_reader_pool.size() << ")"
+             << std::endl;
 
    return 0;
 }

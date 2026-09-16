@@ -26,8 +26,15 @@ int main(void)
    uint64_t tend     = SimThreadRoiEnd(1);
    uint64_t waitroi  = SimWaitForRoi();
 
-   /* K5 -- live-app scheduling. */
-   uint64_t ctxto    = SimContextSwitchTo(0);
+   /* K5 -- live-app scheduling.
+      The id must be one nothing is registered under.  Once
+      SIM_CMD_CONTEXT_SWITCH_TO had a real handler this stopped being a free
+      call: on a hit it returns 42, which suppresses the SIFT response record
+      because the caller is not meant to resume, and a guest asking on its own
+      behalf then blocks forever.  0 is encodeId(app 0, thread 0) -- this very
+      thread -- so it is a hit, and passing it here hung the run for the full
+      timeout.  The miss path answers normally, which is what this needs. */
+   uint64_t ctxto    = SimContextSwitchTo(0xdeadbeef);
    uint64_t appid    = SimGetInjectedAppId();
 
    /* K6 -- fast-fault replay. */

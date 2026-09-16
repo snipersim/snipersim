@@ -290,6 +290,30 @@ FEATURES = {
             'empty queue reported as argc=0 twice, sentinel overwritten'),
         ('mimicos_event.c', r'mimicos_event done')),
 
+    # K5a: the AppReaderPool, and the magic commands that read it.  Readers
+    # used to be reachable only as the app reader of the TraceThread that
+    # created them, so one injected application could exist and only its
+    # creator could run it.  The pool makes every reader addressable by id.
+    #
+    # SimGetInjectedAppId must read -1 before anything is injected and the
+    # registered id afterwards -- that is how a kernel learns what it may
+    # schedule.  SimContextSwitchTo is exercised only through its miss path:
+    # on a hit it returns 42, which suppresses the SIFT response record so the
+    # caller is never resumed, making it a kernel-only command.  On a miss it
+    # has to answer normally, and the guest surviving the miss is the
+    # assertion -- with Virtuoso's 42 there, the caller blocks forever.
+    'app_reader_pool': (
+        ['address_translation_schemes/userspace_baseline'], 2,
+        lambda stats: (
+            'pool before_inject atid=-1' in stats['__stdout__']
+            and 'pool after_inject atid=2' in stats['__stdout__']
+            and 'Registered injected reader as app_thread_id 2' in stats['__stdout__']
+            and 'no reader in pool' in stats['__stdout__']
+            and 'pool survived_miss' in stats['__stdout__'],
+            'atid -1 before inject and 2 after; miss answered without '
+            'stranding the caller'),
+        ('app_reader_pool.c', r'pool done s=')),
+
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (
