@@ -217,7 +217,15 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
          std::cout << "[MimicOS: Magic] Context switch command received" << std::endl;
 #endif
-         auto trace_thread = Sim()->getTraceManager()->getTraceThread(0, 0);
+         /* Route to the caller's own TraceThread, not thread 0.  A kernel
+            worker runs per core -- each created with pthread_create, which
+            reaches the simulator as an ordinary guest thread -- so hardcoding
+            thread 0 makes every worker switch the first one's reader instead
+            of its own.  The second worker then waits forever for a response
+            to a switch that happened somewhere else. */
+         auto trace_thread = Sim()->getTraceManager()->getTraceThread(0, thread_id);
+         if (!trace_thread)
+            trace_thread = Sim()->getTraceManager()->getTraceThread(0, 0);
 
          // Restore the current SIFT Reader to be the App one
          trace_thread->setCurrentSiftReader(trace_thread->getAppSiftReader());
@@ -407,6 +415,11 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
                MimicOSProtocol::buildMessage(popped, "shutdown");
             else
                popped.argc = 0;
+            /* Answering immediately, rather than waiting for an event.
+               Waiting was tried: it hangs any guest that legitimately asks an
+               empty queue what is there, and on the two-application run it
+               bought nothing -- ten scheduling quanta either way.  Whatever
+               makes that run slow, it is not this. */
          }
 
          // Write argc to the core's memory

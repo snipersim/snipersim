@@ -195,6 +195,19 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool init_fifo,
    */
 
    bool userspace_mimicos_enabled = Sim()->getCfg()->getBool("general/enable_userspace_mimicos");
+   /* Under userspace MimicOS every thread reads its own stream, so every
+      thread needs its readers wired -- not just the first.  The kernel runs a
+      worker per core and creates those workers with pthread_create, which
+      reaches Sniper as an ordinary new guest thread; the simulator spawns
+      nothing itself.  Leaving the later threads unwired left
+      m_current_sift_reader null, and the second kernel worker segfaulted in
+      Sift::Reader::Read the moment it started. */
+   if (userspace_mimicos_enabled && !(app_id == 0 && thread_num == 0))
+   {
+      tthread->setKernelSIFTRreader(tthread->getSiftReader());
+      tthread->setCurrentSiftReader(tthread->getSiftReader());
+   }
+
    if (app_id == 0 && thread_num == 0)
    {
       // This is the first thread of the first application, set it as the MimicOS if userspace MimicOS is enabled
