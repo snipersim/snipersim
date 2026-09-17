@@ -1,4 +1,4 @@
-import sys, os, time, subprocess, threading, tempfile, sniper_lib
+import sys, os, re, time, subprocess, threading, tempfile, sniper_lib
 
 
 # Which build to run.
@@ -75,20 +75,103 @@ def load_build_config(build_dir):
   exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
   return configfile, config
 
-def Tee(filename, prefix = ''):
-  open(filename, 'w').close() # Make sure is writeable and empty
-  obj = subprocess.Popen(['bash', '-c', 'while read line; do echo "%s"$line; echo $line >> %s; done' % (prefix, filename)], stdin = subprocess.PIPE)
-  return obj.stdin.fileno()
+# The run stream.
+#
+# Every process in a run -- Sniper, the recorder, the application or the
+# userspace kernel under it -- writes to one merged stream, and the merge is
+# made here, line by line.  A Tee reads a pipe, and for each complete line
+# writes it once (so lines from different processes never split each other)
+# both to the terminal and to a file in the output directory.
+#
+# Two layers.  An application's Tee prefixes its process tag: "[app0] ", or
+# "[kernel] " for the userspace MimicOS kernel.  run-sniper's own Tee, the
+# outer one that everything reaches, stamps each line with the wall-clock
+# time of arrival and tags whatever carries no process tag yet as [sniper]:
+#
+#   2026-09-17T02:14:33.123456 [kernel] [MimicOS] kernel 1: quantum_expired ...
+#   2026-09-17T02:14:33.123512 [sniper] [TRACE:1] -- DONE --
+#
+# The stamped stream is what sim.stdout holds; tools/lnav parses it.
+# Producers keep stdout line-buffered (see include/line_out.h) so arrival
+# order is emission order.
 
-def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
-  prefix_fd = Tee(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), '[app%d] ' % app_id)
-  os.dup2(prefix_fd, sys.stdout.fileno())
-  os.dup2(prefix_fd, sys.stderr.fileno())
-  program_func(program_arg)
+TAGGED = re.compile(rb'^\[(?:app\d+|kernel|rank\d+)\] ')
 
-def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0):
+class Tee:
+  def __init__(self, filename, prefix = '', stamp = False):
+    self.prefix = prefix.encode()
+    self.stamp = stamp
+    self.file = open(filename, 'wb') if filename else None
+    self.out_fd = os.dup(sys.stdout.fileno())    # where lines go: the stdout we were given
+    self.r, self.w = os.pipe()
+    self.thread = threading.Thread(target = self.__pump)
+    self.thread.daemon = True
+    self.thread.start()
+
+  def fileno(self):
+    return self.w
+
+  def __emit(self, line):
+    if line.endswith(b'\r'):
+      line = line[:-1]
+    line = self.prefix + line
+    if self.stamp:
+      if not TAGGED.match(line):
+        line = b'[sniper] ' + line
+      now = time.time()
+      line = (time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(now)).encode()
+              + b'.%06d ' % int((now % 1) * 1000000) + line)
+    line += b'\n'
+    os.write(self.out_fd, line)
+    if self.file:
+      self.file.write(line)
+      self.file.flush()
+
+  def __pump(self):
+    buf = b''
+    while True:
+      try:
+        chunk = os.read(self.r, 65536)
+      except OSError:
+        break
+      if not chunk:
+        break
+      buf += chunk
+      while b'\n' in buf:
+        line, buf = buf.split(b'\n', 1)
+        self.__emit(line)
+    if buf:
+      self.__emit(buf)
+    os.close(self.r)
+    if self.file:
+      self.file.close()
+
+  def redirect(self):
+    """Send this process's stdout and stderr through the tee."""
+    sys.stdout.flush(); sys.stderr.flush()
+    os.dup2(self.w, sys.stdout.fileno())
+    os.dup2(self.w, sys.stderr.fileno())
+
+  def close(self):
+    """Restore stdout/stderr, then drain: every line written so far is out."""
+    sys.stdout.flush(); sys.stderr.flush()
+    os.dup2(self.out_fd, sys.stdout.fileno())
+    os.dup2(self.out_fd, sys.stderr.fileno())
+    os.close(self.w)
+    self.thread.join(10)
+    os.close(self.out_fd)
+
+def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None):
+  tee = Tee(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), '[%s] ' % (tag or 'app%d' % app_id))
+  tee.redirect()
+  try:
+    program_func(program_arg)
+  finally:
+    tee.close()
+
+def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None):
   import multiprocessing # module does not exist in Python <= 2.5, import only when needed
-  proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id))
+  proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id, tag))
   proc.start()
   proc.join()
 

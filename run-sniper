@@ -533,10 +533,13 @@ if not os.path.exists(outputdir):
     print('Failed to create output directory', outputdir, file=sys.stderr)
     sys.exit(-1)
 
-if save_output:
-  prefix_fd = run_sniper.Tee(os.path.join(outputdir, 'sim.stdout'))
-  os.dup2(prefix_fd, sys.stdout.fileno())
-  os.dup2(prefix_fd, sys.stderr.fileno())
+# Every line of the run, from every process, stamped and tagged, on the
+# terminal and in sim.stdout (see the run stream note in tools/run_sniper.py).
+# --save-output used to enable this; it is now always on.
+run_stream = run_sniper.Tee(os.path.join(outputdir, 'sim.stdout'), stamp = True)
+run_stream.redirect()
+import atexit
+atexit.register(run_stream.close)
 
 if heteroconfig:
   hcfgfile = os.path.join(outputdir,'sim.hetero.cfg')
@@ -699,7 +702,7 @@ elif use_sift:
   tracegen['enabled'] = 'true'
   tracegen['emulate_syscalls'] = 'true'
   tracegen['num_apps'] = 1
-  tracegen['redirect'] = False
+  tracegen['redirect'] = True     # through its own Tee, so its lines carry a process tag
   sniperoptions.append('-g --traceinput/stop_with_first_app=false') # Only stop once all processes have completed
   # Set trace recorder options
   other_options = []
@@ -772,7 +775,9 @@ if tracegen:
              + (['-v'] if verbose else []) + trace_extra_args + app_cmd
     tracecmds.append(tracecmd)
     if tracegen['redirect']: # redirect output
-      threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, tracecmd, outputdir)).start()
+      # The userspace MimicOS kernel is tagged for what it is, not as an app.
+      tag = 'kernel' if any(os.path.basename(a) == 'startup_mimicos' for a in app_cmd) else None
+      threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, tracecmd, outputdir, 0, tag)).start()
     else:                    # inline output
       threading.Thread(target = run_sift_recorder, args = (tracecmd,)).start()
 
