@@ -13,6 +13,8 @@
 #include <deque>
 #include <algorithm>
 #include <functional>
+#include <mutex>
+#include <atomic>
 
 #include "mm/scheduler/task.h"
 
@@ -85,6 +87,12 @@ public:
     explicit RunQueue(int32_t core_id)
         : core_id_(core_id), current_(nullptr), nr_running_(0) {}
 
+    /* One lock per runqueue, as in Linux's rq->lock.  A core scheduling on
+       its own queue takes a lock nobody else holds, which is an uncontended
+       CAS with no futex behind it; only a wake-up aimed at another core
+       touches another core's lock.  Mutable so const readers can lock. */
+    mutable std::mutex lock;
+
     /* ---- Task management ---- */
 
     void enqueue(Task* t) {
@@ -148,7 +156,9 @@ public:
 
     int32_t core_id() const { return core_id_; }
     size_t  length() const { return tasks_.size(); }
-    uint32_t nr_running() const { return nr_running_; }
+    /* Lockless, for load comparison across cores -- Linux reads other
+       CPUs' nr_running the same way and tolerates it being a moment stale. */
+    uint32_t nr_running() const { return nr_running_.load(std::memory_order_relaxed); }
     bool    empty() const { return tasks_.empty(); }
 
     const std::deque<Task*>& tasks() const { return tasks_; }
@@ -168,7 +178,7 @@ public:
 private:
     int32_t core_id_;
     Task* current_;
-    uint32_t nr_running_;
+    std::atomic<uint32_t> nr_running_;
     std::deque<Task*> tasks_;
     Stats stats_;
 };

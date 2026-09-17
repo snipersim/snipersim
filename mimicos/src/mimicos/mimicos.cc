@@ -265,6 +265,8 @@ void* MimicOS::kernel_worker_trampoline(void* arg)
    3. Calls SimThreadRoiStart for its app.
    4. Enters poll_for_signal for its core.
    The main thread calls this for core 0; spawned pthreads call it for cores 1..N-1. */
+thread_local uint8_t MimicOS::m_last_pcp_class = 2;
+
 void MimicOS::kernel_worker(int core_id)
 {
     char tname[64];
@@ -1209,7 +1211,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                    running app Task (the one that just faulted).  Multi-app:
                    this gives correct per-Task attribution. */
                 if (m_scheduler.is_enabled()) {
-                    Task* t = m_scheduler.get_runqueue(0).get_current();
+                    Task* t = m_scheduler.current_task(core_id);   /* this core, under its lock */
                     if (!t) t = m_scheduler.get_task(0);  /* single-task fallback */
                     if (t) m_scheduler.on_page_fault(t, replay_result.charged_cost_ns);
                 }
@@ -1464,7 +1466,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
            (one byte copy); cost-free when hierarchical_split_enabled
            is false because nothing reads it. */
         if (physical_memory_allocator) {
-            m_last_pcp_class = physical_memory_allocator->last_alloc_fastpath;
+            m_last_pcp_class = physical_memory_allocator->lastAllocFastpath(core_id);
 
             /* Report the path as well as recording it.  The registry's CSV
                carries pcp_class, but it is written from a shutdown path that
@@ -1480,6 +1482,10 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                     case 1: path_name = "fast"; break;   /* served from the per-CPU pool */
                     default: break;                      /* allocator does not say */
                 }
+                /* One line per fault from any worker; without the lock two
+                   workers' lines interleave character by character. */
+                static std::mutex log_lock;
+                std::lock_guard<std::mutex> ll(log_lock);
                 std::cout << "[MimicOS] alloc_path=" << path_name
                           << " core=" << core_id << std::endl;
             }
@@ -1752,7 +1758,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                        bimodality evidence.  Does not yet feed into
                        fingerprint splitting — that's Phase 9 work. */
                     if (physical_memory_allocator) {
-                        prof.record_pcp_class(physical_memory_allocator->last_alloc_fastpath);
+                        prof.record_pcp_class(physical_memory_allocator->lastAllocFastpath(core_id));
                     }
 
                     m_fast_fault_registry.maybe_promote(prof);
@@ -1872,7 +1878,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
            running app Task (the one that just faulted).  Multi-app: this
            gives correct per-Task fault attribution. */
         if (m_scheduler.is_enabled()) {
-            Task* t = m_scheduler.get_runqueue(0).get_current();
+            Task* t = m_scheduler.current_task(core_id);   /* this core, under its lock */
             if (!t) t = m_scheduler.get_task(0);  /* single-task fallback */
             if (t) {
                 uint64_t cost = instrumented ? timings.total_duration() : 0;

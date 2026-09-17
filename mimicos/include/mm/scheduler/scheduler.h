@@ -23,6 +23,8 @@
 #include <fstream>
 #include <algorithm>
 #include <mutex>
+#include <atomic>
+#include <deque>
 
 #include "mm/scheduler/task.h"
 #include "mm/scheduler/runqueue.h"
@@ -120,31 +122,9 @@ public:
     /**
      * Create and register a new task.  Returns task pointer.
      */
-    Task* create_task(const std::string& name, int32_t /* preferred_core */ = 0) {
-        int32_t id = static_cast<int32_t>(tasks_.size());
-
-        Task* ptr;
-        if (arena_ && arena_->enabled()) {
-            /* Place the Task in the kernel arena.  Subsequent reads/writes
-               to this Task object hit real host memory at an address that
-               Sniper translates through the simulated MMU — accounting
-               kernel footprint correctly. */
-            ptr = arena_->alloc<Task>(KArenaSlab::TASK);
-            arena_owned_tasks_.push_back(ptr);
-        } else {
-            auto task = std::make_unique<Task>();
-            ptr = task.get();
-            tasks_.push_back(std::move(task));
-        }
-        ptr->task_id = id;
-        ptr->name = name;
-        ptr->state = TaskState::CREATED;
-        ptr->sched.timeslice_ns = config_.default_timeslice_ns;
-        ptr->sched.timeslice_remaining_ns = config_.default_timeslice_ns;
-
-        task_map_[id] = ptr;
-
-        return ptr;
+    Task* create_task(const std::string& name, int32_t preferred_core = 0) {
+        std::lock_guard<std::mutex> lk(tasks_lock_);
+        return create_task_unlocked(name, preferred_core);
     }
 
     /**
@@ -152,22 +132,17 @@ public:
      */
     void wake_up(Task* t, int32_t target_core = -1) {
         if (!enabled_ || !t) return;
-        std::lock_guard<std::recursive_mutex> lk(lock_);
-        if (t->state == TaskState::RUNNING) return;
-
-        int32_t core = select_core(t, target_core);
+        int32_t core = select_core(t, target_core);   /* lockless load read */
         if (core < 0 || core >= (int32_t)runqueues_.size()) core = 0;
-
+        RunQueue& rq = runqueues_[core];
+        std::lock_guard<std::mutex> lk(rq.lock);      /* only the target core's lock */
+        if (t->state == TaskState::RUNNING) return;
         t->set_runnable();
-        runqueues_[core].enqueue(t);
+        rq.enqueue(t);
         stats_.wakeups++;
-
-        /* Check if we should preempt the current task on this core */
         if (config_.policy >= SchedPolicy::CFS_LITE) {
-            Task* cur = runqueues_[core].get_current();
-            if (cur && should_preempt(cur, t)) {
-                preempt(core);
-            }
+            Task* cur = rq.get_current();
+            if (cur && should_preempt(cur, t)) preempt_unlocked(core);
         }
     }
 
@@ -176,27 +151,32 @@ public:
      */
     void block(Task* t, WaitChannel wc) {
         if (!enabled_ || !t) return;
-        std::lock_guard<std::recursive_mutex> lk(lock_);
-
-        int32_t core = t->current_core;
-        if (core >= 0 && core < (int32_t)runqueues_.size()) {
-            runqueues_[core].dequeue(t);
-        }
+        int32_t core = -1;
+        std::unique_lock<std::mutex> rl = lock_task_rq(t, core);
+        if (core >= 0) runqueues_[core].dequeue(t);
         t->set_blocked(wc);
-        wait_queue_.enqueue(t);
+        {
+            std::lock_guard<std::mutex> wl(wait_lock_);   /* rq -> wait, never reverse */
+            wait_queue_.enqueue(t);
+        }
         stats_.blocks++;
-
-        /* Schedule next task on this core */
-        if (core >= 0) schedule(core);
+        if (core >= 0) run_schedule_unlocked(core);
     }
 
     /**
      * Wake tasks blocked on a specific channel.
      */
     int wake_blocked(WaitChannel wc) {
-        return wait_queue_.wake_all(wc, [this](Task* t) {
-            wake_up(t);
-        });
+        /* Drain under wait_lock_, wake after releasing it: wake_up takes an
+           rq lock, and block() takes wait_lock_ while holding one, so waking
+           inline here would invert that order. */
+        std::vector<Task*> woken;
+        {
+            std::lock_guard<std::mutex> wl(wait_lock_);
+            wait_queue_.wake_all(wc, [&](Task* t) { woken.push_back(t); });
+        }
+        for (Task* t : woken) wake_up(t);
+        return (int)woken.size();
     }
 
     /**
@@ -204,16 +184,9 @@ public:
      */
     void yield(Task* t) {
         if (!enabled_ || !t) return;
-        std::lock_guard<std::recursive_mutex> lk(lock_);
-
-        int32_t core = t->current_core;
-        t->voluntary_switches++;
-        t->set_runnable();
-
-        if (core >= 0 && core < (int32_t)runqueues_.size()) {
-            runqueues_[core].rotate();
-            schedule(core);
-        }
+        int32_t core = -1;
+        std::unique_lock<std::mutex> rl = lock_task_rq(t, core);
+        yield_unlocked(t, core);
     }
 
     /* ---- Scheduling decisions ---- */
@@ -224,44 +197,8 @@ public:
     void schedule(int32_t core) {
         if (!enabled_) return;
         if (core < 0 || core >= (int32_t)runqueues_.size()) return;
-        std::lock_guard<std::recursive_mutex> lk(lock_);
-
-        RunQueue& rq = runqueues_[core];
-        Task* next = nullptr;
-
-        switch (config_.policy) {
-        case SchedPolicy::FIFO_SIMPLE:
-            next = rq.pick_next();
-            break;
-
-        case SchedPolicy::RR_SIMPLE:
-            next = rq.pick_next();
-            if (next) {
-                next->sched.timeslice_remaining_ns = config_.default_timeslice_ns;
-            }
-            break;
-
-        case SchedPolicy::CFS_LITE:
-            next = rq.pick_next_min_vruntime();
-            break;
-
-        case SchedPolicy::VM_AWARE:
-            next = pick_vm_aware(rq);
-            break;
-
-        default:
-            break;
-        }
-
-        if (next && next != rq.get_current()) {
-            Task* prev = rq.get_current();
-            if (prev && prev->state == TaskState::RUNNING) {
-                prev->set_runnable();
-            }
-            rq.set_current(next);
-            rq.stats().context_switches++;
-            stats_.context_switches++;
-        }
+        std::lock_guard<std::mutex> lk(runqueues_[core].lock);
+        run_schedule_unlocked(core);
     }
 
     /**
@@ -271,35 +208,31 @@ public:
         if (!enabled_) return;
         if (config_.policy < SchedPolicy::RR_SIMPLE) return;
         if (core < 0 || core >= (int32_t)runqueues_.size()) return;
-        std::lock_guard<std::recursive_mutex> lk(lock_);
-
         RunQueue& rq = runqueues_[core];
+        std::lock_guard<std::mutex> lk(rq.lock);
         Task* cur = rq.get_current();
         if (!cur) return;
-
         cur->sched.runtime_ns += elapsed_ns;
         cur->total_runtime_ns += elapsed_ns;
         cur->sched.vruntime += elapsed_ns / cur->sched.weight;
-
         if (config_.policy == SchedPolicy::RR_SIMPLE) {
             if (cur->sched.timeslice_remaining_ns <= elapsed_ns) {
-                /* Timeslice expired */
                 cur->involuntary_switches++;
                 rq.rotate();
-                schedule(core);
+                run_schedule_unlocked(core);
                 rq.stats().preemptions++;
                 stats_.preemptions++;
             } else {
                 cur->sched.timeslice_remaining_ns -= elapsed_ns;
             }
         } else if (config_.policy >= SchedPolicy::CFS_LITE) {
-            /* CFS/VM-aware: preempt if another task has lower vruntime
-               by more than min_granularity */
+            /* preempt if another task's vruntime is behind ours by more than
+               min_granularity */
             Task* candidate = rq.pick_next_min_vruntime();
             if (candidate && candidate != cur &&
                 cur->sched.vruntime > candidate->sched.vruntime + config_.min_granularity_ns) {
                 cur->involuntary_switches++;
-                schedule(core);
+                run_schedule_unlocked(core);
                 rq.stats().preemptions++;
                 stats_.preemptions++;
             }
@@ -312,27 +245,33 @@ public:
      */
     void on_page_fault(Task* t, uint64_t fault_cost_ns) {
         if (!enabled_ || !t) return;
-        std::lock_guard<std::recursive_mutex> lk(lock_);
-
+        int32_t core = -1;
+        std::unique_lock<std::mutex> rl = lock_task_rq(t, core);
         t->charge_fault(fault_cost_ns);
-
-        if (config_.yield_after_fault && t->current_core >= 0) {
-            /* In cooperative mode, yield after each fault */
-            if (config_.policy == SchedPolicy::FIFO_SIMPLE) {
-                yield(t);
-            }
-            /* In preemptive modes, the tick() will handle preemption */
+        if (config_.yield_after_fault && core >= 0) {
+            if (config_.policy == SchedPolicy::FIFO_SIMPLE) yield_unlocked(t, core);
         }
     }
 
     /* ---- Queries ---- */
 
     Task* get_task(int32_t task_id) const {
+        std::lock_guard<std::mutex> lk(tasks_lock_);
         auto it = task_map_.find(task_id);
         return (it != task_map_.end()) ? it->second : nullptr;
     }
 
-    size_t task_count() const { return tasks_.size() + arena_owned_tasks_.size(); }
+    size_t task_count() const {
+        std::lock_guard<std::mutex> lk(tasks_lock_);
+        return tasks_.size() + arena_owned_tasks_.size();
+    }
+    /* The task a core is running, read under that core's lock.  Replaces
+       get_runqueue(core).get_current(), which read it under no lock. */
+    Task* current_task(int32_t core) const {
+        if (core < 0 || core >= (int32_t)runqueues_.size()) return nullptr;
+        std::lock_guard<std::mutex> lk(runqueues_[core].lock);
+        return runqueues_[core].get_current();
+    }
 
     const RunQueue& get_runqueue(int32_t core) const {
         return runqueues_[core];
@@ -340,11 +279,11 @@ public:
 
     /* ---- Statistics ---- */
 
-    struct Stats {
-        uint64_t context_switches = 0;
-        uint64_t preemptions      = 0;
-        uint64_t wakeups          = 0;
-        uint64_t blocks           = 0;
+    struct Stats {   /* atomic: incremented from any core without a shared lock */
+        std::atomic<uint64_t> context_switches{0};
+        std::atomic<uint64_t> preemptions{0};
+        std::atomic<uint64_t> wakeups{0};
+        std::atomic<uint64_t> blocks{0};
     };
 
     const Stats& stats() const { return stats_; }
@@ -352,18 +291,19 @@ public:
     void dump_stats(const std::string& filepath) const {
         std::ofstream f(filepath);
         if (!f.is_open()) return;
-
         f << "metric,value\n";
         f << "policy," << sched_policy_name(config_.policy) << "\n";
         f << "num_cores," << config_.num_cores << "\n";
-        f << "num_tasks," << task_count() << "\n";
-        f << "tasks_in_arena," << arena_owned_tasks_.size() << "\n";
-        f << "tasks_on_heap," << tasks_.size() << "\n";
+        {
+            std::lock_guard<std::mutex> lk(tasks_lock_);
+            f << "num_tasks," << (tasks_.size() + arena_owned_tasks_.size()) << "\n";
+            f << "tasks_in_arena," << arena_owned_tasks_.size() << "\n";
+            f << "tasks_on_heap," << tasks_.size() << "\n";
+        }
         f << "context_switches," << stats_.context_switches << "\n";
         f << "preemptions," << stats_.preemptions << "\n";
         f << "wakeups," << stats_.wakeups << "\n";
         f << "blocks," << stats_.blocks << "\n";
-
         f << "\ntask_id,name,state,total_faults,fault_cost_ns,"
              "runtime_ns,voluntary_csw,involuntary_csw\n";
         auto dump_task = [&](Task* t) {
@@ -373,11 +313,14 @@ public:
               << t->total_runtime_ns << "," << t->voluntary_switches << ","
               << t->involuntary_switches << "\n";
         };
-        for (const auto& t : tasks_) dump_task(t.get());
-        for (Task* t : arena_owned_tasks_) dump_task(t);
-
+        {
+            std::lock_guard<std::mutex> lk(tasks_lock_);
+            for (const auto& t : tasks_) dump_task(t.get());
+            for (Task* t : arena_owned_tasks_) dump_task(t);
+        }
         f << "\ncore,rq_length,csw,preemptions\n";
         for (size_t i = 0; i < runqueues_.size(); i++) {
+            std::lock_guard<std::mutex> lk(runqueues_[i].lock);
             f << i << "," << runqueues_[i].length() << ","
               << runqueues_[i].stats().context_switches << ","
               << runqueues_[i].stats().preemptions << "\n";
@@ -432,15 +375,13 @@ private:
     int32_t select_core(Task* t, int32_t hint) {
         if (hint >= 0 && hint < (int32_t)runqueues_.size() && t->can_run_on(hint))
             return hint;
-
-        /* Find least-loaded allowed core */
+        /* Lockless: compares each core's atomic nr_running, as Linux does
+           when picking a CPU, tolerating a momentarily stale count. */
         int32_t best = -1;
-        size_t min_load = SIZE_MAX;
+        uint32_t min_load = UINT32_MAX;
         for (size_t i = 0; i < runqueues_.size(); i++) {
-            if (t->can_run_on(i) && runqueues_[i].length() < min_load) {
-                min_load = runqueues_[i].length();
-                best = static_cast<int32_t>(i);
-            }
+            uint32_t n = runqueues_[i].nr_running();
+            if (t->can_run_on(i) && n < min_load) { min_load = n; best = (int32_t)i; }
         }
         return best >= 0 ? best : 0;
     }
@@ -458,7 +399,8 @@ private:
     /**
      * Preempt the current task on a core.
      */
-    void preempt(int32_t core) {
+    /* Caller holds runqueues_[core].lock. */
+    void preempt_unlocked(int32_t core) {
         if (core < 0 || core >= (int32_t)runqueues_.size()) return;
         RunQueue& rq = runqueues_[core];
         Task* cur = rq.get_current();
@@ -466,14 +408,37 @@ private:
             cur->involuntary_switches++;
             cur->set_runnable();
         }
-        schedule(core);
+        run_schedule_unlocked(core);
         rq.stats().preemptions++;
         stats_.preemptions++;
+    }
+    /* Caller holds runqueues_[core].lock, or core is -1 and holds nothing. */
+    void yield_unlocked(Task* t, int32_t core) {
+        t->voluntary_switches++;
+        t->set_runnable();
+        if (core >= 0 && core < (int32_t)runqueues_.size()) {
+            runqueues_[core].rotate();
+            run_schedule_unlocked(core);
+        }
+    }
+    /* Lock the runqueue a task is on -- Linux's task_rq_lock: read
+       current_core, lock that queue, then confirm it did not change in
+       between.  Returns the held lock; core_out is -1 (and nothing is held)
+       when the task is on no queue. */
+    std::unique_lock<std::mutex> lock_task_rq(Task* t, int32_t& core_out) {
+        for (;;) {
+            int32_t c = t->current_core;
+            if (c < 0 || c >= (int32_t)runqueues_.size()) { core_out = -1; return {}; }
+            std::unique_lock<std::mutex> lk(runqueues_[c].lock);
+            if (t->current_core == c) { core_out = c; return lk; }
+        }
     }
 
     bool enabled_;
     SchedulerConfig config_;
-    std::vector<RunQueue> runqueues_;
+    /* std::deque, not vector: RunQueue holds a std::mutex, so it cannot be
+       moved, and deque never relocates its elements. */
+    std::deque<RunQueue> runqueues_;
     WaitQueue wait_queue_;
     std::vector<std::unique_ptr<Task>> tasks_;            /* host-heap tasks */
     std::vector<Task*>                 arena_owned_tasks_; /* arena-resident */
@@ -485,13 +450,18 @@ private:
        the Task for the atid the simulator just handed us. */
     std::unordered_map<uint64_t, Task*> atid_map_;
     Stats stats_;
-    /* Stage 5 (Apr 19 2026): mutex serialising state mutations.  Each
-       kernel pthread (one per core) can concurrently call wake_up /
-       schedule / yield / mark_dead on its own runqueue; the scheduler's
-       internal maps and global stats are shared across them.  Uses
-       std::recursive_mutex because existing mutators chain-call each
-       other (e.g. block()→schedule(), wake_up()→preempt()→schedule()). */
-    mutable std::recursive_mutex lock_;
+    /* Locking, Linux-style.  There is no global scheduler lock any more.
+         rq.lock       -- each RunQueue's own; guards its deque, current_, stats
+         tasks_lock_   -- tasks_, arena_owned_tasks_, task_map_, atid_map_
+         wait_lock_    -- wait_queue_
+       Order: an rq lock may be held while taking wait_lock_ (block), and is
+       always released before tasks_lock_ (mark_dead).  Neither of the other
+       two is ever held while taking an rq lock; wake_blocked drains the wait
+       queue under wait_lock_ and wakes only after releasing it.  Public
+       entry points lock; *_unlocked internals assume the rq lock is held,
+       which is what removes the need for a recursive mutex. */
+    mutable std::mutex tasks_lock_;
+    mutable std::mutex wait_lock_;
 
 public:
 
@@ -513,17 +483,14 @@ public:
                                uint64_t atid,
                                int32_t preferred_core = 0)
     {
-        std::lock_guard<std::recursive_mutex> lk(lock_);
+        std::lock_guard<std::mutex> lk(tasks_lock_);
         auto it = atid_map_.find(atid);
         if (it != atid_map_.end()) return nullptr;
-
         Task* t = create_task_unlocked(name, preferred_core);
         if (!t) return nullptr;
         t->app_thread_id = atid;
-        /* Pin to a single core by default — the kernel pthread that
-           received the new_thread event is the one that should run it.
-           Callers can widen `affinity_mask` post-hoc if migration is
-           desired. */
+        /* Pin to the core that received the new_thread event; callers may
+           widen affinity_mask afterwards if migration is wanted. */
         if (preferred_core >= 0 && preferred_core < 64) {
             t->affinity_mask = (1ULL << preferred_core);
         }
@@ -535,7 +502,7 @@ public:
      * Look up the Task for a given `atid`, or nullptr if unknown.
      */
     Task* find_task_by_atid(uint64_t atid) const {
-        std::lock_guard<std::recursive_mutex> lk(lock_);
+        std::lock_guard<std::mutex> lk(tasks_lock_);
         auto it = atid_map_.find(atid);
         return it == atid_map_.end() ? nullptr : it->second;
     }
@@ -549,13 +516,14 @@ public:
      */
     void mark_dead(Task* t) {
         if (!enabled_ || !t) return;
-        std::lock_guard<std::recursive_mutex> lk(lock_);
-        int32_t core = t->current_core;
-        if (core >= 0 && core < (int32_t)runqueues_.size()) {
-            runqueues_[core].dequeue(t);
-        }
-        t->set_dead();
+        {
+            int32_t core = -1;
+            std::unique_lock<std::mutex> rl = lock_task_rq(t, core);
+            if (core >= 0) runqueues_[core].dequeue(t);
+            t->set_dead();
+        }   /* rq lock released before tasks_lock_: never nested */
         if (t->app_thread_id != 0) {
+            std::lock_guard<std::mutex> lk(tasks_lock_);
             atid_map_.erase(t->app_thread_id);
         }
     }
@@ -567,10 +535,9 @@ public:
      * runqueue is empty.
      */
     Task* schedule_and_get_current(int32_t core) {
-        std::lock_guard<std::recursive_mutex> lk(lock_);
         if (!enabled_ || core < 0 || core >= (int32_t)runqueues_.size())
             return nullptr;
-        /* Inline of schedule(core) — avoid lock_ double-acquire. */
+        std::lock_guard<std::mutex> lk(runqueues_[core].lock);
         run_schedule_unlocked(core);
         return runqueues_[core].get_current();
     }

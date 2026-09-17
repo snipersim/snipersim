@@ -11,6 +11,7 @@ public:
                                                                                    m_memory_size(memory_size),
                                                                                    m_kernel_size(kernel_size)
     {
+        for (int i = 0; i < MAX_FASTPATH_CORES; i++) last_alloc_fastpath[i] = 2;
         kernel_start_address = 4096; // First 4KiB is reserved for root->emulated_ppn page
         kernel_end_address = kernel_size * 1024 * 1024;
         
@@ -105,22 +106,28 @@ public:
      */
     virtual void dumpFinalStats() {}
     
-    /* Which path the last allocate() took, for allocators that distinguish a
-     * per-CPU pool hit from a slow-path refill:
+    /* Which path the last allocate() on a given core took, for allocators
+     * that distinguish a per-CPU pool hit from a slow-path refill:
      *   0 = slow path (buddy refill / zone lock)
      *   1 = fast path (per-CPU pool hit)
      *   2 = the allocator does not distinguish
+     * Read by the userspace MimicOS fault profile, which learns a separate
+     * mean cost per class.  Only linux_buddy_anon sets it.
      *
-     * Read by the userspace MimicOS fault profile, which learns a separate mean
-     * cost per class.  Only linux_buddy_anon sets it today; everything else
-     * leaves it at 2, which is why it is a plain field with a default rather
-     * than a virtual.
-     *
-     * Public, not protected: the reader is the userspace kernel, which is not
-     * a derived class.  It was protected here while linux_buddy_anon was the
-     * only thing that touched it.
-     */
-    uint8_t last_alloc_fastpath = 2;
+     * One entry per core.  This was a single field, on the stated assumption
+     * that the kernel was single-threaded with respect to fault dispatch;
+     * with a kernel worker per core that is false, and one core's write was
+     * overwriting another's before it was read. */
+    static const int MAX_FASTPATH_CORES = 64;
+    uint8_t last_alloc_fastpath[MAX_FASTPATH_CORES];
+    uint8_t lastAllocFastpath(UInt64 core) const
+        { return core < (UInt64)MAX_FASTPATH_CORES ? last_alloc_fastpath[core] : 2; }
+
+    /* Whether callers must serialise every allocate() behind one lock.
+     * An allocator with a per-core fast path takes its own zone lock only
+     * where it touches shared state, and returns false. */
+    virtual bool needsGlobalLock() const { return true; }
+
 
 protected:
     String m_name;

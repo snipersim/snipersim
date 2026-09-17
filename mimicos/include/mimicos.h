@@ -134,7 +134,11 @@ class MimicOS {
            allocator's last_alloc_fastpath field.  Initialised to 2
            (unknown) so the very first fault on each profile lands in
            the "unknown" bucket until the second fault reclassifies. */
-        uint8_t              m_last_pcp_class = 2;
+        /* Per kernel worker, not per kernel: every use is inside
+           poll_for_signal, which each worker runs for its own core, and a
+           shared field let one core's fault overwrite the class another core
+           was about to record.  thread_local is exactly per-worker. */
+        static thread_local uint8_t m_last_pcp_class;
 
         /* Phase 9 revisit: per-process page-table-install tracker.
            A PMD index is va >> 21 (one entry per 2 MiB chunk); a PUD
@@ -285,11 +289,20 @@ class MimicOS {
         PhysicalMemoryAllocator* get_physical_memory_allocator(){ return physical_memory_allocator; }
 
         /* Thread-safe allocator wrappers (Stage D: multiple kernel pthreads). */
+        /* Serialise only for allocators that ask for it.  One with a per-CPU
+           fast path locks internally, and only where it touches shared
+           state; wrapping it here would put every core's pool hit behind a
+           single mutex -- which is what had the two kernel workers ping-
+           ponging on a futex for every fault. */
         std::pair<uint64_t, uint64_t> locked_allocate(uint64_t bytes, uint64_t va, uint64_t core_id) {
+            if (!physical_memory_allocator->needsGlobalLock())
+                return physical_memory_allocator->allocate(bytes, va, core_id);
             std::lock_guard<std::mutex> lk(m_alloc_mutex);
             return physical_memory_allocator->allocate(bytes, va, core_id);
         }
         uint64_t locked_handle_pt_alloc(uint64_t bytes) {
+            if (!physical_memory_allocator->needsGlobalLock())
+                return physical_memory_allocator->handle_page_table_allocations(bytes);
             std::lock_guard<std::mutex> lk(m_alloc_mutex);
             return physical_memory_allocator->handle_page_table_allocations(bytes);
         }

@@ -24,6 +24,8 @@
 #include <deque>
 #include <cassert>
 #include <cstring>
+#include <mutex>
+#include <atomic>
 
 /* Macro-gated -O0 (see buddy.h for rationale). */
 #ifdef MIMICOS_CALIBRATION_O0
@@ -38,12 +40,19 @@ class LinuxBuddyAnonAllocator : public PhysicalMemoryAllocator, private Policy
     using BuddyType   = Buddy<BuddyPolicy>;
 
     /*------------------------  shared statistics  ------------------------------*/
-    struct Stats {
-        UInt64 total_allocations  = 0;
-        UInt64 pcp_hits           = 0;   /* served by per-CPU pageset (fast)   */
-        UInt64 pcp_misses         = 0;   /* refilled pageset, then satisfied   */
-        UInt64 pcp_refills        = 0;
+    struct Stats {   /* atomic: bumped from any core outside the zone lock */
+        std::atomic<UInt64> total_allocations{0};
+        std::atomic<UInt64> pcp_hits{0};      /* served by per-CPU pageset (fast)   */
+        std::atomic<UInt64> pcp_misses{0};    /* refilled pageset, then satisfied   */
+        std::atomic<UInt64> pcp_refills{0};
     } stats;
+
+    /* The zone lock, as in Linux: taken only where the shared buddy is
+       touched -- a pool refill, a large-page allocation, a page-table frame.
+       A per-CPU pool hit takes no lock at all, which is the whole point of
+       the pool; the global mutex the kernel used to wrap every allocation in
+       was serialising exactly that path. */
+    std::mutex m_zone_lock;
 
     /* Linux per-CPU pageset: a ring of pre-allocated 4-KB PFNs per core.
        When empty, we refill from buddy in a batch, mimicking
@@ -56,6 +65,10 @@ class LinuxBuddyAnonAllocator : public PhysicalMemoryAllocator, private Policy
 
     static constexpr int  MAX_CORES = 64;
     PerCpuPageset         pcps[MAX_CORES];
+
+public:
+    bool needsGlobalLock() const override { return false; }
+private:
 
 public:
     Stats& getStats() { return stats; }
@@ -115,11 +128,14 @@ public:
                per-refill cost ~30× closer to real Linux. */
             stats.pcp_misses++;
             stats.pcp_refills++;
-            this->last_alloc_fastpath = 0;  /* Phase 8: pcp miss */
+            this->last_alloc_fastpath[cpu] = 0;  /* Phase 8: pcp miss */
 
             std::vector<UInt64> batch;
-            buddy_allocator->allocate_batch_order0(
-                pcp.refill_batch, batch, core_id);
+            {
+                std::lock_guard<std::mutex> zl(m_zone_lock);
+                buddy_allocator->allocate_batch_order0(
+                    pcp.refill_batch, batch, core_id);
+            }
             for (UInt64 pfn : batch) pcp.free_pfns.push_back(pfn);
 
             if (pcp.free_pfns.empty()) {
@@ -128,7 +144,7 @@ public:
             }
         } else {
             stats.pcp_hits++;
-            this->last_alloc_fastpath = 1;  /* Phase 8: pcp hit */
+            this->last_alloc_fastpath[cpu] = 1;  /* Phase 8: pcp hit */
         }
 
         UInt64 pfn = pcp.free_pfns.back();
@@ -147,6 +163,7 @@ public:
                         UInt64 address = 0,
                         UInt64 core_id = (UInt64)-1) override
     {
+        std::lock_guard<std::mutex> zl(m_zone_lock);
         return buddy_allocator->allocate(bytes, address, core_id);
     }
 
@@ -160,6 +177,7 @@ public:
 
     void fragment_memory(double target_fragmentation)
     {
+        std::lock_guard<std::mutex> zl(m_zone_lock);
         buddy_allocator->fragmentMemory(target_fragmentation);
     }
 
@@ -168,6 +186,7 @@ private:
 
     UInt64 handle_page_table_allocations(UInt64 bytes)
     {
+        std::lock_guard<std::mutex> zl(m_zone_lock);
         return buddy_allocator->allocate(bytes, 0, (UInt64)-1);
     }
 };
