@@ -556,6 +556,88 @@ def case_riscv_gemm_sail(p, g, workdir):
         return False, 'sail-riscv did not report SUCCESS: %s' % tail[:200]
     return True, 'sail-riscv 0.14 (RVV 1.0, VLEN=128) runs the scalar and vector paths to agreement'
 
+# The LLM agent workload (test/llm-agent): a tiny GPT trained on the host
+# calls tools over an agent protocol, freestanding on RISC-V, verifying
+# every generated line against the numpy model's own greedy output and the
+# answers against the tools.  Two kernel variants (scalar, RVV) must agree;
+# the simulation case reports the batch-of-1 decode cost in cycles per token.
+LLM_DIR = os.path.join(SNIPER_ROOT, 'test', 'llm-agent')
+
+def llm_build(cc, out, extra):
+    return run([cc, '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O2', '-ffreestanding',
+                '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-I', LLM_DIR] + extra
+               + ['-o', out, os.path.join(LLM_DIR, 'agent.c')], 300)
+
+def riscv_llm_prerequisites(workdir):
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    if not os.path.isfile(os.path.join(LLM_DIR, 'model_weights.h')):
+        return None, 'no model_weights.h (run tools/llm/train_agent_gpt.py on the host)'
+    r['llm'] = {}
+    for variant, flags in (('scalar', []), ('rvv', ['-DUSE_RVV'])):
+        guest = os.path.join(workdir, 'agent-' + variant)
+        if not os.path.isfile(guest):
+            rc, out = llm_build(os.environ['SNIPER_RISCV_CC'], guest, flags)
+            if rc != 0:
+                return None, 'could not build agent.c (%s, exit %s)' % (variant, rc)
+        r['llm'][variant] = guest
+    return r, None
+
+def case_riscv_llm_agent(p, g, workdir):
+    """The tool-calling GPT answers every prompt as the numpy model does, with scalar and RVV kernels."""
+    r, why = riscv_llm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    summary = []
+    for variant, guest in r['llm'].items():
+        rc, out = run([r['qemu'], '-cpu', r['cpu'], guest], 600, cwd=workdir)
+        names = {5: 'a line differs from the numpy model', 6: 'an answer is wrong', 7: 'lines differ and answers are wrong'}
+        if rc != 100:
+            return False, '%s kernel: guest exited %s: %s' % (variant, rc, names.get(rc, 'unexpected'))
+        m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
+        summary.append('%s: %s/%s tokens' % (variant, m.group(1), m.group(2)) if m else variant)
+    n = len(re.findall(r'\[= numpy\] \[correct\]', out))
+    return True, '%d prompts, every line as numpy, every answer right (%s)' % (n, '; '.join(summary))
+
+def case_riscv_llm_simulate(p, g, workdir):
+    """Sniper simulates the agent (RVV kernel) and reports the batch-of-1 cost per token."""
+    r, why = riscv_llm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'llmsim')
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+                   '--', r['llm']['rvv']], 900, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (exit %s)' % rc
+    m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
+    if not m:
+        return False, 'no token count in the guest output'
+    prefilled, generated = int(m.group(1)), int(m.group(2))
+    outdir = os.path.join(workdir, 'llmsimout')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + prefix + '.app0.th0.sift'], 1800, cwd=SNIPER_ROOT)
+    if rc is None:
+        return False, 'simulation timed out'
+    if rc != 0:
+        return False, 'run-sniper exited %d' % rc
+    if 'undecoded instruction' in out:
+        return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
+    stats = {}
+    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        if ' = ' in line:
+            k, v = line.split(' = ', 1)
+            stats[k.strip()] = v.strip().split(',')[0]
+    insns = int(stats.get('performance_model.instruction_count', 0))
+    cycles = int(float(stats.get('performance_model.cycle_count', 0)))
+    tokens = prefilled + generated
+    if not cycles or int(stats.get('riscv.v_load', 0)) == 0:
+        return False, 'no cycles or no vector loads counted'
+    return True, ('%d tokens (%d prefill + %d decode): %.0f cycles/token, %.0f instructions/token, IPC %.2f; '
+                  'vector loads %s, v_fp_muladd %s' % (tokens, prefilled, generated, cycles / tokens, insns / tokens,
+                                                        insns / cycles, stats.get('riscv.v_load'), stats.get('riscv.v_fp_muladd')))
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
@@ -570,6 +652,8 @@ CASES = {
     'riscv-gemm-verify':   case_riscv_gemm_verify,
     'riscv-gemm-simulate': case_riscv_gemm_simulate,
     'riscv-gemm-sail':     case_riscv_gemm_sail,
+    'riscv-llm-agent':     case_riscv_llm_agent,
+    'riscv-llm-simulate':  case_riscv_llm_simulate,
 }
 
 
