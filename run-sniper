@@ -559,7 +559,7 @@ if use_live:
     import termios
     live_tty = os.dup(sys.stdout.fileno())              # the terminal itself, kept aside
     live_termios = termios.tcgetattr(live_tty)          # its state, to put back afterwards
-    live_dash = subprocess.Popen([os.path.join(HOME, 'tools', 'sniper-live'), live_fifo])
+    live_dash = subprocess.Popen([os.path.join(HOME, 'tools', 'sniper-live'), '--log', os.path.join(outputdir, 'sim.stdout'), live_fifo])
     sniper_lib.protected_pids.add(live_dash.pid)        # kill_children() must leave it alone
   else:
     scripts.append('live:%d' % live_interval)

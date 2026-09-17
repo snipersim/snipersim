@@ -87,8 +87,10 @@ yellow, cache and memory hierarchy green, synchronization blue -- with the
 current percentages in the legend; a lane per core showing which application
 thread it runs and the kernel's events there (N new_thread, F page_fault,
 Q quantum_expired, S switch_to, X thread_exit); a lane per Sniper thread
-showing running or stalled and why (futex, pause, syscall); and the running
-totals.  `space` pauses, `+`/`-` change how many samples a column holds,
-`q` quits.  Standard library only; `--once` prints the same frame with ANSI
+showing running or stalled and why (futex, pause, syscall); the run's own
+output in the bottom quarter -- the stamped stream, every process, scrolling
+as it arrives, with `l` cycling the filter through all, sniper, kernel and
+each application, errors highlighted; and the running totals.  `space`
+pauses, `+`/`-` change how many samples a column holds, `q` quits.  Standard library only; `--once` prints the same frame with ANSI
 colors on a terminal and plain text in a pipe, which is what the `live_feed`
 check renders.

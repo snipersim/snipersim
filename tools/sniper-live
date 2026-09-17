@@ -27,12 +27,20 @@ draws, scrolling right to left, one column per sample of simulated time:
     thread lanes        every Sniper thread's state: running, or stalled and
                         why (futex, pause, syscall, ...)
 
+    the log             the bottom quarter: the run's own output (sim.stdout,
+                        every process, stamped and tagged) as it arrives;
+                        key l cycles the filter: all, sniper, kernel, each app
+
 Keys: q quit, space pause, + / - zoom (samples per column), c cycle the
-stack between aggregate and each core, h help.  The renderer needs only the
+stack between aggregate and each core, l cycle the log filter, h help.  The renderer needs only the
 standard library; with --once it writes the frame with ANSI colors when
 stdout is a terminal and plain text otherwise.
 """
-import sys, os, time, json, argparse, collections
+import sys, os, re, time, json, argparse, collections
+
+STAMPED = re.compile(r'^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)\.(\d{6}) \[([a-z0-9]+)\] (.*)$')
+TAG_COLOR = {'sniper': 250, 'kernel': 214}
+ALERT = re.compile(r'\*ERROR\*|Assertion|Segmentation|deadlocked|Broken pipe|killed by|SIGABRT|SIGSEGV')
 
 BLOCKS = ' ▁▂▃▄▅▆▇█'   # eighth blocks, bottom up
 FULL = '█'
@@ -142,6 +150,53 @@ class Feed:
          self.pending.append(rec)
 
 
+class LogTail:
+   """The run's output stream, read incrementally: (time, tag, text) per line."""
+   def __init__(self, paths, keep = 5000):
+      self.paths = [p for p in paths if p]
+      self.fd = None
+      self.buf = b''
+      self.lines = collections.deque(maxlen = keep)
+      self.tags = []
+
+   def poll(self):
+      if self.fd is None:
+         for p in self.paths:
+            if os.path.exists(p):
+               self.fd = open(p, 'rb')      # a rename later (sim.* into simulation/) keeps the inode
+               break
+         if self.fd is None:
+            return False
+      data = self.fd.read()
+      if not data:
+         return False
+      self.buf += data
+      parts = self.buf.split(b'\n')
+      self.buf = parts.pop()
+      for raw in parts:
+         line = raw.decode('utf-8', 'replace').rstrip('\r')
+         m = STAMPED.match(line)
+         if m:
+            hhmmss, us, tag, text = m.group(1)[11:], m.group(2), m.group(3), m.group(4)
+            when = hhmmss + '.' + us[:3]
+         else:
+            when, tag, text = '', '', line
+         if tag and tag not in self.tags:
+            self.tags.append(tag)
+         self.lines.append((when, tag, text))
+      return True
+
+   def last(self, n, tag = None):
+      out = []
+      for when, t, text in reversed(self.lines):
+         if tag is None or t == tag:
+            out.append((when, t, text))
+            if len(out) >= n:
+               break
+      out.reverse()
+      return out
+
+
 class Frame:
    """A grid of (char, fg, bg) cells; fg/bg are 256-color numbers or None."""
    def __init__(self, width, height):
@@ -159,9 +214,12 @@ class Frame:
       return [''.join(c[0] for c in row) for row in self.cells]
 
 
-def render(feed, width, height, zoom = 1, core_view = None):
-   """The screen for the feed's current state.  core_view: None for aggregate, else a core id."""
+def render(feed, width, height, zoom = 1, core_view = None, log = None, log_filter = None):
+   """The screen for the feed's current state.  core_view: None for aggregate, else a core id;
+   log: a LogTail for the bottom quarter, log_filter: a process tag or None for all."""
    f = Frame(width, height)
+   log_rows = max(4, height // 4) if log else 0
+   body_end = height - 1 - (log_rows + 1 if log else 0)     # first row past the lanes
    hdr = feed.header or {}
    ncores = hdr.get('ncores', 0)
    samples = list(feed.samples)
@@ -196,7 +254,7 @@ def render(feed, width, height, zoom = 1, core_view = None):
 
    # --- the CPI stack strip ---
    stack_top = 1
-   stack_rows = max(6, (height - 4 - ncores - 2) // 2)
+   stack_rows = max(6, (body_end - 3 - ncores - 2) // 2)
    groups = [g for g in GROUP_ORDER if g in hdr.get('cpi_groups', [])] + \
             [g for g in hdr.get('cpi_groups', []) if g not in GROUP_ORDER]
    levels = stack_rows * 8
@@ -289,7 +347,7 @@ def render(feed, width, height, zoom = 1, core_view = None):
    y += 1
    thread_ids = sorted(set(t['id'] for s in samples[-cols * zoom:] for t in s['threads']))
    for tid in thread_ids:
-      if y >= height - 1:
+      if y >= body_end:
          break
       cur = next((t for t in (last['threads'] if last else []) if t['id'] == tid), None)
       label = 'T%d c%s a%s %s' % (tid, cur.get('core', '-') if cur else '-', cur.get('app', '-') if cur else '-',
@@ -304,9 +362,19 @@ def render(feed, width, height, zoom = 1, core_view = None):
          f.put(y, x0 + cx, glyph, color)
       y += 1
 
+   # --- the log: the bottom quarter ---
+   if log:
+      y = body_end
+      f.put(y, 0, (' log: %s   (l: all%s)' % (log_filter or 'all processes', ''.join(', ' + t for t in log.tags))).ljust(width)[:width], 231, 236)
+      for i, (when, tag, text) in enumerate(log.last(log_rows, log_filter)):
+         alert = ALERT.search(text) is not None
+         f.put(y + 1 + i, 0, when, 244)
+         f.put(y + 1 + i, 13, ('[%s]' % tag if tag else '').ljust(9), TAG_COLOR.get(tag, 117))
+         f.put(y + 1 + i, 22, text[:width - 22], 196 if alert else None)
+
    # --- footer ---
    tot = feed.totals
-   foot = ' quanta %d  faults %d  switches %d  parks %d  exits %d   q quit  space pause  +/- zoom  c core  h help' % (
+   foot = ' quanta %d  faults %d  switches %d  parks %d  exits %d   q quit  space pause  +/- zoom  c core  l log  h help' % (
       tot['quantum_expired'], tot['page_fault'], tot['switch_to'], tot['parks'], tot['thread_exit'])
    f.put(height - 1, 0, foot.ljust(width)[:width], 231, 236)
    return f
@@ -364,12 +432,18 @@ def curses_main(stdscr, feed, args):
    except curses.error:
       pass
    zoom, core_view, paused, frames, help_on = 1, None, False, 0, False
+   log, log_filter = args.logtail, None
+   scripted = sorted((float(t), k) for t, k in (kv.split(':', 1) for kv in args.keys.split(',') if kv))
+   t_start = time.time()
    while True:
-      changed = feed.poll() if not paused else False
+      if not paused:
+         feed.poll()
+         if log:
+            log.poll()
       h, w = stdscr.getmaxyx()
-      frame = render(feed, w, h, zoom, core_view)
+      frame = render(feed, w, h, zoom, core_view, log, log_filter)
       if help_on:
-         frame.put(2, 2, ' q quit | space pause | + - zoom | c cycle stack: all cores, core 0.. | h close ', 231, 236)
+         frame.put(2, 2, ' q quit | space pause | + - zoom | c cycle stack: all cores, core 0.. | l log filter: all, sniper, kernel, apps | h close ', 231, 236)
       for y, row in enumerate(frame.cells):
          for x, (ch, fg, bg) in enumerate(row):
             if y == h - 1 and x == w - 1:
@@ -380,9 +454,14 @@ def curses_main(stdscr, feed, args):
                pass
       stdscr.refresh()
       frames += 1
+      if args.dump:
+         with open(args.dump, 'a') as d:
+            d.write('\n'.join(frame.rows()) + '\n=====\n')
       if args.frames and frames >= args.frames:
          return
       k = stdscr.getch()
+      if scripted and time.time() - t_start >= scripted[0][0]:
+         k = ord(scripted.pop(0)[1])
       if k in (ord('q'), 27):
          return
       elif k == ord(' '):
@@ -394,6 +473,9 @@ def curses_main(stdscr, feed, args):
       elif k == ord('c'):
          n = (feed.header or {}).get('ncores', 0)
          core_view = 0 if core_view is None else (None if core_view + 1 >= n else core_view + 1)
+      elif k == ord('l') and log:
+         choices = [None] + log.tags
+         log_filter = choices[(choices.index(log_filter) + 1) % len(choices)] if log_filter in choices else None
       elif k == ord('h'):
          help_on = not help_on
       elif k == curses.KEY_RESIZE:
@@ -412,7 +494,11 @@ def main():
    ap.add_argument('--zoom', type = int, default = 1, help = 'samples per column')
    ap.add_argument('--core', type = int, default = None, help = 'show one core\'s stack instead of the aggregate')
    ap.add_argument('--no-color', action = 'store_true')
+   ap.add_argument('--log', default = None, help = 'the run stream to show in the bottom quarter (default: the run\'s sim.stdout when known)')
+   ap.add_argument('--log-filter', default = None, metavar = 'TAG', help = 'with --once: show only this process\'s lines (sniper, kernel, app0, ...)')
    ap.add_argument('--frames', type = int, default = 0, help = argparse.SUPPRESS)   # for tests: quit after N redraws
+   ap.add_argument('--keys', default = '', help = argparse.SUPPRESS)                 # for tests: "12:l,15:q" presses at those seconds
+   ap.add_argument('--dump', default = None, help = argparse.SUPPRESS)               # for tests: append every frame, plain, to this file
    args = ap.parse_args()
    run = None
    if args.run:
@@ -438,10 +524,17 @@ def main():
    path = args.path
    if not path:
       sys.exit('give a run output directory, a feed file, or --run -- <command>')
+   log_paths = [args.log] if args.log else []
+   if run and not args.log and '-d' in cmd:
+      d = cmd[cmd.index('-d') + 1]
+      log_paths = [os.path.join(d, 'sim.stdout'), os.path.join(d, 'simulation', 'sim.stdout')]
    if os.path.isdir(path):
+      if not args.log:
+         log_paths = [os.path.join(path, 'sim.stdout'), os.path.join(path, 'simulation', 'sim.stdout')]
       cand = [os.path.join(path, 'simulation', 'sim.live'), os.path.join(path, 'sim.live')]
       path = next((c for c in cand if os.path.exists(c)), cand[0])
    feed = Feed(path)
+   args.logtail = LogTail(log_paths) if log_paths else None
    if args.once:
       if not os.path.exists(path):
          sys.exit('no feed at %s' % path)
@@ -452,7 +545,9 @@ def main():
          size = os.terminal_size((120, 40))
       w = args.width or size.columns
       h = args.height or size.lines
-      frame = render(feed, w, h, args.zoom, args.core)
+      if args.logtail:
+         args.logtail.poll()
+      frame = render(feed, w, h, args.zoom, args.core, args.logtail, args.log_filter)
       sys.stdout.write(ansi(frame, color = (not args.no_color) and sys.stdout.isatty()))
       return
    import curses
