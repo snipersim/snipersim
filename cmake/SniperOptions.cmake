@@ -21,15 +21,13 @@ set(SNIPER_FRONTEND "sde" CACHE STRING
     "Instrumentation frontend: sde, pin, pinplay or none")
 set_property(CACHE SNIPER_FRONTEND PROPERTY STRINGS sde pin pinplay none)
 
-option(SNIPER_ENABLE_RISCV     "Build the RISC-V decoder (needs rv8)"            OFF)
+option(SNIPER_ENABLE_RISCV     "RISC-V core model (decoder generated from the UDB)" ON)
 option(SNIPER_ENABLE_ARM       "Build the ARM decoder (needs Capstone)"          OFF)
 option(SNIPER_ENABLE_DYNAMORIO "Build the DynamoRIO frontend"                    OFF)
 option(SNIPER_ENABLE_QEMU      "Build the QEMU TCG plugin frontend"              OFF)
 option(SNIPER_ENABLE_TORCH     "Build the libtorch branch predictor"             ON)
 option(SNIPER_ENABLE_MCPAT     "Use McPAT for power and area"                    ON)
 
-set(SNIPER_RV8_HOME "${CMAKE_CURRENT_SOURCE_DIR}/../rv8" CACHE PATH
-    "rv8 checkout, for the RISC-V decoder")
 set(SNIPER_CHAMPSIM_INCLUDE "" CACHE PATH
     "ChampSim include directory, if ChampSim trace support is wanted")
 

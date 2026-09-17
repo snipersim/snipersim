@@ -173,13 +173,9 @@ set_target_properties(sift PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_executable(siftdump "${CMAKE_CURRENT_SOURCE_DIR}/sift/siftdump.cc")
 target_link_libraries(siftdump PRIVATE sift)
 
-# Instruction decoders.  RISC-V and ARM sources are compiled only when their
-# option is on -- previously a filter-out driven by whether a sibling checkout
-# happened to exist next to the repository.
+# Instruction decoders.  ARM sources are compiled only when their option is
+# on (Capstone); the RISC-V decoder has no external dependency.
 file(GLOB DECODER_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decoder_lib/*.cc")
-if(NOT SNIPER_ENABLE_RISCV)
-  list(FILTER DECODER_SOURCES EXCLUDE REGEX "/riscv_decoder\\.cc$")   # riscv_ext.cc needs no rv8
-endif()
 if(NOT SNIPER_ENABLE_ARM)
   list(FILTER DECODER_SOURCES EXCLUDE REGEX "/arm[^/]*\\.cc$")
 endif()
@@ -187,8 +183,24 @@ endif()
 add_library(decoder STATIC ${DECODER_SOURCES})
 target_link_libraries(decoder PUBLIC sniper_common)
 set_target_properties(decoder PROPERTIES POSITION_INDEPENDENT_CODE ON)
-if(SNIPER_ENABLE_RISCV)
-  target_include_directories(decoder PRIVATE "${SNIPER_RV8_HOME}/src")
+# The RISC-V decoder is generated from the RISC-V Unified Database
+# (tools/riscv/gen_isa.py); `make riscv-isa-gen` regenerates it when
+# SNIPER_UDB_ROOTS lists the specification checkouts to build it from.
+set(SNIPER_UDB_ROOTS "" CACHE STRING "UDB roots (;-separated) for tools/riscv/gen_isa.py: upstream, then overlays")
+if(SNIPER_UDB_ROOTS)
+  set(_udb_args "")
+  foreach(_r ${SNIPER_UDB_ROOTS})
+    list(APPEND _udb_args --udb "${_r}")
+  endforeach()
+  add_custom_target(riscv-isa-gen
+    COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/gen_isa.py" ${_udb_args}
+            --udb "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/overlay"
+            --policy "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/isa_policy.yaml"
+            --out "${CMAKE_CURRENT_SOURCE_DIR}/decoder_lib"
+            --config "${CMAKE_CURRENT_SOURCE_DIR}/config/riscv.cfg"
+            --config "${CMAKE_CURRENT_SOURCE_DIR}/config/riscv-mediumboom.cfg"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Regenerating the RISC-V decoder tables from the Unified Database")
 endif()
 
 # The simulator core.

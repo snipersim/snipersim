@@ -1,8 +1,7 @@
 #include "dynamic_micro_op_boom_v1.h"
-#include "riscv_ext.h"
+#include "riscv_isa.h"
 #include "micro_op.h"
 
-#include <riscv_meta.h>
 
 const char* DynamicMicroOpBoomV1::getType() const
 {
@@ -24,32 +23,16 @@ const char* DynamicMicroOpBoomV1::PortTypeString(DynamicMicroOpBoomV1::uop_port_
 
 DynamicMicroOpBoomV1::uop_port_t DynamicMicroOpBoomV1::getPort(const MicroOp *uop)
 {
-      const unsigned int op = uop->getInstructionOpcode();
-      if (rvext::is_ext(op))
-      {
-         switch (rvext::class_of(op))
-         {
-            case rvext::V_LOAD: case rvext::V_STORE:
-            case rvext::IME_TILE_LOAD: case rvext::IME_TILE_STORE:
-               return DynamicMicroOpBoomV1::UOP_PORT2;
-            case rvext::V_FP_ADDSUB: case rvext::V_FP_MULADD: case rvext::V_FP_DIV:
-            case rvext::IME_MMA_INT: case rvext::IME_MMA_FP:
-               return DynamicMicroOpBoomV1::UOP_PORT0;
-            case rvext::V_INT_DIV:
-               return DynamicMicroOpBoomV1::UOP_PORT1;
-            default:
-               return DynamicMicroOpBoomV1::UOP_PORT012;
-         }
-      }
-      if(instrlist[uop->getInstructionOpcode()].has_fpu || instrlist[uop->getInstructionOpcode()].has_fdiv || instrlist[uop->getInstructionOpcode()].has_mul ) {
-            return DynamicMicroOpBoomV1::UOP_PORT0;
-      } else if(instrlist[uop->getInstructionOpcode()].has_div ) {
-            return DynamicMicroOpBoomV1::UOP_PORT1;
-      } else if(instrlist[uop->getInstructionOpcode()].is_memory) {
-            return DynamicMicroOpBoomV1::UOP_PORT2;
-      } else {
-            return DynamicMicroOpBoomV1::UOP_PORT012;
-      }
+   /* By the instruction's class flags: floating-point, vector and matrix
+      work on port 0, the integer divider on port 1, memory on port 2. */
+   const uint32_t f = rvisa::flags_of(uop->getInstructionOpcode());
+   if (f & (rvisa::FLAG_FP | rvisa::FLAG_VECTOR | rvisa::FLAG_MATRIX))
+      return DynamicMicroOpBoomV1::UOP_PORT0;
+   if (f & rvisa::FLAG_BUSY)
+      return DynamicMicroOpBoomV1::UOP_PORT1;
+   if (f & (rvisa::FLAG_LOAD | rvisa::FLAG_STORE))
+      return DynamicMicroOpBoomV1::UOP_PORT2;
+   return DynamicMicroOpBoomV1::UOP_PORT012;
 }
 
 DynamicMicroOpBoomV1::uop_bypass_t DynamicMicroOpBoomV1::getBypassType(const MicroOp *uop)
@@ -72,42 +55,14 @@ DynamicMicroOpBoomV1::uop_bypass_t DynamicMicroOpBoomV1::getBypassType(const Mic
 
 DynamicMicroOpBoomV1::uop_alu_t DynamicMicroOpBoomV1::getAlu(const MicroOp *uop)
 {
-   switch(uop->uop_type)
-   {
-      case MicroOp::UOP_EXECUTE:
-         if (rvext::is_ext(uop->getInstructionOpcode()))
-         {
-            switch (rvext::class_of(uop->getInstructionOpcode()))
-            {
-               case rvext::IME_MMA_INT: case rvext::IME_MMA_FP:
-                  return UOP_ALU_MATRIX;
-               case rvext::V_INT_DIV: case rvext::V_FP_DIV:
-                  return UOP_ALU_TRIG;
-               default:
-                  return UOP_ALU_NONE;
-            }
-         }
-         switch(uop->getInstructionOpcode())
-         {
-            case rv_op_div:
-            case rv_op_divu:
-            case rv_op_divw:
-            case rv_op_divuw:
-            case rv_op_divd:
-            case rv_op_divud:
-            case rv_op_fdiv_s:
-            case rv_op_fdiv_d:
-            case rv_op_fdiv_q:
-            case rv_op_fsqrt_s:
-            case rv_op_fsqrt_d:
-            case rv_op_fsqrt_q:
-               return UOP_ALU_TRIG;
-            default:
-               return UOP_ALU_NONE;
-         }
-      default:
-         return UOP_ALU_NONE;
-   }
+   if (uop->uop_type != MicroOp::UOP_EXECUTE)
+      return UOP_ALU_NONE;
+   const uint32_t f = rvisa::flags_of(uop->getInstructionOpcode());
+   if (f & rvisa::FLAG_MATRIX)
+      return UOP_ALU_MATRIX;
+   if (f & rvisa::FLAG_BUSY)
+      return UOP_ALU_TRIG;          /* dividers and square roots: one busy unit */
+   return UOP_ALU_NONE;
 }
 
 DynamicMicroOpBoomV1::DynamicMicroOpBoomV1(const MicroOp *uop, const CoreModel *core_model, ComponentPeriod period)

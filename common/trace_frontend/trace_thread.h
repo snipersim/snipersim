@@ -6,6 +6,7 @@
 #include "thread.h"
 #include "core.h"
 #include "sift_reader.h"
+#include "riscv_isa.h"
 #include "trace_manager.h"   // AppReaderPool
 #include "operand.h"
 #include "sniper_semaphore.h"
@@ -139,10 +140,11 @@ class TraceThread : public Runnable
       // ChampSim instruction cache statistics
       UInt64 m_champsim_icache_hits;
       UInt64 m_champsim_icache_misses;
-      // Vector/matrix extension instructions and recorded footprints (see riscv_ext.h)
-      UInt64 m_rvext_count[16];
-      UInt64 m_rvext_spans;
-      UInt64 m_rvext_span_bytes;
+      // RISC-V: instructions per class of the generated decoder (riscv_isa.h) and recorded footprints
+      UInt64 m_riscv_count[64];
+      UInt64 m_riscv_spans;
+      UInt64 m_riscv_span_bytes;
+      bool m_count_riscv;
       uint32_t staticMemoryOperands(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst);
       void countExtension(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst);
 

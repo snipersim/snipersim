@@ -45,7 +45,7 @@ extern "C" {
  * restated: the numbering is a wire format shared with the reader, and a copy
  * here would be one more place to get it wrong. */
 #include "decoder.h"
-#include "riscv_ext.h"
+#include "riscv_isa.h"
 
 #include "sift_writer.h"
 #include "sift_format.h"
@@ -167,14 +167,12 @@ unsigned mode_mask_for(const uint8_t *bytes, size_t len, uint8_t qemu_len)
  * decoder_lib's RISC-V is_branch_opcode() lists exactly the b* forms. */
 bool riscv_is_conditional_branch(const uint8_t *bytes, size_t len)
 {
-   if (len == 4)
-      return (bytes[0] & 0x7f) == 0x63;
-   if (len == 2)
-   {
-      const unsigned hw = bytes[0] | (bytes[1] << 8);
-      return (hw & 3) == 1 && ((hw >> 13) & 7) >= 6;
-   }
-   return false;
+   /* The same generated tables Sniper decodes with (riscv_isa.h): the two
+      sides cannot disagree on what a branch is. */
+   const unsigned length = rvisa::length_of(bytes);
+   if (length == 0 || length > len)
+      return false;
+   return rvisa::has(rvisa::decode(rvisa::word_of(bytes, length), length), rvisa::FLAG_BRANCH);
 }
 
 struct InsnInfo
@@ -654,11 +652,10 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       {
          ii->is_branch = got ? riscv_is_conditional_branch(bytes, got) : false;
          ii->mode_mask = 0;
-         if (got == 4)
          {
-            const uint32_t word = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8)
-                                | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
-            ii->footprint = rvext::is_memory(rvext::decode(word));
+            const unsigned length = got ? rvisa::length_of(bytes) : 0;
+            ii->footprint = length && length <= got
+                          && rvisa::has(rvisa::decode(rvisa::word_of(bytes, length), length), rvisa::FLAG_FOOTPRINT);
          }
       }
       else

@@ -21,7 +21,7 @@
 #include "sim_api.h"
 #include "mimicos.h"
 #include "stats.h"
-#include "riscv_ext.h"
+#include "riscv_isa.h"
 #include "parametric_dram_directory_msi/memory_manager.h"
 
 #include <unistd.h>
@@ -94,19 +94,23 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_stopped(false)
    , m_champsim_icache_hits(0)
    , m_champsim_icache_misses(0)
-   , m_rvext_spans(0)
-   , m_rvext_span_bytes(0)
+   , m_riscv_spans(0)
+   , m_riscv_span_bytes(0)
+   , m_count_riscv(Sim()->getCfg()->getString("general/arch") == "riscv")
 {
-   // Vector and matrix (IME) instructions seen by this thread, per class, and
-   // the byte ranges their recorded footprints contributed.
-   for (unsigned int c = 0; c < rvext::NUM_CLASSES; ++c)
+   // RISC-V: instructions seen by this thread per class of the generated
+   // decoder, and the byte ranges recorded footprints contributed.
+   for (unsigned int c = 0; c < rvisa::NUM_CLASSES; ++c)
    {
-      m_rvext_count[c] = 0;
-      if (c)
-         registerStatsMetric("rvext", m_thread->getId(), rvext::class_name((rvext::Class)c), &m_rvext_count[c]);
+      m_riscv_count[c] = 0;
+      if (m_count_riscv)
+         registerStatsMetric("riscv", m_thread->getId(), rvisa::class_table[c].name, &m_riscv_count[c]);
    }
-   registerStatsMetric("rvext", m_thread->getId(), "spans", &m_rvext_spans);
-   registerStatsMetric("rvext", m_thread->getId(), "span_bytes", &m_rvext_span_bytes);
+   if (m_count_riscv)
+   {
+      registerStatsMetric("riscv", m_thread->getId(), "spans", &m_riscv_spans);
+      registerStatsMetric("riscv", m_thread->getId(), "span_bytes", &m_riscv_span_bytes);
+   }
 
    bool userspace_mimicos_enabled = Sim()->getCfg()->getBool("general/enable_userspace_mimicos");
 
@@ -1147,12 +1151,14 @@ uint32_t TraceThread::staticMemoryOperands(const Sift::Instruction &inst, const 
 
 void TraceThread::countExtension(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst)
 {
+   if (!m_count_riscv)
+      return;
    const unsigned int op = dec_inst.inst_num_id();
-   if (rvext::is_ext(op))
-      m_rvext_count[rvext::class_of(op)]++;
-   m_rvext_spans += inst.num_spans;
+   if (op != rvisa::OP_UNKNOWN)
+      m_riscv_count[rvisa::class_of(op)]++;
+   m_riscv_spans += inst.num_spans;
    for (uint32_t s = 0; s < inst.num_spans; ++s)
-      m_rvext_span_bytes += inst.spans[s].size;
+      m_riscv_span_bytes += inst.spans[s].size;
 }
 
 void TraceThread::addDetailedMemoryInfo(DynamicInstruction *dynins, Sift::Instruction &inst, const dl::DecodedInst &decoded_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_prefetch, PerformanceModel *prfmdl)

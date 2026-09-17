@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""The generated RISC-V decoder is in step with its sources.
+
+Two checks.  `regen`: with SNIPER_UDB_ROOTS set (';'-separated UDB roots,
+upstream first, overlays after; tools/riscv/overlay is always appended),
+rerun tools/riscv/gen_isa.py into a scratch directory and require the result
+to be byte-identical to decoder_lib/riscv_isa_gen.{h,cc}, so a policy or
+specification edit that was not regenerated, or a regeneration that was not
+checked in, fails here.  Skips without the roots.  `tables`: the generated
+tables are self-consistent and decode known encodings as expected, through a
+small program built against decoder_lib alone."""
+import os, subprocess, sys, tempfile, filecmp, shutil
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+
+KNOWN = [   # word, length, expected name, expected class
+    ('0x00000013', 4, 'addi', 'int_alu'), ('0x0001', 2, 'c.nop', 'int_alu'),
+    ('0x0007c783', 4, 'lbu', 'load'), ('0xe022', 2, 'c.sdsp', 'store'),
+    ('0xfe0798e3', 4, 'bne', 'branch'), ('0x8082', 2, 'c.jr', 'jump_indirect'),
+    ('0x02b55533', 4, 'divu', 'int_div'), ('0x1820f553', 4, 'fdiv.s', 'fp_div'),
+    ('0x0d0572d7', 4, 'vsetvli', 'v_cfg'), ('0x02056087', 4, 'vle32.v', 'v_load'),
+    ('0x0205830b', 4, 'vsetlambda', 'ime_cfg'), ('0x52b57007', 4, 'vmtl.v', 'ime_tile_load'),
+    ('0xe2800857', 4, 'vmmacc.vv', 'ime_mma_int'), ('0x52b57827', 4, 'vmts.v', 'ime_tile_store'),
+]
+
+def check_regen():
+    roots = os.environ.get('SNIPER_UDB_ROOTS')
+    if not roots:
+        return None, 'SNIPER_UDB_ROOTS not set (upstream UDB;overlays)'
+    tmp = tempfile.mkdtemp(prefix='riscv-isa-')
+    try:
+        cmd = [sys.executable, os.path.join(ROOT, 'tools', 'riscv', 'gen_isa.py')]
+        for r in roots.split(';'):
+            if r:
+                cmd += ['--udb', r]
+        cmd += ['--udb', os.path.join(ROOT, 'tools', 'riscv', 'overlay'),
+                '--policy', os.path.join(ROOT, 'tools', 'riscv', 'isa_policy.yaml'), '--out', tmp]
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if p.returncode != 0:
+            return False, 'generator failed: %s' % p.stdout.strip().splitlines()[-1]
+        for f in ('riscv_isa_gen.h', 'riscv_isa_gen.cc'):
+            if not filecmp.cmp(os.path.join(tmp, f), os.path.join(ROOT, 'decoder_lib', f), shallow=False):
+                return False, '%s differs from the checked-in file: regenerate and commit' % f
+        return True, 'checked-in tables match a fresh generation (%s)' % p.stdout.strip().splitlines()[-1]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+def check_tables():
+    tmp = tempfile.mkdtemp(prefix='riscv-isa-')
+    try:
+        src = os.path.join(tmp, 'check.cc')
+        with open(src, 'w') as f:
+            f.write('#include "riscv_isa.h"\n#include <stdio.h>\n#include <string.h>\nint main(int argc, char **argv) {\n'
+                    '  std::string why; if (!rvisa::self_test(&why)) { printf("SELFTEST %s\\n", why.c_str()); return 1; }\n'
+                    '  for (int i = 1; i + 3 < argc; i += 4) { unsigned w = strtoul(argv[i], 0, 16), len = atoi(argv[i+1]);\n'
+                    '    unsigned op = rvisa::decode(w, len); const char *n = rvisa::name(op); const char *c = rvisa::info(rvisa::class_of(op)).name;\n'
+                    '    if (strcmp(n, argv[i+2]) || strcmp(c, argv[i+3])) { printf("MISMATCH %s: got %s/%s want %s/%s\\n", argv[i], n, c, argv[i+2], argv[i+3]); return 1; } }\n'
+                    '  printf("ok %u instructions %u classes\\n", rvisa::NUM_INSNS, rvisa::NUM_CLASSES); return 0; }\n')
+        exe = os.path.join(tmp, 'check')
+        d = os.path.join(ROOT, 'decoder_lib')
+        p = subprocess.run(['g++', '-std=c++17', '-O1', '-I', d, '-o', exe, src,
+                            os.path.join(d, 'riscv_isa.cc'), os.path.join(d, 'riscv_isa_gen.cc')],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if p.returncode != 0:
+            return False, 'could not build the check: %s' % p.stdout.strip().splitlines()[-1]
+        args = [exe]
+        for w, l, n, c in KNOWN:
+            args += [w, str(l), n, c]
+        p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if p.returncode != 0:
+            return False, p.stdout.strip()
+        return True, '%s; %d known encodings decode to the expected instruction and class' % (p.stdout.strip(), len(KNOWN))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+def main():
+    rc = 0
+    for name, fn in (('regen', check_regen), ('tables', check_tables)):
+        ok, msg = fn()
+        print('%-8s %s %s' % (name, 'SKIP' if ok is None else 'PASS' if ok else 'FAIL', msg))
+        if ok is False:
+            rc = 1
+    return rc
+
+if __name__ == '__main__':
+    sys.exit(main())

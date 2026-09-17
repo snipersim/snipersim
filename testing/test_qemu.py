@@ -288,7 +288,7 @@ def case_system_modes(p, g, workdir):
 # install and classifies branches from the encoding.  Needs a plugin-capable
 # qemu-riscv64 (SNIPER_QEMU_RISCV) and, to build the guest, a RISC-V compiler
 # (SNIPER_RISCV_CC, a clang with lld or a riscv64 gcc); the simulation side
-# needs the RISC-V decoder (make RISCV=ON RV8_HOME=<rv8 checkout>).  Skips,
+# needs the RISC-V core model (make RISCV=ON, the default).  Skips,
 # with the reason, when any of those is missing.
 
 def riscv_prerequisites(workdir):
@@ -348,7 +348,7 @@ def case_riscv_user_simulate(p, g, workdir):
         return False, 'simulation timed out'
     if rc != 0:
         if 'Unknown core model riscv' in out:
-            return None, 'Sniper built without the RISC-V decoder (make RISCV=ON RV8_HOME=...)'
+            return None, 'Sniper built without the RISC-V core model (make RISCV=ON)'
         return False, 'run-sniper exited %d' % rc
     stats = {}
     for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
@@ -445,7 +445,7 @@ def case_riscv_ime_simulate(p, g, workdir):
         return False, 'simulation timed out'
     if rc != 0:
         if 'Unknown core model riscv' in out:
-            return None, 'Sniper built without the RISC-V decoder (make RISCV=ON RV8_HOME=...)'
+            return None, 'Sniper built without the RISC-V core model (make RISCV=ON)'
         return False, 'run-sniper exited %d' % rc
     if 'undecoded instruction' in out:
         return False, 'the decoder did not recognise an instruction: %s' % re.search(r'undecoded instruction[^\n]*', out).group(0)
@@ -455,9 +455,9 @@ def case_riscv_ime_simulate(p, g, workdir):
             k, v = line.split(' = ', 1)
             stats[k.strip()] = v.strip().split(',')[0]
     want = {'performance_model.instruction_count': IME_INSNS,
-            'rvext.ime_tile_load': 3, 'rvext.ime_tile_store': 1, 'rvext.ime_mma_int': 1,
-            'rvext.ime_cfg': 1, 'rvext.v_cfg': 1,
-            'rvext.spans': IME_SPANS, 'rvext.span_bytes': IME_SPAN_BYTES,
+            'riscv.ime_tile_load': 3, 'riscv.ime_tile_store': 1, 'riscv.ime_mma_int': 1,
+            'riscv.ime_cfg': 1, 'riscv.v_cfg': 1,
+            'riscv.spans': IME_SPANS, 'riscv.span_bytes': IME_SPAN_BYTES,
             'L1-D.stores-data': 2}
     for k, v in want.items():
         got = int(stats.get(k, -1))

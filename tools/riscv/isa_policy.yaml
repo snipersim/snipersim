@@ -1,0 +1,113 @@
+# Policy for tools/riscv/gen_isa.py: which parts of the RISC-V Unified
+# Database to build Sniper's decoder from, how instructions are classed for
+# the core model, and the timing placeholders per class.
+#
+# The specification itself (encodings, operands, assembly) comes from the
+# UDB YAML; nothing here repeats it.  This file only adds what the UDB does
+# not carry: a functional-unit class per instruction and a first-order
+# latency for it, which the core model reads from the config under
+# perf_model/core/riscv/<class>_latency (defaults below).
+#
+# Rules are tried in order; the first whose regexes match wins.  `ext`
+# matches any extension the UDB lists as defining the instruction, `name`
+# the mnemonic.  Classes without a `flags` entry are plain execute classes.
+
+xlen: 64
+
+# Decoder parameters (perf_model/core/riscv in the config): the static size
+# of one vector memory uop and how many uops a footprint instruction may
+# spread over (Sift::MAX_MEMORY_SPANS caps it).
+decoder:
+  vector_bytes: 16
+  memory_uops: 16
+
+# Extensions to take from the UDB (regexes over the extension name).
+extensions:
+  - '^(I|M|A|F|D|Q|Zicsr|Zifencei|Zihintpause|Zihintntl|Zimop|Zicond|Zicbom|Zicbop|Zicboz)$'
+  - '^(Zca|Zcb|Zcd|Zcmop|Zalrsc|Zaamo|Zawrs|Zacas|Zabha)$'     # Zcf (c.flw) is RV32-only
+  - '^(Zba|Zbb|Zbc|Zbs|Zbkb|Zbkc|Zbkx|Zfh|Zfhmin|Zfa|Zfbfmin)$'       # Zilsd/Zclsd are RV32-only
+  - '^(V|Zvl.*|Zve.*|Zvfh.*|Zvbb|Zvbc|Zvkb|Zvkg|Zvkn.*|Zvks.*|Zvfbfmin|Zvfbfwma)$'
+  - '^(S|H|Svinval|Smrnmi|Smctr|Sdext)$'    # privileged: mret, sret, wfi, sfence.vma, ... for system-mode traces
+  - '^Zvv.*$'          # IME 0.9 (Zvvmm, Zvvfmm, Zvvmtls, Zvvmttls and the datatype subextensions)
+
+classes:
+  # control flow
+  - {class: branch,        latency: 1,  cpi: branch,  flags: [branch],
+     name: '^(beq|bne|blt|bge|bltu|bgeu|c\.beqz|c\.bnez)$'}
+  - {class: jump,          latency: 1,  cpi: branch,  flags: [jump],
+     name: '^(jal|c\.j|c\.jal)$'}
+  - {class: jump_indirect, latency: 1,  cpi: branch,  flags: [jump, indirect],
+     name: '^(jalr|c\.jr|c\.jalr)$'}
+  # memory (scalar)
+  - {class: atomic,        latency: 1,  cpi: generic, flags: [load, store, atomic],
+     name: '^(amo.*|sc\.[wdq]|amocas.*)$'}
+  - {class: load,          latency: 1,  cpi: generic, flags: [load],
+     name: '^(c\.)?(f?l[bhwdq]u?(sp)?|lr\.[wdq]|lbu|lhu|lwu)$'}
+  - {class: store,         latency: 1,  cpi: generic, flags: [store],
+     name: '^(c\.)?(f?s[bhwdq](sp)?)$'}
+  - {class: prefetch,      latency: 1,  cpi: generic, flags: [load, prefetch],
+     name: '^prefetch\..*$'}
+  - {class: cbo,           latency: 1,  cpi: generic, flags: [cache_flush, serializing],
+     name: '^cbo\..*$'}
+  # scalar integer
+  - {class: int_mul,       latency: 3,  cpi: generic,
+     name: '^(mul|mulh|mulhu|mulhsu|mulw|c\.mul|clmul|clmulh|clmulr)$'}
+  - {class: int_div,       latency: 12, cpi: generic, flags: [busy],
+     name: '^(div|divu|rem|remu|divw|divuw|remw|remuw)$'}
+  # scalar floating point
+  - {class: fp_div,        latency: 11, cpi: fp_muldiv, flags: [fp, busy],
+     name: '^f(div|sqrt)\..*$'}
+  - {class: fp_muladd,     latency: 4,  cpi: fp_muldiv, flags: [fp],
+     name: '^f(mul|madd|msub|nmadd|nmsub)\..*$'}
+  - {class: fp_addsub,     latency: 4,  cpi: fp_addsub, flags: [fp],
+     ext: '^(F|D|Q|Zfh|Zfhmin|Zfa|Zfbfmin)$', name: '^f.*$'}
+  # IME 0.9 matrix
+  - {class: ime_cfg,        latency: 1,  cpi: generic,   flags: [vector],
+     name: '^vsetlambda$'}
+  - {class: ime_tile_load,  latency: 1,  cpi: ldst,      flags: [load, vector, footprint],
+     ext: '^Zvvmtt?ls$', asm: '^vd, \(xs1\)'}
+  - {class: ime_tile_store, latency: 1,  cpi: ldst,      flags: [store, vector, footprint],
+     ext: '^Zvvmtt?ls$', asm: '^vs3, \(xs1\)'}
+  - {class: ime_mma_int,    latency: 8,  issue_cycles: 4, cpi: fp_muldiv, flags: [vector, matrix],
+     ext: '^Zvvmm$'}
+  - {class: ime_mma_fp,     latency: 12, issue_cycles: 4, cpi: fp_muldiv, flags: [fp, vector, matrix],
+     ext: '^Zvvfmm$'}
+  # vector (RVV 1.0)
+  - {class: v_cfg,         latency: 1,  cpi: generic,  flags: [vector],
+     name: '^vset(vl|vli|ivli)$'}
+  # direction from the assembly template: loads name vd and a base (xs1),
+  # stores name vs3 and a base; mnemonics alone would take vsll for a store
+  - {class: v_load,        latency: 1,  cpi: ldst,     flags: [load, vector, footprint],
+     ext: '^(V|Zvl.*|Zve.*)$', asm: '^vd, \(xs1\)'}
+  - {class: v_store,       latency: 1,  cpi: ldst,     flags: [store, vector, footprint],
+     ext: '^(V|Zvl.*|Zve.*)$', asm: '^vs3, \(xs1\)'}
+  - {class: v_fp_div,      latency: 20, cpi: fp_muldiv, flags: [fp, vector, busy],
+     name: '^vf(div|rdiv|sqrt|rsqrt7|rec7)\..*$'}
+  - {class: v_fp_muladd,   latency: 4,  cpi: fp_muldiv, flags: [fp, vector],
+     name: '^vf(w?)(mul|macc|nmacc|msac|nmsac|madd|nmadd|msub|nmsub)\..*$'}
+  - {class: v_fp_addsub,   latency: 4,  cpi: fp_addsub, flags: [fp, vector],
+     name: '^vf.*$'}
+  - {class: v_int_div,     latency: 20, cpi: generic,  flags: [vector, busy],
+     name: '^v(div|divu|rem|remu)\..*$'}
+  - {class: v_int_mul,     latency: 4,  cpi: generic,  flags: [vector],
+     name: '^v(w?)(mul|mulh|mulhu|mulhsu|macc|nmsac|madd|nmsub|smul|maccu|maccus|maccsu|clmul|clmulh)\..*$'}
+  - {class: v_int_alu,     latency: 2,  cpi: generic,  flags: [vector],
+     ext: '^(V|Zvl.*|Zve.*|Zvbb|Zvbc|Zvkb|Zvkg|Zvkn.*|Zvks.*)$'}
+  # system
+  - {class: system,        latency: 1,  cpi: generic,  flags: [serializing],
+     name: '^(ecall|ebreak|c\.ebreak|mret|sret|dret|mnret|wfi|sfence\..*|hfence\..*|fence.*|csr.*|wrs\..*|pause|sinval\..*|hinval\..*|sctrclr)$'}
+  # everything else: single-cycle integer ALU
+  - {class: int_alu,       latency: 1,  cpi: generic}
+
+# The destination register is also read by these (accumulating forms).
+accumulates: '(macc|madd|msub|msac|nmadd|nmsub|nmsac|mmacc|red)'
+
+# Bytes moved by a scalar memory instruction (first match wins); vector and
+# tile accesses take their sizes from the recorded footprint instead.
+mem_size:
+  - {bytes: 1,  name: '^(c\.)?(l[b]u?|s[b]|amo.*\.b|amocas\.b)$'}
+  - {bytes: 2,  name: '^(c\.)?(l[h]u?|s[h]|fl[h]|fs[h]|amo.*\.h|amocas\.h)$'}
+  - {bytes: 4,  name: '^(c\.)?(l[w]u?(sp)?|s[w](sp)?|fl[w](sp)?|fs[w](sp)?|lr\.w|sc\.w|amo.*\.w|amocas\.w)$'}
+  - {bytes: 8,  name: '^(c\.)?(l[d](sp)?|s[d](sp)?|fl[d](sp)?|fs[d](sp)?|lr\.d|sc\.d|amo.*\.d|amocas\.d)$'}
+  - {bytes: 16, name: '^(l[q]|s[q]|fl[q]|fs[q]|lr\.q|sc\.q|amocas\.q)$'}
+  - {bytes: 64, name: '^(cbo\..*|prefetch\..*)$'}

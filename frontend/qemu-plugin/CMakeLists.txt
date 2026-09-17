@@ -29,9 +29,11 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0)
 
-# riscv_ext.cc: the RVV/IME classifier, shared with Sniper's decoder, so the
-# plugin knows which instructions need their whole memory footprint recorded.
-add_library(qemu_frontend MODULE sniper_qemu.cc "${CMAKE_SOURCE_DIR}/decoder_lib/riscv_ext.cc")
+# riscv_isa*.cc: the generated RISC-V instruction tables, shared with Sniper's
+# decoder, so the plugin knows which instructions are branches and which need
+# their whole memory footprint recorded.
+add_library(qemu_frontend MODULE sniper_qemu.cc
+  "${CMAKE_SOURCE_DIR}/decoder_lib/riscv_isa.cc" "${CMAKE_SOURCE_DIR}/decoder_lib/riscv_isa_gen.cc")
 
 target_include_directories(qemu_frontend PRIVATE
   "${SNIPER_QEMU_PLUGIN_INCLUDE}"

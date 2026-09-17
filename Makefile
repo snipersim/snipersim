@@ -41,19 +41,17 @@ DEPS := $(SIM_ROOT)/deps/sniper-deps
 FRONTEND ?= sde
 TORCH ?= ON
 MCPAT ?= ON
-RISCV ?= OFF
+RISCV ?= ON
 ARM ?= OFF
 DYNAMORIO ?= OFF
 QEMU ?= OFF
 BUILD_TYPE ?= Release
-RV8_HOME ?=
 DYNAMORIO_DIR ?=
 CMAKE_ARGS ?=
 
 _deps_flags := --frontend $(FRONTEND)
 _deps_flags += $(if $(filter ON,$(TORCH)),,--no-torch)
 _deps_flags += $(if $(filter ON,$(MCPAT)),,--no-mcpat)
-_deps_flags += $(if $(filter ON,$(RISCV)),--riscv,)
 _deps_flags += $(if $(filter ON,$(ARM)),--arm,)
 _deps_flags += $(if $(filter ON,$(DYNAMORIO)),--dynamorio,)
 _deps_flags += $(if $(filter ON,$(QEMU)),--qemu,)
@@ -68,7 +66,6 @@ _cmake_flags += -DSNIPER_ENABLE_DYNAMORIO=$(DYNAMORIO)
 _cmake_flags += -DSNIPER_ENABLE_QEMU=$(QEMU)
 
 # Locations that are not always where the build would guess.
-_cmake_flags += $(if $(RV8_HOME),-DSNIPER_RV8_HOME=$(RV8_HOME),)
 _cmake_flags += $(if $(DYNAMORIO_DIR),-DDynamoRIO_DIR=$(DYNAMORIO_DIR),)
 
 # Escape hatch: anything else, straight through.  `make CMAKE_ARGS=-DFoo=Bar`.

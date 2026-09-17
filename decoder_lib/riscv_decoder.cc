@@ -1,584 +1,127 @@
 #include "riscv_decoder.h"
-#include <iostream>
+
 #include <set>
-#include <cstddef>
 #include <stdio.h>
 #include <string.h>
-#include <cstdio>
-#include <cstdarg>
-#include <alloca.h>
-// Instead of linking to the rv8 binaries, compile the data directly into this object
-#include "asm/meta.cc"
-#include "asm/format.cc"
-#include "asm/strings.cc"
 
-using namespace riscv;
-
-namespace dl 
+namespace dl
 {
-
-static_assert(rvext::OP_BASE == rv_op_fsflagsi + 1, "rvext opcode ids must continue rv8's enumeration (rv_op_last)");
-#define EXT_OP(inst) (((const RISCVDecodedInst *)(inst))->ext_op())
-
-const char* reg_name_sym[] = {
-      "zero",
-      "ra",
-      "sp",
-      "gp",
-      "tp",
-      "t0",
-      "t1",
-      "t2",
-      "s0",
-      "s1",
-      "a0",
-      "a1",
-      "a2",
-      "a3",
-      "a4",
-      "a5",
-      "a6",
-      "a7",
-      "s2",
-      "s3",
-      "s4",
-      "s5",
-      "s6",
-      "s7",
-      "s8",
-      "s9",
-      "s10",
-      "s11",
-      "t3",
-      "t4",
-      "t5",
-      "t6",
-      "ft0",
-      "ft1",
-      "ft2",
-      "ft3",
-      "ft4",
-      "ft5",
-      "ft6",
-      "ft7",
-      "fs0",
-      "fs1",
-      "fa0",
-      "fa1",
-      "fa2",
-      "fa3",
-      "fa4",
-      "fa5",
-      "fa6",
-      "fa7",
-      "fs2",
-      "fs3",
-      "fs4",
-      "fs5",
-      "fs6",
-      "fs7",
-      "fs8",
-      "fs9",
-      "fs10",
-      "fs11",
-      "ft8",
-      "ft9",
-      "ft10",
-      "ft11",
-      "v0",
-      "v1",
-      "v2",
-      "v3",
-      "v4",
-      "v5",
-      "v6",
-      "v7",
-      "v8",
-      "v9",
-      "v10",
-      "v11",
-      "v12",
-      "v13",
-      "v14",
-      "v15",
-      "v16",
-      "v17",
-      "v18",
-      "v19",
-      "v20",
-      "v21",
-      "v22",
-      "v23",
-      "v24",
-      "v25",
-      "v26",
-      "v27",
-      "v28",
-      "v29",
-      "v30",
-      "v31",
-      nullptr
-    };
 
 RISCVDecoder::RISCVDecoder(dl_arch arch, dl_mode mode, dl_syntax syntax)
 {
   this->m_arch = arch;
   this->m_mode = mode;
   this->m_syntax = syntax;
-  this->m_isa = DL_ISA_RISCV;
+  std::string why;
+  if (!rvisa::self_test(&why))
+    fprintf(stderr, "[RISCV] generated instruction table failed its self-test: %s\n", why.c_str());
 }
 
-RISCVDecoder::~RISCVDecoder()
-{
-}
+RISCVDecoder::~RISCVDecoder() {}
 
 void RISCVDecoder::decode(DecodedInst * inst)
-{  
-  riscv::decode dec;
-
-  if(inst->get_already_decoded())
+{
+  if (inst->get_already_decoded())
     return;
-  
-  riscv::inst_t r_inst;
-  memcpy(&r_inst, inst->get_code(), 8);  // TODO: num_bytes from sift
-
-  riscv::decode_inst_rv64(dec, r_inst);
-  unsigned int ext = 0;
-  if (dec.op == rv_op_illegal && riscv::inst_length(r_inst) == 4)
-    ext = rvext::decode((uint32_t)r_inst);
-  if (ext)
-    ((RISCVDecodedInst *)inst)->set_ext(ext, (uint32_t)r_inst);
-  else if (dec.op == rv_op_illegal)
+  RISCVDecodedInst *d = (RISCVDecodedInst *)inst;
+  const uint8_t *code = inst->get_code();
+  d->m_length = rvisa::length_of(code);
+  d->m_word = rvisa::word_of(code, d->m_length);
+  d->m_op = rvisa::decode(d->m_word, d->m_length);
+  if (d->m_op == rvisa::OP_UNKNOWN)
   {
-    /* Neither in rv8's tables nor a vector/matrix instruction.  Say so once
-       per encoding; the core model costs it as a generic instruction. */
+    /* Not in the generated tables: say so once per encoding; the core
+       model costs it as a generic instruction. */
     static std::set<uint32_t> reported;
-    const uint32_t word = (uint32_t)r_inst;
-    if (reported.insert(word).second)
-      fprintf(stderr, "[RISCV] undecoded instruction 0x%08x (%d bytes): costed as generic\n",
-              word, (int)riscv::inst_length(r_inst));
+    if (reported.insert(d->m_word).second)
+      fprintf(stderr, "[RISCV] undecoded instruction 0x%08x (%u bytes): costed as generic\n", d->m_word, d->m_length);
   }
-  decode_inst_type(dec, r_inst);
-  decode_pseudo_inst(dec);
-
-  ((RISCVDecodedInst *)inst)->set_rv8_dec(dec);
-  
-  //printf("inst: (%016llx) Size: %d Opcode: %d\n", r_inst, riscv::inst_length(r_inst), dec.op); #DEBUG
-
+  rvisa::Operand ops[rvisa::MAX_FIELDS + 1];
+  const unsigned n = rvisa::operands(d->m_op, d->m_word, ops);
+  d->m_nregs = 0;
+  d->m_base_reg = -1;
+  for (unsigned i = 0; i < n; ++i)
+  {
+    if (ops[i].kind != rvisa::F_XREG && ops[i].kind != rvisa::F_FREG && ops[i].kind != rvisa::F_VREG)
+      continue;
+    RISCVDecodedInst::Reg &r = d->m_regs[d->m_nregs++];
+    r.reg = (uint8_t)ops[i].value;
+    r.read = (ops[i].flags & rvisa::FF_READ) != 0;
+    r.write = (ops[i].flags & rvisa::FF_WRITE) != 0;
+    if (strcmp(ops[i].name, "xs1") == 0)
+      d->m_base_reg = (int)ops[i].value;
+  }
+  if (d->m_base_reg < 0 && (d->flags() & (rvisa::FLAG_LOAD | rvisa::FLAG_STORE)))
+    d->m_base_reg = 2;          /* c.lwsp, c.sdsp, ...: the stack pointer is implicit */
   inst->set_already_decoded(true);
 }
 
-void RISCVDecoder::decode(DecodedInst * inst, dl_isa isa)
-{
-  this->decode(inst);
-}
+void RISCVDecoder::decode(DecodedInst * inst, dl_isa isa) { decode(inst); }
+void RISCVDecoder::change_isa_mode(dl_isa new_isa) {}
 
-/// Change the ISA mode to new_mode
-// This function has no real effect for XED and RISCV, because the initialization is already done
-void RISCVDecoder::change_isa_mode(dl_isa new_isa)
-{
-  this->m_isa = new_isa;
-}
+const char* RISCVDecoder::inst_name(unsigned int inst_id) { return rvisa::name(inst_id); }
 
-/// Get the instruction name from the numerical (enum) instruction Id
-const char* RISCVDecoder::inst_name(unsigned int inst_id)
-{
-  if (rvext::is_ext(inst_id))
-    return rvext::name(inst_id);
-  return rv_inst_name_sym[inst_id];
-}
- 
-/// Get the register name from the numerical (enum) register Id
 const char* RISCVDecoder::reg_name(unsigned int reg_id)
 {
-  return reg_name_sym[reg_id];
+  static char buf[8];
+  if (reg_id < 32) return rvisa::xreg_name(reg_id);
+  if (reg_id < 64) { snprintf(buf, sizeof(buf), "f%u", reg_id - 32); return buf; }
+  if (reg_id < 96) { snprintf(buf, sizeof(buf), "v%u", reg_id - 64); return buf; }
+  return "?";
 }
 
-/// Get the largest enclosing register; applies to x86 only (AX/EAX/RAX); ARM and RISCV just returns r;
-Decoder::decoder_reg RISCVDecoder::largest_enclosing_register(Decoder::decoder_reg r)
-{
-  return r;
-}
+Decoder::decoder_reg RISCVDecoder::largest_enclosing_register(decoder_reg r) { return r; }
+bool RISCVDecoder::invalid_register(decoder_reg r) { return r >= dl::last_reg; }
+bool RISCVDecoder::reg_is_program_counter(decoder_reg r) { return false; }
+bool RISCVDecoder::inst_in_group(const DecodedInst * inst, unsigned int group_id) { return false; }
 
-/// Check if this register is invalid
-bool RISCVDecoder::invalid_register(decoder_reg r)
-{
-  bool res = false;
-  if (r < reg_set_size && reg_name_sym[r] == NULL) 
-    return true;
-  return res;
-}
+static inline const RISCVDecodedInst* R(const DecodedInst *inst) { return (const RISCVDecodedInst *)inst; }
 
-/// Check if this register holds the program counter
-bool RISCVDecoder::reg_is_program_counter(decoder_reg r)
-{
-  return false;
-}
+unsigned int RISCVDecoder::num_operands(const DecodedInst * inst) { return R(inst)->m_nregs; }
+bool RISCVDecoder::op_read_reg(const DecodedInst * inst, unsigned int idx) { return idx < R(inst)->m_nregs && R(inst)->m_regs[idx].read; }
+bool RISCVDecoder::op_write_reg(const DecodedInst * inst, unsigned int idx) { return idx < R(inst)->m_nregs && R(inst)->m_regs[idx].write; }
+bool RISCVDecoder::op_is_reg(const DecodedInst * inst, unsigned int idx) { return idx < R(inst)->m_nregs; }
+Decoder::decoder_reg RISCVDecoder::get_op_reg(const DecodedInst * inst, unsigned int idx) { return idx < R(inst)->m_nregs ? R(inst)->m_regs[idx].reg : 0; }
 
-/// True if instruction belongs to instruction group/category
-bool RISCVDecoder::inst_in_group(const DecodedInst * inst, unsigned int group_id)
-{
-  // meta/enums - ignoring for now
-  return true;
-}
-
-/// Get the number of operands of any type for the specified instruction
-unsigned int RISCVDecoder::num_operands(const DecodedInst * inst)
-{   
-  if (EXT_OP(inst)) { unsigned int n; ((const RISCVDecodedInst *)inst)->ext_operands(n); return n; }
-  unsigned int num_operands = 0;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const rv_operand_data *operand_data = rv_inst_operand_data[dec->op];
-  while (operand_data->type == rv_type_ireg && operand_data->type == rv_type_freg) { 
-    num_operands++;
-    operand_data++;
-  }
-  return num_operands;
-}
-/// Get the number of memory operands of the specified instruction
 unsigned int RISCVDecoder::num_memory_operands(const DecodedInst * inst)
 {
-  if (unsigned int e = EXT_OP(inst))
-    return rvext::is_memory(e) ? m_ext_memory_uops : 0;
-  unsigned int num_memory_operands = 0;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const char *format = rv_inst_format[dec->op];
-  if (format == rv_fmt_rd_offset_rs1  /* lb, lh, lw, lbu, lhu, lwu, ld, ldu, lq, c.lwsp, c.ld, c.ldsp, c.lq, c.lqsp */
-    || format == rv_fmt_frd_offset_rs1 /* flw, fld, flq, c.fld, c.flw, c.fldsp, c.flwsp */
-    || format == rv_fmt_rs2_offset_rs1  /* sb, sh, sw, sd, sq, c.sw, c.swsp, c.sd, c.sdsp, c.sq, c.sqsp */
-    || format == rv_fmt_frs2_offset_rs1  /* fsw, fsd, fsq, c.fsd, c.fsw, c.fsdsp, c.fswsp */
-    || format == rv_fmt_aqrl_rd_rs2_rs1 /* amoswap.w */
-    || format == rv_fmt_aqrl_rd_rs2_rs1 /* amoswap.d */ 
-    || format == rv_fmt_aqrl_rd_rs2_rs1 /* amoswap.q */) {
-     num_memory_operands++;
-  }
-  return num_memory_operands;
+  const uint32_t f = R(inst)->flags();
+  if (!(f & (rvisa::FLAG_LOAD | rvisa::FLAG_STORE)))
+    return 0;
+  /* A recorded footprint (vector, matrix tile) can spread over many uops;
+     the spare ones are squashed at run time. */
+  return (f & rvisa::FLAG_FOOTPRINT) ? m_memory_uops : 1;
 }
 
-
-/// Get the base register of the memory operand pointed by mem_idx
-Decoder::decoder_reg RISCVDecoder::mem_base_reg (const DecodedInst * inst, unsigned int mem_idx) 
+Decoder::decoder_reg RISCVDecoder::mem_base_reg(const DecodedInst * inst, unsigned int mem_idx)
 {
-  if (EXT_OP(inst))
-    return rvext::base_reg(((const RISCVDecodedInst *)inst)->ext_word());
-  assert(mem_idx == 0);
-  Decoder::decoder_reg reg;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  
-  // int type = rv_type_ireg;
-  // int operand_name = rv_operand_name_rs1;
-  reg = dec->rs1; // assumption: always rs1
-
-  // TODO: for fp ? and compressed instructions? 
-  return reg;
+  return R(inst)->m_base_reg >= 0 ? R(inst)->m_base_reg : 0;
 }
+Decoder::decoder_reg RISCVDecoder::mem_index_reg(const DecodedInst * inst, unsigned int mem_idx) { return mem_base_reg(inst, mem_idx); }
+bool RISCVDecoder::op_read_mem(const DecodedInst * inst, unsigned int mem_idx) { return (R(inst)->flags() & rvisa::FLAG_LOAD) != 0; }
+bool RISCVDecoder::op_write_mem(const DecodedInst * inst, unsigned int mem_idx) { return (R(inst)->flags() & rvisa::FLAG_STORE) != 0; }
 
-/// Get the index register of the memory operand pointed by mem_idx
-Decoder::decoder_reg RISCVDecoder::mem_index_reg (const DecodedInst * inst, unsigned int mem_idx) 
+unsigned int RISCVDecoder::size_mem_op(const DecodedInst * inst, unsigned int mem_idx)
 {
-  if (EXT_OP(inst))
-    return rvext::base_reg(((const RISCVDecodedInst *)inst)->ext_word());
-  // no index reg
-  return 1;
-}
-
-/// Check if the operand mem_idx from instruction inst is read from memory
-bool RISCVDecoder::op_read_mem(const DecodedInst * inst, unsigned int mem_idx)
-{
-  if (unsigned int e = EXT_OP(inst))
-    return rvext::is_load(e);
-  // if operation is a load, we must be reading from memory
-  bool res = false;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const char *format = rv_inst_format[dec->op];
-  if (format == rv_fmt_rd_offset_rs1  /* lb, lh, lw, lbu, lhu, lwu, ld, ldu, lq, c.lwsp, c.ld, c.ldsp, c.lq, c.lqsp */
-    || format == rv_fmt_frd_offset_rs1 /* flw, fld, flq, c.fld, c.flw, c.fldsp, c.flwsp */ ) {
-     res = true; 
-  }
-  return res;
-}
-
-/// Check if the operand mem_idx from instruction inst is written to memory
-bool RISCVDecoder::op_write_mem(const DecodedInst * inst, unsigned int mem_idx)
-{
-  if (unsigned int e = EXT_OP(inst))
-    return rvext::is_store(e);
-  // if this operation is a store, we must be writing to memory
-  bool res = false;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const char *format = rv_inst_format[dec->op];
-  if (format == rv_fmt_rs2_offset_rs1  /* sb, sh, sw, sd, sq, c.sw, c.swsp, c.sd, c.sdsp, c.sq, c.sqsp */
-    || format == rv_fmt_frs2_offset_rs1  /* fsw, fsd, fsq, c.fsd, c.fsw, c.fsdsp, c.fswsp */ ) {
-     res = true;
-  }
-  return res;
-}
-
-/// Check if the operand idx from instruction inst reads from a register
-bool RISCVDecoder::op_read_reg (const DecodedInst * inst, unsigned int idx)
-{
-  if (EXT_OP(inst)) { unsigned int n; const rvext::Operand *o = ((const RISCVDecodedInst *)inst)->ext_operands(n); return idx < n && o[idx].read; }
-  bool res = false;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const rv_operand_data *operand_data = rv_inst_operand_data[dec->op];
-  if (operand_data[idx].type == rv_type_ireg || operand_data[idx].type == rv_type_freg) {  // what about compressed register?
-    res = true;
-  }
-  return res;
-}
-
-/// Check if the operand idx from instruction inst writes a register
-bool RISCVDecoder::op_write_reg (const DecodedInst * inst, unsigned int idx)
-{
-  if (EXT_OP(inst)) { unsigned int n; const rvext::Operand *o = ((const RISCVDecodedInst *)inst)->ext_operands(n); return idx < n && o[idx].write; }
-  bool res = false;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const rv_operand_data *operand_data = rv_inst_operand_data[dec->op];
-  if (operand_data[idx].type == rv_type_ireg || operand_data[idx].type == rv_type_freg) {  // what about compressed register?
-    res = true;
-  }
-  return res;
-}
-
-/// Check if the operand idx from instruction inst is involved in an address generation operation
-    /// (i.e. part of LEA instruction in x86)
-    /// None in ARM or RISCV
-bool RISCVDecoder::is_addr_gen(const DecodedInst * inst, unsigned int idx)
-{ 
-  return false;
-}
-
-/// Check if the operand idx from instruction inst is a register
-bool RISCVDecoder::op_is_reg (const DecodedInst * inst, unsigned int idx)
-{
-  if (EXT_OP(inst)) { unsigned int n; ((const RISCVDecodedInst *)inst)->ext_operands(n); return idx < n; }
-  bool res = false;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const rv_operand_data *operand_data = rv_inst_operand_data[dec->op];
-  if (operand_data[idx].type == rv_type_ireg || operand_data[idx].type == rv_type_freg) {
-    res = true;
-  }
-  return res;
-}
-
-/// Get the register used for operand idx from instruction inst.
-    /// Function op_is_reg() should be called first.
-Decoder::decoder_reg RISCVDecoder::get_op_reg (const DecodedInst * inst, unsigned int idx)
-{
-  if (EXT_OP(inst)) { unsigned int n; const rvext::Operand *o = ((const RISCVDecodedInst *)inst)->ext_operands(n); return idx < n ? o[idx].reg : 0; }
-  Decoder::decoder_reg reg = 0;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  const rv_operand_data *operand_data = rv_inst_operand_data[dec->op];
-  if (operand_data[idx].type != rv_type_ireg || operand_data[idx].type == rv_type_freg) {
-    switch (operand_data[idx].operand_name) {
-      case rv_operand_name_rd:    reg = dec->rd;    break;
-	    case rv_operand_name_rs1:   reg = dec->rs1;   break;
-	    case rv_operand_name_rs2:   reg = dec->rs2;   break;
-	    case rv_operand_name_frd:   reg = dec->rd + 32 ;   break;
-	    case rv_operand_name_frs1:  reg = dec->rs1 + 32;   break;
-      case rv_operand_name_frs2:  reg = dec->rs2 + 32;   break;
-	    case rv_operand_name_frs3:  reg = dec->rs3 + 32;   break;
-	    default: reg = 0;
-	  }
-  }
-  return reg;
-}
-
-
-/// Get the size in bytes of the memory operand pointed by mem_idx
-unsigned int RISCVDecoder::size_mem_op (const DecodedInst * inst, unsigned int mem_idx)
-{
-  if (EXT_OP(inst))
+  const RISCVDecodedInst *d = R(inst);
+  if (d->flags() & rvisa::FLAG_FOOTPRINT)
     return m_vector_bytes;
-  unsigned int size = 0;
-  riscv::decode *dec = ((RISCVDecodedInst *)inst)->get_rv8_dec();
-  switch(dec->op) {
-    case rv_op_lb: 			/* Load Byte */
-    case rv_op_lbu: 		/* Load Byte Unsigned */
-    case rv_op_flw: 		/* FP Load (SP) */
-    case rv_op_sb: 			/* Store Byte */
-    case rv_op_fsw: 		/* FP Store (SP) */
-    case rv_op_lr_w: 	 	/* Load Reserved Word */
-    case rv_op_sc_w: 		/* Store Conditional Word */
-                        size = 1;
-                        break;
-    case rv_op_lh: 			/* Load Half */
-    case rv_op_lhu: 		/* Load Half Unsigned */
-    case rv_op_sh: 			/* Store Half */
-                        size = 2;
-                        break;
-    case rv_op_lw: 			/* Load Word */
-    case rv_op_lwu: 		/* Load Word Unsigned */
-    case rv_op_sw: 			/* Store Word */
-                        size = 4;
-                        break;
-    case rv_op_ld: 			/* Load Double */
-    case rv_op_fld: 		/* FP Load (DP) */
-    case rv_op_sd: 			/* Store Double */
-    case rv_op_fsd: 		/* FP Store (DP) */
-    case rv_op_lr_d: 		/* Load Reserved Double Word */
-    case rv_op_sc_d: 		/* Store Conditional Double Word */
-                        size = 8;
-                        break;
-  }
-  return size;
+  return d->m_op ? rvisa::insn(d->m_op).mem_size : 0;
 }
 
-/// Get the number of execution micro operations contained in instruction 'ins' 
-unsigned int RISCVDecoder::get_exec_microops(const DecodedInst *ins, int numLoads, int numStores)
-{
-  unsigned int num_exec_uops = 1;
-  riscv::decode *dec = ((RISCVDecodedInst *)ins)->get_rv8_dec();
-  switch(dec->op) {
-    case rv_op_lr_w:                   	/* Load Reserved Word */
-	  case rv_op_sc_w:                   	/* Store Conditional Word */
-    case rv_op_lr_d:                   	/* Load Reserved Double Word */
-	  case rv_op_sc_d:                   	/* Store Conditional Double Word */
-    case rv_op_lr_q:                  
-	  case rv_op_sc_q:
-                        num_exec_uops = 1;
-                        break;
-    case rv_op_amoadd_w:               	/* Atomic Add Word */
-	  case rv_op_amoxor_w:               	/* Atomic Xor Word */
-	  case rv_op_amoor_w:                	/* Atomic Or Word */
-	  case rv_op_amoand_w:               	/* Atomic And Word */
-	  case rv_op_amomin_w:               	/* Atomic Minimum Word */
-	  case rv_op_amomax_w:               	/* Atomic Maximum Word */
-	  case rv_op_amominu_w:              	/* Atomic Minimum Unsigned Word */
-	  case rv_op_amomaxu_w:              	/* Atomic Maximum Unsigned Word */
-	  case rv_op_amoadd_d:               	/* Atomic Add Double Word */
-	  case rv_op_amoxor_d:               	/* Atomic Xor Double Word */
-	  case rv_op_amoor_d:                	/* Atomic Or Double Word */
-	  case rv_op_amoand_d:               	/* Atomic And Double Word */
-	  case rv_op_amomin_d:              	/* Atomic Minimum Double Word */
-	  case rv_op_amomax_d:              	/* Atomic Maximum Double Word */
-	  case rv_op_amominu_d:             	/* Atomic Minimum Unsigned Double Word */
-	  case rv_op_amomaxu_d:             	/* Atomic Maximum Unsigned Double Word */
-	  case rv_op_amoadd_q:              
-	  case rv_op_amoxor_q:              
-	  case rv_op_amoor_q:              
-	  case rv_op_amoand_q:         
-	  case rv_op_amomin_q:           
-	  case rv_op_amomax_q:             
-    case rv_op_amominu_q:          
-	  case rv_op_amomaxu_q:        
-                        num_exec_uops = 1;
-                        break;
-    case rv_op_amoswap_w:              	/* Atomic Swap Word */
-    case rv_op_amoswap_d:              	/* Atomic Swap Double Word */
-    case rv_op_amoswap_q:             
-                        num_exec_uops = 1;
-                        break;
-  }
-  return num_exec_uops;
-}
-
-/// Get the maximum size of the operands of instruction inst in bits
 uint16_t RISCVDecoder::get_operand_size(const DecodedInst *ins)
 {
-  if (EXT_OP(ins))
-    return m_vector_bytes * 8;
-  uint16_t max_reg_size = 32; 
-
-  // TODO: if register- get sizereg (for now)
-  
-
-  return max_reg_size;
+  return (R(ins)->flags() & rvisa::FLAG_VECTOR) ? m_vector_bytes * 8 : 64;
 }
 
-/// Check if the opcode is an instruction that performs a cache flush
-bool RISCVDecoder::is_cache_flush_opcode(decoder_opcode opcd) 
-{
-  // ARM - DC; RISCV - for privileged?
-  return false;
-}
-
-/// Check if the opcode is a division instruction
-bool RISCVDecoder::is_div_opcode(decoder_opcode opcd) 
-{
-  if (rvext::is_ext(opcd)) {
-    rvext::Class c = rvext::class_of(opcd);
-    return c == rvext::V_INT_DIV || c == rvext::V_FP_DIV;
-  }
-  bool res = false;
-  switch(opcd) {
-    case rv_op_div:
-    case rv_op_divu:
-    case rv_op_divw:
-    case rv_op_divuw:
-    case rv_op_divd:
-    case rv_op_divud:
-      res = true; break;
-  }
-  return res;
-}
-
-/// Check if the opcode is a pause instruction
-bool RISCVDecoder::is_pause_opcode(decoder_opcode opcd) 
-{
-  // None in ARM and RISCV 
-  return false;
-}
-
-/// Check if the opcode is a branch instruction
-bool RISCVDecoder::is_branch_opcode(decoder_opcode opcd) 
-{
-  bool res = false;
-  switch(opcd) {
-    case rv_op_beq:		/* Branch Equal */
-    case rv_op_bne:		/* Branch Not Equal */
-    case rv_op_blt:		/* Branch Less Than */
-    case rv_op_bge:		/* Branch Greater than Equal */
-    case rv_op_bltu:	/* Branch Less Than Unsigned */
-    case rv_op_bgeu:	/* Branch Greater than Equal Unsigned */
-    case rv_op_beqz:	/* Branch if = zero */
-    case rv_op_bnez:	/* Branch if ≠ zero */
-    case rv_op_blez:	/* Branch if ≤ zero */
-    case rv_op_bgez:	/* Branch if ≥ zero */
-    case rv_op_bltz:	/* Branch if < zero */
-    case rv_op_bgtz:	/* Branch if > zero */
-    case rv_op_ble:
-    case rv_op_bleu:
-    case rv_op_bgt:
-    case rv_op_bgtu:
-      res = true; break;
-  }
-  return res;
-}
-
-/// Check if the opcode is an add/sub instruction that operates in vector and FP registers
-bool RISCVDecoder::is_fpvector_addsub_opcode(decoder_opcode opcd, const DecodedInst* ins)
-{
-  return rvext::class_of(opcd) == rvext::V_FP_ADDSUB;
-}
-
-/// Check if the opcode is a mul/div instruction that operates in vector and FP registers
-bool RISCVDecoder::is_fpvector_muldiv_opcode(decoder_opcode opcd, const DecodedInst* ins)
-{
-  /* The matrix multiply-accumulates count here too: they are the vector
-     unit's long-latency arithmetic, which is what the CPI stack groups. */
-  rvext::Class c = rvext::class_of(opcd);
-  return c == rvext::V_FP_MULADD || c == rvext::V_FP_DIV || c == rvext::IME_MMA_INT || c == rvext::IME_MMA_FP;
-}
-
-/// Check if the opcode is an instruction that loads or store data on vector and FP registers
-bool RISCVDecoder::is_fpvector_ldst_opcode(decoder_opcode opcd, const DecodedInst* ins)
-{
-  return rvext::is_memory(opcd);
-}
-
-bool RISCVDecoder::has_dynamic_memory_operands(const DecodedInst *ins)
-{
-  unsigned int e = EXT_OP(ins);
-  return e && rvext::is_memory(e);
-}
-
-/// Get the value of the last register in the enumeration
-Decoder::decoder_reg RISCVDecoder::last_reg()
-{
-  return dl::last_reg; // enum reg_num defined in riscv_decoder.h
-}
-
+bool RISCVDecoder::is_cache_flush_opcode(decoder_opcode opcd) { return rvisa::has(opcd, rvisa::FLAG_CACHE_FLUSH); }
+bool RISCVDecoder::is_div_opcode(decoder_opcode opcd) { return rvisa::has(opcd, rvisa::FLAG_BUSY); }
+bool RISCVDecoder::is_pause_opcode(decoder_opcode opcd) { return opcd && strcmp(rvisa::name(opcd), "pause") == 0; }
+bool RISCVDecoder::is_branch_opcode(decoder_opcode opcd) { return rvisa::has(opcd, rvisa::FLAG_BRANCH); }
+bool RISCVDecoder::is_fpvector_addsub_opcode(decoder_opcode opcd, const DecodedInst* ins) { return opcd && rvisa::info(rvisa::class_of(opcd)).cpi == rvisa::CPI_FP_ADDSUB; }
+bool RISCVDecoder::is_fpvector_muldiv_opcode(decoder_opcode opcd, const DecodedInst* ins) { return opcd && rvisa::info(rvisa::class_of(opcd)).cpi == rvisa::CPI_FP_MULDIV; }
+bool RISCVDecoder::is_fpvector_ldst_opcode(decoder_opcode opcd, const DecodedInst* ins) { return opcd && rvisa::info(rvisa::class_of(opcd)).cpi == rvisa::CPI_LDST; }
+bool RISCVDecoder::has_dynamic_memory_operands(const DecodedInst *ins) { return (R(ins)->flags() & rvisa::FLAG_FOOTPRINT) != 0; }
 
 RISCVDecodedInst::RISCVDecodedInst(Decoder* d, const uint8_t * code, size_t size, uint64_t address)
 {
@@ -589,242 +132,20 @@ RISCVDecodedInst::RISCVDecodedInst(Decoder* d, const uint8_t * code, size_t size
   this->m_already_decoded = false;
 }
 
-riscv::inst_t * RISCVDecodedInst::get_rv8_inst() {
-  return & rv8_instr;
-}
+std::string RISCVDecodedInst::disassembly_to_str() const { return rvisa::disassemble(m_op, m_word); }
 
-riscv::decode * RISCVDecodedInst::get_rv8_dec() {
-  return & rv8_dec;
-}
-
-void RISCVDecodedInst::set_ext(unsigned int op, uint32_t word)
-{
-  m_ext_op = op;
-  m_ext_word = word;
-  m_ext_nops = rvext::operands(word, op, m_ext_ops);
-}
-
-void RISCVDecodedInst::set_rv8_dec(riscv::decode d) {
-  rv8_dec = d;
-}
-
-/// Get the instruction numerical Id 
-unsigned int RISCVDecodedInst::inst_num_id() const
-{
-  if (m_ext_op)
-    return m_ext_op;
-  riscv::decode dec = this->rv8_dec;
-  return dec.op;
-}
-
-std::string format_str(const char* fmt, ...) //rv8 src/util/util.cc
-{
-    std::vector<char> buf(256);
-    va_list ap;
-    
-    va_start(ap, fmt);
-    int len = vsnprintf(buf.data(), buf.capacity(), fmt, ap);
-    va_end(ap);
-    
-    std::string str;
-    if (len >= (int)buf.capacity()) {
-        buf.resize(len + 1);
-        va_start(ap, fmt);
-        vsnprintf(buf.data(), buf.capacity(), fmt, ap);
-        va_end(ap);
-    }
-    str = buf.data();
-    
-    return str;
-}
-
-/// Get a string with the disassembled instruction
-std::string RISCVDecodedInst::disassembly_to_str() const
-{ 
-  if (m_ext_op)
-    return rvext::disassemble(m_ext_word, m_ext_op);
-  riscv::decode dec = this->rv8_dec;
-  std::string args;
-  const char *fmt = rv_inst_format[dec.op];
-  while (*fmt) {
-    switch (*fmt) {
-      case 'O': args += rv_inst_name_sym[dec.op]; break;
-      case '(': args += "("; break;
-      case ',': args += ", "; break;
-      case ')': args += ")"; break;
-      case '0': args += rv_ireg_name_sym[dec.rd]; break;
-      case '1': args += rv_ireg_name_sym[dec.rs1]; break;
-      case '2': args += rv_ireg_name_sym[dec.rs2]; break;
-      case '3': args += rv_freg_name_sym[dec.rd]; break;
-      case '4': args += rv_freg_name_sym[dec.rs1]; break;
-      case '5': args += rv_freg_name_sym[dec.rs2]; break;
-      case '6': args += rv_freg_name_sym[dec.rs3]; break;
-      case '7': args += format_str("%d", dec.rs1); break;
-      case 'i': args += format_str("%d", dec.imm); break;
-      case 'o': args += format_str("pc %c %td",
-        intptr_t(dec.imm) < 0 ? '-' : '+',
-        intptr_t(dec.imm) < 0 ? -intptr_t(dec.imm) : intptr_t(dec.imm)); break;
-      case 'c': {
-        const char * csr_name = rv_csr_name_sym[dec.imm & 0xfff];
-        if (csr_name) args += format_str("%s", csr_name);
-        else args += format_str("0x%03x", dec.imm & 0xfff);
-        break;
-      }
-      case 'r':
-        switch(dec.rm) {
-          case rv_rm_rne: args += "rne"; break;
-          case rv_rm_rtz: args += "rtz"; break;
-          case rv_rm_rdn: args += "rdn"; break;
-          case rv_rm_rup: args += "rup"; break;
-          case rv_rm_rmm: args += "rmm"; break;
-          case rv_rm_dyn: args += "dyn"; break;
-          default:           args += "inv"; break;
-        }
-        break;
-      case 'p':
-        if (dec.pred & rv_fence_i) args += "i";
-        if (dec.pred & rv_fence_o) args += "o";
-        if (dec.pred & rv_fence_r) args += "r";
-        if (dec.pred & rv_fence_w) args += "w";
-        break;
-      case 's':
-        if (dec.succ & rv_fence_i) args += "i";
-        if (dec.succ & rv_fence_o) args += "o";
-        if (dec.succ & rv_fence_r) args += "r";
-        if (dec.succ & rv_fence_w) args += "w";
-        break;
-      case '\t': while (args.length() < 12) args += " "; break;
-      case 'A': if (dec.aq) args += ".aq"; break;
-      case 'R': if (dec.rl) args += ".rl"; break;
-      default:
-        break;
-    }
-    fmt++;
-	}
-
-  return args;
-}
-
-/// Check if this instruction is a NOP
 bool RISCVDecodedInst::is_nop() const
 {
-  bool res = false;
-  riscv::decode dec = this->rv8_dec;
-  if (dec.op == rv_op_nop) {
-    return true;
-  }
-  return res;  
+  if (!m_op) return false;
+  const char *n = rvisa::name(m_op);
+  if (strcmp(n, "c.nop") == 0) return true;
+  return strcmp(n, "addi") == 0 && (m_word & 0xffffff80) == 0;   /* addi x0, x0, 0 */
 }
+bool RISCVDecodedInst::is_atomic() const { return (flags() & rvisa::FLAG_ATOMIC) != 0; }
+bool RISCVDecodedInst::is_prefetch() const { return (flags() & rvisa::FLAG_PREFETCH) != 0; }
+bool RISCVDecodedInst::is_serializing() const { return (flags() & rvisa::FLAG_SERIALIZING) != 0; }
+bool RISCVDecodedInst::is_conditional_branch() const { return (flags() & rvisa::FLAG_BRANCH) != 0; }
+bool RISCVDecodedInst::is_indirect_branch() const { return (flags() & rvisa::FLAG_INDIRECT) != 0; }
+bool RISCVDecodedInst::is_barrier() const { return m_op && strncmp(rvisa::name(m_op), "fence", 5) == 0; }
 
-/// Check if this instruction is atomic
-bool RISCVDecodedInst::is_atomic() const
-{
-  // meta.cc or refer meta/opcode-classes
-  bool res = false;
-  riscv::decode dec = this->rv8_dec;
-  if (dec.codec == rv_codec_r_l || dec.codec == rv_codec_r_a) {
-    return true;
-  }
-  return res; 
 }
-
-/// Check if instruction is a prefetch
-bool RISCVDecodedInst::is_prefetch() const
-{
-  return false;
-}
-
-/// Check if this instruction is serializing (all previous instructions must have been executed)
-bool RISCVDecodedInst::is_serializing() const
-{
-  return false;
-}
-
-/// Check if this instruction is a conditional branch
-bool RISCVDecodedInst::is_conditional_branch() const
-{
-  bool res = false;
-  riscv::decode dec = this->rv8_dec;
-  switch (dec.op) {
-    case rv_op_beq:		/* Branch Equal */
-    case rv_op_bne:		/* Branch Not Equal */
-    case rv_op_blt:		/* Branch Less Than */
-    case rv_op_bge:		/* Branch Greater than Equal */
-    case rv_op_bltu:	/* Branch Less Than Unsigned */
-    case rv_op_bgeu:	/* Branch Greater than Equal Unsigned */
-    case rv_op_beqz:	/* Branch if = zero */
-    case rv_op_bnez:	/* Branch if ≠ zero */
-    case rv_op_blez:	/* Branch if ≤ zero */
-    case rv_op_bgez:	/* Branch if ≥ zero */
-    case rv_op_bltz:	/* Branch if < zero */
-    case rv_op_bgtz:	/* Branch if > zero */
-    case rv_op_ble:
-    case rv_op_bleu:
-    case rv_op_bgt:
-    case rv_op_bgtu:
-      res = true;
-      break;
-    default:
-      res = false;
-      break;
-  }
-  return res;
-}
-
-/// Register-indirect jumps: jalr and its compressed forms.  (Conditional
-/// branches and jal are direct.)
-bool RISCVDecodedInst::is_indirect_branch() const
-{
-  switch (this->rv8_dec.op) {
-    case rv_op_jalr:
-    case rv_op_c_jr:
-    case rv_op_c_jalr:
-      return true;
-  }
-  return false;
-}
-
-/// Check if this instruction is a fence/barrier-type
-bool RISCVDecodedInst::is_barrier() const
-{
-  // if DMB, DSB, and ISB Data Memory Barrier, Data Synchronization Barrier, and Instruction Synchronization Barrier.
-  bool res = false;
-  riscv::decode dec = this->rv8_dec;
-  switch (dec.op) {
-    case rv_op_fence:		  /* Fence */
-    case rv_op_fence_i:		/* Fence Instruction */
-      res = true;
-      break;
-  }
-  return res;
-}
-
-/// Check if in this instruction the result merges the source and destination.
-    /// For instance: memory to XMM loads in x86.
-bool RISCVDecodedInst::src_dst_merge() const
-{
-  return false;
-}
-
-/// Check if this instruction is from the X87 set (only applicable to Intel instructions)
-bool RISCVDecodedInst::is_X87() const
-{
-  return false;
-}
-
-/// Check if this instruction has shift or extender modifiers (ARM)
-bool RISCVDecodedInst::has_modifiers() const
-{
-  //based on op-count - shifter and extender INVALID
-  return false;
-}
-
-/// Check if this instruction loads or stores pairs of registers using a memory address (ARM)
-bool RISCVDecodedInst::is_mem_pair() const
-{
-  // instr like ldnp, ldpsw, stnp, stp in ARM
-  // no load/store pair instructions in RISCV
-  return false;
-}
-
-} // namespace dl;

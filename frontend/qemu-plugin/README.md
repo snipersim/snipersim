@@ -38,21 +38,22 @@ the reader decodes it as RISC-V.  Everything else -- deferred emission for
 the taken flag, memory addresses from the memory callbacks, code bytes read
 from guest memory for the icache -- is the same code as x86.
 
-The simulator side needs the RISC-V decoder, which is built on rv8:
+The simulator side needs the RISC-V core model (on by default; no external
+dependency since the decoder is generated):
 
 ```
-git clone https://github.com/michaeljclark/rv8 ../rv8     # or RV8_HOME=...
-make RISCV=ON QEMU=ON -j8
+make QEMU=ON -j8
 qemu-riscv64 -plugin build/default/lib/libsniper-qemu.so,output=trace -- ./app
 ./run-sniper -n 1 -c riscv --traces=trace.app0.th0.sift
 ```
 
 The plugin is built against the QEMU under `qemu/`; any other QEMU of the
 same plugin API version loads it -- a QEMU built from a patched tree for an
-extension under development, for one.  An instruction the decoder does not
-know (the vector extension, matrix extensions ahead of rv8's tables) is
+extension under development, for one.  An instruction the generated tables do
+not know (an extension whose specification is not in the policy yet) is
 reported once per encoding and costed as a generic instruction, so a trace
-with a few of them still simulates; modelling them is decoder work.
+with a few of them still simulates; modelling it is a policy edit and a
+regeneration (docs/RISCV_ISA_GENERATION.md).
 
 `testing/test_qemu.py` has `riscv-user-trace` and `riscv-user-simulate`,
 which take the QEMU and a RISC-V compiler from the environment and skip,
@@ -196,17 +197,14 @@ today.
 
 ## RISC-V vector and matrix (IME) instructions
 
-rv8, the decoder Sniper's RISC-V support is built on, predates the vector
-extension and the Integrated Matrix Extension (IME, Zvvm freeze 0.9).  Both
-are handled by a classifier that needs neither rv8 nor QEMU,
-`decoder_lib/riscv_ext.{h,cc}`: it recognises the RVV 1.0 configuration,
-load/store and arithmetic encodings and the sixteen IME instructions
-(`vmmacc.vv` and its widening and floating-point relatives, the tile
-loads and stores `vmtl.v`, `vmts.v`, `vmttl.v`, `vmtts.v`, and
-`vsetlambda`), and gives each an opcode id that continues rv8's
-numbering.  Sniper's decoder consults it for anything rv8 calls illegal;
-the plugin consults it to know which instructions need their memory
-footprint recorded.
+Sniper's RISC-V decoder is generated from the RISC-V Unified Database
+(`tools/riscv/gen_isa.py`, see docs/RISCV_ISA_GENERATION.md): the same
+tables give every instruction, the vector extension and the Integrated
+Matrix Extension (IME, Zvvm freeze 0.9) included, a class with flags.  The
+plugin links those tables (`decoder_lib/riscv_isa*.cc`) and uses them for
+two translation-time decisions: whether an instruction is a conditional
+branch, and whether its memory footprint must be recorded (the `footprint`
+flag of its class).
 
 **Footprints.**  A trace instruction carries at most two data addresses,
 which cannot describe a tile: a `vmtl.v` reads M rows of `linesize`

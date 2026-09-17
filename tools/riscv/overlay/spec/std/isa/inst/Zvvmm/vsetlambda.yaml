@@ -1,0 +1,31 @@
+# Sniper's overlay on the IME 0.9 UDB contribution: the vtype.lambda
+# configuration instruction, which the ime-0.9-pipeline defines through its
+# pseudo-instruction layer (scripts/ime/pseudo.mjs) rather than as a UDB
+# instruction.  Encoding as the pipeline's llvm-mc emits it: custom-0
+# opcode, funct3 000, bits 31:20 unused (see references/encodings.md).
+$schema: "inst_schema.json#"
+kind: instruction
+name: vsetlambda
+long_name: Set the tile-layout parameter LAMBDA in vtype
+description: |
+  Writes the vtype.lambda field (a WARL encoding of the tile-layout
+  parameter) from xs1 and returns the previous value in xd.  IME 0.9.
+definedBy:
+  extension:
+    name: Zvvmm
+assembly: xd, xs1
+encoding:
+  match: "-----------------000-----0001011"
+  variables:
+    - name: xs1
+      location: 19-15
+    - name: xd
+      location: 11-7
+access:
+  s: always
+  u: always
+  vs: always
+  vu: always
+data_independent_timing: true
+operation(): |
+  X[xd] = ime_vsetlambda(X[xs1]);
