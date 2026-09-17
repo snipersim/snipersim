@@ -267,6 +267,19 @@
       ],
       "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvmtls=on"
     },
+    "sail-riscv": {
+      "kind": "tarball",
+      "url": "https://github.com/riscv/sail-riscv/releases/download/0.14.1/sail-riscv-Linux-x86_64.tar.gz",
+      "version": "0.14.1",
+      "sha256": "de45a89748ca67a8a522b3ac0924c303b5609a16bb50d759bbd08c4d440df0eb",
+      "install_path": "sail-riscv",
+      "when": [
+        "riscv-ime"
+      ],
+      "marker": "bin/sail_riscv_sim",
+      "description": "sail-riscv 0.14.1 prebuilt model (RVV 1.0): the golden functional reference the riscv-gemm-sail check runs the vector workload on",
+      "strip_components": 1
+    },
     "mpich-src": {
       "kind": "tarball",
       "version": "4.2.3",

@@ -210,10 +210,10 @@ flag of its class).
 which cannot describe a tile: a `vmtl.v` reads M rows of `linesize`
 elements, each row wherever the leading dimension puts it.  For every
 vector or tile memory instruction the plugin records all of its accesses
-(QEMU reports each element) and coalesces them into byte ranges, merging
-accesses that fall in a cache line the range already covers, so a row
-striped through a line is one range and rows in different lines stay
-apart.  The ranges go into the trace ahead of the instruction as a
+(QEMU reports each element) and coalesces them into contiguous byte
+ranges, so a unit-stride load is one range and each row of a strided tile
+is its own; the ranges are the exact bytes moved (two rows in one cache
+line still cost one cache access: the core squashes the second uop).  The ranges go into the trace ahead of the instruction as a
 `MemorySpans` record (`Sift::Writer::MemorySpans`, up to
 `Sift::MAX_MEMORY_SPANS` = 16 per instruction; more are dropped with a
 warning) and the reader delivers them with it (`Instruction::spans`).

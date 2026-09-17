@@ -29,7 +29,7 @@ header:
 
 # Extensions to take from the UDB (regexes over the extension name).
 extensions:
-  - '^(I|M|A|F|D|Q|Zicsr|Zifencei|Zihintpause|Zihintntl|Zimop|Zicond|Zicbom|Zicbop|Zicboz)$'
+  - '^(I|M|Zmmul|A|F|D|Q|Zicsr|Zifencei|Zihintpause|Zihintntl|Zimop|Zicond|Zicbom|Zicbop|Zicboz|Zicntr|Zihpm)$'
   - '^(Zca|Zcb|Zcd|Zcmop|Zalrsc|Zaamo|Zawrs|Zacas|Zabha)$'     # Zcf (c.flw) is RV32-only
   - '^(Zba|Zbb|Zbc|Zbs|Zbkb|Zbkc|Zbkx|Zfh|Zfhmin|Zfa|Zfbfmin)$'       # Zilsd/Zclsd are RV32-only
   - '^(V|Zvl.*|Zve.*|Zvfh.*|Zvbb|Zvbc|Zvkb|Zvkg|Zvkn.*|Zvks.*|Zvfbfmin|Zvfbfwma)$'

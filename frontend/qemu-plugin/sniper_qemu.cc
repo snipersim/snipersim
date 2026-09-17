@@ -341,10 +341,12 @@ void writer_open(VCPU *v, unsigned int idx)
 
 /* Emit the buffered instruction, now that we know where control went next. */
 /* Coalesce the pending instruction's accesses into the byte ranges Sniper
- * models: accesses of one direction that start in a cache line the range
- * already covers are merged, so a tile row that is striped through a line
- * is one range and rows in different lines stay apart.  The line size is
- * the 64 bytes Sniper's own micro-op model assumes. */
+ * models: accesses of one direction that touch or overlap are merged into
+ * one contiguous run, so a unit-stride vector load is one range and each
+ * row of a strided tile is its own.  Two runs in one cache line still
+ * cost one cache access: the micro-op model squashes the second uop of an
+ * instruction that hits a line it already touched.  Runs are exact byte
+ * ranges, so the recorded footprint is the bytes the instruction moved. */
 void emit_spans(VCPU *v)
 {
    std::vector<VCPU::Access> &a = v->pend_accs;
@@ -357,7 +359,7 @@ void emit_spans(VCPU *v)
    {
       const uint64_t end = acc.addr + acc.size;
       if (n && (spans[n - 1].is_write == (uint8_t)acc.store)
-          && (acc.addr >> 6) <= ((spans[n - 1].addr + spans[n - 1].size - 1) >> 6))
+          && acc.addr <= spans[n - 1].addr + spans[n - 1].size)
       {
          const uint64_t cur_end = spans[n - 1].addr + spans[n - 1].size;
          if (end > cur_end)

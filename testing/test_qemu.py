@@ -469,6 +469,93 @@ def case_riscv_ime_simulate(p, g, workdir):
     return True, ('%d instructions; 3 tile loads, 1 tile store, 1 vmmacc decoded; '
                   '%d spans reached the cache, 2 of them stores') % (IME_INSNS, IME_SPANS)
 
+# gemm3: one matrix product three ways (scalar, RVV 1.0, IME 0.9), self-
+# verifying (exit 100 when all agree), traced and simulated with the
+# instruction-class and footprint counts checked against the values
+# tools/riscv/expected_counts.py derives from the specification, and, when a
+# sail-riscv model is at hand (SNIPER_SAIL_RISCV, or the sail-riscv
+# dependency), the scalar-versus-vector comparison run on that golden model
+# at VLEN=128 (the model has no IME; the IME path is left out there).
+GEMM_DIR = os.path.join(SNIPER_ROOT, 'test', 'riscv-gemm')
+
+def gemm_build(cc, out, extra):
+    return run([cc, '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O1', '-ffreestanding',
+                '-nostdlib', '-static', '-fuse-ld=lld', '-I', os.path.join(SNIPER_ROOT, 'include')] + extra
+               + ['-o', out, os.path.join(GEMM_DIR, 'gemm3.c')], 120)
+
+def riscv_gemm_prerequisites(workdir):
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    guest = os.path.join(workdir, 'gemm3')
+    if not os.path.isfile(guest):
+        rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start'])
+        if rc != 0:
+            return None, 'could not build gemm3.c (exit %s)' % rc
+    r['gemm'] = guest
+    return r, None
+
+def case_riscv_gemm_verify(p, g, workdir):
+    """Scalar, RVV and IME compute the same product: the guest says so with exit 100."""
+    r, why = riscv_gemm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], r['gemm']], 120, cwd=workdir)
+    names = {100: 'all three agree', 5: 'RVV differs from scalar', 6: 'IME differs from scalar', 7: 'RVV and IME differ from scalar'}
+    if rc != 100:
+        return False, 'guest exited %s: %s' % (rc, names.get(rc, 'unexpected'))
+    return True, 'scalar, RVV 1.0 and IME 0.9 results agree (8x8x8 int32)'
+
+def case_riscv_gemm_simulate(p, g, workdir):
+    """Sniper's per-class instruction counts and footprint bytes equal the specification's."""
+    r, why = riscv_gemm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'gemm3sim')
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+                   '--', r['gemm']], 300, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (exit %s)' % rc
+    outdir = os.path.join(workdir, 'gemm3simout')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc is None:
+        return False, 'simulation timed out'
+    if rc != 0:
+        return False, 'run-sniper exited %d' % rc
+    if 'undecoded instruction' in out:
+        return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
+    rc, out = run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'riscv', 'expected_counts.py'),
+                   os.path.join(outdir, 'simulation', 'sim.stats')], 60)
+    if rc != 0:
+        bad = [l for l in out.splitlines() if l.startswith('FAIL')]
+        return False, 'counts off: ' + '; '.join(bad)[:300]
+    last = [l for l in out.splitlines() if l.startswith('compute:')]
+    return True, 'every class count and the footprint bytes match the specification (%s)' % (last[0] if last else '')
+
+def case_riscv_gemm_sail(p, g, workdir):
+    """The scalar and RVV 1.0 paths agree on the sail-riscv golden model at VLEN=128."""
+    r, why = riscv_gemm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    sail = os.environ.get('SNIPER_SAIL_RISCV') or os.path.join(SNIPER_ROOT, 'sail-riscv', 'bin', 'sail_riscv_sim')
+    if not os.path.isfile(sail):
+        return None, 'no sail-riscv model (SNIPER_SAIL_RISCV, or deps/sniper-deps --riscv-ime)'
+    guest = os.path.join(workdir, 'gemm3-sail')
+    rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest,
+                         ['-DPLATFORM_HTIF', '-DNO_IME', '-Wl,-T,' + os.path.join(GEMM_DIR, 'sail.ld')])
+    if rc != 0:
+        return False, 'could not build the HTIF variant (exit %s)' % rc
+    override = os.path.join(workdir, 'sail-v128.json')
+    with open(override, 'w') as f:
+        f.write('{ "extensions": { "V": { "vlen_exp": 7 } } }\n')
+    rc, out = run([sail, '--config-override', override, guest], 600, cwd=workdir)
+    if 'SUCCESS' not in out:
+        tail = out.strip().splitlines()[-1] if out.strip() else 'no output'
+        return False, 'sail-riscv did not report SUCCESS: %s' % tail[:200]
+    return True, 'sail-riscv 0.14 (RVV 1.0, VLEN=128) runs the scalar and vector paths to agreement'
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
@@ -480,6 +567,9 @@ CASES = {
     'riscv-user-simulate': case_riscv_user_simulate,
     'riscv-ime-trace':     case_riscv_ime_trace,
     'riscv-ime-simulate':  case_riscv_ime_simulate,
+    'riscv-gemm-verify':   case_riscv_gemm_verify,
+    'riscv-gemm-simulate': case_riscv_gemm_simulate,
+    'riscv-gemm-sail':     case_riscv_gemm_sail,
 }
 
 

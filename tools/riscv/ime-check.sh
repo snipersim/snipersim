@@ -10,8 +10,11 @@
 #   4. compiler   a clang with a RISC-V target (SNIPER_RISCV_CC, or found on
 #                 PATH); no rebuilt compiler: the matrix instructions come
 #                 from the generated include/riscv_insn.h
-#   5. workload   test/qemu-plugin-probe/rv-ime.c, traced and simulated by
-#                 the riscv-* cases of testing/test_qemu.py, exact counts
+#   5. workloads  test/qemu-plugin-probe/rv-ime.c and test/riscv-gemm/gemm3.c
+#                 (scalar, RVV and IME, self-verifying), traced and simulated
+#                 by the riscv-* cases of testing/test_qemu.py: exact counts,
+#                 and the RVV path on the sail-riscv model (fetched with
+#                 --riscv-ime) as the golden functional reference
 #
 # Environment: SNIPER_UDB_ROOTS="<riscv-unified-db>;<ime overlay>" (optional,
 # step 1 is skipped without it), SNIPER_RISCV_CC (optional), JOBS.
@@ -51,4 +54,5 @@ fi
 say "5. the IME workload, traced and simulated"
 SNIPER_QEMU_RISCV="$QEMU_RISCV" SNIPER_RISCV_CC="$CC" \
    python3 testing/test_qemu.py --case riscv-user-trace --case riscv-user-simulate \
-                                --case riscv-ime-trace --case riscv-ime-simulate
+                                --case riscv-ime-trace --case riscv-ime-simulate \
+                                --case riscv-gemm-verify --case riscv-gemm-simulate --case riscv-gemm-sail

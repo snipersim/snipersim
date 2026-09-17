@@ -113,6 +113,33 @@ a clang with a RISC-V target (`SNIPER_RISCV_CC`, or on PATH), and run the
 `riscv-*` harness cases, which trace and simulate the IME workload and
 check exact instruction, footprint, span and class counts.
 
+## Validation: functional, and what reaches the memory hierarchy
+
+`test/riscv-gemm/gemm3.c` is the workload that spans both spaces: one
+int32 matrix product computed by a scalar reference, by RVV 1.0 and by IME
+0.9 in one self-verifying binary (exit 100 when all agree, 5/6/7 naming
+the disagreement).  Three harness cases hang off it:
+
+- **Functional, under QEMU** (`riscv-gemm-verify`): the three paths agree.
+- **Functional, against the specification's model** (`riscv-gemm-sail`):
+  the scalar-versus-RVV comparison runs on the prebuilt sail-riscv 0.14
+  model, the golden RVV 1.0 reference, at VLEN=128 (a bare-metal HTIF
+  variant of the same source; `deps/sniper-deps --riscv-ime` fetches the
+  model).  IME is not in the Sail model; its semantics are checked against
+  the scalar reference under QEMU, whose helpers derive from the
+  specification's Sail.
+- **Counts, from the specification** (`riscv-gemm-simulate`):
+  `tools/riscv/expected_counts.py` derives, from the UDB's tile geometry
+  (`M = (VLEN/SEW)/lambda` rows of `lambda*LMUL` elements) and the
+  workload's loop structure, how many instructions of each class and how
+  many bytes of vector and tile footprint the run must contain, and
+  requires Sniper's `riscv.<class>` counters and `riscv.span_bytes` to
+  equal them.  For 8x8x8: 64 `vmmacc.vv`, 144 tile loads, 16 tile stores,
+  128 vector loads, 6656 footprint bytes -- all exact.  The frontend
+  records footprints as contiguous byte runs (each tile row its own run),
+  so the bytes are the bytes moved; two runs in one cache line still cost
+  one cache access, since the core squashes the second uop.
+
 ## Correctness checks
 
 - `rvisa::self_test()` (run when the decoder is created, and by the test):

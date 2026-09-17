@@ -48,6 +48,7 @@ def load_insts(roots):
             if not isinstance(d, dict) or d.get('kind') != 'instruction':
                 continue
             d['_file'] = os.path.relpath(f, root)
+            d['_ext'] = os.path.basename(os.path.dirname(f))
             insts[d['name']] = d          # a later root overrides
     return insts
 
@@ -224,6 +225,10 @@ def build(policy, insts, report):
         if shadow:
             print('\nrefinements (sample word hits a more specific sibling; expected): ' + ', '.join('%s->%s' % s for s in shadow))
         print('\nskipped for xlen: ' + ' '.join(skipped.get('xlen', [])))
+        byext = {}
+        for nm in skipped.get('extension', []):
+            byext.setdefault(insts[nm]['_ext'], []).append(nm)
+        print('skipped by extension: ' + '; '.join('%s: %s' % (e, ' '.join(v)) for e, v in sorted(byext.items())))
     return rows, classes, conflicts
 
 

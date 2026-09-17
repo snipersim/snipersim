@@ -62,7 +62,7 @@ enum Cpi : uint8_t { CPI_GENERIC, CPI_BRANCH, CPI_FP_ADDSUB, CPI_FP_MULDIV, CPI_
 enum FieldKind : uint8_t { F_XREG, F_FREG, F_VREG, F_IMM, F_CSR, F_OTHER };
 enum FieldFlag : uint8_t { FF_READ = 1, FF_WRITE = 2, FF_PLUS8 = 4, FF_SEXT = 8 };
 
-const unsigned NUM_INSNS = 1291;
+const unsigned NUM_INSNS = 1296;
 const unsigned MAX_FIELDS = 7;
 const unsigned MAX_SEGS = 8;
 
