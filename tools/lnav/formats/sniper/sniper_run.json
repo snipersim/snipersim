@@ -1,0 +1,32 @@
+{
+  "$schema": "https://lnav.org/schemas/format-v1.schema.json",
+  "sniper_run": {
+    "title": "Sniper run stream",
+    "description": "run-sniper's merged output: wall-clock stamp, process tag, then the line as the process wrote it (sim.stdout, or the terminal capture).  The optional [src] / [src:tid] after the tag is the producer's own marker: [SNIPER], [TRACE:1], [MimicOS], [SIFT:0].",
+    "regex": {
+      "std": {
+        "pattern": "^(?<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}) \\[(?<proc>sniper|kernel|app\\d+|rank\\d+)\\] (?:\\[(?<src>[^\\]:]+)(?::(?<tid>\\d+))?\\]:? )?(?<body>.*)$"
+      }
+    },
+    "timestamp-format": ["%Y-%m-%dT%H:%M:%S.%f"],
+    "opid-field": "proc",
+    "level-field": "body",
+    "level": {
+      "error": "\\*ERROR\\*|Assertion|Segmentation|deadlocked|Broken pipe|killed by|SIGABRT|SIGSEGV",
+      "warning": "WARNING|\\bwarning\\b|Cannot open"
+    },
+    "value": {
+      "proc": { "kind": "string",  "identifier": true, "description": "which process wrote the line: sniper, kernel (userspace MimicOS), appN, rankN" },
+      "src":  { "kind": "string",  "identifier": true, "description": "the producer's own marker, e.g. TRACE, MimicOS, SNIPER, SIFT" },
+      "tid":  { "kind": "integer", "identifier": true, "description": "thread or core id carried by the marker, e.g. the 1 in [TRACE:1]" },
+      "body": { "kind": "string" }
+    },
+    "sample": [
+      { "line": "2026-09-17T03:59:49.224121 [kernel] [MimicOS] kernel 0: quantum_expired preempted=0x20000 -> SimContextSwitchTo(0x20000)" },
+      { "line": "2026-09-17T03:59:49.331347 [sniper] [TRACE:1] -- last application exited; requesting shutdown" },
+      { "line": "2026-09-17T03:59:40.100200 [sniper] [SNIPER] Sniper using SIFT/trace-driven frontend" },
+      { "line": "2026-09-17T03:59:41.000001 [kernel] [MimicOS]: Output file path: /tmp/lo.txt" },
+      { "line": "2026-09-17T03:59:49.400000 [sniper] 0          [3783107]  [ 0]  [barrier_sync_server.: 296]  *ERROR* No threads running, no timeout. Application has deadlocked.", "level": "error" }
+    ]
+  }
+}

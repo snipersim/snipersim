@@ -86,6 +86,13 @@ from common.runlog import RunLog
 WORKLOAD_SRC = os.path.join(HERE, 'apps', 'workload.c')
 WORKLOAD_OUTPUT = re.compile(r'workload isum=1419064784 fsum=100638720\.000')
 
+# The run stream's line shape, taken from the lnav format so the two agree.
+def _stamped_line_regex():
+    fmt = os.path.join(SNIPER_ROOT, 'tools', 'lnav', 'formats', 'sniper', 'sniper_run.json')
+    pattern = json.load(open(fmt))['sniper_run']['regex']['std']['pattern']
+    return re.compile(pattern.replace('(?<', '(?P<'))
+STAMPED = _stamped_line_regex()
+
 # Where blessed baselines live.  Gitignored: see the module docstring.
 GOLDEN_DIR = os.path.join(HERE, 'goldens', 'virtuoso')
 
@@ -690,6 +697,12 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
     # run-sniper exits 0 even when the simulator refuses to start.
     if not expect.search(p.stdout):
         return None, 'exit 0 but the workload produced no output'
+    # Every line of the run stream is stamped and tagged (tools/run_sniper.py,
+    # "The run stream"); a line that is not means a producer bypassed the
+    # tee, or the tee split or lost one.  Same regex as the lnav format.
+    bad = [l for l in p.stdout.splitlines() if l.strip() and not STAMPED.match(l)]
+    if bad:
+        return None, 'unstamped output line: %r' % bad[0][:60]
     return p.stdout, None
 
 
