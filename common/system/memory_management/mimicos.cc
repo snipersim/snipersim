@@ -1,4 +1,5 @@
 #include "mimicos.h"
+#include "line_out.h"
 #include "config.hpp"
 #include "allocator_factory.h"
 #include "dvfs_manager.h"
@@ -36,7 +37,7 @@ MimicOS::MimicOS(bool is_guest)
     , m_page_fault_latency(nullptr, 0)
     , m_target_fragmentation(0.0)
 {
-    std::cout << "[MimicOS] Initializing MimicOS: " << m_name << std::endl;
+    LineOut() << "[MimicOS] Initializing MimicOS: " << m_name << std::endl;
     
     // Open log file
     m_log_file_name = std::string(Sim()->getConfig()->getOutputDirectory().c_str()) + "/" 
@@ -105,7 +106,7 @@ MimicOS::MimicOS(bool is_guest)
         m_target_fragmentation = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/target_fragmentation");
         
         m_memory_allocator.reset(AllocatorFactory::createAllocator(m_name));
-        std::cout << "[MimicOS] Memory Allocator of type " << allocator_name << " created." << std::endl;
+        LineOut() << "[MimicOS] Memory Allocator of type " << allocator_name << " created." << std::endl;
         
         // Read fragmentation mode configuration
         String frag_mode_str = "ratio";  // Default to ratio-based
@@ -119,11 +120,11 @@ MimicOS::MimicOS(bool is_guest)
             if (Sim()->getCfg()->hasKey("perf_model/" + allocator_name + "/target_free_2mb_pages")) {
                 target_free_2mb = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/target_free_2mb_pages");
             }
-            std::cout << "[MimicOS] Using count-based fragmentation with target " << target_free_2mb << " free 2MB pages" << std::endl;
+            LineOut() << "[MimicOS] Using count-based fragmentation with target " << target_free_2mb << " free 2MB pages" << std::endl;
             m_memory_allocator->fragment_memory_to_count(target_free_2mb);
         } else {
             // Ratio-based fragmentation (default): fragment to target ratio
-            std::cout << "[MimicOS] Using ratio-based fragmentation with target ratio " << m_target_fragmentation << std::endl;
+            LineOut() << "[MimicOS] Using ratio-based fragmentation with target ratio " << m_target_fragmentation << std::endl;
             m_memory_allocator->fragment_memory(m_target_fragmentation);
         }
         
@@ -277,7 +278,7 @@ MimicOS::MimicOS(bool is_guest)
         }
     }
 
-    std::cout << "[MimicOS] Initialization complete" << std::endl;
+    LineOut() << "[MimicOS] Initialization complete" << std::endl;
 }
 
 MimicOS::~MimicOS()

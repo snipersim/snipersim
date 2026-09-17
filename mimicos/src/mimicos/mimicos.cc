@@ -1,4 +1,5 @@
 #include <iostream>
+#include "line_out.h"
 #include <string>
 #include <sys/mman.h>
 #include <sys/wait.h>
@@ -52,11 +53,11 @@ MimicOS::MimicOS(std::string configurationFile, std::string outputFile, std::str
 
     //max_order is only applicable to Buddy-based allocators (e.g., ReserveTHP, Baseline)
     int maxOrder = reader->GetInteger("allocator", "max_order", 0);
-    std::cout << "[MimicOS]: Allocator order: " << maxOrder << std::endl;
+    LineOut() << "[MimicOS]: Allocator order: " << maxOrder << std::endl;
 
     //by setting the kernel size, we reserve the first 'kernel_size' MB for the kernel
     int kernelSize = reader->GetInteger("pmem_alloc"    , "kernel_size", 0);
-    std::cout << "[MimicOS]: Kernel size: " << kernelSize << std::endl;
+    LineOut() << "[MimicOS]: Kernel size: " << kernelSize << std::endl;
 
     //Fragmentation's definition depends on what we want to optimize for
     // "contiguity" => we want to optimize for contiguity (i.e., average block size)
@@ -64,18 +65,18 @@ MimicOS::MimicOS(std::string configurationFile, std::string outputFile, std::str
     String fragType = reader->Get("pmem_alloc", "frag_type", "none").c_str();
         
     int memory_size = reader->GetInteger("pmem_alloc", "memory_size", 0);
-    std::cout << "[MimicOS]: Memory size: " << memory_size << std::endl;
+    LineOut() << "[MimicOS]: Memory size: " << memory_size << std::endl;
 
     //threshold_for_promotion is only applicable to ReserveTHP allocator
     // As we saw in Part1.1, we do not promote a 2MB region to a full 2MB page unless
     // the fraction of used 4KB pages in that region exceeds threshold_for_promotion
     int threshold_for_promotion = reader->GetInteger("pmem_alloc", "threshold_for_promotion", -1);
-    std::cout << "[MimicOS]: Threshold for promotion (Applicable to ReserveTHP, otherwise: default = -1): " << threshold_for_promotion << std::endl;
+    LineOut() << "[MimicOS]: Threshold for promotion (Applicable to ReserveTHP, otherwise: default = -1): " << threshold_for_promotion << std::endl;
 
     //Create physical memory allocator - this will be used to serve page allocations
     // throughout the execution of the SIFT-based application
     physical_memory_allocator = AllocatorFactory::createAllocator(allocatorName, memory_size, maxOrder, kernelSize, fragType, threshold_for_promotion);
-    std::cout << "[MimicOS]: Created allocator: " << allocatorName << std::endl;
+    LineOut() << "[MimicOS]: Created allocator: " << allocatorName << std::endl;
 
     // Initialize HugeTLBfs (optional, from INI config)
     {
@@ -87,7 +88,7 @@ MimicOS::MimicOS(std::string configurationFile, std::string outputFile, std::str
             cfg.nr_hugepages_1gb = reader->GetInteger("hugetlbfs", "nr_hugepages_1gb", 0);
             cfg.overcommit = reader->GetBoolean("hugetlbfs", "overcommit", false);
             m_hugetlbfs = std::make_unique<VirtuosoHugeTLBfs>(cfg);
-            std::cout << "[MimicOS] HugeTLBfs enabled: " << cfg.nr_hugepages_2mb << " 2MB + "
+            LineOut() << "[MimicOS] HugeTLBfs enabled: " << cfg.nr_hugepages_2mb << " 2MB + "
                       << cfg.nr_hugepages_1gb << " 1GB pages" << std::endl;
         }
     }
@@ -98,7 +99,7 @@ MimicOS::MimicOS(std::string configurationFile, std::string outputFile, std::str
         if (swap_enabled) {
             int swap_size_mb = reader->GetInteger("swap", "swap_size_mb", 1024);
             m_swap_cache = std::make_unique<VirtuosoSwapCache>(swap_size_mb);
-            std::cout << "[MimicOS] SwapCache enabled: " << swap_size_mb << " MB" << std::endl;
+            LineOut() << "[MimicOS] SwapCache enabled: " << swap_size_mb << " MB" << std::endl;
         }
     }
 
@@ -132,7 +133,7 @@ MimicOS::MimicOS(std::string configurationFile, std::string outputFile, std::str
         m_fault_calibration.inject_drift_extra_iters =
             (uint64_t)reader->GetInteger("fault_calibration", "inject_drift_extra_iters", 0);
         if (m_fault_calibration.inject_drift_extra_iters > 0) {
-            std::cout << "[MimicOS] Drift injection enabled: after_faults="
+            LineOut() << "[MimicOS] Drift injection enabled: after_faults="
                       << m_fault_calibration.inject_drift_after_faults
                       << " extra_iters=" << m_fault_calibration.inject_drift_extra_iters
                       << std::endl;
@@ -140,7 +141,7 @@ MimicOS::MimicOS(std::string configurationFile, std::string outputFile, std::str
 
         if (m_fault_calibration.phase_instrumentation_enabled) {
             m_fault_metrics.enable();
-            std::cout << "[MimicOS] Fault phase instrumentation enabled" << std::endl;
+            LineOut() << "[MimicOS] Fault phase instrumentation enabled" << std::endl;
         }
     }
 
@@ -201,7 +202,7 @@ MimicOS::MimicOS(std::string configurationFile, std::string outputFile, std::str
 
             m_fast_fault_registry.configure(fp);
             m_fast_fault_registry.enable();
-            std::cout << "[MimicOS] FastFaultRegistry enabled (min_samples="
+            LineOut() << "[MimicOS] FastFaultRegistry enabled (min_samples="
                       << fp.min_samples << " abandon_samples=" << fp.abandon_samples
                       << " stable_cv=" << fp.stable_cv
                       << " replay_mode=" << mode_s
@@ -366,7 +367,7 @@ MimicOS::~MimicOS()
     if (m_child_pid > 0 && m_app_vma_tree.size() > 0) {
         std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
         m_app_vma_tree.dump(base + "_vma_tree.log");
-        std::cout << "[MimicOS] Dumped VMA tree (" << m_app_vma_tree.size()
+        LineOut() << "[MimicOS] Dumped VMA tree (" << m_app_vma_tree.size()
                   << " regions) to " << base << "_vma_tree.log" << std::endl;
     }
 
@@ -375,7 +376,7 @@ MimicOS::~MimicOS()
         std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
         m_fault_metrics.dump_csv(base + "_fault_phases.csv");
         m_fault_metrics.dump_histograms(base + "_fault_histograms.csv");
-        std::cout << "[MimicOS] Dumped fault phase metrics (" << m_fault_metrics.fault_count()
+        LineOut() << "[MimicOS] Dumped fault phase metrics (" << m_fault_metrics.fault_count()
                   << " faults) to " << base << "_fault_*.csv" << std::endl;
     }
 
@@ -384,7 +385,7 @@ MimicOS::~MimicOS()
         std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
         m_scheduler.dump_stats(base + "_scheduler_stats.csv");
         auto& ss = m_scheduler.stats();
-        std::cout << "[MimicOS] Scheduler stats: csw=" << ss.context_switches
+        LineOut() << "[MimicOS] Scheduler stats: csw=" << ss.context_switches
                   << " preemptions=" << ss.preemptions
                   << " wakeups=" << ss.wakeups << std::endl;
     }
@@ -394,7 +395,7 @@ MimicOS::~MimicOS()
         std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
         m_fault_replay.dump_stats(base + "_replay_stats.csv");
         auto& cs = m_fault_replay.cache_stats();
-        std::cout << "[MimicOS] Replay cache stats: lookups=" << cs.total_lookups()
+        LineOut() << "[MimicOS] Replay cache stats: lookups=" << cs.total_lookups()
                   << " hit_rate=" << cs.hit_rate()
                   << " structured=" << cs.structured_replays
                   << " analytical=" << cs.analytical_replays << std::endl;
@@ -447,7 +448,7 @@ MimicOS::~MimicOS()
             }
         }
         auto& s = m_fast_fault_registry.stats();
-        std::cout << "[MimicOS] FastFault stats: profiles=" << m_fast_fault_registry.size()
+        LineOut() << "[MimicOS] FastFault stats: profiles=" << m_fast_fault_registry.size()
                   << " trained=" << s.trained_promotions
                   << " abandoned=" << s.abandoned_promotions
                   << " detailed_trainings=" << s.detailed_trainings
@@ -462,7 +463,7 @@ void MimicOS::boot()
     boot_log << "[MimicOS-userspace] boot() called" << std::endl;
 
     double target_fragmentation = reader->GetReal("pmem_alloc"    , "target_fragmentation", 1.0);
-    std::cout << "[MimicOS]: Fragmenting memory w/ target_fragmentation factor = " << target_fragmentation << std::endl;
+    LineOut() << "[MimicOS]: Fragmenting memory w/ target_fragmentation factor = " << target_fragmentation << std::endl;
     boot_log << "[MimicOS-userspace] target_fragmentation=" << target_fragmentation << std::endl;
 
     //Fragment memory to achieve target fragmentation
@@ -477,7 +478,7 @@ void MimicOS::boot()
     // Start OS daemons BEFORE the application so their threads exist
     // when SDE starts recording. The POSIX threads created here will be
     // instrumented by SDE and simulated by Sniper.
-    std::cout << "[MimicOS]: Starting OS daemons" << std::endl;
+    LineOut() << "[MimicOS]: Starting OS daemons" << std::endl;
     boot_log << "[MimicOS-userspace] calling start_daemons()" << std::endl;
     boot_log.flush();
     start_daemons();
@@ -545,14 +546,14 @@ void MimicOS::boot()
     }
     m_num_live_apps = num_live;  // visible to kernel_worker via member
 
-    std::cout << "[MimicOS]: Provisioning " << m_num_cores << " core(s), "
+    LineOut() << "[MimicOS]: Provisioning " << m_num_cores << " core(s), "
               << num_live << " live + " << (m_num_cores - num_live) << " trace" << std::endl;
 
     if (m_num_cores == 1 && !num_live) {
         /* Single trace-based app: legacy path (SimRoiStart + SimStartProcess). */
-        std::cout << "[MimicOS]: Calling start_application (trace-based)" << std::endl;
+        LineOut() << "[MimicOS]: Calling start_application (trace-based)" << std::endl;
         start_application();
-        std::cout << "[MimicOS]: Calling poll_for_signal" << std::endl;
+        LineOut() << "[MimicOS]: Calling poll_for_signal" << std::endl;
         /* Legacy path: always has an initial app to context-switch to. */
         poll_for_signal(/*core_id=*/0, /*has_initial_app=*/true);
 
@@ -587,7 +588,7 @@ void MimicOS::boot()
             pthread_create(&m_cores[i].thread, nullptr,
                            MimicOS::kernel_worker_trampoline,
                            &m_cores[i]);
-            std::cout << "[MimicOS]: Spawned kernel pthread for core " << i << std::endl;
+            LineOut() << "[MimicOS]: Spawned kernel pthread for core " << i << std::endl;
         }
 
         /* Core 0 runs on main thread. */
@@ -623,7 +624,7 @@ void MimicOS::start_daemons()
 
         m_kcompactd = new VirtuosoKcompactd(cfg);
 
-        std::cout << "[MimicOS] kcompactd created (interval=" << cfg.scan_interval_us << "us)" << std::endl;
+        LineOut() << "[MimicOS] kcompactd created (interval=" << cfg.scan_interval_us << "us)" << std::endl;
 
         // Bind kcompactd to the allocator's data structures
         // The allocator must be ReserveTHP-like to expose getTwoMbMap()/getBuddyAllocator()
@@ -635,12 +636,12 @@ void MimicOS::start_daemons()
             if (rthp) {
                 m_kcompactd->bind(&rthp->getTwoMbMap(), rthp->getBuddyAllocator());
                 m_kcompactd->start();
-                std::cout << "[MimicOS] kcompactd daemon thread started (SDE-instrumented)" << std::endl;
+                LineOut() << "[MimicOS] kcompactd daemon thread started (SDE-instrumented)" << std::endl;
             } else {
-                std::cout << "[MimicOS] kcompactd: failed to bind to ReserveTHP allocator" << std::endl;
+                LineOut() << "[MimicOS] kcompactd: failed to bind to ReserveTHP allocator" << std::endl;
             }
         } else {
-            std::cout << "[MimicOS] kcompactd: allocator '" << allocatorName << "' does not support 2MB region tracking" << std::endl;
+            LineOut() << "[MimicOS] kcompactd: allocator '" << allocatorName << "' does not support 2MB region tracking" << std::endl;
         }
     }
 
@@ -661,7 +662,7 @@ void MimicOS::start_daemons()
             if (rthp) {
                 m_khugepaged->bind(&rthp->getTwoMbMap());
                 m_khugepaged->start();
-                std::cout << "[MimicOS] khugepaged daemon thread started" << std::endl;
+                LineOut() << "[MimicOS] khugepaged daemon thread started" << std::endl;
             }
         }
     }
@@ -680,7 +681,7 @@ void MimicOS::start_daemons()
         m_kswapd = new VirtuosoKswapd(cfg);
         m_kswapd->bind(nullptr, 0);
         m_kswapd->start();
-        std::cout << "[MimicOS] kswapd daemon thread started" << std::endl;
+        LineOut() << "[MimicOS] kswapd daemon thread started" << std::endl;
     }
 }
 
@@ -688,20 +689,20 @@ void MimicOS::stop_daemons()
 {
     if (m_kcompactd) {
         m_kcompactd->stop();
-        std::cout << "[MimicOS] kcompactd stopped. Scans=" << m_kcompactd->getStats().scans << std::endl;
+        LineOut() << "[MimicOS] kcompactd stopped. Scans=" << m_kcompactd->getStats().scans << std::endl;
         delete m_kcompactd;
         m_kcompactd = nullptr;
     }
     if (m_khugepaged) {
         m_khugepaged->stop();
-        std::cout << "[MimicOS] khugepaged stopped. Scans=" << m_khugepaged->getStats().scans
+        LineOut() << "[MimicOS] khugepaged stopped. Scans=" << m_khugepaged->getStats().scans
                   << " Promoted=" << m_khugepaged->getStats().regions_promoted << std::endl;
         delete m_khugepaged;
         m_khugepaged = nullptr;
     }
     if (m_kswapd) {
         m_kswapd->stop();
-        std::cout << "[MimicOS] kswapd stopped. Scans=" << m_kswapd->getStats().scans
+        LineOut() << "[MimicOS] kswapd stopped. Scans=" << m_kswapd->getStats().scans
                   << " Reclaimed=" << m_kswapd->getStats().pages_reclaimed << std::endl;
         delete m_kswapd;
         m_kswapd = nullptr;
@@ -711,7 +712,7 @@ void MimicOS::stop_daemons()
 void MimicOS::start_application()
 {
     const char *path = path_to_app.c_str();
-    std::cout << "[MimicOS] [start_application]: path = " << path << std::endl;
+    LineOut() << "[MimicOS] [start_application]: path = " << path << std::endl;
 
     /* Stage A (Apr 15 2026): if path begins with "live:", treat the
        remainder as a real binary and fork+execve it under PIN/SDE
@@ -748,10 +749,10 @@ void MimicOS::start_application()
         std::vector<std::string> forwarded_args(
             parts.size() > 1 ? parts.begin() + 1 : parts.end(),
             parts.end());
-        std::cout << "[MimicOS] live: binary=" << binary
+        LineOut() << "[MimicOS] live: binary=" << binary
                   << " argc_passthrough=" << forwarded_args.size() << std::endl;
         for (size_t i = 0; i < forwarded_args.size(); i++) {
-            std::cout << "  argv[" << (i+1) << "] = " << forwarded_args[i] << std::endl;
+            LineOut() << "  argv[" << (i+1) << "] = " << forwarded_args[i] << std::endl;
         }
         SimRoiExpect(1);
         spawn_live_application(binary, forwarded_args);
@@ -760,7 +761,7 @@ void MimicOS::start_application()
 
     //Execute an instruction which we call "magic"
     // r11 = *pointer_to_file OR opcode
-    std::cout << "[MimicOS] [start_application]: Before SimStartProcess" << std::endl;
+    LineOut() << "[MimicOS] [start_application]: Before SimStartProcess" << std::endl;
     SimSetThreadName("mimicos_pre_SimRoiStart");
     SimRoiStart();
     SimSetThreadName("mimicos_pre_SimStartProcess");
@@ -770,7 +771,7 @@ void MimicOS::start_application()
     SimStartProcess((long unsigned int)(path));
     SimSetThreadName("mimicos_post_SimStartProcess");
 
-    std::cout << "[MimicOS] [start_application]: After SimStartProcess" << std::endl;
+    LineOut() << "[MimicOS] [start_application]: After SimStartProcess" << std::endl;
 
     /* If the scheduler is enabled, register the spawned application as a Task
        so the scheduler has a real runnable entity to track.  Per-fault
@@ -788,7 +789,7 @@ void MimicOS::start_application()
         if (!app_task) app_task = m_scheduler.create_task(path_to_app);
         m_scheduler.wake_up(app_task, 0);
         m_scheduler.schedule(0);
-        std::cout << "[MimicOS] Registered app trace as Task id="
+        LineOut() << "[MimicOS] Registered app trace as Task id="
                   << app_task->task_id << " atid=0x" << std::hex << main_atid
                   << std::dec << " in scheduler" << std::endl;
     }
@@ -812,7 +813,7 @@ void MimicOS::start_application()
 pid_t MimicOS::spawn_live_application(const std::string& binary,
                                        const std::vector<std::string>& argv)
 {
-    std::cout << "[MimicOS] [spawn_live_application]: binary=" << binary
+    LineOut() << "[MimicOS] [spawn_live_application]: binary=" << binary
               << " argc=" << argv.size() << std::endl;
 
     /* Build argv array for execve.  argv[0] conventionally = binary. */
@@ -848,13 +849,13 @@ pid_t MimicOS::spawn_live_application(const std::string& binary,
        userspace; we track by binary name. */
     SimSetThreadName("mimicos_post_spawn_fork");
     m_child_pid = child;
-    std::cout << "[MimicOS] [spawn_live_application]: forked child pid=" << child
+    LineOut() << "[MimicOS] [spawn_live_application]: forked child pid=" << child
               << " for binary " << binary << std::endl;
 
     if (m_scheduler.is_enabled()) {
         Task* t = m_scheduler.create_task(binary);
         m_scheduler.wake_up(t, 0);
-        std::cout << "[MimicOS] [spawn_live_application]: registered scheduler Task id="
+        LineOut() << "[MimicOS] [spawn_live_application]: registered scheduler Task id="
                   << t->task_id << " for live binary" << std::endl;
     }
 
@@ -1254,8 +1255,8 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
         }
 
 #if DEBUG_MimicOS >= DEBUG_BASIC
-        std::cout << "[MimicOS] Received response from context switch ..." << std::endl;
-        std::cout << "[MimicOS] Message is exception_type = " << exception_type_code <<
+        LineOut() << "[MimicOS] Received response from context switch ..." << std::endl;
+        LineOut() << "[MimicOS] Message is exception_type = " << exception_type_code <<
                      " -- vpn = " << vpn <<
                      " -- num_requested_frames = " << num_requested_frames << std::endl;
 #endif
@@ -1264,12 +1265,12 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
             assert(argc >= 1);
             std::string message_type;
             if (protocol_codes_decode.find(argv[0]) == protocol_codes_decode.end()) {
-                std::cout << "[MimicOS]: Unknown protocol code: " << argv[0] << std::endl;
+                LineOut() << "[MimicOS]: Unknown protocol code: " << argv[0] << std::endl;
                 continue; // Skip unknown messages
             }
             else {
                 message_type = protocol_codes_decode[argv[0]];
-                std::cout << "[MimicOS]: protocol name / message type : " << message_type << std::endl;
+                LineOut() << "[MimicOS]: protocol name / message type : " << message_type << std::endl;
             }
         #endif
 
@@ -1492,7 +1493,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                    workers' lines interleave character by character. */
                 static std::mutex log_lock;
                 std::lock_guard<std::mutex> ll(log_lock);
-                std::cout << "[MimicOS] alloc_path=" << path_name
+                LineOut() << "[MimicOS] alloc_path=" << path_name
                           << " core=" << core_id << std::endl;
             }
             /* Phase 9-E: charge the buddy-refill Δ when the allocator
@@ -1538,7 +1539,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
         for (int i = 0; i < num_requested_frames - 1; i++) {
             auto frame = locked_handle_pt_alloc(bytes);
 #if DEBUG_MimicOS >= DEBUG_BASIC
-            std::cout << "[MimicOS] Allocated page table frame " << i << ": " << frame << std::endl;
+            LineOut() << "[MimicOS] Allocated page table frame " << i << ": " << frame << std::endl;
 #endif
             frame_buf[frame_count++] = frame;
         }
@@ -1558,16 +1559,16 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
         }
 
 #if DEBUG_MimicOS >= DEBUG_BASIC
-            std::cout << "[MimicOS] Physical memory allocation succeeded: " << std::endl;
-            std::cout << "[MimicOS] Number of frames requested = " << num_requested_frames << std::endl;
-            std::cout << "[MimicOS] Frames allocated: ";
+            LineOut() << "[MimicOS] Physical memory allocation succeeded: " << std::endl;
+            LineOut() << "[MimicOS] Number of frames requested = " << num_requested_frames << std::endl;
+            LineOut() << "[MimicOS] Frames allocated: ";
             for (int i = 0; i < frame_count; i++) {
                 if (i == 0) {
-                    std::cout << "Data frame: ";
+                    LineOut() << "Data frame: ";
                 } else {
-                    std::cout << "Page table frame " << (i - 1) << ": ";
+                    LineOut() << "Page table frame " << (i - 1) << ": ";
                 }
-                std::cout << frame_buf[i] << std::endl;
+                LineOut() << frame_buf[i] << std::endl;
             }
 #endif
 
@@ -1736,14 +1737,14 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                            the profile re-trains and promotes again we'll
                            restore the charge with the new mean. */
                         SimSetFastFaultCharge(0);
-                        std::cout << "[MimicOS] FastFault DRIFT DETECTED fp_id="
+                        LineOut() << "[MimicOS] FastFault DRIFT DETECTED fp_id="
                                   << prof.fp_id << " after " << prof.resample_count
                                   << " resamples (last_sample=" << prof.drift_last_sample
                                   << " threshold=" << m_fast_fault_registry.policy().drift_consecutive_out
                                   << " consecutive out) → demoted to TRAINING"
                                   << " (reset #" << prof.drift_resets << ")" << std::endl;
                     } else if (action == FastFaultRegistry::DriftAction::OUT_BAND) {
-                        std::cout << "[MimicOS] FastFault resample fp_id="
+                        LineOut() << "[MimicOS] FastFault resample fp_id="
                                   << prof.fp_id << " OUT_OF_BAND sample="
                                   << prof.drift_last_sample
                                   << " mean=" << prof.mean_cycles
@@ -1782,7 +1783,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                            trace_ptr, making the (ptr, len) key a
                            reliable dedup handle. */
                         prof.captured_accesses.shrink_to_fit();
-                        std::cout << "[MimicOS] FastFault profile fp_id="
+                        LineOut() << "[MimicOS] FastFault profile fp_id="
                                   << prof.fp_id
                                   << (prof.drift_resets > 0 ? " RE-TRAINED" : " TRAINED")
                                   << " after "
@@ -1807,7 +1808,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                     if (prev == FastFaultState::TRAINING &&
                         prof.state == FastFaultState::ABANDONED) {
                         s.abandoned_promotions++;
-                        std::cout << "[MimicOS] FastFault profile fp_id="
+                        LineOut() << "[MimicOS] FastFault profile fp_id="
                                   << prof.fp_id << " ABANDONED after "
                                   << prof.sample_count << " samples (cv="
                                   << prof.cv() << ")" << std::endl;

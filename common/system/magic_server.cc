@@ -1,4 +1,5 @@
 #include "magic_server.h"
+#include "line_out.h"
 #include "sim_api.h"
 #include "simulator.h"
 #include "thread_manager.h"
@@ -215,7 +216,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
       case SIM_CMD_CONTEXT_SWITCH:
       {
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
-         std::cout << "[MimicOS: Magic] Context switch command received" << std::endl;
+         LineOut() << "[MimicOS: Magic] Context switch command received" << std::endl;
 #endif
          /* Route to the caller's own TraceThread, not thread 0.  A kernel
             worker runs per core -- each created with pthread_create, which
@@ -239,7 +240,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          // Restore the current SIFT Reader to be the App one
          trace_thread->setCurrentSiftReader(trace_thread->getAppSiftReader());
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
-         std::cout << "[MimicOS: Magic] Current SiftReader set to APP" << std::endl;
+         LineOut() << "[MimicOS: Magic] Current SiftReader set to APP" << std::endl;
 #endif
          return 42;
       }
@@ -390,7 +391,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
       case SIM_CMD_RECEIVE_MESSAGE:
       {
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
-         std::cout << "[MimicOS: Magic] Receive message command" << std::endl;
+         LineOut() << "[MimicOS: Magic] Receive message command" << std::endl;
 #endif
          Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
 
@@ -448,7 +449,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
       case SIM_CMD_MIMICOS_RESULT:
       {
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
-         std::cout << "[MimicOS: Magic] MimicOS result command" << std::endl;
+         LineOut() << "[MimicOS: Magic] MimicOS result command" << std::endl;
 #endif
          Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
 
@@ -475,7 +476,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          str[255] = '\0';
 
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
-         std::cout << "[MimicOS: Magic] Starting process: " << str << std::endl;
+         LineOut() << "[MimicOS: Magic] Starting process: " << str << std::endl;
 #endif
          Sim()->getTraceManager()->createTraceBasedApplication(SubsecondTime::Zero(), str, thread_id);
          return 0;

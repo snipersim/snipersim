@@ -1,4 +1,5 @@
 #include "trace_thread.h"
+#include "line_out.h"
 #include "trace_manager.h"
 #include "simulator.h"
 #include "core_manager.h"
@@ -991,7 +992,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
 void TraceThread::handleChampSimDetailed(Sift::Instruction &inst, Sift::Instruction &next_inst, PerformanceModel *prfmdl)
 {
    #if DEBUG_TRACE_CHAMPSIM >= DEBUG_BASIC
-      std::cout << "[TraceThread] Handling ChampSim detailed instruction at address " << std::hex << inst.sinst->addr << std::dec << std::endl;
+      LineOut() << "[TraceThread] Handling ChampSim detailed instruction at address " << std::hex << inst.sinst->addr << std::dec << std::endl;
    #endif 
 
    // ChampSim instructions are cached by (PC, is_branch, num_src_regs, num_dest_regs, num_loads, num_stores).
@@ -1048,7 +1049,7 @@ void TraceThread::handleChampSimDetailed(Sift::Instruction &inst, Sift::Instruct
          oss << static_cast<uint32_t>(inst.dest_registers[idx]);
       }
       oss << "]";
-      std::cout << oss.str() << std::endl;
+      LineOut() << oss.str() << std::endl;
 
       std::ostringstream opss;
       const OperandList &ops = ins->getOperands();
@@ -1074,7 +1075,7 @@ void TraceThread::handleChampSimDetailed(Sift::Instruction &inst, Sift::Instruct
          opss << ops[i].toString();
       }
       opss << "]";
-      std::cout << opss.str() << std::endl;
+      LineOut() << opss.str() << std::endl;
    
    #endif 
 
@@ -1248,7 +1249,7 @@ void TraceThread::notifyAppExitAndSwitchToKernel()
          and its stream ending is what finishes the run. */
       if (Sim()->getTraceManager()->lastInjectedAppExited())
       {
-         std::cout << "[TRACE:" << m_thread->getId()
+         LineOut() << "[TRACE:" << m_thread->getId()
                    << "] -- last application exited; requesting shutdown" << std::endl;
          Sim()->getTraceManager()->requestShutdown();
       }
@@ -1294,11 +1295,11 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
    // Print which host CPU this thread is running on
    int host_cpu = sched_getcpu();
-   std::cout << "[TraceThread] Thread " << m_thread->getId()
+   LineOut() << "[TraceThread] Thread " << m_thread->getId()
              << " (app " << m_app_id << ") started on host CPU " << host_cpu << std::endl;
 
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-   std::cout << "[TRACE:" << m_thread->getId() << "] -- " << threadName.c_str() << " --" << std::endl;
+   LineOut() << "[TRACE:" << m_thread->getId() << "] -- " << threadName.c_str() << " --" << std::endl;
 #endif
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
 
@@ -1310,7 +1311,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
    if (m_thread->getCore() == NULL)
    {
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-      std::cout << "[TRACE:" << m_thread->getId() << "] -- Waiting for core to be assigned --" << std::endl;
+      LineOut() << "[TRACE:" << m_thread->getId() << "] -- Waiting for core to be assigned --" << std::endl;
 #endif
       // We didn't get scheduled on startup, wait here
       SubsecondTime time = SubsecondTime::Zero();
@@ -1358,7 +1359,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
          switched = false;
 
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-         std::cout << "[TRACE:" << m_thread->getId() << "] -- Reading instruction: "
+         LineOut() << "[TRACE:" << m_thread->getId() << "] -- Reading instruction: "
                    << std::hex << inst.sinst->addr << std::dec
                    << " from trace_id = " << getCurrentSiftReader()->getId() << std::endl;
 #endif
@@ -1380,7 +1381,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
                switched = true;
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-               std::cout << "[TRACE:" << m_thread->getId() << "] -- Switching SIFT reader to the App due to CS --" << std::endl;
+               LineOut() << "[TRACE:" << m_thread->getId() << "] -- Switching SIFT reader to the App due to CS --" << std::endl;
 #endif
                // Finished processing kernel instructions; record end time
                kernel_end_time = prfmdl->getElapsedTime();
@@ -1399,7 +1400,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
                   have_next = true; // next_inst is valid by construction
 
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-                  std::cout << "[TRACE:" << m_thread->getId() << "] -- Replaying instruction: inst = "
+                  LineOut() << "[TRACE:" << m_thread->getId() << "] -- Replaying instruction: inst = "
                             << std::hex << inst.sinst->addr << std::dec << std::endl;
 #endif
                }
@@ -1415,7 +1416,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
                         break;
                      }
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-                     std::cout << "[TRACE:" << m_thread->getId() << "] -- First instruction from App SIFT reader: inst = "
+                     LineOut() << "[TRACE:" << m_thread->getId() << "] -- First instruction from App SIFT reader: inst = "
                                << std::hex << inst_app.sinst->addr << std::dec << std::endl;
 #endif
                      if (!m_current_sift_reader->Read(next_inst_app))
@@ -1435,7 +1436,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
                         break;
                      }
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-                     std::cout << "[TRACE:" << m_thread->getId() << "] -- Restored instruction from App SIFT reader: inst = "
+                     LineOut() << "[TRACE:" << m_thread->getId() << "] -- Restored instruction from App SIFT reader: inst = "
                                << std::hex << inst_app.sinst->addr << std::dec << std::endl;
 #endif
                   }
@@ -1446,7 +1447,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
                }
 
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-               std::cout << "[TRACE:" << m_thread->getId() << "] -- Instruction: " << std::hex << inst.sinst->addr << std::dec
+               LineOut() << "[TRACE:" << m_thread->getId() << "] -- Instruction: " << std::hex << inst.sinst->addr << std::dec
                          << " -- Next instruction: " << std::hex << next_inst.sinst->addr << std::dec
                          << " -- Kernel mode: " << (kernel_mode ? "true" : "false") << std::endl;
 #endif
@@ -1597,7 +1598,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
          if (m_stop)
          {
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-            std::cout << "[TRACE:" << m_thread->getId() << "] -- Stopping trace thread --" << std::endl;
+            LineOut() << "[TRACE:" << m_thread->getId() << "] -- Stopping trace thread --" << std::endl;
 #endif
             break;
          }
@@ -1611,7 +1612,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
             // Page fault must occur only in user space (app reader active)
             assert(getCurrentSiftReader() == getAppSiftReader());
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-            std::cout << "[TRACE:" << m_thread->getId() << "] -- Switching SIFT reader back to the kernel due to page fault CS --" << std::endl;
+            LineOut() << "[TRACE:" << m_thread->getId() << "] -- Switching SIFT reader back to the kernel due to page fault CS --" << std::endl;
 #endif
 
             // Save app instruction pair to replay after kernel handles the fault
@@ -1620,7 +1621,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
             int num_requested_frames = mimic_os->getNumRequestedFrames(pf_core_id);
 #if DEBUG_TRACE_THREAD >= DEBUG_BASIC
-            std::cout << "[TRACE:" << m_thread->getId() << "] -- Requesting "
+            LineOut() << "[TRACE:" << m_thread->getId() << "] -- Requesting "
                       << num_requested_frames << " frames for page fault handling" << std::endl;
 #endif
 
@@ -1630,7 +1631,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
             // Handle PF on user-space MimicOS (kernel) side
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
-            std::cout << "[TRACE:" << m_thread->getId() << "] -- Switching SIFT reader to Kernel and sending response after CS --" << std::endl;
+            LineOut() << "[TRACE:" << m_thread->getId() << "] -- Switching SIFT reader to Kernel and sending response after CS --" << std::endl;
 #endif
             setCurrentSiftReader(getKernelSiftReader());
 
@@ -1657,13 +1658,13 @@ void TraceThread::m_run_func_with_userpace_mimicos()
          if (executed_instructions % 20000 == 0)
          {
             // Print progress every 20k instructions
-            std::cout << "[TRACE:" << m_thread->getId() << "] -- Current SIFT reader: "
+            LineOut() << "[TRACE:" << m_thread->getId() << "] -- Current SIFT reader: "
                       << (getCurrentSiftReader() == getKernelSiftReader() ? "Kernel" : "App") << " -- "
                       << "Executed instructions: " << executed_instructions
                       << ", Current time: " << prfmdl->getElapsedTime().getNS() << "ns"
                       << ", Current SIFT reader position: " << m_current_sift_reader->getPosition()
                       << std::endl;
-            std::cout << "[TRACE:" << m_thread->getId() << "] -- Current instruction: " << std::hex << inst.sinst->addr << std::dec
+            LineOut() << "[TRACE:" << m_thread->getId() << "] -- Current instruction: " << std::hex << inst.sinst->addr << std::dec
                       << ", Next instruction: " << std::hex << next_inst.sinst->addr << std::dec
                       << ", Kernel mode: " << (kernel_mode ? "true" : "false")
                       << std::endl;
@@ -1700,7 +1701,7 @@ void TraceThread::m_run_func_default()
 
    // Print which host CPU this thread is running on
    int host_cpu = sched_getcpu();
-   std::cout << "[TraceThread] Thread " << m_thread->getId()
+   LineOut() << "[TraceThread] Thread " << m_thread->getId()
              << " (app " << m_app_id << ") started on host CPU " << host_cpu << std::endl;
 
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);

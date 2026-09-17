@@ -1,4 +1,6 @@
 #include "mimicos.h"
+#include <cstdio>
+#include "line_out.h"
 
 #include "globals.h"
 #include "INIReader.h"
@@ -13,6 +15,9 @@
 #include <vector>
 
 int main(int argc, char *argv[]) {
+   /* Line-buffered even when stdout is a pipe (run-sniper's), so each
+      complete line reaches the merged stream when it is written. */
+   setvbuf(stdout, NULL, _IOLBF, 0);
 
     // Proof-of-life: magic instruction with a recognizable marker string.
     // Under SDE syscall emulation, stdout/stderr are dropped, so we rely on
@@ -59,9 +64,9 @@ int main(int argc, char *argv[]) {
     }
     fprintf(stderr, "[startup_mimicos] args parsed: config=%s sift=%s output=%s\n", args.configFile.c_str(), args.siftFile.c_str(), args.outputFile.c_str());
 
-    std::cout << "[MimicOS]: Configuration file path: " << args.configFile << std::endl;
-    std::cout << "[MimicOS]: SIFT file path: " << args.siftFile << std::endl;
-    std::cout << "[MimicOS]: Output file path: " << args.outputFile << std::endl;
+    LineOut() << "[MimicOS]: Configuration file path: " << args.configFile << std::endl;
+    LineOut() << "[MimicOS]: SIFT file path: " << args.siftFile << std::endl;
+    LineOut() << "[MimicOS]: Output file path: " << args.outputFile << std::endl;
 
     try {
         MimicOS* mimicos = MimicOS::getMimicOS(args.configFile, args.outputFile, args.siftFile);

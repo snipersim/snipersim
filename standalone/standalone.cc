@@ -1,4 +1,5 @@
 #include "simulator.h"
+#include <cstdio>
 #include "handle_args.h"
 #include "config.hpp"
 #include "trace_manager.h"
@@ -9,6 +10,9 @@
 
 int main(int argc, char* argv[])
 {
+   /* Line-buffered even when stdout is a pipe (run-sniper's), so each
+      complete line reaches the merged stream when it is written. */
+   setvbuf(stdout, NULL, _IOLBF, 0);
    // Set thread name for Sniper-in-Sniper simulations
    SimSetThreadName("main");
 
