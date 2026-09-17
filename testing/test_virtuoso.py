@@ -133,10 +133,11 @@ def live_feed_check(stats):
     exits = sum(1 for r in recs if r['ev'] == 'os' and r['kind'] == 'thread_exit')
     # One park: the worker whose application exits first waits on its empty
     # queue; the last exit hands the other worker the shutdown without a wait.
-    # Switches are the kernel-mediated ones (new_thread, faults taken by the
-    # kernel); quanta are posted at expiry -- see the quantum hand-back.
+    # Every quantum hands back to the kernel, which switches an application
+    # in again: at least one switch per quantum, plus new_thread and the
+    # faults the kernel takes.
     ok = (evs[0] == 'header' and 'end' in evs and any(busy) and cores_seen >= {0, 1}
-          and stacks and parks == 1 and quanta >= 100 and switches >= 2 and exits == 2)
+          and stacks and parks == 1 and quanta >= 100 and switches >= quanta and exits == 2)
     return ok, ('%d records, %d samples (cores busy: %s), stacks %s, %d parks, %d quanta, %d switches, %d exits'
                 % (len(recs), len(samples), sorted(cores_seen), 'nonzero' if stacks else 'EMPTY',
                    parks, quanta, switches, exits))

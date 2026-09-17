@@ -161,7 +161,7 @@ class TraceThread : public Runnable
 
       void m_run_func_default();
       void m_run_func_with_userpace_mimicos();
-      void accountQuantumInstruction();
+      bool accountQuantumInstruction();   // true when this instruction ended the quantum
       void notifyAppExitAndSwitchToKernel();
 
       Sift::Mode handleInstructionCountFunc(uint32_t icount);

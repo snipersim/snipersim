@@ -1268,20 +1268,26 @@ void TraceThread::notifyAppExitAndSwitchToKernel()
    getCurrentSiftReader()->sendResponseAfterContextSwitch();
 }
 
-void TraceThread::accountQuantumInstruction()
+bool TraceThread::accountQuantumInstruction()
 {
    if (m_quantum_instrs == 0)
-      return;
+      return false;
+
+   core_id_t my_core = m_thread->getCore() ? m_thread->getCore()->getId() : 0;
+   /* A faulting instruction is replayed after the kernel handles the fault;
+      it is accounted then, so a quantum never expires on top of a fault. */
+   if (Sim()->getMimicOS()->getIsPageFault(my_core))
+      return false;
 
    if (++m_instrs_this_quantum < m_quantum_instrs)
-      return;
+      return false;
 
    m_instrs_this_quantum = 0;
 
-   core_id_t my_core = m_thread->getCore() ? m_thread->getCore()->getId() : 0;
    Sim()->getMimicOS()->buildMessageWithArgs((int)my_core, "quantum_expired",
                                              m_running_app_tid);
    ++m_quanta_expired;
+   return true;
 }
 
 void TraceThread::m_run_func_with_userpace_mimicos()
@@ -1356,6 +1362,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
       while (have_inst)
       {
          bool have_next = false;
+         bool quantum_expired = false;
          switched = false;
 
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
@@ -1575,7 +1582,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
                case InstMode::DETAILED:
                   handleInstructionDetailed(inst, next_inst, prfmdl);
-                  accountQuantumInstruction();
+                  quantum_expired = accountQuantumInstruction();
                   break;
 
                default:
@@ -1648,6 +1655,26 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
             kernel_mode = true;
             mimic_os->resetPageFaultState(pf_core_id);
+         }
+         else if (quantum_expired && getCurrentSiftReader() == getAppSiftReader() && getKernelSiftReader())
+         {
+            /* The quantum hand-back: the kernel decides who runs next.  Same
+               as the fault hand-back above -- wake the worker parked in its
+               SimContextSwitchTo and read on in its stream -- except that the
+               instruction that ended the quantum has executed, so nothing is
+               set aside for replay: when the kernel switches an application
+               back in, the resume path continues at next_inst_app.  Before
+               this the event was only posted, the application ran on, and
+               the kernel found the whole quantum backlog after it exited. */
+            kernel_start_time = prfmdl->getElapsedTime();
+            setCurrentSiftReader(getKernelSiftReader());
+            getCurrentSiftReader()->sendResponseAfterContextSwitch();
+            bool have_next_q = m_current_sift_reader->Read(next_inst_kernel);
+            if (!have_next_q)
+               break;   // EOF on kernel after the quantum
+            next_inst = next_inst_kernel;
+            have_next = have_next_q;
+            kernel_mode = true;
          }
 
          // Save current "next_inst" as the next "inst"
