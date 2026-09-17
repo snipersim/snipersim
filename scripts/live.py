@@ -56,9 +56,7 @@ class Live:
     self.interval_ns = int(args.get(0, '') or 100000)
     self.ncores = sim.config.ncores
     path = args.get(1, '') or os.path.join(sim.config.output_dir, 'sim.live')
-    if os.path.exists(path) and not os.path.isfile(path):
-      print('[live] streaming to %s (waiting for a reader)' % path)
-    self.fd = open(path, 'w', buffering = 1)    # a FIFO blocks here until its reader opens
+    self.fd = self.open_feed(path)
     self.threads = {}                     # thread id -> {'state', 'core', 'reason', 'by'}
     self.sd = sim.util.StatsDelta()
     self.instrs = [ self.sd.getter('performance_model', c, 'instruction_count') for c in range(self.ncores) ]
@@ -80,6 +78,25 @@ class Live:
                    cpi_groups = sorted(self.cpi.keys())))
     sim.util.Every(self.interval_ns * sim.util.Time.NS, self.sample, statsdelta = self.sd, roi_only = False)
     # The hooks: sim.util.register() wires every hook_<name> method below to HOOK_<NAME>.
+
+  def open_feed(self, path):
+    """A file, or a named pipe.  A pipe is opened without blocking: if no
+    reader shows up within a few seconds (the dashboard was closed, or never
+    started) the feed goes to sim.live instead and the run is not held up."""
+    if os.path.exists(path) and not os.path.isfile(path):
+      import time, fcntl
+      for _ in range(50):
+        try:
+          fd = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+        except OSError:            # ENXIO: no reader yet
+          time.sleep(0.1)
+          continue
+        fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) & ~os.O_NONBLOCK)
+        print('[live] streaming to %s' % path)
+        return os.fdopen(fd, 'w', buffering = 1)
+      path = os.path.join(sim.config.output_dir, 'sim.live')
+      print('[live] no reader on the pipe; the feed goes to %s' % path)
+    return open(path, 'w', buffering = 1)
 
   def emit(self, rec):
     if not self.fd:

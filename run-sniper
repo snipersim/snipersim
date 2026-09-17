@@ -40,6 +40,7 @@ def usage():
         '  [--genstats]' + \
         '  [--no-cache-warming]' + \
         '  [--save-output]' + \
+        '  [--live] [--live-interval=<ns>]' + \
         '  [--save-patch]' + \
         '  [--pin-stats]' + \
         '  [--wrap-sim=]' + \
@@ -90,6 +91,8 @@ run_power = False
 enable_pacsim = False
 enable_smc = False
 save_output = False
+use_live = False
+live_interval = 1000   # simulated ns per sample of the live feed
 save_patch = False
 pin_stats = False
 curdir = os.getcwd()
@@ -230,6 +233,7 @@ try:
       "power",
       "cache-only", "fast-forward", "no-cache-warming",
       "save-output", "save-patch",
+      "live", "live-interval=",
       "curdir=",
       "build-dir=",
       "pin-stats",
@@ -288,6 +292,10 @@ for o, a in opts:
     sim_end = a
   if o == '-s':
     scripts.append(a)
+  if o == '--live':
+    use_live = True
+  if o == '--live-interval':
+    live_interval = int(a)
   if o == '--viz':
     use_viz = True
   if o == '--viz-aso':
@@ -536,7 +544,23 @@ if not os.path.exists(outputdir):
 # Every line of the run, from every process, stamped and tagged, on the
 # terminal and in sim.stdout (see the run stream note in tools/run_sniper.py).
 # --save-output used to enable this; it is now always on.
-run_stream = run_sniper.Tee(os.path.join(outputdir, 'sim.stdout'), stamp = True)
+# --live: watch the run in the terminal as it goes (tools/sniper-live).  The
+# feed streams through a private pipe, nothing is stored; the dashboard owns
+# the screen, so the run's own lines go to sim.stdout only, and the run waits
+# at the end for the dashboard to be closed.  Without a terminal the feed
+# goes to sim.live instead, for sniper-live to read afterwards.
+live_dash = None
+if use_live:
+  if sys.stdout.isatty():
+    live_dir = tempfile.mkdtemp(prefix = 'sniper-live-')
+    live_fifo = os.path.join(live_dir, 'feed')
+    os.mkfifo(live_fifo)
+    scripts.append('live:%d:%s' % (live_interval, live_fifo))
+    live_dash = subprocess.Popen([os.path.join(HOME, 'tools', 'sniper-live'), live_fifo])
+  else:
+    scripts.append('live:%d' % live_interval)
+    print('[SNIPER] --live: no terminal; the feed goes to %s' % os.path.join(outputdir, 'simulation', 'sim.live'))
+run_stream = run_sniper.Tee(os.path.join(outputdir, 'sim.stdout'), stamp = True, terminal = live_dash is None)
 run_stream.redirect()
 import atexit
 atexit.register(run_stream.close)
@@ -1070,5 +1094,14 @@ open(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats)+'\n')
 
 if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpath(outputdir):
   os.system('cp pin.log %s' % outputdir)
+
+if live_dash:
+  # Leave the final picture up until the dashboard is closed (q); if it was
+  # closed during the run, say where the run's output went.
+  if live_dash.poll() is None:
+    live_dash.wait()
+  run_stream.terminal = True
+  print('[SNIPER] run finished (exit %d); its output is in %s' % (rc, os.path.join(outputdir, 'simulation', 'sim.stdout')))
+  shutil.rmtree(live_dir, ignore_errors = True)
 
 sys.exit(rc)

@@ -98,9 +98,10 @@ def load_build_config(build_dir):
 TAGGED = re.compile(rb'^\[(?:app\d+|kernel|rank\d+)\] ')
 
 class Tee:
-  def __init__(self, filename, prefix = '', stamp = False):
+  def __init__(self, filename, prefix = '', stamp = False, terminal = True):
     self.prefix = prefix.encode()
     self.stamp = stamp
+    self.terminal = terminal        # False: file only (the screen belongs to sniper-live)
     self.file = open(filename, 'wb') if filename else None
     self.out_fd = os.dup(sys.stdout.fileno())    # where lines go: the stdout we were given
     self.r, self.w = os.pipe()
@@ -122,7 +123,8 @@ class Tee:
       line = (time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(now)).encode()
               + b'.%06d ' % int((now % 1) * 1000000) + line)
     line += b'\n'
-    os.write(self.out_fd, line)
+    if self.terminal:
+      os.write(self.out_fd, line)
     if self.file:
       self.file.write(line)
       self.file.flush()

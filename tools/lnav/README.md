@@ -63,10 +63,15 @@ application thread.  A dashboard tails it; `testing/test_virtuoso.py`'s
 
 ## sniper-live: the run in the terminal
 
-    tools/sniper-live --run -- ./run-sniper -n 4 -c ... -- app    stream it: nothing stored
+    ./run-sniper --live [--live-interval=<ns>] -n 4 -c ... -- app   the easy way: watch the run
+    tools/sniper-live --run -- ./run-sniper -n 4 -c ... -- app    the same, started from the tool
     tools/sniper-live <outputdir>          tail sim.live while it runs, or after
     tools/sniper-live --once <outputdir>   one frame to stdout (no terminal needed)
 
+`run-sniper --live` streams the feed through a private pipe into the
+dashboard, which owns the screen (the run's own lines go to `sim.stdout`),
+and waits at the end for it to be closed with `q`; closing it earlier leaves
+the run going.  Without a terminal `--live` writes `sim.live` instead.
 `--run` makes a private named pipe, starts the run-sniper command with
 `-s live:<interval>:<pipe>` (`--interval` in simulated ns, default 1000) and
 reads the feed from memory as the simulation writes it; the run's own
