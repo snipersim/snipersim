@@ -152,6 +152,18 @@ static SInt64 hookCallbackThreadMigrateType(UInt64 pFunc, UInt64 _argument)
    return result;
 }
 
+static SInt64 hookCallbackMimicOSEvent(UInt64 pFunc, UInt64 _argument)
+{
+   HooksManager::MimicOSEvent *argument = (HooksManager::MimicOSEvent *)_argument;
+   SubsecondTime time(argument->time);
+   PyGILState_STATE state = PyGILState_Ensure();
+   PyObject *pResult = HooksPy::callPythonFunction((PyObject *)pFunc, Py_BuildValue("(iKKL)", argument->core_id, argument->kind, argument->arg, time.getFS()));
+   SInt64 result = hookCallbackResult(pResult);
+   PyGILState_Release(state);
+   check_and_abort();
+   return result;
+}
+
 static SInt64 hookCallbackSyscallEnter(UInt64 pFunc, UInt64 _argument)
 {
    SyscallMdl::HookSyscallEnter* argument = (SyscallMdl::HookSyscallEnter*)_argument;
@@ -248,6 +260,9 @@ registerHook(PyObject *self, PyObject *args)
          break;
       case HookType::HOOK_SYSCALL_EXIT:
          Sim()->getHooksManager()->registerHook(type, hookCallbackSyscallExit, (UInt64)pFunc);
+         break;
+      case HookType::HOOK_MIMICOS_EVENT:
+         Sim()->getHooksManager()->registerHook(type, hookCallbackMimicOSEvent, (UInt64)pFunc);
          break;
       case HookType::HOOK_TYPES_MAX:
          assert(0);

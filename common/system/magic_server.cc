@@ -374,6 +374,7 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             kernel-only command: a guest that calls it for itself is never
             answered and blocks, which is why the check below exercises the
             lookup through the miss path and leaves the install to a kernel. */
+         Sim()->getMimicOS()->notifyEvent((int)core_id, MimicOS::EVENT_SWITCH_TO, arg0);
          return 42;
       }
       case SIM_CMD_GET_INJECTED_APP_ID:

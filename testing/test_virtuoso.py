@@ -117,6 +117,31 @@ INVARIANCE = [
 
 
 
+def live_feed_check(stats):
+    path = os.path.join(stats['__outdir__'], 'simulation', 'sim.live')
+    if not os.path.exists(path):
+        return False, 'no sim.live written'
+    recs = [json.loads(l) for l in open(path) if l.strip()]
+    evs = [r['ev'] for r in recs]
+    samples = [r for r in recs if r['ev'] == 'sample']
+    busy = [any(c['instrs'] > 0 for c in r['cores']) for r in samples]
+    cores_seen = set(i for r in samples for i, c in enumerate(r['cores']) if c['instrs'] > 0)
+    stacks = all(sum(c['cpi'].values()) > 0 for r in samples for c in r['cores'] if c['instrs'] > 0)
+    parks = sum(1 for r in recs if r['ev'] == 'thread' and r['what'] == 'stall' and r.get('reason') == 'pause')
+    quanta = sum(1 for r in recs if r['ev'] == 'os' and r['kind'] == 'quantum_expired')
+    switches = sum(1 for r in recs if r['ev'] == 'os' and r['kind'] == 'switch_to')
+    exits = sum(1 for r in recs if r['ev'] == 'os' and r['kind'] == 'thread_exit')
+    # One park: the worker whose application exits first waits on its empty
+    # queue; the last exit hands the other worker the shutdown without a wait.
+    # Switches are the kernel-mediated ones (new_thread, faults taken by the
+    # kernel); quanta are posted at expiry -- see the quantum hand-back.
+    ok = (evs[0] == 'header' and 'end' in evs and any(busy) and cores_seen >= {0, 1}
+          and stacks and parks == 1 and quanta >= 100 and switches >= 2 and exits == 2)
+    return ok, ('%d records, %d samples (cores busy: %s), stacks %s, %d parks, %d quanta, %d switches, %d exits'
+                % (len(recs), len(samples), sorted(cores_seen), 'nonzero' if stacks else 'EMPTY',
+                   parks, quanta, switches, exits))
+
+
 def counter(stats, name):
     """A statistic as a plain int, summed over cores.  0 when absent."""
     v = stats.get(name)
@@ -432,6 +457,18 @@ FEATURES = {
     # reports, and the round-robin scheduler must have preempted both
     # applications for the whole run.  Pinned at 4 cores like the race test
     # that found the hang; the two spare cores stay idle.
+    # The live feed (scripts/live.py): simulated-time samples with the CPI
+    # stack and the thread table, thread events, and the software layer's
+    # events from HOOK_MIMICOS_EVENT.  On the two-application run both cores
+    # retire instructions in the samples, both idle parks show as 'pause'
+    # stalls, and the kernel's quanta and switches are all there.
+    'live_feed': (
+        ['address_translation_schemes/userspace_baseline', '-slive:50000'], 4,
+        live_feed_check,
+        ('startup_mimicos', r'Scheduler stats: csw=', None,
+         ['mimicos/configs/two_app_smp.ini',
+          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_live_check.txt'])),
+
     'mimicos_two_app_smp': (
         ['address_translation_schemes/userspace_baseline'], 4,
         lambda stats: (
@@ -682,7 +719,8 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
     if have_setarch():
         cmd += ['setarch', '-R']
     cmd += [os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', str(ncores)]
-    cmd += ['-c' + n for n in names]
+    # a name starting with '-' is passed to run-sniper as it is (e.g. '-slive:50000')
+    cmd += [n if n.startswith('-') else '-c' + n for n in names]
     cmd += ['-d', outdir, '--', workload]
     cmd += list(app_args or [])
     try:
@@ -987,6 +1025,7 @@ def main():
             # with.  Only feature checks see it -- the invariance goldens are
             # blessed from read_stats() untouched.
             feat_stats['__stdout__'] = out
+            feat_stats['__outdir__'] = outdir
             ok, detail = check(feat_stats)
             log.record('feature:' + fname, took, 'PASS' if ok else 'FAIL')
             print('%s (%s) [%ds]' % ('PASS' if ok else 'FAIL', detail, round(took)))

@@ -27,6 +27,7 @@ const char* HookType::hook_type_names[] = {
    "HOOK_APPLICATION_ROI_BEGIN",
    "HOOK_APPLICATION_ROI_END",
    "HOOK_SIGUSR1",
+   "HOOK_MIMICOS_EVENT",
 };
 static_assert(HookType::HOOK_TYPES_MAX == sizeof(HookType::hook_type_names) / sizeof(HookType::hook_type_names[0]),
               "Not enough values in HookType::hook_type_names");

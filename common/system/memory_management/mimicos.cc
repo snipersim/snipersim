@@ -4,6 +4,7 @@
 #include "allocator_factory.h"
 #include "dvfs_manager.h"
 #include "simulator.h"
+#include "hooks_manager.h"
 #include "thread_manager.h"
 #include "core_manager.h"
 #include "core.h"
@@ -684,4 +685,15 @@ void MimicOS::wakeAllIdleWaiters()
 {
     for (size_t c = 0; c < m_idle_waiters.size(); c++)
         wakeIdleWaiter((int)c);
+}
+
+void MimicOS::notifyEvent(int core_id, UInt64 kind, UInt64 arg)
+{
+    HooksManager::MimicOSEvent args;
+    args.core_id = core_id;
+    args.kind = kind;
+    args.arg = arg;
+    Core* core = Sim()->getCoreManager()->getCoreFromID(core_id);
+    args.time = core ? core->getPerformanceModel()->getElapsedTime() : SubsecondTime::Zero();
+    Sim()->getHooksManager()->callHooks(HookType::HOOK_MIMICOS_EVENT, (UInt64)&args);
 }

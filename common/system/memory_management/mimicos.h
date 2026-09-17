@@ -372,11 +372,13 @@ public:
         if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) core_id = 0;
         MimicOSMessage msg;
         MimicOSProtocol::buildMessage(msg, message_type, std::forward<Args>(args)...);
+        UInt64 kind = msg.argv[0], arg = msg.argc > 1 ? msg.argv[1] : 0;   // before the move
         {
             std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
             m_event_queues[core_id].push_back(std::move(msg));
         }
         wakeIdleWaiter(core_id);
+        notifyEvent(core_id, kind, arg);
     }
 
     /* Same, for a poster that already holds the thread-manager lock (a
@@ -386,12 +388,20 @@ public:
         if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) core_id = 0;
         MimicOSMessage msg;
         MimicOSProtocol::buildMessage(msg, message_type, std::forward<Args>(args)...);
+        UInt64 kind = msg.argv[0], arg = msg.argc > 1 ? msg.argv[1] : 0;   // before the move
         {
             std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
             m_event_queues[core_id].push_back(std::move(msg));
         }
         wakeIdleWaiter_unlocked(core_id);
+        notifyEvent(core_id, kind, arg);
     }
+
+    /* The live feed (scripts/live.py) sees every event posted to a core's
+       queue and every switch of a kernel worker to an application thread,
+       through HOOK_MIMICOS_EVENT.  Kinds are the protocol codes, plus: */
+    static const UInt64 EVENT_SWITCH_TO = 100;
+    void notifyEvent(int core_id, UInt64 kind, UInt64 arg);
 
     /* Idle-worker wait.  A kernel worker whose queue is empty parks in
        SimReceiveMessage the way an idle CPU halts until an interrupt: the

@@ -44,3 +44,19 @@ The stream is plain text: `grep '\[kernel\]'`, `sort` (timestamps sort
 lexically), `cut -d' ' -f2-` to drop stamps.  `testing/test_virtuoso.py`
 refuses a run whose output has an unstamped line, using the same regular
 expression as the lnav format, so the format and the stream cannot drift.
+
+## The live feed
+
+`run-sniper -s live[:interval_ns] ...` also writes `<outputdir>/simulation/sim.live`:
+one JSON record per line, in simulated time, as the run goes (`scripts/live.py`
+documents the records).  Every interval it holds, per core, the instructions
+retired, the time in detailed and in fast-forward mode, and the CPI stack as
+femtoseconds per group -- the groups are `tools/cpistack.py`'s, so the live
+stack and the post-hoc one agree -- and the thread table (state, stall reason,
+core, application, name).  Between samples it records every thread event
+(start, exit, stall, resume, migrate), instrumentation-mode and ROI changes,
+markers, and the software layer's events from the userspace MimicOS kernel:
+each event posted to a core's queue (`page_fault`, `new_thread`, `thread_exit`,
+`quantum_expired`, `shutdown`) and each `switch_to` of a kernel worker to an
+application thread.  A dashboard tails it; `testing/test_virtuoso.py`'s
+`live_feed` check pins its contents on the two-application run.

@@ -38,6 +38,7 @@ public:
       HOOK_APPLICATION_ROI_BEGIN, // none                            ROI begin, always triggers
       HOOK_APPLICATION_ROI_END,   // none                            ROI end, always triggers
       HOOK_SIGUSR1,             // none                              Sniper process received SIGUSR1
+      HOOK_MIMICOS_EVENT,       // HooksManager::MimicOSEvent        An event was posted to a core's MimicOS queue, or a kernel worker switched to an application thread
       HOOK_TYPES_MAX
    };
    static const char* hook_type_names[];
@@ -93,6 +94,12 @@ public:
       core_id_t core_id;      // Core the thread is now running (or INVALID_CORE_ID == -1 for unscheduled)
       subsecond_time_t time;  // Current time
    } ThreadMigrate;
+   typedef struct {
+      core_id_t core_id;      // Core whose queue received the event, or whose worker switched
+      UInt64 kind;            // MimicOSProtocol code (page_fault, new_thread, thread_exit, quantum_expired, shutdown) or MimicOS::EVENT_SWITCH_TO
+      UInt64 arg;             // The event's first argument: app thread id, fault address, ...
+      subsecond_time_t time;  // The core's time
+   } MimicOSEvent;
 
    HooksManager();
    void init();
