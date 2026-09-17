@@ -1731,12 +1731,20 @@ void TraceThread::m_run_func_default()
    LineOut() << "[TraceThread] Thread " << m_thread->getId()
              << " (app " << m_app_id << ") started on host CPU " << host_cpu << std::endl;
 
-   Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
 
    // Open the trace (be sure to do this before potentially blocking on reschedule() as this causes deadlock)
    m_trace.initStream();
    m_trace_has_pa = m_trace.getTraceHasPhysicalAddresses();
    m_champsim_trace = m_trace.isChampSimTrace();
+
+   /* Announce the thread only now that its stream is open.  Until the
+      recorder's thread connects this thread cannot execute, so it must not
+      be a scheduling candidate: a core given to it sits idle and the barrier
+      waits for a thread that never arrives -- which oversubscription used to
+      deadlock on.  (The open itself must precede reschedule(): a thread
+      waiting for a core with its pipe unopened leaves the recorder blocked
+      in its thread-start callback.) */
+   Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
 
    if (m_thread->getCore() == NULL)
    {

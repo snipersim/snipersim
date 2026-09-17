@@ -1,4 +1,6 @@
 #include "simulator.h"
+#include <cstdlib>
+#include <sys/prctl.h>
 #include <cstdio>
 #include "handle_args.h"
 #include "config.hpp"
@@ -10,6 +12,11 @@
 
 int main(int argc, char* argv[])
 {
+   /* SNIPER_ALLOW_PTRACE=1: let any process attach a debugger (gdb -p).
+      Yama's default ptrace_scope refuses attaching to anything but a
+      descendant, which makes a hung simulation impossible to inspect. */
+   if (getenv("SNIPER_ALLOW_PTRACE"))
+      prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
    /* Line-buffered even when stdout is a pipe (run-sniper's), so each
       complete line reaches the merged stream when it is written. */
    setvbuf(stdout, NULL, _IOLBF, 0);

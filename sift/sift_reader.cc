@@ -1,4 +1,6 @@
 #include "sift_reader.h"
+#include <errno.h>
+#include <string.h>
 #include "sift_format.h"
 #include "sift_utils.h"
 #include "zfstream.h"
@@ -320,7 +322,7 @@ bool Reader::initResponse()
 
    if ((!response->is_open()) || (response->fail()))
    {
-      std::cerr << "[SIFT:" << m_id << "] Cannot open " << m_response_filename << "\n";
+      std::cerr << "[SIFT:" << m_id << "] Cannot open " << m_response_filename << ": " << strerror(errno) << "\n";
       return false;
    }
 

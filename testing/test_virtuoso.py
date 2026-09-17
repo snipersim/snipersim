@@ -494,6 +494,23 @@ FEATURES = {
          ['mimicos/configs/two_app_smp.ini',
           'test/sniper-in-sniper/fft.sift', '/tmp/sniper_two_app_check.txt'])),
 
+    # More software threads than cores.  Eight threads with a barrier between
+    # rounds on four cores (the shape of fft -p 8 on -n 4), which deadlocked
+    # at the fifth thread: a new thread's recorder blocked in PinCRT's fopen()
+    # on its response pipe -- waiting for a trace thread that had no core --
+    # holding the stdio lock every other thread's fopen() needs, so no thread
+    # could start and the barrier never advanced.  The recorder's FIFO opens
+    # no longer wait inside stdio (sift/zfstream.cc), and a trace thread is
+    # announced to the scheduler only once its stream is open.
+    'oversubscription': (
+        ['gainestown'], 4,
+        lambda stats: (
+            'oversub done threads=8' in stats['__stdout__']
+            and counter(stats, 'thread.instruction_count') > 0,
+            'eight threads finished on four cores; %d thread instructions'
+            % counter(stats, 'thread.instruction_count')),
+        ('oversub.c', r'oversub done threads=8')),
+
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (

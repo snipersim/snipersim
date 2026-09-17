@@ -1,4 +1,13 @@
 #include "zfstream.h"
+#include <string.h>
+#include <stdlib.h>
+#include <iostream>
+#include <sys/stat.h>
+#include <time.h>
+#include <errno.h>
+#include <unistd.h>
+#include <poll.h>
+#include <fcntl.h>
 
 #include <algorithm>
 #include <cassert>
@@ -164,79 +173,162 @@ int izstream::peek()
 #endif /*SIFT_USE_ZLIB*/
 
 #include <cstdio>
-cvifstream::cvifstream(const char * filename, std::ios_base::openmode mode)
+/* FIFO opens that do not wait inside the C library -- see cvofstream in
+   zfstream.h for why.  A regular file is opened the same way and just works. */
+static int open_reader_without_waiting(const char * filename)
 {
-	std::string mode_str;
-	if(mode & std::ios_base::in)
-		mode_str += "r";
-	if(mode & std::ios_base::out)
-		mode_str += "w";
-	if(mode & std::ios_base::binary)
-		mode_str += "b";
-
-	// FIXME: Reimplement this correctly
-	if(mode & (std::ios_base::app | std::ios_base::ate | std::ios_base::trunc))
-		assert(false);
-
-	this->stream = std::fopen(filename, mode_str.c_str());
-	assert(this->stream != NULL);
-	this->peek_buffer = 0;
-	this->buffer_in_use = false;
-	this->read_failed = false;
+	// O_RDONLY|O_NONBLOCK succeeds at once on a FIFO, writer or not; the
+	// writer is awaited in cvifstream::fill().
+	return ::open(filename, O_RDONLY | O_NONBLOCK);
 }
 
+static int open_writer_without_waiting(const char * filename)
+{
+	for (;;)
+	{
+		// On a FIFO with no reader this fails with ENXIO rather than waiting
+		int fd = ::open(filename, O_WRONLY | O_NONBLOCK | O_CREAT | O_TRUNC, 0666);
+		if (fd >= 0)
+		{
+			// The reader is there, so a blocking open returns at once; use
+			// that fd, since fcntl(F_SETFL) cannot be relied on (PinCRT).
+			int bfd = ::open(filename, O_WRONLY);
+			::close(fd);
+			return bfd;
+		}
+		if (errno != ENXIO)
+			return fd;
+		struct timespec ts = { 0, 1000000 };   // 1 ms: the reader is not there yet
+		::nanosleep(&ts, NULL);
+	}
+}
+
+cvofstream::cvofstream(const char * filename)
+{
+	int fd = open_writer_without_waiting(filename);
+	this->stream = fd < 0 ? NULL : ::fdopen(fd, "wb");
+}
+cvofstream::~cvofstream()
+{
+	if (this->stream)
+		std::fclose(this->stream);
+}
+void cvofstream::write(const char* s, std::streamsize n)
+{
+	std::fwrite(s, 1, n, this->stream);
+}
+void cvofstream::flush()
+{
+	std::fflush(this->stream);
+}
+bool cvofstream::fail()
+{
+	return this->stream == NULL || std::ferror(this->stream);
+}
+bool cvofstream::is_open()
+{
+	return this->stream != NULL;
+}
+
+cvifstream::cvifstream(const char * filename, std::ios_base::openmode mode)
+	: fd(-1), filename(strdup(filename)), owned(NULL), writer_seen(false), peek_buffer(0), buffer_in_use(false), read_failed(false)
+{
+	// FIXME: Reimplement this correctly
+	if(mode & (std::ios_base::app | std::ios_base::ate | std::ios_base::trunc | std::ios_base::out))
+		assert(false);
+	this->fd = open_reader_without_waiting(filename);
+	assert(this->fd >= 0);
+}
+cvifstream::cvifstream(std::FILE *stream)
+	: fd(::fileno(stream)), filename(NULL), owned(stream), writer_seen(true), peek_buffer(0), buffer_in_use(false), read_failed(false)
+{
+}
 cvifstream::~cvifstream()
 {
-	std::fclose(this->stream);
+	if (this->owned)
+		std::fclose(this->owned);
+	else if (this->fd >= 0)
+		::close(this->fd);
+	free(this->filename);
 }
-
+/* Read exactly n bytes; false (and read_failed) on end of file or error.
+   Until a writer has been seen the fd is non-blocking: 0 means no writer
+   yet -- wait a millisecond and try again -- and EAGAIN means one is there. */
+bool cvifstream::fill(char* s, size_t n)
+{
+	while (n > 0)
+	{
+		ssize_t r = ::read(this->fd, s, n);
+		if (r > 0)
+		{
+			if (!this->writer_seen)
+				this->switchToBlocking();
+			s += r; n -= r;
+			continue;
+		}
+		if (!this->writer_seen)
+		{
+			if (r < 0 && errno == EAGAIN)
+			{
+				this->switchToBlocking();
+				continue;
+			}
+			if (r == 0 || (r < 0 && errno == EINTR))
+			{
+				struct timespec ts = { 0, 1000000 };
+				::nanosleep(&ts, NULL);
+				continue;
+			}
+		}
+		if (r < 0 && errno == EINTR)
+			continue;
+		if (r == 0)
+			std::cerr << "[SIFT] response pipe: end of file -- the simulator closed it" << std::endl;
+		else
+			std::cerr << "[SIFT] response pipe: read failed: " << strerror(errno) << std::endl;
+		this->read_failed = true;    // end of file, or an error
+		return false;
+	}
+	return true;
+}
+/* The writer is connected: reopen the FIFO in blocking mode (immediate, the
+   writer holds its end) and drop the non-blocking fd.  Both fds share the
+   pipe, so nothing already written is lost. */
+void cvifstream::switchToBlocking()
+{
+	this->writer_seen = true;
+	if (!this->filename)
+		return;
+	int bfd = ::open(this->filename, O_RDONLY);
+	if (bfd >= 0)
+	{
+		::close(this->fd);
+		this->fd = bfd;
+	}
+}
 void cvifstream::read(char* s, std::streamsize n)
 {
-	size_t nr_to_read = n;
-	char* start_buffer = s;
-	if(this->buffer_in_use)
-    {
-		start_buffer[0] = this->peek_buffer;
-		nr_to_read--;
-		start_buffer++;
+	if (n <= 0)
+		return;
+	if (this->buffer_in_use)
+	{
+		*s++ = this->peek_buffer; --n;
 		this->buffer_in_use = false;
 	}
-	if(nr_to_read > 0)
-    {
-		ssize_t num_read = std::fread(start_buffer, sizeof(char), nr_to_read, this->stream);
-
-		// Against nr_to_read, not n.  A peek()ed byte is served from
-		// peek_buffer and nr_to_read is one short of n, so a completely
-		// successful read returned n-1 and a test against n was false --
-		// leaving the old assertion to pass only via its ferror() clause.
-		// peek() is how the reader dispatches on record type, so that was the
-		// ordinary path, and that half of the check never did anything.
-		if (num_read != (ssize_t)nr_to_read)
-		{
-			// Short read.  A stream error was already fatal; end of file was
-			// not, and that was the worse case of the two: fread() leaves the
-			// unfilled remainder of the caller's buffer untouched, so the
-			// caller went on to parse whatever happened to be there as though
-			// it had arrived over the connection.  Recorded instead, so that
-			// fail() reports it -- which is what callers already test after
-			// reading a response.
-			this->read_failed = true;
-			assert(std::ferror(this->stream) == 0);
-		}
-	}
+	if (n > 0)
+		this->fill(s, n);
 }
-
 int cvifstream::peek()
 {
-	if(!this->buffer_in_use)
-    {
-		this->read(&this->peek_buffer, 1);
+	if (!this->buffer_in_use)
+	{
+		if (!this->fill(&this->peek_buffer, 1))
+			return EOF;
 		this->buffer_in_use = true;
 	}
-	return this->peek_buffer;
+	return (unsigned char)this->peek_buffer;
 }
-
-bool cvifstream::fail() const 
+bool cvifstream::fail() const
 {
-	return this->stream == NULL || this->read_failed;
+	return this->read_failed;
 }

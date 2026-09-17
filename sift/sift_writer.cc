@@ -87,7 +87,7 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    if (m_send_va2pa_mapping)
       options |= PhysicalAddress;
 
-   output = new vofstream(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+   output = new cvofstream(filename);      // a FIFO open that does not wait inside stdio (zfstream.h)
 
    if (!output->is_open())
    {
