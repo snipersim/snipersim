@@ -2,9 +2,17 @@
 """
 sniper-live -- the run, as it goes, in the terminal.
 
+    tools/sniper-live --run [--interval ns] -- ./run-sniper -n 4 -c ... -- app
+                                             stream: start the run, watch it, nothing stored
     tools/sniper-live <outputdir>            tail <outputdir>/simulation/sim.live
-    tools/sniper-live path/to/sim.live
+    tools/sniper-live path/to/sim.live       a file, or a named pipe the run writes to
     tools/sniper-live --once [-W cols -H rows] <feed>     one frame to stdout, no TTY needed
+
+--run makes a private named pipe, adds "-s live:<interval>:<pipe>" to the
+run-sniper command and reads the feed from it as the simulation writes it;
+the run's own output goes to its sim.stdout as always.  Quitting the
+dashboard leaves the run going.  To attach from another terminal instead:
+mkfifo /tmp/live; run-sniper -s live:1000:/tmp/live ... ; tools/sniper-live /tmp/live
 
 Reads the live feed written by "run-sniper -s live" (scripts/live.py) and
 draws, scrolling right to left, one column per sample of simulated time:
@@ -90,8 +98,13 @@ class Feed:
       if self.fd is None:
          if not os.path.exists(self.path):
             return False
-         self.fd = open(self.path, 'rb')
-      data = self.fd.read()
+         # Non-blocking: a named pipe with no writer yet reads as empty
+         # rather than blocking the screen until the run opens it.
+         self.fd = os.open(self.path, os.O_RDONLY | os.O_NONBLOCK)
+      try:
+         data = os.read(self.fd, 1 << 20)
+      except BlockingIOError:
+         return False
       if not data:
          return False
       self.buf += data
@@ -178,7 +191,7 @@ def render(feed, width, height, zoom = 1, core_view = None):
       os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(feed.path)))) or feed.path,
       t_us, len(samples), zoom, ipc,
       '  core %d' % core_view if core_view is not None else '  all cores',
-      '  [ended]' if feed.ended else '')
+      '  [ended]' if feed.ended else ('  [run pid %d%s]' % (feed.run.pid, '' if feed.run.poll() is None else ' exited %d' % feed.run.returncode) if getattr(feed, 'run', None) else ''))
    f.put(0, 0, title.ljust(width)[:width], 231, 236)
 
    # --- the CPI stack strip ---
@@ -388,7 +401,10 @@ def curses_main(stdscr, feed, args):
 
 def main():
    ap = argparse.ArgumentParser(description = __doc__, formatter_class = argparse.RawDescriptionHelpFormatter)
-   ap.add_argument('path', help = 'a run output directory, or a sim.live file')
+   ap.add_argument('path', nargs = '?', help = 'a run output directory, a sim.live file, or a named pipe')
+   ap.add_argument('--run', action = 'store_true', help = 'start the run-sniper command after -- and stream its feed')
+   ap.add_argument('--interval', type = int, default = 1000, help = 'with --run: sample interval in simulated ns (default 1000)')
+   ap.add_argument('cmd', nargs = argparse.REMAINDER, help = 'with --run: the run-sniper command, after --')
    ap.add_argument('--once', action = 'store_true', help = 'print one frame and exit (no TTY needed)')
    ap.add_argument('-W', '--width', type = int, default = None)
    ap.add_argument('-H', '--height', type = int, default = None)
@@ -397,7 +413,30 @@ def main():
    ap.add_argument('--no-color', action = 'store_true')
    ap.add_argument('--frames', type = int, default = 0, help = argparse.SUPPRESS)   # for tests: quit after N redraws
    args = ap.parse_args()
+   run = None
+   if args.run:
+      import tempfile, subprocess, atexit, shutil
+      cmd = list(args.cmd)
+      if cmd and cmd[0] == '--':
+         cmd = cmd[1:]
+      if args.path and not cmd:
+         cmd, args.path = [args.path], None
+      elif args.path:
+         cmd = [args.path] + cmd
+      if not cmd:
+         sys.exit('--run needs the run-sniper command after --')
+      tmp = tempfile.mkdtemp(prefix = 'sniper-live-')
+      atexit.register(shutil.rmtree, tmp, True)
+      fifo = os.path.join(tmp, 'feed')
+      os.mkfifo(fifo)
+      # the hook option goes with run-sniper's own options, before its "--"
+      split = cmd.index('--') if '--' in cmd else len(cmd)
+      cmd = cmd[:split] + ['-slive:%d:%s' % (args.interval, fifo)] + cmd[split:]
+      run = subprocess.Popen(cmd, stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL, start_new_session = True)
+      args.path = fifo
    path = args.path
+   if not path:
+      sys.exit('give a run output directory, a feed file, or --run -- <command>')
    if os.path.isdir(path):
       cand = [os.path.join(path, 'simulation', 'sim.live'), os.path.join(path, 'sim.live')]
       path = next((c for c in cand if os.path.exists(c)), cand[0])
@@ -416,7 +455,10 @@ def main():
       sys.stdout.write(ansi(frame, color = (not args.no_color) and sys.stdout.isatty()))
       return
    import curses
+   feed.run = run
    curses.wrapper(curses_main, feed, args)
+   if run and run.poll() is None:
+      print('the run (pid %d) is still going; its output is in its sim.stdout' % run.pid)
 
 
 if __name__ == '__main__':

@@ -63,10 +63,19 @@ application thread.  A dashboard tails it; `testing/test_virtuoso.py`'s
 
 ## sniper-live: the run in the terminal
 
-    tools/sniper-live <outputdir>          while it runs, or after
+    tools/sniper-live --run -- ./run-sniper -n 4 -c ... -- app    stream it: nothing stored
+    tools/sniper-live <outputdir>          tail sim.live while it runs, or after
     tools/sniper-live --once <outputdir>   one frame to stdout (no terminal needed)
 
-tails the live feed and draws it, scrolling right to left, one column per
+`--run` makes a private named pipe, starts the run-sniper command with
+`-s live:<interval>:<pipe>` (`--interval` in simulated ns, default 1000) and
+reads the feed from memory as the simulation writes it; the run's own
+output goes to its `sim.stdout` as always, and quitting the dashboard leaves
+the run going.  To attach from a second terminal instead, give the feed a
+pipe yourself: `mkfifo /tmp/live; run-sniper -s live:1000:/tmp/live ...;
+tools/sniper-live /tmp/live`.
+
+The dashboard draws the feed, scrolling right to left, one column per
 sample of simulated time: the CPI stack aggregated over the busy cores (key
 `c` cycles through the cores), colored by family -- compute red, branch
 yellow, cache and memory hierarchy green, synchronization blue -- with the

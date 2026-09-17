@@ -6,7 +6,10 @@ simulation goes, in simulated time.  Tail it while the run is going; the
 dashboard reads it, and so does anything that wants to know what the
 machine and its threads were doing when.
 
-  -s live[:interval_ns]        sample interval in simulated ns (default 100000)
+  -s live[:interval_ns[:path]]   sample interval in simulated ns (default 100000);
+                                 path: where to write (default <output_dir>/sim.live).
+                                 A named pipe streams the feed without storing it:
+                                 tools/sniper-live --run does this for you.
 
 Records, by their "ev" field:
   header  once: cores, frequencies, the CPI groups being sampled, interval
@@ -52,7 +55,10 @@ class Live:
     args = dict(enumerate((args or '').split(':')))
     self.interval_ns = int(args.get(0, '') or 100000)
     self.ncores = sim.config.ncores
-    self.fd = open(os.path.join(sim.config.output_dir, 'sim.live'), 'w', buffering = 1)
+    path = args.get(1, '') or os.path.join(sim.config.output_dir, 'sim.live')
+    if os.path.exists(path) and not os.path.isfile(path):
+      print('[live] streaming to %s (waiting for a reader)' % path)
+    self.fd = open(path, 'w', buffering = 1)    # a FIFO blocks here until its reader opens
     self.threads = {}                     # thread id -> {'state', 'core', 'reason', 'by'}
     self.sd = sim.util.StatsDelta()
     self.instrs = [ self.sd.getter('performance_model', c, 'instruction_count') for c in range(self.ncores) ]
@@ -76,7 +82,12 @@ class Live:
     # The hooks: sim.util.register() wires every hook_<name> method below to HOOK_<NAME>.
 
   def emit(self, rec):
-    self.fd.write(json.dumps(rec, separators = (',', ':')) + '\n')
+    if not self.fd:
+      return
+    try:
+      self.fd.write(json.dumps(rec, separators = (',', ':')) + '\n')
+    except (BrokenPipeError, OSError):
+      self.fd = None        # the reader went away (a dashboard quit); the run goes on without the feed
 
   def when(self, t):
     return None if t is None or t >= MAXTIME else t
