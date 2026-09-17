@@ -131,13 +131,15 @@ def live_feed_check(stats):
     quanta = sum(1 for r in recs if r['ev'] == 'os' and r['kind'] == 'quantum_expired')
     switches = sum(1 for r in recs if r['ev'] == 'os' and r['kind'] == 'switch_to')
     exits = sum(1 for r in recs if r['ev'] == 'os' and r['kind'] == 'thread_exit')
-    # One park: the worker whose application exits first waits on its empty
-    # queue; the last exit hands the other worker the shutdown without a wait.
+    # At most one park: the worker whose application exits first waits on its
+    # empty queue while the other finishes, but whether it reaches that wait
+    # before the last exit posts shutdown is a scheduling race -- both orders
+    # are correct, so 0 or 1 parks are accepted, not a fixed count.
     # Every quantum hands back to the kernel, which switches an application
     # in again: at least one switch per quantum, plus new_thread and the
     # faults the kernel takes.
     ok = (evs[0] == 'header' and 'end' in evs and any(busy) and cores_seen >= {0, 1}
-          and stacks and parks == 1 and quanta >= 100 and switches >= quanta and exits == 2)
+          and stacks and parks <= 1 and quanta >= 100 and switches >= quanta and exits == 2)
     # And the dashboard draws it: one frame, no terminal, with the legend,
     # the core lanes carrying the kernel's events, the thread lanes, totals.
     frame = subprocess.run([os.path.join(SNIPER_ROOT, 'tools', 'sniper-live'), '--once', '--no-color',
