@@ -1,0 +1,8 @@
+# Pin's standard tool build rules; PIN_ROOT selects the kit.
+TOOL_ROOTS := fifo_check
+APP_ROOTS := fifo_app
+TOOL_CXXFLAGS += -DPIN_TOOL
+
+# DynamoRIO finds block_here/probe through the export table
+APP_LDFLAGS_NOOPT += -rdynamic
+APP_LDFLAGS += -rdynamic

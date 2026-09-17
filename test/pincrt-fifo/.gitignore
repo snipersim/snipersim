@@ -1,0 +1,3 @@
+obj-intel64/
+fifo_check_native
+fifo_check_dr.so
