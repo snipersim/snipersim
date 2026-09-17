@@ -62,9 +62,9 @@ def enabled_features(args):
         feats.add('torch')
     if args.mcpat:
         feats.add('mcpat')
-    for name in ('arm', 'riscv', 'dynamorio', 'qemu', 'mpi'):
+    for name in ('arm', 'riscv', 'dynamorio', 'qemu', 'mpi', 'riscv_ime'):
         if getattr(args, name):
-            feats.add(name)
+            feats.add(name.replace('_', '-'))
     return feats
 
 
@@ -285,6 +285,7 @@ def fetch_build(name, dep, offline, jobs=None):
         out = out.replace('{install}', target)
         out = out.replace('{build}', target + '.build')
         out = out.replace('{jobs}', str(jobs or os.cpu_count() or 1))
+        out = out.replace('{root}', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         for src in dep['from']:
             out = out.replace('{dep:%s}' % src, cache_path(src, man['dependencies'][src]))
         return out
@@ -457,6 +458,8 @@ def main():
     ap.add_argument('--no-mcpat', dest='mcpat', action='store_false')
     ap.add_argument('--arm', action='store_true')
     ap.add_argument('--riscv', action='store_true')
+    ap.add_argument('--riscv-ime', dest='riscv_ime', action='store_true',
+                    help='QEMU riscv64 user mode with the IME 0.9 patch and plugin support')
     ap.add_argument('--dynamorio', action='store_true')
     ap.add_argument('--qemu', action='store_true',
                     help='QEMU frontend: builds QEMU with TCG plugin support')

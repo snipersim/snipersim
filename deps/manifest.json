@@ -220,10 +220,12 @@
       "tag": "v11.1.1",
       "install_path": "qemu-src",
       "when": [
-        "qemu"
+        "qemu",
+        "riscv-ime"
       ],
       "marker": "include/plugins/qemu-plugin.h",
-      "description": "QEMU 11.1.1 source; plugin API v7. Cloned shallow at the tag, verified against rev"
+      "description": "QEMU 11.1.1 source; plugin API v7. Cloned shallow at the tag, verified against rev",
+      "when_any": true
     },
     "qemu-build": {
       "kind": "build",
@@ -244,6 +246,26 @@
         "mkdir -p build && cd build && ../configure --enable-plugins --target-list=x86_64-softmmu,x86_64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
       "description": "QEMU built with TCG plugin support; the frontend is loaded with -plugin"
+    },
+    "qemu-riscv-ime": {
+      "kind": "build",
+      "from": [
+        "qemu"
+      ],
+      "copy_from": "qemu",
+      "install_path": "qemu-riscv",
+      "when": [
+        "riscv-ime"
+      ],
+      "marker": "build/qemu-riscv64",
+      "workdir": "{install}",
+      "env": {},
+      "command": [
+        "sh",
+        "-c",
+        "git apply {root}/tools/riscv/qemu-11.1.1-ime.patch && mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
+      ],
+      "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvmtls=on"
     },
     "mpich-src": {
       "kind": "tarball",

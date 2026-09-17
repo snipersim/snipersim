@@ -21,6 +21,12 @@ decoder:
   vector_bytes: 16
   memory_uops: 16
 
+# Extensions a stock assembler lacks: gen_isa.py --header writes inline-asm
+# macros (typed .insn directives) for them, prefixed RISCV_.
+header:
+  extensions: ['^Zvv']
+  prefix: RISCV_
+
 # Extensions to take from the UDB (regexes over the extension name).
 extensions:
   - '^(I|M|A|F|D|Q|Zicsr|Zifencei|Zihintpause|Zihintntl|Zimop|Zicond|Zicbom|Zicbop|Zicboz)$'

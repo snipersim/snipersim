@@ -45,6 +45,7 @@ RISCV ?= ON
 ARM ?= OFF
 DYNAMORIO ?= OFF
 QEMU ?= OFF
+RISCV_IME ?= OFF   # QEMU riscv64 with the IME 0.9 patch, for the RISC-V/IME checks
 BUILD_TYPE ?= Release
 DYNAMORIO_DIR ?=
 CMAKE_ARGS ?=
@@ -55,6 +56,7 @@ _deps_flags += $(if $(filter ON,$(MCPAT)),,--no-mcpat)
 _deps_flags += $(if $(filter ON,$(ARM)),--arm,)
 _deps_flags += $(if $(filter ON,$(DYNAMORIO)),--dynamorio,)
 _deps_flags += $(if $(filter ON,$(QEMU)),--qemu,)
+_deps_flags += $(if $(filter ON,$(RISCV_IME)),--riscv-ime,)
 
 _cmake_flags := -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
 _cmake_flags += -DSNIPER_FRONTEND=$(FRONTEND)
@@ -214,3 +216,9 @@ validate_pacsim:
 # a comment, so the two cannot drift apart.
 help:
 	@sed -n '/^#/!q; s/^#\{1\} \{0,1\}//p' $(lastword $(MAKEFILE_LIST))
+
+# The RISC-V / IME 0.9 chain, end to end: specification -> generated decoder,
+# QEMU with the IME patch, a workload built with a stock clang, the harness.
+riscv-ime-check:
+	@tools/riscv/ime-check.sh
+.PHONY: riscv-ime-check

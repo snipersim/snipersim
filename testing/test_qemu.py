@@ -372,7 +372,7 @@ def case_riscv_user_simulate(p, g, workdir):
 # properties; SNIPER_QEMU_RISCV_IME_CPU overrides the -cpu string.  The guest
 # is built like rv-loop.c.  Skips when the QEMU lacks the properties.
 IME_CPU_DEFAULT = 'max,vlen=128,x-zvvmm=on,x-zvvmtls=on'
-IME_INSNS = 36            # rv-ime.c: exact instruction count of the guest
+IME_INSNS = 33            # rv-ime.c: exact instruction count of the guest (built on include/riscv_insn.h)
 IME_FOOTPRINTS = 4        # three tile loads and one tile store
 IME_SPANS = 8             # each tile has two rows in different cache lines
 IME_SPAN_BYTES = 64       # 8 rows of 8 bytes
@@ -384,8 +384,11 @@ def riscv_ime_prerequisites(workdir):
     cc = os.environ['SNIPER_RISCV_CC']
     guest = os.path.join(workdir, 'rv-ime')
     if not os.path.isfile(guest):
-        rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-O1',
-                       '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest,
+        # rv64gcv: the standard vector configuration instruction is native; the
+        # matrix instructions come from the generated include/riscv_insn.h
+        rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O1',
+                       '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start',
+                       '-I', os.path.join(SNIPER_ROOT, 'include'), '-o', guest,
                        os.path.join(PROBE_DIR, 'rv-ime.c')], 120)
         if rc != 0:
             return None, 'could not build rv-ime.c (exit %s)' % rc
