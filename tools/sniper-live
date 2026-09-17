@@ -254,10 +254,11 @@ def render(feed, width, height, zoom = 1, core_view = None):
                   GROUP_COLOR.get(above, UNKNOWN_COLOR) if above else None)
    # legend in the label column
    f.put(stack_top, 0, 'CPI stack', 231)
+   shown = list(reversed(groups))      # top of the legend = top of the stack
+   if len(shown) > stack_rows - 1:     # short of rows: the 0% groups go first
+      shown = [g for g in shown if legend_pct[g] >= 0.5][:stack_rows - 1]
    ly = stack_top + 1
-   for g in groups:
-      if ly >= stack_top + stack_rows:
-         break
+   for g in shown:
       f.put(ly, 0, FULL + ' %-12s%4.0f%%' % (g[:12], legend_pct[g]), GROUP_COLOR.get(g, UNKNOWN_COLOR))
       ly += 1
 

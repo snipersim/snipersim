@@ -556,7 +556,11 @@ if use_live:
     live_fifo = os.path.join(live_dir, 'feed')
     os.mkfifo(live_fifo)
     scripts.append('live:%d:%s' % (live_interval, live_fifo))
+    import termios
+    live_tty = os.dup(sys.stdout.fileno())              # the terminal itself, kept aside
+    live_termios = termios.tcgetattr(live_tty)          # its state, to put back afterwards
     live_dash = subprocess.Popen([os.path.join(HOME, 'tools', 'sniper-live'), live_fifo])
+    sniper_lib.protected_pids.add(live_dash.pid)        # kill_children() must leave it alone
   else:
     scripts.append('live:%d' % live_interval)
     print('[SNIPER] --live: no terminal; the feed goes to %s' % os.path.join(outputdir, 'simulation', 'sim.live'))
@@ -1096,12 +1100,19 @@ if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpa
   os.system('cp pin.log %s' % outputdir)
 
 if live_dash:
-  # Leave the final picture up until the dashboard is closed (q); if it was
-  # closed during the run, say where the run's output went.
+  # Leave the final picture up until the dashboard is closed (q).  Then put
+  # the terminal back the way it was, whatever happened to the dashboard:
+  # its saved modes, out of the alternate screen, cursor shown, colors off.
   if live_dash.poll() is None:
     live_dash.wait()
-  run_stream.terminal = True
-  print('[SNIPER] run finished (exit %d); its output is in %s' % (rc, os.path.join(outputdir, 'simulation', 'sim.stdout')))
+  try:
+    termios.tcsetattr(live_tty, termios.TCSADRAIN, live_termios)
+  except termios.error:
+    pass
+  os.write(live_tty, b'\033[?1049l\033[?25h\033[0m\r\n')
+  os.write(live_tty, ('[SNIPER] run finished (exit %d); its output is in %s\n'
+                      % (rc, os.path.join(outputdir, 'simulation', 'sim.stdout'))).encode())
+  os.close(live_tty)
   shutil.rmtree(live_dir, ignore_errors = True)
 
 sys.exit(rc)

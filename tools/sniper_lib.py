@@ -454,10 +454,14 @@ def kill_stragglers(marker, sig = signal.SIGKILL):
   return killed
 
 
+# Children that outlive the run on purpose: the --live dashboard stays up
+# until it is closed, and must not be killed with the recorders.
+protected_pids = set()
+
 def kill_children():
   children = find_children(os.getpid())
   for pid in children:
-    if pid != os.getpid():
+    if pid != os.getpid() and pid not in protected_pids:
       try: os.kill(pid, 9)
       except OSError: pass
 

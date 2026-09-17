@@ -22,12 +22,6 @@ CFLAGS=$(SNIPER_CFLAGS)
 # See ${SNIPER_ROOT}/include/sim_api.h for more information
 run: $(TARGET) run_$(TARGET)
 	@echo
-	@echo
-	@echo "Optional: Run '../../tools/cpistack.py' in this directory to generate cpi-stack output for this run"
-	@echo "Optional: Run '../../tools/mcpat.py' in this directory to generate power output for this run"
-	@echo "Optional: Run '../../tools/dumpstats.py' in this directory to view detailed statistics for this run"
-	@echo "Optional: Run '../../tools/gen_topology.py' in this directory to view the system topology for this run"
-	@echo
 
 $(SNIPER_BUILDCONF):
 	@echo
