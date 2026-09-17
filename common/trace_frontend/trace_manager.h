@@ -207,6 +207,10 @@ class TraceManager
          last application has finished -- and running it twice writes to
          response pipes that the first pass already closed. */
       std::atomic<bool> m_shutdown_requested{false};
+      /* stop()'s own once-guard, separate from m_shutdown_requested so that
+         a shutdown *request* does not make a later forced stop() return
+         early without halting the threads. */
+      std::atomic<bool> m_stop_entered{false};
 
       String getFifoName(app_id_t app_id, UInt64 thread_num, bool response, bool create);
       thread_id_t newThread(app_id_t app_id, bool first, bool init_fifo, bool spawn, SubsecondTime time, thread_id_t creator_thread_id);
@@ -251,6 +255,14 @@ class TraceManager
          to stop waiting when no more will arrive. */
       bool isDone() const
          { return m_shutdown_requested.load(std::memory_order_acquire); }
+
+      /* Ask the run to wind down without halting anything.  isDone() turns
+         true, so a kernel waiting in SimReceiveMessage is handed a shutdown
+         event and can drain what is queued, report, and exit on its own;
+         its stream then ends and the run finishes the normal way.  stop()
+         is the forced form, for a run that has nothing left to drain. */
+      void requestShutdown()
+         { m_shutdown_requested.store(true, std::memory_order_release); }
 
       Sift::Reader *getKernelTraceReader() const { return m_kernel_trace_reader; }
       void setKernelTraceReader(Sift::Reader *reader) { m_kernel_trace_reader = reader; }

@@ -1238,34 +1238,33 @@ void TraceThread::notifyAppExitAndSwitchToKernel()
       pool.unregisterReader(m_running_app_tid);
       m_running_app_tid = 0;
 
-      /* When the last injected application has gone there is nothing left to
-         run, so the simulation winds down.
-
-         The kernel does not get to see that happen, and cannot while it
-         shares this TraceThread with the application.  stop() halts this
-         thread, which is the one the kernel runs on, so the thread_exit
-         posted just above is never drained and neither is the shutdown that
-         would follow -- taking with it everything the kernel reports once its
-         dispatch loop returns, its fault-profile CSV included.  Leaving stop()
-         out is not an alternative: nothing else ends the run, and it hangs
-         until the timeout.  Measured both ways.
-
-         What resolves it is a kernel thread per core, where halting the
-         application's thread leaves the kernel's own still running to drain
-         the queue.  That is also the point at which the per-core queues stop
-         being safe under a migrating Sniper scheduler. */
+      /* When the last injected application has gone, ask the run to wind
+         down rather than halting it.  A forced stop() here halts this very
+         thread -- the one the kernel worker's stream is read on -- before
+         the worker can drain the thread_exit just posted, so nothing the
+         kernel does after its dispatch loop ever ran.  Requesting instead
+         makes isDone() true: the worker's next SimReceiveMessage hands it a
+         shutdown event, it returns from poll_for_signal, reports, and exits,
+         and its stream ending is what finishes the run. */
       if (Sim()->getTraceManager()->lastInjectedAppExited())
       {
          std::cout << "[TRACE:" << m_thread->getId()
-                   << "] -- last application exited; stopping" << std::endl;
-         Sim()->getTraceManager()->stop();
+                   << "] -- last application exited; requesting shutdown" << std::endl;
+         Sim()->getTraceManager()->requestShutdown();
       }
    }
 
-   /* Hand the thread back to the kernel so it can drain what was just
-      posted, rather than leaving a stale application reader in place. */
+   /* Hand the thread back to the kernel, and wake it.  The worker is parked
+      inside the SimContextSwitchTo that scheduled this application -- that
+      command returns 42, which sends no response, so the recorder blocks
+      until one arrives.  The fault path sends it every time it switches back
+      to the kernel; this path did not, and a worker whose application had
+      exited stayed parked for good.  Whether that stalled the other core
+      before its application reached EOF was a race, which is why two
+      applications hung most runs and one never did. */
    setAppSiftReader(NULL);
    setCurrentSiftReader(getKernelSiftReader());
+   getCurrentSiftReader()->sendResponseAfterContextSwitch();
 }
 
 void TraceThread::accountQuantumInstruction()

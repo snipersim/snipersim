@@ -448,11 +448,12 @@ void TraceManager::stop()
       writing to response pipes the first pass already closed, which
       dereferences a null response stream. */
    bool expected = false;
-   if (!m_shutdown_requested.compare_exchange_strong(expected, true,
-                                                     std::memory_order_acq_rel))
+   if (!m_stop_entered.compare_exchange_strong(expected, true,
+                                               std::memory_order_acq_rel))
    {
       return;
    }
+   m_shutdown_requested.store(true, std::memory_order_release);
 
    // End of region-of-interest when running Sniper inside Sniper
    SimRoiEnd();

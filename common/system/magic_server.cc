@@ -227,6 +227,15 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          if (!trace_thread)
             trace_thread = Sim()->getTraceManager()->getTraceThread(0, 0);
 
+         /* Nothing to switch to: the application this thread was running has
+            exited and its reader was cleared.  Installing NULL as the
+            current reader crashes the next Read; answering normally lets the
+            kernel carry on to its next SimReceiveMessage, where the
+            thread_exit it is owed is waiting.  Same shape as the
+            CONTEXT_SWITCH_TO miss path. */
+         if (!trace_thread->getAppSiftReader())
+            return 0;
+
          // Restore the current SIFT Reader to be the App one
          trace_thread->setCurrentSiftReader(trace_thread->getAppSiftReader());
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
