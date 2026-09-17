@@ -1709,6 +1709,8 @@ void TraceThread::m_run_func_with_userpace_mimicos()
       cleanupChampSimCache();
    }
 
+   prfmdl->drain();               // retire what the timing model still holds
+
    SubsecondTime time_end = prfmdl->getElapsedTime();
 
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
@@ -1760,8 +1762,23 @@ void TraceThread::m_run_func_default()
 
    bool have_first = m_trace.Read(inst);
 
-   while(have_first && m_trace.Read(next_inst))
+   /* An instruction is handed to the timing model together with its
+      successor (the branch target comes from there), so the last one used to
+      be dropped: no successor could be read.  It gets a fall-through
+      successor instead, and the loop ends after it. */
+   bool have_next = have_first && m_trace.Read(next_inst);
+   bool last_one = false;
+   Sift::StaticInstruction fallthrough;
+   while(have_first)
    {
+      if (!have_next)
+      {
+         fallthrough = *inst.sinst;
+         fallthrough.addr += inst.sinst->size;
+         next_inst = inst;
+         next_inst.sinst = &fallthrough;
+         last_one = true;
+      }
    
       if (!m_started)
       {
@@ -1855,10 +1872,11 @@ void TraceThread::m_run_func_default()
       }
 
 
-      if (m_stop)
+      if (m_stop || last_one)
          break;
 
       inst = next_inst;
+      have_next = m_trace.Read(next_inst);
    }
 
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
@@ -1867,6 +1885,8 @@ void TraceThread::m_run_func_default()
    if (m_champsim_trace) {
       cleanupChampSimCache();
    }
+
+   prfmdl->drain();               // retire what the timing model still holds
 
    SubsecondTime time_end = prfmdl->getElapsedTime();
 

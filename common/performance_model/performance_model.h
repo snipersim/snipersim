@@ -32,6 +32,10 @@ public:
    void handleIdleInstruction(PseudoInstruction *i);
    void iterate();
    virtual void synchronize();
+   /* The thread's stream has ended: retire whatever the model still holds
+      (an out-of-order model waits for more instructions before it runs a
+      cycle, so the last window would otherwise never commit). */
+   virtual void drain() {}
 
    UInt64 getInstructionCount() const { return m_instruction_count; }
 

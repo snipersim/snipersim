@@ -578,3 +578,15 @@ void MicroOpPerformanceModel::handleInstruction(DynamicInstruction *dynins)
    fprintf(m_cycle_log, "[%s] latency=%d\n", itostr(m_elapsed_time).c_str(), itostr(new_latency.getElapsedTime()).c_str());
 #endif
 }
+
+void MicroOpPerformanceModel::drain()
+{
+   uint64_t num_insns = 0, cycles = 0;
+   boost::tie(num_insns, cycles) = drainTimer();
+   if (num_insns == 0 && cycles == 0)
+      return;
+   ComponentTime latency(m_elapsed_time.getLatencyGenerator());
+   latency.addCycleLatency(cycles);
+   m_instruction_count += num_insns;
+   m_elapsed_time.addLatency(latency);
+}

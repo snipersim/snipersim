@@ -11,6 +11,7 @@ public:
    ~RobPerformanceModel();
 protected:
    virtual boost::tuple<uint64_t,uint64_t> simulate(const std::vector<DynamicMicroOp*>& insts);
+   boost::tuple<uint64_t,uint64_t> drainTimer();
    virtual void notifyElapsedTimeUpdate();
 private:
    RobTimer rob_timer;

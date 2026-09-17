@@ -54,6 +54,7 @@ RobTimer::RobTimer(
       , store_queue("rob_timer.store_queue", core->getId(), Sim()->getCfg()->getIntArray("perf_model/core/rob_timer/outstanding_stores", core->getId()))
       , nextSequenceNumber(0)
       , will_skip(false)
+      , m_draining(false)
       , time_skipped(SubsecondTime::Zero())
       , registerDependencies(new RegisterDependencies())
       , memoryDependencies(new MemoryDependencies())
@@ -458,6 +459,8 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
 
       while(m_num_in_rob < windowSize)
       {
+         if (m_draining && m_num_in_rob >= rob.size())
+            break;      // the buffer is running dry, as it should at the end
          LOG_ASSERT_ERROR(m_num_in_rob < rob.size(), "Expected sufficient uops for dispatching in pre-ROB buffer, but didn't find them");
          RobEntry *entry = &rob.at(m_num_in_rob);
          DynamicMicroOp &uop = *entry->uop;
@@ -897,7 +900,7 @@ void RobTimer::execute(uint64_t& instructionsExecuted, SubsecondTime& latency)
 
 
    // If frontend not stalled
-   if (frontend_stalled_until <= now)
+   if (frontend_stalled_until <= now && !m_draining)   /* drain(): no more uops are coming */
    {
       if (rob.size() < m_num_in_rob + 2*dispatchWidth)
       {
@@ -1048,4 +1051,32 @@ void RobTimer::printRob()
          std::cout<<"(dynamic)";
       std::cout<<std::endl;
    }
+}
+
+/* The thread's stream has ended.  execute() normally waits for the pre-ROB
+   buffer to hold two dispatch widths before running a cycle, so the tail of
+   every trace -- a few dozen instructions, all of a short one -- sat there
+   uncommitted.  Run cycles until nothing is left, counting what commits. */
+boost::tuple<uint64_t,SubsecondTime> RobTimer::drain()
+{
+   uint64_t total = 0;
+   SubsecondTime totalLat = SubsecondTime::Zero();
+   m_draining = true;
+   uint64_t idle_cycles = 0;
+   while (rob.size() > 0)
+   {
+      uint64_t ins = 0;
+      SubsecondTime lat = SubsecondTime::Zero();
+      execute(ins, lat);
+      total += ins;
+      totalLat += lat;
+      idle_cycles = ins ? 0 : idle_cycles + 1;
+      if (idle_cycles > 100000)
+      {
+         LOG_PRINT_WARNING("RobTimer::drain: %zu uops left that never commit", (size_t)rob.size());
+         break;
+      }
+   }
+   m_draining = false;
+   return boost::tuple<uint64_t,SubsecondTime>(total, totalLat);
 }

@@ -358,9 +358,11 @@ def case_riscv_user_simulate(p, g, workdir):
     n = int(stats.get('performance_model.instruction_count', 0))
     correct = int(stats.get('branch_predictor.num-correct', 0))
     wrong = int(stats.get('branch_predictor.num-incorrect', 0))
-    # 100,007 retired; what sits in the ROB when the stream ends is not drained
-    if not (99000 < n <= 100007):
-        return False, '%d instructions simulated, expected ~100007' % n
+    # Every retired instruction is simulated: the ROB is drained when the
+    # stream ends, and the last instruction is handed over with a synthesized
+    # fall-through successor.
+    if n != 100007:
+        return False, '%d instructions simulated, expected exactly 100007' % n
     if correct + wrong != 20000:
         return False, '%d branches predicted, expected the loop\'s 20000' % (correct + wrong)
     return True, '%d instructions, %d of %d branches predicted' % (n, correct, correct + wrong)
@@ -404,6 +406,7 @@ def main():
 
     workdir = tempfile.mkdtemp(prefix='sniper-qemu-')
     failures = []
+    passed = 0
     log = RunLog('qemu')
     stopped_early = False
     try:
@@ -417,6 +420,8 @@ def main():
             print('%-20s %s [%ds]'
                   % (name, 'PASS (%s)' % detail if ok else verdict + ': ' + detail,
                      round(took)))
+            if ok:
+                passed += 1
             if ok is False:
                 failures.append(name)
                 if args.failfast:
@@ -436,10 +441,11 @@ def main():
 
     print()
     total = len(args.case or CASES)
+    skipped = total - len(failures) - passed
     if failures:
         print('%d of %d checks FAILED' % (len(failures), total))
         return 1
-    print('all %d checks passed' % total)
+    print('all %d checks passed%s' % (total - skipped, ' (%d skipped)' % skipped if skipped else ''))
     return 0
 
 

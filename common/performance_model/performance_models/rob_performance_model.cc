@@ -29,3 +29,10 @@ void RobPerformanceModel::notifyElapsedTimeUpdate()
 {
    rob_timer.synchronize(m_elapsed_time.getElapsedTime());
 }
+
+boost::tuple<uint64_t,uint64_t> RobPerformanceModel::drainTimer()
+{
+   uint64_t ins; SubsecondTime latency;
+   boost::tie(ins, latency) = rob_timer.drain();
+   return boost::tuple<uint64_t,uint64_t>(ins, SubsecondTime::divideRounded(latency, m_elapsed_time.getPeriod()));
+}

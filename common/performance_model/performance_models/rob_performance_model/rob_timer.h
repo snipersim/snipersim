@@ -71,6 +71,7 @@ private:
 
    uint64_t nextSequenceNumber;
    bool will_skip;
+   bool m_draining;
    SubsecondTime time_skipped;
 
    RegisterDependencies* const registerDependencies;
@@ -153,6 +154,8 @@ public:
    ~RobTimer();
 
    boost::tuple<uint64_t,SubsecondTime> simulate(const std::vector<DynamicMicroOp*>& insts);
+
+   boost::tuple<uint64_t,SubsecondTime> drain();   // stream ended: retire everything held
    void synchronize(SubsecondTime time);
 };
 

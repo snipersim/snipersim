@@ -25,6 +25,9 @@ protected:
    const CoreModel *m_core_model;
 
    virtual boost::tuple<uint64_t,uint64_t> simulate(const std::vector<DynamicMicroOp*>& insts) = 0;
+   // Retire what the timer still holds; (instructions, cycles), like simulate()
+   virtual boost::tuple<uint64_t,uint64_t> drainTimer() { return boost::tuple<uint64_t,uint64_t>(0, 0); }
+   virtual void drain();
    virtual void notifyElapsedTimeUpdate() = 0;
    void doSquashing(std::vector<DynamicMicroOp*> &current_uops, uint32_t first_squashed = 0);
 
