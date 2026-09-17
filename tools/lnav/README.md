@@ -60,3 +60,21 @@ each event posted to a core's queue (`page_fault`, `new_thread`, `thread_exit`,
 `quantum_expired`, `shutdown`) and each `switch_to` of a kernel worker to an
 application thread.  A dashboard tails it; `testing/test_virtuoso.py`'s
 `live_feed` check pins its contents on the two-application run.
+
+## sniper-live: the run in the terminal
+
+    tools/sniper-live <outputdir>          while it runs, or after
+    tools/sniper-live --once <outputdir>   one frame to stdout (no terminal needed)
+
+tails the live feed and draws it, scrolling right to left, one column per
+sample of simulated time: the CPI stack aggregated over the busy cores (key
+`c` cycles through the cores), colored by family -- compute red, branch
+yellow, cache and memory hierarchy green, synchronization blue -- with the
+current percentages in the legend; a lane per core showing which application
+thread it runs and the kernel's events there (N new_thread, F page_fault,
+Q quantum_expired, S switch_to, X thread_exit); a lane per Sniper thread
+showing running or stalled and why (futex, pause, syscall); and the running
+totals.  `space` pauses, `+`/`-` change how many samples a column holds,
+`q` quits.  Standard library only; `--once` prints the same frame with ANSI
+colors on a terminal and plain text in a pipe, which is what the `live_feed`
+check renders.

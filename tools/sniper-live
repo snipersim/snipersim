@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""
+sniper-live -- the run, as it goes, in the terminal.
+
+    tools/sniper-live <outputdir>            tail <outputdir>/simulation/sim.live
+    tools/sniper-live path/to/sim.live
+    tools/sniper-live --once [-W cols -H rows] <feed>     one frame to stdout, no TTY needed
+
+Reads the live feed written by "run-sniper -s live" (scripts/live.py) and
+draws, scrolling right to left, one column per sample of simulated time:
+
+    the CPI stack       aggregate over the busy cores (or one core: key c),
+                        cpistack.py's groups, colored by family --
+                        compute red, branch yellow, cache/memory green,
+                        synchronization blue, the rest grey
+    core lanes          which application thread each core runs, and the
+                        kernel's events there: N new_thread, F page_fault,
+                        Q quantum_expired, S switch_to, X thread_exit
+    thread lanes        every Sniper thread's state: running, or stalled and
+                        why (futex, pause, syscall, ...)
+
+Keys: q quit, space pause, + / - zoom (samples per column), c cycle the
+stack between aggregate and each core, h help.  The renderer needs only the
+standard library; with --once it writes the frame with ANSI colors when
+stdout is a terminal and plain text otherwise.
+"""
+import sys, os, time, json, argparse, collections
+
+BLOCKS = ' ▁▂▃▄▅▆▇█'   # eighth blocks, bottom up
+FULL = '█'
+
+# --- the CPI stack: cpistack.py's groups by family, drawn bottom-up in this order ---
+FAMILIES = [
+   # (group,           256-color, 8-color fallback)
+   ('base',            196, 'red'),      # compute
+   ('dispatch_width',  160, 'red'),
+   ('rs_full',         124, 'red'),
+   ('depend',          88,  'red'),
+   ('issue',           166, 'red'),
+   ('serial',          202, 'red'),
+   ('smt',             130, 'red'),
+   ('branch',          226, 'yellow'),   # branch
+   ('ifetch',          46,  'green'),    # cache / memory hierarchy
+   ('mem',             34,  'green'),
+   ('itlb',            28,  'green'),
+   ('dtlb',            22,  'green'),
+   ('sync',            33,  'blue'),     # synchronization
+   ('imbalance',       27,  'blue'),
+   ('dvfs-transition', 244, 'white'),    # the rest
+   ('other',           240, 'white'),
+]
+GROUP_ORDER = [g for g, _, _ in FAMILIES]
+GROUP_COLOR = {g: c for g, c, _ in FAMILIES}
+GROUP_BASIC = {g: b for g, _, b in FAMILIES}
+UNKNOWN_COLOR = 240
+
+# thread states: (256-color, 8-color, glyph)
+STATE_STYLE = {
+   'running':  (255, 'white',   FULL),
+   'futex':    (220, 'yellow',  '▓'),
+   'pause':    (39,  'blue',    '░'),
+   'syscall':  (171, 'magenta', '▒'),
+   'sleep':    (39,  'blue',    '░'),
+   'cond':     (220, 'yellow',  '▓'),
+   'mutex':    (220, 'yellow',  '▓'),
+   'barrier':  (220, 'yellow',  '▓'),
+   'join':     (220, 'yellow',  '▓'),
+   'unscheduled': (244, 'white', '·'),
+}
+EVENT_GLYPH = [('thread_exit', 'X'), ('new_thread', 'N'), ('page_fault', 'F'), ('quantum_expired', 'Q'), ('switch_to', 'S')]
+APP_COLORS = [45, 208, 118, 213, 51, 214, 156, 219]
+
+
+class Feed:
+   """The feed, read incrementally.  Each sample carries the events since the one before."""
+   def __init__(self, path, keep = 20000):
+      self.path = path
+      self.fd = None
+      self.buf = b''
+      self.header = None
+      self.samples = collections.deque(maxlen = keep)
+      self.pending = []          # events since the last sample
+      self.core_app = {}         # core -> app thread id currently installed
+      self.totals = collections.Counter()
+      self.ended = False
+      self.nrecords = 0
+
+   def poll(self):
+      """Read what is new.  True if anything arrived."""
+      if self.fd is None:
+         if not os.path.exists(self.path):
+            return False
+         self.fd = open(self.path, 'rb')
+      data = self.fd.read()
+      if not data:
+         return False
+      self.buf += data
+      lines = self.buf.split(b'\n')
+      self.buf = lines.pop()
+      for line in lines:
+         if line.strip():
+            try:
+               self.take(json.loads(line))
+            except ValueError:
+               pass
+      return True
+
+   def take(self, rec):
+      self.nrecords += 1
+      ev = rec.get('ev')
+      if ev == 'header':
+         self.header = rec
+      elif ev == 'sample':
+         rec['events'] = self.pending
+         rec['core_app'] = dict(self.core_app)
+         self.pending = []
+         self.samples.append(rec)
+      elif ev == 'end':
+         self.ended = True
+      else:
+         if ev == 'os':
+            self.totals[rec['kind']] += 1
+            if rec['kind'] == 'switch_to':
+               self.core_app[rec['core']] = rec['arg']
+            elif rec['kind'] == 'thread_exit':
+               self.core_app.pop(rec['core'], None)
+         elif ev == 'thread' and rec['what'] == 'stall' and rec.get('reason') == 'pause':
+            self.totals['parks'] += 1
+         self.pending.append(rec)
+
+
+class Frame:
+   """A grid of (char, fg, bg) cells; fg/bg are 256-color numbers or None."""
+   def __init__(self, width, height):
+      self.w, self.h = width, height
+      self.cells = [[(' ', None, None)] * width for _ in range(height)]
+
+   def put(self, y, x, text, fg = None, bg = None):
+      if not (0 <= y < self.h):
+         return
+      for i, ch in enumerate(text):
+         if 0 <= x + i < self.w:
+            self.cells[y][x + i] = (ch, fg, bg)
+
+   def rows(self):
+      return [''.join(c[0] for c in row) for row in self.cells]
+
+
+def render(feed, width, height, zoom = 1, core_view = None):
+   """The screen for the feed's current state.  core_view: None for aggregate, else a core id."""
+   f = Frame(width, height)
+   hdr = feed.header or {}
+   ncores = hdr.get('ncores', 0)
+   samples = list(feed.samples)
+   label_w = 22
+   cols = max(1, width - label_w - 1)
+
+   # --- columns: the newest at the right; each is `zoom` samples ---
+   columns = []
+   for i in range(len(samples) - 1, -1, -zoom):
+      chunk = samples[max(0, i - zoom + 1): i + 1]
+      columns.append(chunk)
+      if len(columns) >= cols:
+         break
+   columns.reverse()
+   x0 = width - len(columns)          # first column's x
+
+   # --- header line ---
+   last = samples[-1] if samples else None
+   t_us = last['t'] / 1e9 if last else 0.0
+   instrs = sum(c['instrs'] for s in samples[-zoom:] for c in s['cores']) if samples else 0
+   cyc = 0.0
+   if last:
+      for ci, c in enumerate(last['cores']):
+         cyc += c['time'] * (hdr.get('freq_mhz', [0] * ncores)[ci] if ncores else 0) / 1e9
+   ipc = (sum(c['instrs'] for c in last['cores']) / cyc) if last and cyc else 0.0
+   title = ' sniper-live  %s  t=%.1f us  samples=%d  x%d  IPC=%.2f%s%s' % (
+      os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(feed.path)))) or feed.path,
+      t_us, len(samples), zoom, ipc,
+      '  core %d' % core_view if core_view is not None else '  all cores',
+      '  [ended]' if feed.ended else '')
+   f.put(0, 0, title.ljust(width)[:width], 231, 236)
+
+   # --- the CPI stack strip ---
+   stack_top = 1
+   stack_rows = max(6, (height - 4 - ncores - 2) // 2)
+   groups = [g for g in GROUP_ORDER if g in hdr.get('cpi_groups', [])] + \
+            [g for g in hdr.get('cpi_groups', []) if g not in GROUP_ORDER]
+   levels = stack_rows * 8
+   legend_pct = collections.OrderedDict((g, 0.0) for g in groups)
+   for cx, chunk in enumerate(columns):
+      agg = collections.Counter(); total = 0.0
+      for s in chunk:
+         for ci, c in enumerate(s['cores']):
+            if core_view is not None and ci != core_view:
+               continue
+            for g, v in c['cpi'].items():
+               agg[g] += v; total += v
+      if total <= 0:
+         continue
+      if chunk is columns[-1]:
+         for g in groups:
+            legend_pct[g] = 100.0 * agg[g] / total
+      # stacked, bottom up, in group order, `levels` eighths tall
+      boundaries = []      # (level_end, group)
+      acc = 0.0
+      for g in groups:
+         acc += agg[g] / total * levels
+         boundaries.append((acc, g))
+      x = x0 + cx
+      for r in range(stack_rows):
+         lo, hi = r * 8, (r + 1) * 8             # this cell spans levels [lo, hi)
+         y = stack_top + stack_rows - 1 - r
+         below = None; fill = 0; above = None
+         prev_end = 0.0
+         for end, g in boundaries:
+            if end <= lo:
+               prev_end = end; continue
+            if prev_end <= lo and end >= hi:      # one group fills the cell
+               below, fill = g, 8; break
+            if prev_end <= lo < end < hi:         # g covers the bottom part
+               below, fill = g, int(round(end - lo))
+               # the group above (first one ending beyond this cell)
+               for end2, g2 in boundaries:
+                  if end2 > end:
+                     above = g2; break
+               break
+            if lo < prev_end:                     # starts inside the cell: covered by 'above'
+               break
+            prev_end = end
+         if below is None:
+            continue
+         fill = max(0, min(8, fill))
+         if fill == 8:
+            f.put(y, x, FULL, GROUP_COLOR.get(below, UNKNOWN_COLOR))
+         elif fill == 0:
+            if above:
+               f.put(y, x, FULL, GROUP_COLOR.get(above, UNKNOWN_COLOR))
+         else:
+            f.put(y, x, BLOCKS[fill], GROUP_COLOR.get(below, UNKNOWN_COLOR),
+                  GROUP_COLOR.get(above, UNKNOWN_COLOR) if above else None)
+   # legend in the label column
+   f.put(stack_top, 0, 'CPI stack', 231)
+   ly = stack_top + 1
+   for g in groups:
+      if ly >= stack_top + stack_rows:
+         break
+      f.put(ly, 0, FULL + ' %-12s%4.0f%%' % (g[:12], legend_pct[g]), GROUP_COLOR.get(g, UNKNOWN_COLOR))
+      ly += 1
+
+   # --- core lanes ---
+   y = stack_top + stack_rows
+   f.put(y, 0, 'cores'.ljust(width), 231, 236)
+   y += 1
+   for ci in range(ncores):
+      app = feed.core_app.get(ci)
+      f.put(y + ci, 0, ('core %d %s' % (ci, ('0x%x' % app) if app else '-'))[:label_w].ljust(label_w), 250)
+      for cx, chunk in enumerate(columns):
+         x = x0 + cx
+         evs = [e for s in chunk for e in s['events'] if e.get('ev') == 'os' and e.get('core') == ci]
+         app_here = chunk[-1]['core_app'].get(ci)
+         glyph = ' '
+         for kind, gl in EVENT_GLYPH:
+            if any(e['kind'] == kind for e in evs):
+               glyph = gl; break
+         busy = any(c['instrs'] > 0 for s in chunk for c in [s['cores'][ci]] if ci < len(s['cores']))
+         if glyph != ' ':
+            f.put(y + ci, x, glyph, 16, APP_COLORS[(app_here or 0) % len(APP_COLORS)] if app_here else 244)
+         elif busy:
+            f.put(y + ci, x, FULL, APP_COLORS[(app_here or 0) % len(APP_COLORS)] if app_here else 250)
+   y += ncores
+
+   # --- thread lanes ---
+   f.put(y, 0, 'threads'.ljust(width), 231, 236)
+   y += 1
+   thread_ids = sorted(set(t['id'] for s in samples[-cols * zoom:] for t in s['threads']))
+   for tid in thread_ids:
+      if y >= height - 1:
+         break
+      cur = next((t for t in (last['threads'] if last else []) if t['id'] == tid), None)
+      label = 'T%d c%s a%s %s' % (tid, cur.get('core', '-') if cur else '-', cur.get('app', '-') if cur else '-',
+                                 (cur.get('name') or '') if cur else 'gone')
+      f.put(y, 0, label[:label_w].ljust(label_w), 250)
+      for cx, chunk in enumerate(columns):
+         t = next((t for t in chunk[-1]['threads'] if t['id'] == tid), None)
+         if not t:
+            continue
+         state = t.get('reason') if t.get('state') == 'stalled' else 'running'
+         color, _, glyph = STATE_STYLE.get(state, (244, 'white', '?'))
+         f.put(y, x0 + cx, glyph, color)
+      y += 1
+
+   # --- footer ---
+   tot = feed.totals
+   foot = ' quanta %d  faults %d  switches %d  parks %d  exits %d   q quit  space pause  +/- zoom  c core  h help' % (
+      tot['quantum_expired'], tot['page_fault'], tot['switch_to'], tot['parks'], tot['thread_exit'])
+   f.put(height - 1, 0, foot.ljust(width)[:width], 231, 236)
+   return f
+
+
+# --- output backends ---
+
+def ansi(frame, color = True):
+   out = []
+   for row in frame.cells:
+      line = []; cur = (None, None)
+      for ch, fg, bg in row:
+         if color and (fg, bg) != cur:
+            seq = '\033[0m'
+            if fg is not None: seq += '\033[38;5;%dm' % fg
+            if bg is not None: seq += '\033[48;5;%dm' % bg
+            line.append(seq); cur = (fg, bg)
+         line.append(ch)
+      if color: line.append('\033[0m')
+      out.append(''.join(line))
+   return '\n'.join(out) + '\n'
+
+
+def curses_main(stdscr, feed, args):
+   import curses
+   curses.curs_set(0)
+   stdscr.nodelay(True)
+   stdscr.timeout(200)
+   has256 = curses.COLORS >= 256
+   pairs = {}
+   basic = {'red': curses.COLOR_RED, 'yellow': curses.COLOR_YELLOW, 'green': curses.COLOR_GREEN,
+            'blue': curses.COLOR_BLUE, 'magenta': curses.COLOR_MAGENTA, 'white': curses.COLOR_WHITE}
+   def to_basic(c):
+      for g, c256, b in FAMILIES:
+         if c256 == c: return basic[b]
+      for st in STATE_STYLE.values():
+         if st[0] == c: return basic[st[1]]
+      return curses.COLOR_WHITE
+   def pair(fg, bg):
+      key = (fg, bg)
+      if key not in pairs:
+         n = len(pairs) + 1
+         if n >= curses.COLOR_PAIRS:
+            return 0
+         cf = fg if fg is not None else -1
+         cb = bg if bg is not None else -1
+         if not has256:
+            cf = to_basic(fg) if fg is not None else -1
+            cb = to_basic(bg) if bg is not None else -1
+         curses.init_pair(n, cf, cb)
+         pairs[key] = n
+      return pairs[key]
+   try:
+      curses.use_default_colors()
+   except curses.error:
+      pass
+   zoom, core_view, paused, frames, help_on = 1, None, False, 0, False
+   while True:
+      changed = feed.poll() if not paused else False
+      h, w = stdscr.getmaxyx()
+      frame = render(feed, w, h, zoom, core_view)
+      if help_on:
+         frame.put(2, 2, ' q quit | space pause | + - zoom | c cycle stack: all cores, core 0.. | h close ', 231, 236)
+      for y, row in enumerate(frame.cells):
+         for x, (ch, fg, bg) in enumerate(row):
+            if y == h - 1 and x == w - 1:
+               continue
+            try:
+               stdscr.addstr(y, x, ch, curses.color_pair(pair(fg, bg)))
+            except curses.error:
+               pass
+      stdscr.refresh()
+      frames += 1
+      if args.frames and frames >= args.frames:
+         return
+      k = stdscr.getch()
+      if k in (ord('q'), 27):
+         return
+      elif k == ord(' '):
+         paused = not paused
+      elif k in (ord('+'), ord('=')):
+         zoom = min(zoom * 2, 4096)
+      elif k == ord('-'):
+         zoom = max(1, zoom // 2)
+      elif k == ord('c'):
+         n = (feed.header or {}).get('ncores', 0)
+         core_view = 0 if core_view is None else (None if core_view + 1 >= n else core_view + 1)
+      elif k == ord('h'):
+         help_on = not help_on
+      elif k == curses.KEY_RESIZE:
+         stdscr.clear()
+
+
+def main():
+   ap = argparse.ArgumentParser(description = __doc__, formatter_class = argparse.RawDescriptionHelpFormatter)
+   ap.add_argument('path', help = 'a run output directory, or a sim.live file')
+   ap.add_argument('--once', action = 'store_true', help = 'print one frame and exit (no TTY needed)')
+   ap.add_argument('-W', '--width', type = int, default = None)
+   ap.add_argument('-H', '--height', type = int, default = None)
+   ap.add_argument('--zoom', type = int, default = 1, help = 'samples per column')
+   ap.add_argument('--core', type = int, default = None, help = 'show one core\'s stack instead of the aggregate')
+   ap.add_argument('--no-color', action = 'store_true')
+   ap.add_argument('--frames', type = int, default = 0, help = argparse.SUPPRESS)   # for tests: quit after N redraws
+   args = ap.parse_args()
+   path = args.path
+   if os.path.isdir(path):
+      cand = [os.path.join(path, 'simulation', 'sim.live'), os.path.join(path, 'sim.live')]
+      path = next((c for c in cand if os.path.exists(c)), cand[0])
+   feed = Feed(path)
+   if args.once:
+      if not os.path.exists(path):
+         sys.exit('no feed at %s' % path)
+      feed.poll()
+      try:
+         size = os.get_terminal_size()
+      except OSError:
+         size = os.terminal_size((120, 40))
+      w = args.width or size.columns
+      h = args.height or size.lines
+      frame = render(feed, w, h, args.zoom, args.core)
+      sys.stdout.write(ansi(frame, color = (not args.no_color) and sys.stdout.isatty()))
+      return
+   import curses
+   curses.wrapper(curses_main, feed, args)
+
+
+if __name__ == '__main__':
+   main()

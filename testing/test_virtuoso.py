@@ -138,9 +138,17 @@ def live_feed_check(stats):
     # faults the kernel takes.
     ok = (evs[0] == 'header' and 'end' in evs and any(busy) and cores_seen >= {0, 1}
           and stacks and parks == 1 and quanta >= 100 and switches >= quanta and exits == 2)
-    return ok, ('%d records, %d samples (cores busy: %s), stacks %s, %d parks, %d quanta, %d switches, %d exits'
+    # And the dashboard draws it: one frame, no terminal, with the legend,
+    # the core lanes carrying the kernel's events, the thread lanes, totals.
+    frame = subprocess.run([os.path.join(SNIPER_ROOT, 'tools', 'sniper-live'), '--once', '--no-color',
+                            '-W', '120', '-H', '36', path], stdout=subprocess.PIPE, text=True)
+    drawn = (frame.returncode == 0 and 'CPI stack' in frame.stdout and ' mem ' in frame.stdout
+             and 'core 0' in frame.stdout and 'Q' in frame.stdout and 'T0 ' in frame.stdout
+             and 'T1 ' in frame.stdout and 'quanta %d' % quanta in frame.stdout)
+    ok = ok and drawn
+    return ok, ('%d records, %d samples (cores busy: %s), stacks %s, %d parks, %d quanta, %d switches, %d exits; frame %s'
                 % (len(recs), len(samples), sorted(cores_seen), 'nonzero' if stacks else 'EMPTY',
-                   parks, quanta, switches, exits))
+                   parks, quanta, switches, exits, 'drawn' if drawn else 'NOT drawn (rc %d)' % frame.returncode))
 
 
 def counter(stats, name):
