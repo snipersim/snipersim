@@ -68,6 +68,7 @@ int main(int argc, char *argv[]) {
 
         mimicos->initHandlers();
         mimicos->boot();
+        MimicOS::destroyInstance();
         
     } catch (const std::exception& e) {
         std::cerr << "An exception occurred: " << e.what() << std::endl;

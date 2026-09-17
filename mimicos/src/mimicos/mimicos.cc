@@ -593,6 +593,12 @@ void MimicOS::boot()
         /* Core 0 runs on main thread. */
         m_cores[0].active = true;
         kernel_worker(0);
+
+        /* Every worker leaves poll_for_signal on its shutdown event; wait
+           for them before returning so the exit reports in ~MimicOS() see
+           the final state and no worker is still touching it. */
+        for (int i = 1; i < m_num_cores; i++)
+            pthread_join(m_cores[i].thread, nullptr);
     }
 }
 

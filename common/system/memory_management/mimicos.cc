@@ -2,6 +2,12 @@
 #include "config.hpp"
 #include "allocator_factory.h"
 #include "dvfs_manager.h"
+#include "simulator.h"
+#include "thread_manager.h"
+#include "core_manager.h"
+#include "core.h"
+#include "performance_model.h"
+#include "lock.h"
 #include "debug_config.h"
 
 #include <iostream>
@@ -559,6 +565,7 @@ void MimicOS::initPerCorePageFaultState(UInt32 num_cores)
        until the CoreManager has built them. */
     if (m_event_queues.empty()) {
         m_event_queues.resize(num_cores);
+        m_idle_waiters.assign(num_cores, INVALID_THREAD_ID);
         m_event_queue_locks.reserve(num_cores);
         for (UInt32 i = 0; i < num_cores; ++i) {
             m_event_queue_locks.emplace_back(new std::mutex());
@@ -622,4 +629,58 @@ void MimicOS::updateDataAccessStats(core_id_t core_id, SubsecondTime latency, bo
             stats->cache_misses++;
         }
     }
+}
+
+/* ---- idle-worker wait ------------------------------------------------- */
+
+void MimicOS::registerIdleWaiter(int core_id, thread_id_t thread_id)
+{
+    if (core_id >= 0 && (size_t)core_id < m_idle_waiters.size())
+        m_idle_waiters[core_id] = thread_id;
+}
+
+void MimicOS::clearIdleWaiter(int core_id)
+{
+    if (core_id >= 0 && (size_t)core_id < m_idle_waiters.size())
+        m_idle_waiters[core_id] = INVALID_THREAD_ID;
+}
+
+/* The wake time is the poster's "now".  Posters are TraceThreads, which
+   do not register a current core, so take the latest core time in the
+   system: an interrupt arrives at global time, and the barrier keeps the
+   cores within a skew of each other anyway. */
+static SubsecondTime latestCoreTime()
+{
+    SubsecondTime t = SubsecondTime::Zero();
+    core_id_t n = (core_id_t)Sim()->getConfig()->getApplicationCores();
+    for (core_id_t c = 0; c < n; c++) {
+        Core* core = Sim()->getCoreManager()->getCoreFromID(c);
+        if (core && core->getPerformanceModel()->getElapsedTime() > t)
+            t = core->getPerformanceModel()->getElapsedTime();
+    }
+    return t;
+}
+
+void MimicOS::wakeIdleWaiter(int core_id)
+{
+    ThreadManager* tm = Sim()->getThreadManager();
+    if (!tm) return;
+    ScopedLock sl(tm->getLock());
+    wakeIdleWaiter_unlocked(core_id);
+}
+
+void MimicOS::wakeIdleWaiter_unlocked(int core_id)
+{
+    if (core_id < 0 || (size_t)core_id >= m_idle_waiters.size()) return;
+    ThreadManager* tm = Sim()->getThreadManager();
+    thread_id_t waiter = m_idle_waiters[core_id];
+    if (waiter == INVALID_THREAD_ID) return;
+    m_idle_waiters[core_id] = INVALID_THREAD_ID;   // one wake per registration
+    tm->resumeThread(waiter, INVALID_THREAD_ID, latestCoreTime());
+}
+
+void MimicOS::wakeAllIdleWaiters()
+{
+    for (size_t c = 0; c < m_idle_waiters.size(); c++)
+        wakeIdleWaiter((int)c);
 }

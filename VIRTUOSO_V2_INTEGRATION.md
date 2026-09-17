@@ -238,28 +238,54 @@ configuration, not just a new one, so it lands after everything else is known go
 | **K3** | SIFT recorder follows fork+execve children | E3 (re-derive, §2.1) | partly, `05f262d` |
 | **K4** | Per-core MimicOS event queues | E4 | done, `caf1e43` |
 | **K5a** | `AppReaderPool`, `SimContextSwitchTo`, `SimGetInjectedAppId` | E5 | done, `7b2e445` |
-| **K5b** | Shutdown: `m_shutdown_requested`, `isDone()`, `stopAll()` | E5 | **next** |
-| **K5c** | Quantum preemption and app exit | E5 | pending |
-| **K5d** | Live-app spawn, `registerSpawnedAppThread` | E5 | pending |
-| **K6** | Fast-fault replay path | E6 | phase 1 done, `e2134ec` |
-| **K7** | Userspace MimicOS v2 kernel integration | E7d | headers in `4df7f88` |
+| **K5b** | Shutdown: `m_shutdown_requested`, `isDone()`, `stopAll()` | E5 | done, `6993fa0`; wind-down without halting, `18a4c1f` |
+| **K5c** | Quantum preemption and app exit | E5 | done, `5a136b5` (fires once K7 schedules) |
+| **K5d** | Live-app spawn, `registerSpawnedAppThread` | E5 | done, `267281e`; real app ids and exit notice, `6282e37` |
+| **K6** | Fast-fault replay path | E6 | done, `e2134ec`; cost charged to the core, `65f0b97` |
+| **K7** | Userspace MimicOS v2 kernel integration | E7d | done: `211da19`, `723b262`, `0f0ae21`, `041b735`; per-core locking `6612b08` |
+| **K8** | Idle-worker wait and kernel exit reports | — | done (this commit) |
 
 K5 was split once its shape was visible, as the plan asked. The split is not
 the one first sketched: `SimContextSwitchTo` turned out to belong with the pool
 rather than after it, and shutdown turned out to be a prerequisite for the rest
 rather than a tidy-up at the end -- see below.
 
-**The kernel is the thing that makes the rest testable, and it is reachable.**
-`virtuoso/mimicos` is ~7,800 lines with its own Makefile, builds against this
-tree's `include/` once `4df7f88`'s four shared headers are in, and runs as a
-guest under the simulator. It links only with `-no-pie`: this toolchain
-defaults to PIE and the `#pragma GCC optimize` blocks in the allocator headers
-reset code generation. Its `MIMICOS_FAST_FAULT_SMOKE` mode exists to prove a
-magic reaches the simulator without the full kernel, and it is what drove K6.
+**The kernel lives in-repo** (`mimicos/`, built by CMake as
+`build/default/bin/startup_mimicos`) and is what makes K5–K8 testable: the
+`mimicos_*` checks run it as the guest, and `mimicos_two_app_smp` runs two
+applications on two kernel workers end to end.  It links only with `-no-pie`:
+this toolchain defaults to PIE and the `#pragma GCC optimize` blocks in the
+allocator headers reset code generation.
 
-K5 is the single largest item in the whole migration (`trace_manager` +
-`trace_thread`, ~1,000 changed lines against files this branch has already modified).
-It should be split further once K1–K4 are in and its real shape is visible.
+**K8 -- what the two-application run taught.**  Three defects hid behind one
+symptom, "the two-application run hangs sometimes", and a fourth hid behind a
+passing result:
+
+- The app-exit hand-back never sent the response that wakes a recorder parked
+  in a 42-returning `SimContextSwitchTo`, so the worker stayed parked; and
+  `stop()` halted every thread before the kernel could drain its queue
+  (`18a4c1f`).
+- `SimReceiveMessage` answered an empty queue with `argc=0` while the run was
+  not done, and the kernel asserts `argc >= 1`: the worker whose application
+  exited *first* aborted the whole kernel.  Sniper's exit code stayed 0, so a
+  criterion of "rc=0 and quanta > 0" passed five runs out of six in which the
+  kernel had died.  A kernel run passes only if the kernel exits cleanly and
+  prints its exit report.
+- The exit reports live in `~MimicOS()`, and `main()` never deleted the
+  singleton.  `boot()` now joins the workers and `main()` tears the instance
+  down.
+- The fix for the empty queue is the one Virtuoso's comment describes but
+  could not do here: wait.  `Magic()` holds the thread-manager lock, so a spin
+  or a plain condition variable deadlocks against the posters; the wait goes
+  through `ThreadManager::stallThread(STALL_PAUSE)` like a futex or `pause`,
+  which releases that lock while parked, keeps the barrier from waiting on
+  the parked core, and turns a wait nobody will end into Sniper's deadlock
+  report instead of a hang.  Posters wake the registered waiter after the
+  push; a poster that already holds the lock (injection, from a magic
+  handler) uses `buildMessageWithArgsLocked`.  `requestShutdown()` wakes every
+  parked worker so it takes the synthesized shutdown.  With this the run is
+  deterministic: 115 quanta per application, both workers report shutdown,
+  the report file appears, six runs out of six.
 
 ### Not ported
 

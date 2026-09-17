@@ -268,31 +268,27 @@ FEATURES = {
             'recorder took its app_id from the environment'),
         ('workload.c', r'workload isum=', {'SIFT_CHILD_APP_ID': '0'})),
 
-    # K4: SimReceiveMessage reads a per-core event queue rather than a single
-    # shared MimicOSMessage slot.  With one slot a core got the last event
-    # posted on any core, and whatever was left in it when nothing had been
-    # posted at all.
-    #
-    # This checks the consumer, not the queueing.  Nothing posts events yet --
-    # every producer (new_thread, thread_exit, quantum_expired, and the
-    # page-fault path) sits behind the userspace kernel -- so FIFO order and
-    # per-core isolation cannot be observed from a guest until K5.  What is
-    # observable is that the handler runs and answers definitely: the guest
-    # writes a sentinel into argc and the handler must overwrite it with 0.
-    # A handler that never ran, or returned without writing, leaves the
-    # sentinel and this fails.
+    # The per-core event queue, from the consumer's side.  SimReceiveMessage
+    # is a wait: an empty queue parks the caller through the ThreadManager
+    # (like an idle CPU halted until an interrupt) and a poster wakes it.  The
+    # one producer a guest can drive is injection, which posts new_thread to
+    # the injecting core's queue; the guest injects and receives, and what
+    # arrives is pinned: argc=2, code 3 (NEW_THREAD), the injected app's main
+    # thread id encodeId(1, 0) = 65536, sentinel overwritten.  The K4 form of
+    # this check expected argc=0 back at once from an empty queue; that was
+    # the stopgap before anything posted events.  Parking, the wake on
+    # shutdown and the exit reports are covered by mimicos_two_app_smp.
     'mimicos_event_queue': (
         ['address_translation_schemes/userspace_baseline'], 1,
         lambda stats: (
-            'mimicos_event first argc=0' in stats['__stdout__']
-            and 'mimicos_event second argc=0' in stats['__stdout__']
+            'mimicos_event injected app_id=1' in stats['__stdout__']
+            and 'mimicos_event new_thread argc=2 code=3 arg=65536' in stats['__stdout__']
             and '1515870810' not in stats['__stdout__'],   # 0x5A5A5A5A
-            'argc reported as %s; sentinel %s'
-            % (', '.join(re.findall(r'mimicos_event \w+ argc=(-?\d+)',
-                                    stats['__stdout__'])) or 'nothing',
-               'left in place -- the handler did not write'
-               if '1515870810' in stats['__stdout__'] else 'overwritten')),
+            'new_thread delivered as %s'
+            % (', '.join(re.findall(r'mimicos_event new_thread (argc=\S+ code=\S+ arg=\S+)',
+                                    stats['__stdout__'])) or 'nothing')),
         ('mimicos_event.c', r'mimicos_event done')),
+
 
     # K5a: the AppReaderPool, and the magic commands that read it.  Readers
     # used to be reachable only as the app reader of the TraceThread that
@@ -419,6 +415,29 @@ FEATURES = {
         ('startup_mimicos', r'Scheduler\] Configured', None,
          ['mimicos/configs/linux_buddy_anon_sched_rr.ini',
           'test/sniper-in-sniper/fft.sift', '/tmp/sniper_sched_check.txt'])),
+
+    # Two applications on two cores, kernel-driven, end to end.  Each worker
+    # injects and runs its own application; the one whose application exits
+    # first parks on its empty queue (ThreadManager stall, not a spin), and
+    # the last exit wakes it with the synthesized shutdown.  Both workers must
+    # report the shutdown, the kernel must exit cleanly (no assertion -- it
+    # used to abort on argc=0 from the empty queue) and reach its exit
+    # reports, and the round-robin scheduler must have preempted both
+    # applications for the whole run.  Pinned at 4 cores like the race test
+    # that found the hang; the two spare cores stay idle.
+    'mimicos_two_app_smp': (
+        ['address_translation_schemes/userspace_baseline'], 4,
+        lambda stats: (
+            stats['__stdout__'].count('shutdown event received') == 2
+            and 'Scheduler stats:' in stats['__stdout__']
+            and 'Assertion' not in stats['__stdout__']
+            and 'Application has deadlocked' not in stats['__stdout__']
+            and counter(stats, 'trace_thread.quanta_expired') >= 100,
+            'both workers saw shutdown, kernel exited with its reports, '
+            '%d quanta expired' % counter(stats, 'trace_thread.quanta_expired')),
+        ('startup_mimicos', r'Scheduler stats: csw=', None,
+         ['mimicos/configs/two_app_smp.ini',
+          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_two_app_check.txt'])),
 
     'magic_reserved': (
         ['address_translation_schemes/baseline'], 1,

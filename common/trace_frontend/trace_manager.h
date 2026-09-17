@@ -261,8 +261,7 @@ class TraceManager
          event and can drain what is queued, report, and exit on its own;
          its stream then ends and the run finishes the normal way.  stop()
          is the forced form, for a run that has nothing left to drain. */
-      void requestShutdown()
-         { m_shutdown_requested.store(true, std::memory_order_release); }
+      void requestShutdown();
 
       Sift::Reader *getKernelTraceReader() const { return m_kernel_trace_reader; }
       void setKernelTraceReader(Sift::Reader *reader) { m_kernel_trace_reader = reader; }

@@ -372,9 +372,38 @@ public:
         if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) core_id = 0;
         MimicOSMessage msg;
         MimicOSProtocol::buildMessage(msg, message_type, std::forward<Args>(args)...);
-        std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
-        m_event_queues[core_id].push_back(std::move(msg));
+        {
+            std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
+            m_event_queues[core_id].push_back(std::move(msg));
+        }
+        wakeIdleWaiter(core_id);
     }
+
+    /* Same, for a poster that already holds the thread-manager lock (a
+       magic handler): the wake must not take it again. */
+    template <typename... Args>
+    void buildMessageWithArgsLocked(int core_id, const std::string& message_type, Args&&... args) {
+        if (core_id < 0 || (size_t)core_id >= m_event_queues.size()) core_id = 0;
+        MimicOSMessage msg;
+        MimicOSProtocol::buildMessage(msg, message_type, std::forward<Args>(args)...);
+        {
+            std::lock_guard<std::mutex> lk(*m_event_queue_locks[core_id]);
+            m_event_queues[core_id].push_back(std::move(msg));
+        }
+        wakeIdleWaiter_unlocked(core_id);
+    }
+
+    /* Idle-worker wait.  A kernel worker whose queue is empty parks in
+       SimReceiveMessage the way an idle CPU halts until an interrupt: the
+       magic handler registers the worker's Sniper thread here and stalls
+       it through the ThreadManager; a poster wakes it after pushing.
+       register/clear are called with the thread-manager lock held (the
+       handler runs under it); the wakers take that lock themselves. */
+    void registerIdleWaiter(int core_id, thread_id_t thread_id);
+    void clearIdleWaiter(int core_id);
+    void wakeIdleWaiter(int core_id);            // takes the thread-manager lock
+    void wakeIdleWaiter_unlocked(int core_id);   // caller holds it
+    void wakeAllIdleWaiters();
 
     /* True when the core has at least one event waiting. */
     bool isEventReady(int core_id) {
@@ -586,6 +615,7 @@ private:
        grow once at construction. */
     std::vector<std::deque<MimicOSMessage>>  m_event_queues;
     std::vector<std::unique_ptr<std::mutex>> m_event_queue_locks;
+    std::vector<thread_id_t>                 m_idle_waiters;   // per core, INVALID_THREAD_ID when none
     /* Landing slot for the deprecated getMessage() shim; real delivery pops
        into a caller-provided buffer. */
     std::vector<MimicOSMessage> m_scratch_messages;

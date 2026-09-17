@@ -324,6 +324,13 @@ class MimicOS {
             return instance;
         }
 
+        /* Run the destructor -- it writes the exit reports (scheduler,
+           fault-phase, replay stats).  main() calls this after boot(). */
+        static void destroyInstance(){
+            delete instance;
+            instance = nullptr;
+        }
+
         void handleDeallocate();
         void handlePrintAllocator();
         void handleInitRandom();

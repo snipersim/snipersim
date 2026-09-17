@@ -1,45 +1,38 @@
-/* K4: the SimReceiveMessage consumer reads a per-core event queue.
+/* The per-core event queue, driven from a guest with no kernel.
  *
- * The queue replaced a single shared MimicOSMessage slot.  With one slot a
- * core asking for an event got the last one posted on any core, and whatever
- * happened to be left there when nothing had been posted at all.
+ * SimReceiveMessage is a wait, not a probe: a core whose queue is empty is
+ * parked through the ThreadManager like an idle CPU halted until an
+ * interrupt, and whoever posts to that queue wakes it.  The one producer a
+ * guest can drive itself is injection: SimStartProcess posts new_thread to
+ * the injecting core's queue.  So the guest injects an application and
+ * receives, and the check pins what arrives -- argc, the protocol code and
+ * the app thread id -- and that the handler overwrote the sentinel.
  *
- * Nothing posts events yet -- every producer (new_thread, thread_exit,
- * quantum_expired, and the page-fault path) sits behind the userspace kernel
- * that arrives later -- so what is checked here is the consumer: that it runs
- * against the queue and reports "no event" as a definite answer rather than
- * leaving the guest's buffer alone.
+ * The guest stops there.  Running the injected application means handling
+ * its page faults, which is the kernel's job; the kernel-driven two-core
+ * check (mimicos_two_app_smp) covers the rest of the protocol: parking on
+ * an empty queue, the wake on shutdown, and the exit reports.
  *
- * The sentinel is what makes that observable.  The guest writes 0x5A5A5A5A
- * into argc and asks for an event; the handler must overwrite it with 0.  A
- * handler that never ran, or that returned without writing, leaves the
- * sentinel in place and the check fails.
- */
+ * The K4 version of this test probed an empty queue and expected argc=0
+ * back at once.  That was the stopgap before anything posted events; a
+ * guest that asks an empty queue with no producer now parks, and Sniper
+ * reports the idle deadlock rather than hanging. */
 #include <stdio.h>
 #include <stdint.h>
 #include "sim_api.h"
 
-#define SENTINEL 0x5A5A5A5A
-
 int main(void)
 {
-   /* Deliberately not volatile.  This was volatile while the magic macros
-      lacked a "memory" clobber, which made the store below dead as far as
-      the compiler could see; that workaround is exactly why this check kept
-      passing against a broken ABI.  With the clobber in place the store
-      survives on its own, and leaving it plain means this check now fails if
-      the clobber is ever lost again. */
-   int argc_slot = SENTINEL;
+   char path[] = "test/sniper-in-sniper/fft.sift";   /* array: no link-time constant in the magic */
+   SimStartProcess((unsigned long)path);
+   unsigned long app_id = SimGetInjectedAppId();
+   printf("mimicos_event injected app_id=%lu\n", app_id);
+
+   int argc_slot = 0x5A5A5A5A;                  /* sentinel: the handler must write */
    uint64_t argv_slot[8] = { 0 };
-
    SimReceiveMessage((unsigned long)&argc_slot, (unsigned long)argv_slot);
-   printf("mimicos_event first argc=%d\n", argc_slot);
-
-   /* Ask again: an empty queue must keep answering the same way rather than
-      draining into something stale. */
-   argc_slot = SENTINEL;
-   SimReceiveMessage((unsigned long)&argc_slot, (unsigned long)argv_slot);
-   printf("mimicos_event second argc=%d\n", argc_slot);
+   printf("mimicos_event new_thread argc=%d code=%lu arg=%lu\n", argc_slot,
+          (unsigned long)argv_slot[0], (unsigned long)argv_slot[1]);
 
    printf("mimicos_event done\n");
    return 0;

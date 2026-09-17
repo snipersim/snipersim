@@ -331,7 +331,7 @@ app_id_t TraceManager::createTraceBasedApplication(SubsecondTime time, char *tra
       {
          creator_core = mimicos_trace_thread->getThread()->getCore()->getId();
       }
-      Sim()->getMimicOS()->buildMessageWithArgs((int)creator_core,
+      Sim()->getMimicOS()->buildMessageWithArgsLocked((int)creator_core,
                                                 "new_thread", atid);
    }
 
@@ -640,4 +640,13 @@ void TraceManager::setTraceReaderHandlers(Sift::Reader* reader, TraceThread* mim
    reader->setHandleForkFunc(TraceThread::__handleForkFunc, mimicos_trace_thread);
    if (Sim()->getRoutineTracer())
       reader->setHandleRoutineFunc(TraceThread::__handleRoutineChangeFunc, TraceThread::__handleRoutineAnnounceFunc, this);
+}
+
+void TraceManager::requestShutdown()
+{
+   m_shutdown_requested.store(true, std::memory_order_release);
+   /* Idle kernel workers are parked in SimReceiveMessage; wake them so
+      they see isDone() and take the synthesized shutdown event. */
+   if (Sim()->getMimicOS())
+      Sim()->getMimicOS()->wakeAllIdleWaiters();
 }

@@ -400,35 +400,39 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             at all.  An empty queue now delivers a well-formed message with
             argc == 0, so the guest can tell "no event" from a stale one.
 
-            Virtuoso blocks here until an event arrives, which it can do
-            because it holds no lock.  That spin is not taken yet: Magic()
-            holds the thread manager lock, and the events this would wait for
-            are posted by other TraceThreads that need the same lock, so it
-            would deadlock exactly as the ROI barrier's wait did.  The
-            producers that make blocking meaningful -- new_thread,
-            thread_exit, quantum_expired -- arrive with the multi-core kernel
-            pthreads in K5, and the wait belongs with them, together with the
-            TraceManager::isDone() shutdown synthesis that lets a blocked
-            kernel pthread leave its loop. */
+            Virtuoso spins here until an event arrives, which it can do
+            because it holds no lock.  Magic() holds the thread-manager
+            lock, and the posters need it too, so a spin would deadlock;
+            the wait below goes through ThreadManager::stallThread() like a
+            futex or pause syscall instead, which releases that lock while
+            parked and keeps the barrier from waiting on the parked core. */
          MimicOS_NS::Message popped;
          MimicOS_NS::Message *message = &popped;
-         if (!Sim()->getMimicOS()->popEvent((int)core_id, popped))
+         MimicOS* mimic = Sim()->getMimicOS();
+         ThreadManager* tm = Sim()->getThreadManager();
+         while (!mimic->popEvent((int)core_id, popped))
          {
             /* Nothing queued.  If the simulation is winding down, say so
-               rather than answering "no event": a kernel waiting for work has
-               no other way to learn that none is coming, and would otherwise
-               sit in its dispatch loop until the process was torn down --
-               taking everything it reports at exit with it, since that
-               reporting runs after the loop returns. */
+               rather than waiting: a kernel waiting for work has no other
+               way to learn that none is coming, and would otherwise sit in
+               its dispatch loop until the process was torn down -- taking
+               everything it reports at exit with it. */
             if (Sim()->getTraceManager()->isDone())
+            {
                MimicOSProtocol::buildMessage(popped, "shutdown");
-            else
-               popped.argc = 0;
-            /* Answering immediately, rather than waiting for an event.
-               Waiting was tried: it hangs any guest that legitimately asks an
-               empty queue what is there, and on the two-application run it
-               bought nothing -- ten scheduling quanta either way.  Whatever
-               makes that run slow, it is not this. */
+               break;
+            }
+            /* Otherwise halt like an idle CPU until a poster wakes us.
+               Registration and the stall happen under the lock Magic()
+               holds, so a post cannot slip between them; the poster clears
+               the registration when it resumes us, and we re-check the
+               queue on every wake (a shutdown request also wakes us). */
+            SubsecondTime t_halt = core->getPerformanceModel()->getElapsedTime();
+            mimic->registerIdleWaiter((int)core_id, thread_id);
+            SubsecondTime t_wake = tm->stallThread(thread_id, ThreadManager::STALL_PAUSE, t_halt);
+            mimic->clearIdleWaiter((int)core_id);
+            if (t_wake > t_halt)
+               core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(t_wake, SyncInstruction::PAUSE));
          }
 
          // Write argc to the core's memory
