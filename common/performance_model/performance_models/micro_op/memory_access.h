@@ -8,10 +8,13 @@ namespace Memory
       union {
          UInt64 address, virt, phys;
       };
-      //static const UInt64 length = 8;
-      void set(UInt64 address)
+      /** Bytes accessed, when known dynamically (vector and matrix-tile
+          accesses); 0 means the micro-op's static size applies. */
+      UInt32 size;
+      void set(UInt64 address, UInt32 size = 0)
       {
          this->address = address;
+         this->size = size;
       }
    };
 

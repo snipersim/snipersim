@@ -1,4 +1,5 @@
 #include "dynamic_micro_op_boom_v1.h"
+#include "riscv_ext.h"
 #include "micro_op.h"
 
 #include <riscv_meta.h>
@@ -23,6 +24,23 @@ const char* DynamicMicroOpBoomV1::PortTypeString(DynamicMicroOpBoomV1::uop_port_
 
 DynamicMicroOpBoomV1::uop_port_t DynamicMicroOpBoomV1::getPort(const MicroOp *uop)
 {
+      const unsigned int op = uop->getInstructionOpcode();
+      if (rvext::is_ext(op))
+      {
+         switch (rvext::class_of(op))
+         {
+            case rvext::V_LOAD: case rvext::V_STORE:
+            case rvext::IME_TILE_LOAD: case rvext::IME_TILE_STORE:
+               return DynamicMicroOpBoomV1::UOP_PORT2;
+            case rvext::V_FP_ADDSUB: case rvext::V_FP_MULADD: case rvext::V_FP_DIV:
+            case rvext::IME_MMA_INT: case rvext::IME_MMA_FP:
+               return DynamicMicroOpBoomV1::UOP_PORT0;
+            case rvext::V_INT_DIV:
+               return DynamicMicroOpBoomV1::UOP_PORT1;
+            default:
+               return DynamicMicroOpBoomV1::UOP_PORT012;
+         }
+      }
       if(instrlist[uop->getInstructionOpcode()].has_fpu || instrlist[uop->getInstructionOpcode()].has_fdiv || instrlist[uop->getInstructionOpcode()].has_mul ) {
             return DynamicMicroOpBoomV1::UOP_PORT0;
       } else if(instrlist[uop->getInstructionOpcode()].has_div ) {
@@ -57,6 +75,18 @@ DynamicMicroOpBoomV1::uop_alu_t DynamicMicroOpBoomV1::getAlu(const MicroOp *uop)
    switch(uop->uop_type)
    {
       case MicroOp::UOP_EXECUTE:
+         if (rvext::is_ext(uop->getInstructionOpcode()))
+         {
+            switch (rvext::class_of(uop->getInstructionOpcode()))
+            {
+               case rvext::IME_MMA_INT: case rvext::IME_MMA_FP:
+                  return UOP_ALU_MATRIX;
+               case rvext::V_INT_DIV: case rvext::V_FP_DIV:
+                  return UOP_ALU_TRIG;
+               default:
+                  return UOP_ALU_NONE;
+            }
+         }
          switch(uop->getInstructionOpcode())
          {
             case rv_op_div:

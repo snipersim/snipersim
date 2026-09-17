@@ -86,6 +86,13 @@ int main(int argc, char* argv[])
             printf(" %02x", inst.sinst->data[i]);
          printf("\n");
 
+         if (inst.num_spans > 0) {
+            // The recorded footprint of a vector or matrix-tile access
+            printf("                 -- spans");
+            for(int i = 0; i < inst.num_spans; ++i)
+               printf(" %08" PRIx64 "+%u%s", inst.spans[i].addr, inst.spans[i].size, inst.spans[i].is_write ? "w" : "r");
+            printf("\n");
+         }
          if (inst.num_addresses > 0) {
             printf("                 -- addr");
             for(int i = 0; i < inst.num_addresses; ++i)

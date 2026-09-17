@@ -131,6 +131,14 @@ class Decoder
     
     /// Get the number of execution micro operations contained in instruction 'ins' 
     virtual unsigned int get_exec_microops(const DecodedInst *ins, int numLoads, int numStores) = 0;
+    /// True when the number of memory accesses the instruction makes is only
+    /// known dynamically (vector and matrix instructions): num_memory_operands
+    /// is then an upper bound, and load/store uops without an access are squashed.
+    virtual bool has_dynamic_memory_operands(const DecodedInst *ins) { return false; }
+    /// Vector/matrix memory instructions: the static size of one memory uop and
+    /// how many such uops one instruction gets (perf_model/core/rvv in the config)
+    virtual void set_vector_bytes(unsigned int n) {}
+    virtual void set_ext_memory_uops(unsigned int n) {}
     
     /// Get the maximum size of the operands of instruction inst in bits
     virtual uint16_t get_operand_size(const DecodedInst *ins) = 0;

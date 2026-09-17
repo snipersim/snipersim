@@ -88,6 +88,8 @@ void Simulator::createDecoder()
 
       m_factory = new dl::DecoderFactory;
       m_decoder = m_factory->CreateDecoder(dla, dlm, dls);  // create decoder for [arch, mode, syntax]
+      m_decoder->set_vector_bytes(getCfg()->getIntDefault("perf_model/core/rvv/vlen_bytes", 16));
+      m_decoder->set_ext_memory_uops(getCfg()->getIntDefault("perf_model/core/rvv/memory_uops", 16));
    }
 }
 

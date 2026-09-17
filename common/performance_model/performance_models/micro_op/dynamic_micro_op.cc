@@ -24,6 +24,9 @@ DynamicMicroOp::DynamicMicroOp(const MicroOp *uop, const CoreModel *core_model, 
    this->squashedCount = 0;
    this->dependenciesLength = 0;
 
+   /* A load or store uop that never receives a dynamic address (a predicated-off
+      or unmapped access) must still carry a defined size (0: the static size). */
+   this->address.set(0);
    this->execLatency = m_core_model->getInstructionLatency(uop);
 
    this->sequenceNumber = INVALID_SEQNR;

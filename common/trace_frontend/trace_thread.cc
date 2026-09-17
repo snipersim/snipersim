@@ -21,6 +21,7 @@
 #include "sim_api.h"
 #include "mimicos.h"
 #include "stats.h"
+#include "riscv_ext.h"
 #include "parametric_dram_directory_msi/memory_manager.h"
 
 #include <unistd.h>
@@ -93,7 +94,19 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_stopped(false)
    , m_champsim_icache_hits(0)
    , m_champsim_icache_misses(0)
+   , m_rvext_spans(0)
+   , m_rvext_span_bytes(0)
 {
+   // Vector and matrix (IME) instructions seen by this thread, per class, and
+   // the byte ranges their recorded footprints contributed.
+   for (unsigned int c = 0; c < rvext::NUM_CLASSES; ++c)
+   {
+      m_rvext_count[c] = 0;
+      if (c)
+         registerStatsMetric("rvext", m_thread->getId(), rvext::class_name((rvext::Class)c), &m_rvext_count[c]);
+   }
+   registerStatsMetric("rvext", m_thread->getId(), "spans", &m_rvext_spans);
+   registerStatsMetric("rvext", m_thread->getId(), "span_bytes", &m_rvext_span_bytes);
 
    bool userspace_mimicos_enabled = Sim()->getCfg()->getBool("general/enable_userspace_mimicos");
 
@@ -807,7 +820,20 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
       // Ignore memory-referencing operands in NOP instructions
       if (!dec_inst.is_nop())
       {
-         for(uint32_t mem_idx = 0; mem_idx <  Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
+         countExtension(inst, dec_inst);
+         for(uint32_t s = 0; s < inst.num_spans; ++s)
+         {
+            const Sift::MemorySpan &sp = inst.spans[s];
+            core->accessMemory(
+                  Core::NONE,
+                  sp.is_write ? Core::WRITE : Core::READ,
+                  va2pa(sp.addr),
+                  NULL,
+                  sp.size,
+                  Core::MEM_MODELED_COUNT,
+                  va2pa(inst.sinst->addr));
+         }
+         for(uint32_t mem_idx = 0; mem_idx <  staticMemoryOperands(inst, dec_inst); ++mem_idx)
          {
             if (Sim()->getDecoder()->op_read_mem(&dec_inst, mem_idx))
             {
@@ -842,7 +868,7 @@ void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruc
             }
          }
 
-         for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
+         for(uint32_t mem_idx = 0; mem_idx < staticMemoryOperands(inst, dec_inst); ++mem_idx)
          {
             if (Sim()->getDecoder()->op_write_mem(&dec_inst, mem_idx))
             {
@@ -964,8 +990,20 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
    if (!dec_inst.is_nop())
    {
       const bool is_prefetch = dec_inst.is_prefetch();
-
-      for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
+      countExtension(inst, dec_inst);
+      // A recorded footprint (vector, matrix tile) replaces the decoder's
+      // static view: one memory entry per byte range, reads before writes as
+      // the static operand list is ordered.
+      for (int pass = 0; pass < 2 && inst.num_spans; ++pass)
+         for (uint32_t s = 0; s < inst.num_spans; ++s)
+         {
+            const Sift::MemorySpan &sp = inst.spans[s];
+            if ((sp.is_write != 0) != (pass == 1))
+               continue;
+            dynins->addMemory(inst.executed, SubsecondTime::Zero(), va2pa(sp.addr), sp.size,
+                              sp.is_write ? Operand::WRITE : Operand::READ, 0, HitWhere::UNKNOWN);
+         }
+      for(uint32_t mem_idx = 0; mem_idx < staticMemoryOperands(inst, dec_inst); ++mem_idx)
       {
          if (Sim()->getDecoder()->op_read_mem(&dec_inst, mem_idx))
          {
@@ -973,7 +1011,7 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
          }
       }
 
-      for(uint32_t mem_idx = 0; mem_idx < Sim()->getDecoder()->num_memory_operands(&dec_inst); ++mem_idx)
+      for(uint32_t mem_idx = 0; mem_idx < staticMemoryOperands(inst, dec_inst); ++mem_idx)
       {
          if (Sim()->getDecoder()->op_write_mem(&dec_inst, mem_idx))
          {
@@ -1096,6 +1134,25 @@ void TraceThread::handleChampSimDetailed(Sift::Instruction &inst, Sift::Instruct
 
    prfmdl->queueInstruction(dynins);
    prfmdl->iterate();
+}
+
+static_assert(Sift::MAX_MEMORY_SPANS <= DynamicInstruction::MAX_MEMORY, "a recorded footprint must fit the dynamic instruction");
+
+// The decoder's memory operands are only consulted when the trace did not
+// record the instruction's footprint itself.
+uint32_t TraceThread::staticMemoryOperands(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst)
+{
+   return inst.num_spans ? 0 : Sim()->getDecoder()->num_memory_operands(&dec_inst);
+}
+
+void TraceThread::countExtension(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst)
+{
+   const unsigned int op = dec_inst.inst_num_id();
+   if (rvext::is_ext(op))
+      m_rvext_count[rvext::class_of(op)]++;
+   m_rvext_spans += inst.num_spans;
+   for (uint32_t s = 0; s < inst.num_spans; ++s)
+      m_rvext_span_bytes += inst.spans[s].size;
 }
 
 void TraceThread::addDetailedMemoryInfo(DynamicInstruction *dynins, Sift::Instruction &inst, const dl::DecodedInst &decoded_inst, uint32_t mem_idx, Operand::Direction op_type, bool is_prefetch, PerformanceModel *prfmdl)

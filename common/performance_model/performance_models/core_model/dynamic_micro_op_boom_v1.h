@@ -20,6 +20,7 @@ class DynamicMicroOpBoomV1 : public DynamicMicroOp
       enum uop_alu_t {
          UOP_ALU_NONE = 0,
          UOP_ALU_TRIG,
+         UOP_ALU_MATRIX,      // the IME matrix multiply-accumulate unit
          UOP_ALU_SIZE,
       };
       uop_alu_t uop_alu;

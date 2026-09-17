@@ -178,7 +178,7 @@ target_link_libraries(siftdump PRIVATE sift)
 # happened to exist next to the repository.
 file(GLOB DECODER_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decoder_lib/*.cc")
 if(NOT SNIPER_ENABLE_RISCV)
-  list(FILTER DECODER_SOURCES EXCLUDE REGEX "/riscv[^/]*\\.cc$")
+  list(FILTER DECODER_SOURCES EXCLUDE REGEX "/riscv_decoder\\.cc$")   # riscv_ext.cc needs no rv8
 endif()
 if(NOT SNIPER_ENABLE_ARM)
   list(FILTER DECODER_SOURCES EXCLUDE REGEX "/arm[^/]*\\.cc$")

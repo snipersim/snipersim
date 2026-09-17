@@ -68,6 +68,8 @@ namespace Sift
          void RoutineChange(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip = 0);
          void RoutineAnnounce(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
          void ISAChange(uint32_t new_isa);
+         // The byte ranges the next Instruction() accesses, when two addresses cannot describe them
+         void MemorySpans(uint8_t count, const MemorySpan spans[]);
          bool IsOpen();
 
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }

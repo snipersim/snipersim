@@ -37,7 +37,8 @@ class DynamicInstruction
          SubsecondTime latency;
          HitWhere::where_t hit_where;
       };
-      static const UInt8 MAX_MEMORY = 2;
+      // Enough for a vector or matrix-tile instruction's footprint (Sift::MAX_MEMORY_SPANS)
+      static const UInt8 MAX_MEMORY = 16;
 
       Instruction* instruction;
       IntPtr eip; // Can be physical address, so different from instruction->getAddress() which is always virtual

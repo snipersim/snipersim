@@ -139,6 +139,12 @@ class TraceThread : public Runnable
       // ChampSim instruction cache statistics
       UInt64 m_champsim_icache_hits;
       UInt64 m_champsim_icache_misses;
+      // Vector/matrix extension instructions and recorded footprints (see riscv_ext.h)
+      UInt64 m_rvext_count[16];
+      UInt64 m_rvext_spans;
+      UInt64 m_rvext_span_bytes;
+      uint32_t staticMemoryOperands(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst);
+      void countExtension(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst);
 
       int fd_read;
       int fd_write;

@@ -125,6 +125,9 @@ struct MicroOp
 
    bool m_membar;
    bool is_x87;
+   /** The instruction's number of memory accesses is only known dynamically
+       (vector, matrix tile): this uop is squashed when no access is left for it. */
+   bool m_dynamic_memory;
    uint16_t operand_size;
    uint16_t memoryAccessSize;
 
@@ -142,6 +145,8 @@ struct MicroOp
 
    bool isFpLoadStore() const;
    void setIsX87(bool _is_x87) { is_x87 = _is_x87; }
+   void setDynamicMemory(bool d) { m_dynamic_memory = d; }
+   bool hasDynamicMemory() const { return m_dynamic_memory; }
    bool isX87(void) const { return is_x87; }
    void setOperandSize(int size) { operand_size = size; }
    uint16_t getOperandSize(void) const { return operand_size; }

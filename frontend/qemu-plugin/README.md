@@ -193,3 +193,54 @@ addresses, zero disagreements in either direction.
 
 ARM guests will need the equivalent through Capstone; only x86-64 is handled
 today.
+
+## RISC-V vector and matrix (IME) instructions
+
+rv8, the decoder Sniper's RISC-V support is built on, predates the vector
+extension and the Integrated Matrix Extension (IME, Zvvm freeze 0.9).  Both
+are handled by a classifier that needs neither rv8 nor QEMU,
+`decoder_lib/riscv_ext.{h,cc}`: it recognises the RVV 1.0 configuration,
+load/store and arithmetic encodings and the sixteen IME instructions
+(`vmmacc.vv` and its widening and floating-point relatives, the tile
+loads and stores `vmtl.v`, `vmts.v`, `vmttl.v`, `vmtts.v`, and
+`vsetlambda`), and gives each an opcode id that continues rv8's
+numbering.  Sniper's decoder consults it for anything rv8 calls illegal;
+the plugin consults it to know which instructions need their memory
+footprint recorded.
+
+**Footprints.**  A trace instruction carries at most two data addresses,
+which cannot describe a tile: a `vmtl.v` reads M rows of `linesize`
+elements, each row wherever the leading dimension puts it.  For every
+vector or tile memory instruction the plugin records all of its accesses
+(QEMU reports each element) and coalesces them into byte ranges, merging
+accesses that fall in a cache line the range already covers, so a row
+striped through a line is one range and rows in different lines stay
+apart.  The ranges go into the trace ahead of the instruction as a
+`MemorySpans` record (`Sift::Writer::MemorySpans`, up to
+`Sift::MAX_MEMORY_SPANS` = 16 per instruction; more are dropped with a
+warning) and the reader delivers them with it (`Instruction::spans`).
+`siftdump` prints them as `-- spans <addr>+<bytes><r|w>`.  A trace from
+the Pin recorder never contains the record, and a reader that predates it
+skips it.
+
+**Simulation.**  The trace thread turns each range into one memory access
+of that size (the core splits it over cache lines), so every line a tile
+touches goes through the cache hierarchy and the ROB.  A vector or tile
+memory instruction is given `perf_model/core/rvv/memory_uops` load or
+store uops statically; each recorded range takes one and the rest are
+squashed, the way scatter/gather uops already are.  The execute part is
+costed per class from `perf_model/core/rvv` and `perf_model/core/ime`
+in the config (see `config/riscv.cfg` for the keys and defaults): matrix
+multiply-accumulates run on a matrix unit with a result latency and an
+issue interval, vector dividers stay busy for their latency, and the
+BOOM port assignment treats vector FP and matrix work as port 0, vector
+divides as port 1 and vector memory as port 2.  `sim.stats` counts the
+instructions per class under `rvext.*` (per thread) together with the
+recorded spans and their bytes.
+
+Two more harness cases cover this, `riscv-ime-trace` and
+`riscv-ime-simulate`, built around `test/qemu-plugin-probe/rv-ime.c`, a
+2x2 integer tile multiply whose rows sit in different cache lines.  They
+need a qemu-riscv64 with the IME CPU properties (`x-zvvmm`,
+`x-zvvmtls`; `SNIPER_QEMU_RISCV_IME_CPU` overrides the `-cpu` string)
+and skip otherwise.

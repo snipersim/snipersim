@@ -2,6 +2,7 @@
 #define _RISCV_DECODER_H_
 
 #include "decoder.h"
+#include "riscv_ext.h"
 
 #include <cstddef>
 #include <string>
@@ -83,6 +84,38 @@ namespace dl
     rv_freg_f29,                        /* FP temporaries Caller */
     rv_freg_f30,                        /* FP temporaries Caller */
     rv_freg_f31,                        /* FP temporaries Caller */
+    rv_vreg_v0,                         /* Vector registers */
+    rv_vreg_v1,
+    rv_vreg_v2,
+    rv_vreg_v3,
+    rv_vreg_v4,
+    rv_vreg_v5,
+    rv_vreg_v6,
+    rv_vreg_v7,
+    rv_vreg_v8,
+    rv_vreg_v9,
+    rv_vreg_v10,
+    rv_vreg_v11,
+    rv_vreg_v12,
+    rv_vreg_v13,
+    rv_vreg_v14,
+    rv_vreg_v15,
+    rv_vreg_v16,
+    rv_vreg_v17,
+    rv_vreg_v18,
+    rv_vreg_v19,
+    rv_vreg_v20,
+    rv_vreg_v21,
+    rv_vreg_v22,
+    rv_vreg_v23,
+    rv_vreg_v24,
+    rv_vreg_v25,
+    rv_vreg_v26,
+    rv_vreg_v27,
+    rv_vreg_v28,
+    rv_vreg_v29,
+    rv_vreg_v30,
+    rv_vreg_v31,
     last_reg
   };
 extern const char* reg_name_sym[];  
@@ -91,7 +124,16 @@ class RISCVDecoder : public Decoder
 {
   public:    
     RISCVDecoder(dl_arch arch, dl_mode mode, dl_syntax syntax);
-    int reg_set_size = 64;   
+    int reg_set_size = 96;   
+    /* Vector and matrix instructions (riscv_ext.h): the static size of one
+       of their memory uops and how many such uops an instruction gets; the
+       dynamic footprint comes from the trace (Sift MemorySpans). */
+    virtual void set_vector_bytes(unsigned int n) override { m_vector_bytes = n; }
+    virtual void set_ext_memory_uops(unsigned int n) override { m_ext_memory_uops = n > rvext_max_memory_uops() ? rvext_max_memory_uops() : n; }
+    static unsigned int rvext_max_memory_uops() { return 16; }   // Sift::MAX_MEMORY_SPANS
+    virtual bool has_dynamic_memory_operands(const DecodedInst *ins) override;
+    unsigned int m_vector_bytes = 16;
+    unsigned int m_ext_memory_uops = 16;
     
     virtual ~RISCVDecoder();  // dtor
     
@@ -198,6 +240,11 @@ class RISCVDecodedInst : public DecodedInst
     riscv::inst_t * get_rv8_inst();
     riscv::decode * get_rv8_dec();
     void set_rv8_dec(riscv::decode d);
+    /// Vector/matrix extension opcode (rvext::Op), 0 for an rv8-decoded instruction
+    unsigned int ext_op() const { return m_ext_op; }
+    uint32_t ext_word() const { return m_ext_word; }
+    void set_ext(unsigned int op, uint32_t word);
+    const rvext::Operand* ext_operands(unsigned int &n) const { n = m_ext_nops; return m_ext_ops; }
 
     /// Get the instruction numerical Id
     virtual unsigned int inst_num_id() const override;
@@ -238,6 +285,10 @@ class RISCVDecodedInst : public DecodedInst
     private:
      riscv::decode rv8_dec;
      riscv::inst_t rv8_instr;  
+     unsigned int m_ext_op = 0;
+     uint32_t m_ext_word = 0;
+     rvext::Operand m_ext_ops[rvext::MAX_OPERANDS];
+     unsigned int m_ext_nops = 0;
 };
 
 } // namespace dl;

@@ -2,12 +2,15 @@
 #define __CORE_MODEL_BOOM_V1_H
 
 #include "core_model.h"
+#include "riscv_ext.h"
 #include "dynamic_micro_op_boom_v1.h"
 
 class CoreModelBoomV1 : public BaseCoreModel<DynamicMicroOpBoomV1>
 {
    private:
       unsigned int m_lll_cutoff;
+      unsigned int m_ext_issue_cycles[16];
+      static unsigned int extLatency(rvext::Class c);
 
    public:
       CoreModelBoomV1();

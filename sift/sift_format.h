@@ -116,6 +116,7 @@ namespace Sift
       RecOtherCacheOnly,
       RecOtherISAChange,
       RecOtherShutdown,
+      RecOtherMemorySpans,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

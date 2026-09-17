@@ -156,6 +156,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address,  c
       currentMicroOp->setOperandSize(operand_size);
       currentMicroOp->setInstruction(ins_ptr);
       currentMicroOp->setDecodedInstruction(ins);
+      currentMicroOp->setDynamicMemory(dec->has_dynamic_memory_operands(ins));
       // We don't necessarily know the address at this point as it could
       // be dependent on register values.  Therefore, fill it in at simulation time.
 

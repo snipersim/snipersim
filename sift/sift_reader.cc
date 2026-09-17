@@ -95,6 +95,7 @@ Reader::Reader(const char *filename, const char *response_filename, uint32_t id,
    , m_id(id)
    , m_trace_has_pa(false)
    , m_seen_end(false)
+   , m_pending_spans_n(0)
    , m_last_sinst(NULL)
    , m_code_may_change(false)
    , m_isa(0)
@@ -689,6 +690,16 @@ bool Reader::Read(Instruction &inst)
                break;
             }
 
+            case RecOtherMemorySpans:
+            {
+               uint8_t n;
+               input->read(reinterpret_cast<char*>(&n), sizeof(n));
+               assert(n <= MAX_MEMORY_SPANS);
+               assert(rec.Other.size == sizeof(uint8_t) + n * sizeof(MemorySpan));
+               input->read(reinterpret_cast<char*>(m_pending_spans), n * sizeof(MemorySpan));
+               m_pending_spans_n = n;
+               break;
+            }
             default:
             {
                // Skip unknown Other record
@@ -744,7 +755,12 @@ bool Reader::Read(Instruction &inst)
       }
 
       last_address += size;
-
+      inst.num_spans = m_pending_spans_n;
+      if (m_pending_spans_n)
+      {
+         memcpy(inst.spans, m_pending_spans, m_pending_spans_n * sizeof(MemorySpan));
+         m_pending_spans_n = 0;
+      }
       for (int i = 0; i < inst.num_addresses; ++i)
          input->read(reinterpret_cast<char*>(&inst.addresses[i]), sizeof(uint64_t));
 
@@ -832,6 +848,7 @@ bool Reader::readChampSim(Instruction &inst)
 
    // Fill legacy addresses[] array with src first, then dest, but keep MAX_DYNAMIC_ADDRESSES bound
    inst.num_addresses = std::min<uint8_t>(inst.num_src_addresses + inst.num_dest_addresses, MAX_DYNAMIC_ADDRESSES);
+   inst.num_spans = 0;
    uint8_t combined_idx = 0;
 
    for (uint8_t i = 0; i < inst.num_src_addresses && combined_idx < inst.num_addresses; ++i, ++combined_idx)

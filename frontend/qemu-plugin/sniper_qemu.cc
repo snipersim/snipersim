@@ -31,6 +31,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include <glib.h>
 
@@ -44,6 +45,7 @@ extern "C" {
  * restated: the numbering is a wire format shared with the reader, and a copy
  * here would be one more place to get it wrong. */
 #include "decoder.h"
+#include "riscv_ext.h"
 
 #include "sift_writer.h"
 #include "sift_format.h"
@@ -62,6 +64,7 @@ namespace {
  * tests and its ISAChange record is emitted once, when the stream opens. */
 enum Arch { ARCH_X86, ARCH_RISCV };
 Arch        g_arch       = ARCH_X86;
+uint64_t    g_nspans     = 0;        /* MemorySpans records written, all vCPUs */
 
 std::string opt_output   = "sniper";
 uint64_t    opt_flow     = 1000;   /* matches KnobFlowControl in sift/recorder */
@@ -180,6 +183,10 @@ struct InsnInfo
    uint8_t  size;
    bool     is_branch;
    unsigned mode_mask;
+   /* A RISC-V vector or matrix-tile memory instruction: every access it makes
+    * is recorded and sent ahead of it as MemorySpans, since two addresses
+    * cannot describe a tile. */
+   bool     footprint = false;
 };
 
 /* ------------------------------------------------------------- per-vCPU */
@@ -200,7 +207,11 @@ struct VCPU
    uint64_t pend_addr    = 0;
    uint8_t  pend_size    = 0;
    bool     pend_branch  = false;
-   std::vector<uint64_t> pend_addrs;
+   std::vector<uint64_t> pend_addrs;   /* the first MAX_DYNAMIC_ADDRESSES, for the Instruction record */
+   /* Every access of a footprint instruction (InsnInfo::footprint). */
+   struct Access { uint64_t addr; uint32_t size; bool store; };
+   bool     pend_footprint = false;
+   std::vector<Access> pend_accs;
 };
 
 /* One slot per vCPU, sized once and never resized.
@@ -331,6 +342,51 @@ void writer_open(VCPU *v, unsigned int idx)
 }
 
 /* Emit the buffered instruction, now that we know where control went next. */
+/* Coalesce the pending instruction's accesses into the byte ranges Sniper
+ * models: accesses of one direction that start in a cache line the range
+ * already covers are merged, so a tile row that is striped through a line
+ * is one range and rows in different lines stay apart.  The line size is
+ * the 64 bytes Sniper's own micro-op model assumes. */
+void emit_spans(VCPU *v)
+{
+   std::vector<VCPU::Access> &a = v->pend_accs;
+   std::sort(a.begin(), a.end(), [](const VCPU::Access &x, const VCPU::Access &y) {
+      return x.store != y.store ? !x.store : x.addr < y.addr; });
+   Sift::MemorySpan spans[Sift::MAX_MEMORY_SPANS];
+   unsigned n = 0;
+   bool truncated = false;
+   for (const VCPU::Access &acc : a)
+   {
+      const uint64_t end = acc.addr + acc.size;
+      if (n && (spans[n - 1].is_write == (uint8_t)acc.store)
+          && (acc.addr >> 6) <= ((spans[n - 1].addr + spans[n - 1].size - 1) >> 6))
+      {
+         const uint64_t cur_end = spans[n - 1].addr + spans[n - 1].size;
+         if (end > cur_end)
+            spans[n - 1].size = (uint32_t)(end - spans[n - 1].addr);
+         continue;
+      }
+      if (n == Sift::MAX_MEMORY_SPANS)
+      {
+         truncated = true;
+         break;
+      }
+      spans[n].addr = acc.addr;
+      spans[n].size = acc.size;
+      spans[n].is_write = acc.store;
+      n++;
+   }
+   static bool warned = false;
+   if (truncated && !warned)
+   {
+      warned = true;
+      fprintf(stderr, "[SNIPER-QEMU] an instruction at 0x%" PRIx64 " touched more than %u byte ranges; "
+              "the rest are not modelled\n", v->pend_addr, Sift::MAX_MEMORY_SPANS);
+   }
+   v->writer->MemorySpans((uint8_t)n, spans);
+   __sync_fetch_and_add(&g_nspans, 1);
+}
+
 void flush_pending(VCPU *v, uint64_t next_vaddr)
 {
    if (!v->have_pending)
@@ -338,6 +394,9 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
 
    const bool taken = v->pend_branch &&
                       (next_vaddr != v->pend_addr + v->pend_size);
+
+   if (v->pend_footprint && !v->pend_accs.empty())
+      emit_spans(v);
 
    v->writer->Instruction(v->pend_addr, v->pend_size,
                           (uint8_t)v->pend_addrs.size(),
@@ -347,6 +406,7 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
 
    v->have_pending = false;
    v->pend_addrs.clear();
+   v->pend_accs.clear();
    v->icount++;
 }
 
@@ -368,6 +428,7 @@ void insn_exec(unsigned int cpu_index, void *udata)
    v->pend_addr   = ii->vaddr;
    v->pend_size   = ii->size;
    v->pend_branch = ii->is_branch;
+   v->pend_footprint = ii->footprint;
    v->have_pending = true;
 
    /* Pacing.  In system mode this hands Sniper's notion of time to QEMU and
@@ -474,8 +535,18 @@ void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
                 uint64_t vaddr, void *udata)
 {
    VCPU *v = vcpu_get(cpu_index);
-   if (v->have_pending && v->pend_addrs.size() < Sift::MAX_DYNAMIC_ADDRESSES)
+   if (!v->have_pending)
+      return;
+   if (v->pend_addrs.size() < Sift::MAX_DYNAMIC_ADDRESSES)
       v->pend_addrs.push_back(vaddr);
+   if (v->pend_footprint)
+   {
+      VCPU::Access acc;
+      acc.addr  = vaddr;
+      acc.size  = 1u << qemu_plugin_mem_size_shift(info);
+      acc.store = qemu_plugin_mem_is_store(info);
+      v->pend_accs.push_back(acc);
+   }
 }
 
 void syscall_enter(SNP_SYSCALL_ARGS)
@@ -583,6 +654,12 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       {
          ii->is_branch = got ? riscv_is_conditional_branch(bytes, got) : false;
          ii->mode_mask = 0;
+         if (got == 4)
+         {
+            const uint32_t word = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8)
+                                | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+            ii->footprint = rvext::is_memory(rvext::decode(word));
+         }
       }
       else
       {
@@ -625,6 +702,8 @@ void at_exit(SNP_UDATA_ARGS)
          fprintf(stderr, "[SNIPER-QEMU] vcpu %zu: %" PRIu64 " instructions\n", i, v->icount);
    }
    fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " instructions written\n", total);
+   if (g_nspans)
+      fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " memory footprints recorded\n", g_nspans);
    if (opt_verbose || getcode_fail)
       fprintf(stderr, "[SNIPER-QEMU] guest code reads: %" PRIu64 ", failed: %" PRIu64 "\n",
               getcode_calls, getcode_fail);

@@ -48,6 +48,7 @@ MicroOp::MicroOp()
 
    this->m_membar = false;
    this->is_x87 = false;
+   this->m_dynamic_memory = false;
    this->operand_size = 0;
 
    for(uint32_t i = 0 ; i < MAXIMUM_NUMBER_OF_SOURCE_REGISTERS; i++)

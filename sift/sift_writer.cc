@@ -972,6 +972,20 @@ void Sift::Writer::ISAChange(uint32_t new_isa)
    output->write(reinterpret_cast<char*>(&new_isa), sizeof(new_isa));
 }
 
+void Sift::Writer::MemorySpans(uint8_t count, const MemorySpan spans[])
+{
+   if (!output)
+      return;
+   sift_assert(count <= MAX_MEMORY_SPANS);
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherMemorySpans;
+   rec.Other.size = sizeof(uint8_t) + count * sizeof(MemorySpan);
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<const char*>(&count), sizeof(count));
+   output->write(reinterpret_cast<const char*>(spans), count * sizeof(MemorySpan));
+}
+
 bool Sift::Writer::IsOpen()
 {
    return !!output;

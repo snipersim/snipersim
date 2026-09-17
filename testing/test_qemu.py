@@ -368,6 +368,104 @@ def case_riscv_user_simulate(p, g, workdir):
     return True, '%d instructions, %d of %d branches predicted' % (n, correct, correct + wrong)
 
 
+# The IME (Zvvm 0.9) cases need a qemu-riscv64 built with the extension's CPU
+# properties; SNIPER_QEMU_RISCV_IME_CPU overrides the -cpu string.  The guest
+# is built like rv-loop.c.  Skips when the QEMU lacks the properties.
+IME_CPU_DEFAULT = 'max,vlen=128,x-zvvmm=on,x-zvvmtls=on'
+IME_INSNS = 36            # rv-ime.c: exact instruction count of the guest
+IME_FOOTPRINTS = 4        # three tile loads and one tile store
+IME_SPANS = 8             # each tile has two rows in different cache lines
+IME_SPAN_BYTES = 64       # 8 rows of 8 bytes
+
+def riscv_ime_prerequisites(workdir):
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    cc = os.environ['SNIPER_RISCV_CC']
+    guest = os.path.join(workdir, 'rv-ime')
+    if not os.path.isfile(guest):
+        rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-O1',
+                       '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest,
+                       os.path.join(PROBE_DIR, 'rv-ime.c')], 120)
+        if rc != 0:
+            return None, 'could not build rv-ime.c (exit %s)' % rc
+    cpu = os.environ.get('SNIPER_QEMU_RISCV_IME_CPU', IME_CPU_DEFAULT)
+    rc, out = run([r['qemu'], '-cpu', cpu, guest], 60, cwd=workdir)
+    if rc != 100:
+        if 'zvvm' in out or 'Property' in out:
+            return None, 'qemu-riscv64 has no IME (x-zvvmm) CPU properties'
+        return None, 'the IME guest exited %s under qemu-riscv64 (expected 100)' % rc
+    r['cpu'] = cpu
+    r['ime_guest'] = guest
+    return r, None
+
+def case_riscv_ime_trace(p, g, workdir):
+    """The frontend records every byte range a tile access touches, ahead of the instruction."""
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'rvime')
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+                   '--', r['ime_guest']], 300, cwd=workdir)
+    if rc != 100:
+        return False, 'qemu-riscv64 exited %s' % rc
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+    n = int(m.group(1)) if m else -1
+    if n != IME_INSNS:
+        return False, '%d instructions, expected %d' % (n, IME_INSNS)
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) memory footprints recorded', out)
+    f = int(m.group(1)) if m else 0
+    if f != IME_FOOTPRINTS:
+        return False, '%d memory footprints recorded, expected %d' % (f, IME_FOOTPRINTS)
+    rc, out = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
+    if rc != 0:
+        return False, 'siftdump could not read the trace (exit %s)' % rc
+    spans = re.findall(r'[0-9a-f]{8}\+(\d+)([rw])', out)
+    if len(spans) != IME_SPANS or any(int(b) != 8 for b, _ in spans):
+        return False, 'siftdump shows %d spans %s, expected %d of 8 bytes' % (len(spans), spans, IME_SPANS)
+    if sum(1 for _, d in spans if d == 'w') != 2:
+        return False, 'expected the tile store to contribute two written spans, got %s' % spans
+    return True, '%d instructions, %d footprints, %d spans (2 written)' % (n, f, len(spans))
+
+def case_riscv_ime_simulate(p, g, workdir):
+    """Sniper decodes the IME instructions, counts them, and the cache sees every tile row."""
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'rvimesim')
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+                   '--', r['ime_guest']], 300, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (exit %s)' % rc
+    outdir = os.path.join(workdir, 'rvimesimout')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc is None:
+        return False, 'simulation timed out'
+    if rc != 0:
+        if 'Unknown core model riscv' in out:
+            return None, 'Sniper built without the RISC-V decoder (make RISCV=ON RV8_HOME=...)'
+        return False, 'run-sniper exited %d' % rc
+    if 'undecoded instruction' in out:
+        return False, 'the decoder did not recognise an instruction: %s' % re.search(r'undecoded instruction[^\n]*', out).group(0)
+    stats = {}
+    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        if ' = ' in line:
+            k, v = line.split(' = ', 1)
+            stats[k.strip()] = v.strip().split(',')[0]
+    want = {'performance_model.instruction_count': IME_INSNS,
+            'rvext.ime_tile_load': 3, 'rvext.ime_tile_store': 1, 'rvext.ime_mma_int': 1,
+            'rvext.ime_cfg': 1, 'rvext.v_cfg': 1,
+            'rvext.spans': IME_SPANS, 'rvext.span_bytes': IME_SPAN_BYTES,
+            'L1-D.stores-data': 2}
+    for k, v in want.items():
+        got = int(stats.get(k, -1))
+        if got != v:
+            return False, '%s = %d, expected %d' % (k, got, v)
+    return True, ('%d instructions; 3 tile loads, 1 tile store, 1 vmmacc decoded; '
+                  '%d spans reached the cache, 2 of them stores') % (IME_INSNS, IME_SPANS)
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
@@ -377,6 +475,8 @@ CASES = {
     'system-modes':     case_system_modes,
     'riscv-user-trace':    case_riscv_user_trace,
     'riscv-user-simulate': case_riscv_user_simulate,
+    'riscv-ime-trace':     case_riscv_ime_trace,
+    'riscv-ime-simulate':  case_riscv_ime_simulate,
 }
 
 

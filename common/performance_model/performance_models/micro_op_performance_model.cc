@@ -241,6 +241,22 @@ void MicroOpPerformanceModel::handleInstruction(DynamicInstruction *dynins)
             // DynamicInstruction has no corresponding memory_info entry.
             // This happens with ChampSim traces when the first instance of an IP
             // had more memory references than some later instance.
+            //
+            // A vector or matrix-tile instruction is given one load/store uop
+            // per byte range it might touch; this instance touched fewer, so
+            // the spare uop is squashed rather than issued without an address.
+            const bool is_read = (o.m_direction == Operand::READ);
+            const size_t base = is_read ? load_base_index : store_base_index;
+            if (base != SIZE_MAX)
+            {
+               const size_t idx = base + (is_read ? num_reads_done : num_writes_done);
+               if (idx < m_current_uops.size() && m_current_uops[idx]->getMicroOp()->hasDynamicMemory())
+               {
+                  m_current_uops[idx]->squash(&m_current_uops);
+                  do_squashing = true;
+                  if (is_read) ++num_reads_done; else ++num_writes_done;
+               }
+            }
             continue; // Don't try to read a non-existent MemoryInfo
          }
          DynamicInstruction::MemoryInfo &info = dynins->memory_info[memidx++];
@@ -282,7 +298,9 @@ void MicroOpPerformanceModel::handleInstruction(DynamicInstruction *dynins)
                UInt64 bypass_latency = m_core_model->getBypassLatency(m_current_uops[load_index]);
                m_current_uops[load_index]->setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
-               addr.set(info.addr);
+               // The recorded size only applies to vector/tile uops; everything
+               // else keeps its static access size at issue.
+               addr.set(info.addr, m_current_uops[load_index]->getMicroOp()->hasDynamicMemory() ? info.size : 0);
                m_current_uops[load_index]->setAddress(addr);
                m_current_uops[load_index]->setDCacheHitWhere(info.hit_where);
                ++num_reads_done;
@@ -317,7 +335,9 @@ void MicroOpPerformanceModel::handleInstruction(DynamicInstruction *dynins)
                UInt64 bypass_latency = m_core_model->getBypassLatency(m_current_uops[store_index]);
                m_current_uops[store_index]->setExecLatency(memory_cycle_latency + bypass_latency);
                Memory::Access addr;
-               addr.set(info.addr);
+               // The recorded size only applies to vector/tile uops; everything
+               // else keeps its static access size at issue.
+               addr.set(info.addr, m_current_uops[store_index]->getMicroOp()->hasDynamicMemory() ? info.size : 0);
                m_current_uops[store_index]->setAddress(addr);
                m_current_uops[store_index]->setDCacheHitWhere(info.hit_where);
                ++num_writes_done;

@@ -592,7 +592,7 @@ void RobTimer::issueInstruction(uint64_t idx, SubsecondTime &next_event)
          uop.getMicroOp()->isLoad() ? Core::READ : Core::WRITE,
          uop.getAddress().address,
          NULL,
-         uop.getMicroOp()->getMemoryAccessSize(),
+         uop.getAddress().size ? uop.getAddress().size : uop.getMicroOp()->getMemoryAccessSize(),
          Core::MEM_MODELED_RETURN,
          uop.getMicroOp()->getInstruction() ? uop.getMicroOp()->getInstruction()->getAddress() : static_cast<uint64_t>(NULL),
          now.getElapsedTime()
