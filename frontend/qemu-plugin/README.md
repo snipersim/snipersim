@@ -28,6 +28,41 @@ Options: `output=` prefix, `flow=N` instructions per quantum, `response`
 (user-mode blocking flow control), `time` (system-mode time control), `ns=N`
 nanoseconds per instruction, `verbose`.
 
+## RISC-V
+
+The same plugin loads into a RISC-V QEMU.  It reads the target from QEMU at
+install: for `riscv64`/`riscv32` the conditional-branch classification is a
+few bit tests (the BRANCH major opcode and `c.beqz`/`c.bnez`), there is no
+mode probing, and each stream opens with an `ISAChange` to `DL_ISA_RISCV` so
+the reader decodes it as RISC-V.  Everything else -- deferred emission for
+the taken flag, memory addresses from the memory callbacks, code bytes read
+from guest memory for the icache -- is the same code as x86.
+
+The simulator side needs the RISC-V decoder, which is built on rv8:
+
+```
+git clone https://github.com/michaeljclark/rv8 ../rv8     # or RV8_HOME=...
+make RISCV=ON QEMU=ON -j8
+qemu-riscv64 -plugin build/default/lib/libsniper-qemu.so,output=trace -- ./app
+./run-sniper -n 1 -c riscv --traces=trace.app0.th0.sift
+```
+
+The plugin is built against the QEMU under `qemu/`; any other QEMU of the
+same plugin API version loads it -- a QEMU built from a patched tree for an
+extension under development, for one.  An instruction the decoder does not
+know (the vector extension, matrix extensions ahead of rv8's tables) is
+reported once per encoding and costed as a generic instruction, so a trace
+with a few of them still simulates; modelling them is decoder work.
+
+`testing/test_qemu.py` has `riscv-user-trace` and `riscv-user-simulate`,
+which take the QEMU and a RISC-V compiler from the environment and skip,
+saying so, without them:
+
+```
+SNIPER_QEMU_RISCV=/path/to/qemu-riscv64 SNIPER_RISCV_CC=/path/to/clang \
+  python3 testing/test_qemu.py --case riscv-user-trace --case riscv-user-simulate
+```
+
 ## Which mode, and why it matters
 
 |  | user mode | full system |

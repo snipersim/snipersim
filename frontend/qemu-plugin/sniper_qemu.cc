@@ -56,6 +56,13 @@ namespace {
 
 /* ---------------------------------------------------------------- options */
 
+/* The guest architecture, from QEMU's target name at install.  x86 needs the
+ * XED-based branch classification and the mode probing below; RISC-V has
+ * fixed-format encodings and one ISA, so its classification is a few bit
+ * tests and its ISAChange record is emitted once, when the stream opens. */
+enum Arch { ARCH_X86, ARCH_RISCV };
+Arch        g_arch       = ARCH_X86;
+
 std::string opt_output   = "sniper";
 uint64_t    opt_flow     = 1000;   /* matches KnobFlowControl in sift/recorder */
 bool        opt_verbose  = false;
@@ -150,6 +157,23 @@ unsigned mode_mask_for(const uint8_t *bytes, size_t len, uint8_t qemu_len)
 }
 
 /* Filled once per translation, shared by every execution of that instruction. */
+/* RISC-V: the conditional branches are the BRANCH major opcode (0x63) and, in
+ * the compressed quadrant 1, c.beqz / c.bnez (funct3 110 / 111).  Jumps
+ * (jal, jalr, c.j, c.jal, c.jr, c.jalr) are excluded for the reason given
+ * above for x86: SIFT's is_branch means "could have fallen through", and
+ * decoder_lib's RISC-V is_branch_opcode() lists exactly the b* forms. */
+bool riscv_is_conditional_branch(const uint8_t *bytes, size_t len)
+{
+   if (len == 4)
+      return (bytes[0] & 0x7f) == 0x63;
+   if (len == 2)
+   {
+      const unsigned hw = bytes[0] | (bytes[1] << 8);
+      return (hw & 3) == 1 && ((hw >> 13) & 7) >= 6;
+   }
+   return false;
+}
+
 struct InsnInfo
 {
    uint64_t vaddr;
@@ -297,6 +321,11 @@ void writer_open(VCPU *v, unsigned int idx)
       fprintf(stderr, "[SNIPER-QEMU] cannot open %s\n", filename);
       exit(1);
    }
+   /* The reader decodes as x86 until told otherwise; a RISC-V stream says so
+    * before its first instruction.  (x86 streams get theirs from the mode
+    * check, which knows 16/32/64.) */
+   if (g_arch == ARCH_RISCV)
+      v->writer->ISAChange(dl::DL_ISA_RISCV);
    if (opt_verbose)
       fprintf(stderr, "[SNIPER-QEMU] vcpu %u -> %s\n", idx, filename);
 }
@@ -550,8 +579,16 @@ void tb_trans(SNP_TB_TRANS_ARGS)
        * execution of the block. */
       uint8_t bytes[XED_MAX_INSTRUCTION_BYTES] = {0};
       size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(bytes));
-      ii->is_branch = got ? xed_is_conditional_branch(bytes, got) : false;
-      ii->mode_mask = got ? mode_mask_for(bytes, got, ii->size) : 0;
+      if (g_arch == ARCH_RISCV)
+      {
+         ii->is_branch = got ? riscv_is_conditional_branch(bytes, got) : false;
+         ii->mode_mask = 0;
+      }
+      else
+      {
+         ii->is_branch = got ? xed_is_conditional_branch(bytes, got) : false;
+         ii->mode_mask = got ? mode_mask_for(bytes, got, ii->size) : 0;
+      }
       if (ii->mode_mask)
          ti->mode_mask &= ii->mode_mask;  /* one mode governs the whole block */
 
@@ -565,8 +602,11 @@ void tb_trans(SNP_TB_TRANS_ARGS)
    /* R_REGS so mode_from_registers() has something to read; it runs before the
     * block's first instruction callback, so an ISAChange precedes the
     * instructions it applies to. */
-   qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_mode_check,
-                                        QEMU_PLUGIN_CB_R_REGS, ti);
+   if (g_arch == ARCH_X86)
+      qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_mode_check,
+                                           QEMU_PLUGIN_CB_R_REGS, ti);
+   else
+      delete ti;                    /* one ISA, nothing to check per block */
 }
 
 void at_exit(SNP_UDATA_ARGS)
@@ -598,6 +638,16 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                                            int argc, char **argv)
 {
    in_system_mode = info->system_emulation;
+   if (!strncmp(info->target_name, "riscv", 5))
+      g_arch = ARCH_RISCV;
+   else if (!strcmp(info->target_name, "x86_64") || !strcmp(info->target_name, "i386"))
+      g_arch = ARCH_X86;
+   else
+   {
+      fprintf(stderr, "[SNIPER-QEMU] unsupported target %s (x86_64, i386, riscv32, riscv64)\n",
+              info->target_name);
+      return -1;
+   }
 
    /* Needed before any xed_decode(). */
    xed_tables_init();

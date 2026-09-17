@@ -4,6 +4,7 @@
 #include "decoder.h"
 
 #include <cstddef>
+#include <string>
 #include <asm/types.h>
 #include <asm/meta.h>
 #include <asm/codec.h>
@@ -124,6 +125,9 @@ class RISCVDecoder : public Decoder
     virtual decoder_reg mem_base_reg (const DecodedInst * inst, unsigned int mem_idx) override;
     /// Get the index register of the memory operand pointed by mem_idx
     virtual decoder_reg mem_index_reg (const DecodedInst * inst, unsigned int mem_idx) override;
+    // RISC-V addresses are base + immediate: no index register, no base update
+    virtual bool mem_base_upate(const DecodedInst * inst, unsigned int mem_idx) override { return false; }
+    virtual bool has_index_reg (const DecodedInst * inst, unsigned int mem_idx) override { return false; }
     
     /// Check if the operand mem_idx from instruction inst is read from memory
     virtual bool op_read_mem (const DecodedInst * inst, unsigned int mem_idx) override;
@@ -169,6 +173,12 @@ class RISCVDecoder : public Decoder
     
     /// Get the value of the last register in the enumeration
     virtual decoder_reg last_reg() override;
+    virtual uint32_t map_register(decoder_reg reg) override { return reg; }
+    // No implicitly read or written registers are modelled for RISC-V
+    virtual unsigned int num_read_implicit_registers(const DecodedInst *inst) override { return 0; }
+    virtual decoder_reg get_read_implicit_reg(const DecodedInst* inst, unsigned int idx) override { return 0; }
+    virtual unsigned int num_write_implicit_registers(const DecodedInst *inst) override { return 0; }
+    virtual decoder_reg get_write_implicit_reg(const DecodedInst *inst, unsigned int idx) override { return 0; }
 
     // /// Get the target architecture of the decoder
     // dl_arch get_arch();
@@ -192,7 +202,7 @@ class RISCVDecodedInst : public DecodedInst
     /// Get the instruction numerical Id
     virtual unsigned int inst_num_id() const override;
     /// Get an string with the disassembled instruction
-    virtual void disassembly_to_str(char *, int) const override;
+    virtual std::string disassembly_to_str() const override;
     /// Check if this instruction is a NOP
     virtual bool is_nop() const override;
     /// Check if this instruction is atomic
@@ -203,6 +213,8 @@ class RISCVDecodedInst : public DecodedInst
     virtual bool is_serializing() const override;
     /// Check if this instruction is a conditional branch
     virtual bool is_conditional_branch() const override;
+    virtual bool is_indirect_branch() const override;
+    virtual bool is_writeback() const override { return false; }
     /// Check if this instruction is a fence/barrier-type
     virtual bool is_barrier() const override;
     /// Check if in this instruction the result merges the source and destination.

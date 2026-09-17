@@ -51,6 +51,11 @@ CoreModelBoomV1::CoreModelBoomV1()
 unsigned int CoreModelBoomV1::getInstructionLatency(const MicroOp *uop) const
 {
    unsigned int instruction_type = (unsigned int) uop->getInstructionOpcode();
+   /* Opcode 0 is what the decoder leaves for an encoding it does not know --
+      vector and matrix extensions ahead of rv8's tables.  Cost it as a
+      generic instruction; the decoder has warned about the encoding once. */
+   if (instruction_type == 0)
+      return 1;
    LOG_ASSERT_ERROR(instruction_type > 0 && instruction_type < rv_op_last, "Invalid instruction type %d", instruction_type);
    return instructionLatencies[instruction_type];
 }

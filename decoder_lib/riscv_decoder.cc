@@ -1,5 +1,6 @@
 #include "riscv_decoder.h"
 #include <iostream>
+#include <set>
 #include <cstddef>
 #include <stdio.h>
 #include <string.h>
@@ -107,6 +108,16 @@ void RISCVDecoder::decode(DecodedInst * inst)
   memcpy(&r_inst, inst->get_code(), 8);  // TODO: num_bytes from sift
 
   riscv::decode_inst_rv64(dec, r_inst);
+  if (dec.op == rv_op_illegal)
+  {
+    /* Not in rv8's tables: the vector and matrix extensions, for one.  Say so
+       once per encoding; the core model costs it as a generic instruction. */
+    static std::set<uint32_t> reported;
+    const uint32_t word = (uint32_t)r_inst;
+    if (reported.insert(word).second)
+      fprintf(stderr, "[RISCV] undecoded instruction 0x%08x (%d bytes): costed as generic\n",
+              word, (int)riscv::inst_length(r_inst));
+  }
   decode_inst_type(dec, r_inst);
   decode_pseudo_inst(dec);
 
@@ -545,7 +556,7 @@ std::string format_str(const char* fmt, ...) //rv8 src/util/util.cc
 }
 
 /// Get a string with the disassembled instruction
-void RISCVDecodedInst::disassembly_to_str(char *str, int len) const
+std::string RISCVDecodedInst::disassembly_to_str() const
 { 
   riscv::decode dec = this->rv8_dec;
   std::string args;
@@ -606,8 +617,7 @@ void RISCVDecodedInst::disassembly_to_str(char *str, int len) const
     fmt++;
 	}
 
-  strncpy(str, args.c_str(), len-1);
-  str[len-1] = '\0';
+  return args;
 }
 
 /// Check if this instruction is a NOP
@@ -674,6 +684,19 @@ bool RISCVDecodedInst::is_conditional_branch() const
       break;
   }
   return res;
+}
+
+/// Register-indirect jumps: jalr and its compressed forms.  (Conditional
+/// branches and jal are direct.)
+bool RISCVDecodedInst::is_indirect_branch() const
+{
+  switch (this->rv8_dec.op) {
+    case rv_op_jalr:
+    case rv_op_c_jr:
+    case rv_op_c_jalr:
+      return true;
+  }
+  return false;
 }
 
 /// Check if this instruction is a fence/barrier-type

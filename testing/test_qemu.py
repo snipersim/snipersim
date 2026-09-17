@@ -282,6 +282,90 @@ def case_system_modes(p, g, workdir):
         len(sw), int(sw[0][0]), top2, len(sw))
 
 
+# --- RISC-V, user mode --------------------------------------------------
+#
+# The same plugin, loaded into a RISC-V QEMU: it reads the target from QEMU at
+# install and classifies branches from the encoding.  Needs a plugin-capable
+# qemu-riscv64 (SNIPER_QEMU_RISCV) and, to build the guest, a RISC-V compiler
+# (SNIPER_RISCV_CC, a clang with lld or a riscv64 gcc); the simulation side
+# needs the RISC-V decoder (make RISCV=ON RV8_HOME=<rv8 checkout>).  Skips,
+# with the reason, when any of those is missing.
+
+def riscv_prerequisites(workdir):
+    qemu = os.environ.get('SNIPER_QEMU_RISCV')
+    cc = os.environ.get('SNIPER_RISCV_CC')
+    if not qemu or not os.path.isfile(qemu):
+        return None, 'SNIPER_QEMU_RISCV not set to a qemu-riscv64 built with --enable-plugins'
+    if not cc or not os.path.isfile(cc):
+        return None, 'SNIPER_RISCV_CC not set to a RISC-V compiler'
+    guest = os.path.join(workdir, 'rv-loop')
+    if not os.path.isfile(guest):
+        rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-O1',
+                       '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest,
+                       os.path.join(PROBE_DIR, 'rv-loop.c')], 120)
+        if rc != 0:
+            return None, 'could not build rv-loop.c (exit %s)' % rc
+    return {'qemu': qemu, 'guest': guest}, None
+
+
+def case_riscv_user_trace(p, g, workdir):
+    """The frontend traces a RISC-V guest: the exact count, and the trace reads back."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'rv')
+    rc, out = run([r['qemu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+                   '--', r['guest']], 300, cwd=workdir)
+    if rc != 100:        # the guest exits with work(20000) & 0x7f == 100
+        return False, 'qemu-riscv64 exited %s' % rc
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+    if not m:
+        return False, 'frontend reported no instruction count'
+    n = int(m.group(1))
+    if n != 100007:
+        return False, '%d instructions, expected 100007' % n
+    rc, _ = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
+    if rc != 0:
+        return False, 'siftdump could not read the trace (exit %s)' % rc
+    return True, '%d instructions, trace readable' % n
+
+
+def case_riscv_user_simulate(p, g, workdir):
+    """Sniper's RISC-V core model simulates the trace; branches agree with the decoder."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'rvsim')
+    rc, out = run([r['qemu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+                   '--', r['guest']], 300, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (exit %s)' % rc
+    outdir = os.path.join(workdir, 'rvsimout')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc is None:
+        return False, 'simulation timed out'
+    if rc != 0:
+        if 'Unknown core model riscv' in out:
+            return None, 'Sniper built without the RISC-V decoder (make RISCV=ON RV8_HOME=...)'
+        return False, 'run-sniper exited %d' % rc
+    stats = {}
+    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        if ' = ' in line:
+            k, v = line.split(' = ', 1)
+            stats[k.strip()] = v.strip().split(',')[0]
+    n = int(stats.get('performance_model.instruction_count', 0))
+    correct = int(stats.get('branch_predictor.num-correct', 0))
+    wrong = int(stats.get('branch_predictor.num-incorrect', 0))
+    # 100,007 retired; what sits in the ROB when the stream ends is not drained
+    if not (99000 < n <= 100007):
+        return False, '%d instructions simulated, expected ~100007' % n
+    if correct + wrong != 20000:
+        return False, '%d branches predicted, expected the loop\'s 20000' % (correct + wrong)
+    return True, '%d instructions, %d of %d branches predicted' % (n, correct, correct + wrong)
+
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
@@ -289,6 +373,8 @@ CASES = {
     'system-exact':     case_system_exact,
     'system-vapa':      case_system_vapa,
     'system-modes':     case_system_modes,
+    'riscv-user-trace':    case_riscv_user_trace,
+    'riscv-user-simulate': case_riscv_user_simulate,
 }
 
 
@@ -325,12 +411,13 @@ def main():
         for name in (args.case or sorted(CASES)):
             started = time.time()
             ok, detail = CASES[name](p, g, workdir)
-            took = log.record(name, time.time() - started,
-                              'PASS' if ok else 'FAIL')
+            # None: the case cannot run here (a missing tool), and says why
+            verdict = 'SKIP' if ok is None else 'PASS' if ok else 'FAIL'
+            took = log.record(name, time.time() - started, verdict)
             print('%-20s %s [%ds]'
-                  % (name, 'PASS (%s)' % detail if ok else 'FAIL: ' + detail,
+                  % (name, 'PASS (%s)' % detail if ok else verdict + ': ' + detail,
                      round(took)))
-            if not ok:
+            if ok is False:
                 failures.append(name)
                 if args.failfast:
                     raise FailFast()
