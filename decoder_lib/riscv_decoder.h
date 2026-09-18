@@ -17,7 +17,9 @@ namespace dl
     rv_ireg_x0 = 0,
     rv_freg_f0 = 32,
     rv_vreg_v0 = 64,
-    last_reg = 96
+    rv_mreg_m0 = 96,      /* AME matrix registers */
+    rv_areg_a0 = 128,     /* AME accumulator registers */
+    last_reg = 144
   };
 
   class RISCVDecodedInst;

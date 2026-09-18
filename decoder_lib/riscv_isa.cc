@@ -43,7 +43,7 @@ int64_t field_value(const Field &f, uint32_t word)
       v = (v << n) | ((word >> f.seg[i].lsb) & ((1u << n) - 1));
       width += n;
    }
-   if (f.kind == F_XREG || f.kind == F_FREG || f.kind == F_VREG)
+   if (f.kind == F_XREG || f.kind == F_FREG || f.kind == F_VREG || f.kind == F_MREG || f.kind == F_AREG)
       return (int64_t)v + ((f.flags & FF_PLUS8) ? 8 : 0);
    v <<= f.shift;
    width += f.shift;
@@ -67,6 +67,8 @@ unsigned operands(unsigned op, uint32_t word, Operand out[MAX_FIELDS + 1])
       out[n].value = field_value(f, word);
       if (f.kind == F_FREG) out[n].value += 32;
       if (f.kind == F_VREG) out[n].value += 64;
+      if (f.kind == F_MREG) out[n].value += 96;
+      if (f.kind == F_AREG) out[n].value += 128;
       if (f.kind == F_OTHER && strcmp(f.name, "vm") == 0 && out[n].value == 0)
          masked = true;
       n++;
@@ -122,6 +124,8 @@ std::string disassemble(unsigned op, uint32_t word)
             if (ops[i].kind == F_XREG)       snprintf(buf, sizeof(buf), "%s", xreg_name((unsigned)v));
             else if (ops[i].kind == F_FREG)  snprintf(buf, sizeof(buf), "f%d", (int)(v - 32));
             else if (ops[i].kind == F_VREG)  snprintf(buf, sizeof(buf), "v%d", (int)(v - 64));
+            else if (ops[i].kind == F_MREG)  snprintf(buf, sizeof(buf), "m%d", (int)(v - 96));
+            else if (ops[i].kind == F_AREG)  snprintf(buf, sizeof(buf), "a%d", (int)(v - 128));
             else if (ops[i].kind == F_CSR)   snprintf(buf, sizeof(buf), "0x%x", (unsigned)v);
             else                             snprintf(buf, sizeof(buf), "%lld", (long long)v);
             s += buf;

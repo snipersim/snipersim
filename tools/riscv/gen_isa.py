@@ -23,7 +23,7 @@ is the API over the tables."""
 import argparse, glob, os, re, sys
 import yaml
 
-FIELD_KINDS = ['XREG', 'FREG', 'VREG', 'IMM', 'CSR', 'OTHER']
+FIELD_KINDS = ['XREG', 'FREG', 'VREG', 'MREG', 'AREG', 'IMM', 'CSR', 'OTHER']   # MREG/AREG: AME matrix and accumulator registers
 FLAG_BITS = ['load', 'store', 'branch', 'jump', 'indirect', 'atomic', 'fp', 'vector',
              'footprint', 'busy', 'matrix', 'serializing', 'prefetch', 'cache_flush']
 CPI_GROUPS = ['generic', 'branch', 'fp_addsub', 'fp_muldiv', 'ldst']
@@ -33,7 +33,7 @@ MAX_SEGS = 8
 # the schema now says xs1/xd.  Both are accepted.
 RENAME = {'rs1': 'xs1', 'rs2': 'xs2', 'rd': 'xd', 'rs3': 'xs3',
           'frs1': 'fs1', 'frs2': 'fs2', 'frs3': 'fs3', 'frd': 'fd'}
-REG_KIND = {'x': 'XREG', 'f': 'FREG', 'v': 'VREG'}
+REG_KIND = {'x': 'XREG', 'f': 'FREG', 'v': 'VREG', 'm': 'MREG', 'a': 'AREG'}
 
 
 def load_insts(roots):
@@ -110,7 +110,7 @@ def field_of(var, length, name):
     fname = RENAME.get(var['name'], var['name'])
     segs = parse_location(var['location'])
     width = sum(m - l + 1 for m, l in segs)
-    m = re.match(r'^([xfv])(d|s[123])$', fname)
+    m = re.match(r'^([xfvma])(d|s[123])$', fname)
     kind = REG_KIND[m.group(1)] if m else ('CSR' if fname == 'csr' else 'IMM' if fname in ('imm', 'uimm', 'shamt', 'cimm', 'spimm', 'offset', 'index') else 'OTHER')
     flags = []
     if m:
@@ -181,7 +181,7 @@ def build(policy, insts, report):
         flags = set(rule.get('flags', []))
         if acc_re.search(name):
             for f in fields:
-                if f['kind'] in ('XREG', 'FREG', 'VREG') and 'WRITE' in f['flags']:
+                if f['kind'] in ('XREG', 'FREG', 'VREG', 'MREG', 'AREG') and 'WRITE' in f['flags']:
                     f['flags'].append('READ')
         rows.append(dict(name=name, ext=exts[0], exts=exts, assembly=asm,
                          mask=mask, match=mval, length=length, fixed=bin(mask).count('1'),
@@ -236,6 +236,8 @@ def describe_root(root):
     """A stable name for a UDB root: its basename, plus the commit when it is a git checkout."""
     import subprocess
     name = os.path.basename(os.path.abspath(root.rstrip('/')))
+    if name == 'overlay':
+        return name              # Sniper's overlay, wherever a check copies it
     def top(path):
         try:
             return subprocess.run(['git', '-C', path, 'rev-parse', '--show-toplevel'], stdout=subprocess.PIPE,
@@ -345,17 +347,20 @@ def emit_header(rows, policy, path, roots):
         opcode = r['match'] & 0x7f
         funct3 = (r['match'] >> 12) & 7
         ins, outs, clob = [], [], []
+        slot_lsb = {'rd': 7, 'rs1': 15, 'rs2': 20}
         def slot_text(name):
             f = slots.get(name)
             if f is None:
-                return 'x0'
+                # a fixed selector in a register slot (AME's R2/R1 forms): the
+                # register name carrying that value encodes it exactly
+                return 'x%d' % ((r['match'] >> slot_lsb[name]) & 31)
             if f['kind'] == 'XREG':
                 if 'WRITE' in f['flags']:
                     outs.append('[_%s] "=r"(%s)' % (f['name'], f['name']))
                 else:
                     ins.append('[_%s] "r"(%s)' % (f['name'], f['name']))
                 return '%%[_%s]' % f['name']
-            return '" "x" #%s "' % f['name']          # vector/FP register number literal
+            return '" "x" #%s "' % f['name']          # vector/FP/matrix/accumulator register number literal
         if kind == 'r':
             f7_fixed = (r['match'] >> 25) & 0x7f
             f7 = ['0x%x' % f7_fixed] + [field_expr(f, 25) for f in extra]

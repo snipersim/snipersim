@@ -68,6 +68,35 @@ the policy (defaults) or in the config (`perf_model/core/riscv/<class>_latency`,
 rewrites the tables and the config blocks; `testing/test_riscv_isa.py`
 fails when the checked-in tables are out of step with the sources.
 
+## AME: a UDB overlay generated from the specification source
+
+The Attached Matrix Extension (AME, extension name Ztt) is the second
+matrix extension the path carries, and the first whose working group has
+not published UDB YAML: its public repository
+(`riscv/riscv-attached-matrix-extension`) is AsciiDoc.  Its instruction
+chapter is machine-readable all the same -- every instruction carries a
+wavedrom field list (the exact encoding), a mnemonic line, a synopsis, a
+description and an operation block, and the repository ships a generated
+mask/match table -- so `tools/riscv/gen_ame_udb.py` converts it into the
+UDB layout (`tools/riscv/overlay/spec/std/isa/inst/Ztt/*.yaml`,
+`ext/Ztt.yaml`), checking every encoding against the repository's own
+table (138 instructions, zero mismatches at commit 8d27acd).  Operand
+names follow the UDB direction convention (`md`/`ms1`/`ms2` for M
+registers, `ad`/`as1` for accumulators, `xd`/`xs1`/`xs2` for X
+registers); the spec's pseudocode is carried verbatim as `operation()`
+for reference.  From there AME takes exactly IME's path: the policy's
+`ame_*` classes (ownership, datatype configuration, load, store, matrix
+multiply, move, elementwise) with placeholder latencies, two new register
+kinds in the generated tables (M registers 96-127, accumulators 128-143),
+and `.insn` macros -- AME's R2/R1 forms put fixed selectors in register
+slots, which the macros encode as the register name carrying that value
+(`x24` for 0x18) -- verified by assembling them with stock clang and
+decoding the words back through the tables.  `SNIPER_AME_ROOT` (the
+driver, the CMake target and `testing/test_riscv_isa.py`) regenerates the
+overlay from a checkout before the tables, so a moved draft is caught.
+When the group publishes AME in UDB form, that root replaces the
+generated overlay with no other change.
+
 ## Using a new extension with an unmodified compiler
 
 LLVM has no plugin mechanism for new instructions (its plugins are

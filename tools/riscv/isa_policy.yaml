@@ -24,7 +24,7 @@ decoder:
 # Extensions a stock assembler lacks: gen_isa.py --header writes inline-asm
 # macros (typed .insn directives) for them, prefixed RISCV_.
 header:
-  extensions: ['^Zvv']
+  extensions: ['^Zvv', '^Ztt']
   prefix: RISCV_
 
 # Extensions to take from the UDB (regexes over the extension name).
@@ -34,7 +34,8 @@ extensions:
   - '^(Zba|Zbb|Zbc|Zbs|Zbkb|Zbkc|Zbkx|Zfh|Zfhmin|Zfa|Zfbfmin)$'       # Zilsd/Zclsd are RV32-only
   - '^(V|Zvl.*|Zve.*|Zvfh.*|Zvbb|Zvbc|Zvkb|Zvkg|Zvkn.*|Zvks.*|Zvfbfmin|Zvfbfwma)$'
   - '^(S|H|Svinval|Smrnmi|Smctr|Sdext)$'    # privileged: mret, sret, wfi, sfence.vma, ... for system-mode traces
-  - '^Zvv.*$'          # IME 0.9 (Zvvmm, Zvvfmm, Zvvmtls, Zvvmttls and the datatype subextensions)
+  - '^Zvv.*$'          # IME 0.9
+  - '^Ztt$'            # AME (Attached Matrix Extension) draft, from tools/riscv/gen_ame_udb.py (Zvvmm, Zvvfmm, Zvvmtls, Zvvmttls and the datatype subextensions)
 
 classes:
   # control flow
@@ -78,6 +79,23 @@ classes:
      ext: '^Zvvmm$'}
   - {class: ime_mma_fp,     latency: 12, issue_cycles: 4, cpi: fp_muldiv, flags: [fp, vector, matrix],
      ext: '^Zvvfmm$'}
+  # AME (Attached Matrix Extension, Ztt): the attached matrix unit.  Loads and
+  # stores move whole squares, so they carry footprints; the .2d multiplies
+  # run on the matrix unit; the rest executes on the unit elementwise.
+  - {class: ame_own,        latency: 1,  cpi: generic,  flags: [serializing],
+     name: '^ame\.'}
+  - {class: ame_cfg,        latency: 1,  cpi: generic,
+     name: '^[am](get|set)typ$'}
+  - {class: ame_load,       latency: 1,  cpi: ldst,     flags: [load, vector, footprint],
+     name: '^mls\.'}
+  - {class: ame_store,      latency: 1,  cpi: ldst,     flags: [store, vector, footprint],
+     name: '^mss\.'}
+  - {class: ame_mma,        latency: 8,  issue_cycles: 4, cpi: fp_muldiv, flags: [vector, matrix],
+     name: '^mmul[a-z]*\.2d$'}
+  - {class: ame_move,       latency: 2,  cpi: generic,  flags: [vector],
+     name: '^(mmov|mmove|mbcast|mzero)'}
+  - {class: ame_ew,         latency: 4,  cpi: fp_addsub, flags: [vector],
+     ext: '^Ztt$'}
   # vector (RVV 1.0)
   - {class: v_cfg,         latency: 1,  cpi: generic,  flags: [vector],
      name: '^vset(vl|vli|ivli)$'}
@@ -106,7 +124,7 @@ classes:
   - {class: int_alu,       latency: 1,  cpi: generic}
 
 # The destination register is also read by these (accumulating forms).
-accumulates: '(macc|madd|msub|msac|nmadd|nmsub|nmsac|mmacc|red)'
+accumulates: '(macc|madd|msub|msac|nmadd|nmsub|nmsac|mmacc|red|mmul[a-z]*acc|ldexpacc|rdexpacc|scatadd|scatmax)'
 
 # Bytes moved by a scalar memory instruction (first match wins); vector and
 # tile accesses take their sizes from the recorded footprint instead.

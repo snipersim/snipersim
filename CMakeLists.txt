@@ -192,13 +192,20 @@ if(SNIPER_UDB_ROOTS)
   foreach(_r ${SNIPER_UDB_ROOTS})
     list(APPEND _udb_args --udb "${_r}")
   endforeach()
+  set(SNIPER_AME_ROOT "" CACHE PATH "riscv-attached-matrix-extension checkout: regenerate the AME (Ztt) overlay first")
+  set(_ame_cmd "")
+  if(SNIPER_AME_ROOT)
+    set(_ame_cmd COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/gen_ame_udb.py" --ame "${SNIPER_AME_ROOT}" --out "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/overlay")
+  endif()
   add_custom_target(riscv-isa-gen
+    ${_ame_cmd}
     COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/gen_isa.py" ${_udb_args}
             --udb "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/overlay"
             --policy "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/isa_policy.yaml"
             --out "${CMAKE_CURRENT_SOURCE_DIR}/decoder_lib"
             --config "${CMAKE_CURRENT_SOURCE_DIR}/config/riscv.cfg"
             --config "${CMAKE_CURRENT_SOURCE_DIR}/config/riscv-mediumboom.cfg"
+            --header "${CMAKE_CURRENT_SOURCE_DIR}/include/riscv_insn.h"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Regenerating the RISC-V decoder tables from the Unified Database")
 endif()

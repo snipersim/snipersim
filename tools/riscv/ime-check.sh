@@ -17,7 +17,8 @@
 #                 --riscv-ime) as the golden functional reference
 #
 # Environment: SNIPER_UDB_ROOTS="<riscv-unified-db>;<ime overlay>" (optional,
-# step 1 is skipped without it), SNIPER_RISCV_CC (optional), JOBS.
+# step 1 is skipped without it), SNIPER_AME_ROOT (optional: an AME spec
+# checkout, to regenerate the Ztt overlay first), SNIPER_RISCV_CC (optional), JOBS.
 set -e
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT"
@@ -25,6 +26,9 @@ JOBS=${JOBS:-$(nproc 2>/dev/null || echo 4)}
 say() { printf '\n== %s\n' "$*"; }
 
 say "1. decoder tables from the specification"
+if [ -n "${SNIPER_AME_ROOT:-}" ]; then
+   python3 tools/riscv/gen_ame_udb.py --ame "$SNIPER_AME_ROOT" --out tools/riscv/overlay
+fi
 if [ -n "${SNIPER_UDB_ROOTS:-}" ]; then
    python3 testing/test_riscv_isa.py
 else

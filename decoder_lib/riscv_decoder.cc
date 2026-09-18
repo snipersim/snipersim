@@ -42,7 +42,8 @@ void RISCVDecoder::decode(DecodedInst * inst)
   d->m_base_reg = -1;
   for (unsigned i = 0; i < n; ++i)
   {
-    if (ops[i].kind != rvisa::F_XREG && ops[i].kind != rvisa::F_FREG && ops[i].kind != rvisa::F_VREG)
+    if (ops[i].kind != rvisa::F_XREG && ops[i].kind != rvisa::F_FREG && ops[i].kind != rvisa::F_VREG
+        && ops[i].kind != rvisa::F_MREG && ops[i].kind != rvisa::F_AREG)
       continue;
     RISCVDecodedInst::Reg &r = d->m_regs[d->m_nregs++];
     r.reg = (uint8_t)ops[i].value;
@@ -67,6 +68,8 @@ const char* RISCVDecoder::reg_name(unsigned int reg_id)
   if (reg_id < 32) return rvisa::xreg_name(reg_id);
   if (reg_id < 64) { snprintf(buf, sizeof(buf), "f%u", reg_id - 32); return buf; }
   if (reg_id < 96) { snprintf(buf, sizeof(buf), "v%u", reg_id - 64); return buf; }
+  if (reg_id < 128) { snprintf(buf, sizeof(buf), "m%u", reg_id - 96); return buf; }
+  if (reg_id < 144) { snprintf(buf, sizeof(buf), "a%u", reg_id - 128); return buf; }
   return "?";
 }
 

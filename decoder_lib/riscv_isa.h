@@ -71,8 +71,9 @@ namespace rvisa
    inline const char* name(unsigned op) { return op ? insn(op).name : "unknown"; }
 
    /* A decoded operand: for registers `value` is the register number in the
-    * shared numbering x0-31 = 0-31, f0-31 = 32-63, v0-31 = 64-95; for
-    * immediates the shifted, sign-extended value. */
+    * shared numbering x0-31 = 0-31, f0-31 = 32-63, v0-31 = 64-95, AME m0-31 =
+    * 96-127 and accumulators a0-15 = 128-143; for immediates the shifted,
+    * sign-extended value. */
    struct Operand
    {
       const char *name;
