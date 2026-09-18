@@ -39,7 +39,11 @@ token tiles (16 accumulators on AME: the whole 64-token window).  The
 AME and DMA builds run only under the frontend plugin (QEMU has neither)
 and die with SIGILL without it.  The guest prints the prefill batch
 sizes, from which the harness derives the exact tile, square and task
-counts.
+counts.  The unit geometry is a compile-time choice: `-DAME_N=32` for
+32x32 squares (the plugin takes `ame_n=32`), `-DIME_VLEN=4096
+-DIME_LMUL=8 -DIME_LAMBDA=4` for 32x32 IME tiles (QEMU with
+`vlen=4096`); batches shorter than a tile are padded.
+ACCELERATOR_COMPONENTS.md section 8 has the limits and the measurements.
 
 Harness cases (`testing/test_qemu.py`): `riscv-llm-agent` runs the five
 kernels under the IME QEMU (AME and DMA through the plugin) and requires

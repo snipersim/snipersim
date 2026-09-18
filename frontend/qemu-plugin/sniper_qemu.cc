@@ -829,6 +829,16 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
 
       if (key == "output")        opt_output = val;
       else if (key == "flow")     opt_flow = strtoull(val.c_str(), nullptr, 0);
+      else if (key == "ame_n")                                   /* the AME square side (4, 8, 16, 32) */
+      {
+         const unsigned n = (unsigned)strtoul(val.c_str(), nullptr, 0);
+         if (n < 2 || n > ame::MAXN || (n & (n - 1)))
+         {
+            fprintf(stderr, "[SNIPER-QEMU] ame_n must be a power of two between 2 and %u\n", ame::MAXN);
+            return -1;
+         }
+         ame::square_n = n;
+      }
       else if (key == "verbose")  opt_verbose = true;
       else if (key == "response") opt_response = true;
       else if (key == "time")     opt_time = true;

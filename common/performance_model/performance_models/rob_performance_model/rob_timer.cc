@@ -644,7 +644,13 @@ void RobTimer::issueInstruction(uint64_t idx, SubsecondTime &next_event)
       m_stores_latency += uop.getExecLatency() * now.getPeriod();
    }
 
-   if (uop.getMicroOp()->isStore())
+   if (on_tile && m_ame_tile->holds_until_done(uop))
+   {
+      /* The accelerator's wait: the instruction stays in the window until
+         the task's output is written, so the core cannot retire past it. */
+      last_store_done = std::max(last_store_done, cycle_done);
+   }
+   else if (uop.getMicroOp()->isStore())
    {
       last_store_done = std::max(last_store_done, cycle_done);
       cycle_depend = now + 1ul;                          // For stores, forward the result immediately

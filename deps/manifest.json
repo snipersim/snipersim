@@ -265,7 +265,7 @@
         "-c",
         "git apply {root}/tools/riscv/qemu-11.1.1-ime.patch && mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
-      "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvmtls=on"
+      "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on (vlen up to 4096)"
     },
     "sail-riscv": {
       "kind": "tarball",

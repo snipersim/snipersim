@@ -20,12 +20,12 @@ must be at least the vector and tile accesses (scalar traffic adds to
 them)."""
 import argparse, sys
 
-def expected(vlen, sew, m, n, k, lam=2, lmul=1, ame=False):
+def expected(vlen, sew, m, n, k, lam=2, lmul=1, ame=False, ame_n=4):
     epr = vlen // sew
     linesize = lam * lmul
     rows = epr // lam
     tile_elems = rows * linesize
-    assert tile_elems == 4 and rows == 2 and linesize == 2, 'gemm3.c assumes 2x2 tiles'
+    assert rows == linesize, 'gemm3.c uses square IME tiles'
     tiles_c = (m // rows) * (n // linesize)
     kslices = k // linesize
     e = {}
@@ -48,14 +48,14 @@ def expected(vlen, sew, m, n, k, lam=2, lmul=1, ame=False):
         # per output square one asettyp, per 4-wide K slice two strided loads and one
         # mmulbtacc.2d, then one mmov.m.a and one strided store; three msettyp, an
         # acquire and a release.  A strided square is 4 rows of 16 bytes.
-        sq_out = (m // 4) * (n // 4); ksl = k // 4
+        sq_out = (m // ame_n) * (n // ame_n); ksl = k // ame_n
         e['riscv.ame_own'] = 2
         e['riscv.ame_cfg'] = 3 + sq_out
         e['riscv.ame_load'] = sq_out * 2 * ksl
         e['riscv.ame_store'] = sq_out
         e['riscv.ame_mma'] = sq_out * ksl
         e['riscv.ame_move'] = sq_out
-        e['riscv.span_bytes'] += (e['riscv.ame_load'] + e['riscv.ame_store']) * 64
+        e['riscv.span_bytes'] += (e['riscv.ame_load'] + e['riscv.ame_store']) * ame_n * ame_n * 4
     e['_min_dcache_loads'] = e['riscv.v_load'] + e['riscv.ime_tile_load']
     e['_min_dcache_stores'] = e['riscv.ime_tile_store']
     return e
@@ -73,8 +73,11 @@ def main():
     ap.add_argument('stats'); ap.add_argument('--vlen', type=int, default=128); ap.add_argument('--sew', type=int, default=32)
     ap.add_argument('--m', type=int, default=8); ap.add_argument('--n', type=int, default=8); ap.add_argument('--k', type=int, default=8)
     ap.add_argument('--ame', action='store_true', help='the build also ran the AME path (-DUSE_AME)')
+    ap.add_argument('--ame-n', type=int, default=4, help='the AME square side (-DAME_N)')
+    ap.add_argument('--lmul', type=int, default=1, help='IME LMUL (-DIME_LMUL)')
+    ap.add_argument('--lam', type=int, default=2, help='IME lambda (-DIME_LAMBDA)')
     a = ap.parse_args()
-    e = expected(a.vlen, a.sew, a.m, a.n, a.k, ame=a.ame)
+    e = expected(a.vlen, a.sew, a.m, a.n, a.k, lam=a.lam, lmul=a.lmul, ame=a.ame, ame_n=a.ame_n)
     s = read_stats(a.stats)
     ok = True
     for key, want in e.items():

@@ -581,64 +581,49 @@ def llm_dims():
             d[m.group(1)] = int(m.group(2))
     return d['D'], d['L'], d['V']
 
+# Unit geometry per kernel variant: the matrix side S (an IME tile or an AME
+# square is S x S) and the accumulators the GEMM blocks over (IME: 16/LMUL
+# register groups, AME: 16 accumulators).
+LLM_GEOMETRY = {'ime': (2, 16), 'ime32': (32, 2), 'ame': (4, 16), 'ame32': (32, 16)}
+
 def llm_matrix_counts(variant, decode_tokens, batches):
     """The riscv.<class> counts the agent's kernels imply.  Per decode token
     (and per prefill batch for the head, whose logits only the last token
     needs): matvecs per layer qkv (D->3D), out (D->D), fc1 (D->4D), fc2
-    (4D->D), then the head (D->V); IME works 2 output rows x 2-wide K slices
-    per tile op, AME 4 x 4 per square, leftover rows through the RVV dot
-    product.  Per prefill batch of T tokens each layer matvec is a GEMM: the
-    unit's accumulators hold 16 token tiles, so a weight tile is loaded once
-    per group of 16 token tiles, an activation tile once per weight tile,
-    and leftover tokens go through the matvec."""
+    (4D->D), then the head (D->V); a matvec is one S-wide block of output
+    rows at a time over S-wide K slices, the leftover rows through the RVV
+    dot product.  Per prefill batch of T tokens each layer matvec is a GEMM
+    over ceil(T/S) padded token blocks: a weight tile is loaded once per
+    group of NACC token blocks, an activation tile once per weight tile."""
     D, L, V = llm_dims()
     layer_shapes = [(D, 3 * D), (D, D), (D, 4 * D), (4 * D, D)] * L
     e = {}
-    if variant == 'ime':
-        h = 2
+    if variant in LLM_GEOMETRY:
+        S, NACC = LLM_GEOMETRY[variant]
         cfg = loads = stores = mma = 0
         def matvec(nin, nout):
             nonlocal cfg, loads, stores, mma
-            pairs, ks = nout // h, nin // h
-            cfg += 1; loads += pairs * ks * 2; stores += pairs; mma += pairs * ks
+            blocks, ks = nout // S, nin // S
+            cfg += blocks if variant.startswith('ame') else 1
+            loads += blocks * ks * 2; stores += blocks; mma += blocks * ks
         for _ in range(decode_tokens):
             for nin, nout in layer_shapes + [(D, V)]:
                 matvec(nin, nout)
         for T in batches:
             matvec(D, V)
-            TB, tail = T // h, T % h
-            groups = (TB + 15) // 16
+            TB = (T + S - 1) // S
+            groups = (TB + NACC - 1) // NACC
             for nin, nout in layer_shapes:
-                cfg += 1
-                loads += groups * (nout // h) * (nin // h) + TB * (nout // h) * (nin // h)
-                mma += TB * (nout // h) * (nin // h)
-                stores += TB * (nout // h)
-                for _ in range(tail):
-                    matvec(nin, nout)
-        e = {'riscv.ime_cfg': cfg, 'riscv.ime_tile_load': loads, 'riscv.ime_tile_store': stores, 'riscv.ime_mma_fp': mma}
-    elif variant == 'ame':
-        h = 4
-        cfg = loads = stores = mma = 0
-        def matvec(nin, nout):
-            nonlocal cfg, loads, stores, mma
-            sq, ks = nout // h, nin // h
-            cfg += sq; loads += sq * ks * 2; stores += sq; mma += sq * ks
-        for _ in range(decode_tokens):
-            for nin, nout in layer_shapes + [(D, V)]:
-                matvec(nin, nout)
-        for T in batches:
-            matvec(D, V)
-            TB, tail = T // h, T % h
-            groups = (TB + 15) // 16
-            for nin, nout in layer_shapes:
-                cfg += TB * (nout // h)
-                loads += groups * (nout // h) * (nin // h) + TB * (nout // h) * (nin // h)
-                mma += TB * (nout // h) * (nin // h)
-                stores += TB * (nout // h)
-                for _ in range(tail):
-                    matvec(nin, nout)
-        e = {'riscv.ame_cfg': cfg + 3, 'riscv.ame_load': loads, 'riscv.ame_store': stores, 'riscv.ame_mma': mma,
-             'riscv.ame_move': stores, 'riscv.ame_own': 2}
+                blocks, ks = nout // S, nin // S
+                cfg += TB * blocks if variant.startswith('ame') else 1
+                loads += groups * blocks * ks + TB * blocks * ks
+                mma += TB * blocks * ks
+                stores += TB * blocks
+        if variant.startswith('ime'):
+            e = {'riscv.ime_cfg': cfg, 'riscv.ime_tile_load': loads, 'riscv.ime_tile_store': stores, 'riscv.ime_mma_fp': mma}
+        else:
+            e = {'riscv.ame_cfg': cfg + 3, 'riscv.ame_load': loads, 'riscv.ame_store': stores, 'riscv.ame_mma': mma,
+                 'riscv.ame_move': stores, 'riscv.ame_own': 2}
     elif variant == 'dma':
         # one task per weight product: per decode token the 4L layer matvecs
         # and the head, per prefill batch the 4L GEMMs and the head matvec
@@ -834,6 +819,100 @@ def case_riscv_llm_couplings(p, g, workdir):
             report.append('%s/%s %.0f cycles/token (%.0f insn/token)' % (variant, coupling, cycles / tokens, insns / tokens))
     return True, '%d tokens: %s; tile and task counts exact' % (tokens, '; '.join(report))
 
+# The units at their wide geometry: 32x32 fp32 IME tiles (VLEN=4096, e32, m8,
+# lambda 4: the QEMU patch raises RV_VLEN_MAX to 4096) and 32x32 AME squares
+# (AME_NELEM = 1024, the plugin model's ame_n=32).  A square product of side
+# 32 is 32768 multiply-accumulates: an in-core issue interval of 32 cycles
+# (a 32x32 array) and vector operands of 512 bytes.
+SIZE32_CPU = IME_CPU_DEFAULT.replace('vlen=128', 'vlen=4096')
+SIZE32_IME_FLAGS = ['-DUSE_IME', '-DIME_VLEN=4096', '-DIME_LMUL=8', '-DIME_LAMBDA=4']
+SIZE32_AME_FLAGS = ['-DUSE_AME', '-DAME_N=32']
+
+def case_riscv_size32_verify(p, g, workdir):
+    """gemm3 at 64x64x64 with 32x32 IME tiles and 32x32 AME squares: all four paths agree and every count is exact."""
+    r, why = riscv_gemm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    guest = os.path.join(workdir, 'gemm3-32')
+    rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start'] + SIZE32_AME_FLAGS + SIZE32_IME_FLAGS + ['-DM=64', '-DN=64', '-DK=64'])
+    if rc != 0:
+        return False, 'could not build the 32x32 variant (exit %s)' % rc
+    prefix = os.path.join(workdir, 'gemm3-32')
+    rc, out = run([r['qemu'], '-cpu', SIZE32_CPU, '-plugin', '%s,output=%s,ame_n=32' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    if rc != 100:
+        if 'VLEN in the range' in out:
+            return None, 'this qemu-riscv64 caps VLEN below 4096 (rebuild with the current IME patch)'
+        return False, 'guest exited %s (100 = scalar, RVV, IME and AME agree)' % rc
+    outdir = os.path.join(workdir, 'gemm3-32out')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '-g', 'perf_model/core/riscv/vector_bytes=512', '-g', 'perf_model/core/riscv/ame_mma_issue_cycles=32',
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc is None or rc != 0:
+        return False, 'run-sniper exited %s' % rc
+    rc, out = run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'riscv', 'expected_counts.py'), '--ame', '--ame-n', '32',
+                   '--vlen', '4096', '--lmul', '8', '--lam', '4', '--m', '64', '--n', '64', '--k', '64',
+                   os.path.join(outdir, 'simulation', 'sim.stats')], 60)
+    if rc != 0:
+        return False, 'counts off: ' + '; '.join(l for l in out.splitlines() if l.startswith('FAIL'))[:300]
+    return True, '64x64x64 on 32x32 tiles (4 tiles, 8 vmmacc.vv) and 32x32 squares (4 squares, 8 mmulbtacc.2d): every count and footprint byte exact'
+
+def case_riscv_llm_size32(p, g, workdir):
+    """The agent on 32x32 AME squares (in core and on the tile), 32x32 IME tiles and a 4096-bit vector unit: answers as numpy, counts exact, cycles per token."""
+    r, why = riscv_llm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    builds = {'ame32': SIZE32_AME_FLAGS, 'ime32': SIZE32_IME_FLAGS}
+    guests = {'rvv4k': r['llm']['rvv']}
+    for variant, flags in builds.items():
+        guest = os.path.join(workdir, 'agent-' + variant)
+        rc, out = llm_build(os.environ['SNIPER_RISCV_CC'], guest, flags)
+        if rc != 0:
+            return False, 'could not build agent.c (%s, exit %s)' % (variant, rc)
+        guests[variant] = guest
+    runs = [('ame32', 'ica', r['cpu'], 'ame_n=32', ['-g', 'perf_model/core/riscv/ame_mma_issue_cycles=32']),
+            ('ame32', 'nca', r['cpu'], 'ame_n=32', ['-g', 'perf_model/ame_tile/coupling=nca']),
+            ('ime32', 'ica', SIZE32_CPU, None, ['-g', 'perf_model/core/riscv/vector_bytes=512', '-g', 'perf_model/core/riscv/ime_mma_fp_issue_cycles=32']),
+            ('rvv4k', 'ica', SIZE32_CPU, None, ['-g', 'perf_model/core/riscv/vector_bytes=512'])]
+    report = []
+    traced = {}
+    for variant, coupling, cpu, popt, gargs in runs:
+        prefix = os.path.join(workdir, 'llm32-' + variant)
+        if variant not in traced:
+            rc, out = run([r['qemu'], '-cpu', cpu, '-plugin', '%s,output=%s%s' % (p['frontend'], prefix, (',' + popt) if popt else ''),
+                           '--', guests[variant]], 900, cwd=workdir)
+            if rc != 100:
+                if 'VLEN in the range' in out:
+                    return None, 'this qemu-riscv64 caps VLEN below 4096 (rebuild with the current IME patch)'
+                return False, '%s: guest exited %s (100 = every line as numpy, every answer right)' % (variant, rc)
+            m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
+            mb = re.search(r'prefill batches:((?: \d+)+)', out)
+            if not m or not mb:
+                return False, '%s: no token or batch counts in the guest output' % variant
+            traced[variant] = (int(m.group(1)), int(m.group(2)), [int(t) for t in mb.group(1).split()])
+        prefilled, generated, batches = traced[variant]
+        tokens = prefilled + generated
+        outdir = os.path.join(workdir, 'llm32-%s-%s' % (variant, coupling))
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir] + gargs
+                      + ['--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
+        if rc is None or rc != 0:
+            return False, '%s/%s: run-sniper exited %s' % (variant, coupling, rc)
+        stats = {}
+        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+            if ' = ' in line:
+                k, v = line.split(' = ', 1)
+                stats[k.strip()] = v.strip().split(',')[0]
+        cycles = int(float(stats.get('performance_model.cycle_count', 0)))
+        insns = int(stats.get('performance_model.instruction_count', 0))
+        for k, v in sorted(llm_matrix_counts(variant, generated, batches).items()):
+            if int(stats.get(k, -1)) != v:
+                return False, '%s/%s: %s = %s, the model shape implies %d' % (variant, coupling, k, stats.get(k), v)
+        if coupling != 'ica' and int(stats.get('ame_tile.mma', -1)) != llm_matrix_counts(variant, generated, batches).get('riscv.ame_mma', -2):
+            return False, '%s/%s: the tile executed %s squares' % (variant, coupling, stats.get('ame_tile.mma'))
+        report.append('%s/%s %.0f cycles/token (%.0f insn/token)' % (variant, coupling, cycles / tokens, insns / tokens))
+    return True, '%d tokens: %s; counts exact' % (tokens, '; '.join(report))
+
 def case_riscv_ame_couplings(p, g, workdir):
     """The attached tile (AmeTile) runs a 32x32x32 AME product under every coupling: tile counts exact, timing responds."""
     r, why = riscv_gemm_prerequisites(workdir)
@@ -908,6 +987,8 @@ CASES = {
     'riscv-ame-simulate':  case_riscv_ame_simulate,
     'riscv-ame-couplings': case_riscv_ame_couplings,
     'riscv-llm-couplings': case_riscv_llm_couplings,
+    'riscv-size32-verify': case_riscv_size32_verify,
+    'riscv-llm-size32':    case_riscv_llm_size32,
 }
 
 

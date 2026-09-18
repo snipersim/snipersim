@@ -259,7 +259,9 @@ instruction before QEMU's illegal-instruction exception is raised.  The
 X-register handles come from `qemu_plugin_get_registers`, whose names are
 the gdb ABI names with x8 as `fp` (not `s0`); a register the lookup
 cannot find is reported at the first AME instruction, since it would
-otherwise read as zero.  The
+otherwise read as zero.  The square side is the plugin option `ame_n=<N>`
+(4 by default, a power of two up to 32: AME_NELEM = N*N, any power of 4
+in the draft).  The
 same binary dies with SIGILL without the plugin.  A semantic error in the
 model (a datatype mismatch, an instruction it does not implement yet,
 `mls.1r`/`mss.1r` among them) prints `[AME] error at <pc>: ...` and the

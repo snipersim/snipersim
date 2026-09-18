@@ -35,9 +35,11 @@ AmeTile::AmeTile(Core *core, MemComponent::component_t level, bool prefetch)
    , m_dispatch_latency(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/dispatch_latency", 4))
    , m_result_latency(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/result_latency", 4))
    , m_bytes_per_cycle(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/bytes_per_cycle", 64))
-   , m_mma_issue(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/mma_issue_cycles", 4))
+   , m_mma_issue(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/mma_issue_cycles", 0))
    , m_mma_latency(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/mma_latency", 8))
    , m_other_latency(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/other_latency", 1))
+   , m_mma_macs_per_cycle(Sim()->getCfg()->getIntDefault("perf_model/ame_tile/mma_macs_per_cycle", 0))
+   , m_n(4)
    , m_free(SubsecondTime::Zero())
    , m_ops(0), m_rows(0), m_bytes(0), m_mma(0), m_prefetch_hits(0)
    , m_busy(SubsecondTime::Zero()), m_queue_wait(SubsecondTime::Zero()), m_idle(SubsecondTime::Zero()), m_mem_latency(SubsecondTime::Zero())
@@ -96,6 +98,11 @@ SubsecondTime AmeTile::stream(Core::mem_op_t op, IntPtr addr, UInt32 size, IntPt
 bool AmeTile::owns(const DynamicMicroOp &uop) const
 {
    return is_ame_class(uop.getMicroOp()) || is_acc_class(uop.getMicroOp());
+}
+
+bool AmeTile::holds_until_done(const DynamicMicroOp &uop) const
+{
+   return uop.getMicroOp()->isStore() && strcmp(class_name(uop.getMicroOp()), "acc_wait") == 0;
 }
 
 void AmeTile::dispatch(const DynamicMicroOp &uop, SubsecondTime now)
@@ -241,13 +248,21 @@ uint64_t AmeTile::issue(DynamicMicroOp &uop, const ComponentTime &now, HitWhere:
       m_rows++;
       m_bytes += size;
       m_mem_latency += mem;
+      if (size >= 8 && (size & (size - 1)) == 0 && size / 4 <= 64)
+         m_n = size / 4;                                    /* a row of N 32-bit elements */
       /* loads complete when the data is in; stores leave the tile once their bytes have gone out */
       done = start + busy + (m->isLoad() ? mem : SubsecondTime::Zero());
    }
    else if (flags & rvisa::FLAG_MATRIX)
    {
-      busy = m_mma_issue * now.getPeriod();
-      done = start + m_mma_latency * now.getPeriod();
+      /* An N x N x N square product: N^3 multiply-accumulates on an array of
+         mma_macs_per_cycle (N*N by default, one square row per cycle), unless
+         mma_issue_cycles overrides the interval. */
+      const uint64_t macs = m_n * m_n * m_n;
+      const uint64_t rate = m_mma_macs_per_cycle ? m_mma_macs_per_cycle : m_n * m_n;
+      const uint64_t issue = m_mma_issue ? m_mma_issue : (macs + rate - 1) / rate;
+      busy = issue * now.getPeriod();
+      done = start + (issue > m_mma_latency ? issue : m_mma_latency) * now.getPeriod();
       m_mma++;
    }
    else

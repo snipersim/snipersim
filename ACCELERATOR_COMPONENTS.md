@@ -302,19 +302,20 @@ workload's shape implies (the harness cases of section 2.5).
 |---|---|---|---|---|
 | scalar (F extension) | core | 683,660 | 1,161,416 | 0.20x |
 | RVV 1.0, e32 m4 | core | 138,176 | 211,559 | 1.00x |
-| IME 0.9, fp32 2x2 tiles | in-core | 294,099 | 452,697 | 0.47x |
-| AME draft, fp32 4x4 squares | in-core (`ica`) | 131,273 | 169,709 | 1.05x |
-| AME draft | attached tile, port at L2 (`oca_l2`) | 146,051 | 169,709 | 0.95x |
-| AME draft | attached tile, near-core with transfer engine (`nca`) | 145,462 | 169,709 | 0.95x |
-| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 75,901 | 100,653 | 1.82x |
-| DMA-attached accelerator | near-core | 75,901 | 100,653 | 1.82x |
+| IME 0.9, fp32 2x2 tiles | in-core | 292,643 | 455,765 | 0.47x |
+| AME draft, fp32 4x4 squares | in-core (`ica`) | 129,092 | 170,677 | 1.07x |
+| AME draft | attached tile, port at L2 (`oca_l2`) | 143,631 | 170,677 | 0.96x |
+| AME draft | attached tile, near-core with transfer engine (`nca`) | 141,989 | 170,677 | 0.97x |
+| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 88,315 | 100,653 | 1.56x |
+| DMA-attached accelerator | near-core | 88,315 | 100,653 | 1.56x |
 
 The same kernels with the prefill token-serial, the shape measured
 before the class B kernel existed: RVV 141,698, IME 472,610, AME
 185,668 cycles per token.  Batching the prefill took IME from 3.3x to
-2.1x slower than RVV and AME from 1.3x slower to 1.05x faster, with the
+2.1x slower than RVV and AME from 1.3x slower to 1.07x faster, with the
 same instruction-level counts formulas confirming that every prefill
-GEMM filled its tiles.
+GEMM filled its tiles (a batch shorter than a tile is padded; the
+figures are the padded kernels').
 
 **gemm3 on the attached tile**, the 32x32x32 AME product repeated 16
 times (`riscv-ame-couplings`): 97,360 tile ops, 69,632 rows, 8,192
@@ -341,18 +342,97 @@ What the numbers say:
   0.4 percent for the same reason.  On the pure GEMM the spread between
   couplings is under 1 percent.  Where the port sits will matter for a
   workload that misses in L2, and for several units sharing it.
-- **The DMA-attached accelerator is the fastest configuration**, 1.8x
-  over RVV and 1.7x over AME in the core.  Per token: 13 tasks, 148,360
+- **The DMA-attached accelerator is the fastest configuration**, 1.56x
+  over RVV and 1.46x over AME in the core.  Per token: 13 tasks, 148,360
   multiply-accumulates, 9,275 cycles of compute at 16 per cycle, 3,190
   cycles of streaming, 196 KB streamed in (weights once per batch in
-  prefill, once per token in decode), and 14,790 cycles waited at
-  `acc.wait`.  The other 61,000 cycles per token are the core's own
-  work between tasks: attention over the KV cache on the RVV dot
+  prefill, once per token in decode), and 13,036 cycles stalled at
+  `acc.wait` (the wait holds the instruction window until the task's
+  output is written).  The other 75,000 cycles per token are the core's
+  own work between tasks: attention over the KV cache on the RVV dot
   product, layer normalisation, GELU, the embedding and cache writes.
   That is now the bottleneck, and it says what the next step is on this
   path: attention as a task or on the unit, and issuing the next
   independent task before waiting on the previous one (the kernel waits
-  immediately today), which would recover part of the 14,790 cycles.
+  immediately today), which would recover part of the stall.  A unit 64x
+  faster (1,024 multiply-accumulates per cycle) cuts the stall to 3,911
+  cycles and the total to 79,218: the floor is the core, not the unit.
 - **Near-core and L2 are identical for tasks**, because a task's blocks
   are streamed as a whole when the task starts; the transfer engine's
   prefetch-at-dispatch applies to instructions, not to tasks.
+
+## 8. How big can the units be, and what a 32x32 unit buys
+
+Every unit's size is a parameter, and every part of the chain now carries
+32x32.  The ceilings, from the specifications and the tools:
+
+| unit | what sets the size | ceiling | here |
+|---|---|---|---|
+| RVV 1.0 vector unit | VLEN, a power of two of bits per register; LMUL groups up to 8 registers | 65,536 bits (the specification); QEMU 11.1.1 stops at 1,024, the IME patch raises it to 4,096 | 128 (default) and 4,096: 4 or 128 fp32 elements per register, 512 or 4,096 per m8 group |
+| IME 0.9 tiles | rows = (VLEN/SEW)/lambda, columns = lambda x LMUL, so a square tile has VLEN/SEW = lambda^2 x LMUL, and lambda must be one of the two or three values the freeze allows for that VLEN/SEW | square fp32 tiles: 2x2 (VLEN 128, m1), 4x4 (256, m2), 8x8 (512, m4), 16x16 (1,024, m8: stock QEMU's limit), 32x32 (4,096, m8, lambda 4), 64x64 (16,384), 128x128 (65,536, the RVV maximum) | 2x2 and 32x32; the patch's helper buffers hold 1,024 elements, so 64x64 needs them and the cap raised again |
+| AME draft squares | AME_NELEM, any power of 4; N = sqrt(AME_NELEM); AME_MAX_SQUARE_SIZE is an implementation parameter with no ceiling in the draft | unbounded by the draft; the plugin model takes `ame_n` up to 32 (192 KB of unit state at 32x32 fp32: 32 M registers of 4 KB and 16 accumulators), the tile model reads N from the rows it loads | 4x4 and 32x32 |
+| DMA-attached accelerator | none: blocks of any size; the compute rate `macs_per_cycle` is the unit's size | -- | 16 and 1,024 multiply-accumulates per cycle |
+| The trace and the core model | one span, one memory entry and one memory micro-op per row: `Sift::MAX_MEMORY_SPANS`, `DynamicInstruction::MAX_MEMORY`, the policy's `memory_uops` | 32 rows per instruction now (was 16); raise all three together for 64x64 | -- |
+
+The software follows the geometry at compile time: `-DAME_N=32` for the
+agent and gemm3 (`ame_n=32` to the plugin), `-DIME_VLEN=4096 -DIME_LMUL=8
+-DIME_LAMBDA=4` for IME (`-cpu ...,vlen=4096` to QEMU), the RVV kernel
+adapts through `vsetvli`.  Batches shorter than a tile are padded; the
+harness cases `riscv-size32-verify` (gemm3 at 64x64x64) and
+`riscv-llm-size32` derive the counts from the geometry.  In the
+simulation the wide units are charged accordingly: a 32x32 square
+product is 32,768 multiply-accumulates, issued every 32 cycles on a
+32x32 array (the tile derives that from the rows it loads; the in-core
+class costs take `ame_mma_issue_cycles=32` and `ime_mma_fp_issue_cycles=32`),
+and vector operands are 512 bytes.  The vector class costs are per
+instruction and do not grow with VLEN, so the 4,096-bit vector row
+assumes a datapath as wide as the register group: an upper bound.
+
+**The LLM agent at both geometries**, cycles per token, 379 tokens:
+
+| kernel | at the baseline geometry | at 32x32 (RVV: 4,096 bits) | change |
+|---|---|---|---|
+| RVV 1.0 | 138,176 (VLEN 128) | 102,191 | 1.35x |
+| IME 0.9 in core | 292,643 (2x2) | 91,764 | 3.2x |
+| AME in core | 129,092 (4x4) | 93,112 | 1.39x |
+| AME on the tile, near-core | 141,989 (4x4) | 95,776 | 1.48x |
+| DMA accelerator | 88,315 (16 MACs/cycle) | 79,218 (1,024 MACs/cycle) | 1.11x |
+
+Instructions per token: AME 170,677 to 126,514, IME 455,765 to 124,667,
+RVV 211,559 to 143,786.  Every count is exact at both geometries; the
+AME 32 run executes 17,374 squares, which is what 6+2+8+2 output blocks
+of 32 rows over 2 K-slices per layer, 3 layers, the head and the 16
+prefill batches imply.
+
+What the numbers say:
+
+- **Bigger tiles help, and then stop helping.**  The three in-core
+  kernels land within 10 percent of each other at 32x32, between 91,000
+  and 102,000 cycles per token, against a floor of about 75,000 cycles of
+  non-matrix work per token (attention over the KV cache, normalisation,
+  GELU, the embedding; measured in section 7 as the core's own work
+  between DMA tasks, which a 64x faster accelerator leaves untouched).  A wider unit cannot remove that floor; only moving
+  that work to the unit, or a leaner model, can.
+- **At batch 1 the wide unit is almost all padding.**  A decode matvec
+  fills one column of a 32x32 square: 32,768 multiply-accumulates for
+  1,024 useful ones, 3 percent utilisation.  The prefill batches of 8 to
+  26 tokens fill 25 to 81 percent of a token block.  The AME 32 run does
+  569 million multiply-accumulates on the array for the 56 million the
+  model needs; the 4x4 run did 4.5x fewer wasted ones.  The gain came
+  from fewer, larger instructions, not from more useful work per cycle.
+- **This model is too narrow to feed a 32x32 unit.**  With d = 64 a
+  square product covers 2 K-slices; the weight matrices are 2 to 8 output
+  blocks wide.  A 32x32 unit wants d of 512 or more and batches of 32
+  tokens: prefill-shaped class B work, or decode batched by speculative
+  verification.  The measurement to make next is a wider
+  agent (d = 256 or 512) at both geometries, which the trainer can
+  produce and every count formula already covers.
+- **IME gains the most** because its 2x2 tiles were the least efficient
+  encoding of the work; at 32x32 IME and AME are equivalent in-core
+  units, and the tile's attachment cost (dispatch and in-order queue) is
+  3 percent at 32x32 against 11 percent at 4x4, since there are fewer,
+  longer operations to queue.
+- **Ownership and context state grow with the square.**  A 32x32 AME
+  unit holds 192 KB of architectural state; the draft's whole-register
+  image transfers (`mls.1r`/`mss.1r`) are what a context switch moves,
+  and the tile model does not charge for them yet.

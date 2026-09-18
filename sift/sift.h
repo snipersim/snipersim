@@ -15,7 +15,7 @@ namespace Sift
    // name (vector and matrix-tile accesses) describes its footprint as up to
    // MAX_MEMORY_SPANS contiguous byte ranges (Writer::MemorySpans), recorded
    // ahead of the instruction and delivered with it (Instruction::spans).
-   const uint32_t MAX_MEMORY_SPANS = 16;
+   const uint32_t MAX_MEMORY_SPANS = 32;      /* a 32x32 square or tile: one row per span */
    typedef struct
    {
       uint64_t addr;

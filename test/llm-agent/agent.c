@@ -151,29 +151,68 @@ static void matvec(float *y, const float *x, const float *W, const float *bias, 
 #elif defined(USE_IME)
 #undef MATVEC_NAME
 #define MATVEC_NAME "ime"
-static float xpad[2][4 * GPT_D];                 /* row 0: the activation vector, row 1: zeros */
-/* Per pair of output rows: C(2x2) += A(2x2) x B(2x2)^T over 2-wide K slices,
- * A = two rows of W, B = x over a zero row, so column 0 of C is y[o], y[o+1]. */
+/* IME tile geometry: rows = (VLEN/SEW)/lambda, cols = lambda*LMUL; square
+ * tiles of side IME_S (2 at VLEN=128 e32 m1 lambda 2; 32 at VLEN=4096 e32 m8
+ * lambda 4).  A tile is v0, B v8, the accumulators start at v16, one register
+ * group of LMUL registers each: 16/LMUL of them. */
+#ifndef IME_VLEN
+#define IME_VLEN 128
+#endif
+#ifndef IME_LMUL
+#define IME_LMUL 1
+#endif
+#ifndef IME_LAMBDA
+#define IME_LAMBDA 2
+#endif
+#define IME_S (IME_LAMBDA * IME_LMUL)
+#define IME_NACC (16 / IME_LMUL)
+/* The lambda field of the tile instructions is log2(lambda)+1; it must reach
+   the .insn macro as a literal, hence the #if chain and the two-level macros
+   (the header stringifies its argument before expansion). */
+#if IME_LAMBDA == 1
+#define IME_LAMBDA_ENC 1
+#elif IME_LAMBDA == 2
+#define IME_LAMBDA_ENC 2
+#elif IME_LAMBDA == 4
+#define IME_LAMBDA_ENC 3
+#elif IME_LAMBDA == 8
+#define IME_LAMBDA_ENC 4
+#elif IME_LAMBDA == 16
+#define IME_LAMBDA_ENC 5
+#else
+#define IME_LAMBDA_ENC 6
+#endif
+#define IME_VMTL_(vd, p, ld, enc) RISCV_VMTL_V(vd, p, ld, enc, 1)
+#define IME_VMTS_(vs, p, ld, enc) RISCV_VMTS_V(vs, p, ld, enc, 1)
+#define IME_VMTL(vd, p, ld) IME_VMTL_(vd, p, ld, IME_LAMBDA_ENC)
+#define IME_VMTS(vs, p, ld) IME_VMTS_(vs, p, ld, IME_LAMBDA_ENC)
+#define IME_STR_(x) #x
+#define IME_STR(x) IME_STR_(x)
+_Static_assert((IME_VLEN / 32) / IME_LAMBDA == IME_S, "agent.c uses square IME tiles: (VLEN/32)/lambda must equal lambda*LMUL");
+_Static_assert(GPT_T % IME_S == 0 && GPT_D % IME_S == 0, "the window and the width must be multiples of the IME tile");
+#define IME_VSETVLI() __asm__ volatile("vsetvli t0, zero, e32, m" IME_STR(IME_LMUL) ", ta, ma" : : : "t0")
+static float xpad[IME_S][4 * GPT_D];             /* row 0: the activation vector, the rest zeros */
+/* Per IME_S output rows: C += A x B^T over IME_S-wide K slices, A = IME_S rows
+ * of W, B = x over zero rows, so column 0 of C is y[o..o+IME_S-1]. */
 static void matvec(float *y, const float *x, const float *W, const float *bias, int nin, int nout)
 {
    long old;
    for (int i = 0; i < nin; i++) xpad[0][i] = x[i];
-   __asm__ volatile("vsetvli t0, zero, e32, m1, ta, ma" : : : "t0");
-   RISCV_VSETLAMBDA(old, 2L); (void)old;
+   IME_VSETVLI();
+   RISCV_VSETLAMBDA(old, (long)IME_LAMBDA); (void)old;
    int o = 0;
-   for (; o + 2 <= nout; o += 2)
+   for (; o + IME_S <= nout; o += IME_S)
    {
-      float t[4];
+      float t[IME_S * IME_S];
       __asm__ volatile("vmv.v.i v16, 0");                                  /* C tile */
-      for (int k = 0; k < nin; k += 2)
+      for (int k = 0; k < nin; k += IME_S)
       {
-         RISCV_VMTL_V(0, W + (long)o * nin + k, (long)nin, 2, 1);          /* A: rows o,o+1, cols k,k+1 */
-         RISCV_VMTL_V(8, &xpad[0][k], (long)(4 * GPT_D), 2, 1);            /* B: x[k..k+1] over zeros */
-         RISCV_VFMMACC_VV(16, 0, 8, 1);                                     /* C += A x B^T */
+         IME_VMTL(0, W + (long)o * nin + k, (long)nin);      /* A: rows o.., cols k.. */
+         IME_VMTL(8, &xpad[0][k], (long)(4 * GPT_D));        /* B: x[k..] over zeros */
+         RISCV_VFMMACC_VV(16, 0, 8, 1);                                             /* C += A x B^T */
       }
-      RISCV_VMTS_V(16, t, 2L, 2, 1);
-      y[o] = (bias ? bias[o] : 0.0f) + t[0];
-      y[o + 1] = (bias ? bias[o + 1] : 0.0f) + t[2];
+      IME_VMTS(16, t, (long)IME_S);
+      for (int i = 0; i < IME_S; i++) y[o + i] = (bias ? bias[o + i] : 0.0f) + t[i * IME_S];
    }
    for (; o < nout; o++) y[o] = (bias ? bias[o] : 0.0f) + dot(x, W + (long)o * nin, nin);
 }
@@ -181,27 +220,34 @@ static void matvec(float *y, const float *x, const float *W, const float *bias, 
 #undef MATVEC_NAME
 #define MATVEC_NAME "ame"
 #define AME_FP32 0x20300120L                     /* IEEE class: exp 8, RNE, Inf, denormals, 32 bits */
-static float xpad[4][4 * GPT_D];                 /* row 0: the activation vector, rows 1-3: zeros */
-/* Per four output rows: acc(4x4) += A(4x4) x B(4x4)^T over 4-wide K slices,
- * A = four rows of W (strided square), B = x over three zero rows, so
- * column 0 of the accumulator is y[o..o+3]. */
+/* The AME square side N = sqrt(AME_NELEM), an implementation parameter of the
+ * draft (any power of 4 elements): 4 by default, the plugin model takes the
+ * same value as ame_n=<N>. */
+#ifndef AME_N
+#define AME_N 4
+#endif
+_Static_assert(GPT_T % AME_N == 0 && GPT_D % AME_N == 0, "the window and the width must be multiples of the AME square");
+static float xpad[AME_N][4 * GPT_D];             /* row 0: the activation vector, the rest zeros */
+/* Per N output rows: acc(NxN) += A(NxN) x B(NxN)^T over N-wide K slices, A =
+ * N rows of W (strided square), B = x over N-1 zero rows, so column 0 of the
+ * accumulator is y[o..o+N-1]. */
 static void matvec(float *y, const float *x, const float *W, const float *bias, int nin, int nout)
 {
    for (int i = 0; i < nin; i++) xpad[0][i] = x[i];
    int o = 0;
-   for (; o + 4 <= nout; o += 4)
+   for (; o + AME_N <= nout; o += AME_N)
    {
-      float t[4][4];
+      float t[AME_N][AME_N];
       RISCV_ASETTYP(0, AME_FP32);                                          /* zero the accumulator */
-      for (int k = 0; k < nin; k += 4)
+      for (int k = 0; k < nin; k += AME_N)
       {
-         RISCV_MLS_ST(0, W + (long)o * nin + k, (long)nin * 4);            /* A: rows o..o+3, cols k..k+3 */
-         RISCV_MLS_ST(1, &xpad[0][k], (long)(4 * GPT_D) * 4);              /* B: x[k..k+3] over zeros */
+         RISCV_MLS_ST(0, W + (long)o * nin + k, (long)nin * 4);            /* A: rows o.., cols k.. */
+         RISCV_MLS_ST(1, &xpad[0][k], (long)(4 * GPT_D) * 4);              /* B: x[k..] over zeros */
          RISCV_MMULBTACC_2D(0, 0, 1);                                       /* acc0 += A x B^T */
       }
       RISCV_MMOV_M_A(2, 0);
-      RISCV_MSS_ST(2, &t[0][0], 16L);
-      for (int i = 0; i < 4; i++) y[o + i] = (bias ? bias[o + i] : 0.0f) + t[i][0];
+      RISCV_MSS_ST(2, &t[0][0], (long)AME_N * 4);
+      for (int i = 0; i < AME_N; i++) y[o + i] = (bias ? bias[o + i] : 0.0f) + t[i][0];
    }
    for (; o < nout; o++) y[o] = (bias ? bias[o] : 0.0f) + dot(x, W + (long)o * nin, nin);
 }
@@ -236,78 +282,96 @@ static float gelu(float x)
    case 12: OP(12); break; case 13: OP(13); break; case 14: OP(14); break; case 15: OP(15); break; } } while (0)
 
 #if defined(USE_IME)
-/* 2x2 tiles: token pair x output pair; accumulators v16..v31 hold 16 token
- * tiles (32 tokens), so a weight tile is loaded once per 32 tokens. */
+/* IME_S x IME_S tiles: a token block x an output block; the IME_NACC
+ * accumulator groups (v16.. in steps of LMUL) hold that many token tiles, so a
+ * weight tile is loaded once per IME_NACC*IME_S tokens.  A batch shorter than
+ * a tile is padded: the rows beyond T come from the buffer (GPT_T rows) and
+ * are never read back. */
 #define IME_ZERO(a)  __asm__ volatile("vmv.v.i v" #a ", 0")
 #define IME_MMA(a)   RISCV_VFMMACC_VV(a, 0, 8, 1)
-#define IME_STORE(a) RISCV_VMTS_V(a, yp, (long)ldy, 2, 1)
+#define IME_STORE(a) IME_VMTS(a, yp, (long)ldy)
+#if IME_LMUL == 1
 #define SELV(i, OP) do { switch (i) { \
    case 0: OP(16); break; case 1: OP(17); break; case 2: OP(18); break; case 3: OP(19); break; \
    case 4: OP(20); break; case 5: OP(21); break; case 6: OP(22); break; case 7: OP(23); break; \
    case 8: OP(24); break; case 9: OP(25); break; case 10: OP(26); break; case 11: OP(27); break; \
    case 12: OP(28); break; case 13: OP(29); break; case 14: OP(30); break; case 15: OP(31); break; } } while (0)
+#elif IME_LMUL == 2
+#define SELV(i, OP) do { switch (i) { \
+   case 0: OP(16); break; case 1: OP(18); break; case 2: OP(20); break; case 3: OP(22); break; \
+   case 4: OP(24); break; case 5: OP(26); break; case 6: OP(28); break; case 7: OP(30); break; } } while (0)
+#elif IME_LMUL == 4
+#define SELV(i, OP) do { switch (i) { case 0: OP(16); break; case 1: OP(20); break; case 2: OP(24); break; case 3: OP(28); break; } } while (0)
+#else
+#define SELV(i, OP) do { switch (i) { case 0: OP(16); break; case 1: OP(24); break; } } while (0)
+#endif
 static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
 {
    long old;
-   const int TB = T / 2;
-   __asm__ volatile("vsetvli t0, zero, e32, m1, ta, ma" : : : "t0");
-   RISCV_VSETLAMBDA(old, 2L); (void)old;
-   for (int o = 0; o < nout; o += 2)
-      for (int g = 0; g < TB; g += 16)
+   const int TB = (T + IME_S - 1) / IME_S;
+   IME_VSETVLI();
+   RISCV_VSETLAMBDA(old, (long)IME_LAMBDA); (void)old;
+   int o = 0;
+   for (; o + IME_S <= nout; o += IME_S)
+      for (int g = 0; g < TB; g += IME_NACC)
       {
-         const int nb = TB - g < 16 ? TB - g : 16;
+         const int nb = TB - g < IME_NACC ? TB - g : IME_NACC;
          for (int tb = 0; tb < nb; tb++) SELV(tb, IME_ZERO);
-         for (int k = 0; k < nin; k += 2)
+         for (int k = 0; k < nin; k += IME_S)
          {
-            RISCV_VMTL_V(8, W + (long)o * nin + k, (long)nin, 2, 1);           /* W tile: rows o,o+1 */
+            IME_VMTL(8, W + (long)o * nin + k, (long)nin);           /* W tile: rows o.. */
             for (int tb = 0; tb < nb; tb++)
             {
-               RISCV_VMTL_V(0, Xm + (long)(g + tb) * 2 * ldx + k, (long)ldx, 2, 1);   /* X tile: two tokens */
+               IME_VMTL(0, Xm + (long)(g + tb) * IME_S * ldx + k, (long)ldx);   /* X tile: IME_S tokens */
                SELV(tb, IME_MMA);                                               /* C += X x W^T */
             }
          }
          for (int tb = 0; tb < nb; tb++)
          {
-            float *yp = Y + (long)(g + tb) * 2 * ldy + o;
+            float *yp = Y + (long)(g + tb) * IME_S * ldy + o;
             SELV(tb, IME_STORE);
-            if (bias) { yp[0] += bias[o]; yp[1] += bias[o + 1]; yp[ldy] += bias[o]; yp[ldy + 1] += bias[o + 1]; }
+            if (bias) for (int i = 0; i < IME_S; i++) for (int j = 0; j < IME_S; j++) yp[i * ldy + j] += bias[o + j];
          }
       }
-   for (int t = TB * 2; t < T; t++) matvec(Y + (long)t * ldy, Xm + (long)t * ldx, W, bias, nin, nout);
+   for (; o < nout; o++)
+      for (int t = 0; t < T; t++) Y[(long)t * ldy + o] = (bias ? bias[o] : 0.0f) + dot(Xm + (long)t * ldx, W + (long)o * nin, nin);
 }
 #elif defined(USE_AME)
-/* 4x4 squares: four tokens x four outputs; the 16 accumulators hold 16
- * token squares (64 tokens, the whole window), so a weight square is loaded
- * once per prefill. */
+/* N x N squares: a token block x an output block; the 16 accumulators hold 16
+ * token squares (16*N tokens), so a weight square is loaded once per prefill.
+ * A batch shorter than a square is padded: the rows beyond T come from the
+ * buffer (GPT_T rows) and are never read back. */
 #define AME_SET(a)  RISCV_ASETTYP(a, AME_FP32)
 #define AME_MMA(a)  RISCV_MMULBTACC_2D(a, 0, 1)
 #define AME_MOV(a)  RISCV_MMOV_M_A(2, a)
 static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
 {
-   const int TB = T / 4;
-   for (int o = 0; o < nout; o += 4)
+   const int TB = (T + AME_N - 1) / AME_N;
+   int o = 0;
+   for (; o + AME_N <= nout; o += AME_N)
       for (int g = 0; g < TB; g += 16)
       {
          const int nb = TB - g < 16 ? TB - g : 16;
          for (int tb = 0; tb < nb; tb++) SEL16(tb, AME_SET);                      /* zero the accumulators */
-         for (int k = 0; k < nin; k += 4)
+         for (int k = 0; k < nin; k += AME_N)
          {
-            RISCV_MLS_ST(1, W + (long)o * nin + k, (long)nin * 4);                 /* W square: rows o..o+3 */
+            RISCV_MLS_ST(1, W + (long)o * nin + k, (long)nin * 4);                 /* W square: rows o.. */
             for (int tb = 0; tb < nb; tb++)
             {
-               RISCV_MLS_ST(0, Xm + (long)(g + tb) * 4 * ldx + k, (long)ldx * 4);  /* X square: four tokens */
+               RISCV_MLS_ST(0, Xm + (long)(g + tb) * AME_N * ldx + k, (long)ldx * 4);  /* X square: N tokens */
                SEL16(tb, AME_MMA);                                                 /* acc += X x W^T */
             }
          }
          for (int tb = 0; tb < nb; tb++)
          {
-            float *yp = Y + (long)(g + tb) * 4 * ldy + o;
+            float *yp = Y + (long)(g + tb) * AME_N * ldy + o;
             SEL16(tb, AME_MOV);
             RISCV_MSS_ST(2, yp, (long)ldy * 4);
-            if (bias) for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) yp[i * ldy + j] += bias[o + j];
+            if (bias) for (int i = 0; i < AME_N; i++) for (int j = 0; j < AME_N; j++) yp[i * ldy + j] += bias[o + j];
          }
       }
-   for (int t = TB * 4; t < T; t++) matvec(Y + (long)t * ldy, Xm + (long)t * ldx, W, bias, nin, nout);
+   for (; o < nout; o++)
+      for (int t = 0; t < T; t++) Y[(long)t * ldy + o] = (bias ? bias[o] : 0.0f) + dot(Xm + (long)t * ldx, W + (long)o * nin, nin);
 }
 #elif defined(USE_DMA)
 static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)

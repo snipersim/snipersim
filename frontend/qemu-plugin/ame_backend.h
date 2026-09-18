@@ -6,7 +6,8 @@
  * depends on QEMU, so the model can be run on the host against a reference.
  *
  * Implementation parameters of this model (the specification leaves them
- * to the implementation): AME_NELEM = 16 (4x4 squares), AME_UNIT_DATATYPE_SIZE
+ * to the implementation): AME_NELEM = N*N with N = 4 by default (ame_n=<N> up
+ * to 32), AME_UNIT_DATATYPE_SIZE
  * = 32, 32 M registers, 16 accumulators; the Int32 (descriptor 0x40000020)
  * and FP32 (0x20300120: exponent width 8, RNE, infinities and denormals,
  * IEEE class) datatypes, so pack_factor is 1 and every square is 16
@@ -29,8 +30,11 @@
 
 namespace ame
 {
-   const unsigned N = 4;                  /* square side: AME_NELEM = 16 */
-   const unsigned NELEM = N * N;
+   /* The square side N = sqrt(AME_NELEM), an implementation parameter of the
+      draft (any power of 4 elements): 4 by default, up to MAXN, set by the
+      plugin option ame_n=<N>. */
+   const unsigned MAXN = 32;
+   extern unsigned square_n;
    const unsigned NUM_M = 32, NUM_ACC = 16;
    const uint32_t DTYPE_INT32 = 0x40000020;   /* standard, signed, 32 bits */
    const uint32_t DTYPE_FP32 = 0x20300120;    /* IEEE class: exp 8, RNE, Inf, denormals, FP, 32 bits */
@@ -39,8 +43,8 @@ namespace ame
    {
       bool owned = false;
       uint32_t Md[NUM_M] = {0}, Ad[NUM_ACC] = {0};
-      int32_t M[NUM_M][NELEM] = {{0}};
-      int32_t Acc[NUM_ACC][NELEM] = {{0}};
+      int32_t M[NUM_M][MAXN * MAXN] = {{0}};
+      int32_t Acc[NUM_ACC][MAXN * MAXN] = {{0}};
       uint64_t executed = 0, errors = 0;
    };
 

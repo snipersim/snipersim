@@ -7,6 +7,8 @@
 namespace ame
 {
 
+unsigned square_n = 4;
+
 namespace
 {
    struct Ops { int md = -1, ms1 = -1, ms2 = -1, ad = -1, as1 = -1, xd = -1, xs1 = -1, xs2 = -1; };
@@ -35,20 +37,21 @@ namespace
    bool square_transfer(Backend &b, const Env &env, int32_t *sq, bool store, bool colmajor, bool strided, bool transposed_stride,
                         uint64_t base, uint64_t stride)
    {
+      const unsigned N = square_n, NELEM = N * N;
       /* Row-major: element (i,j) at index i*N+j of a contiguous 16-element string;
        * column-major: (i,j) at j*N+i.  Strided (.st): row i is a segment at
        * base + i*stride; transposed-strided (.tst): column j is the segment. */
-      int32_t buf[NELEM];
+      int32_t buf[MAXN * MAXN];
       if (store)
-         memcpy(buf, sq, sizeof(buf));
+         memcpy(buf, sq, NELEM * sizeof(int32_t));
       if (!strided)
       {
-         int32_t mem[NELEM];
+         int32_t mem[MAXN * MAXN];
          if (store)
             for (unsigned i = 0; i < N; i++) for (unsigned j = 0; j < N; j++) mem[colmajor ? j * N + i : i * N + j] = buf[i * N + j];
-         if (store ? !env.write_mem(base, mem, sizeof(mem)) : !env.read_mem(base, mem, sizeof(mem)))
+         if (store ? !env.write_mem(base, mem, NELEM * 4) : !env.read_mem(base, mem, NELEM * 4))
             return false;
-         env.note_access(base, sizeof(mem), store);
+         env.note_access(base, NELEM * 4, store);
          if (!store)
             for (unsigned i = 0; i < N; i++) for (unsigned j = 0; j < N; j++) buf[i * N + j] = mem[colmajor ? j * N + i : i * N + j];
       }
@@ -56,25 +59,26 @@ namespace
       {
          for (unsigned s = 0; s < N; s++)
          {
-            int32_t seg[N];
+            int32_t seg[MAXN];
             const uint64_t addr = base + s * stride;
             if (store)
                for (unsigned e = 0; e < N; e++) seg[e] = transposed_stride ? buf[e * N + s] : buf[s * N + e];
-            if (store ? !env.write_mem(addr, seg, sizeof(seg)) : !env.read_mem(addr, seg, sizeof(seg)))
+            if (store ? !env.write_mem(addr, seg, N * 4) : !env.read_mem(addr, seg, N * 4))
                return false;
-            env.note_access(addr, sizeof(seg), store);
+            env.note_access(addr, N * 4, store);
             if (!store)
                for (unsigned e = 0; e < N; e++) { if (transposed_stride) buf[e * N + s] = seg[e]; else buf[s * N + e] = seg[e]; }
          }
       }
       if (!store)
-         memcpy(sq, buf, sizeof(buf));
+         memcpy(sq, buf, NELEM * sizeof(int32_t));
       return true;
    }
 }
 
 bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
 {
+   const unsigned N = square_n, NELEM = N * N;
    const char *name = rvisa::name(op);
    const Ops o = operands(op, word);
    auto fail = [&](const std::string &why) { b.errors++; env.error(std::string(name) + ": " + why); return false; };

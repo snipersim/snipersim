@@ -41,6 +41,9 @@ public:
    static AmeTile *create(Core *core);
 
    bool owns(const DynamicMicroOp &uop) const;
+   /* acc.wait: its output-block store completes when the task does, and the
+      core must not retire past it before then. */
+   bool holds_until_done(const DynamicMicroOp &uop) const;
 
    /* The op enters the core's window: the transfer engine (nca) starts
       fetching its rows. */
@@ -57,6 +60,8 @@ private:
    MemComponent::component_t m_level;
    bool m_prefetch;
    uint64_t m_dispatch_latency, m_result_latency, m_bytes_per_cycle, m_mma_issue, m_mma_latency, m_other_latency;
+   uint64_t m_mma_macs_per_cycle;                 /* 0: the square's N*N (an N x N array) */
+   uint64_t m_n;                                  /* the square side, from the rows the tile loads */
    SubsecondTime m_free;                                      /* when the tile accepts its next op */
    std::unordered_map<IntPtr, SubsecondTime> m_prefetched;    /* row address -> arrival (nca) */
 

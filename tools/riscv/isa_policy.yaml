@@ -19,7 +19,7 @@ xlen: 64
 # spread over (Sift::MAX_MEMORY_SPANS caps it).
 decoder:
   vector_bytes: 16
-  memory_uops: 16
+  memory_uops: 32
 
 # Extensions a stock assembler lacks: gen_isa.py --header writes inline-asm
 # macros (typed .insn directives) for them, prefixed RISCV_.

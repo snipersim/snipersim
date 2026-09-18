@@ -34,6 +34,50 @@
 #ifndef K
 #define K 8
 #endif
+/* Unit geometry.  AME: N x N squares (AME_NELEM = N*N, any power of 4 in the
+   draft; the plugin model takes ame_n=<N>).  IME: the tile is rows x cols
+   with rows = (VLEN/SEW)/lambda and cols = lambda*LMUL; the kernel uses
+   square tiles (rows == cols), 2x2 at VLEN=128 e32 m1 lambda 2, 32x32 at
+   VLEN=4096 e32 m8 lambda 4. */
+#ifndef AME_N
+#define AME_N 4
+#endif
+#ifndef IME_VLEN
+#define IME_VLEN 128
+#endif
+#ifndef IME_LMUL
+#define IME_LMUL 1
+#endif
+#ifndef IME_LAMBDA
+#define IME_LAMBDA 2
+#endif
+#define IME_R ((IME_VLEN / 32) / IME_LAMBDA)
+#define IME_C (IME_LAMBDA * IME_LMUL)
+/* The lambda field of the tile instructions is log2(lambda)+1; it must reach
+   the .insn macro as a literal, hence the #if chain and the two-level macros
+   (the header stringifies its argument before expansion). */
+#if IME_LAMBDA == 1
+#define IME_LAMBDA_ENC 1
+#elif IME_LAMBDA == 2
+#define IME_LAMBDA_ENC 2
+#elif IME_LAMBDA == 4
+#define IME_LAMBDA_ENC 3
+#elif IME_LAMBDA == 8
+#define IME_LAMBDA_ENC 4
+#elif IME_LAMBDA == 16
+#define IME_LAMBDA_ENC 5
+#else
+#define IME_LAMBDA_ENC 6
+#endif
+#define IME_VMTL_(vd, p, ld, enc) RISCV_VMTL_V(vd, p, ld, enc, 1)
+#define IME_VMTS_(vs, p, ld, enc) RISCV_VMTS_V(vs, p, ld, enc, 1)
+#define IME_VMTL(vd, p, ld) IME_VMTL_(vd, p, ld, IME_LAMBDA_ENC)
+#define IME_VMTS(vs, p, ld) IME_VMTS_(vs, p, ld, IME_LAMBDA_ENC)
+#define IME_STR_(x) #x
+#define IME_STR(x) IME_STR_(x)
+_Static_assert(IME_R == IME_C, "gemm3 uses square IME tiles: (VLEN/32)/lambda must equal lambda*LMUL");
+_Static_assert(M % IME_R == 0 && N % IME_R == 0 && K % IME_C == 0, "M, N, K must be multiples of the IME tile");
+_Static_assert(M % AME_N == 0 && N % AME_N == 0 && K % AME_N == 0, "M, N, K must be multiples of the AME square");
 
 static int32_t A[M * K] __attribute__((aligned(64)));
 static int32_t B[N * K] __attribute__((aligned(64)));
@@ -127,22 +171,22 @@ static void gemm_rvv(void)
  * 2-wide K slice load the A and B tiles and accumulate C += A x B^T; store. */
 static void gemm_ime(void)
 {
-   const long vl = 4, ld = K;
+   const long vl = IME_R * IME_C, ld = K;             /* the whole register group is one tile */
    long old;
-   __asm__ volatile("vsetvli t0, %0, e32, m1, ta, ma" : : "r"(vl) : "t0", "memory");
-   RISCV_VSETLAMBDA(old, 2L);
+   __asm__ volatile("vsetvli t0, %0, e32, m" IME_STR(IME_LMUL) ", ta, ma" : : "r"(vl) : "t0", "memory");
+   RISCV_VSETLAMBDA(old, (long)IME_LAMBDA);
    (void)old;
-   for (int ti = 0; ti < M; ti += 2)
-      for (int tj = 0; tj < N; tj += 2)
+   for (int ti = 0; ti < M; ti += IME_R)
+      for (int tj = 0; tj < N; tj += IME_R)
       {
-         RISCV_VMTL_V(16, &C_ime[ti * N + tj], (long)N, 2, 1);      /* C tile (zero) */
-         for (int k = 0; k < K; k += 2)
+         IME_VMTL(16, &C_ime[ti * N + tj], (long)N);      /* C tile (zero) */
+         for (int k = 0; k < K; k += IME_C)
          {
-            RISCV_VMTL_V(0, &A[ti * K + k], ld, 2, 1);               /* A tile: rows ti,ti+1, cols k,k+1 */
-            RISCV_VMTL_V(8, &B[tj * K + k], ld, 2, 1);               /* B tile: rows tj,tj+1, cols k,k+1 */
-            RISCV_VMMACC_VV(16, 0, 8, 1);                            /* C += A x B^T */
+            IME_VMTL(0, &A[ti * K + k], ld);               /* A tile: rows ti.., cols k.. */
+            IME_VMTL(8, &B[tj * K + k], ld);               /* B tile: rows tj.., cols k.. */
+            RISCV_VMMACC_VV(16, 0, 8, 1);                                         /* C += A x B^T */
          }
-         RISCV_VMTS_V(16, &C_ime[ti * N + tj], (long)N, 2, 1);
+         IME_VMTS(16, &C_ime[ti * N + tj], (long)N);
       }
 }
 #endif
@@ -158,11 +202,11 @@ static void gemm_ame(void)
    RISCV_AME_ACQUIRE(status, 0L);                 /* TRY */
    const long dtype = 0x40000020L;                /* standard, signed, 32 bits */
    RISCV_MSETTYP(0, dtype); RISCV_MSETTYP(1, dtype); RISCV_MSETTYP(2, dtype);
-   for (int ti = 0; ti < M; ti += 4)
-      for (int tj = 0; tj < N; tj += 4)
+   for (int ti = 0; ti < M; ti += AME_N)
+      for (int tj = 0; tj < N; tj += AME_N)
       {
          RISCV_ASETTYP(0, dtype);                 /* zero the accumulator */
-         for (int k = 0; k < K; k += 4)
+         for (int k = 0; k < K; k += AME_N)
          {
             RISCV_MLS_ST(0, &A[ti * K + k], (long)(K * 4));
             RISCV_MLS_ST(1, &B[tj * K + k], (long)(K * 4));
