@@ -27,25 +27,34 @@ weight rows and of the activation vector over a zero row, `vfmmacc.vv`,
 column 0 of the tile is two outputs); or on the AME draft (`-DUSE_AME`:
 fp32 4x4 squares, `mls.st` of four weight rows and of the vector over
 three zero rows, `mmulbtacc.2d`, `mmov.m.a`, `mss.st`, column 0 is four
-outputs).  The matrix variants keep the RVV dot product for attention and
-for the odd output rows (the 45-entry head).  All four must produce the
-tokens the numpy model produces.  At batch 1 a matrix unit computes a
-full tile for one useful column, which is the batch-1 cost to
-measure; the AME build runs only under the frontend plugin
-(QEMU has no AME) and dies with SIGILL without it.
+outputs); or as tasks for the DMA-attached accelerator (`-DUSE_DMA`: a
+descriptor per weight product, `acc.task`, `acc.wait`).  The matrix
+variants keep the RVV dot product for attention and for the odd output
+rows (the 45-entry head).  All five must produce the tokens the numpy
+model produces.  Decode is batch 1, where a matrix unit computes a full
+tile for one useful column; prefill runs the queued prompt text as one
+batch (`forward_batch`), so every weight matvec is a GEMM over the token
+block and the tiles fill, with a weight tile loaded once per group of
+token tiles (16 accumulators on AME: the whole 64-token window).  The
+AME and DMA builds run only under the frontend plugin (QEMU has neither)
+and die with SIGILL without it.  The guest prints the prefill batch
+sizes, from which the harness derives the exact tile, square and task
+counts.
 
-Harness cases (`testing/test_qemu.py`): `riscv-llm-agent` runs the four
-kernels under the IME QEMU (AME through the plugin) and requires the same
-answers from each; `riscv-llm-simulate` simulates the RVV, IME and AME
-builds in Sniper, reports cycles and instructions per token for each, and
-requires the matrix-unit instruction counts to equal what the model's
-shape implies (per forward, per layer D->3D, D->D, D->4D, 4D->D, then
-D->V: tile or square loads, multiply-accumulates, stores, configuration).
+Harness cases (`testing/test_qemu.py`): `riscv-llm-agent` runs the five
+kernels under the IME QEMU (AME and DMA through the plugin) and requires
+the same answers from each; `riscv-llm-simulate` simulates the RVV, IME
+and AME builds with the units costed in the core, reports cycles and
+instructions per token, and requires the matrix-unit instruction counts
+to equal what the model's shape and the prefill batches imply;
+`riscv-llm-couplings` simulates the AME build on the attached tile and
+the DMA build on the accelerator under the L2 and near-core couplings.
+Results are in ACCELERATOR_COMPONENTS.md, section 7.
 
 Build by hand:
 
     clang --target=riscv64-linux-gnu -march=rv64gcv -mabi=lp64d -O2 -ffreestanding \
-          -nostdlib -static -fuse-ld=lld -Wl,-e,_start [-DUSE_RVV|-DUSE_IME|-DUSE_AME] \
+          -nostdlib -static -fuse-ld=lld -Wl,-e,_start [-DUSE_RVV|-DUSE_IME|-DUSE_AME|-DUSE_DMA] \
           -I test/llm-agent -I include -o agent test/llm-agent/agent.c
     qemu-riscv/build/qemu-riscv64 -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on ./agent
     # the AME build needs the plugin:

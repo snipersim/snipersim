@@ -110,6 +110,21 @@ of a mnemonic is the destination unless the specification names it a
 source, so `mmov.m.a md, as1` reads an accumulator and `agettyp xd, as1`
 writes an X register.
 
+## Xsnacc: an extension that exists only to carry a task interface
+
+The DMA-attached accelerator (ACCELERATOR_COMPONENTS.md) has no instructions of its own; a core
+hands it a descriptor and waits.  So that the same path carries it,
+`tools/riscv/overlay/spec/std/isa/inst/Xsnacc` defines two hints on the
+CUSTOM-3 opcode, `acc.task xs1` and `acc.wait`, classed `acc_task` (a
+footprint load: the descriptor and the input blocks) and `acc_wait` (a
+footprint store: the output block).  The plugin's `acc_backend.cc`
+executes them, the trace carries the blocks as footprints, and the tile
+model's DMA timeline times them.  Two things the split into two
+instructions settles: each carries one direction of memory operands,
+which the performance model's pairing of memory entries with load and
+store micro-ops requires, and the wait is where the output becomes
+visible, which is what a DMA accelerator's completion means.
+
 ## Using a new extension with an unmodified compiler
 
 LLVM has no plugin mechanism for new instructions (its plugins are

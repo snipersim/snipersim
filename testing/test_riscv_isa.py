@@ -27,6 +27,7 @@ KNOWN = [   # word, length, expected name, expected class
     ('0xe2800857', 4, 'vmmacc.vv', 'ime_mma_int'), ('0x52b57827', 4, 'vmts.v', 'ime_tile_store'),
     ('0xa4a0002b', 4, 'ame.release', 'ame_own'), ('0xa38501ab', 4, 'mls.rm', 'ame_load'),
     ('0x944180ab', 4, 'mmulacc.2d', 'ame_mma'), ('0xa3c082ab', 4, 'mmov.m.a', 'ame_move'),
+    ('0x0005007b', 4, 'acc.task', 'acc_task'), ('0x0200007b', 4, 'acc.wait', 'acc_wait'),
 ]
 
 def check_regen():

@@ -47,6 +47,7 @@ extern "C" {
 #include "decoder.h"
 #include "riscv_isa.h"
 #include "ame_backend.h"
+#include "acc_backend.h"
 
 #include "sift_writer.h"
 #include "sift_format.h"
@@ -219,6 +220,7 @@ struct VCPU
    /* The AME backend this hart owns (a functional model; see ame_backend.h)
     * and the X-register handles its instructions read and write. */
    ame::Backend  ame_backend;
+   acc::Backend  acc_backend;      /* the DMA-attached accelerator's functional model (Xsnacc) */
    struct qemu_plugin_register *xreg[32] = {nullptr};
    bool          xreg_found = false;
 };
@@ -489,7 +491,11 @@ void ame_exec(unsigned int cpu_index, void *udata)
    env.error = [ii](const std::string &why) {
       fprintf(stderr, "[AME] error at 0x%" PRIx64 ": %s\n", ii->vaddr, why.c_str());
    };
-   ame::execute(v->ame_backend, ii->op, rvisa::word_of((const uint8_t *)&ii->word, 4), env);
+   const char *cls = rvisa::info(rvisa::class_of(ii->op)).name;
+   if (strncmp(cls, "acc_", 4) == 0)
+      acc::execute(v->acc_backend, ii->op, rvisa::word_of((const uint8_t *)&ii->word, 4), env);
+   else
+      ame::execute(v->ame_backend, ii->op, rvisa::word_of((const uint8_t *)&ii->word, 4), env);
    qemu_plugin_set_pc(ii->vaddr + ii->size);
 }
 
@@ -739,7 +745,7 @@ void tb_trans(SNP_TB_TRANS_ARGS)
                ii->op = rvisa::decode(ii->word, length);
                ii->footprint = rvisa::has(ii->op, rvisa::FLAG_FOOTPRINT);
                const char *cls = rvisa::info(rvisa::class_of(ii->op)).name;
-               ii->ame = ii->op && strncmp(cls, "ame_", 4) == 0;
+               ii->ame = ii->op && (strncmp(cls, "ame_", 4) == 0 || strncmp(cls, "acc_", 4) == 0);   /* executed by a plugin model */
             }
          }
       }

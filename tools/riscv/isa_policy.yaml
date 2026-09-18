@@ -24,7 +24,7 @@ decoder:
 # Extensions a stock assembler lacks: gen_isa.py --header writes inline-asm
 # macros (typed .insn directives) for them, prefixed RISCV_.
 header:
-  extensions: ['^Zvv', '^Ztt']
+  extensions: ['^Zvv', '^Ztt', '^Xsnacc']
   prefix: RISCV_
 
 # Extensions to take from the UDB (regexes over the extension name).
@@ -36,6 +36,7 @@ extensions:
   - '^(S|H|Svinval|Smrnmi|Smctr|Sdext)$'    # privileged: mret, sret, wfi, sfence.vma, ... for system-mode traces
   - '^Zvv.*$'          # IME 0.9
   - '^Ztt$'            # AME (Attached Matrix Extension) draft, from tools/riscv/gen_ame_udb.py (Zvvmm, Zvvfmm, Zvvmtls, Zvvmttls and the datatype subextensions)
+  - '^Xsnacc$'
 
 classes:
   # control flow
@@ -96,6 +97,13 @@ classes:
      name: '^(mmov|mmove|mbcast|mzero)'}
   - {class: ame_ew,         latency: 4,  cpi: fp_addsub, flags: [vector],
      ext: '^Ztt$'}
+  # DMA-attached accelerator task hints (Sniper's Xsnacc overlay): the task's
+  # input operands are the loads of acc.task, its output block the store of
+  # acc.wait, both recorded as footprints by the plugin's functional model.
+  - {class: acc_task,       latency: 1,  cpi: generic,   flags: [load, footprint],
+     ext: '^Xsnacc$', name: '^acc\.task$'}
+  - {class: acc_wait,       latency: 1,  cpi: generic,   flags: [store, footprint],
+     ext: '^Xsnacc$', name: '^acc\.wait$'}
   # vector (RVV 1.0)
   - {class: v_cfg,         latency: 1,  cpi: generic,  flags: [vector],
      name: '^vset(vl|vli|ivli)$'}

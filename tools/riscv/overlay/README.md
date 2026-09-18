@@ -9,3 +9,14 @@ from the AME working group's specification source
 the converter is its UDB source until it does.  Regenerate when the draft
 moves; the converter checks every encoding against the repository's own
 mask/match table.
+
+## Xsnacc: the DMA-attached accelerator's task hints
+
+Sniper's own extension for the DMA-attached accelerator, which has no
+instructions of its own: `acc.task xs1` and `acc.wait` on the CUSTOM-3
+opcode (funct3 000, funct7 0 and 1).  They exist so that the same
+UDB-to-decoder-to-plugin path that carries IME and AME carries a task
+interface: the classes `acc_task` (a footprint load: the descriptor and
+the input blocks) and `acc_wait` (a footprint store: the output block)
+are what the trace records and what the tile's DMA model times.  See
+`frontend/qemu-plugin/README.md`.

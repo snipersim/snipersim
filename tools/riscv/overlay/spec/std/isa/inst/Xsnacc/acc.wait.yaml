@@ -1,0 +1,22 @@
+$schema: "inst_schema.json#"
+kind: instruction
+name: acc.wait
+long_name: Wait for the DMA-attached accelerator's task
+description: |
+  Completes when the accelerator has finished the last acc.task and written its
+  output block Y (T x nout floats) to memory through its port.
+definedBy:
+  extension:
+    name: Xsnacc
+assembly: ""
+encoding:
+  match: "00000010000000000000000001111011"
+  variables: []
+access:
+  s: always
+  u: always
+  vs: always
+  vu: always
+data_independent_timing: false
+operation(): |
+  acc_wait();

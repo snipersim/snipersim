@@ -3,6 +3,7 @@
  */
 
 #include "rob_timer.h"
+#include "ame_tile.h"
 
 #include "tools.h"
 #include "stats.h"
@@ -46,6 +47,7 @@ RobTimer::RobTimer(
          Sim()->getCfg()->getBoolArray("perf_model/core/rob_timer/issue_contention", core->getId())
          ? core_model->createRobContentionModel(core)
          : NULL)
+      , m_ame_tile(AmeTile::create(core))
       , now(core->getDvfsDomain())
       , frontend_stalled_until(SubsecondTime::Zero())
       , in_icache_miss(false)
@@ -509,6 +511,8 @@ SubsecondTime RobTimer::doDispatch(SubsecondTime **cpiComponent)
          entry->dispatched = now;
          ++m_num_in_rob;
          ++m_rs_entries_used;
+         if (m_ame_tile)
+            m_ame_tile->dispatch(uop, now.getElapsedTime());
 
          uops_dispatched++;
          if (uop.isLast())
@@ -584,7 +588,17 @@ void RobTimer::issueInstruction(uint64_t idx, SubsecondTime &next_event)
    RobEntry *entry = &rob[idx];
    DynamicMicroOp &uop = *entry->uop;
 
-   if ((uop.getMicroOp()->isLoad() || uop.getMicroOp()->isStore())
+   const bool on_tile = m_ame_tile && m_ame_tile->owns(uop);
+   if (on_tile)
+   {
+      /* An AME op executes on the attached tile: its time, and its rows'
+         memory accesses through the tile's own port, come from there. */
+      HitWhere::where_t hw = HitWhere::UNKNOWN;
+      uop.setExecLatency(m_ame_tile->issue(uop, now, hw));
+      if (uop.getMicroOp()->isLoad() || uop.getMicroOp()->isStore())
+         uop.setDCacheHitWhere(hw);
+   }
+   else if ((uop.getMicroOp()->isLoad() || uop.getMicroOp()->isStore())
       && uop.getDCacheHitWhere() == HitWhere::UNKNOWN)
    {
       MemoryResult res = m_core->accessMemory(
@@ -603,7 +617,11 @@ void RobTimer::issueInstruction(uint64_t idx, SubsecondTime &next_event)
       uop.setDCacheHitWhere(res.hit_where);
    }
 
-   if (uop.getMicroOp()->isLoad())
+   if (on_tile)
+   {
+      /* the tile's rows do not occupy the core's load and store queues */
+   }
+   else if (uop.getMicroOp()->isLoad())
    {
       load_queue.getCompletionTime(now, uop.getExecLatency() * now.getPeriod(), uop.getAddress().address);
    }

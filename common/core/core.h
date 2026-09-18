@@ -75,6 +75,8 @@ class Core
       {
          PAGE_TABLE_WALK = 0,
          NORMAL,
+         ACCEL_L2,      /* an attached accelerator's port entering at L2: the L1 is bypassed (AmeTile) */
+         ACCEL_LLC,     /* ... entering at the last-level cache: L1 and L2 are bypassed */
          NUM_MEM_ORIGINS
       };
 
@@ -104,6 +106,9 @@ class Core
       MemoryResult nativeMemOp(lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
 
       void accessMemoryFast(bool icache, mem_op_t mem_op_type, IntPtr address);
+      /* A modeled access entering the hierarchy at a chosen cache level: the
+         port of an attached accelerator (see AmeTile). */
+      MemoryResult accessMemoryAt(MemComponent::component_t level, mem_op_t mem_op_type, IntPtr address, UInt32 size, IntPtr eip, SubsecondTime now);
 
       void logMemoryHit(bool icache, mem_op_t mem_op_type, IntPtr address, MemModeled modeled = MEM_MODELED_NONE, IntPtr eip = 0);
       bool countInstructions(IntPtr address, UInt32 count);

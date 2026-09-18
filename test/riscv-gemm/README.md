@@ -1,6 +1,8 @@
 # gemm3: vector and matrix space, validated four ways
 
-`gemm3.c` computes one int32 matrix product, C = A x B^T (8x8x8), three
+`gemm3.c` computes one int32 matrix product, C = A x B^T (8x8x8 by
+default; `-DM -DN -DK` for other sizes, `-DAME_REPEAT=n` repeats the AME
+path so it dominates a timing run), three
 ways in one binary -- a scalar reference, RVV 1.0 (a vector dot product per
 element) and IME 0.9 (2x2 tiles through `include/riscv_insn.h`) -- and
 compares them: exit 100 when all agree, otherwise 4 plus a bit mask of
@@ -13,7 +15,8 @@ AME build dies with SIGILL when run without the plugin.  It is
 freestanding and builds with a stock clang (`-march=rv64gcv
 -ffreestanding`); `-DPLATFORM_HTIF -DNO_IME -Wl,-T,sail.ld` makes the
 bare-metal variant the sail-riscv model runs (RAM at 0x80000000, HTIF
-exit, vector unit enabled in mstatus).
+exit, an assembly entry that sets the stack before any C code, vector
+unit enabled in mstatus).
 
 Three harness cases in `testing/test_qemu.py` use it:
 
@@ -28,6 +31,10 @@ Three harness cases in `testing/test_qemu.py` use it:
   `expected_counts.py --ame`: the AME class counts (ownership,
   configuration, square loads and stores, `mmulbtacc.2d`, moves) and the
   extra footprint bytes must be exact as well.
+- `riscv-ame-couplings`: the 32x32x32 AME product, repeated 16 times, on
+  the attached tile (`ame_tile.cc`) under every coupling: tile ops,
+  rows, squares and transfer-engine prefetches must equal what the square
+  geometry implies, and the cycle count must respond to the coupling.
 - `riscv-gemm-sail`: the scalar-versus-RVV comparison on the sail-riscv
   RVV 1.0 model at VLEN=128, the golden functional reference (the model
   has no IME; the IME semantics are checked against the scalar reference

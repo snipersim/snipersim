@@ -1,0 +1,18 @@
+# Sniper's task interface for a DMA-attached accelerator:
+# two hint-shaped instructions on the CUSTOM-3 opcode that a core issues to a unit which is
+# not an ISA extension.  QEMU executes them through the frontend plugin (acc_backend.cc).
+$schema: "ext_schema.json#"
+kind: extension
+name: Xsnacc
+long_name: Sniper accelerator task hints (DMA-attached accelerator)
+type: unprivileged
+description: |
+  acc.task hands a descriptor (X block, weights, bias, output block, T x nin x nout) to a
+  DMA-attached accelerator, which streams the operands through its own port, computes
+  Y = X W^T + bias, and delivers Y when acc.wait completes.  The core continues after
+  acc.task; acc.wait is the synchronisation point.  Encodings: CUSTOM-3 (opcode 1111011),
+  funct3 000, funct7 0000000 (acc.task, rs1 = descriptor address) and 0000001 (acc.wait).
+versions:
+  - version: "0.1.0"
+    state: development
+    ratification_date: null

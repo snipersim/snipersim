@@ -269,3 +269,21 @@ line, on any exit but 100, and on any class count or footprint byte that
 differs from what `tools/riscv/expected_counts.py --ame` derives from the
 square geometry.  The cost of the route is one translation-block exit per
 instruction.
+
+## The DMA-attached accelerator: tasks executed by the plugin
+
+The DMA-attached accelerator is
+not an ISA extension: the core hands it a task descriptor in memory and
+waits for the result.  Sniper's `Xsnacc` overlay
+(`tools/riscv/overlay/spec/std/isa/inst/Xsnacc`) defines the two hints
+that carry this, `acc.task xs1` (descriptor address) and `acc.wait`, on
+the CUSTOM-3 opcode, and the plugin executes them exactly as it executes
+AME: `acc_backend.{h,cc}` reads the descriptor (`{X, W, bias, Y, T, nin,
+nout}`), computes `Y = X W^T + bias` on the host, records the descriptor
+and every input block as one contiguous footprint of `acc.task`, and at
+`acc.wait` writes `Y` to guest memory and records it as the wait's
+footprint.  In the simulation those footprints are what the accelerator's
+DMA streams through its port (`ame_tile.cc`); the core retires `acc.task`
+at once and stalls only at `acc.wait`, for whatever remains of the
+transfer-compute-transfer timeline.  `test/llm-agent/agent.c -DUSE_DMA`
+issues every weight product as a task; `riscv-llm-couplings` runs it.

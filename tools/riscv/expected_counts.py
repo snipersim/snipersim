@@ -6,7 +6,7 @@ derived from the specification's semantics, checked against a Sniper run.
 
 The RVV path does one K-long dot product per C element: two unit-stride
 vector loads (vle32.v: vl elements of SEW/8 bytes each, contiguous), one
-vmul.vv, one vmv.s.x, one vredsum.vs, one vmv.x.s, one vsetvli.  The IME
+vmacc.vv per vector-length chunk of K, one vmv.v.i, one vmv.s.x, one vredsum.vs, one vmv.x.s, a vsetvli before, per chunk and after.  The IME
 path works on tiles whose shape the UDB defines through the vtype geometry
 (vmtl.v: `n = M * linesize` elements with `linesize = lambda * LMUL`,
 `M = (VLEN/SEW) / lambda`; each element SEW/8 bytes; element i lives at
@@ -29,15 +29,17 @@ def expected(vlen, sew, m, n, k, lam=2, lmul=1, ame=False):
     tiles_c = (m // rows) * (n // linesize)
     kslices = k // linesize
     e = {}
-    e['riscv.v_cfg'] = m * n + 1                     # one vsetvli per dot product, one for the IME path
-    e['riscv.v_load'] = 2 * m * n
-    e['riscv.v_int_mul'] = m * n                     # vmul.vv
-    e['riscv.v_int_alu'] = 3 * m * n                 # vmv.s.x, vredsum.vs, vmv.x.s
+    vlmax = 2 * epr                                  # the dot product runs e32,m2
+    iters = (k + vlmax - 1) // vlmax                 # vector-length chunks of the K loop
+    e['riscv.v_cfg'] = (2 + iters) * m * n + 1       # vsetvli before, per chunk and after each dot product; one for the IME path
+    e['riscv.v_load'] = 2 * m * n * iters
+    e['riscv.v_int_mul'] = m * n * iters             # vmacc.vv per chunk
+    e['riscv.v_int_alu'] = 4 * m * n                 # vmv.v.i, vmv.s.x, vredsum.vs, vmv.x.s
     e['riscv.ime_cfg'] = 1                           # vsetlambda
     e['riscv.ime_tile_load'] = tiles_c * (1 + 2 * kslices)
     e['riscv.ime_tile_store'] = tiles_c
     e['riscv.ime_mma_int'] = tiles_c * kslices
-    v_bytes = 2 * m * n * k * (sew // 8)             # each vle32.v moves vl=K elements
+    v_bytes = 2 * m * n * k * (sew // 8)             # the vle32.v chunks together move K elements per operand
     t_bytes = (e['riscv.ime_tile_load'] + e['riscv.ime_tile_store']) * tile_elems * (sew // 8)
     e['riscv.span_bytes'] = v_bytes + t_bytes
     e['riscv.spans'] = None                          # lines touched: layout-dependent, reported, not asserted
@@ -88,7 +90,7 @@ def main():
         flag = 'ok  ' if got >= cnt else 'FAIL'
         ok &= got >= cnt
         print('%s %-24s at least %6d  got %6s' % (flag, key, cnt, got))
-    print('compute: %d vmmacc.vv over %d tiles, %d vmul.vv; memory: %d bytes of vector/tile footprint'
+    print('compute: %d vmmacc.vv over %d tiles, %d vmacc.vv; memory: %d bytes of vector/tile footprint'
           % (e['riscv.ime_mma_int'], e['riscv.ime_tile_store'], e['riscv.v_int_mul'], e['riscv.span_bytes']))
     return 0 if ok else 1
 

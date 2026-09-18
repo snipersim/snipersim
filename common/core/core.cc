@@ -265,6 +265,11 @@ Core::readInstructionMemory(IntPtr address, UInt32 instruction_size)
              Core::NONE, Core::READ, address & blockmask, NULL, getMemoryManager()->getCacheBlockSize(), MEM_MODELED_COUNT_TLBTIME, 0, SubsecondTime::MaxTime());
 }
 
+MemoryResult Core::accessMemoryAt(MemComponent::component_t level, mem_op_t mem_op_type, IntPtr address, UInt32 size, IntPtr eip, SubsecondTime now)
+{
+   return initiateMemoryAccess(level, Core::NONE, mem_op_type, address, NULL, size, Core::MEM_MODELED_RETURN, eip, now);
+}
+
 void Core::accessMemoryFast(bool icache, mem_op_t mem_op_type, IntPtr address)
 {
    if (m_cheetah_manager && icache == false)

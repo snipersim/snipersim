@@ -1,0 +1,26 @@
+$schema: "inst_schema.json#"
+kind: instruction
+name: acc.task
+long_name: Issue a task to the DMA-attached accelerator
+description: |
+  X[xs1] points at a task descriptor {X, W, bias, Y, T, nin, nout}.  The accelerator
+  reads the descriptor and the input operands (X: T x nin floats, W: nout x nin, bias:
+  nout) through its own memory port and computes Y = X W^T + bias; the result is
+  delivered by acc.wait.  The core does not wait.
+definedBy:
+  extension:
+    name: Xsnacc
+assembly: xs1
+encoding:
+  match: "000000000000-----000000001111011"
+  variables:
+    - name: xs1
+      location: 19-15
+access:
+  s: always
+  u: always
+  vs: always
+  vu: always
+data_independent_timing: false
+operation(): |
+  acc_task(X[xs1]);

@@ -61,4 +61,5 @@ SNIPER_QEMU_RISCV="$QEMU_RISCV" SNIPER_RISCV_CC="$CC" \
                                 --case riscv-ime-trace --case riscv-ime-simulate \
                                 --case riscv-gemm-verify --case riscv-gemm-simulate --case riscv-gemm-sail \
                                 --case riscv-llm-agent --case riscv-llm-simulate \
-                                --case riscv-ame-verify --case riscv-ame-simulate
+                                --case riscv-ame-verify --case riscv-ame-simulate --case riscv-ame-couplings \
+                                --case riscv-llm-couplings

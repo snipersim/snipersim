@@ -11,6 +11,8 @@
 
 #include <deque>
 
+class AmeTile;
+
 class RobTimer
 {
 private:
@@ -61,6 +63,7 @@ private:
    uint64_t m_num_in_rob;
    uint64_t m_rs_entries_used;
    RobContention *m_rob_contention;
+   AmeTile *m_ame_tile;               /* the attached matrix tile, NULL when AME is costed in the core */
 
    ComponentTime now;
    SubsecondTime frontend_stalled_until;

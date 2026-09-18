@@ -24,8 +24,10 @@
  * fp32 2x2 tiles, vfmmacc.vv, the activation vector as the top row of the
  * B tile over a zero row) or -DUSE_AME (the AME draft, fp32 4x4 squares,
  * mmulbtacc.2d, the vector as the top row of a square); both keep the RVV
- * dot product for attention.  At batch 1 the unit computes N rows of its
- * tile for one useful column, which is the point of measuring it. */
+ * dot product for attention.  Decode is batch 1: the unit computes N rows
+ * of its tile for one useful column.  Prefill runs the queued prompt text
+ * as one batch (forward_batch), where each weight matvec becomes a GEMM
+ * over the token block and the tiles fill: the class B shape. */
 
 #include <stdint.h>
 #include "model_weights.h"
@@ -83,7 +85,7 @@ static float tanhf_(float x)
 static float sqrtf_(float x) { float r; __asm__("fsqrt.s %0, %1" : "=f"(r) : "f"(x)); return r; }
 
 /* ---------------------------------------------------------- kernels */
-#if defined(USE_IME) || defined(USE_AME)
+#if defined(USE_IME) || defined(USE_AME) || defined(USE_DMA)
 #include "riscv_insn.h"
 #define USE_RVV
 #endif
@@ -123,7 +125,24 @@ static float dot(const float *a, const float *b, long n)
 #endif
 
 /* y[o] = bias[o] + dot(x, W[o]) for o < nout; W is [nout][nin] */
-#if !defined(USE_IME) && !defined(USE_AME)
+#if defined(USE_DMA)
+#undef MATVEC_NAME
+#define MATVEC_NAME "dma"
+/* The DMA-attached accelerator (Xsnacc): every weight product is a task
+ * described in memory; the core issues it and waits for the result. */
+struct acc_desc { const float *x, *w, *bias; float *y; unsigned t, nin, nout, pad; };
+static struct acc_desc acc_d __attribute__((aligned(64)));
+static void acc_run(float *y, const float *x, const float *W, const float *bias, int T, int nin, int nout)
+{
+   acc_d.x = x; acc_d.w = W; acc_d.bias = bias; acc_d.y = y; acc_d.t = (unsigned)T; acc_d.nin = (unsigned)nin; acc_d.nout = (unsigned)nout;
+   RISCV_ACC_TASK(&acc_d);
+   RISCV_ACC_WAIT();
+}
+static void matvec(float *y, const float *x, const float *W, const float *bias, int nin, int nout)
+{
+   acc_run(y, x, W, bias, 1, nin, nout);
+}
+#elif !defined(USE_IME) && !defined(USE_AME)
 static void matvec(float *y, const float *x, const float *W, const float *bias, int nin, int nout)
 {
    for (int o = 0; o < nout; o++)
@@ -203,6 +222,107 @@ static float gelu(float x)
    return 0.5f * x * (1.0f + tanhf_(u));
 }
 
+
+/* ---------------------------------------------------------- prefill: the GEMM
+ * Y[t][o] = bias[o] + sum_k Xm[t][k] * W[o][k] for T tokens at once (Y and
+ * Xm with their own row strides).  The class B shape: the T x nin activation
+ * block against the nout x nin weights, so a matrix unit fills every column
+ * of its tile and a weight tile is loaded once per group of token tiles
+ * instead of once per token. */
+#define SEL16(i, OP) do { switch (i) { \
+   case 0: OP(0); break; case 1: OP(1); break; case 2: OP(2); break; case 3: OP(3); break; \
+   case 4: OP(4); break; case 5: OP(5); break; case 6: OP(6); break; case 7: OP(7); break; \
+   case 8: OP(8); break; case 9: OP(9); break; case 10: OP(10); break; case 11: OP(11); break; \
+   case 12: OP(12); break; case 13: OP(13); break; case 14: OP(14); break; case 15: OP(15); break; } } while (0)
+
+#if defined(USE_IME)
+/* 2x2 tiles: token pair x output pair; accumulators v16..v31 hold 16 token
+ * tiles (32 tokens), so a weight tile is loaded once per 32 tokens. */
+#define IME_ZERO(a)  __asm__ volatile("vmv.v.i v" #a ", 0")
+#define IME_MMA(a)   RISCV_VFMMACC_VV(a, 0, 8, 1)
+#define IME_STORE(a) RISCV_VMTS_V(a, yp, (long)ldy, 2, 1)
+#define SELV(i, OP) do { switch (i) { \
+   case 0: OP(16); break; case 1: OP(17); break; case 2: OP(18); break; case 3: OP(19); break; \
+   case 4: OP(20); break; case 5: OP(21); break; case 6: OP(22); break; case 7: OP(23); break; \
+   case 8: OP(24); break; case 9: OP(25); break; case 10: OP(26); break; case 11: OP(27); break; \
+   case 12: OP(28); break; case 13: OP(29); break; case 14: OP(30); break; case 15: OP(31); break; } } while (0)
+static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
+{
+   long old;
+   const int TB = T / 2;
+   __asm__ volatile("vsetvli t0, zero, e32, m1, ta, ma" : : : "t0");
+   RISCV_VSETLAMBDA(old, 2L); (void)old;
+   for (int o = 0; o < nout; o += 2)
+      for (int g = 0; g < TB; g += 16)
+      {
+         const int nb = TB - g < 16 ? TB - g : 16;
+         for (int tb = 0; tb < nb; tb++) SELV(tb, IME_ZERO);
+         for (int k = 0; k < nin; k += 2)
+         {
+            RISCV_VMTL_V(8, W + (long)o * nin + k, (long)nin, 2, 1);           /* W tile: rows o,o+1 */
+            for (int tb = 0; tb < nb; tb++)
+            {
+               RISCV_VMTL_V(0, Xm + (long)(g + tb) * 2 * ldx + k, (long)ldx, 2, 1);   /* X tile: two tokens */
+               SELV(tb, IME_MMA);                                               /* C += X x W^T */
+            }
+         }
+         for (int tb = 0; tb < nb; tb++)
+         {
+            float *yp = Y + (long)(g + tb) * 2 * ldy + o;
+            SELV(tb, IME_STORE);
+            if (bias) { yp[0] += bias[o]; yp[1] += bias[o + 1]; yp[ldy] += bias[o]; yp[ldy + 1] += bias[o + 1]; }
+         }
+      }
+   for (int t = TB * 2; t < T; t++) matvec(Y + (long)t * ldy, Xm + (long)t * ldx, W, bias, nin, nout);
+}
+#elif defined(USE_AME)
+/* 4x4 squares: four tokens x four outputs; the 16 accumulators hold 16
+ * token squares (64 tokens, the whole window), so a weight square is loaded
+ * once per prefill. */
+#define AME_SET(a)  RISCV_ASETTYP(a, AME_FP32)
+#define AME_MMA(a)  RISCV_MMULBTACC_2D(a, 0, 1)
+#define AME_MOV(a)  RISCV_MMOV_M_A(2, a)
+static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
+{
+   const int TB = T / 4;
+   for (int o = 0; o < nout; o += 4)
+      for (int g = 0; g < TB; g += 16)
+      {
+         const int nb = TB - g < 16 ? TB - g : 16;
+         for (int tb = 0; tb < nb; tb++) SEL16(tb, AME_SET);                      /* zero the accumulators */
+         for (int k = 0; k < nin; k += 4)
+         {
+            RISCV_MLS_ST(1, W + (long)o * nin + k, (long)nin * 4);                 /* W square: rows o..o+3 */
+            for (int tb = 0; tb < nb; tb++)
+            {
+               RISCV_MLS_ST(0, Xm + (long)(g + tb) * 4 * ldx + k, (long)ldx * 4);  /* X square: four tokens */
+               SEL16(tb, AME_MMA);                                                 /* acc += X x W^T */
+            }
+         }
+         for (int tb = 0; tb < nb; tb++)
+         {
+            float *yp = Y + (long)(g + tb) * 4 * ldy + o;
+            SEL16(tb, AME_MOV);
+            RISCV_MSS_ST(2, yp, (long)ldy * 4);
+            if (bias) for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) yp[i * ldy + j] += bias[o + j];
+         }
+      }
+   for (int t = TB * 4; t < T; t++) matvec(Y + (long)t * ldy, Xm + (long)t * ldx, W, bias, nin, nout);
+}
+#elif defined(USE_DMA)
+static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
+{
+   /* the task takes contiguous blocks: the agent's buffers have ldx == nin and ldy == nout */
+   if (ldx != nin || ldy != nout) { for (int t = 0; t < T; t++) matvec(Y + (long)t * ldy, Xm + (long)t * ldx, W, bias, nin, nout); return; }
+   acc_run(Y, Xm, W, bias, T, nin, nout);
+}
+#else
+static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
+{
+   for (int t = 0; t < T; t++) matvec(Y + (long)t * ldy, Xm + (long)t * ldx, W, bias, nin, nout);
+}
+#endif
+
 /* ---------------------------------------------------------- the model */
 #define HD (GPT_D / GPT_H)
 static float Kc[GPT_L][GPT_T][GPT_D], Vc[GPT_L][GPT_T][GPT_D];   /* KV cache */
@@ -259,17 +379,68 @@ static void forward(int tok)
    pos++;
 }
 
+/* T tokens in at positions pos..pos+T-1 as one batch, logits of the last
+ * one out.  The same arithmetic as T calls of forward() (the numpy check
+ * still holds), but every weight matvec is one GEMM over the token block. */
+static float Xb[GPT_T][GPT_D], Hb[GPT_T][GPT_D], QKVb[GPT_T][3 * GPT_D], ATTb[GPT_T][GPT_D], Ob[GPT_T][GPT_D], M1b[GPT_T][4 * GPT_D], M2b[GPT_T][GPT_D];
+static void forward_batch(const int *toks, int T)
+{
+   const float scale = 1.0f / sqrtf_((float)HD);
+   for (int t = 0; t < T; t++)
+      for (int i = 0; i < GPT_D; i++) Xb[t][i] = W(OFF_WTE)[toks[t] * GPT_D + i] + W(OFF_WPE)[(pos + t) * GPT_D + i];
+   for (int l = 0; l < GPT_L; l++)
+   {
+      const int *L = LOFF[l];
+      for (int t = 0; t < T; t++) layernorm(Hb[t], Xb[t], W(L[0]), W(L[1]), GPT_D);
+      gemm(&QKVb[0][0], 3 * GPT_D, &Hb[0][0], GPT_D, W(L[2]), W(L[3]), T, GPT_D, 3 * GPT_D);
+      for (int t = 0; t < T; t++)
+         for (int i = 0; i < GPT_D; i++) { Kc[l][pos + t][i] = QKVb[t][GPT_D + i]; Vc[l][pos + t][i] = QKVb[t][2 * GPT_D + i]; }
+      for (int t = 0; t < T; t++)
+         for (int hh = 0; hh < GPT_H; hh++)
+         {
+            const float *q = QKVb[t] + hh * HD;
+            float mx = -1e30f;
+            for (int u = 0; u <= pos + t; u++) { scores[u] = dot(q, &Kc[l][u][hh * HD], HD) * scale; if (scores[u] > mx) mx = scores[u]; }
+            float sum = 0;
+            for (int u = 0; u <= pos + t; u++) { scores[u] = expf_(scores[u] - mx); sum += scores[u]; }
+            for (int i = 0; i < HD; i++) ATTb[t][hh * HD + i] = 0;
+            for (int u = 0; u <= pos + t; u++) { float pr = scores[u] / sum; for (int i = 0; i < HD; i++) ATTb[t][hh * HD + i] += pr * Vc[l][u][hh * HD + i]; }
+         }
+      gemm(&Ob[0][0], GPT_D, &ATTb[0][0], GPT_D, W(L[4]), W(L[5]), T, GPT_D, GPT_D);
+      for (int t = 0; t < T; t++) for (int i = 0; i < GPT_D; i++) Xb[t][i] += Ob[t][i];
+      for (int t = 0; t < T; t++) layernorm(Hb[t], Xb[t], W(L[6]), W(L[7]), GPT_D);
+      gemm(&M1b[0][0], 4 * GPT_D, &Hb[0][0], GPT_D, W(L[8]), W(L[9]), T, GPT_D, 4 * GPT_D);
+      for (int t = 0; t < T; t++) for (int i = 0; i < 4 * GPT_D; i++) M1b[t][i] = gelu(M1b[t][i]);
+      gemm(&M2b[0][0], GPT_D, &M1b[0][0], 4 * GPT_D, W(L[10]), W(L[11]), T, 4 * GPT_D, GPT_D);
+      for (int t = 0; t < T; t++) for (int i = 0; i < GPT_D; i++) Xb[t][i] += M2b[t][i];
+   }
+   layernorm(h, Xb[T - 1], W(OFF_LNF_G), W(OFF_LNF_B), GPT_D);     /* only the last token's logits are used */
+   matvec(logits, h, W(OFF_HEAD), 0, GPT_D, GPT_V);
+   pos += T;
+}
+
 /* ---------------------------------------------------------- tokens and the agent loop */
 static int stoi[256];
 static long n_prefill, n_generated;
+static int pending[GPT_T], npending;
+static int batches[64], nbatches;
 
-static void feed(const char *s)                 /* prefill: consume text, discard logits */
+static void feed(const char *s)                 /* prefill: queue text; it runs as one batch before the next generate */
 {
-   for (; *s; s++) { if (pos >= GPT_T) return; forward(stoi[(unsigned char)*s]); n_prefill++; }
+   for (; *s; s++) { if (pos + npending >= GPT_T) return; pending[npending++] = stoi[(unsigned char)*s]; }
+}
+static void flush_prefill(void)
+{
+   if (!npending) return;
+   if (nbatches < 64) batches[nbatches++] = npending;
+   forward_batch(pending, npending);
+   n_prefill += npending;
+   npending = 0;
 }
 static int generate(char *dst, int max)         /* greedy until '\n' (kept out of dst) or the window ends */
 {
    int n = 0;
+   flush_prefill();
    while (n < max && pos < GPT_T)
    {
       int best = 0;
@@ -325,6 +496,7 @@ void _start(void)
       if (!correct) bad |= 2;
    }
    out("tokens: "); outn(n_prefill); out(" prefilled, "); outn(n_generated); out(" generated\n");
+   out("prefill batches:"); for (int i = 0; i < nbatches; i++) { out(" "); outn(batches[i]); } out("\n");
 #ifdef USE_AME
    RISCV_AME_RELEASE();
 #endif

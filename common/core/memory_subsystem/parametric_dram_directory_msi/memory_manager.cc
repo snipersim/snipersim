@@ -664,15 +664,32 @@ namespace ParametricDramDirectoryMSI
 				dram_accesses_during_translation));
 		}
 		
-		// Perform the memory access -> send the request to the cache hierarchy
-		HitWhere::where_t result = m_cache_cntlrs[mem_component]->processMemOpFromCore(
+		// Perform the memory access -> send the request to the cache hierarchy.
+		// A request for a level below L1 is an attached accelerator's port
+		// (AmeTile): it still enters through the L1 controller, which owns the
+		// locks, but carries an origin that makes the levels above the port
+		// pass it down without looking it up or filling themselves.
+		Core::mem_origin_t origin = Core::mem_origin_t::NORMAL;
+		MemComponent::component_t entry = mem_component;
+		if (mem_component == MemComponent::L2_CACHE)
+		{
+			origin = Core::mem_origin_t::ACCEL_L2;
+			entry = MemComponent::L1_DCACHE;
+		}
+		else if (mem_component > MemComponent::L2_CACHE)
+		{
+			origin = Core::mem_origin_t::ACCEL_LLC;
+			entry = MemComponent::L1_DCACHE;
+		}
+		HitWhere::where_t result = m_cache_cntlrs[entry]->processMemOpFromCore(
 			eip,
 			lock_signal,
 			mem_op_type,
 			physical_address, offset,
 			data_buf, data_length,
 			modeled == Core::MEM_MODELED_NONE || modeled == Core::MEM_MODELED_COUNT ? false : true,
-			modeled == Core::MEM_MODELED_NONE ? false : true, CacheBlockInfo::block_type_t::DATA, SubsecondTime::Zero());
+			modeled == Core::MEM_MODELED_NONE ? false : true, CacheBlockInfo::block_type_t::DATA, SubsecondTime::Zero(),
+			origin);
 
 		// Clear the MetadataContext after the data access
 		MetadataContext::clear(getCore()->getId());

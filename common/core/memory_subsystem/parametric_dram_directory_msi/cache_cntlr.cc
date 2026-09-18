@@ -675,6 +675,76 @@ namespace ParametricDramDirectoryMSI
 
 		SubsecondTime t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
 
+		/* An attached accelerator's port enters the hierarchy below this L1
+		   (AmeTile, couplings oca_l2, oca_llc, nca): the request goes to the
+		   next level the way an L1 miss does, but this L1 is neither looked up
+		   nor filled.  A write invalidates the core's copy of the line, as a
+		   port at L2 would through coherence. */
+		if (mem_origin == Core::mem_origin_t::ACCEL_L2 || mem_origin == Core::mem_origin_t::ACCEL_LLC)
+		{
+			LOG_ASSERT_ERROR(m_next_cache_cntlr != NULL, "an accelerator port below L1 needs a next cache level");
+#ifndef PRIVATE_L2_OPTIMIZATION
+			if (!lock_all)
+				acquireStackLock(ca_address, true);
+#endif
+			if (mem_op_type == Core::WRITE && getCacheState(ca_address) != CacheState::INVALID)
+			{
+				if (getCacheState(ca_address) == CacheState::MODIFIED)
+				{
+					/* the core's dirty copy goes to the next level first, as an eviction's would */
+					Byte buf[getCacheBlockSize()];
+					retrieveCacheBlock(ca_address, buf, ShmemPerfModel::_USER_THREAD, false);
+					if (!m_cache_writethrough)
+						m_next_cache_cntlr->writeCacheBlock(ca_address, 0, buf, getCacheBlockSize(), ShmemPerfModel::_USER_THREAD);
+					setCacheState(ca_address, CacheState::SHARED);
+				}
+				invalidateCacheBlock(ca_address);
+			}
+			hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, offset, data_length, modeled, count, block_type, Prefetch::NONE, t_start, false, mem_origin);
+			if (hit_where == HitWhere::MISS)
+			{
+				/* last level miss, a message has been sent */
+#ifdef PRIVATE_L2_OPTIMIZATION
+				releaseLock(ca_address);
+#else
+				releaseStackLock(ca_address);
+#endif
+				waitForNetworkThread();
+				wakeUpNetworkThread();
+				hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, offset, data_length, false, false, block_type, Prefetch::NONE, t_start, true, mem_origin);
+				LOG_ASSERT_ERROR(hit_where != HitWhere::MISS, "Tried to read in next-level cache, but data is already gone");
+#ifdef PRIVATE_L2_OPTIMIZATION
+				releaseStackLock(ca_address, true);
+#endif
+			}
+#ifndef PRIVATE_L2_OPTIMIZATION
+			if (!lock_all)
+				releaseStackLock(ca_address, true);
+#endif
+			{
+				ScopedLock sl(getLock());
+				if (count)
+					stats.total_latency += getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD) - t_start;
+#ifdef PRIVATE_L2_OPTIMIZATION
+				if (lock_signal != Core::LOCK)
+					releaseLock(ca_address);
+#else
+				if (lock_signal != Core::LOCK)
+				{
+					if (lock_all)
+						releaseStackLock(ca_address);
+					else
+						releaseLock(ca_address);
+				}
+#endif
+				if (mem_op_type == Core::WRITE)
+					stats.stores_where[block_type][hit_where]++;
+				else
+					stats.loads_where[block_type][hit_where]++;
+			}
+			return hit_where;
+		}
+
 		bool cache_hit = false;
 		bool prefetch_hit = false;
 		CacheBlockInfo *cache_block_info;
@@ -1255,6 +1325,17 @@ namespace ParametricDramDirectoryMSI
 #else
 		bool have_write_lock_internal = true;
 #endif
+		/* An attached accelerator's port enters below this cache: pass the
+		   request down untouched (no lookup, no fill at this level). */
+		if (mem_origin == Core::mem_origin_t::ACCEL_LLC && m_next_cache_cntlr != NULL)
+		{
+			HitWhere::where_t below = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, address, offset, data_length, modeled, count, block_type, isPrefetch, t_issue, have_write_lock_internal, mem_origin);
+#ifdef PRIVATE_L2_OPTIMIZATION
+			if (!have_write_lock && m_shared_cores > 1)
+				releaseStackLock(address, true);
+#endif
+			return below;
+		}
 		// std:: cout << "Block type = " << block_type << std::endl;
 		// Check if this is any type of metadata request using the helper function
 		bool metadata_request = CacheBlockInfo::isMetadataBlockType(block_type);

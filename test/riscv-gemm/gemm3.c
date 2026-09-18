@@ -25,9 +25,15 @@
 #include "riscv_insn.h"
 #endif
 
+#ifndef M
 #define M 8
+#endif
+#ifndef N
 #define N 8
+#endif
+#ifndef K
 #define K 8
+#endif
 
 static int32_t A[M * K] __attribute__((aligned(64)));
 static int32_t B[N * K] __attribute__((aligned(64)));
@@ -87,22 +93,31 @@ static void gemm_scalar(void)
  * an element-wise multiply, a reduction, and the scalar moved out. */
 static void gemm_rvv(void)
 {
-   const long vl = K;
    for (int i = 0; i < M; i++)
       for (int j = 0; j < N; j++)
       {
          int32_t s;
+         const int32_t *a = &A[i * K], *b = &B[j * K];
+         long n = K;
          __asm__ volatile(
-            "vsetvli t0, %[vl], e32, m2, ta, ma\n\t"
+            "vsetvli t0, zero, e32, m2, ta, ma\n\t"
+            "vmv.v.i v6, 0\n\t"
+            "1:\n\t"
+            "vsetvli t0, %[n], e32, m2, tu, mu\n\t"       /* tail undisturbed: upper lanes keep their sums */
             "vle32.v v2, (%[a])\n\t"
             "vle32.v v4, (%[b])\n\t"
-            "vmul.vv v6, v2, v4\n\t"
+            "vmacc.vv v6, v2, v4\n\t"
+            "slli t1, t0, 2\n\t"
+            "add %[a], %[a], t1\n\t"
+            "add %[b], %[b], t1\n\t"
+            "sub %[n], %[n], t0\n\t"
+            "bnez %[n], 1b\n\t"
+            "vsetvli t0, zero, e32, m2, ta, ma\n\t"
             "vmv.s.x v8, zero\n\t"
             "vredsum.vs v8, v6, v8\n\t"
             "vmv.x.s %[s], v8"
-            : [s] "=r"(s)
-            : [vl] "r"(vl), [a] "r"(&A[i * K]), [b] "r"(&B[j * K])
-            : "t0", "memory");
+            : [s] "=r"(s), [a] "+r"(a), [b] "+r"(b), [n] "+r"(n)
+            : : "t0", "t1", "memory");
          C_rvv[i * N + j] = s;
       }
 }
@@ -169,7 +184,20 @@ static int same(const int32_t *x, const int32_t *y)
    return 1;
 }
 
+#ifdef PLATFORM_HTIF
+/* Bare metal: nothing has set a stack when _start runs, and the compiler may
+   spill registers in the first prologue, so the entry is assembly that points
+   sp at a static stack before any C code. */
+static char stack_area[8192] __attribute__((aligned(16), used));
+__asm__(".section .text.start\n"
+        ".globl _start\n"
+        "_start:\n"
+        "  lla sp, stack_area + 8192\n"
+        "  j start_c\n");
+void start_c(void)
+#else
 void __attribute__((section(".text.start"))) _start(void)
+#endif
 {
    platform_init();
    fill();
@@ -181,8 +209,14 @@ void __attribute__((section(".text.start"))) _start(void)
    bad |= same(C_ref, C_ime) ? 0 : 2;
 #endif
 #ifdef USE_AME
-   gemm_ame();
-   bad |= same(C_ref, C_ame) ? 0 : 4;
+#ifndef AME_REPEAT
+#define AME_REPEAT 1                              /* more repeats make the AME path dominate a timing run */
+#endif
+   for (int rep = 0; rep < AME_REPEAT; rep++)
+   {
+      gemm_ame();
+      bad |= same(C_ref, C_ame) ? 0 : 4;
+   }
 #endif
    sys_exit(bad == 0 ? 100 : bad + 4);            /* 5 RVV, 6 IME, 8 AME, sums for combinations */
 }
