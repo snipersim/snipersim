@@ -371,7 +371,7 @@ def case_riscv_user_simulate(p, g, workdir):
 # The IME (Zvvm 0.9) cases need a qemu-riscv64 built with the extension's CPU
 # properties; SNIPER_QEMU_RISCV_IME_CPU overrides the -cpu string.  The guest
 # is built like rv-loop.c.  Skips when the QEMU lacks the properties.
-IME_CPU_DEFAULT = 'max,vlen=128,x-zvvmm=on,x-zvvmtls=on'
+IME_CPU_DEFAULT = 'max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on'
 IME_INSNS = 33            # rv-ime.c: exact instruction count of the guest (built on include/riscv_insn.h)
 IME_FOOTPRINTS = 4        # three tile loads and one tile store
 IME_SPANS = 8             # each tile has two rows in different cache lines
@@ -559,14 +559,53 @@ def case_riscv_gemm_sail(p, g, workdir):
 # The LLM agent workload (test/llm-agent): a tiny GPT trained on the host
 # calls tools over an agent protocol, freestanding on RISC-V, verifying
 # every generated line against the numpy model's own greedy output and the
-# answers against the tools.  Two kernel variants (scalar, RVV) must agree;
-# the simulation case reports the batch-of-1 decode cost in cycles per token.
+# answers against the tools.  Four kernel variants (scalar, RVV, and the
+# weight matvecs on IME 0.9 tiles or the AME draft's squares) must agree;
+# the simulation case reports the batch-of-1 cost in cycles per token for
+# each accelerated variant and checks the matrix-unit instruction counts
+# against what the model's shape implies.
 LLM_DIR = os.path.join(SNIPER_ROOT, 'test', 'llm-agent')
+LLM_VARIANTS = (('scalar', []), ('rvv', ['-DUSE_RVV']), ('ime', ['-DUSE_IME']), ('ame', ['-DUSE_AME']))
 
 def llm_build(cc, out, extra):
     return run([cc, '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O2', '-ffreestanding',
-                '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-I', LLM_DIR] + extra
+                '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-I', LLM_DIR,
+                '-I', os.path.join(SNIPER_ROOT, 'include')] + extra
                + ['-o', out, os.path.join(LLM_DIR, 'agent.c')], 300)
+
+def llm_dims():
+    d = {}
+    for line in open(os.path.join(LLM_DIR, 'model_weights.h')):
+        m = re.match(r'#define GPT_([DLV]) (\d+)', line)
+        if m:
+            d[m.group(1)] = int(m.group(2))
+    return d['D'], d['L'], d['V']
+
+def llm_matrix_counts(variant, tokens):
+    """The riscv.<class> counts the agent's matvec kernels imply: per forward,
+    per layer qkv (D->3D), out (D->D), fc1 (D->4D), fc2 (4D->D), then the
+    head (D->V); IME works 2 output rows x 2-wide K slices per tile op, AME 4
+    x 4 per square, the leftover rows go through the RVV dot product."""
+    D, L, V = llm_dims()
+    shapes = [(D, 3 * D), (D, D), (D, 4 * D), (4 * D, D)] * L + [(D, V)]
+    e = {}
+    if variant == 'ime':
+        cfg = loads = stores = mma = 0
+        for nin, nout in shapes:
+            pairs, ks = nout // 2, nin // 2
+            cfg += 1; loads += pairs * ks * 2; stores += pairs; mma += pairs * ks
+        e = {'riscv.ime_cfg': cfg, 'riscv.ime_tile_load': loads, 'riscv.ime_tile_store': stores, 'riscv.ime_mma_fp': mma}
+        e = {k: v * tokens for k, v in e.items()}
+    elif variant == 'ame':
+        cfg = loads = stores = mma = 0
+        for nin, nout in shapes:
+            sq, ks = nout // 4, nin // 4
+            cfg += sq; loads += sq * ks * 2; stores += sq; mma += sq * ks
+        e = {'riscv.ame_cfg': cfg, 'riscv.ame_load': loads, 'riscv.ame_store': stores, 'riscv.ame_mma': mma, 'riscv.ame_move': stores}
+        e = {k: v * tokens for k, v in e.items()}
+        e['riscv.ame_cfg'] += 3          # msettyp x3 once
+        e['riscv.ame_own'] = 2           # acquire, release
+    return e
 
 def riscv_llm_prerequisites(workdir):
     r, why = riscv_ime_prerequisites(workdir)
@@ -575,7 +614,7 @@ def riscv_llm_prerequisites(workdir):
     if not os.path.isfile(os.path.join(LLM_DIR, 'model_weights.h')):
         return None, 'no model_weights.h (run tools/llm/train_agent_gpt.py on the host)'
     r['llm'] = {}
-    for variant, flags in (('scalar', []), ('rvv', ['-DUSE_RVV'])):
+    for variant, flags in LLM_VARIANTS:
         guest = os.path.join(workdir, 'agent-' + variant)
         if not os.path.isfile(guest):
             rc, out = llm_build(os.environ['SNIPER_RISCV_CC'], guest, flags)
@@ -585,58 +624,68 @@ def riscv_llm_prerequisites(workdir):
     return r, None
 
 def case_riscv_llm_agent(p, g, workdir):
-    """The tool-calling GPT answers every prompt as the numpy model does, with scalar and RVV kernels."""
+    """The tool-calling GPT answers every prompt as the numpy model does, with scalar, RVV, IME and AME kernels."""
     r, why = riscv_llm_prerequisites(workdir)
     if r is None:
         return None, why
     summary = []
     for variant, guest in r['llm'].items():
-        rc, out = run([r['qemu'], '-cpu', r['cpu'], guest], 600, cwd=workdir)
+        cmd = [r['qemu'], '-cpu', r['cpu']]
+        if variant == 'ame':     # QEMU has no AME: the plugin executes it
+            cmd += ['-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'llmame')), '--']
+        rc, out = run(cmd + [guest], 900, cwd=workdir)
         names = {5: 'a line differs from the numpy model', 6: 'an answer is wrong', 7: 'lines differ and answers are wrong'}
         if rc != 100:
             return False, '%s kernel: guest exited %s: %s' % (variant, rc, names.get(rc, 'unexpected'))
+        if '[AME] error' in out:
+            return False, 'the AME backend model reported: ' + [l for l in out.splitlines() if l.startswith('[AME] error')][0]
         m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
         summary.append('%s: %s/%s tokens' % (variant, m.group(1), m.group(2)) if m else variant)
     n = len(re.findall(r'\[= numpy\] \[correct\]', out))
     return True, '%d prompts, every line as numpy, every answer right (%s)' % (n, '; '.join(summary))
 
 def case_riscv_llm_simulate(p, g, workdir):
-    """Sniper simulates the agent (RVV kernel) and reports the batch-of-1 cost per token."""
+    """Sniper simulates the agent on RVV, IME and AME and reports the batch-of-1 cost per token; matrix-unit counts must be exact."""
     r, why = riscv_llm_prerequisites(workdir)
     if r is None:
         return None, why
-    prefix = os.path.join(workdir, 'llmsim')
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
-                   '--', r['llm']['rvv']], 900, cwd=workdir)
-    if rc != 100:
-        return False, 'recording failed (exit %s)' % rc
-    m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
-    if not m:
-        return False, 'no token count in the guest output'
-    prefilled, generated = int(m.group(1)), int(m.group(2))
-    outdir = os.path.join(workdir, 'llmsimout')
-    shutil.rmtree(outdir, ignore_errors=True)
-    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
-                   '--traces=' + prefix + '.app0.th0.sift'], 1800, cwd=SNIPER_ROOT)
-    if rc is None:
-        return False, 'simulation timed out'
-    if rc != 0:
-        return False, 'run-sniper exited %d' % rc
-    if 'undecoded instruction' in out:
-        return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
-    stats = {}
-    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
-        if ' = ' in line:
-            k, v = line.split(' = ', 1)
-            stats[k.strip()] = v.strip().split(',')[0]
-    insns = int(stats.get('performance_model.instruction_count', 0))
-    cycles = int(float(stats.get('performance_model.cycle_count', 0)))
-    tokens = prefilled + generated
-    if not cycles or int(stats.get('riscv.v_load', 0)) == 0:
-        return False, 'no cycles or no vector loads counted'
-    return True, ('%d tokens (%d prefill + %d decode): %.0f cycles/token, %.0f instructions/token, IPC %.2f; '
-                  'vector loads %s, v_fp_muladd %s' % (tokens, prefilled, generated, cycles / tokens, insns / tokens,
-                                                        insns / cycles, stats.get('riscv.v_load'), stats.get('riscv.v_fp_muladd')))
+    report = []
+    for variant in ('rvv', 'ime', 'ame'):
+        prefix = os.path.join(workdir, 'llmsim-' + variant)
+        rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+                       '--', r['llm'][variant]], 900, cwd=workdir)
+        if rc != 100:
+            return False, '%s: recording failed (exit %s)' % (variant, rc)
+        m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
+        if not m:
+            return False, '%s: no token count in the guest output' % variant
+        prefilled, generated = int(m.group(1)), int(m.group(2))
+        outdir = os.path.join(workdir, 'llmsimout-' + variant)
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                       '--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
+        if rc is None:
+            return False, '%s: simulation timed out' % variant
+        if rc != 0:
+            return False, '%s: run-sniper exited %d' % (variant, rc)
+        if 'undecoded instruction' in out:
+            return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
+        stats = {}
+        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+            if ' = ' in line:
+                k, v = line.split(' = ', 1)
+                stats[k.strip()] = v.strip().split(',')[0]
+        insns = int(stats.get('performance_model.instruction_count', 0))
+        cycles = int(float(stats.get('performance_model.cycle_count', 0)))
+        tokens = prefilled + generated
+        if not cycles or int(stats.get('riscv.v_load', 0)) == 0:
+            return False, '%s: no cycles or no vector loads counted' % variant
+        for k, v in sorted(llm_matrix_counts(variant, tokens).items()):
+            got = int(stats.get(k, 0))
+            if got != v:
+                return False, '%s: %s = %d, the model shape implies %d' % (variant, k, got, v)
+        report.append('%s %.0f cycles/token (%.0f insn/token, IPC %.2f)' % (variant, cycles / tokens, insns / tokens, insns / cycles))
+    return True, '%d tokens (%d prefill + %d decode): %s; IME and AME instruction counts exact' % (tokens, prefilled, generated, '; '.join(report))
 
 # AME (Attached Matrix Extension draft, Ztt): the gemm3 AME path runs on the
 # backend model inside the frontend plugin (QEMU has no AME; without the

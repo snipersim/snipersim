@@ -7,9 +7,10 @@
  *
  * Implementation parameters of this model (the specification leaves them
  * to the implementation): AME_NELEM = 16 (4x4 squares), AME_UNIT_DATATYPE_SIZE
- * = 32, 32 M registers, 16 accumulators; the Int32 datatype only
- * (descriptor 0x40000020), so pack_factor is 1 and every square is 16
- * int32 elements.  One backend per hart (no sharing between harts yet).
+ * = 32, 32 M registers, 16 accumulators; the Int32 (descriptor 0x40000020)
+ * and FP32 (0x20300120: exponent width 8, RNE, infinities and denormals,
+ * IEEE class) datatypes, so pack_factor is 1 and every square is 16
+ * 32-bit elements.  One backend per hart (no sharing between harts yet).
  *
  * Instructions modelled: ame.acquire/ame.release, asettyp/msettyp/
  * agettyp/mgettyp, mls.{rm,cm,st,tst}, mss.{rm,cm,st,tst}, mmulacc.2d,
@@ -32,6 +33,7 @@ namespace ame
    const unsigned NELEM = N * N;
    const unsigned NUM_M = 32, NUM_ACC = 16;
    const uint32_t DTYPE_INT32 = 0x40000020;   /* standard, signed, 32 bits */
+   const uint32_t DTYPE_FP32 = 0x20300120;    /* IEEE class: exp 8, RNE, Inf, denormals, FP, 32 bits */
 
    struct Backend
    {

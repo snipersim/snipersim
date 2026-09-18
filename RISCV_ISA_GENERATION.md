@@ -141,7 +141,7 @@ plugins -- which rules out static binaries, since they cannot `dlopen`.
 `tools/riscv/qemu-11.1.1-ime.patch` (the pipeline's generated QEMU overlay
 for freeze 0.9, applied to the v11.1.1 tag) and `--enable-plugins`, once
 per version into the shared dependency cache, and links it at
-`qemu-riscv/`.  Run it with `-cpu max,vlen=128,x-zvvmm=on,x-zvvmtls=on`.
+`qemu-riscv/`.  Run it with `-cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on`.
 Building on the target is what keeps it free of glibc-version trouble: a
 binary built on a newer distribution than the one it runs on fails on
 glibc symbol versions, and a static one cannot host the plugin.

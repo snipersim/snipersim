@@ -439,15 +439,24 @@ void ame_exec(unsigned int cpu_index, void *udata)
    VCPU *v = vcpu_get(cpu_index);
    if (!v->xreg_found)
    {
+      /* QEMU's gdb register list names X registers by ABI name, with x8 as
+       * "fp" rather than "s0"; a register without a handle would read as
+       * zero, so a miss is reported loudly instead. */
       GArray *regs = qemu_plugin_get_registers();
       for (guint i = 0; i < regs->len; i++)
       {
          qemu_plugin_reg_descriptor *d = &g_array_index(regs, qemu_plugin_reg_descriptor, i);
          for (unsigned r = 0; r < 32; r++)
-            if (strcmp(d->name, rvisa::xreg_name(r)) == 0)
+         {
+            char xn[8]; snprintf(xn, sizeof(xn), "x%u", r);
+            if (strcmp(d->name, rvisa::xreg_name(r)) == 0 || strcmp(d->name, xn) == 0 || (r == 8 && strcmp(d->name, "fp") == 0))
                v->xreg[r] = d->handle;
+         }
       }
       g_array_free(regs, TRUE);
+      for (unsigned r = 1; r < 32; r++)
+         if (!v->xreg[r])
+            fprintf(stderr, "[AME] no register handle for %s: its reads return 0 and writes are dropped\n", rvisa::xreg_name(r));
       v->xreg_found = true;
    }
    ame::Env env;

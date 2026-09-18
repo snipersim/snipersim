@@ -2,6 +2,7 @@
 #include "riscv_isa.h"
 
 #include <string.h>
+#include <stdio.h>
 
 namespace ame
 {
@@ -90,7 +91,9 @@ bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
    if (!b.owned)
       return fail("executed without owning the backend (the specification raises illegal-instruction)");
 
-   auto dtype_ok = [&](uint32_t d) { return d == DTYPE_INT32; };
+   auto dtype_ok = [&](uint32_t d) { return d == DTYPE_INT32 || d == DTYPE_FP32; };
+   auto as_f = [](int32_t v) { float f; memcpy(&f, &v, 4); return f; };
+   auto as_i = [](float f) { int32_t v; memcpy(&v, &f, 4); return v; };
    if (!strcmp(name, "asettyp"))
    {
       const uint32_t d = (uint32_t)env.read_x(o.xs1);
@@ -117,14 +120,18 @@ bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
       if (!strcmp(form, "1r")) return fail("whole-register transfer not modelled");
       const uint64_t base = env.read_x(o.xs1), stride = strided ? env.read_x(o.xs2) : 0;
       if (!square_transfer(b, env, b.M[reg], store, colmajor, strided, tst, base, stride))
-         return fail("guest memory access failed");
+      {
+         char where[64]; snprintf(where, sizeof(where), "guest memory access failed at 0x%llx (stride %llu)", (unsigned long long)base, (unsigned long long)stride);
+         return fail(where);
+      }
       return true;
    }
 
    /* matrix multiply-accumulate: C += A x B, A^T x B, A x B^T, and the negating forms */
    if (!strncmp(name, "mmul", 4) && strstr(name, ".2d"))
    {
-      if (!dtype_ok(b.Ad[o.ad]) || !dtype_ok(b.Md[o.ms1]) || !dtype_ok(b.Md[o.ms2])) return fail("operands need the Int32 datatype");
+      const uint32_t dt = b.Ad[o.ad];
+      if (!dtype_ok(dt) || b.Md[o.ms1] != dt || b.Md[o.ms2] != dt) return fail("operands need one supported datatype (Int32 or FP32) in common");
       const bool at = strstr(name, "mmulat") != 0, bt = strstr(name, "mmulbt") != 0, neg = strstr(name, "neg") != 0;
       const int32_t *A = b.M[o.ms1], *B = b.M[o.ms2];
       int32_t *C = b.Acc[o.ad];
@@ -132,13 +139,17 @@ bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
          for (unsigned j = 0; j < N; j++)
          {
             int32_t s = C[i * N + j];
+            float fs = as_f(s);
             for (unsigned q = 0; q < N; q++)
             {
                const int32_t a = at ? A[q * N + i] : A[i * N + q];
                const int32_t bb = bt ? B[j * N + q] : B[q * N + j];
-               s = neg ? s - a * bb : s + a * bb;      /* fixed order q = 0..N-1, seeded with the accumulator */
+               if (dt == DTYPE_FP32)
+                  fs = neg ? fs - as_f(a) * as_f(bb) : fs + as_f(a) * as_f(bb);   /* fixed order q = 0..N-1, seeded with the accumulator */
+               else
+                  s = neg ? s - a * bb : s + a * bb;
             }
-            C[i * N + j] = s;
+            C[i * N + j] = dt == DTYPE_FP32 ? as_i(fs) : s;
          }
       return true;
    }
@@ -159,14 +170,21 @@ bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
    if (!strcmp(name, "mzero.2d.acc")) { memset(b.Acc[o.ad], 0, sizeof(b.Acc[o.ad])); return true; }
    if (!strcmp(name, "mzero.2d.m")) { memset(b.M[o.md], 0, sizeof(b.M[o.md])); return true; }
 
-   /* elementwise, Int32 */
+   /* elementwise */
    if (!strcmp(name, "madd.ew") || !strcmp(name, "msub.ew") || !strcmp(name, "mmul.ew"))
    {
-      if (!dtype_ok(b.Md[o.md]) || !dtype_ok(b.Md[o.ms1]) || !dtype_ok(b.Md[o.ms2])) return fail("operands need the Int32 datatype");
+      const uint32_t dt = b.Md[o.md];
+      if (!dtype_ok(dt) || b.Md[o.ms1] != dt || b.Md[o.ms2] != dt) return fail("operands need one supported datatype (Int32 or FP32) in common");
       for (unsigned e = 0; e < NELEM; e++)
       {
          const int32_t x = b.M[o.ms1][e], y = b.M[o.ms2][e];
-         b.M[o.md][e] = name[1] == 'a' ? x + y : name[1] == 's' ? x - y : x * y;
+         if (dt == DTYPE_FP32)
+         {
+            const float fx = as_f(x), fy = as_f(y);
+            b.M[o.md][e] = as_i(name[1] == 'a' ? fx + fy : name[1] == 's' ? fx - fy : fx * fy);
+         }
+         else
+            b.M[o.md][e] = name[1] == 'a' ? x + y : name[1] == 's' ? x - y : x * y;
       }
       return true;
    }

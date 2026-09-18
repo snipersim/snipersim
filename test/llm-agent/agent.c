@@ -19,7 +19,13 @@
  * (exp, tanh) is implemented here so the edge build needs no libm; sqrt is
  * the F-extension instruction.  The dot-product kernel is selectable:
  * scalar (default) or RVV 1.0 (-DUSE_RVV: vfmacc.vv over e32,m4 groups, a
- * vfredusum.vs at the end), the first optimization lever. */
+ * vfredusum.vs at the end), the first optimization lever.
+ * The weight matvecs can go to a matrix unit instead: -DUSE_IME (IME 0.9
+ * fp32 2x2 tiles, vfmmacc.vv, the activation vector as the top row of the
+ * B tile over a zero row) or -DUSE_AME (the AME draft, fp32 4x4 squares,
+ * mmulbtacc.2d, the vector as the top row of a square); both keep the RVV
+ * dot product for attention.  At batch 1 the unit computes N rows of its
+ * tile for one useful column, which is the point of measuring it. */
 
 #include <stdint.h>
 #include "model_weights.h"
@@ -77,6 +83,10 @@ static float tanhf_(float x)
 static float sqrtf_(float x) { float r; __asm__("fsqrt.s %0, %1" : "=f"(r) : "f"(x)); return r; }
 
 /* ---------------------------------------------------------- kernels */
+#if defined(USE_IME) || defined(USE_AME)
+#include "riscv_insn.h"
+#define USE_RVV
+#endif
 #ifdef USE_RVV
 static float dot(const float *a, const float *b, long n)
 {
@@ -113,11 +123,70 @@ static float dot(const float *a, const float *b, long n)
 #endif
 
 /* y[o] = bias[o] + dot(x, W[o]) for o < nout; W is [nout][nin] */
+#if !defined(USE_IME) && !defined(USE_AME)
 static void matvec(float *y, const float *x, const float *W, const float *bias, int nin, int nout)
 {
    for (int o = 0; o < nout; o++)
       y[o] = (bias ? bias[o] : 0.0f) + dot(x, W + (long)o * nin, nin);
 }
+#elif defined(USE_IME)
+#undef MATVEC_NAME
+#define MATVEC_NAME "ime"
+static float xpad[2][4 * GPT_D];                 /* row 0: the activation vector, row 1: zeros */
+/* Per pair of output rows: C(2x2) += A(2x2) x B(2x2)^T over 2-wide K slices,
+ * A = two rows of W, B = x over a zero row, so column 0 of C is y[o], y[o+1]. */
+static void matvec(float *y, const float *x, const float *W, const float *bias, int nin, int nout)
+{
+   long old;
+   for (int i = 0; i < nin; i++) xpad[0][i] = x[i];
+   __asm__ volatile("vsetvli t0, zero, e32, m1, ta, ma" : : : "t0");
+   RISCV_VSETLAMBDA(old, 2L); (void)old;
+   int o = 0;
+   for (; o + 2 <= nout; o += 2)
+   {
+      float t[4];
+      __asm__ volatile("vmv.v.i v16, 0");                                  /* C tile */
+      for (int k = 0; k < nin; k += 2)
+      {
+         RISCV_VMTL_V(0, W + (long)o * nin + k, (long)nin, 2, 1);          /* A: rows o,o+1, cols k,k+1 */
+         RISCV_VMTL_V(8, &xpad[0][k], (long)(4 * GPT_D), 2, 1);            /* B: x[k..k+1] over zeros */
+         RISCV_VFMMACC_VV(16, 0, 8, 1);                                     /* C += A x B^T */
+      }
+      RISCV_VMTS_V(16, t, 2L, 2, 1);
+      y[o] = (bias ? bias[o] : 0.0f) + t[0];
+      y[o + 1] = (bias ? bias[o + 1] : 0.0f) + t[2];
+   }
+   for (; o < nout; o++) y[o] = (bias ? bias[o] : 0.0f) + dot(x, W + (long)o * nin, nin);
+}
+#else
+#undef MATVEC_NAME
+#define MATVEC_NAME "ame"
+#define AME_FP32 0x20300120L                     /* IEEE class: exp 8, RNE, Inf, denormals, 32 bits */
+static float xpad[4][4 * GPT_D];                 /* row 0: the activation vector, rows 1-3: zeros */
+/* Per four output rows: acc(4x4) += A(4x4) x B(4x4)^T over 4-wide K slices,
+ * A = four rows of W (strided square), B = x over three zero rows, so
+ * column 0 of the accumulator is y[o..o+3]. */
+static void matvec(float *y, const float *x, const float *W, const float *bias, int nin, int nout)
+{
+   for (int i = 0; i < nin; i++) xpad[0][i] = x[i];
+   int o = 0;
+   for (; o + 4 <= nout; o += 4)
+   {
+      float t[4][4];
+      RISCV_ASETTYP(0, AME_FP32);                                          /* zero the accumulator */
+      for (int k = 0; k < nin; k += 4)
+      {
+         RISCV_MLS_ST(0, W + (long)o * nin + k, (long)nin * 4);            /* A: rows o..o+3, cols k..k+3 */
+         RISCV_MLS_ST(1, &xpad[0][k], (long)(4 * GPT_D) * 4);              /* B: x[k..k+3] over zeros */
+         RISCV_MMULBTACC_2D(0, 0, 1);                                       /* acc0 += A x B^T */
+      }
+      RISCV_MMOV_M_A(2, 0);
+      RISCV_MSS_ST(2, &t[0][0], 16L);
+      for (int i = 0; i < 4; i++) y[o + i] = (bias ? bias[o + i] : 0.0f) + t[i][0];
+   }
+   for (; o < nout; o++) y[o] = (bias ? bias[o] : 0.0f) + dot(x, W + (long)o * nin, nin);
+}
+#endif
 static void layernorm(float *y, const float *x, const float *g, const float *b, int n)
 {
    float mu = 0, var = 0;
@@ -232,6 +301,11 @@ void _start(void)
 {
    for (int i = 0; i < 256; i++) stoi[i] = 0;
    for (int i = 0; i < GPT_V; i++) stoi[(unsigned char)GPT_VOCAB[i]] = i;
+#ifdef USE_AME
+   long ame_status;
+   RISCV_AME_ACQUIRE(ame_status, 0L); (void)ame_status;
+   RISCV_MSETTYP(0, AME_FP32); RISCV_MSETTYP(1, AME_FP32); RISCV_MSETTYP(2, AME_FP32);
+#endif
    out("agent: "); outn(GPT_NPARAM); out(" parameters, d="); outn(GPT_D); out(" L="); outn(GPT_L); out(" ctx="); outn(GPT_T); out(", matvec " MATVEC_NAME "\n");
    int bad = 0;
    char call[64], res[24], ans[64];
@@ -251,5 +325,8 @@ void _start(void)
       if (!correct) bad |= 2;
    }
    out("tokens: "); outn(n_prefill); out(" prefilled, "); outn(n_generated); out(" generated\n");
+#ifdef USE_AME
+   RISCV_AME_RELEASE();
+#endif
    sys_exit(bad == 0 ? 100 : bad == 1 ? 5 : bad == 2 ? 6 : 7);
 }
