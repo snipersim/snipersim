@@ -300,7 +300,7 @@ workload's shape implies (the harness cases of section 2.5).
 
 | kernel | unit and coupling | cycles / token | instructions / token | vs RVV |
 |---|---|---|---|---|
-| scalar (F extension), prefill token-serial | core | 692,749 | 1,185,057 | 0.20x |
+| scalar (F extension) | core | 683,660 | 1,161,416 | 0.20x |
 | RVV 1.0, e32 m4 | core | 138,176 | 211,559 | 1.00x |
 | IME 0.9, fp32 2x2 tiles | in-core | 294,099 | 452,697 | 0.47x |
 | AME draft, fp32 4x4 squares | in-core (`ica`) | 131,273 | 169,709 | 1.05x |
