@@ -97,6 +97,19 @@ overlay from a checkout before the tables, so a moved draft is caught.
 When the group publishes AME in UDB form, that root replaces the
 generated overlay with no other change.
 
+The functional side takes a different route from IME's: QEMU is not
+patched.  The frontend plugin recognises the `ame_*` classes from the
+same tables and executes them itself on a model of the unit
+(`frontend/qemu-plugin/ame_backend.{h,cc}`) through the plugin API's
+register and memory access and `qemu_plugin_set_pc`, so a stock
+plugin-enabled qemu-riscv64 runs AME binaries and records their
+footprints (`frontend/qemu-plugin/README.md`).  Operand lookup in the
+model is by the overlay's operand names (`md`, `ms1`, `as1`, `xd`, ...),
+which is why the converter's direction rule matters: the first operand
+of a mnemonic is the destination unless the specification names it a
+source, so `mmov.m.a md, as1` reads an accumulator and `agettyp xd, as1`
+writes an X register.
+
 ## Using a new extension with an unmodified compiler
 
 LLVM has no plugin mechanism for new instructions (its plugins are

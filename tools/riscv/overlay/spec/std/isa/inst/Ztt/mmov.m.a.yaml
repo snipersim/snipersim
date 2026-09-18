@@ -21,13 +21,13 @@ description: |
 definedBy:
   extension:
     name: Ztt
-assembly: "md, ad"
+assembly: "md, as1"
 encoding:
   match: "101000111100-----000-----0101011"
   variables:
     - name: md
       location: 11-7
-    - name: ad
+    - name: as1
       location: 19-15
 access:
   s: always

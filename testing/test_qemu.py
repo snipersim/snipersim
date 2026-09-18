@@ -638,6 +638,58 @@ def case_riscv_llm_simulate(p, g, workdir):
                   'vector loads %s, v_fp_muladd %s' % (tokens, prefilled, generated, cycles / tokens, insns / tokens,
                                                         insns / cycles, stats.get('riscv.v_load'), stats.get('riscv.v_fp_muladd')))
 
+# AME (Attached Matrix Extension draft, Ztt): the gemm3 AME path runs on the
+# backend model inside the frontend plugin (QEMU has no AME; without the
+# plugin the guest dies with SIGILL), then Sniper counts it by class.
+def case_riscv_ame_verify(p, g, workdir):
+    """Scalar, RVV, IME and AME agree; AME executed by the plugin's backend model."""
+    r, why = riscv_gemm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    guest = os.path.join(workdir, 'gemm3-ame')
+    rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start', '-DUSE_AME'])
+    if rc != 0:
+        return False, 'could not build the AME variant (exit %s)' % rc
+    prefix = os.path.join(workdir, 'gemm3ame')
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    names = {5: 'RVV differs', 6: 'IME differs', 8: 'AME differs from scalar', 12: 'RVV and AME differ', 14: 'IME and AME differ'}
+    if rc != 100:
+        errs = [l for l in out.splitlines() if l.startswith('[AME] error')]
+        return False, 'guest exited %s: %s%s' % (rc, names.get(rc, 'unexpected'), ('; ' + errs[0]) if errs else '')
+    if '[AME] error' in out:
+        return False, 'the backend model reported an error: ' + [l for l in out.splitlines() if l.startswith('[AME] error')][0]
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) memory footprints recorded', out)
+    r['ame_trace'] = prefix + '.app0.th0.sift'
+    return True, 'scalar, RVV 1.0, IME 0.9 and AME (4x4 Int32 squares) agree; %s footprints recorded' % (m.group(1) if m else '?')
+
+def case_riscv_ame_simulate(p, g, workdir):
+    """Sniper counts the AME instructions by class and their strided-square footprints exactly."""
+    r, why = riscv_gemm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    guest = os.path.join(workdir, 'gemm3-ame')
+    if not os.path.isfile(guest):
+        rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start', '-DUSE_AME'])
+        if rc != 0:
+            return False, 'could not build the AME variant (exit %s)' % rc
+    prefix = os.path.join(workdir, 'gemm3amesim')
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (exit %s)' % rc
+    outdir = os.path.join(workdir, 'gemm3amesimout')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc is None or rc != 0:
+        return False, 'run-sniper exited %s' % rc
+    if 'undecoded instruction' in out:
+        return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
+    rc, out = run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'riscv', 'expected_counts.py'), '--ame',
+                   os.path.join(outdir, 'simulation', 'sim.stats')], 60)
+    if rc != 0:
+        return False, 'counts off: ' + '; '.join(l for l in out.splitlines() if l.startswith('FAIL'))[:300]
+    return True, 'every class count (2 own, 7 cfg, 16 square loads, 4 stores, 8 mmulbtacc.2d, 4 moves) and the footprint bytes match'
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
@@ -654,6 +706,8 @@ CASES = {
     'riscv-gemm-sail':     case_riscv_gemm_sail,
     'riscv-llm-agent':     case_riscv_llm_agent,
     'riscv-llm-simulate':  case_riscv_llm_simulate,
+    'riscv-ame-verify':    case_riscv_ame_verify,
+    'riscv-ame-simulate':  case_riscv_ame_simulate,
 }
 
 

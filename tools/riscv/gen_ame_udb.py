@@ -116,12 +116,20 @@ def convert(root, out):
         # operand order in the mnemonic decides direction: first is the destination
         order = [o.strip() for o in ops.split(',')] if ops else []
         renamed = {}
+        # direction follows position: the first operand is the destination
+        # (unless the spec already names it a source, as stores do), every
+        # later one a source -- so `agettyp xd, ad` reads as1, not ad
+        nsrc = {'m': 0, 'a': 0, 'x': 0}
         for i, o in enumerate(order):
             new, kind = rename(o)
-            if kind:
-                if i == 0 and new.endswith('s1'):      # a source in the first slot keeps its name
-                    pass
-                renamed[o.strip('()')] = new
+            if not kind:
+                continue
+            if i > 0 and new.endswith('d'):
+                nsrc[kind] += 1
+                new = kind + 's%d' % nsrc[kind]
+            elif new.endswith('s1') or new.endswith('s2'):
+                nsrc[kind] = max(nsrc[kind], int(new[-1]))
+            renamed[o.strip('()')] = new
         seen_src = {}
         for f in fields:
             n = f['bits']; nm = f['name']

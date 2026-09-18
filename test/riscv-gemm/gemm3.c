@@ -8,7 +8,7 @@
  * compared and the exit code says what agreed:
  *
  *   100  all agree           5  RVV differs from scalar
- *     6  IME differs         7  both differ
+ *     6  IME differs         8  AME differs (-DUSE_AME); sums for combinations
  *
  * Freestanding (-nostdlib, entry _start).  Platform: PLATFORM_HTIF makes
  * exit write the sail-riscv model's tohost word instead of the Linux
@@ -21,7 +21,7 @@
  * leading dimension of every matrix is K elements. */
 
 #include <stdint.h>
-#ifndef NO_IME
+#if !defined(NO_IME) || defined(USE_AME)
 #include "riscv_insn.h"
 #endif
 
@@ -34,6 +34,7 @@ static int32_t B[N * K] __attribute__((aligned(64)));
 static int32_t C_ref[M * N] __attribute__((aligned(64)));
 static int32_t C_rvv[M * N] __attribute__((aligned(64)));
 static int32_t C_ime[M * N] __attribute__((aligned(64)));
+static int32_t C_ame[M * N] __attribute__((aligned(64)));
 
 #ifdef PLATFORM_HTIF
 volatile uint64_t tohost __attribute__((section(".tohost"), aligned(64)));
@@ -131,6 +132,35 @@ static void gemm_ime(void)
 }
 #endif
 
+#ifdef USE_AME
+/* AME (Ztt) draft, on the functional backend model in the QEMU frontend:
+ * 4x4 Int32 squares.  A and B squares are loaded strided (rows K elements
+ * apart), C = A x B^T accumulates with the transposed-B multiply, and each
+ * finished square is moved to an M register and stored strided. */
+static void gemm_ame(void)
+{
+   long status;
+   RISCV_AME_ACQUIRE(status, 0L);                 /* TRY */
+   const long dtype = 0x40000020L;                /* standard, signed, 32 bits */
+   RISCV_MSETTYP(0, dtype); RISCV_MSETTYP(1, dtype); RISCV_MSETTYP(2, dtype);
+   for (int ti = 0; ti < M; ti += 4)
+      for (int tj = 0; tj < N; tj += 4)
+      {
+         RISCV_ASETTYP(0, dtype);                 /* zero the accumulator */
+         for (int k = 0; k < K; k += 4)
+         {
+            RISCV_MLS_ST(0, &A[ti * K + k], (long)(K * 4));
+            RISCV_MLS_ST(1, &B[tj * K + k], (long)(K * 4));
+            RISCV_MMULBTACC_2D(0, 0, 1);          /* acc0 += A x B^T */
+         }
+         RISCV_MMOV_M_A(2, 0);
+         RISCV_MSS_ST(2, &C_ame[ti * N + tj], (long)(N * 4));
+      }
+   RISCV_AME_RELEASE();
+   (void)status;
+}
+#endif
+
 static int same(const int32_t *x, const int32_t *y)
 {
    for (int i = 0; i < M * N; i++)
@@ -150,5 +180,9 @@ void __attribute__((section(".text.start"))) _start(void)
    gemm_ime();
    bad |= same(C_ref, C_ime) ? 0 : 2;
 #endif
-   sys_exit(bad == 0 ? 100 : (bad == 1 ? 5 : bad == 2 ? 6 : 7));
+#ifdef USE_AME
+   gemm_ame();
+   bad |= same(C_ref, C_ame) ? 0 : 4;
+#endif
+   sys_exit(bad == 0 ? 100 : bad + 4);            /* 5 RVV, 6 IME, 8 AME, sums for combinations */
 }

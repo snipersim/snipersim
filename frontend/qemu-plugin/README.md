@@ -242,3 +242,26 @@ Two more harness cases cover this, `riscv-ime-trace` and
 need a qemu-riscv64 with the IME CPU properties (`x-zvvmm`,
 `x-zvvmtls`; `SNIPER_QEMU_RISCV_IME_CPU` overrides the `-cpu` string)
 and skip otherwise.
+
+## AME: executed by the plugin, not by QEMU
+
+The Attached Matrix Extension (AME, Ztt, still a draft) is not in QEMU,
+and the plugin does not need it to be.  Every instruction of an `ame_*`
+class in the generated tables gets a second callback at translation
+time, registered right after the tracing one with
+`QEMU_PLUGIN_CB_RW_REGS_PC`, which executes it on a functional model of
+the unit (`ame_backend.{h,cc}`: M registers, accumulators, datatype
+configuration, ownership, 4x4 Int32 squares) using nothing but the v7
+plugin API -- X registers through `qemu_plugin_read/write_register`,
+squares through `qemu_plugin_read/write_memory_vaddr` with each row
+recorded as a footprint, and `qemu_plugin_set_pc` to step over the
+instruction before QEMU's illegal-instruction exception is raised.  The
+same binary dies with SIGILL without the plugin.  A semantic error in the
+model (a datatype mismatch, an instruction it does not implement yet,
+`mls.1r`/`mss.1r` among them) prints `[AME] error at <pc>: ...` and the
+guest continues; the harness cases `riscv-ame-verify` and
+`riscv-ame-simulate` (`test/riscv-gemm/gemm3.c -DUSE_AME`) fail on that
+line, on any exit but 100, and on any class count or footprint byte that
+differs from what `tools/riscv/expected_counts.py --ame` derives from the
+square geometry.  The cost of the route is one translation-block exit per
+instruction.

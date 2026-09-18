@@ -46,6 +46,7 @@ extern "C" {
  * here would be one more place to get it wrong. */
 #include "decoder.h"
 #include "riscv_isa.h"
+#include "ame_backend.h"
 
 #include "sift_writer.h"
 #include "sift_format.h"
@@ -185,6 +186,11 @@ struct InsnInfo
     * is recorded and sent ahead of it as MemorySpans, since two addresses
     * cannot describe a tile. */
    bool     footprint = false;
+   /* RISC-V: the generated opcode id, and whether the AME backend model
+    * executes the instruction (QEMU itself would trap on it). */
+   unsigned op = 0;
+   uint32_t word = 0;
+   bool     ame = false;
 };
 
 /* ------------------------------------------------------------- per-vCPU */
@@ -210,6 +216,11 @@ struct VCPU
    struct Access { uint64_t addr; uint32_t size; bool store; };
    bool     pend_footprint = false;
    std::vector<Access> pend_accs;
+   /* The AME backend this hart owns (a functional model; see ame_backend.h)
+    * and the X-register handles its instructions read and write. */
+   ame::Backend  ame_backend;
+   struct qemu_plugin_register *xreg[32] = {nullptr};
+   bool          xreg_found = false;
 };
 
 /* One slot per vCPU, sized once and never resized.
@@ -415,6 +426,63 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
 namespace {
 
 /* ------------------------------------------------------------ callbacks */
+
+/* AME: executed by the backend model, since QEMU has no AME.  Registered
+ * after the tracer's callback for the same instruction, with RW_REGS_PC, so
+ * the trace record is already pending when this runs; the model's memory
+ * accesses go into the pending footprint, then the PC is moved past the
+ * instruction before QEMU's illegal-instruction code for it can run (that
+ * exits the CPU loop; see test/qemu-plugin-probe/emu-probe). */
+void ame_exec(unsigned int cpu_index, void *udata)
+{
+   const InsnInfo *ii = (const InsnInfo *)udata;
+   VCPU *v = vcpu_get(cpu_index);
+   if (!v->xreg_found)
+   {
+      GArray *regs = qemu_plugin_get_registers();
+      for (guint i = 0; i < regs->len; i++)
+      {
+         qemu_plugin_reg_descriptor *d = &g_array_index(regs, qemu_plugin_reg_descriptor, i);
+         for (unsigned r = 0; r < 32; r++)
+            if (strcmp(d->name, rvisa::xreg_name(r)) == 0)
+               v->xreg[r] = d->handle;
+      }
+      g_array_free(regs, TRUE);
+      v->xreg_found = true;
+   }
+   ame::Env env;
+   env.read_x = [v](unsigned r) -> uint64_t {
+      if (r == 0 || !v->xreg[r]) return 0;
+      GByteArray *b = g_byte_array_new(); uint64_t val = 0;
+      if (qemu_plugin_read_register(v->xreg[r], b) && b->len >= 8) memcpy(&val, b->data, 8);
+      g_byte_array_free(b, TRUE); return val;
+   };
+   env.write_x = [v](unsigned r, uint64_t val) {
+      if (r == 0 || !v->xreg[r]) return;
+      GByteArray *b = g_byte_array_new(); g_byte_array_append(b, (const guint8 *)&val, 8);
+      qemu_plugin_write_register(v->xreg[r], b); g_byte_array_free(b, TRUE);
+   };
+   env.read_mem = [](uint64_t addr, void *dst, unsigned n) -> bool {
+      GByteArray *b = g_byte_array_new(); bool ok = qemu_plugin_read_memory_vaddr(addr, b, n) && b->len == n;
+      if (ok) memcpy(dst, b->data, n);
+      g_byte_array_free(b, TRUE); return ok;
+   };
+   env.write_mem = [](uint64_t addr, const void *src, unsigned n) -> bool {
+      GByteArray *b = g_byte_array_new(); g_byte_array_append(b, (const guint8 *)src, n);
+      bool ok = qemu_plugin_write_memory_vaddr(addr, b); g_byte_array_free(b, TRUE); return ok;
+   };
+   env.note_access = [v](uint64_t addr, unsigned n, bool store) {
+      if (!v->have_pending) return;
+      if (v->pend_addrs.size() < Sift::MAX_DYNAMIC_ADDRESSES) v->pend_addrs.push_back(addr);
+      VCPU::Access acc; acc.addr = addr; acc.size = n; acc.store = store;
+      v->pend_accs.push_back(acc);
+   };
+   env.error = [ii](const std::string &why) {
+      fprintf(stderr, "[AME] error at 0x%" PRIx64 ": %s\n", ii->vaddr, why.c_str());
+   };
+   ame::execute(v->ame_backend, ii->op, rvisa::word_of((const uint8_t *)&ii->word, 4), env);
+   qemu_plugin_set_pc(ii->vaddr + ii->size);
+}
 
 void insn_exec(unsigned int cpu_index, void *udata)
 {
@@ -656,8 +724,14 @@ void tb_trans(SNP_TB_TRANS_ARGS)
          ii->mode_mask = 0;
          {
             const unsigned length = got ? rvisa::length_of(bytes) : 0;
-            ii->footprint = length && length <= got
-                          && rvisa::has(rvisa::decode(rvisa::word_of(bytes, length), length), rvisa::FLAG_FOOTPRINT);
+            if (length && length <= got)
+            {
+               ii->word = rvisa::word_of(bytes, length);
+               ii->op = rvisa::decode(ii->word, length);
+               ii->footprint = rvisa::has(ii->op, rvisa::FLAG_FOOTPRINT);
+               const char *cls = rvisa::info(rvisa::class_of(ii->op)).name;
+               ii->ame = ii->op && strncmp(cls, "ame_", 4) == 0;
+            }
          }
       }
       else
@@ -670,6 +744,8 @@ void tb_trans(SNP_TB_TRANS_ARGS)
 
       qemu_plugin_register_vcpu_insn_exec_cb(insn, insn_exec,
                                              QEMU_PLUGIN_CB_NO_REGS, ii);
+      if (ii->ame)
+         qemu_plugin_register_vcpu_insn_exec_cb(insn, ame_exec, QEMU_PLUGIN_CB_RW_REGS_PC, ii);
       qemu_plugin_register_vcpu_mem_cb(insn, mem_access,
                                        QEMU_PLUGIN_CB_NO_REGS,
                                        QEMU_PLUGIN_MEM_RW, nullptr);

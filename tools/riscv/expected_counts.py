@@ -20,7 +20,7 @@ must be at least the vector and tile accesses (scalar traffic adds to
 them)."""
 import argparse, sys
 
-def expected(vlen, sew, m, n, k, lam=2, lmul=1):
+def expected(vlen, sew, m, n, k, lam=2, lmul=1, ame=False):
     epr = vlen // sew
     linesize = lam * lmul
     rows = epr // lam
@@ -41,6 +41,19 @@ def expected(vlen, sew, m, n, k, lam=2, lmul=1):
     t_bytes = (e['riscv.ime_tile_load'] + e['riscv.ime_tile_store']) * tile_elems * (sew // 8)
     e['riscv.span_bytes'] = v_bytes + t_bytes
     e['riscv.spans'] = None                          # lines touched: layout-dependent, reported, not asserted
+    if ame:
+        # AME path (gemm3.c -DUSE_AME): 4x4 Int32 squares, output squares (m/4)*(n/4),
+        # per output square one asettyp, per 4-wide K slice two strided loads and one
+        # mmulbtacc.2d, then one mmov.m.a and one strided store; three msettyp, an
+        # acquire and a release.  A strided square is 4 rows of 16 bytes.
+        sq_out = (m // 4) * (n // 4); ksl = k // 4
+        e['riscv.ame_own'] = 2
+        e['riscv.ame_cfg'] = 3 + sq_out
+        e['riscv.ame_load'] = sq_out * 2 * ksl
+        e['riscv.ame_store'] = sq_out
+        e['riscv.ame_mma'] = sq_out * ksl
+        e['riscv.ame_move'] = sq_out
+        e['riscv.span_bytes'] += (e['riscv.ame_load'] + e['riscv.ame_store']) * 64
     e['_min_dcache_loads'] = e['riscv.v_load'] + e['riscv.ime_tile_load']
     e['_min_dcache_stores'] = e['riscv.ime_tile_store']
     return e
@@ -57,8 +70,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('stats'); ap.add_argument('--vlen', type=int, default=128); ap.add_argument('--sew', type=int, default=32)
     ap.add_argument('--m', type=int, default=8); ap.add_argument('--n', type=int, default=8); ap.add_argument('--k', type=int, default=8)
+    ap.add_argument('--ame', action='store_true', help='the build also ran the AME path (-DUSE_AME)')
     a = ap.parse_args()
-    e = expected(a.vlen, a.sew, a.m, a.n, a.k)
+    e = expected(a.vlen, a.sew, a.m, a.n, a.k, ame=a.ame)
     s = read_stats(a.stats)
     ok = True
     for key, want in e.items():

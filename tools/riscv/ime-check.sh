@@ -55,9 +55,10 @@ fi
 [ -n "$CC" ] || { echo "no clang with a riscv64 target on PATH; set SNIPER_RISCV_CC (any distro clang >= 15 with lld)"; exit 1; }
 "$CC" --version | head -1
 
-say "5. the IME workload, traced and simulated"
+say "5. the IME and AME workloads, traced and simulated"
 SNIPER_QEMU_RISCV="$QEMU_RISCV" SNIPER_RISCV_CC="$CC" \
    python3 testing/test_qemu.py --case riscv-user-trace --case riscv-user-simulate \
                                 --case riscv-ime-trace --case riscv-ime-simulate \
                                 --case riscv-gemm-verify --case riscv-gemm-simulate --case riscv-gemm-sail \
-                                --case riscv-llm-agent --case riscv-llm-simulate
+                                --case riscv-llm-agent --case riscv-llm-simulate \
+                                --case riscv-ame-verify --case riscv-ame-simulate

@@ -26,8 +26,8 @@
 /* mzero.2d.m md  (Ztt; class ame_move) */
 #define RISCV_MZERO_2D_M(md) __asm__ volatile(".insn r 0x2b, 0x0, (0x53), " "x" #md ", x1, x0")
 
-/* agettyp xd, ad  (Ztt; class ame_cfg) */
-#define RISCV_AGETTYP(xd, ad) __asm__ volatile(".insn r 0x2b, 0x0, (0x51), %[_xd], " "x" #ad ", x0" : [_xd] "=r"(xd))
+/* agettyp xd, as1  (Ztt; class ame_cfg) */
+#define RISCV_AGETTYP(xd, as1) __asm__ volatile(".insn r 0x2b, 0x0, (0x51), %[_xd], " "x" #as1 ", x0" : [_xd] "=r"(xd))
 
 /* ame.acquire xd, xs1  (Ztt; class ame_own) */
 #define RISCV_AME_ACQUIRE(xd, xs1) __asm__ volatile(".insn r 0x2b, 0x0, (0x52), %[_xd], %[_xs1], x9" : [_xd] "=r"(xd) : [_xs1] "r"(xs1))
@@ -83,8 +83,8 @@
 /* mmov.a.m ad, ms1  (Ztt; class ame_move) */
 #define RISCV_MMOV_A_M(ad, ms1) __asm__ volatile(".insn r 0x2b, 0x0, (0x51), " "x" #ad ", " "x" #ms1 ", x29")
 
-/* mmov.m.a md, ad  (Ztt; class ame_move) */
-#define RISCV_MMOV_M_A(md, ad) __asm__ volatile(".insn r 0x2b, 0x0, (0x51), " "x" #md ", " "x" #ad ", x28")
+/* mmov.m.a md, as1  (Ztt; class ame_move) */
+#define RISCV_MMOV_M_A(md, as1) __asm__ volatile(".insn r 0x2b, 0x0, (0x51), " "x" #md ", " "x" #as1 ", x28")
 
 /* mmov.m.m md, ms1  (Ztt; class ame_move) */
 #define RISCV_MMOV_M_M(md, ms1) __asm__ volatile(".insn r 0x2b, 0x0, (0x51), " "x" #md ", " "x" #ms1 ", x30")
