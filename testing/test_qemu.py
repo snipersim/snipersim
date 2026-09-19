@@ -950,6 +950,26 @@ def case_riscv_vlen_probe(p, g, workdir):
         return False, 'the probe fails at a length it must pass (%s): %s' % (', '.join(str(v) for v in required_bad), summary)
     return True, summary
 
+def case_riscv_llm_vlen(p, g, workdir):
+    """The agent's vector-length-agnostic kernels (RVV, AME, DMA tasks) reproduce the numpy model at 256, 4,096 and 65,536 bits."""
+    r, why = riscv_llm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    summary = []
+    for vlen in (256, 4096, 65536):
+        cpu = r['cpu'].replace('vlen=128', 'vlen=%d' % vlen)
+        for variant in ('rvv', 'ame', 'dma'):
+            cmd = [r['qemu'], '-cpu', cpu]
+            if variant in ('ame', 'dma'):
+                cmd += ['-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'llmvlen-%s-%d' % (variant, vlen))), '--']
+            rc, out = run(cmd + [r['llm'][variant]], 900, cwd=workdir)
+            if rc != 100:
+                if 'VLEN in the range' in out:
+                    return None, 'this qemu-riscv64 caps VLEN below %d (rebuild with the current IME patch)' % vlen
+                return False, '%s at %d bits: guest exited %s (100 = every line as numpy, every answer right)' % (variant, vlen, rc)
+        summary.append(str(vlen))
+    return True, 'rvv, ame and dma kernels agree with numpy at %s bits' % ', '.join(summary)
+
 def case_riscv_ame_couplings(p, g, workdir):
     """The attached tile (AmeTile) runs a 32x32x32 AME product under every coupling: tile counts exact, timing responds."""
     r, why = riscv_gemm_prerequisites(workdir)
@@ -1027,6 +1047,7 @@ CASES = {
     'riscv-size32-verify': case_riscv_size32_verify,
     'riscv-llm-size32':    case_riscv_llm_size32,
     'riscv-vlen-probe':    case_riscv_vlen_probe,
+    'riscv-llm-vlen':      case_riscv_llm_vlen,
 }
 
 
