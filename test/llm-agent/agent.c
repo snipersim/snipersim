@@ -41,6 +41,10 @@ __asm__(".section .rodata\n.balign 64\n.globl GPT_W\nGPT_W:\n.incbin \"" GPT_W_B
 extern const float GPT_W[];
 #endif
 #include "prompts.h"
+#ifndef GEN_CALL
+#define GEN_CALL 40           /* tokens per generate; a model's header pins both to the numpy value it was referenced with */
+#define GEN_ANS 24
+#endif
 
 /* ---------------------------------------------------------- freestanding */
 void *memcpy(void *d, const void *s, unsigned long n) { char *dd = d; const char *ss = s; while (n--) *dd++ = *ss++; return d; }
@@ -510,10 +514,12 @@ static void flush_prefill(void)
    n_prefill += npending;
    npending = 0;
 }
+static int ended_nl;                            /* the last generate stopped at a newline (now in the context) */
 static int generate(char *dst, int max)         /* greedy until '\n' (kept out of dst) or the window ends */
 {
    int n = 0;
    flush_prefill();
+   ended_nl = 0;
    while (n < max && pos < GPT_T)
    {
       int best = 0;
@@ -521,7 +527,7 @@ static int generate(char *dst, int max)         /* greedy until '\n' (kept out o
       char c = GPT_VOCAB[best];
       n_generated++;
       forward(best);
-      if (c == '\n') break;
+      if (c == '\n') { ended_nl = 1; break; }
       dst[n++] = c;
    }
    dst[n] = 0;
@@ -557,10 +563,11 @@ void _start(void)
    {
       pos = 0;
       feed("Q: "); feed(PROMPT_Q[i]); feed("\nT: ");
-      generate(call, 40);                 /* the call and its newline are already in the context */
+      generate(call, GEN_CALL);           /* the call and its newline are already in the context ... */
+      if (!ended_nl) feed("\n");           /* ... unless the model never produced one (untrained): the numpy protocol adds it */
       run_tool(call, res);
       feed("R: "); feed(res); feed("\nA: ");
-      generate(ans, 24);
+      generate(ans, GEN_ANS);
       int as_model = seq(call, PROMPT_CALL_MODEL[i]) && seq(ans, PROMPT_ANS_MODEL[i]);
       int correct = seq(ans, res) && seq(ans, PROMPT_ANS[i]);
       out("Q: "); out(PROMPT_Q[i]); out("\n  T: "); out(call); out("  R: "); out(res); out("  A: "); out(ans);
@@ -573,5 +580,5 @@ void _start(void)
 #ifdef USE_AME
    RISCV_AME_RELEASE();
 #endif
-   sys_exit(bad == 0 ? 100 : bad == 1 ? 5 : bad == 2 ? 6 : 7);
+   sys_exit(bad == 0 ? 100 : bad == 1 ? 5 : bad == 2 ? 6 : 7);   /* 6: every line as numpy but the answers wrong -- an untrained model's pass */
 }

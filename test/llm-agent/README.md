@@ -72,3 +72,13 @@ The blob is found through the include path, and because a quoted
 `#include` searches the source file's own directory first, a model kept in
 another directory is built from a copy of `agent.c` placed outside
 `test/llm-agent`.
+
+An untrained model can be exported for measurements of size alone:
+`--steps 0 --export-anyway`, with `--eval-questions`, `--prompts` and
+`--gen` keeping the reference generation short.  Its outputs are
+garbage, but they are the numpy model's garbage: the header pins the
+generation lengths (`GEN_CALL`, `GEN_ANS`) to the value the references
+used, and the agent feeds the protocol newline after a call the model
+never terminated, so the token-for-token check still holds.  Exit code 6
+(every line as numpy, every answer wrong) is such a model's pass; the
+sweep scripts accept it.

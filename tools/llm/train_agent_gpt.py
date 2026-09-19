@@ -145,7 +145,8 @@ class GPT:
         np.add.at(grads['wte'], idx, dx)
         return loss, grads
 
-    def generate(self, prompt, stop='\n', max_new=24):
+    def generate(self, prompt, stop='\n', max_new=None):
+        max_new = GEN_MAX if max_new is None else max_new
         ids = [STOI[c] for c in prompt]
         out = ''
         for _ in range(max_new):
@@ -161,6 +162,8 @@ class GPT:
         return out
 
 # ------------------------------------------------------------------ tools (the runtime's, mirrored here)
+GEN_MAX = 24     # tokens per generate: what agent.c's GEN_CALL/GEN_ANS must match for an untrained model
+
 def run_tool(call):
     parts = call.split()
     if parts[0] == 'add': return str(int(parts[1]) + int(parts[2]))
@@ -201,7 +204,12 @@ def main():
     ap.add_argument('--ctx', type=int, default=64); ap.add_argument('--batch', type=int, default=64)
     ap.add_argument('--export-anyway', action='store_true', help='export even an untrained model (prompts carry its own outputs)')
     ap.add_argument('--blob', action='store_true', help='write the weights as model_weights.bin (.incbin) instead of C text')
+    ap.add_argument('--eval-questions', type=int, default=40, help='fresh questions to evaluate the agent protocol on')
+    ap.add_argument('--prompts', type=int, default=8, help='prompts to export')
+    ap.add_argument('--gen', type=int, default=24, help='tokens per generate (numpy and, via GEN_CALL/GEN_ANS, agent.c)')
     a = ap.parse_args()
+    global GEN_MAX
+    GEN_MAX = a.gen
     rng = np.random.default_rng(a.seed)
     print('vocab %d chars; gradient check (float64, relative error): %.2e' % (len(VOCAB), grad_check(np.random.default_rng(0))))
     model = GPT(len(VOCAB), a.ctx, a.d, a.layers, a.heads, rng)
@@ -231,22 +239,22 @@ def main():
     # ---- evaluate the agent protocol with greedy decoding on fresh questions
     erng = np.random.default_rng(1234)
     tests, correct = [], 0
-    for _ in range(40):
+    for _ in range(a.eval_questions):
         ex = make_example(erng)
         q = ex.split('\n')[0][3:]; want_call = ex.split('\n')[1][3:]; want = ex.split('\n')[3][3:]
         call, ans = agent_episode(model, q)
         ok = (call == want_call and ans == want)
         correct += ok
         tests.append((q, want_call, want, ok))
-    print('agent accuracy on 40 fresh questions: %d/40' % correct)
+    print('agent accuracy on %d fresh questions: %d/%d' % (a.eval_questions, correct, a.eval_questions))
     outputs = {}
     for q, want_call, want, ok in tests:
         outputs[q] = agent_episode(model, q)
-    chosen = [t for t in tests if t[3]][:8]
-    if len(chosen) < 8:
+    chosen = [t for t in tests if t[3]][:a.prompts]
+    if len(chosen) < a.prompts:
         if not a.export_anyway:
-            sys.exit('fewer than 8 correct episodes; train longer')
-        chosen = tests[:8]
+            sys.exit('fewer than %d correct episodes; train longer' % a.prompts)
+        chosen = tests[:a.prompts]
     # ---- export
     os.makedirs(a.out, exist_ok=True)
     order = ['wte', 'wpe'] + [k % l for l in range(a.layers) for k in ('ln1_g%d', 'ln1_b%d', 'wqkv%d', 'bqkv%d', 'wo%d', 'bo%d', 'ln2_g%d', 'ln2_b%d', 'w1%d', 'b1%d', 'w2%d', 'b2%d')] + ['lnf_g', 'lnf_b', 'head']
@@ -261,6 +269,7 @@ def main():
         for k in order:
             f.write('#define OFF_%s %d\n' % (k.upper(), offs[k]))
         f.write('#define GPT_NPARAM %d\n' % total)
+        f.write('#define GEN_CALL %d\n#define GEN_ANS %d\n' % (a.gen, a.gen))   # the generation lengths the numpy references used
         f.write('/* matmul weights (wqkv, wo, w1, w2, head) are stored transposed, [out][in], so each\n   output is one contiguous dot product; embeddings stay [row][d]. */\n')
         if a.blob:
             # a large model is not C text: the weights go to a raw float32 file that
