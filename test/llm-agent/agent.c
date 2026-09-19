@@ -408,6 +408,8 @@ static float scores[GPT_T];
 static int pos;
 
 #define W(off) (GPT_W + (off))
+/* the per-layer weight offsets, one row per layer up to 16 (a deeper model adds rows here) */
+_Static_assert(GPT_L <= 16, "agent.c carries offset rows for up to 16 layers");
 #define LAYER(l) { OFF_LN1_G##l, OFF_LN1_B##l, OFF_WQKV##l, OFF_BQKV##l, OFF_WO##l, OFF_BO##l, OFF_LN2_G##l, OFF_LN2_B##l, OFF_W1##l, OFF_B1##l, OFF_W2##l, OFF_B2##l }
 static const int LOFF[GPT_L][12] = {
    LAYER(0),
@@ -419,6 +421,42 @@ static const int LOFF[GPT_L][12] = {
 #endif
 #if GPT_L > 3
    LAYER(3),
+#endif
+#if GPT_L > 4
+   LAYER(4),
+#endif
+#if GPT_L > 5
+   LAYER(5),
+#endif
+#if GPT_L > 6
+   LAYER(6),
+#endif
+#if GPT_L > 7
+   LAYER(7),
+#endif
+#if GPT_L > 8
+   LAYER(8),
+#endif
+#if GPT_L > 9
+   LAYER(9),
+#endif
+#if GPT_L > 10
+   LAYER(10),
+#endif
+#if GPT_L > 11
+   LAYER(11),
+#endif
+#if GPT_L > 12
+   LAYER(12),
+#endif
+#if GPT_L > 13
+   LAYER(13),
+#endif
+#if GPT_L > 14
+   LAYER(14),
+#endif
+#if GPT_L > 15
+   LAYER(15),
 #endif
 };
 
