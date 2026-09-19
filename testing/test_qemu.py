@@ -1013,6 +1013,38 @@ def case_riscv_footprint_lines(p, g, workdir):
         report.append('%d bits: %d lines per gather, 32 recorded and %d counted beyond each' % (vlen, lanes, lanes - 32))
     return True, '; '.join(report)
 
+def case_riscv_vector_datapath(p, g, workdir):
+    """The vector agent at 4,096 bits with the full-width datapath and with a 16-byte one: the narrow unit is slower, the instruction counts identical."""
+    r, why = riscv_llm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    cpu = r['cpu'].replace('vlen=128', 'vlen=4096')
+    prefix = os.path.join(workdir, 'vdp')
+    rc, out = run([r['qemu'], '-cpu', cpu, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', r['llm']['rvv']], 900, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (exit %s)' % rc
+    cycles, counts = {}, {}
+    for width in (0, 16):
+        outdir = os.path.join(workdir, 'vdp-%d' % width)
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                       '-g', 'perf_model/core/riscv/vector_bytes=512', '-g', 'perf_model/core/vector/datapath_bytes=%d' % width,
+                       '--traces=' + prefix + '.app0.th0.sift'], 3600, cwd=SNIPER_ROOT)
+        if rc is None or rc != 0:
+            return False, 'run-sniper exited %s (datapath %d)' % (rc, width)
+        stats = {}
+        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+            if ' = ' in line:
+                k, v = line.split(' = ', 1)
+                stats[k.strip()] = v.strip().split(',')[0]
+        cycles[width] = int(float(stats['performance_model.cycle_count']))
+        counts[width] = tuple(stats.get(k) for k in ('riscv.v_load', 'riscv.v_fp_muladd', 'performance_model.instruction_count'))
+    if counts[0] != counts[16]:
+        return False, 'the counts differ between datapath widths: %s vs %s' % (counts[0], counts[16])
+    if cycles[16] <= cycles[0]:
+        return False, 'a 16-byte datapath (%d cycles) is not slower than the full width (%d)' % (cycles[16], cycles[0])
+    return True, 'full width %d cycles, 16-byte datapath %d cycles (%.2fx), counts identical' % (cycles[0], cycles[16], cycles[16] / cycles[0])
+
 def case_riscv_ame_couplings(p, g, workdir):
     """The attached tile (AmeTile) runs a 32x32x32 AME product under every coupling: tile counts exact, timing responds."""
     r, why = riscv_gemm_prerequisites(workdir)
@@ -1092,6 +1124,7 @@ CASES = {
     'riscv-vlen-probe':    case_riscv_vlen_probe,
     'riscv-llm-vlen':      case_riscv_llm_vlen,
     'riscv-footprint-lines': case_riscv_footprint_lines,
+    'riscv-vector-datapath': case_riscv_vector_datapath,
 }
 
 

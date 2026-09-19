@@ -10,6 +10,7 @@
 #include "simulator.h"
 
 #include <decoder.h>
+#include <algorithm>
 
 
 
@@ -32,6 +33,13 @@ CoreModelBoomV1::CoreModelBoomV1()
    for (unsigned int op = 1; op < rvisa::NUM_OPS; op++)
       instructionLatencies[op] = m_class_latency[rvisa::class_of(op)];
    m_lll_cutoff = Sim()->getCfg()->getInt("perf_model/core/interval_timer/lll_cutoff");
+   /* The vector unit's width: a vector instruction occupies its port for the
+      cycles its operand takes through a datapath of this many bytes
+      (perf_model/core/vector/datapath_bytes, 0 = the whole register group at
+      once, which is what the placeholder costs assumed).  The trace does not
+      carry vtype, so the group is vector_bytes times an assumed LMUL. */
+   m_vector_datapath_bytes = Sim()->getCfg()->getIntDefault("perf_model/core/vector/datapath_bytes", 0);
+   m_vector_lmul = Sim()->getCfg()->getIntDefault("perf_model/core/vector/lmul", 1);
 }
 
 unsigned int CoreModelBoomV1::getInstructionLatency(const MicroOp *uop) const
@@ -54,11 +62,18 @@ unsigned int CoreModelBoomV1::getAluLatency(const MicroOp *uop) const
       return 1;
    const rvisa::Class c = rvisa::class_of(op);
    const uint32_t flags = rvisa::info(c).flags;
+   unsigned int width_cycles = 1;
+   if ((flags & rvisa::FLAG_VECTOR) && m_vector_datapath_bytes)
+   {
+      const unsigned int group_bytes = uop->getOperandSize() / 8 * m_vector_lmul;
+      width_cycles = (group_bytes + m_vector_datapath_bytes - 1) / m_vector_datapath_bytes;
+   }
    if (flags & rvisa::FLAG_MATRIX)
       return m_class_issue[c];
    if (flags & rvisa::FLAG_BUSY)
-      return m_class_latency[c];
-   return m_class_issue[c] > 1 ? m_class_issue[c] : getInstructionLatency(uop);
+      return std::max(m_class_latency[c], width_cycles);
+   const unsigned int issue = m_class_issue[c] > 1 ? m_class_issue[c] : getInstructionLatency(uop);
+   return std::max(issue, width_cycles);
 }
 
 unsigned int CoreModelBoomV1::getBypassLatency(const DynamicMicroOp *uop) const
@@ -90,5 +105,11 @@ DynamicMicroOp* CoreModelBoomV1::createDynamicMicroOp(Allocator *alloc, const Mi
    info->uop_port = DynamicMicroOpBoomV1::getPort(uop);
    info->uop_bypass = DynamicMicroOpBoomV1::getBypassType(uop);
    info->uop_alu = DynamicMicroOpBoomV1::getAlu(uop);
+   /* A vector execute op occupies the vector datapath for the cycles its
+      group takes through it (getAluLatency); without a configured width the
+      op has no unit, as before, and the placeholder costs stand. */
+   if (m_vector_datapath_bytes && info->uop_alu == DynamicMicroOpBoomV1::UOP_ALU_NONE
+       && uop->uop_type == MicroOp::UOP_EXECUTE && (rvisa::flags_of(uop->getInstructionOpcode()) & rvisa::FLAG_VECTOR))
+      info->uop_alu = DynamicMicroOpBoomV1::UOP_ALU_VECTOR;
    return info;
 }

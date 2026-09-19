@@ -9,6 +9,8 @@ class CoreModelBoomV1 : public BaseCoreModel<DynamicMicroOpBoomV1>
 {
    private:
       unsigned int m_lll_cutoff;
+      unsigned int m_vector_datapath_bytes;   /* 0: as wide as the register group (a flat cost per instruction) */
+      unsigned int m_vector_lmul;             /* the group size the costs assume, since the trace carries no vtype */
       unsigned int m_class_latency[rvisa::NUM_CLASSES];
       unsigned int m_class_issue[rvisa::NUM_CLASSES];
 

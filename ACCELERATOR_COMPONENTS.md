@@ -385,8 +385,12 @@ product is 32,768 multiply-accumulates, issued every 32 cycles on a
 32x32 array (the tile derives that from the rows it loads; the in-core
 class costs take `ame_mma_issue_cycles=32` and `ime_mma_fp_issue_cycles=32`),
 and vector operands are 512 bytes.  The vector class costs are per
-instruction and do not grow with VLEN, so the 4,096-bit vector row
-assumes a datapath as wide as the register group: an upper bound.
+instruction by default, a datapath as wide as the register group, so the
+4,096-bit vector row is an upper bound; `perf_model/core/vector/datapath_bytes`
+gives the unit a width, and a vector instruction then holds its port for
+the cycles its group (vector_bytes times the assumed `lmul`) takes through
+it -- with a 16-byte datapath the same 4,096-bit run is 7x slower
+(`riscv-vector-datapath`).
 
 **The LLM agent at both geometries**, cycles per token, 379 tokens:
 

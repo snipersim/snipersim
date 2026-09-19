@@ -21,6 +21,7 @@ class DynamicMicroOpBoomV1 : public DynamicMicroOp
          UOP_ALU_NONE = 0,
          UOP_ALU_TRIG,
          UOP_ALU_MATRIX,      // the IME matrix multiply-accumulate unit
+         UOP_ALU_VECTOR,      // the vector datapath, when perf_model/core/vector/datapath_bytes gives it a width
          UOP_ALU_SIZE,
       };
       uop_alu_t uop_alu;
