@@ -141,7 +141,7 @@ class Decoder
     virtual void set_ext_memory_uops(unsigned int n) {}
     
     /// Get the maximum size of the operands of instruction inst in bits
-    virtual uint16_t get_operand_size(const DecodedInst *ins) = 0;
+    virtual uint32_t get_operand_size(const DecodedInst *ins) = 0;
     
     /// Check if the opcode is an instruction that performs a cache flush
     virtual bool is_cache_flush_opcode(decoder_opcode opcd) = 0;

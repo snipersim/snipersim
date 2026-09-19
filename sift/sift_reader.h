@@ -49,6 +49,7 @@ namespace Sift
       uint64_t addresses[MAX_DYNAMIC_ADDRESSES];
       uint8_t num_spans;
       MemorySpan spans[MAX_MEMORY_SPANS];
+      uint32_t spans_dropped_lines;      /* lines touched beyond the recorded spans */
       bool is_branch;
       bool taken;
       bool is_predicate;
@@ -128,6 +129,7 @@ namespace Sift
          bool m_seen_end;
          uint8_t m_pending_spans_n;
          MemorySpan m_pending_spans[MAX_MEMORY_SPANS];
+         uint32_t m_pending_spans_dropped;
          const StaticInstruction *m_last_sinst;
          // Set when the trace declares IcacheVariable: the writer is sending
          // each instruction's bytes because they can change at the same

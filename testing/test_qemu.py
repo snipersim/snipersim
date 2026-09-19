@@ -970,6 +970,49 @@ def case_riscv_llm_vlen(p, g, workdir):
         summary.append(str(vlen))
     return True, 'rvv, ame and dma kernels agree with numpy at %s bits' % ', '.join(summary)
 
+def case_riscv_footprint_lines(p, g, workdir):
+    """A gather over more lines than the trace record holds (test/riscv-vlen-probe/gather.c) at 4,096 and 65,536 bits: recorded spans plus dropped lines equal the lines touched, and the core times the recorded ones."""
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    guest = os.path.join(workdir, 'gather')
+    rc, out = run([os.environ['SNIPER_RISCV_CC'], '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O2', '-ffreestanding',
+                   '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-DNGATHER=8', '-o', guest,
+                   os.path.join(SNIPER_ROOT, 'test', 'riscv-vlen-probe', 'gather.c')], 300)
+    if rc != 0:
+        return False, 'could not build the gather guest (exit %s)' % rc
+    report = []
+    for vlen in (4096, 65536):
+        lanes = vlen * 8 // 32
+        prefix = os.path.join(workdir, 'gather-%d' % vlen)
+        rc, out = run([r['qemu'], '-cpu', 'max,vlen=%d' % vlen, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+        if rc != 100:
+            if 'VLEN in the range' in out:
+                return None, 'this qemu-riscv64 caps VLEN below %d' % vlen
+            return False, 'guest exited %s at %d bits (100 = every gathered element right)' % (rc, vlen)
+        outdir = os.path.join(workdir, 'gather-%d-out' % vlen)
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                       '-g', 'perf_model/core/riscv/vector_bytes=%d' % (vlen // 8), '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+        if rc is None or rc != 0:
+            return False, 'run-sniper exited %s at %d bits' % (rc, vlen)
+        stats = {}
+        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+            if ' = ' in line:
+                k, v = line.split(' = ', 1)
+                stats[k.strip()] = v.strip().split(',')[0]
+        spans, dropped = int(stats.get('riscv.spans', 0)), int(stats.get('riscv.spans_dropped_lines', 0))
+        # per gather: `lanes` lines (one per element) -> 32 recorded + the rest dropped; the index and output
+        # unit-stride accesses are one contiguous span each (lanes*4 bytes), recorded whole
+        want_gather_lines = 8 * lanes
+        want_dropped = 8 * (lanes - 32)
+        if dropped != want_dropped:
+            return False, '%d bits: %d dropped lines, the gathers imply %d' % (vlen, dropped, want_dropped)
+        if spans < 8 * 32 + 16:
+            return False, '%d bits: only %d spans recorded' % (vlen, spans)
+        report.append('%d bits: %d lines per gather, 32 recorded and %d counted beyond each' % (vlen, lanes, lanes - 32))
+    return True, '; '.join(report)
+
 def case_riscv_ame_couplings(p, g, workdir):
     """The attached tile (AmeTile) runs a 32x32x32 AME product under every coupling: tile counts exact, timing responds."""
     r, why = riscv_gemm_prerequisites(workdir)
@@ -1048,6 +1091,7 @@ CASES = {
     'riscv-llm-size32':    case_riscv_llm_size32,
     'riscv-vlen-probe':    case_riscv_vlen_probe,
     'riscv-llm-vlen':      case_riscv_llm_vlen,
+    'riscv-footprint-lines': case_riscv_footprint_lines,
 }
 
 

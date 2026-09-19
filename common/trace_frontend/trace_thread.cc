@@ -96,6 +96,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_champsim_icache_misses(0)
    , m_riscv_spans(0)
    , m_riscv_span_bytes(0)
+   , m_riscv_spans_dropped_lines(0)
    , m_count_riscv(Sim()->getCfg()->getString("general/arch") == "riscv")
 {
    // RISC-V: instructions seen by this thread per class of the generated
@@ -110,6 +111,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    {
       registerStatsMetric("riscv", m_thread->getId(), "spans", &m_riscv_spans);
       registerStatsMetric("riscv", m_thread->getId(), "span_bytes", &m_riscv_span_bytes);
+      registerStatsMetric("riscv", m_thread->getId(), "spans_dropped_lines", &m_riscv_spans_dropped_lines);
    }
 
    bool userspace_mimicos_enabled = Sim()->getCfg()->getBool("general/enable_userspace_mimicos");
@@ -1157,6 +1159,7 @@ void TraceThread::countExtension(const Sift::Instruction &inst, const dl::Decode
    if (op != rvisa::OP_UNKNOWN)
       m_riscv_count[rvisa::class_of(op)]++;
    m_riscv_spans += inst.num_spans;
+   m_riscv_spans_dropped_lines += inst.spans_dropped_lines;
    for (uint32_t s = 0; s < inst.num_spans; ++s)
       m_riscv_span_bytes += inst.spans[s].size;
 }

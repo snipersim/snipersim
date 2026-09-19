@@ -972,18 +972,23 @@ void Sift::Writer::ISAChange(uint32_t new_isa)
    output->write(reinterpret_cast<char*>(&new_isa), sizeof(new_isa));
 }
 
-void Sift::Writer::MemorySpans(uint8_t count, const MemorySpan spans[])
+void Sift::Writer::MemorySpans(uint8_t count, const MemorySpan spans[], uint32_t dropped_lines)
 {
+   /* count spans, then the spans, then the number of cache lines the
+      instruction touched beyond them (an access wider than the record holds:
+      a gather of thousands of lines at a wide VLEN).  A reader that predates
+      the count accepts the record without it. */
    if (!output)
       return;
    sift_assert(count <= MAX_MEMORY_SPANS);
    Record rec;
    rec.Other.zero = 0;
    rec.Other.type = RecOtherMemorySpans;
-   rec.Other.size = sizeof(uint8_t) + count * sizeof(MemorySpan);
+   rec.Other.size = sizeof(uint8_t) + count * sizeof(MemorySpan) + sizeof(dropped_lines);
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    output->write(reinterpret_cast<const char*>(&count), sizeof(count));
    output->write(reinterpret_cast<const char*>(spans), count * sizeof(MemorySpan));
+   output->write(reinterpret_cast<const char*>(&dropped_lines), sizeof(dropped_lines));
 }
 
 bool Sift::Writer::IsOpen()

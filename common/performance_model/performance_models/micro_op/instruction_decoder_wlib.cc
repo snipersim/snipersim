@@ -130,7 +130,7 @@ const std::vector<const MicroOp*>* InstructionDecoder::decode(IntPtr address,  c
    // Determine some extra instruction characteristics that will affect timing
 
    // Determine instruction operand width
-   uint16_t operand_size = dec->get_operand_size(ins);
+   uint32_t operand_size = dec->get_operand_size(ins);
 
 
    bool is_serializing = ins->is_serializing();

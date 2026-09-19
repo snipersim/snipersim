@@ -54,7 +54,7 @@ namespace dl
     virtual decoder_reg get_op_reg(const DecodedInst * inst, unsigned int idx) override;
     virtual unsigned int size_mem_op(const DecodedInst * inst, unsigned int mem_idx) override;
     virtual unsigned int get_exec_microops(const DecodedInst *ins, int numLoads, int numStores) override { return 1; }
-    virtual uint16_t get_operand_size(const DecodedInst *ins) override;
+    virtual uint32_t get_operand_size(const DecodedInst *ins) override;
     virtual bool is_cache_flush_opcode(decoder_opcode opcd) override;
     virtual bool is_div_opcode(decoder_opcode opcd) override;
     virtual bool is_pause_opcode(decoder_opcode opcd) override;

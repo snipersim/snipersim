@@ -112,7 +112,7 @@ unsigned int RISCVDecoder::size_mem_op(const DecodedInst * inst, unsigned int me
   return d->m_op ? rvisa::insn(d->m_op).mem_size : 0;
 }
 
-uint16_t RISCVDecoder::get_operand_size(const DecodedInst *ins)
+uint32_t RISCVDecoder::get_operand_size(const DecodedInst *ins)
 {
   return (R(ins)->flags() & rvisa::FLAG_VECTOR) ? m_vector_bytes * 8 : 64;
 }

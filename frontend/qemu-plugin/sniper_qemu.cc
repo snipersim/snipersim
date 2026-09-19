@@ -67,6 +67,7 @@ namespace {
 enum Arch { ARCH_X86, ARCH_RISCV };
 Arch        g_arch       = ARCH_X86;
 uint64_t    g_nspans     = 0;        /* MemorySpans records written, all vCPUs */
+uint64_t    g_ndropped_lines = 0;  /* cache lines an instruction touched beyond the spans its record holds */
 
 std::string opt_output   = "sniper";
 uint64_t    opt_flow     = 1000;   /* matches KnobFlowControl in sift/recorder */
@@ -365,38 +366,59 @@ void emit_spans(VCPU *v)
    std::vector<VCPU::Access> &a = v->pend_accs;
    std::sort(a.begin(), a.end(), [](const VCPU::Access &x, const VCPU::Access &y) {
       return x.store != y.store ? !x.store : x.addr < y.addr; });
-   Sift::MemorySpan spans[Sift::MAX_MEMORY_SPANS];
-   unsigned n = 0;
-   bool truncated = false;
+   /* Contiguous (or overlapping) runs of the same direction become one span. */
+   std::vector<Sift::MemorySpan> runs;
    for (const VCPU::Access &acc : a)
    {
       const uint64_t end = acc.addr + acc.size;
-      if (n && (spans[n - 1].is_write == (uint8_t)acc.store)
-          && acc.addr <= spans[n - 1].addr + spans[n - 1].size)
+      if (!runs.empty() && (runs.back().is_write == (uint8_t)acc.store)
+          && acc.addr <= runs.back().addr + runs.back().size)
       {
-         const uint64_t cur_end = spans[n - 1].addr + spans[n - 1].size;
+         const uint64_t cur_end = runs.back().addr + runs.back().size;
          if (end > cur_end)
-            spans[n - 1].size = (uint32_t)(end - spans[n - 1].addr);
+            runs.back().size = (uint32_t)(end - runs.back().addr);
          continue;
       }
-      if (n == Sift::MAX_MEMORY_SPANS)
-      {
-         truncated = true;
-         break;
-      }
-      spans[n].addr = acc.addr;
-      spans[n].size = acc.size;
-      spans[n].is_write = acc.store;
-      n++;
+      Sift::MemorySpan sp; sp.addr = acc.addr; sp.size = acc.size; sp.is_write = acc.store;
+      runs.push_back(sp);
    }
-   static bool warned = false;
-   if (truncated && !warned)
+   /* More runs than the record holds (a gather over thousands of lines at a
+      wide VLEN): coalesce by cache line -- what the core would fetch -- keep
+      the first MAX_MEMORY_SPANS lines, and count the lines beyond them so
+      the trace still says how much the instruction touched. */
+   uint32_t dropped = 0;
+   if (runs.size() > Sift::MAX_MEMORY_SPANS)
    {
-      warned = true;
-      fprintf(stderr, "[SNIPER-QEMU] an instruction at 0x%" PRIx64 " touched more than %u byte ranges; "
-              "the rest are not modelled\n", v->pend_addr, Sift::MAX_MEMORY_SPANS);
+      std::vector<Sift::MemorySpan> lines;
+      for (const Sift::MemorySpan &r : runs)
+      {
+         const uint64_t first = r.addr & ~63ull, last = (r.addr + r.size - 1) & ~63ull;
+         for (uint64_t l = first; l <= last; l += 64)
+         {
+            if (!lines.empty() && lines.back().is_write == r.is_write && l >= lines.back().addr && l < lines.back().addr + lines.back().size)
+               continue;                      /* the same line again */
+            if (!lines.empty() && lines.back().is_write == r.is_write && lines.back().addr + lines.back().size == l)
+               lines.back().size += 64;
+            else
+            {
+               Sift::MemorySpan sp; sp.addr = l; sp.size = 64; sp.is_write = r.is_write;
+               lines.push_back(sp);
+            }
+         }
+      }
+      if (lines.size() > Sift::MAX_MEMORY_SPANS)
+      {
+         for (size_t i = Sift::MAX_MEMORY_SPANS; i < lines.size(); i++)
+            dropped += lines[i].size / 64;
+         lines.resize(Sift::MAX_MEMORY_SPANS);
+      }
+      runs.swap(lines);
    }
-   v->writer->MemorySpans((uint8_t)n, spans);
+   Sift::MemorySpan spans[Sift::MAX_MEMORY_SPANS];
+   const unsigned n = (unsigned)runs.size();
+   for (unsigned i = 0; i < n; i++) spans[i] = runs[i];
+   if (dropped) __sync_fetch_and_add(&g_ndropped_lines, dropped);
+   v->writer->MemorySpans((uint8_t)n, spans, dropped);
    __sync_fetch_and_add(&g_nspans, 1);
 }
 
@@ -794,6 +816,8 @@ void at_exit(SNP_UDATA_ARGS)
    fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " instructions written\n", total);
    if (g_nspans)
       fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " memory footprints recorded\n", g_nspans);
+   if (g_ndropped_lines)
+      fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " cache lines touched beyond the spans their records hold (counted, not timed)\n", g_ndropped_lines);
    if (opt_verbose || getcode_fail)
       fprintf(stderr, "[SNIPER-QEMU] guest code reads: %" PRIu64 ", failed: %" PRIu64 "\n",
               getcode_calls, getcode_fail);

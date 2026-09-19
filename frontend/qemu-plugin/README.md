@@ -215,8 +215,16 @@ ranges, so a unit-stride load is one range and each row of a strided tile
 is its own; the ranges are the exact bytes moved (two rows in one cache
 line still cost one cache access: the core squashes the second uop).  The ranges go into the trace ahead of the instruction as a
 `MemorySpans` record (`Sift::Writer::MemorySpans`, up to
-`Sift::MAX_MEMORY_SPANS` = 16 per instruction; more are dropped with a
-warning) and the reader delivers them with it (`Instruction::spans`).
+`Sift::MAX_MEMORY_SPANS` = 32 per instruction) and the reader delivers
+them with it (`Instruction::spans`).  An instruction that touches more
+ranges than that, a gather over thousands of lines at a wide VLEN, is
+coalesced by cache line instead; the first 32 lines are recorded and
+timed, the lines beyond them are counted in the record
+(`Instruction::spans_dropped_lines`, the statistic
+`riscv.spans_dropped_lines`) so the footprint is still known; adjacent
+lines fold into one span, so a gather over a contiguous region is one
+sized access.  `test/riscv-vlen-probe/gather.c` and the harness case
+`riscv-footprint-lines` check it at 4,096 and 65,536 bits.
 `siftdump` prints them as `-- spans <addr>+<bytes><r|w>`.  A trace from
 the Pin recorder never contains the record, and a reader that predates it
 skips it.

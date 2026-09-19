@@ -96,6 +96,7 @@ Reader::Reader(const char *filename, const char *response_filename, uint32_t id,
    , m_trace_has_pa(false)
    , m_seen_end(false)
    , m_pending_spans_n(0)
+   , m_pending_spans_dropped(0)
    , m_last_sinst(NULL)
    , m_code_may_change(false)
    , m_isa(0)
@@ -693,11 +694,16 @@ bool Reader::Read(Instruction &inst)
             case RecOtherMemorySpans:
             {
                uint8_t n;
+               uint32_t dropped = 0;
                input->read(reinterpret_cast<char*>(&n), sizeof(n));
                assert(n <= MAX_MEMORY_SPANS);
-               assert(rec.Other.size == sizeof(uint8_t) + n * sizeof(MemorySpan));
+               const size_t base = sizeof(uint8_t) + n * sizeof(MemorySpan);
+               assert(rec.Other.size == base || rec.Other.size == base + sizeof(dropped));
                input->read(reinterpret_cast<char*>(m_pending_spans), n * sizeof(MemorySpan));
+               if (rec.Other.size == base + sizeof(dropped))
+                  input->read(reinterpret_cast<char*>(&dropped), sizeof(dropped));
                m_pending_spans_n = n;
+               m_pending_spans_dropped = dropped;
                break;
             }
             default:
@@ -756,10 +762,12 @@ bool Reader::Read(Instruction &inst)
 
       last_address += size;
       inst.num_spans = m_pending_spans_n;
+      inst.spans_dropped_lines = m_pending_spans_dropped;
       if (m_pending_spans_n)
       {
          memcpy(inst.spans, m_pending_spans, m_pending_spans_n * sizeof(MemorySpan));
          m_pending_spans_n = 0;
+      m_pending_spans_dropped = 0;
       }
       for (int i = 0; i < inst.num_addresses; ++i)
          input->read(reinterpret_cast<char*>(&inst.addresses[i]), sizeof(uint64_t));

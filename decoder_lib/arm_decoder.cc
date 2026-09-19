@@ -767,7 +767,7 @@ unsigned int ARMDecoder::get_exec_microops(const DecodedInst *ins, int numLoads,
   return num_exec_uops;
 }
 
-uint16_t ARMDecoder::get_operand_size(const DecodedInst *ins)
+uint32_t ARMDecoder::get_operand_size(const DecodedInst *ins)
 {
   if(m_arch == DL_ARCH_ARMv7)
   {

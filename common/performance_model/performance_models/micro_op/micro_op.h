@@ -128,7 +128,7 @@ struct MicroOp
    /** The instruction's number of memory accesses is only known dynamically
        (vector, matrix tile): this uop is squashed when no access is left for it. */
    bool m_dynamic_memory;
-   uint16_t operand_size;
+   uint32_t operand_size;       /* bits; a 65,536-bit vector group does not fit 16 */
    uint16_t memoryAccessSize;
 
    void makeLoad(uint32_t offset, dl::Decoder::decoder_opcode instructionOpcode, const String& instructionOpcodeName, uint16_t mem_size);
@@ -149,7 +149,7 @@ struct MicroOp
    bool hasDynamicMemory() const { return m_dynamic_memory; }
    bool isX87(void) const { return is_x87; }
    void setOperandSize(int size) { operand_size = size; }
-   uint16_t getOperandSize(void) const { return operand_size; }
+   uint32_t getOperandSize(void) const { return operand_size; }
    uint16_t getMemoryAccessSize(void) const { return memoryAccessSize; }
 
    void setInstruction(Instruction* instr) { instruction = instr; }

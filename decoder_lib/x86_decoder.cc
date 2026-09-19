@@ -295,7 +295,7 @@ unsigned int X86Decoder::get_exec_microops(const DecodedInst *ins, int numLoads,
   }
 }
 
-uint16_t X86Decoder::get_operand_size(const DecodedInst *ins)
+uint32_t X86Decoder::get_operand_size(const DecodedInst *ins)
 {
   uint16_t operand_size = 0;
     
