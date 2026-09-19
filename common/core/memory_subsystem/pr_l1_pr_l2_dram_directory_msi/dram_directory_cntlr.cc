@@ -1118,6 +1118,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
       else if (shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::SH_REQ)
       {
          // Write Data to Dram
+         if (!shmem_msg->isClean())   // never-modified data is already in memory
          sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now,shmem_msg->getBlockType());
          processShReqFromL2Cache(shmem_req, shmem_msg->getDataBuf());
       }
@@ -1144,6 +1145,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
       else // shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::NULLIFY_REQ
       {
          // Write Data To Dram
+         if (!shmem_msg->isClean())   // never-modified data is already in memory
          sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now,shmem_msg->getBlockType());
          processNullifyReq(shmem_req);
       }
@@ -1152,7 +1154,8 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
    {
       // This was just an eviction
       // Write Data to Dram
-      sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now,shmem_msg->getBlockType());
+      if (!shmem_msg->isClean())   // never-modified data is already in memory
+         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now,shmem_msg->getBlockType());
    }
 
    MYLOG("End @ %lx", address);

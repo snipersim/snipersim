@@ -2706,8 +2706,16 @@ namespace ParametricDramDirectoryMSI
 			// Update Shared Mem perf counters for access to L2 Cache
 			getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS, ShmemPerfModel::_SIM_THREAD);
 
-			// Flush the line
+			// Flush the line.  The directory asks for a FLUSH of every E line it
+			// drops, since a silent E->M upgrade could have happened; the reply
+			// says whether the data was in fact modified, so that memory is not
+			// written with data it already holds.  A modified L1 copy is written
+			// into this level by the previous-level walk, so the state is read
+			// after that walk.
 			Byte data_buf[getCacheBlockSize()];
+			for (CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
+				(*it)->updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_SIM_THREAD);
+			bool clean = getCacheState(address) != CacheState::MODIFIED;
 			// std::cout << "Update Cache Block: " << __LINE__ << " "<<CStateString(CacheState::INVALID)<<std::endl;
 			updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, data_buf, ShmemPerfModel::_SIM_THREAD);
 
@@ -2719,7 +2727,7 @@ namespace ParametricDramDirectoryMSI
 										sender /* receiver */,
 										address,
 										data_buf, getCacheBlockSize(),
-										HitWhere::UNKNOWN, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD, shmem_msg->getBlockType());
+										HitWhere::UNKNOWN, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD, shmem_msg->getBlockType(), clean);
 		}
 		else
 		{

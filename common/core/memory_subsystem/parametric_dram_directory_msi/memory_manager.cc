@@ -888,12 +888,13 @@ namespace ParametricDramDirectoryMSI
 	}
 
 	void
-	MemoryManager::sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte *data_buf, UInt32 data_length, HitWhere::where_t where, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num, CacheBlockInfo::block_type_t block_type)
+	MemoryManager::sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte *data_buf, UInt32 data_length, HitWhere::where_t where, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num, CacheBlockInfo::block_type_t block_type, bool clean)
 	{
 		MYLOG("send msg %u %ul%u > %ul%u", msg_type, requester, sender_mem_component, receiver, receiver_mem_component);
 		assert((data_buf == NULL) == (data_length == 0));
 		PrL1PrL2DramDirectoryMSI::ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, data_buf, data_length, perf, block_type);
 		shmem_msg.setWhere(where);
+		shmem_msg.setClean(clean);
 
 		Byte *msg_buf = shmem_msg.makeMsgBuf();
 		SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(thread_num);

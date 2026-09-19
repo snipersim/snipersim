@@ -1143,6 +1143,7 @@ void TraceThread::handleChampSimDetailed(Sift::Instruction &inst, Sift::Instruct
 }
 
 static_assert(Sift::MAX_MEMORY_SPANS <= DynamicInstruction::MAX_MEMORY, "a recorded footprint must fit the dynamic instruction");
+static_assert(Sift::MAX_MEMORY_SPANS <= 32, "the RISC-V decoder spreads a footprint over at most RISCVDecoder::rvisa_max_memory_uops() uops");
 
 // The decoder's memory operands are only consulted when the trace did not
 // record the instruction's footprint itself.

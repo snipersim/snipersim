@@ -52,6 +52,7 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 m_data_length;
          ShmemPerf* m_perf;
          CacheBlockInfo::block_type_t m_block_type;
+         bool m_clean;   // FLUSH_REP: the data was never modified (a flushed E or S copy), so memory already holds it
 
       public:
          ShmemMsg() = delete;
@@ -85,6 +86,8 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 getDataLength() { return m_data_length; }
          HitWhere::where_t getWhere() { return m_where; }
          CacheBlockInfo::block_type_t getBlockType(){return m_block_type;}
+         bool isClean() { return m_clean; }
+         void setClean(bool clean) { m_clean = clean; }
          void setDataBuf(Byte* data_buf) { m_data_buf = data_buf; }
          void setWhere(HitWhere::where_t where) { m_where = where; }
 

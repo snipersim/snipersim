@@ -71,11 +71,14 @@ namespace dl
     virtual bool has_dynamic_memory_operands(const DecodedInst *ins) override;
     virtual void set_vector_bytes(unsigned int n) override { m_vector_bytes = n; }
     virtual void set_ext_memory_uops(unsigned int n) override { m_memory_uops = n < rvisa_max_memory_uops() ? n : rvisa_max_memory_uops(); }
-    static unsigned int rvisa_max_memory_uops() { return 16; }   // Sift::MAX_MEMORY_SPANS
+    /* The most uops a footprint can spread over: one per recorded span, so this
+     * must not fall below Sift::MAX_MEMORY_SPANS (the trace thread asserts it);
+     * a lower cap silently drops the rows beyond it. */
+    static unsigned int rvisa_max_memory_uops() { return 32; }
 
   private:
     unsigned int m_vector_bytes = 16;    /* static size of one vector memory uop */
-    unsigned int m_memory_uops = 16;     /* load/store uops a footprint instruction spreads over */
+    unsigned int m_memory_uops = 32;     /* load/store uops a footprint instruction spreads over (perf_model/core/riscv/memory_uops) */
   };
 
   class RISCVDecodedInst : public DecodedInst

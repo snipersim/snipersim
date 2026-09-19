@@ -15,7 +15,8 @@ namespace PrL1PrL2DramDirectoryMSI
       m_data_buf(NULL),
       m_data_length(0),
       m_perf(perf),
-      m_block_type(CacheBlockInfo::block_type_t::DATA)
+      m_block_type(CacheBlockInfo::block_type_t::DATA),
+      m_clean(false)
    {}
 
    ShmemMsg::ShmemMsg(msg_t msg_type,
@@ -35,7 +36,8 @@ namespace PrL1PrL2DramDirectoryMSI
       m_data_buf(data_buf),
       m_data_length(data_length),
       m_perf(perf),
-      m_block_type(block_type)
+      m_block_type(block_type),
+      m_clean(false)
    {}
 
    ShmemMsg::ShmemMsg(ShmemMsg* shmem_msg) :
@@ -47,7 +49,8 @@ namespace PrL1PrL2DramDirectoryMSI
       m_data_buf(shmem_msg->getDataBuf()),
       m_data_length(shmem_msg->getDataLength()),
       m_perf(shmem_msg->getPerf()),
-      m_block_type(shmem_msg->getBlockType())
+      m_block_type(shmem_msg->getBlockType()),
+      m_clean(shmem_msg->isClean())
    {}
 
    ShmemMsg::~ShmemMsg()

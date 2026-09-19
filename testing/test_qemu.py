@@ -586,6 +586,16 @@ def llm_dims():
 # register groups, AME: 16 accumulators).
 LLM_GEOMETRY = {'ime': (2, 16), 'ime32': (32, 2), 'ame': (4, 16), 'ame32': (32, 16)}
 
+# The memory side of the agent runs: an edge LPDDR bandwidth (config/riscv.cfg
+# ships 5 GB/s), and the DRAM traffic per token in the summaries.
+LLM_DRAM_GBS = 25.6
+LLM_DRAM_ARGS = ['-g', 'perf_model/dram/per_controller_bandwidth=%s' % LLM_DRAM_GBS]
+
+def dram_per_token(stats, tokens):
+    """DRAM traffic per token; a read or write is one 64-byte line."""
+    reads, writes = int(stats.get('dram.reads', 0)), int(stats.get('dram.writes', 0))
+    return 'DRAM %.0f reads + %.0f writes per token (%.2f MB)' % (reads / tokens, writes / tokens, (reads + writes) * 64 / tokens / 1e6)
+
 def llm_matrix_counts(variant, decode_tokens, batches):
     """The riscv.<class> counts the agent's kernels imply.  Per decode token
     (and per prefill batch for the head, whose logits only the last token
@@ -700,8 +710,8 @@ def case_riscv_llm_simulate(p, g, workdir):
                 return False, 'w4: %s int4 matvecs, the model shape implies %d' % (mw.group(1) if mw else 'no', want)
         outdir = os.path.join(workdir, 'llmsimout-' + variant)
         shutil.rmtree(outdir, ignore_errors=True)
-        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
-                       '--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir] + LLM_DRAM_ARGS
+                      + ['--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
         if rc is None:
             return False, '%s: simulation timed out' % variant
         if rc != 0:
@@ -724,8 +734,8 @@ def case_riscv_llm_simulate(p, g, workdir):
             got = int(stats.get(k, 0))
             if got != v:
                 return False, '%s: %s = %d, the model shape implies %d' % (variant, k, got, v)
-        report.append('%s %.0f cycles/token (%.0f insn/token, IPC %.2f)' % (variant, cycles / tokens, insns / tokens, insns / cycles))
-    return True, '%d tokens (%d prefill + %d decode): %s; IME and AME instruction counts and int4 matvec count exact' % (tokens, prefilled, generated, '; '.join(report))
+        report.append('%s %.0f cycles/token (%.0f insn/token, IPC %.2f; %s)' % (variant, cycles / tokens, insns / tokens, insns / cycles, dram_per_token(stats, tokens)))
+    return True, '%d tokens (%d prefill + %d decode) at %s GB/s: %s; IME and AME instruction counts and int4 matvec count exact' % (tokens, prefilled, generated, LLM_DRAM_GBS, '; '.join(report))
 
 # AME (Attached Matrix Extension draft, Ztt): the gemm3 AME path runs on the
 # backend model inside the frontend plugin (QEMU has no AME; without the
@@ -802,8 +812,8 @@ def case_riscv_llm_couplings(p, g, workdir):
             outdir = os.path.join(workdir, 'llmcpl-%s-%s' % (variant, coupling))
             shutil.rmtree(outdir, ignore_errors=True)
             rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
-                           '-g', 'perf_model/ame_tile/coupling=' + coupling,
-                           '--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
+                           '-g', 'perf_model/ame_tile/coupling=' + coupling] + LLM_DRAM_ARGS
+                          + ['--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
             if rc is None or rc != 0:
                 return False, '%s/%s: run-sniper exited %s' % (variant, coupling, rc)
             stats = {}
@@ -823,8 +833,8 @@ def case_riscv_llm_couplings(p, g, workdir):
                     return False, '%s/%s: %s = %s, the model shape implies %d' % (variant, coupling, k, stats.get(k), v)
             if variant == 'ame' and int(stats.get('ame_tile.mma', 0)) != want['riscv.ame_mma']:
                 return False, '%s/%s: the tile executed %s squares, the core counted %d' % (variant, coupling, stats.get('ame_tile.mma'), want['riscv.ame_mma'])
-            report.append('%s/%s %.0f cycles/token (%.0f insn/token)' % (variant, coupling, cycles / tokens, insns / tokens))
-    return True, '%d tokens: %s; tile and task counts exact' % (tokens, '; '.join(report))
+            report.append('%s/%s %.0f cycles/token (%.0f insn/token; %s)' % (variant, coupling, cycles / tokens, insns / tokens, dram_per_token(stats, tokens)))
+    return True, '%d tokens at %s GB/s: %s; tile and task counts exact' % (tokens, LLM_DRAM_GBS, '; '.join(report))
 
 # The units at their wide geometry: 32x32 fp32 IME tiles (VLEN=4096, e32, m8,
 # lambda 4: the QEMU patch raises RV_VLEN_MAX to 4096) and 32x32 AME squares
@@ -901,7 +911,7 @@ def case_riscv_llm_size32(p, g, workdir):
         tokens = prefilled + generated
         outdir = os.path.join(workdir, 'llm32-%s-%s' % (variant, coupling))
         shutil.rmtree(outdir, ignore_errors=True)
-        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir] + gargs
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir] + gargs + LLM_DRAM_ARGS
                       + ['--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
         if rc is None or rc != 0:
             return False, '%s/%s: run-sniper exited %s' % (variant, coupling, rc)
@@ -917,8 +927,15 @@ def case_riscv_llm_size32(p, g, workdir):
                 return False, '%s/%s: %s = %s, the model shape implies %d' % (variant, coupling, k, stats.get(k), v)
         if coupling != 'ica' and int(stats.get('ame_tile.mma', -1)) != llm_matrix_counts(variant, generated, batches).get('riscv.ame_mma', -2):
             return False, '%s/%s: the tile executed %s squares' % (variant, coupling, stats.get('ame_tile.mma'))
-        report.append('%s/%s %.0f cycles/token (%.0f insn/token)' % (variant, coupling, cycles / tokens, insns / tokens))
-    return True, '%d tokens: %s; counts exact' % (tokens, '; '.join(report))
+        if coupling != 'ica':
+            # a 32x32 fp32 square is 32 rows of 128 bytes and every byte of every load
+            # and store reaches the tile; rows whose stride is the row length (the
+            # padded token blocks) coalesce into one span, so the tile sees at most that many rows
+            rows = (int(stats.get('riscv.ame_load', 0)) + int(stats.get('riscv.ame_store', 0))) * 32
+            if int(stats.get('ame_tile.bytes', -1)) != rows * 128 or not 0 < int(stats.get('ame_tile.rows', 0)) <= rows:
+                return False, '%s/%s: the tile saw %s rows and %s bytes, the squares hold %d rows (%d bytes)' % (variant, coupling, stats.get('ame_tile.rows'), stats.get('ame_tile.bytes'), rows, rows * 128)
+        report.append('%s/%s %.0f cycles/token (%.0f insn/token; %s)' % (variant, coupling, cycles / tokens, insns / tokens, dram_per_token(stats, tokens)))
+    return True, '%d tokens at %s GB/s: %s; counts exact' % (tokens, LLM_DRAM_GBS, '; '.join(report))
 
 # The vector unit at its full width (test/riscv-vlen-probe): every VLEN QEMU
 # accepts, up to the RVV 1.0 limit of 65,536 bits.  VLEN_KNOWN_GOOD is the
@@ -1053,7 +1070,7 @@ def case_riscv_vector_datapath(p, g, workdir):
     return True, 'full width %d cycles, 16-byte datapath %d cycles (%.2fx), counts identical' % (cycles[0], cycles[16], cycles[16] / cycles[0])
 
 def case_riscv_llm_wide(p, g, workdir):
-    """The 100 MiB agent (test/llm-agent-wide, generated on the host) on the two fast configurations of tools/llm/wide-sweep.sh: fp32 on 32x32 AME squares and int4 on a 4,096-bit vector unit, under 25.6 GB/s."""
+    """The 100 MiB agent (test/llm-agent-wide, generated on the host) on the two fast configurations of tools/llm/wide-sweep.sh: fp32 on 32x32 AME squares and int4 on a 4,096-bit vector unit, under LLM_DRAM_GBS."""
     r, why = riscv_ime_prerequisites(workdir)
     if r is None:
         return None, why
@@ -1061,11 +1078,24 @@ def case_riscv_llm_wide(p, g, workdir):
     if not os.path.isfile(os.path.join(wide, 'model_weights.bin')) or not os.path.isfile(os.path.join(wide, 'model_w4.bin')):
         return None, 'no wide model (see test/llm-agent-wide/README.md)'
     env = dict(os.environ, SNIPER_QEMU_RISCV=r['qemu'])
-    proc = subprocess.run(['bash', os.path.join(SNIPER_ROOT, 'tools', 'llm', 'wide-sweep.sh'), workdir, '25.6', 'fp32-ame32', 'w4-rvv4k'],
-                          cwd=SNIPER_ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=7200)
+    try:
+        # two recordings of ~150 M instructions and two simulations: about two hours on an idle machine
+        proc = subprocess.run(['bash', os.path.join(SNIPER_ROOT, 'tools', 'llm', 'wide-sweep.sh'), workdir, str(LLM_DRAM_GBS), 'fp32-ame32', 'w4-rvv4k'],
+                              cwd=SNIPER_ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=14400)
+    except subprocess.TimeoutExpired:
+        return False, 'the sweep did not finish within four hours'
     lines = [l for l in proc.stdout.splitlines() if 'cycles/token' in l]
     if len(lines) != 2:
         return False, 'sweep output: ' + proc.stdout.strip()[-300:]
+    for l in lines:
+        m = re.search(r'dram/token (\d+) reads \+ (\d+) writes', l)
+        if not m:
+            return False, 'no DRAM figures in: ' + l
+        reads, writes = int(m.group(1)), int(m.group(2))
+        # the weights stream in once per token and are never written: writes are
+        # the activations' evictions, a small fraction (clean lines must not be written back)
+        if writes * 8 > reads:
+            return False, 'DRAM writes (%d/token) are not small against reads (%d/token): clean lines written back?' % (writes, reads)
     return True, '; '.join(' '.join(l.split()) for l in lines)
 
 def case_riscv_ame_couplings(p, g, workdir):
@@ -1185,7 +1215,11 @@ def main():
         g = build_guests(workdir)
         for name in (args.case or sorted(CASES)):
             started = time.time()
-            ok, detail = CASES[name](p, g, workdir)
+            try:
+                ok, detail = CASES[name](p, g, workdir)
+            except Exception as e:
+                # a case that raises fails on its own; the others still run
+                ok, detail = False, '%s: %s' % (type(e).__name__, str(e).strip().splitlines()[-1] if str(e).strip() else '')
             # None: the case cannot run here (a missing tool), and says why
             verdict = 'SKIP' if ok is None else 'PASS' if ok else 'FAIL'
             took = log.record(name, time.time() - started, verdict)
