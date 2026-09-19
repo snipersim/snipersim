@@ -292,8 +292,11 @@ count checks; `make riscv-ime-check` runs them in sequence.
 ## 7. Results: both workloads on every unit
 
 All runs: Sniper with `config/riscv.cfg` (a single BOOM-class core at
-2 GHz, L1 and a private L2), every count checked against what the
-workload's shape implies (the harness cases of section 2.5).
+2 GHz, L1 and a private L2, memory at 25.6 GB/s), every count checked
+against what the workload's shape implies (the harness cases of section
+2.5).  The small model fits in the L2, so its rows see about 33 DRAM
+reads per token and no writes; the memory side only matters for the
+100 MiB model of section 9.
 
 **The LLM agent**, 379 tokens (276 prefill tokens in 16 batches of 8 to
 26, 103 decoded), every kernel reproducing the numpy model's tokens:
@@ -301,13 +304,19 @@ workload's shape implies (the harness cases of section 2.5).
 | kernel | unit and coupling | cycles / token | instructions / token | vs RVV |
 |---|---|---|---|---|
 | scalar (F extension) | core | 683,660 | 1,161,416 | 0.20x |
-| RVV 1.0, e32 m4 | core | 138,176 | 211,559 | 1.00x |
-| IME 0.9, fp32 2x2 tiles | in-core | 292,643 | 455,765 | 0.47x |
-| AME draft, fp32 4x4 squares | in-core (`ica`) | 129,092 | 170,677 | 1.07x |
-| AME draft | attached tile, port at L2 (`oca_l2`) | 143,631 | 170,677 | 0.96x |
-| AME draft | attached tile, near-core with transfer engine (`nca`) | 141,989 | 170,677 | 0.97x |
-| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 88,315 | 100,653 | 1.56x |
-| DMA-attached accelerator | near-core | 88,315 | 100,653 | 1.56x |
+| RVV 1.0, e32 m4 | core | 138,687 | 211,908 | 1.00x |
+| int4 weights, dequantised on RVV (`-DUSE_W4`) | core | 125,290 | 188,556 | 1.11x |
+| IME 0.9, fp32 2x2 tiles | in-core | 291,152 | 456,315 | 0.48x |
+| AME draft, fp32 4x4 squares | in-core (`ica`) | 128,707 | 171,228 | 1.08x |
+| AME draft | attached tile, port at L2 (`oca_l2`) | 142,213 | 171,228 | 0.98x |
+| AME draft | attached tile, near-core with transfer engine (`nca`) | 141,398 | 171,228 | 0.98x |
+| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 86,645 | 99,548 | 1.60x |
+| DMA-attached accelerator | near-core | 86,645 | 99,548 | 1.60x |
+
+(The instruction counts rose by a few hundred per token when the agent
+gained the untrained-model protocol and the layer-table indirection; the
+int4 row dequantises inside the dot product, 8x fewer weight bytes for
+11 percent fewer cycles on a model that fits in the L2.)
 
 The same kernels with the prefill token-serial, the shape measured
 before the class B kernel existed: RVV 141,698, IME 472,610, AME
@@ -396,17 +405,21 @@ it -- with a 16-byte datapath the same 4,096-bit run is 7x slower
 
 | kernel | at the baseline geometry | at 32x32 (RVV: 4,096 bits) | change |
 |---|---|---|---|
-| RVV 1.0 | 138,176 (VLEN 128) | 102,191 | 1.35x |
-| IME 0.9 in core | 292,643 (2x2) | 91,764 | 3.2x |
-| AME in core | 129,092 (4x4) | 93,112 | 1.39x |
-| AME on the tile, near-core | 141,989 (4x4) | 95,776 | 1.48x |
-| DMA accelerator | 88,315 (16 MACs/cycle) | 79,218 (1,024 MACs/cycle) | 1.11x |
+| RVV 1.0 | 138,687 (VLEN 128) | 102,666 | 1.35x |
+| IME 0.9 in core | 291,152 (2x2) | 92,983 | 3.1x |
+| AME in core | 128,707 (4x4) | 94,161 | 1.37x |
+| AME on the tile, near-core | 141,398 (4x4) | 98,199 | 1.44x |
+| DMA accelerator | 86,645 (16 MACs/cycle) | 79,218 (1,024 MACs/cycle) | 1.09x |
 
-Instructions per token: AME 170,677 to 126,514, IME 455,765 to 124,667,
-RVV 211,559 to 143,786.  Every count is exact at both geometries; the
+Instructions per token: AME 171,228 to 126,516, IME 456,315 to 125,218,
+RVV 211,908 to 144,134.  Every count is exact at both geometries; the
 AME 32 run executes 17,374 squares, which is what 6+2+8+2 output blocks
 of 32 rows over 2 K-slices per layer, 3 layers, the head and the 16
-prefill batches imply.
+prefill batches imply, and the tile receives every byte of every square
+(`riscv-llm-size32` checks the rows and bytes: an earlier decoder cap of
+16 memory micro-ops per instruction had delivered half of each 32-row
+square, which is why the 32x32 rows moved by 1 to 3 percent when it was
+lifted).
 
 What the numbers say:
 
@@ -440,3 +453,84 @@ What the numbers say:
   unit holds 192 KB of architectural state; the draft's whole-register
   image transfers (`mls.1r`/`mss.1r`) are what a context switch moves,
   and the tile model does not charge for them yet.
+
+## 9. The 100 MiB agent: where the bytes are
+
+Sections 7 and 9 measured a model whose weights fit in the L2, which is
+the one case where a compressed weight format cannot show as time.
+`test/llm-agent-wide` is the same agent at d = 512, 8 layers, context
+128: 25.3 million parameters, 101 MB of fp32, so every decode token
+streams the whole model through a memory system that holds none of it.
+The model is untrained (the trainer's export-anyway mode: the references
+are the untrained numpy model's own outputs, and the generation lengths
+are pinned to the numpy value, so the self-check still holds), and its
+weights travel as a binary blob embedded at link time.  A second weight
+format joins fp32: int4 with a per-row scale (`quantize_w4.py`, 12.7
+MB, dequantised on the vector unit inside the dot product).  One prompt,
+8 tokens per generate, `tools/llm/wide-sweep.sh` at 25.6 GB/s of memory
+bandwidth (an edge LPDDR figure; the configuration's default is 5):
+
+| kernel | weight format | unit | cycles / token | instructions / token | DRAM reads + writes / token | bytes / token |
+|---|---|---|---|---|---|---|
+| fp32, 32x32 squares | fp32, 101 MB | AME in core | 6,802,694 | 3,006,245 | 580,598 + 6,573 | 37.6 MB |
+| fp32, 32x32 squares | fp32 | AME tile, near-core | 6,441,976 | 3,006,245 | 580,628 + 6,580 | 37.6 MB |
+| int4, dequantised in the dot product | int4, 12.7 MB | RVV, 128 bits | 13,805,144 | 11,788,868 | 83,918 + 3,704 | 5.6 MB |
+| int4 | int4 | RVV, 4,096 bits over a 64-byte datapath | 13,438,056 | 3,893,196 | 83,918 + 3,704 | 5.6 MB |
+| fp32 direct | fp32 | RVV, 128 and 4,096 bits | simulating: 877 M and 175 M instructions per run | | | |
+
+(51 tokens: one prompt of 35 tokens prefilled in two batches, 16
+decoded; every run reproduces the numpy model's tokens.  The DRAM
+columns count 64-byte lines; 18 passes over the model in 51 tokens gives
+35.7 MB of fp32 weights per token and 4.5 MB of int4, the rest is the KV
+cache and activations.  The writes are the activations' evictions, 1 to
+4 percent of the reads.)
+
+These rows were measured after two memory-side corrections that every
+earlier wide figure lacked (commit "Memory side"): a directory the size
+of the L2 had written every clean line back to DRAM (writes equalled
+reads) and cost a flush round trip per L2 miss, and the decoder had
+delivered half the rows of each 32x32 square.  The uncorrected fp32 row
+was 6.7 million cycles per token at 40 MB per token; the corrected one
+moves 6 percent fewer bytes for about the same time, because the missing
+rows now cost what the spurious writes had.
+
+What the numbers say:
+
+- **The bytes moved as promised.**  Against fp32 the int4 format
+  streams 6.7x fewer bytes per token, and the counts are exact: the
+  compressed format's DRAM traffic is what a hardware decompressor would
+  move.  At 25.6 GB/s the fp32 stream alone is 2.9 million cycles per
+  token, the int4 stream 0.44 million: that is the floor each format can
+  reach, and the gap between them is the prize.
+- **The int4 rows are bound by DRAM latency, not by instructions.**
+  Cutting the kernel from 11.8 million to 3.9 million instructions per
+  token (128 to 4,096 bits) gained 3 percent, and both rows sit 30x above
+  their bandwidth floor.  The dot product walks one 256-byte weight row
+  at a time, the configuration has no hardware prefetcher
+  (`prefetcher = none` at every level of `config/riscv.cfg`), and the
+  out-of-order window overlaps barely more than one 100 ns miss with the
+  next: 84,000 line reads at 100 ns each is 16.8 million cycles if they
+  were serial, and the run takes 13.4 million.  The fp32 square loads
+  fare better because one instruction issues 64 lines at once (8.5
+  misses in flight on average), which is why the format that moves 6.7x
+  more bytes is 2x faster.  A stream prefetcher or a DMA engine in front
+  of the vector unit is the lever, and it is worth more than the
+  instruction count: the accelerator form of the int4 kernel (the task
+  path of section 3.4, streaming rows and dequantising inside the unit)
+  would let the byte count become the time.
+- **The fp32 run reaches 43 percent of the bandwidth**, 6.8 million
+  cycles against a 2.9 million floor, latency-bound on the in-order row
+  path of the square loads; the near-core transfer engine, which
+  prefetches at dispatch a few instructions ahead, gains 5 percent (6.44
+  million).  The stream needs a prefetcher that runs whole squares ahead.
+- **The core's own work is about 2 million cycles per token.**  Of the
+  fp32 run's 3.0 million instructions, 1.9 million are the generic
+  scalar work and 386,000 the scalar multiply-adds of attention over the
+  KV cache, normalisation and GELU; at d = 512 that is the floor under
+  every row once the weight stream is fixed.  Vectorising attention and
+  the activations (the next items on the list) pairs with the compressed
+  weights.
+
+`tools/llm/wide-sweep.sh` reproduces every row; the harness case
+`riscv-llm-wide` runs the two fast configurations and requires the DRAM
+writes to stay a small fraction of the reads.

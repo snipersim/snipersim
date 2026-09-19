@@ -232,16 +232,16 @@ skips it.
 **Simulation.**  The trace thread turns each range into one memory access
 of that size (the core splits it over cache lines), so every line a tile
 touches goes through the cache hierarchy and the ROB.  A vector or tile
-memory instruction is given `perf_model/core/rvv/memory_uops` load or
+memory instruction is given `perf_model/core/riscv/memory_uops` load or
 store uops statically; each recorded range takes one and the rest are
 squashed, the way scatter/gather uops already are.  The execute part is
-costed per class from `perf_model/core/rvv` and `perf_model/core/ime`
+costed per class from the generated `perf_model/core/riscv`
 in the config (see `config/riscv.cfg` for the keys and defaults): matrix
 multiply-accumulates run on a matrix unit with a result latency and an
 issue interval, vector dividers stay busy for their latency, and the
 BOOM port assignment treats vector FP and matrix work as port 0, vector
 divides as port 1 and vector memory as port 2.  `sim.stats` counts the
-instructions per class under `rvext.*` (per thread) together with the
+instructions per class under `riscv.<class>` (per thread) together with the
 recorded spans and their bytes.
 
 Two more harness cases cover this, `riscv-ime-trace` and
