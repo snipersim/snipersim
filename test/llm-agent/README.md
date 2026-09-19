@@ -64,3 +64,11 @@ Build by hand:
     # the AME build needs the plugin:
     qemu-riscv/build/qemu-riscv64 -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on \
           -plugin build/release/lib/libsniper-qemu.so,output=trace -- ./agent
+
+The trainer's `--blob` writes the weights as `model_weights.bin`, a raw
+float32 file the agent embeds at link time with `.incbin` (the header then
+only carries the shape and the offsets); a 100 MiB model is not C text.
+The blob is found through the include path, and because a quoted
+`#include` searches the source file's own directory first, a model kept in
+another directory is built from a copy of `agent.c` placed outside
+`test/llm-agent`.

@@ -31,6 +31,15 @@
 
 #include <stdint.h>
 #include "model_weights.h"
+#ifdef GPT_W_BLOB
+/* The weights as a binary blob embedded at link time (a 100 MiB model is not
+   C text): the trainer's --blob writes model_weights.bin next to the header,
+   found through the include path.  A quoted #include searches the source
+   file's own directory first, so a model in another directory is built from
+   a copy of this file placed outside test/llm-agent. */
+__asm__(".section .rodata\n.balign 64\n.globl GPT_W\nGPT_W:\n.incbin \"" GPT_W_BLOB "\"\n.previous");
+extern const float GPT_W[];
+#endif
 #include "prompts.h"
 
 /* ---------------------------------------------------------- freestanding */
