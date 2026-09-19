@@ -913,6 +913,43 @@ def case_riscv_llm_size32(p, g, workdir):
         report.append('%s/%s %.0f cycles/token (%.0f insn/token)' % (variant, coupling, cycles / tokens, insns / tokens))
     return True, '%d tokens: %s; counts exact' % (tokens, '; '.join(report))
 
+# The vector unit at its full width (test/riscv-vlen-probe): every VLEN QEMU
+# accepts, up to the RVV 1.0 limit of 65,536 bits.  VLEN_KNOWN_GOOD is the
+# widest length the probe is required to pass at; QEMU's generic-vector
+# expansion is wrong above 2 KB operands (family 5 at 4,096 bits) until fixed.
+VLEN_KNOWN_GOOD = 2048
+
+def case_riscv_vlen_probe(p, g, workdir):
+    """The vector-width probe at every VLEN QEMU accepts: every instruction family agrees with the scalar reference up to VLEN_KNOWN_GOOD."""
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    guest = os.path.join(workdir, 'vlen_probe')
+    rc, out = run([os.environ['SNIPER_RISCV_CC'], '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O2', '-ffreestanding',
+                   '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest,
+                   os.path.join(SNIPER_ROOT, 'test', 'riscv-vlen-probe', 'vlen_probe.c')], 300)
+    if rc != 0:
+        return False, 'could not build the probe (exit %s)' % rc
+    results, cap = {}, None
+    vlen = 128
+    while vlen <= 65536:
+        rc, out = run([r['qemu'], '-cpu', 'max,vlen=%d' % vlen, guest], 120, cwd=workdir)
+        m = re.search(r'VLEN in the range \[\d+, (\d+)\]', out or '')
+        if m:
+            cap = int(m.group(1))
+            break
+        results[vlen] = rc
+        vlen *= 2
+    bad = ['%d: family %d step %d' % (v, rc // 10, rc % 10) for v, rc in sorted(results.items()) if rc != 100]
+    required_bad = [v for v, rc in results.items() if rc != 100 and v <= VLEN_KNOWN_GOOD]
+    good = [v for v, rc in sorted(results.items()) if rc == 100]
+    summary = 'every family agrees at %s bits; QEMU cap %s' % (', '.join(str(v) for v in good), cap if cap else 'none below 65536')
+    if bad:
+        summary += '; wrong above: ' + ', '.join(bad)
+    if required_bad:
+        return False, 'the probe fails at a length it must pass (%s): %s' % (', '.join(str(v) for v in required_bad), summary)
+    return True, summary
+
 def case_riscv_ame_couplings(p, g, workdir):
     """The attached tile (AmeTile) runs a 32x32x32 AME product under every coupling: tile counts exact, timing responds."""
     r, why = riscv_gemm_prerequisites(workdir)
@@ -989,6 +1026,7 @@ CASES = {
     'riscv-llm-couplings': case_riscv_llm_couplings,
     'riscv-size32-verify': case_riscv_size32_verify,
     'riscv-llm-size32':    case_riscv_llm_size32,
+    'riscv-vlen-probe':    case_riscv_vlen_probe,
 }
 
 
