@@ -917,7 +917,7 @@ def case_riscv_llm_size32(p, g, workdir):
 # accepts, up to the RVV 1.0 limit of 65,536 bits.  VLEN_KNOWN_GOOD is the
 # widest length the probe is required to pass at; QEMU's generic-vector
 # expansion is wrong above 2 KB operands (family 5 at 4,096 bits) until fixed.
-VLEN_KNOWN_GOOD = 4096
+VLEN_KNOWN_GOOD = 65536
 
 def case_riscv_vlen_probe(p, g, workdir):
     """The vector-width probe at every VLEN QEMU accepts: every instruction family agrees with the scalar reference up to VLEN_KNOWN_GOOD."""
