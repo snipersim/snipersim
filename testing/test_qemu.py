@@ -565,7 +565,7 @@ def case_riscv_gemm_sail(p, g, workdir):
 # each accelerated variant and checks the matrix-unit instruction counts
 # against what the model's shape implies.
 LLM_DIR = os.path.join(SNIPER_ROOT, 'test', 'llm-agent')
-LLM_VARIANTS = (('scalar', []), ('rvv', ['-DUSE_RVV']), ('ime', ['-DUSE_IME']), ('ame', ['-DUSE_AME']), ('dma', ['-DUSE_DMA']))
+LLM_VARIANTS = (('scalar', []), ('rvv', ['-DUSE_RVV']), ('ime', ['-DUSE_IME']), ('ame', ['-DUSE_AME']), ('dma', ['-DUSE_DMA']), ('w4', ['-DUSE_W4']))
 
 def llm_build(cc, out, extra):
     return run([cc, '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O2', '-ffreestanding',
@@ -651,7 +651,7 @@ def riscv_llm_prerequisites(workdir):
     return r, None
 
 def case_riscv_llm_agent(p, g, workdir):
-    """The tool-calling GPT answers every prompt as the numpy model does, with scalar, RVV, IME, AME and DMA-task kernels."""
+    """The tool-calling GPT answers every prompt as the numpy model does, with scalar, RVV, IME, AME, DMA-task and int4 kernels."""
     r, why = riscv_llm_prerequisites(workdir)
     if r is None:
         return None, why
@@ -672,12 +672,12 @@ def case_riscv_llm_agent(p, g, workdir):
     return True, '%d prompts, every line as numpy, every answer right (%s)' % (n, '; '.join(summary))
 
 def case_riscv_llm_simulate(p, g, workdir):
-    """Sniper simulates the agent on RVV, IME and AME and reports the batch-of-1 cost per token; matrix-unit counts must be exact."""
+    """Sniper simulates the agent on RVV, IME, AME and int4 weights and reports the batch-of-1 cost per token; matrix-unit and int4 matvec counts must be exact."""
     r, why = riscv_llm_prerequisites(workdir)
     if r is None:
         return None, why
     report = []
-    for variant in ('rvv', 'ime', 'ame'):
+    for variant in ('rvv', 'ime', 'ame', 'w4'):
         prefix = os.path.join(workdir, 'llmsim-' + variant)
         rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                        '--', r['llm'][variant]], 900, cwd=workdir)
@@ -691,6 +691,13 @@ def case_riscv_llm_simulate(p, g, workdir):
         if not mb:
             return False, '%s: no prefill batch sizes in the guest output' % variant
         batches = [int(t) for t in mb.group(1).split()]
+        if variant == 'w4':
+            # every layer product of every token runs as one int4 matvec (the head stays fp32)
+            D, L, V = llm_dims()
+            mw = re.search(r'w4: (\d+) int4 matvecs', out)
+            want = (prefilled + generated) * 4 * L
+            if not mw or int(mw.group(1)) != want:
+                return False, 'w4: %s int4 matvecs, the model shape implies %d' % (mw.group(1) if mw else 'no', want)
         outdir = os.path.join(workdir, 'llmsimout-' + variant)
         shutil.rmtree(outdir, ignore_errors=True)
         rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
@@ -718,7 +725,7 @@ def case_riscv_llm_simulate(p, g, workdir):
             if got != v:
                 return False, '%s: %s = %d, the model shape implies %d' % (variant, k, got, v)
         report.append('%s %.0f cycles/token (%.0f insn/token, IPC %.2f)' % (variant, cycles / tokens, insns / tokens, insns / cycles))
-    return True, '%d tokens (%d prefill + %d decode): %s; IME and AME instruction counts exact' % (tokens, prefilled, generated, '; '.join(report))
+    return True, '%d tokens (%d prefill + %d decode): %s; IME and AME instruction counts and int4 matvec count exact' % (tokens, prefilled, generated, '; '.join(report))
 
 # AME (Attached Matrix Extension draft, Ztt): the gemm3 AME path runs on the
 # backend model inside the frontend plugin (QEMU has no AME; without the

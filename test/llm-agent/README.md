@@ -82,3 +82,10 @@ used, and the agent feeds the protocol newline after a call the model
 never terminated, so the token-for-token check still holds.  Exit code 6
 (every line as numpy, every answer wrong) is such a model's pass; the
 sweep scripts accept it.
+
+`-DUSE_W4` runs the layer matvecs on int4 weights (`tools/llm/quantize_w4.py`
+writes `model_w4.h`, `model_w4.bin` and `prompts_w4.h`: a per-row scale,
+planar nibbles, 8x fewer weight bytes than fp32, the int4 numpy model's own
+outputs as the reference); the dot product dequantizes on the vector unit.
+The harness runs it as the `w4` variant of `riscv-llm-agent` and
+`riscv-llm-simulate`.

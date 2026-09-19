@@ -40,7 +40,14 @@
 __asm__(".section .rodata\n.balign 64\n.globl GPT_W\nGPT_W:\n.incbin \"" GPT_W_BLOB "\"\n.previous");
 extern const float GPT_W[];
 #endif
+#if defined(USE_W4)
+#include "model_w4.h"         /* the matmul weights as int4 rows (tools/llm/quantize_w4.py) */
+#include "prompts_w4.h"       /* the int4 numpy model's own outputs */
+__asm__(".section .rodata\n.balign 64\n.globl W4_BLOB\nW4_BLOB:\n.incbin \"" W4_BLOB_FILE "\"\n.previous");
+extern const unsigned char W4_BLOB[];
+#else
 #include "prompts.h"
+#endif
 #ifndef GEN_CALL
 #define GEN_CALL 40           /* tokens per generate; a model's header pins both to the numpy value it was referenced with */
 #define GEN_ANS 24
@@ -98,7 +105,7 @@ static float tanhf_(float x)
 static float sqrtf_(float x) { float r; __asm__("fsqrt.s %0, %1" : "=f"(r) : "f"(x)); return r; }
 
 /* ---------------------------------------------------------- kernels */
-#if defined(USE_IME) || defined(USE_AME) || defined(USE_DMA)
+#if defined(USE_IME) || defined(USE_AME) || defined(USE_DMA) || defined(USE_W4)
 #include "riscv_insn.h"
 #define USE_RVV
 #endif
@@ -400,6 +407,108 @@ static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, co
 }
 #endif
 
+
+#ifdef USE_W4
+/* ---------------------------------------------------------- W4A16: int4 weights
+ * Per output row: a float32 scale and nin/2 bytes of planar nibbles (q+8; the
+ * low nibbles are the first half of the row, the high nibbles the second).
+ * The dot product dequantizes on the vector unit: unpack, widen, subtract 8,
+ * convert, multiply-accumulate with x; one scale per row at the end.  8x
+ * fewer weight bytes than fp32, the same number of vector operations. */
+struct w4_mat { const unsigned char *q; const float *scale; int nout, nin; };
+#define W4_ENTRY(K, NOUT, NIN) { W4_BLOB + W4_OFF_Q_##K, (const float *)(W4_BLOB + W4_OFF_S_##K), NOUT, NIN }
+#define W4_LAYER(l) { W4_ENTRY(WQKV##l, 3 * GPT_D, GPT_D), W4_ENTRY(WO##l, GPT_D, GPT_D), W4_ENTRY(W1##l, 4 * GPT_D, GPT_D), W4_ENTRY(W2##l, GPT_D, 4 * GPT_D) }
+static const struct w4_mat W4_MATS[GPT_L][4] = {
+   W4_LAYER(0),
+#if GPT_L > 1
+   W4_LAYER(1),
+#endif
+#if GPT_L > 2
+   W4_LAYER(2),
+#endif
+#if GPT_L > 3
+   W4_LAYER(3),
+#endif
+#if GPT_L > 4
+   W4_LAYER(4),
+#endif
+#if GPT_L > 5
+   W4_LAYER(5),
+#endif
+#if GPT_L > 6
+   W4_LAYER(6),
+#endif
+#if GPT_L > 7
+   W4_LAYER(7),
+#endif
+#if GPT_L > 8
+   W4_LAYER(8),
+#endif
+#if GPT_L > 9
+   W4_LAYER(9),
+#endif
+#if GPT_L > 10
+   W4_LAYER(10),
+#endif
+#if GPT_L > 11
+   W4_LAYER(11),
+#endif
+#if GPT_L > 12
+   W4_LAYER(12),
+#endif
+#if GPT_L > 13
+   W4_LAYER(13),
+#endif
+#if GPT_L > 14
+   W4_LAYER(14),
+#endif
+#if GPT_L > 15
+   W4_LAYER(15),
+#endif
+};
+static long n_w4_matvec;
+static void w4_matvec(float *y, const float *x, const struct w4_mat *m, const float *bias)
+{
+   const int nin = m->nin, half = nin / 2;
+   for (int o = 0; o < m->nout; o++)
+   {
+      const unsigned char *row = m->q + (long)o * half;
+      float s;
+      __asm__ volatile("vsetvli t0, zero, e32, m8, ta, ma\n\tvmv.v.i v24, 0" : : : "t0");
+      for (int j = 0; j < half; )
+      {
+         long vl;
+         __asm__ volatile(
+            "vsetvli %[vl], %[n], e8, m2, ta, ma\n\t"
+            "vle8.v v0, (%[row])\n\t"                          /* vl bytes: two weights each */
+            "vand.vi v2, v0, 15\n\t"                           /* low nibbles: weights j.. */
+            "vsrl.vi v4, v0, 4\n\t"                            /* high nibbles: weights j + half.. */
+            "vsetvli %[vl], %[n], e32, m8, tu, ma\n\t"         /* tail undisturbed: the accumulator's upper lanes keep their sums */
+            "vzext.vf4 v8, v2\n\t"
+            "vadd.vi v8, v8, -8\n\t"
+            "vfcvt.f.x.v v8, v8\n\t"
+            "vle32.v v16, (%[xl])\n\t"
+            "vfmacc.vv v24, v8, v16\n\t"
+            "vzext.vf4 v8, v4\n\t"
+            "vadd.vi v8, v8, -8\n\t"
+            "vfcvt.f.x.v v8, v8\n\t"
+            "vle32.v v16, (%[xh])\n\t"
+            "vfmacc.vv v24, v8, v16"
+            : [vl] "=&r"(vl) : [n] "r"((long)(half - j)), [row] "r"(row + j), [xl] "r"(x + j), [xh] "r"(x + half + j) : "t0", "memory");
+         j += (int)vl;
+      }
+      __asm__ volatile(
+         "vsetvli t0, zero, e32, m8, ta, ma\n\t"
+         "vmv.s.x v0, zero\n\t"
+         "vfredusum.vs v0, v24, v0\n\t"
+         "vfmv.f.s %[s], v0"
+         : [s] "=f"(s) : : "t0");
+      y[o] = (bias ? bias[o] : 0.0f) + s * m->scale[o];
+   }
+   n_w4_matvec++;
+}
+#endif
+
 /* ---------------------------------------------------------- the model */
 #define HD (GPT_D / GPT_H)
 static float Kc[GPT_L][GPT_T][GPT_D], Vc[GPT_L][GPT_T][GPT_D];   /* KV cache */
@@ -460,6 +569,15 @@ static const int LOFF[GPT_L][12] = {
 #endif
 };
 
+/* A layer's weight product: the int4 rows under -DUSE_W4, the fp32 matrix otherwise. */
+#ifdef USE_W4
+#define LAYER_MATVEC(y, xin, which, Wp, bp, nin, nout) w4_matvec(y, xin, &W4_MATS[l][which], bp)
+#define LAYER_GEMM(Y, ldy, Xm, ldx, which, Wp, bp, T, nin, nout) do { for (int t_ = 0; t_ < (T); t_++) w4_matvec((Y) + (long)t_ * (ldy), (Xm) + (long)t_ * (ldx), &W4_MATS[l][which], bp); } while (0)
+#else
+#define LAYER_MATVEC(y, xin, which, Wp, bp, nin, nout) matvec(y, xin, Wp, bp, nin, nout)
+#define LAYER_GEMM(Y, ldy, Xm, ldx, which, Wp, bp, T, nin, nout) gemm(Y, ldy, Xm, ldx, Wp, bp, T, nin, nout)
+#endif
+
 /* one token in at position pos, logits out */
 static void forward(int tok)
 {
@@ -469,7 +587,7 @@ static void forward(int tok)
    {
       const int *L = LOFF[l];
       layernorm(h, x, W(L[0]), W(L[1]), GPT_D);
-      matvec(qkv, h, W(L[2]), W(L[3]), GPT_D, 3 * GPT_D);
+      LAYER_MATVEC(qkv, h, 0, W(L[2]), W(L[3]), GPT_D, 3 * GPT_D);
       for (int i = 0; i < GPT_D; i++) { Kc[l][pos][i] = qkv[GPT_D + i]; Vc[l][pos][i] = qkv[2 * GPT_D + i]; }
       for (int hh = 0; hh < GPT_H; hh++)
       {
@@ -481,12 +599,12 @@ static void forward(int tok)
          for (int i = 0; i < HD; i++) att[hh * HD + i] = 0;
          for (int t = 0; t <= pos; t++) { float p = scores[t] / sum; for (int i = 0; i < HD; i++) att[hh * HD + i] += p * Vc[l][t][hh * HD + i]; }
       }
-      matvec(o, att, W(L[4]), W(L[5]), GPT_D, GPT_D);
+      LAYER_MATVEC(o, att, 1, W(L[4]), W(L[5]), GPT_D, GPT_D);
       for (int i = 0; i < GPT_D; i++) x[i] += o[i];
       layernorm(h, x, W(L[6]), W(L[7]), GPT_D);
-      matvec(m1, h, W(L[8]), W(L[9]), GPT_D, 4 * GPT_D);
+      LAYER_MATVEC(m1, h, 2, W(L[8]), W(L[9]), GPT_D, 4 * GPT_D);
       for (int i = 0; i < 4 * GPT_D; i++) m1[i] = gelu(m1[i]);
-      matvec(m2, m1, W(L[10]), W(L[11]), 4 * GPT_D, GPT_D);
+      LAYER_MATVEC(m2, m1, 3, W(L[10]), W(L[11]), 4 * GPT_D, GPT_D);
       for (int i = 0; i < GPT_D; i++) x[i] += m2[i];
    }
    layernorm(h, x, W(OFF_LNF_G), W(OFF_LNF_B), GPT_D);
@@ -507,7 +625,7 @@ static void forward_batch(const int *toks, int T)
    {
       const int *L = LOFF[l];
       for (int t = 0; t < T; t++) layernorm(Hb[t], Xb[t], W(L[0]), W(L[1]), GPT_D);
-      gemm(&QKVb[0][0], 3 * GPT_D, &Hb[0][0], GPT_D, W(L[2]), W(L[3]), T, GPT_D, 3 * GPT_D);
+      LAYER_GEMM(&QKVb[0][0], 3 * GPT_D, &Hb[0][0], GPT_D, 0, W(L[2]), W(L[3]), T, GPT_D, 3 * GPT_D);
       for (int t = 0; t < T; t++)
          for (int i = 0; i < GPT_D; i++) { Kc[l][pos + t][i] = QKVb[t][GPT_D + i]; Vc[l][pos + t][i] = QKVb[t][2 * GPT_D + i]; }
       for (int t = 0; t < T; t++)
@@ -521,12 +639,12 @@ static void forward_batch(const int *toks, int T)
             for (int i = 0; i < HD; i++) ATTb[t][hh * HD + i] = 0;
             for (int u = 0; u <= pos + t; u++) { float pr = scores[u] / sum; for (int i = 0; i < HD; i++) ATTb[t][hh * HD + i] += pr * Vc[l][u][hh * HD + i]; }
          }
-      gemm(&Ob[0][0], GPT_D, &ATTb[0][0], GPT_D, W(L[4]), W(L[5]), T, GPT_D, GPT_D);
+      LAYER_GEMM(&Ob[0][0], GPT_D, &ATTb[0][0], GPT_D, 1, W(L[4]), W(L[5]), T, GPT_D, GPT_D);
       for (int t = 0; t < T; t++) for (int i = 0; i < GPT_D; i++) Xb[t][i] += Ob[t][i];
       for (int t = 0; t < T; t++) layernorm(Hb[t], Xb[t], W(L[6]), W(L[7]), GPT_D);
-      gemm(&M1b[0][0], 4 * GPT_D, &Hb[0][0], GPT_D, W(L[8]), W(L[9]), T, GPT_D, 4 * GPT_D);
+      LAYER_GEMM(&M1b[0][0], 4 * GPT_D, &Hb[0][0], GPT_D, 2, W(L[8]), W(L[9]), T, GPT_D, 4 * GPT_D);
       for (int t = 0; t < T; t++) for (int i = 0; i < 4 * GPT_D; i++) M1b[t][i] = gelu(M1b[t][i]);
-      gemm(&M2b[0][0], GPT_D, &M1b[0][0], 4 * GPT_D, W(L[10]), W(L[11]), T, 4 * GPT_D, GPT_D);
+      LAYER_GEMM(&M2b[0][0], GPT_D, &M1b[0][0], 4 * GPT_D, 3, W(L[10]), W(L[11]), T, 4 * GPT_D, GPT_D);
       for (int t = 0; t < T; t++) for (int i = 0; i < GPT_D; i++) Xb[t][i] += M2b[t][i];
    }
    layernorm(h, Xb[T - 1], W(OFF_LNF_G), W(OFF_LNF_B), GPT_D);     /* only the last token's logits are used */
@@ -594,7 +712,11 @@ void _start(void)
    RISCV_AME_ACQUIRE(ame_status, 0L); (void)ame_status;
    RISCV_MSETTYP(0, AME_FP32); RISCV_MSETTYP(1, AME_FP32); RISCV_MSETTYP(2, AME_FP32);
 #endif
-   out("agent: "); outn(GPT_NPARAM); out(" parameters, d="); outn(GPT_D); out(" L="); outn(GPT_L); out(" ctx="); outn(GPT_T); out(", matvec " MATVEC_NAME "\n");
+   out("agent: "); outn(GPT_NPARAM); out(" parameters, d="); outn(GPT_D); out(" L="); outn(GPT_L); out(" ctx="); outn(GPT_T); out(", matvec " MATVEC_NAME
+#ifdef USE_W4
+       " + w4"
+#endif
+       "\n");
    int bad = 0;
    char call[64], res[24], ans[64];
    for (int i = 0; i < N_PROMPTS; i++)
@@ -615,6 +737,9 @@ void _start(void)
    }
    out("tokens: "); outn(n_prefill); out(" prefilled, "); outn(n_generated); out(" generated\n");
    out("prefill batches:"); for (int i = 0; i < nbatches; i++) { out(" "); outn(batches[i]); } out("\n");
+#ifdef USE_W4
+   out("w4: "); outn(n_w4_matvec); out(" int4 matvecs\n");
+#endif
 #ifdef USE_AME
    RISCV_AME_RELEASE();
 #endif
