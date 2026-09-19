@@ -88,3 +88,5 @@ pin-log.txt
 
 # Blessed statistics baselines: host-specific, see testing/test_virtuoso.py
 testing/goldens/
+test/llm-agent-wide/*.bin
+test/llm-agent-wide/*.h

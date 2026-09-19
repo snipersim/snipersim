@@ -1052,6 +1052,22 @@ def case_riscv_vector_datapath(p, g, workdir):
         return False, 'a 16-byte datapath (%d cycles) is not slower than the full width (%d)' % (cycles[16], cycles[0])
     return True, 'full width %d cycles, 16-byte datapath %d cycles (%.2fx), counts identical' % (cycles[0], cycles[16], cycles[16] / cycles[0])
 
+def case_riscv_llm_wide(p, g, workdir):
+    """The 100 MiB agent (test/llm-agent-wide, generated on the host) on the two fast configurations of tools/llm/wide-sweep.sh: fp32 on 32x32 AME squares and int4 on a 4,096-bit vector unit, under 25.6 GB/s."""
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    wide = os.path.join(SNIPER_ROOT, 'test', 'llm-agent-wide')
+    if not os.path.isfile(os.path.join(wide, 'model_weights.bin')) or not os.path.isfile(os.path.join(wide, 'model_w4.bin')):
+        return None, 'no wide model (see test/llm-agent-wide/README.md)'
+    env = dict(os.environ, SNIPER_QEMU_RISCV=r['qemu'])
+    proc = subprocess.run(['bash', os.path.join(SNIPER_ROOT, 'tools', 'llm', 'wide-sweep.sh'), workdir, '25.6', 'fp32-ame32', 'w4-rvv4k'],
+                          cwd=SNIPER_ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=7200)
+    lines = [l for l in proc.stdout.splitlines() if 'cycles/token' in l]
+    if len(lines) != 2:
+        return False, 'sweep output: ' + proc.stdout.strip()[-300:]
+    return True, '; '.join(' '.join(l.split()) for l in lines)
+
 def case_riscv_ame_couplings(p, g, workdir):
     """The attached tile (AmeTile) runs a 32x32x32 AME product under every coupling: tile counts exact, timing responds."""
     r, why = riscv_gemm_prerequisites(workdir)
@@ -1132,6 +1148,7 @@ CASES = {
     'riscv-llm-vlen':      case_riscv_llm_vlen,
     'riscv-footprint-lines': case_riscv_footprint_lines,
     'riscv-vector-datapath': case_riscv_vector_datapath,
+    'riscv-llm-wide':      case_riscv_llm_wide,
 }
 
 
