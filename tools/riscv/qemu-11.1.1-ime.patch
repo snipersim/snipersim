@@ -5,7 +5,10 @@ by hand.  Adds the x-zvvmm/x-zvvfmm/x-zvvmtls/x-zvvmttls CPU properties
 (default off), the tile load/store and matrix multiply-accumulate helpers,
 and vsetlambda; raises RV_VLEN_MAX from 1024 to 4096 and the tile helper
 buffers to 1024 elements so IME tiles of up to 32x32 fp32 (VLEN=4096, m8,
-lambda 4) run.  Applied by deps/sniper-deps for the riscv-ime feature.
+lambda 4) run; widens the generic-vector descriptor's size field
+(tcg-gvec-desc.h, 8 to 13 bits) so vector operands above 2 KB are no longer
+silently truncated (test/riscv-vlen-probe).  Applied by deps/sniper-deps for
+the riscv-ime feature.
 Regenerate from the pipeline when the specification moves.
 
 --- a/target/riscv/cpu.c
@@ -1550,3 +1553,14 @@ Regenerate from the pipeline when the specification moves.
  #define RV_MAX_MHPMEVENTS 32
  #define RV_MAX_MHPMCOUNTERS 32
  
+--- a/include/tcg/tcg-gvec-desc.h
++++ b/include/tcg/tcg-gvec-desc.h
+@@ -33,7 +33,7 @@
+  * This steals the input that would otherwise map to 24 to match maxsz.
+  */
+ #define SIMD_MAXSZ_SHIFT   0
+-#define SIMD_MAXSZ_BITS    8
++#define SIMD_MAXSZ_BITS    13   /* was 8: operands up to 64 KB (an m8 group at VLEN 65536), not 2 KB; RISC-V's VDATA uses 11 of the remaining 17 data bits (Sniper) */
+ 
+ #define SIMD_OPRSZ_SHIFT   (SIMD_MAXSZ_SHIFT + SIMD_MAXSZ_BITS)
+ #define SIMD_OPRSZ_BITS    2

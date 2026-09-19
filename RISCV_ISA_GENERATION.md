@@ -159,7 +159,12 @@ per version into the shared dependency cache, and links it at
 `qemu-riscv/`.  Run it with `-cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on`;
 the patch also raises QEMU's VLEN cap from 1,024 to 4,096 bits (and the tile
 helper buffers to 1,024 elements) so that 32x32 fp32 IME tiles run
-(`vlen=4096`, e32, m8, lambda 4).
+(`vlen=4096`, e32, m8, lambda 4).  The raise exposed a limit in QEMU's
+generic-vector descriptor, whose size field held operands up to 2 KB and
+silently truncated larger ones (the simple integer ops on a full m8 group
+at 4,096 bits came out wrong); the patch widens the field to 13 bits, 64
+KB, and `test/riscv-vlen-probe` checks every instruction family on a full
+group at every VLEN QEMU accepts.
 Building on the target is what keeps it free of glibc-version trouble: a
 binary built on a newer distribution than the one it runs on fails on
 glibc symbol versions, and a static one cannot host the plugin.
