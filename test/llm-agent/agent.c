@@ -295,11 +295,10 @@ static float gelu(float x)
  * block against the nout x nin weights, so a matrix unit fills every column
  * of its tile and a weight tile is loaded once per group of token tiles
  * instead of once per token. */
-#define SEL16(i, OP) do { switch (i) { \
-   case 0: OP(0); break; case 1: OP(1); break; case 2: OP(2); break; case 3: OP(3); break; \
-   case 4: OP(4); break; case 5: OP(5); break; case 6: OP(6); break; case 7: OP(7); break; \
-   case 8: OP(8); break; case 9: OP(9); break; case 10: OP(10); break; case 11: OP(11); break; \
-   case 12: OP(12); break; case 13: OP(13); break; case 14: OP(14); break; case 15: OP(15); break; } } while (0)
+/* The accumulator a block uses is a register number, which must reach the
+ * instruction as a literal.  A step over the nb blocks of a group is one
+ * switch on nb that falls through: block nb-1 first, down to block 0, each
+ * with its own literal (one indirect jump per step, not one per block). */
 
 #if defined(USE_IME)
 /* IME_S x IME_S tiles: a token block x an output block; the IME_NACC
@@ -307,23 +306,19 @@ static float gelu(float x)
  * weight tile is loaded once per IME_NACC*IME_S tokens.  A batch shorter than
  * a tile is padded: the rows beyond T come from the buffer (GPT_T rows) and
  * are never read back. */
-#define IME_ZERO(a)  __asm__ volatile("vmv.v.i v" #a ", 0")
-#define IME_MMA(a)   RISCV_VFMMACC_VV(a, 0, 8, 1)
-#define IME_STORE(a) IME_VMTS(a, yp, (long)ldy)
+/* per block i on accumulator group a: zero it, load the X tile and multiply-accumulate, store it */
+#define IME_ZERO_B(a, i)  __asm__ volatile("vmv.v.i v" #a ", 0")
+#define IME_MMA_B(a, i)   do { IME_VMTL(0, Xm + (long)(g + (i)) * IME_S * ldx + k, (long)ldx); RISCV_VFMMACC_VV(a, 0, 8, 1); } while (0)
+#define IME_STORE_B(a, i) do { float *yp = Y + (long)(g + (i)) * IME_S * ldy + o; IME_VMTS(a, yp, (long)ldy); \
+   if (bias) for (int r = 0; r < IME_S; r++) for (int c = 0; c < IME_S; c++) yp[r * ldy + c] += bias[o + c]; } while (0)
 #if IME_LMUL == 1
-#define SELV(i, OP) do { switch (i) { \
-   case 0: OP(16); break; case 1: OP(17); break; case 2: OP(18); break; case 3: OP(19); break; \
-   case 4: OP(20); break; case 5: OP(21); break; case 6: OP(22); break; case 7: OP(23); break; \
-   case 8: OP(24); break; case 9: OP(25); break; case 10: OP(26); break; case 11: OP(27); break; \
-   case 12: OP(28); break; case 13: OP(29); break; case 14: OP(30); break; case 15: OP(31); break; } } while (0)
+#define IME_BLOCKS(nb, OP) do { switch (nb) { case 16: OP(31, 15); case 15: OP(30, 14); case 14: OP(29, 13); case 13: OP(28, 12); case 12: OP(27, 11); case 11: OP(26, 10); case 10: OP(25, 9); case 9: OP(24, 8); case 8: OP(23, 7); case 7: OP(22, 6); case 6: OP(21, 5); case 5: OP(20, 4); case 4: OP(19, 3); case 3: OP(18, 2); case 2: OP(17, 1); case 1: OP(16, 0); default: break; } } while (0)
 #elif IME_LMUL == 2
-#define SELV(i, OP) do { switch (i) { \
-   case 0: OP(16); break; case 1: OP(18); break; case 2: OP(20); break; case 3: OP(22); break; \
-   case 4: OP(24); break; case 5: OP(26); break; case 6: OP(28); break; case 7: OP(30); break; } } while (0)
+#define IME_BLOCKS(nb, OP) do { switch (nb) { case 8: OP(30, 7); case 7: OP(28, 6); case 6: OP(26, 5); case 5: OP(24, 4); case 4: OP(22, 3); case 3: OP(20, 2); case 2: OP(18, 1); case 1: OP(16, 0); default: break; } } while (0)
 #elif IME_LMUL == 4
-#define SELV(i, OP) do { switch (i) { case 0: OP(16); break; case 1: OP(20); break; case 2: OP(24); break; case 3: OP(28); break; } } while (0)
+#define IME_BLOCKS(nb, OP) do { switch (nb) { case 4: OP(28, 3); case 3: OP(24, 2); case 2: OP(20, 1); case 1: OP(16, 0); default: break; } } while (0)
 #else
-#define SELV(i, OP) do { switch (i) { case 0: OP(16); break; case 1: OP(24); break; } } while (0)
+#define IME_BLOCKS(nb, OP) do { switch (nb) { case 2: OP(24, 1); case 1: OP(16, 0); default: break; } } while (0)
 #endif
 static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
 {
@@ -336,22 +331,13 @@ static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, co
       for (int g = 0; g < TB; g += IME_NACC)
       {
          const int nb = TB - g < IME_NACC ? TB - g : IME_NACC;
-         for (int tb = 0; tb < nb; tb++) SELV(tb, IME_ZERO);
+         IME_BLOCKS(nb, IME_ZERO_B);
          for (int k = 0; k < nin; k += IME_S)
          {
             IME_VMTL(8, W + (long)o * nin + k, (long)nin);           /* W tile: rows o.. */
-            for (int tb = 0; tb < nb; tb++)
-            {
-               IME_VMTL(0, Xm + (long)(g + tb) * IME_S * ldx + k, (long)ldx);   /* X tile: IME_S tokens */
-               SELV(tb, IME_MMA);                                               /* C += X x W^T */
-            }
+            IME_BLOCKS(nb, IME_MMA_B);                                /* per block: X tile of IME_S tokens, C += X x W^T */
          }
-         for (int tb = 0; tb < nb; tb++)
-         {
-            float *yp = Y + (long)(g + tb) * IME_S * ldy + o;
-            SELV(tb, IME_STORE);
-            if (bias) for (int i = 0; i < IME_S; i++) for (int j = 0; j < IME_S; j++) yp[i * ldy + j] += bias[o + j];
-         }
+         IME_BLOCKS(nb, IME_STORE_B);
       }
    for (; o < nout; o++)
       for (int t = 0; t < T; t++) Y[(long)t * ldy + o] = (bias ? bias[o] : 0.0f) + dot(Xm + (long)t * ldx, W + (long)o * nin, nin);
@@ -361,9 +347,12 @@ static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, co
  * token squares (16*N tokens), so a weight square is loaded once per prefill.
  * A batch shorter than a square is padded: the rows beyond T come from the
  * buffer (GPT_T rows) and are never read back. */
-#define AME_SET(a)  RISCV_ASETTYP(a, AME_FP32)
-#define AME_MMA(a)  RISCV_MMULBTACC_2D(a, 0, 1)
-#define AME_MOV(a)  RISCV_MMOV_M_A(2, a)
+/* per block i on accumulator a: zero it, load the X square and multiply-accumulate, move it out and store */
+#define AME_SET_B(a, i) RISCV_ASETTYP(a, AME_FP32)
+#define AME_MMA_B(a, i) do { RISCV_MLS_ST(0, Xm + (long)(g + (i)) * AME_N * ldx + k, (long)ldx * 4); RISCV_MMULBTACC_2D(a, 0, 1); } while (0)
+#define AME_MOV_B(a, i) do { float *yp = Y + (long)(g + (i)) * AME_N * ldy + o; RISCV_MMOV_M_A(2, a); RISCV_MSS_ST(2, yp, (long)ldy * 4); \
+   if (bias) for (int r = 0; r < AME_N; r++) for (int c = 0; c < AME_N; c++) yp[r * ldy + c] += bias[o + c]; } while (0)
+#define AME_BLOCKS(nb, OP) do { switch (nb) { case 16: OP(15, 15); case 15: OP(14, 14); case 14: OP(13, 13); case 13: OP(12, 12); case 12: OP(11, 11); case 11: OP(10, 10); case 10: OP(9, 9); case 9: OP(8, 8); case 8: OP(7, 7); case 7: OP(6, 6); case 6: OP(5, 5); case 5: OP(4, 4); case 4: OP(3, 3); case 3: OP(2, 2); case 2: OP(1, 1); case 1: OP(0, 0); default: break; } } while (0)
 static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, const float *bias, int T, int nin, int nout)
 {
    const int TB = (T + AME_N - 1) / AME_N;
@@ -372,23 +361,13 @@ static void gemm(float *Y, int ldy, const float *Xm, int ldx, const float *W, co
       for (int g = 0; g < TB; g += 16)
       {
          const int nb = TB - g < 16 ? TB - g : 16;
-         for (int tb = 0; tb < nb; tb++) SEL16(tb, AME_SET);                      /* zero the accumulators */
+         AME_BLOCKS(nb, AME_SET_B);                                                /* zero the accumulators */
          for (int k = 0; k < nin; k += AME_N)
          {
             RISCV_MLS_ST(1, W + (long)o * nin + k, (long)nin * 4);                 /* W square: rows o.. */
-            for (int tb = 0; tb < nb; tb++)
-            {
-               RISCV_MLS_ST(0, Xm + (long)(g + tb) * AME_N * ldx + k, (long)ldx * 4);  /* X square: N tokens */
-               SEL16(tb, AME_MMA);                                                 /* acc += X x W^T */
-            }
+            AME_BLOCKS(nb, AME_MMA_B);                                             /* per block: X square of N tokens, acc += X x W^T */
          }
-         for (int tb = 0; tb < nb; tb++)
-         {
-            float *yp = Y + (long)(g + tb) * AME_N * ldy + o;
-            SEL16(tb, AME_MOV);
-            RISCV_MSS_ST(2, yp, (long)ldy * 4);
-            if (bias) for (int i = 0; i < AME_N; i++) for (int j = 0; j < AME_N; j++) yp[i * ldy + j] += bias[o + j];
-         }
+         AME_BLOCKS(nb, AME_MOV_B);
       }
    for (; o < nout; o++)
       for (int t = 0; t < T; t++) Y[(long)t * ldy + o] = (bias ? bias[o] : 0.0f) + dot(Xm + (long)t * ldx, W + (long)o * nin, nin);

@@ -306,17 +306,20 @@ reads per token and no writes; the memory side only matters for the
 | scalar (F extension) | core | 683,660 | 1,161,416 | 0.20x |
 | RVV 1.0, e32 m4 | core | 138,687 | 211,908 | 1.00x |
 | int4 weights, dequantised on RVV (`-DUSE_W4`) | core | 125,290 | 188,556 | 1.11x |
-| IME 0.9, fp32 2x2 tiles | in-core | 291,152 | 456,315 | 0.48x |
-| AME draft, fp32 4x4 squares | in-core (`ica`) | 128,707 | 171,228 | 1.08x |
-| AME draft | attached tile, port at L2 (`oca_l2`) | 142,213 | 171,228 | 0.98x |
-| AME draft | attached tile, near-core with transfer engine (`nca`) | 141,398 | 171,228 | 0.98x |
-| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 86,645 | 99,548 | 1.60x |
-| DMA-attached accelerator | near-core | 86,645 | 99,548 | 1.60x |
+| IME 0.9, fp32 2x2 tiles | in-core | 264,998 | 264,759 | 0.52x |
+| AME draft, fp32 4x4 squares | in-core (`ica`) | 127,939 | 146,247 | 1.08x |
+| AME draft | attached tile, port at L2 (`oca_l2`) | 144,455 | 146,247 | 0.96x |
+| AME draft | attached tile, near-core with transfer engine (`nca`) | 142,846 | 146,247 | 0.97x |
+| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 86,646 | 99,548 | 1.60x |
+| DMA-attached accelerator | near-core | 86,646 | 99,548 | 1.60x |
 
-(The instruction counts rose by a few hundred per token when the agent
-gained the untrained-model protocol and the layer-table indirection; the
-int4 row dequantises inside the dot product, 8x fewer weight bytes for
-11 percent fewer cycles on a model that fits in the L2.)
+(The int4 row dequantises inside the dot product, 8x fewer weight bytes
+for 11 percent fewer cycles on a model that fits in the L2.  The tile
+kernels dispatch each step over a group's token blocks through one
+switch that falls through the blocks, one indirect jump per step instead
+of one per block: IME's instruction count fell from 456,315 to 264,759
+per token and AME's from 171,228 to 146,247; the 4x4 rows gained 2 to 9
+percent in time, the 32x32 rows of section 8 close to half.)
 
 The same kernels with the prefill token-serial, the shape measured
 before the class B kernel existed: RVV 141,698, IME 472,610, AME
@@ -405,14 +408,16 @@ it -- with a 16-byte datapath the same 4,096-bit run is 7x slower
 
 | kernel | at the baseline geometry | at 32x32 (RVV: 4,096 bits) | change |
 |---|---|---|---|
-| RVV 1.0 | 138,687 (VLEN 128) | 102,666 | 1.35x |
-| IME 0.9 in core | 291,152 (2x2) | 92,983 | 3.1x |
-| AME in core | 128,707 (4x4) | 94,161 | 1.37x |
-| AME on the tile, near-core | 141,398 (4x4) | 98,199 | 1.44x |
-| DMA accelerator | 86,645 (16 MACs/cycle) | 79,218 (1,024 MACs/cycle) | 1.09x |
+| RVV 1.0 | 138,686 (VLEN 128) | 102,665 | 1.35x |
+| IME 0.9 in core | 264,998 (2x2) | 51,197 | 5.2x |
+| AME in core | 127,939 (4x4) | 54,071 | 2.37x |
+| AME on the tile, near-core | 142,846 (4x4) | 58,027 | 2.46x |
+| DMA accelerator | 86,646 (16 MACs/cycle) | 79,218 (1,024 MACs/cycle) | 1.09x |
 
-Instructions per token: AME 171,228 to 126,516, IME 456,315 to 125,218,
-RVV 211,908 to 144,134.  Every count is exact at both geometries; the
+Instructions per token: AME 146,247 to 70,593, IME 264,759 to 67,655,
+RVV 211,908 to 144,134.  (Before the fall-through block dispatch the
+32x32 rows were 92,983 for IME and 94,161 for AME: with 16 token blocks
+per group the per-block switch had cost as much as the matrix work.)  Every count is exact at both geometries; the
 AME 32 run executes 17,374 squares, which is what 6+2+8+2 output blocks
 of 32 rows over 2 K-slices per layer, 3 layers, the head and the 16
 prefill batches imply, and the tile receives every byte of every square
@@ -423,13 +428,13 @@ lifted).
 
 What the numbers say:
 
-- **Bigger tiles help, and then stop helping.**  The three in-core
-  kernels land within 10 percent of each other at 32x32, between 91,000
-  and 102,000 cycles per token, against a floor of about 75,000 cycles of
-  non-matrix work per token (attention over the KV cache, normalisation,
-  GELU, the embedding; measured in section 7 as the core's own work
-  between DMA tasks, which a 64x faster accelerator leaves untouched).  A wider unit cannot remove that floor; only moving
-  that work to the unit, or a leaner model, can.
+- **Bigger tiles help, and the dispatch must keep up.**  The two
+  matrix units land within 6 percent of each other at 32x32, 51,000 to
+  54,000 cycles per token, half the vector unit at 4,096 bits and below
+  the DMA accelerator, whose 79,000 is dominated by the core's own
+  scalar work between tasks (attention over the KV cache, normalisation,
+  GELU, the embedding), the floor a wider unit cannot remove; the vector
+  kernels for that work are the next items.
 - **At batch 1 the wide unit is almost all padding.**  A decode matvec
   fills one column of a 32x32 square: 32,768 multiply-accumulates for
   1,024 useful ones, 3 percent utilisation.  The prefill batches of 8 to
