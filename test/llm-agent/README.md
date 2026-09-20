@@ -89,3 +89,9 @@ planar nibbles, 8x fewer weight bytes than fp32, the int4 numpy model's own
 outputs as the reference); the dot product dequantizes on the vector unit.
 The harness runs it as the `w4` variant of `riscv-llm-agent` and
 `riscv-llm-simulate`.
+
+With `-DUSE_RVV` (and every build on top of it) layer normalisation and
+GELU also run on the vector unit as strip loops over e32,m4 groups, so
+the same code runs at every VLEN; the guest reports its attention dot
+count and the harness derives every vector-class instruction count of
+the RVV build from the model's shape (`llm_vector_counts`).

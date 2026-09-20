@@ -573,13 +573,38 @@ def llm_build(cc, out, extra):
                 '-I', os.path.join(SNIPER_ROOT, 'include')] + extra
                + ['-o', out, os.path.join(LLM_DIR, 'agent.c')], 300)
 
-def llm_dims():
+def llm_dims(keys='DLV'):
     d = {}
     for line in open(os.path.join(LLM_DIR, 'model_weights.h')):
-        m = re.match(r'#define GPT_([DLV]) (\d+)', line)
+        m = re.match(r'#define GPT_([DLVH]) (\d+)', line)
         if m:
             d[m.group(1)] = int(m.group(2))
-    return d['D'], d['L'], d['V']
+    return tuple(d[k] for k in keys)
+
+def llm_vector_counts(vlen, prefilled, generated, batches, att_dots):
+    """The riscv.v_<class> counts the RVV build implies.  Its vector work is
+    three strip loops over e32,m4 groups of VL = VLEN/8 elements: the dot
+    product (every matvec row, the head, and att_dots q.k products of HD
+    elements, a count the guest reports because it depends on the positions),
+    layer normalisation (three passes over D) and GELU (one pass over 4D);
+    the per-strip instruction counts are those of the loops in agent.c."""
+    D, L, V, H = llm_dims('DLVH')
+    VL = vlen // 8
+    S = lambda n: (n + VL - 1) // VL
+    tokens, heads = prefilled + generated, generated + len(batches)
+    dots = {D: tokens * L * (3 * D + D + 4 * D) + heads * V, 4 * D: tokens * L * D, D // H: att_dots}
+    ln, gelu = tokens * 2 * L + heads, tokens * L
+    e = {k: 0 for k in ('v_cfg', 'v_load', 'v_store', 'v_fp_muladd', 'v_fp_addsub', 'v_fp_div', 'v_int_alu')}
+    for n, calls in dots.items():
+        e['v_cfg'] += calls * (S(n) + 2); e['v_load'] += calls * 2 * S(n); e['v_fp_muladd'] += calls * S(n)
+        e['v_fp_addsub'] += calls * 2; e['v_int_alu'] += calls * 2
+    s = S(D)
+    e['v_cfg'] += ln * (3 * s + 4); e['v_load'] += ln * 5 * s; e['v_store'] += ln * s
+    e['v_fp_addsub'] += ln * (4 * s + 4); e['v_fp_muladd'] += ln * 3 * s; e['v_int_alu'] += ln * 4
+    s = S(4 * D)
+    e['v_cfg'] += gelu * s; e['v_load'] += gelu * s; e['v_store'] += gelu * s
+    e['v_fp_muladd'] += gelu * 15 * s; e['v_fp_addsub'] += gelu * 13 * s; e['v_fp_div'] += gelu * s; e['v_int_alu'] += gelu * 3 * s
+    return {'riscv.' + k: v for k, v in e.items()}
 
 # Unit geometry per kernel variant: the matrix side S (an IME tile or an AME
 # square is S x S) and the accumulators the GEMM blocks over (IME: 16/LMUL
@@ -670,7 +695,7 @@ def case_riscv_llm_agent(p, g, workdir):
         cmd = [r['qemu'], '-cpu', r['cpu']]
         if variant in ('ame', 'dma'):     # QEMU has neither AME nor the accelerator: the plugin executes them
             cmd += ['-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'llm' + variant)), '--']
-        rc, out = run(cmd + [guest], 900, cwd=workdir)
+        rc, out = run(cmd + [guest], 1800, cwd=workdir)     # the IME build under QEMU's tile helpers takes ~7 minutes alone, more on a loaded machine
         names = {5: 'a line differs from the numpy model', 6: 'an answer is wrong', 7: 'lines differ and answers are wrong'}
         if rc != 100:
             return False, '%s kernel: guest exited %s: %s' % (variant, rc, names.get(rc, 'unexpected'))
@@ -701,6 +726,7 @@ def case_riscv_llm_simulate(p, g, workdir):
         if not mb:
             return False, '%s: no prefill batch sizes in the guest output' % variant
         batches = [int(t) for t in mb.group(1).split()]
+        att = re.search(r'attention: (\d+) dots', out)      # the guest's output, before the simulator's replaces it
         if variant == 'w4':
             # every layer product of every token runs as one int4 matvec (the head stays fp32)
             D, L, V = llm_dims()
@@ -734,8 +760,16 @@ def case_riscv_llm_simulate(p, g, workdir):
             got = int(stats.get(k, 0))
             if got != v:
                 return False, '%s: %s = %d, the model shape implies %d' % (variant, k, got, v)
+        if variant == 'rvv':
+            if not att:
+                return False, 'rvv: no attention dot count in the guest output'
+            vlen = int(re.search(r'vlen=(\d+)', r['cpu']).group(1))
+            for k, v in sorted(llm_vector_counts(vlen, prefilled, generated, batches, int(att.group(1))).items()):
+                got = int(stats.get(k, 0))
+                if got != v:
+                    return False, 'rvv: %s = %d, the kernels imply %d' % (k, got, v)
         report.append('%s %.0f cycles/token (%.0f insn/token, IPC %.2f; %s)' % (variant, cycles / tokens, insns / tokens, insns / cycles, dram_per_token(stats, tokens)))
-    return True, '%d tokens (%d prefill + %d decode) at %s GB/s: %s; IME and AME instruction counts and int4 matvec count exact' % (tokens, prefilled, generated, LLM_DRAM_GBS, '; '.join(report))
+    return True, '%d tokens (%d prefill + %d decode) at %s GB/s: %s; RVV vector-class, IME and AME instruction counts and the int4 matvec count exact' % (tokens, prefilled, generated, LLM_DRAM_GBS, '; '.join(report))
 
 # AME (Attached Matrix Extension draft, Ztt): the gemm3 AME path runs on the
 # backend model inside the frontend plugin (QEMU has no AME; without the

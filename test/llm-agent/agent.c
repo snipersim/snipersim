@@ -272,6 +272,133 @@ static void matvec(float *y, const float *x, const float *W, const float *bias, 
    for (; o < nout; o++) y[o] = (bias ? bias[o] : 0.0f) + dot(x, W + (long)o * nin, nin);
 }
 #endif
+#ifdef USE_RVV
+/* Layer normalisation and GELU on the vector unit (e32, m4 strips of whatever
+ * length vsetvli grants, so the same code runs at every VLEN).  Both keep the
+ * scalar arithmetic: two reductions and a normalising pass; GELU's tanh
+ * through the same clamped range reduction and degree-6 polynomial as expf_.
+ * The harness derives every vector-class count of the RVV build from these
+ * loops (testing/test_qemu.py, llm_vector_counts). */
+static void layernorm(float *y, const float *x, const float *g, const float *b, int n)
+{
+   float mu, var, rstd;
+   long nn = n; const float *p = x;
+   __asm__ volatile(                                            /* mu = sum x */
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vmv.v.i v8, 0\n\t"
+      "1:\n\t"
+      "vsetvli t0, %[n], e32, m4, tu, mu\n\t"
+      "vle32.v v0, (%[p])\n\t"
+      "vfadd.vv v8, v8, v0\n\t"
+      "slli t1, t0, 2\n\t"
+      "add %[p], %[p], t1\n\t"
+      "sub %[n], %[n], t0\n\t"
+      "bnez %[n], 1b\n\t"
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vmv.s.x v12, zero\n\t"
+      "vfredusum.vs v12, v8, v12\n\t"
+      "vfmv.f.s %[s], v12"
+      : [s] "=f"(mu), [p] "+r"(p), [n] "+r"(nn) : : "t0", "t1", "memory");
+   mu /= (float)n;
+   nn = n; p = x;
+   __asm__ volatile(                                            /* var = sum (x - mu)^2 */
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vmv.v.i v8, 0\n\t"
+      "1:\n\t"
+      "vsetvli t0, %[n], e32, m4, tu, mu\n\t"
+      "vle32.v v0, (%[p])\n\t"
+      "vfsub.vf v0, v0, %[mu]\n\t"
+      "vfmacc.vv v8, v0, v0\n\t"
+      "slli t1, t0, 2\n\t"
+      "add %[p], %[p], t1\n\t"
+      "sub %[n], %[n], t0\n\t"
+      "bnez %[n], 1b\n\t"
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vmv.s.x v12, zero\n\t"
+      "vfredusum.vs v12, v8, v12\n\t"
+      "vfmv.f.s %[s], v12"
+      : [s] "=f"(var), [p] "+r"(p), [n] "+r"(nn) : [mu] "f"(mu) : "t0", "t1", "memory");
+   var /= (float)n;
+   rstd = 1.0f / sqrtf_(var + 1e-5f);
+   nn = n; p = x;
+   __asm__ volatile(                                            /* y = (x - mu) * rstd * g + b */
+      "1:\n\t"
+      "vsetvli t0, %[n], e32, m4, ta, ma\n\t"
+      "vle32.v v0, (%[p])\n\t"
+      "vfsub.vf v0, v0, %[mu]\n\t"
+      "vfmul.vf v0, v0, %[rstd]\n\t"
+      "vle32.v v4, (%[g])\n\t"
+      "vfmul.vv v0, v0, v4\n\t"
+      "vle32.v v4, (%[b])\n\t"
+      "vfadd.vv v0, v0, v4\n\t"
+      "vse32.v v0, (%[y])\n\t"
+      "slli t1, t0, 2\n\t"
+      "add %[p], %[p], t1\n\t"
+      "add %[g], %[g], t1\n\t"
+      "add %[b], %[b], t1\n\t"
+      "add %[y], %[y], t1\n\t"
+      "sub %[n], %[n], t0\n\t"
+      "bnez %[n], 1b"
+      : [p] "+r"(p), [g] "+r"(g), [b] "+r"(b), [y] "+r"(y), [n] "+r"(nn) : [mu] "f"(mu), [rstd] "f"(rstd) : "t0", "t1", "memory");
+}
+/* GELU over n elements in place: u = c1 (x + c2 x^3), y = x (1 + tanh u) / 2,
+ * tanh u = (e - 1) / (e + 1) with e = exp(2u), 2u clamped to [-20, 20] (the
+ * scalar code returns +-1 beyond |u| = 9; e^20 rounds to the same). */
+static void gelu_v(float *v, int n)
+{
+   long nn = n;
+   const float c1x2 = 2.0f * 0.7978845608028654f, c2 = 0.044715f, hi = 20.0f, lo = -20.0f;
+   const float inv = 1.4426950408889634f, ln2 = 0.6931471805599453f, half = 0.5f, one = 1.0f;
+   const float c6 = 0.0013888889f, c5 = 0.008333334f, c4 = 0.041666668f, c3 = 0.16666667f;
+   const long b127 = 127;
+   __asm__ volatile(
+      "1:\n\t"
+      "vsetvli t0, %[n], e32, m4, ta, ma\n\t"
+      "vle32.v v0, (%[p])\n\t"                 /* x */
+      "vfmul.vv v4, v0, v0\n\t"                /* x^2 */
+      "vfmul.vv v4, v4, v0\n\t"                /* x^3 */
+      "vmv.v.v v8, v0\n\t"
+      "vfmacc.vf v8, %[c2], v4\n\t"            /* x + c2 x^3 */
+      "vfmul.vf v8, v8, %[c1x2]\n\t"           /* z = 2u */
+      "vfmin.vf v8, v8, %[hi]\n\t"
+      "vfmax.vf v8, v8, %[lo]\n\t"
+      "vfmul.vf v4, v8, %[inv]\n\t"            /* z / ln2 */
+      "vfcvt.x.f.v v12, v4\n\t"                /* k */
+      "vfcvt.f.x.v v4, v12\n\t"
+      "vfnmsac.vf v8, %[ln2], v4\n\t"          /* r = z - k ln2 */
+      "vfmul.vf v4, v8, %[c6]\n\t"             /* p = c6 r + c5, Horner down to 1 */
+      "vfadd.vf v4, v4, %[c5]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[c4]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[c3]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[half]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[one]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[one]\n\t"
+      "vadd.vx v12, v12, %[b127]\n\t"          /* 2^k as float bits */
+      "vsll.vi v12, v12, 23\n\t"
+      "vfmul.vv v4, v4, v12\n\t"               /* e = p 2^k */
+      "vfsub.vf v8, v4, %[one]\n\t"
+      "vfadd.vf v4, v4, %[one]\n\t"
+      "vfdiv.vv v8, v8, v4\n\t"                /* tanh */
+      "vfadd.vf v8, v8, %[one]\n\t"
+      "vfmul.vv v8, v8, v0\n\t"
+      "vfmul.vf v8, v8, %[half]\n\t"
+      "vse32.v v8, (%[p])\n\t"
+      "slli t1, t0, 2\n\t"
+      "add %[p], %[p], t1\n\t"
+      "sub %[n], %[n], t0\n\t"
+      "bnez %[n], 1b"
+      : [p] "+r"(v), [n] "+r"(nn)
+      : [c1x2] "f"(c1x2), [c2] "f"(c2), [hi] "f"(hi), [lo] "f"(lo), [inv] "f"(inv), [ln2] "f"(ln2),
+        [c6] "f"(c6), [c5] "f"(c5), [c4] "f"(c4), [c3] "f"(c3), [half] "f"(half), [one] "f"(one), [b127] "r"(b127)
+      : "t0", "t1", "memory");
+}
+#define GELU_INPLACE(v, n) gelu_v(v, n)
+#else
 static void layernorm(float *y, const float *x, const float *g, const float *b, int n)
 {
    float mu = 0, var = 0;
@@ -287,6 +414,8 @@ static float gelu(float x)
    float u = 0.7978845608028654f * (x + 0.044715f * x * x * x);
    return 0.5f * x * (1.0f + tanhf_(u));
 }
+#define GELU_INPLACE(v, n) do { for (int i_ = 0; i_ < (n); i_++) (v)[i_] = gelu((v)[i_]); } while (0)
+#endif
 
 
 /* ---------------------------------------------------------- prefill: the GEMM
@@ -494,6 +623,7 @@ static float Kc[GPT_L][GPT_T][GPT_D], Vc[GPT_L][GPT_T][GPT_D];   /* KV cache */
 static float x[GPT_D], h[GPT_D], qkv[3 * GPT_D], att[GPT_D], o[GPT_D], m1[4 * GPT_D], m2[GPT_D], logits[GPT_V];
 static float scores[GPT_T];
 static int pos;
+static long n_att_dots;                        /* q.k dot products, for the harness's derived vector counts */
 
 #define W(off) (GPT_W + (off))
 /* the per-layer weight offsets, one row per layer up to 16 (a deeper model adds rows here) */
@@ -568,6 +698,7 @@ static void forward(int tok)
       layernorm(h, x, W(L[0]), W(L[1]), GPT_D);
       LAYER_MATVEC(qkv, h, 0, W(L[2]), W(L[3]), GPT_D, 3 * GPT_D);
       for (int i = 0; i < GPT_D; i++) { Kc[l][pos][i] = qkv[GPT_D + i]; Vc[l][pos][i] = qkv[2 * GPT_D + i]; }
+      n_att_dots += (long)GPT_H * (pos + 1);
       for (int hh = 0; hh < GPT_H; hh++)
       {
          const float *q = qkv + hh * HD;
@@ -582,7 +713,7 @@ static void forward(int tok)
       for (int i = 0; i < GPT_D; i++) x[i] += o[i];
       layernorm(h, x, W(L[6]), W(L[7]), GPT_D);
       LAYER_MATVEC(m1, h, 2, W(L[8]), W(L[9]), GPT_D, 4 * GPT_D);
-      for (int i = 0; i < 4 * GPT_D; i++) m1[i] = gelu(m1[i]);
+      GELU_INPLACE(m1, 4 * GPT_D);
       LAYER_MATVEC(m2, m1, 3, W(L[10]), W(L[11]), 4 * GPT_D, GPT_D);
       for (int i = 0; i < GPT_D; i++) x[i] += m2[i];
    }
@@ -608,6 +739,8 @@ static void forward_batch(const int *toks, int T)
       for (int t = 0; t < T; t++)
          for (int i = 0; i < GPT_D; i++) { Kc[l][pos + t][i] = QKVb[t][GPT_D + i]; Vc[l][pos + t][i] = QKVb[t][2 * GPT_D + i]; }
       for (int t = 0; t < T; t++)
+         n_att_dots += (long)GPT_H * (pos + t + 1);
+      for (int t = 0; t < T; t++)
          for (int hh = 0; hh < GPT_H; hh++)
          {
             const float *q = QKVb[t] + hh * HD;
@@ -622,7 +755,7 @@ static void forward_batch(const int *toks, int T)
       for (int t = 0; t < T; t++) for (int i = 0; i < GPT_D; i++) Xb[t][i] += Ob[t][i];
       for (int t = 0; t < T; t++) layernorm(Hb[t], Xb[t], W(L[6]), W(L[7]), GPT_D);
       LAYER_GEMM(&M1b[0][0], 4 * GPT_D, &Hb[0][0], GPT_D, 2, W(L[8]), W(L[9]), T, GPT_D, 4 * GPT_D);
-      for (int t = 0; t < T; t++) for (int i = 0; i < 4 * GPT_D; i++) M1b[t][i] = gelu(M1b[t][i]);
+      for (int t = 0; t < T; t++) GELU_INPLACE(M1b[t], 4 * GPT_D);
       LAYER_GEMM(&M2b[0][0], GPT_D, &M1b[0][0], 4 * GPT_D, 3, W(L[10]), W(L[11]), T, 4 * GPT_D, GPT_D);
       for (int t = 0; t < T; t++) for (int i = 0; i < GPT_D; i++) Xb[t][i] += M2b[t][i];
    }
@@ -716,6 +849,7 @@ void _start(void)
    }
    out("tokens: "); outn(n_prefill); out(" prefilled, "); outn(n_generated); out(" generated\n");
    out("prefill batches:"); for (int i = 0; i < nbatches; i++) { out(" "); outn(batches[i]); } out("\n");
+   out("attention: "); outn(n_att_dots); out(" dots\n");
 #ifdef USE_W4
    out("w4: "); outn(n_w4_matvec); out(" int4 matvecs\n");
 #endif
