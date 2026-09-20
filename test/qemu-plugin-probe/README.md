@@ -97,3 +97,12 @@ one and compiles the plugin against it:
 plugin requires API version 3, but this QEMU supports only a minimum version of 7
 plugin requires API version 7, but this QEMU supports only up to version 3
 ```
+
+`rv-ame-api.c` (`-DMODE=0/1/2`) and `rv-ame-loop.c` are the guests of the
+`riscv-plugin-api` case: the plugin-backed AME CSRs, ownership, a 4x4
+product through claimed instructions, the exceptions the model raises
+(SIGILL without ownership, SIGSEGV for a square at an unmapped address),
+and 4 million emulated instructions to time the claim against the
+exception path.  See frontend/qemu-plugin/README.md, "Emulating an
+extension".
+

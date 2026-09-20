@@ -63,4 +63,4 @@ SNIPER_QEMU_RISCV="$QEMU_RISCV" SNIPER_RISCV_CC="$CC" \
                                 --case riscv-llm-agent --case riscv-llm-simulate \
                                 --case riscv-ame-verify --case riscv-ame-simulate --case riscv-ame-couplings \
                                 --case riscv-llm-couplings --case riscv-size32-verify --case riscv-llm-size32 --case riscv-vlen-probe --case riscv-llm-vlen \
-                                --case riscv-llm-wide
+                                --case riscv-llm-wide --case riscv-plugin-api

@@ -6,7 +6,8 @@
 set -e
 PRISTINE=${1:?pristine tree}; PATCHED=${2:?patched tree}; ROOT=$(cd "$(dirname "$0")/../.." && pwd); OUT=$ROOT/tools/riscv/qemu-11.1.1-ime.patch
 HDR=$(mktemp); sed -n '1,/^--- /p' "$OUT" | sed '$d' > "$HDR"
-FILES=$( { grep '^+++ b/' "$OUT" | sed 's|^+++ b/||'; } | sort -u)
+# every file the patch already touches, plus any other file that differs between the trees
+FILES=$( { grep '^+++ b/' "$OUT" | sed 's|^+++ b/||'; diff -rq --exclude=build --exclude=.git "$PRISTINE" "$PATCHED" | grep '^Files ' | awk '{print $2}' | sed "s|^$PRISTINE/||"; } | sort -u)
 NEW=$(mktemp); cat "$HDR" > "$NEW"
 for f in $FILES; do
    if [ -f "$PRISTINE/$f" ]; then diff -u --label "a/$f" --label "b/$f" "$PRISTINE/$f" "$PATCHED/$f" >> "$NEW" || true

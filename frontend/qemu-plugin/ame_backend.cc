@@ -50,7 +50,10 @@ namespace
          if (store)
             for (unsigned i = 0; i < N; i++) for (unsigned j = 0; j < N; j++) mem[colmajor ? j * N + i : i * N + j] = buf[i * N + j];
          if (store ? !env.write_mem(base, mem, NELEM * 4) : !env.read_mem(base, mem, NELEM * 4))
+         {
+            b.fault_addr = base; b.fault_store = store;
             return false;
+         }
          env.note_access(base, NELEM * 4, store);
          if (!store)
             for (unsigned i = 0; i < N; i++) for (unsigned j = 0; j < N; j++) buf[i * N + j] = mem[colmajor ? j * N + i : i * N + j];
@@ -64,7 +67,10 @@ namespace
             if (store)
                for (unsigned e = 0; e < N; e++) seg[e] = transposed_stride ? buf[e * N + s] : buf[s * N + e];
             if (store ? !env.write_mem(addr, seg, N * 4) : !env.read_mem(addr, seg, N * 4))
+            {
+               b.fault_addr = addr; b.fault_store = store;
                return false;
+            }
             env.note_access(addr, N * 4, store);
             if (!store)
                for (unsigned e = 0; e < N; e++) { if (transposed_stride) buf[e * N + s] = seg[e]; else buf[s * N + e] = seg[e]; }
@@ -81,7 +87,9 @@ bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
    const unsigned N = square_n, NELEM = N * N;
    const char *name = rvisa::name(op);
    const Ops o = operands(op, word);
-   auto fail = [&](const std::string &why) { b.errors++; env.error(std::string(name) + ": " + why); return false; };
+   /* the conditions the draft traps on raise an illegal-instruction exception
+    * with the instruction bits as the trap value, when the host can */
+   auto fail = [&](const std::string &why) { b.errors++; env.error(std::string(name) + ": " + why); if (env.trap) env.trap(EXCP_ILLEGAL, word); return false; };
    b.executed++;
 
    if (!strcmp(name, "ame.acquire"))
@@ -125,8 +133,11 @@ bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
       const uint64_t base = env.read_x(o.xs1), stride = strided ? env.read_x(o.xs2) : 0;
       if (!square_transfer(b, env, b.M[reg], store, colmajor, strided, tst, base, stride))
       {
-         char where[64]; snprintf(where, sizeof(where), "guest memory access failed at 0x%llx (stride %llu)", (unsigned long long)base, (unsigned long long)stride);
-         return fail(where);
+         /* an access fault at the row that failed, once reported */
+         char where[96]; snprintf(where, sizeof(where), "guest memory access failed at 0x%llx (base 0x%llx, stride %llu)", (unsigned long long)b.fault_addr, (unsigned long long)base, (unsigned long long)stride);
+         b.errors++; env.error(std::string(name) + ": " + where);
+         if (env.trap) env.trap(b.fault_store ? EXCP_STORE_ACCESS : EXCP_LOAD_ACCESS, b.fault_addr);
+         return false;
       }
       return true;
    }
@@ -196,3 +207,33 @@ bool execute(Backend &b, unsigned op, uint32_t word, const Env &env)
 }
 
 }
+
+namespace ame
+{
+uint64_t csr_read(const Backend &b, unsigned csr)
+{
+   switch (csr)
+   {
+      case CSR_AMENLEN:   return square_n;
+      case CSR_AMEUDSZ:   return 32;                 /* the unit's element: 32 bits */
+      case CSR_AMESTYPE:  return b.stype;
+      case CSR_AMEOWN:    return b.owned ? 1 : 0;
+      case CSR_AMEFFLAGS: return b.fflags;
+      case CSR_AMEXSAT:   return b.xsat;
+      case CSR_AMESTATUS: return b.status;
+      default:            return 0;
+   }
+}
+void csr_write(Backend &b, unsigned csr, uint64_t val)
+{
+   switch (csr)
+   {
+      case CSR_AMESTYPE:  b.stype = val; break;
+      case CSR_AMEFFLAGS: b.fflags = val & 0x1f; break;
+      case CSR_AMEXSAT:   b.xsat = val & 1; break;
+      case CSR_AMESTATUS: b.status = val; break;
+      default: break;
+   }
+}
+}
+

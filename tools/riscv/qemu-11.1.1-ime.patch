@@ -13,6 +13,268 @@ checks every instruction family at every VLEN).  Applied by deps/sniper-deps
 for the riscv-ime feature; regenerate with tools/riscv/regen-qemu-patch.sh.
 Regenerate from the pipeline when the specification moves.
 
+--- a/accel/tcg/translator.c
++++ b/accel/tcg/translator.c
+@@ -8,6 +8,7 @@
+  */
+ 
+ #include "qemu/osdep.h"
++#include "qemu/plugin.h"
+ #include "qemu/bswap.h"
+ #include "qemu/log.h"
+ #include "qemu/error-report.h"
+@@ -410,7 +411,24 @@
+ 
+ size_t translator_st_len(const DisasContextBase *db)
+ {
+-    return db->fake_insn ? db->record_len : db->tb->size;
++    size_t len;
++
++    if (db->fake_insn) {
++        return db->record_len;
++    }
++    len = db->tb->size;
++#ifdef CONFIG_PLUGIN
++    /*
++     * tb->size is set when translation ends.  While it runs, a plugin's
++     * claim callback reads the instruction being offered to it, whose
++     * length the target has told the plugin layer (tcg_ctx->plugin_insn):
++     * the bytes up to its end have been loaded and are readable.
++     */
++    if (len == 0 && tcg_ctx->plugin_insn && tcg_ctx->plugin_insn->len) {
++        len = tcg_ctx->plugin_insn->vaddr - db->pc_first + tcg_ctx->plugin_insn->len;
++    }
++#endif
++    return len;
+ }
+ 
+ bool translator_st(const DisasContextBase *db, void *dest,
+--- a/include/accel/tcg/cpu-ops.h
++++ b/include/accel/tcg/cpu-ops.h
+@@ -34,6 +34,22 @@
+     bool mttcg_supported;
+ 
+     /**
++     * @plugin_raise_exception: raise an architectural exception on behalf
++     * of a plugin (qemu_plugin_raise_exception); the PC has been set.
++     * @cause and @tval are the target's own codes.  Optional.
++     */
++    G_NORETURN void (*plugin_raise_exception)(CPUState *cpu, uint64_t cause,
++                                              uint64_t tval);
++    /**
++     * @plugin_sysreg_claim: let a plugin back a system register the target
++     * does not implement (qemu_plugin_register_sysreg_cb).  Optional.
++     */
++    bool (*plugin_sysreg_claim)(unsigned int index,
++                                uint64_t (*read)(unsigned int, unsigned int, void *),
++                                void (*write)(unsigned int, unsigned int, uint64_t, void *),
++                                void *udata);
++
++    /**
+      * @precise_smc: Stores which modify code within the current TB force
+      *               the TB to exit; the next executed instruction will see
+      *               the result of the store.
+--- a/include/plugins/qemu-plugin.h
++++ b/include/plugins/qemu-plugin.h
+@@ -1367,4 +1367,144 @@
+ } /* extern "C" */
+ #endif
+ 
++
++/*
++ * ---------------------------------------------------------------------------
++ * Emulating an instruction-set extension from a plugin.
++ * (QEMU_PLUGIN_HAS_INSN_CLAIM says these four calls exist.)
++ *
++ * A plugin that implements instructions QEMU does not know (an accelerator
++ * extension under development) needs four things beyond the tracing API:
++ * to claim such an instruction at translation time so the block continues
++ * through it instead of ending in an illegal-instruction exception, to
++ * raise an architectural exception when the emulated instruction must trap,
++ * to expose the extension's registers through the gdbstub register list
++ * (so gdb and qemu_plugin_read_register see them), and to back system
++ * registers (RISC-V CSRs) that the extension defines.
++ */
++
++/**
++ * typedef qemu_plugin_vcpu_insn_claim_cb_t - claim callback
++ * @vcpu_index: the vcpu translating the instruction
++ * @insn: the instruction the target could not decode; qemu_plugin_insn_data,
++ *        _vaddr and _size describe it
++ * @udata: the pointer given at registration
++ *
++ * Called during translation, before the target emits the exception for an
++ * instruction it does not know.  A plugin that recognises the instruction
++ * registers its execution callbacks on @insn (qemu_plugin_register_vcpu_insn_exec_cb
++ * with QEMU_PLUGIN_CB_RW_REGS: the callback reads and writes registers and
++ * memory) and returns true; the target then emits nothing for the
++ * instruction and translation continues at the next one, so the emulated
++ * instruction costs one helper call instead of an exception, a loop exit
++ * and a block lookup.  The callbacks run at the instruction's start in
++ * program order with the plugin's other callbacks for it; they must not
++ * call qemu_plugin_set_pc unless the emulated instruction branches.
++ * Returns false to leave the instruction to the target.
++ */
++#define QEMU_PLUGIN_HAS_INSN_CLAIM 1
++
++typedef bool (*qemu_plugin_vcpu_insn_claim_cb_t)(unsigned int vcpu_index,
++                                                 struct qemu_plugin_insn *insn,
++                                                 void *udata);
++
++/**
++ * qemu_plugin_register_vcpu_insn_claim_cb() - register a claim callback
++ * @id: plugin ID
++ * @cb: the callback
++ * @udata: passed to every call
++ *
++ * Only targets that consult the plugin before raising an illegal-instruction
++ * exception call it (RISC-V does).
++ */
++QEMU_PLUGIN_API
++void qemu_plugin_register_vcpu_insn_claim_cb(qemu_plugin_id_t id,
++                                             qemu_plugin_vcpu_insn_claim_cb_t cb,
++                                             void *udata);
++
++/**
++ * qemu_plugin_raise_exception() - raise an architectural exception
++ * @vaddr: the address of the instruction that traps (the exception PC)
++ * @cause: the target's exception cause (RISC-V: the mcause code)
++ * @tval: the target's trap value (RISC-V: the instruction bits for an
++ *        illegal instruction, the faulting address for an access fault)
++ *
++ * Only from a callback registered with QEMU_PLUGIN_CB_RW_REGS or
++ * QEMU_PLUGIN_CB_RW_REGS_PC.  Does not return when the target supports
++ * it: the exception is delivered as the target would deliver its own (in
++ * user mode, the signal the cpu loop maps the cause to).  Returns false
++ * when the target has no support.
++ */
++QEMU_PLUGIN_API
++bool qemu_plugin_raise_exception(uint64_t vaddr, uint64_t cause, uint64_t tval);
++
++/**
++ * typedef qemu_plugin_reg_read_cb_t - read a plugin-defined register
++ * @vcpu_index: the vcpu
++ * @reg: the register's index in the registered set
++ * @buf: append the register's bytes (its bitsize / 8, target byte order)
++ * @udata: the pointer given at registration
++ */
++typedef void (*qemu_plugin_reg_read_cb_t)(unsigned int vcpu_index, unsigned int reg,
++                                          GByteArray *buf, void *udata);
++/**
++ * typedef qemu_plugin_reg_write_cb_t - write a plugin-defined register
++ * @data: the register's bytes (its bitsize / 8)
++ */
++typedef void (*qemu_plugin_reg_write_cb_t)(unsigned int vcpu_index, unsigned int reg,
++                                           const uint8_t *data, void *udata);
++
++/**
++ * qemu_plugin_register_vcpu_registers() - add registers to a vcpu's register list
++ * @vcpu_index: the vcpu (from a vcpu_init callback or later)
++ * @feature: the gdb feature name, e.g. "org.riscv.ame"
++ * @tags: extra XML placed before the registers (type definitions such as
++ *        <vector id="m" type="uint32" count="16"/>), or NULL
++ * @names, @bits, @types: per register its name, size in bits and gdb type
++ *        (a builtin such as "uint64", or an id from @tags)
++ * @n: how many registers
++ * @read, @write: the accessors; @write may be NULL for read-only registers
++ * @udata: passed to both
++ *
++ * The registers join the vcpu's gdb register list: gdb shows them under
++ * @feature, qemu_plugin_get_registers lists them by name and
++ * qemu_plugin_read/write_register reach them.  One set per vcpu.  Returns
++ * false if the vcpu is unknown or already has a set.
++ */
++QEMU_PLUGIN_API
++bool qemu_plugin_register_vcpu_registers(unsigned int vcpu_index,
++                                         const char *feature, const char *tags,
++                                         const char *const names[], const unsigned int bits[],
++                                         const char *const types[], unsigned int n,
++                                         qemu_plugin_reg_read_cb_t read,
++                                         qemu_plugin_reg_write_cb_t write, void *udata);
++
++/**
++ * typedef qemu_plugin_sysreg_read_cb_t - read a plugin-backed system register
++ * @index: the register's number in the target's system-register space
++ *         (RISC-V: the CSR address)
++ */
++typedef uint64_t (*qemu_plugin_sysreg_read_cb_t)(unsigned int vcpu_index,
++                                                 unsigned int index, void *udata);
++typedef void (*qemu_plugin_sysreg_write_cb_t)(unsigned int vcpu_index,
++                                              unsigned int index, uint64_t value,
++                                              void *udata);
++
++/**
++ * qemu_plugin_register_sysreg_cb() - back a system register the target does not implement
++ * @index: the register's number (RISC-V: the CSR address, 0..4095)
++ * @read, @write: the accessors; @write may be NULL
++ * @udata: passed to both
++ *
++ * Instructions that access the register (RISC-V csrr/csrrw/...) call the
++ * plugin instead of trapping; the target's own access rules still apply
++ * (a read-only address rejects writes).  Registers the target implements
++ * cannot be claimed.  Returns false when the target has no support or the
++ * register is taken.
++ */
++QEMU_PLUGIN_API
++bool qemu_plugin_register_sysreg_cb(unsigned int index,
++                                    qemu_plugin_sysreg_read_cb_t read,
++                                    qemu_plugin_sysreg_write_cb_t write, void *udata);
++
+ #endif /* QEMU_QEMU_PLUGIN_H */
+--- a/include/qemu/plugin-event.h
++++ b/include/qemu/plugin-event.h
+@@ -24,6 +24,7 @@
+     QEMU_PLUGIN_EV_VCPU_EXCEPTION,
+     QEMU_PLUGIN_EV_VCPU_HOSTCALL,
+     QEMU_PLUGIN_EV_VCPU_SYSCALL_FILTER,
++    QEMU_PLUGIN_EV_VCPU_INSN_CLAIM,
+     QEMU_PLUGIN_EV_MAX, /* total number of plugin events we support */
+ };
+ 
+--- a/include/qemu/plugin.h
++++ b/include/qemu/plugin.h
+@@ -63,6 +63,7 @@
+     qemu_plugin_vcpu_syscall_cb_t        vcpu_syscall;
+     qemu_plugin_vcpu_syscall_ret_cb_t    vcpu_syscall_ret;
+     qemu_plugin_vcpu_syscall_filter_cb_t vcpu_syscall_filter;
++    qemu_plugin_vcpu_insn_claim_cb_t     vcpu_insn_claim;
+     void *generic;
+ };
+ 
+@@ -145,6 +146,7 @@
+  */
+ struct CPUPluginState {
+     DECLARE_BITMAP(event_mask, QEMU_PLUGIN_EV_MAX);
++    void *regs;     /* the plugin-defined registers of this vcpu (plugins/api.c) */
+ };
+ 
+ /**
+@@ -158,6 +160,13 @@
+ void qemu_plugin_vcpu_init_hook(CPUState *cpu);
+ void qemu_plugin_vcpu_exit_hook(CPUState *cpu);
+ void qemu_plugin_tb_trans_cb(CPUState *cpu, struct qemu_plugin_tb *tb);
++
++/*
++ * Offer the instruction being translated (tcg_ctx->plugin_insn, @len bytes)
++ * to the plugins' claim callbacks; true when one takes it, in which case the
++ * target emits nothing for it and translation continues at the next one.
++ */
++bool qemu_plugin_insn_claim(CPUState *cpu, size_t len);
+ void qemu_plugin_vcpu_idle_cb(CPUState *cpu);
+ void qemu_plugin_vcpu_resume_cb(CPUState *cpu);
+ void qemu_plugin_vcpu_interrupt_cb(CPUState *cpu, uint64_t from);
+@@ -259,6 +268,11 @@
+                                            struct qemu_plugin_tb *tb)
+ { }
+ 
++static inline bool qemu_plugin_insn_claim(CPUState *cpu, size_t len)
++{
++    return false;
++}
++
+ static inline void qemu_plugin_vcpu_idle_cb(CPUState *cpu)
+ { }
+ 
 --- a/include/tcg/tcg-gvec-desc.h
 +++ b/include/tcg/tcg-gvec-desc.h
 @@ -33,7 +33,7 @@
@@ -24,6 +286,231 @@ Regenerate from the pipeline when the specification moves.
  
  #define SIMD_OPRSZ_SHIFT   (SIMD_MAXSZ_SHIFT + SIMD_MAXSZ_BITS)
  #define SIMD_OPRSZ_BITS    2
+--- a/linux-user/main.c
++++ b/linux-user/main.c
+@@ -1000,6 +1000,14 @@
+     init_main_thread(cpu, info);
+ 
+     if (gdbstub) {
++        /*
++         * The plugins' vcpu-init work is queued on the CPU (it runs before
++         * the first instruction); run it now so that state a plugin adds to
++         * the vcpu, such as registers in the gdb list, exists when the
++         * debugger attaches.
++         */
++        current_cpu = cpu;
++        process_queued_cpu_work(cpu);
+         gdbserver_start(gdbstub, &error_fatal);
+     }
+ 
+--- a/linux-user/riscv/cpu_loop.c
++++ b/linux-user/riscv/cpu_loop.c
+@@ -75,6 +75,14 @@
+         case RISCV_EXCP_ILLEGAL_INST:
+             force_sig_fault(TARGET_SIGILL, TARGET_ILL_ILLOPC, env->pc);
+             break;
++        case RISCV_EXCP_LOAD_ACCESS_FAULT:
++        case RISCV_EXCP_STORE_AMO_ACCESS_FAULT:
++        case RISCV_EXCP_LOAD_PAGE_FAULT:
++        case RISCV_EXCP_STORE_PAGE_FAULT:
++            /* raised by a plugin emulating an instruction (TCG's own faults
++               arrive as signals); the address is in badaddr */
++            force_sig_fault(TARGET_SIGSEGV, TARGET_SEGV_MAPERR, env->badaddr);
++            break;
+         case RISCV_EXCP_BREAKPOINT:
+         case EXCP_DEBUG:
+         gdbstep:
+--- a/plugins/api.c
++++ b/plugins/api.c
+@@ -44,6 +44,7 @@
+ #include "tcg/tcg.h"
+ #include "exec/cpu-common.h"
+ #include "exec/gdbstub.h"
++#include "accel/tcg/cpu-ops.h"
+ #include "exec/target_page.h"
+ #include "exec/translation-block.h"
+ #include "exec/translator.h"
+@@ -508,6 +509,124 @@
+     cpu_loop_exit(current_cpu);
+ }
+ 
++bool qemu_plugin_raise_exception(uint64_t vaddr, uint64_t cause, uint64_t tval)
++{
++    const TCGCPUOps *ops;
++
++    g_assert(current_cpu);
++    g_assert(qemu_plugin_get_cb_flags() == QEMU_PLUGIN_CB_RW_REGS ||
++             qemu_plugin_get_cb_flags() == QEMU_PLUGIN_CB_RW_REGS_PC);
++
++    ops = current_cpu->cc->tcg_ops;
++    if (!ops->plugin_raise_exception) {
++        return false;
++    }
++    cpu_set_pc(current_cpu, vaddr);
++    ops->plugin_raise_exception(current_cpu, cause, tval);
++}
++
++/*
++ * Plugin-defined registers: one set per vcpu, registered with the gdbstub
++ * as a coprocessor feature whose accessors call back into the plugin.
++ */
++struct plugin_regs {
++    GDBFeature feature;
++    unsigned int n;
++    unsigned int *bytes;
++    qemu_plugin_reg_read_cb_t read;
++    qemu_plugin_reg_write_cb_t write;
++    void *udata;
++};
++
++static int plugin_regs_get(CPUState *cpu, GByteArray *buf, int reg)
++{
++    struct plugin_regs *r = cpu->plugin_state->regs;
++    guint before = buf->len;
++    unsigned int want;
++
++    if (!r || (unsigned int)reg >= r->n) {
++        return 0;
++    }
++    want = r->bytes[reg];
++    r->read(cpu->cpu_index, reg, buf, r->udata);
++    /* gdb expects exactly the register's size */
++    if (buf->len - before < want) {
++        g_byte_array_set_size(buf, before + want);
++    } else if (buf->len - before > want) {
++        g_byte_array_set_size(buf, before + want);
++    }
++    return want;
++}
++
++static int plugin_regs_set(CPUState *cpu, uint8_t *mem_buf, int reg)
++{
++    struct plugin_regs *r = cpu->plugin_state->regs;
++
++    if (!r || (unsigned int)reg >= r->n) {
++        return 0;
++    }
++    if (r->write) {
++        r->write(cpu->cpu_index, reg, mem_buf, r->udata);
++    }
++    return r->bytes[reg];
++}
++
++bool qemu_plugin_register_vcpu_registers(unsigned int vcpu_index,
++                                         const char *feature, const char *tags,
++                                         const char *const names[], const unsigned int bits[],
++                                         const char *const types[], unsigned int n,
++                                         qemu_plugin_reg_read_cb_t read,
++                                         qemu_plugin_reg_write_cb_t write, void *udata)
++{
++    CPUState *cpu = qemu_get_cpu(vcpu_index);
++    struct plugin_regs *r;
++    GDBFeatureBuilder builder;
++    unsigned int i;
++
++    if (!cpu || !cpu->plugin_state || cpu->plugin_state->regs || !cpu->gdb_regs ||
++        !read || !n) {
++        return false;
++    }
++    r = g_new0(struct plugin_regs, 1);
++    r->n = n;
++    r->bytes = g_new0(unsigned int, n);
++    r->read = read;
++    r->write = write;
++    r->udata = udata;
++    gdb_feature_builder_init(&builder, &r->feature, g_strdup(feature),
++                             g_strdup_printf("%s.xml", feature), cpu->gdb_num_regs);
++    if (tags) {
++        gdb_feature_builder_append_tag(&builder, "%s", tags);
++    }
++    for (i = 0; i < n; i++) {
++        r->bytes[i] = (bits[i] + 7) / 8;
++        gdb_feature_builder_append_reg(&builder, g_strdup(names[i]), bits[i], i,
++                                       types[i], write ? NULL : "plugin");
++    }
++    gdb_feature_builder_end(&builder);
++    cpu->plugin_state->regs = r;
++    gdb_register_coprocessor(cpu, plugin_regs_get, write ? plugin_regs_set : NULL,
++                             &r->feature);
++    return true;
++}
++
++bool qemu_plugin_register_sysreg_cb(unsigned int index,
++                                    qemu_plugin_sysreg_read_cb_t read,
++                                    qemu_plugin_sysreg_write_cb_t write, void *udata)
++{
++    CPUState *cpu = current_cpu ? current_cpu : first_cpu;
++    const TCGCPUOps *ops;
++
++    if (!cpu || !read) {
++        return false;
++    }
++    ops = cpu->cc->tcg_ops;
++    if (!ops->plugin_sysreg_claim) {
++        return false;
++    }
++    return ops->plugin_sysreg_claim(index, read, write, udata);
++}
++
+ bool qemu_plugin_read_memory_vaddr(uint64_t addr, GByteArray *data, size_t len)
+ {
+     g_assert(current_cpu);
+--- a/plugins/core.c
++++ b/plugins/core.c
+@@ -21,6 +21,7 @@
+ #include "qemu/rcu.h"
+ #include "exec/tb-flush.h"
+ #include "tcg/tcg-op-common.h"
++#include "tcg/tcg.h"
+ #include "plugin.h"
+ 
+ struct qemu_plugin_cb {
+@@ -493,6 +494,45 @@
+     }
+ }
+ 
++void qemu_plugin_register_vcpu_insn_claim_cb(qemu_plugin_id_t id,
++                                             qemu_plugin_vcpu_insn_claim_cb_t cb,
++                                             void *udata)
++{
++    plugin_register_cb_udata(id, QEMU_PLUGIN_EV_VCPU_INSN_CLAIM, cb, udata);
++}
++
++/*
++ * Called by the target's translator for an instruction it cannot decode,
++ * with tcg_ctx->plugin_insn describing it (its length is not known to the
++ * plugin layer yet: the target passes it).  The first plugin that claims
++ * the instruction owns it.
++ */
++QEMU_DISABLE_CFI
++bool qemu_plugin_insn_claim(CPUState *cpu, size_t len)
++{
++    struct qemu_plugin_cb *cb, *next;
++    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_VCPU_INSN_CLAIM;
++    struct qemu_plugin_insn *insn = tcg_ctx->plugin_insn;
++
++    if (!insn || !test_bit(ev, cpu->plugin_state->event_mask)) {
++        return false;
++    }
++    insn->len = len;
++
++    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
++        qemu_plugin_vcpu_insn_claim_cb_t func = cb->f.vcpu_insn_claim;
++        bool claimed;
++
++        qemu_plugin_set_cb_flags(cpu, QEMU_PLUGIN_CB_RW_REGS);
++        claimed = func(cpu->cpu_index, insn, cb->udata);
++        qemu_plugin_set_cb_flags(cpu, QEMU_PLUGIN_CB_NO_REGS);
++        if (claimed) {
++            return true;
++        }
++    }
++    return false;
++}
++
+ static void clamp_syscall_arguments(uint64_t *a1, uint64_t *a2, uint64_t *a3,
+                                     uint64_t *a4, uint64_t *a5, uint64_t *a6,
+                                     uint64_t *a7, uint64_t *a8)
 --- a/target/riscv/cpu.c
 +++ b/target/riscv/cpu.c
 @@ -293,6 +293,10 @@
@@ -111,6 +598,20 @@ Regenerate from the pipeline when the specification moves.
  #define RV_MAX_MHPMEVENTS 32
  #define RV_MAX_MHPMCOUNTERS 32
  
+@@ -699,6 +699,13 @@
+ G_NORETURN void riscv_raise_exception(CPURISCVState *env,
+                                       RISCVException exception,
+                                       uintptr_t pc);
++/* the plugin API's exception and system-register hooks (op_helper.c, csr.c) */
++G_NORETURN void riscv_plugin_raise_exception(CPUState *cs, uint64_t cause,
++                                             uint64_t tval);
++bool riscv_plugin_csr_claim(unsigned int csrno,
++                            uint64_t (*read)(unsigned int, unsigned int, void *),
++                            void (*write)(unsigned int, unsigned int, uint64_t, void *),
++                            void *udata);
+ 
+ uint8_t riscv_cpu_get_fflags(CPURISCVState *env);
+ void riscv_cpu_set_fflags(CPURISCVState *env, uint8_t);
 --- a/target/riscv/cpu_cfg_fields.h.inc
 +++ b/target/riscv/cpu_cfg_fields.h.inc
 @@ -80,6 +80,10 @@
@@ -181,6 +682,67 @@ Regenerate from the pipeline when the specification moves.
 +vmttl_v          ... 101 . ..... ..... 111 ..... 0000111  @ime_tile
 +vmtts_v          ... 101 . ..... ..... 111 ..... 0100111  @ime_tile
 +vsetlambda       ............ ..... 000 ..... 0001011  @i
+--- a/target/riscv/tcg/csr.c
++++ b/target/riscv/tcg/csr.c
+@@ -47,6 +47,58 @@
+     csr_ops[csrno & (CSR_TABLE_SIZE - 1)] = *ops;
+ }
+ 
++/*
++ * CSRs a plugin backs (qemu_plugin_register_sysreg_cb): an address the
++ * target does not implement gets accessors that call the plugin.  The
++ * ordinary access rules still apply (riscv_csrrw_check: privilege, the
++ * read-only ranges), only the existence check is satisfied.
++ */
++static struct {
++    uint64_t (*read)(unsigned int, unsigned int, void *);
++    void (*write)(unsigned int, unsigned int, uint64_t, void *);
++    void *udata;
++} plugin_csrs[CSR_TABLE_SIZE];
++
++static RISCVException plugin_csr_predicate(CPURISCVState *env, int csrno)
++{
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException plugin_csr_read(CPURISCVState *env, int csrno,
++                                      target_ulong *val)
++{
++    *val = plugin_csrs[csrno].read(env_cpu(env)->cpu_index, csrno,
++                                   plugin_csrs[csrno].udata);
++    return RISCV_EXCP_NONE;
++}
++
++static RISCVException plugin_csr_write(CPURISCVState *env, int csrno,
++                                       target_ulong val, uintptr_t ra)
++{
++    plugin_csrs[csrno].write(env_cpu(env)->cpu_index, csrno, val,
++                             plugin_csrs[csrno].udata);
++    return RISCV_EXCP_NONE;
++}
++
++bool riscv_plugin_csr_claim(unsigned int csrno,
++                            uint64_t (*read)(unsigned int, unsigned int, void *),
++                            void (*write)(unsigned int, unsigned int, uint64_t, void *),
++                            void *udata)
++{
++    riscv_csr_operations ops = { .name = "plugin", .predicate = plugin_csr_predicate,
++                                 .read = plugin_csr_read,
++                                 .write = write ? plugin_csr_write : NULL };
++
++    if (csrno >= CSR_TABLE_SIZE || csr_ops[csrno].predicate || !read) {
++        return false;
++    }
++    plugin_csrs[csrno].read = read;
++    plugin_csrs[csrno].write = write;
++    plugin_csrs[csrno].udata = udata;
++    csr_ops[csrno] = ops;
++    return true;
++}
++
+ /* Predicates */
+ #if !defined(CONFIG_USER_ONLY)
+ RISCVException smstateen_acc_ok(CPURISCVState *env, int index, uint64_t bit)
 --- /dev/null
 +++ b/target/riscv/tcg/ime.h
 @@ -0,0 +1,41 @@
@@ -1589,9 +2151,56 @@ Regenerate from the pipeline when the specification moves.
  ))
 -
 -
+--- a/target/riscv/tcg/op_helper.c
++++ b/target/riscv/tcg/op_helper.c
+@@ -34,6 +34,25 @@
+ #include "trace.h"
+ 
+ /* Exceptions processing helpers */
++/*
++ * An exception raised by a plugin that emulates an instruction (see
++ * qemu_plugin_raise_exception): the PC is already the trapping
++ * instruction's, so there is no state to restore; the trap value is the
++ * instruction bits for an illegal instruction and the address otherwise.
++ */
++G_NORETURN void riscv_plugin_raise_exception(CPUState *cs, uint64_t cause,
++                                             uint64_t tval)
++{
++    CPURISCVState *env = cpu_env(cs);
++
++    if (cause == RISCV_EXCP_ILLEGAL_INST) {
++        env->bins = tval;
++    } else {
++        env->badaddr = tval;
++    }
++    riscv_raise_exception(env, cause, 0);
++}
++
+ G_NORETURN void riscv_raise_exception(CPURISCVState *env,
+                                       RISCVException exception,
+                                       uintptr_t pc)
+--- a/target/riscv/tcg/tcg-cpu.c
++++ b/target/riscv/tcg/tcg-cpu.c
+@@ -282,6 +282,8 @@
+     .synchronize_from_tb = riscv_cpu_synchronize_from_tb,
+     .restore_state_to_opc = riscv_restore_state_to_opc,
+     .mmu_index = riscv_cpu_mmu_index,
++    .plugin_raise_exception = riscv_plugin_raise_exception,
++    .plugin_sysreg_claim = riscv_plugin_csr_claim,
+ 
+ #ifndef CONFIG_USER_ONLY
+     .tlb_fill = riscv_cpu_tlb_fill,
 --- a/target/riscv/tcg/translate.c
 +++ b/target/riscv/tcg/translate.c
-@@ -1198,6 +1198,7 @@
+@@ -28,6 +28,7 @@
+ #include "exec/translation-block.h"
+ #include "exec/log.h"
+ #include "semihosting/semihost.h"
++#include "qemu/plugin.h"
+ 
+ #include "internals.h"
+ 
+@@ -1198,6 +1199,7 @@
  #include "insn_trans/trans_rvd.c.inc"
  #include "insn_trans/trans_rvh.c.inc"
  #include "insn_trans/trans_rvv.c.inc"
@@ -1599,3 +2208,134 @@ Regenerate from the pipeline when the specification moves.
  #include "insn_trans/trans_rvb.c.inc"
  #include "insn_trans/trans_rvzicond.c.inc"
  #include "insn_trans/trans_rvzacas.c.inc"
+@@ -1302,6 +1304,17 @@
+         }
+     }
+ 
++    /*
++     * Not an instruction this CPU knows.  A plugin may claim it (an
++     * extension emulated in the plugin): its callbacks, injected at the
++     * instruction's start, execute it, and the block continues at the next
++     * instruction as if the target had translated it.
++     */
++    if (ctx->base.plugin_enabled &&
++        qemu_plugin_insn_claim(env_cpu(env), ctx->cur_insn_len)) {
++        return;
++    }
++
+     gen_exception_illegal(ctx);
+ }
+ 
+--- a/target/riscv/tcg/vector_helper.c
++++ b/target/riscv/tcg/vector_helper.c
+@@ -464,25 +464,24 @@
+     }
+ #endif
+ 
+-    /* Calculate the page range of first page */
+-    addr = base + ((env->vstart * nf) << log2_esz);
+-    page_split = -(addr | TARGET_PAGE_MASK);
+-    /* Get number of elements */
+-    elems = page_split / msize;
+-    if (unlikely(env->vstart + elems >= evl)) {
+-        elems = evl - env->vstart;
+-    }
+-
+-    /* Load/store elements in the first page */
+-    if (likely(elems)) {
+-        vext_page_ldst_us(env, vd, addr, elems, nf, max_elems, log2_esz,
+-                          is_load, mmu_index, ldst_tlb, ldst_host, ra);
+-    }
+-
+-    /* Load/store elements in the second page */
+-    if (unlikely(env->vstart < evl)) {
+-        /* Cross page element */
+-        if (unlikely(page_split % msize)) {
++    /*
++     * Page by page: with VLEN up to 65536 bits an access spans any number of
++     * pages, not two (Sniper).  Each page takes the whole elements that fit,
++     * then the element straddling its end goes through the slow path.
++     */
++    while (env->vstart < evl) {
++        addr = base + ((env->vstart * nf) << log2_esz);
++        page_split = -(addr | TARGET_PAGE_MASK);
++        elems = page_split / msize;
++        if (elems > evl - env->vstart) {
++            elems = evl - env->vstart;
++        }
++        if (likely(elems)) {
++            vext_page_ldst_us(env, vd, addr, elems, nf, max_elems, log2_esz,
++                              is_load, mmu_index, ldst_tlb, ldst_host, ra);
++        }
++        if (env->vstart < evl && unlikely(page_split % msize)) {
++            /* Cross page element */
+             for (k = 0; k < nf; k++) {
+                 addr = base + ((env->vstart * nf + k) << log2_esz);
+                 ldst_tlb(env, adjust_addr(env, addr),
+@@ -490,14 +489,6 @@
+             }
+             env->vstart++;
+         }
+-
+-        addr = base + ((env->vstart * nf) << log2_esz);
+-        /* Get number of elements of second page */
+-        elems = evl - env->vstart;
+-
+-        /* Load/store elements in the second page */
+-        vext_page_ldst_us(env, vd, addr, elems, nf, max_elems, log2_esz,
+-                          is_load, mmu_index, ldst_tlb, ldst_host, ra);
+     }
+ 
+     env->vstart = 0;
+@@ -851,37 +842,24 @@
+     uint32_t esz = 1 << log2_esz;
+     int mmu_index = riscv_env_mmu_index(env, false);
+ 
+-    /* Calculate the page range of first page */
+-    addr = base + (env->vstart << log2_esz);
+-    page_split = -(addr | TARGET_PAGE_MASK);
+-    /* Get number of elements */
+-    elems = page_split / esz;
+-    if (unlikely(env->vstart + elems >= evl)) {
+-        elems = evl - env->vstart;
+-    }
+-
+-    /* Load/store elements in the first page */
+-    if (likely(elems)) {
+-        vext_page_ldst_us(env, vd, addr, elems, 1, max_elems, log2_esz,
+-                          is_load, mmu_index, ldst_tlb, ldst_host, ra);
+-    }
+-
+-    /* Load/store elements in the second page */
+-    if (unlikely(env->vstart < evl)) {
+-        /* Cross page element */
+-        if (unlikely(page_split % esz)) {
++    /* Page by page, as vext_ldst_us: any number of pages (Sniper). */
++    while (env->vstart < evl) {
++        addr = base + (env->vstart << log2_esz);
++        page_split = -(addr | TARGET_PAGE_MASK);
++        elems = page_split / esz;
++        if (elems > evl - env->vstart) {
++            elems = evl - env->vstart;
++        }
++        if (likely(elems)) {
++            vext_page_ldst_us(env, vd, addr, elems, 1, max_elems, log2_esz,
++                              is_load, mmu_index, ldst_tlb, ldst_host, ra);
++        }
++        if (env->vstart < evl && unlikely(page_split % esz)) {
++            /* Cross page element */
+             addr = base + (env->vstart << log2_esz);
+             ldst_tlb(env, adjust_addr(env, addr), env->vstart, vd, ra);
+             env->vstart++;
+         }
+-
+-        addr = base + (env->vstart << log2_esz);
+-        /* Get number of elements of second page */
+-        elems = evl - env->vstart;
+-
+-        /* Load/store elements in the second page */
+-        vext_page_ldst_us(env, vd, addr, elems, 1, max_elems, log2_esz,
+-                          is_load, mmu_index, ldst_tlb, ldst_host, ra);
+     }
+ 
+     env->vstart = 0;

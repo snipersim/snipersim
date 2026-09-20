@@ -113,6 +113,15 @@ the plugin executes them through the v7 plugin API (register read/write,
 guest memory read/write, set-PC).  The cost of that route is one
 translation-block exit per instruction.
 
+The AME and Xsnacc instructions run on models inside the plugin.  With
+the plugin-API additions the patch makes to QEMU (frontend/qemu-plugin/README.md,
+"Emulating an extension") they are claimed at translation, so the block
+runs through them like any other instruction; the models raise the
+draft's exceptions (illegal instruction, access faults) as real ones; the
+unit's CSRs answer `csrr`; and its registers (CSRs, datatype registers,
+M and accumulator squares) are in the vcpu's gdb register list.  The
+harness case `riscv-plugin-api` checks each.
+
 ### 2.4 Workloads
 
 | workload | paths | self-check | counts |

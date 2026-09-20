@@ -48,6 +48,9 @@ extern "C" {
 #include "riscv_isa.h"
 #include "ame_backend.h"
 #include "acc_backend.h"
+#include "qemu_plugin_ext.h"
+#include <mutex>
+#include <unordered_set>
 
 #include "sift_writer.h"
 #include "sift_format.h"
@@ -68,6 +71,15 @@ enum Arch { ARCH_X86, ARCH_RISCV };
 Arch        g_arch       = ARCH_X86;
 uint64_t    g_nspans     = 0;        /* MemorySpans records written, all vCPUs */
 uint64_t    g_ndropped_lines = 0;  /* cache lines an instruction touched beyond the spans its record holds */
+/* Instructions the plugin's models execute (AME, Xsnacc): claimed at
+ * translation when the QEMU has the claim API (the block continues through
+ * them), otherwise emulated from the illegal-instruction path with a loop
+ * exit per instruction.  opt_claim=0 forces the older path for comparison. */
+bool        opt_claim = true;
+bool        opt_trace = true;      /* trace=0: no SIFT output and no tracing callbacks, only the plugin models (a functional run) */
+uint64_t    g_exec_claimed = 0, g_exec_trapped = 0;
+std::mutex  g_claim_lock;
+std::unordered_set<const struct qemu_plugin_insn *> g_claimed;   /* claimed in this translation, consumed by tb_trans */
 
 std::string opt_output   = "sniper";
 uint64_t    opt_flow     = 1000;   /* matches KnobFlowControl in sift/recorder */
@@ -193,6 +205,7 @@ struct InsnInfo
    unsigned op = 0;
    uint32_t word = 0;
    bool     ame = false;
+   bool     claimed = false;    /* claimed at translation: no exception follows, so no set_pc */
 };
 
 /* ------------------------------------------------------------- per-vCPU */
@@ -201,6 +214,8 @@ struct VCPU
 {
    Sift::Writer *writer   = nullptr;
    bool          closed   = false;
+   bool          pregs    = false;   /* the AME register set is registered with the gdbstub */
+   bool          pregs_checked = false;
    unsigned      mode     = 0;   /* 0 until the first instruction settles it */
    struct qemu_plugin_register *reg_cr0  = nullptr;
    struct qemu_plugin_register *reg_efer = nullptr;
@@ -483,6 +498,24 @@ void ame_exec(unsigned int cpu_index, void *udata)
             fprintf(stderr, "[AME] no register handle for %s: its reads return 0 and writes are dropped\n", rvisa::xreg_name(r));
       v->xreg_found = true;
    }
+   if (v->pregs && !v->pregs_checked)
+   {
+      /* The unit's registers went into the gdbstub list at vcpu init; read
+       * one back the way gdb and other plugins would, and say so. */
+      v->pregs_checked = true;
+      GArray *regs = qemu_plugin_get_registers();
+      unsigned seen = 0; struct qemu_plugin_register *nlen = nullptr;
+      for (guint i = 0; i < regs->len; i++)
+      {
+         qemu_plugin_reg_descriptor *d = &g_array_index(regs, qemu_plugin_reg_descriptor, i);
+         if (d->feature && strcmp(d->feature, "org.riscv.ame") == 0) seen++;
+         if (strcmp(d->name, "amenlen") == 0) nlen = d->handle;
+      }
+      g_array_free(regs, TRUE);
+      uint64_t val = 0;
+      if (nlen) { GByteArray *b = g_byte_array_new(); if (qemu_plugin_read_register(nlen, b) && b->len >= 8) memcpy(&val, b->data, 8); g_byte_array_free(b, TRUE); }
+      fprintf(stderr, "[SNIPER-QEMU] AME registers: %u in the gdbstub list under org.riscv.ame, amenlen reads %" PRIu64 "\n", seen, val);
+   }
    ame::Env env;
    env.read_x = [v](unsigned r) -> uint64_t {
       if (r == 0 || !v->xreg[r]) return 0;
@@ -513,12 +546,121 @@ void ame_exec(unsigned int cpu_index, void *udata)
    env.error = [ii](const std::string &why) {
       fprintf(stderr, "[AME] error at 0x%" PRIx64 ": %s\n", ii->vaddr, why.c_str());
    };
+   if (SNP_HAVE_RAISE)
+      env.trap = [ii, v](unsigned cause, uint64_t tval) {
+         /* the pending trace record of this instruction is dropped with the
+          * guest's state: nothing retires */
+         v->have_pending = false;
+         qemu_plugin_raise_exception(ii->vaddr, cause, tval);       /* does not return */
+      };
    const char *cls = rvisa::info(rvisa::class_of(ii->op)).name;
    if (strncmp(cls, "acc_", 4) == 0)
       acc::execute(v->acc_backend, ii->op, rvisa::word_of((const uint8_t *)&ii->word, 4), env);
    else
       ame::execute(v->ame_backend, ii->op, rvisa::word_of((const uint8_t *)&ii->word, 4), env);
-   qemu_plugin_set_pc(ii->vaddr + ii->size);
+   if (ii->claimed)
+      __sync_fetch_and_add(&g_exec_claimed, 1);       /* the block continues past it */
+   else
+   {
+      __sync_fetch_and_add(&g_exec_trapped, 1);
+      qemu_plugin_set_pc(ii->vaddr + ii->size);       /* before QEMU's illegal-instruction code runs */
+   }
+}
+
+/* The translation-time claim: an instruction QEMU cannot decode is one of the
+ * plugin models' if the generated decoder knows it as an ame_* or acc_*
+ * class.  Only the mark is made here; tb_trans registers the callbacks in
+ * their order (the tracer's first, then the model's). */
+bool insn_claim(unsigned int cpu_index, struct qemu_plugin_insn *insn, void *)
+{
+   if (g_arch != ARCH_RISCV || !opt_claim)
+      return false;
+   uint8_t bytes[8] = {0};
+   const size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(bytes));
+   const unsigned length = got ? rvisa::length_of(bytes) : 0;
+   if (!length || length > got)
+      return false;
+   const unsigned op = rvisa::decode(rvisa::word_of(bytes, length), length);
+   if (!op)
+      return false;
+   const char *cls = rvisa::info(rvisa::class_of(op)).name;
+   if (strncmp(cls, "ame_", 4) != 0 && strncmp(cls, "acc_", 4) != 0)
+      return false;
+   std::lock_guard<std::mutex> lock(g_claim_lock);
+   g_claimed.insert(insn);
+   return true;
+}
+
+/* ------------------------------------------------- the AME unit's registers
+ * The seven CSRs, the datatype registers and the M and accumulator squares of
+ * the plugin's AME model, in the vcpu's gdbstub register list, so gdb shows
+ * them and qemu_plugin_read/write_register reach them. */
+namespace
+{
+   const unsigned AME_NCSR = 7;
+   const char *const ame_csr_names[AME_NCSR] = { "amenlen", "ameudsz", "amestype", "ameown", "amefflags", "amexsat", "amestatus" };
+   const unsigned ame_csr_addr[AME_NCSR] = { ame::CSR_AMENLEN, ame::CSR_AMEUDSZ, ame::CSR_AMESTYPE, ame::CSR_AMEOWN, ame::CSR_AMEFFLAGS, ame::CSR_AMEXSAT, ame::CSR_AMESTATUS };
+   std::vector<std::string> ame_reg_names;      /* the storage the gdbstub keeps pointers into */
+   std::vector<const char *> ame_reg_name_ptrs, ame_reg_types;
+   std::vector<unsigned> ame_reg_bits;
+   std::string ame_reg_tags;
+
+   /* register index -> which state */
+   enum { R_CSR = 0, R_MD = R_CSR + AME_NCSR, R_AD = R_MD + ame::NUM_M, R_M = R_AD + ame::NUM_ACC, R_ACC = R_M + ame::NUM_M, R_END = R_ACC + ame::NUM_ACC };
+
+   void ame_reg_read(unsigned int cpu_index, unsigned int reg, GByteArray *buf, void *)
+   {
+      VCPU *v = vcpu_get(cpu_index);
+      const ame::Backend &b = v->ame_backend;
+      const unsigned sq = ame::square_n * ame::square_n * 4;
+      if (reg < R_MD) { uint64_t x = ame::csr_read(b, ame_csr_addr[reg]); g_byte_array_append(buf, (const guint8 *)&x, 8); }
+      else if (reg < R_AD) g_byte_array_append(buf, (const guint8 *)&b.Md[reg - R_MD], 4);
+      else if (reg < R_M) g_byte_array_append(buf, (const guint8 *)&b.Ad[reg - R_AD], 4);
+      else if (reg < R_ACC) g_byte_array_append(buf, (const guint8 *)b.M[reg - R_M], sq);
+      else if (reg < R_END) g_byte_array_append(buf, (const guint8 *)b.Acc[reg - R_ACC], sq);
+   }
+   void ame_reg_write(unsigned int cpu_index, unsigned int reg, const uint8_t *data, void *)
+   {
+      VCPU *v = vcpu_get(cpu_index);
+      ame::Backend &b = v->ame_backend;
+      const unsigned sq = ame::square_n * ame::square_n * 4;
+      if (reg < R_MD) { uint64_t x; memcpy(&x, data, 8); ame::csr_write(b, ame_csr_addr[reg], x); }
+      else if (reg < R_AD) memcpy(&b.Md[reg - R_MD], data, 4);
+      else if (reg < R_M) memcpy(&b.Ad[reg - R_AD], data, 4);
+      else if (reg < R_ACC) memcpy(b.M[reg - R_M], data, sq);
+      else if (reg < R_END) memcpy(b.Acc[reg - R_ACC], data, sq);
+   }
+   uint64_t ame_csr_cb_read(unsigned int cpu_index, unsigned int csr, void *) { return ame::csr_read(vcpu_get(cpu_index)->ame_backend, csr); }
+   void ame_csr_cb_write(unsigned int cpu_index, unsigned int csr, uint64_t val, void *) { ame::csr_write(vcpu_get(cpu_index)->ame_backend, csr, val); }
+
+   void ame_register_state(VCPU *v, unsigned cpu_index)
+   {
+      if (ame_reg_names.empty())
+      {
+         const unsigned nelem = ame::square_n * ame::square_n;
+         char tag[96]; snprintf(tag, sizeof(tag), "<vector id=\"ame_sq\" type=\"uint32\" count=\"%u\"/>", nelem);
+         ame_reg_tags = tag;
+         for (unsigned i = 0; i < AME_NCSR; i++) { ame_reg_names.push_back(ame_csr_names[i]); ame_reg_bits.push_back(64); ame_reg_types.push_back("uint64"); }
+         for (unsigned i = 0; i < ame::NUM_M; i++) { ame_reg_names.push_back("md" + std::to_string(i)); ame_reg_bits.push_back(32); ame_reg_types.push_back("uint32"); }
+         for (unsigned i = 0; i < ame::NUM_ACC; i++) { ame_reg_names.push_back("ad" + std::to_string(i)); ame_reg_bits.push_back(32); ame_reg_types.push_back("uint32"); }
+         for (unsigned i = 0; i < ame::NUM_M; i++) { ame_reg_names.push_back("m" + std::to_string(i)); ame_reg_bits.push_back(nelem * 32); ame_reg_types.push_back("ame_sq"); }
+         for (unsigned i = 0; i < ame::NUM_ACC; i++) { ame_reg_names.push_back("acc" + std::to_string(i)); ame_reg_bits.push_back(nelem * 32); ame_reg_types.push_back("ame_sq"); }
+         for (const std::string &n : ame_reg_names) ame_reg_name_ptrs.push_back(n.c_str());
+      }
+      if (SNP_HAVE_REGISTERS)
+         v->pregs = qemu_plugin_register_vcpu_registers(cpu_index, "org.riscv.ame", ame_reg_tags.c_str(), ame_reg_name_ptrs.data(), ame_reg_bits.data(),
+                                                        ame_reg_types.data(), (unsigned)ame_reg_names.size(), ame_reg_read, ame_reg_write, nullptr);
+      static bool csrs_claimed = false;
+      if (SNP_HAVE_SYSREGS && !csrs_claimed)
+      {
+         csrs_claimed = true;
+         unsigned ok = 0;
+         for (unsigned i = 0; i < AME_NCSR; i++)
+            ok += qemu_plugin_register_sysreg_cb(ame_csr_addr[i], ame_csr_cb_read, ame_csr_cb_write, nullptr) ? 1 : 0;
+         if (ok != AME_NCSR)
+            fprintf(stderr, "[SNIPER-QEMU] only %u of %u AME CSRs could be claimed\n", ok, AME_NCSR);
+      }
+   }
 }
 
 void insn_exec(unsigned int cpu_index, void *udata)
@@ -678,6 +820,8 @@ void syscall_enter(SNP_SYSCALL_ARGS)
 void vcpu_init(SNP_VCPU_ARGS)
 {
    VCPU *v = vcpu_get(cpu_index);
+   if (g_arch == ARCH_RISCV)
+      ame_register_state(v, cpu_index);
 
    /* Checked before anything is opened, so a user who asks for this gets the
     * explanation rather than whatever the SIFT writer says about its response
@@ -699,7 +843,9 @@ void vcpu_init(SNP_VCPU_ARGS)
    }
 
    if (!v->writer)
-      writer_open(v, cpu_index);
+      if (!opt_trace)
+      return;                      /* a functional run: no trace file */
+   writer_open(v, cpu_index);
 
    /* Register handles are per-vCPU and only obtainable in vCPU context.  Absent
     * in user mode, where the mode never changes anyway. */
@@ -779,10 +925,21 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       if (ii->mode_mask)
          ti->mode_mask &= ii->mode_mask;  /* one mode governs the whole block */
 
+      if (ii->ame)
+      {
+         std::lock_guard<std::mutex> lock(g_claim_lock);
+         ii->claimed = g_claimed.erase(insn) > 0;
+      }
+      if (!opt_trace)
+      {
+         if (ii->ame)
+            qemu_plugin_register_vcpu_insn_exec_cb(insn, ame_exec, ii->claimed ? QEMU_PLUGIN_CB_RW_REGS : QEMU_PLUGIN_CB_RW_REGS_PC, ii);
+         continue;
+      }
       qemu_plugin_register_vcpu_insn_exec_cb(insn, insn_exec,
                                              QEMU_PLUGIN_CB_NO_REGS, ii);
-      if (ii->ame)
-         qemu_plugin_register_vcpu_insn_exec_cb(insn, ame_exec, QEMU_PLUGIN_CB_RW_REGS_PC, ii);
+      if (ii->ame)     /* after the tracer's callback: the record is pending when the model runs */
+         qemu_plugin_register_vcpu_insn_exec_cb(insn, ame_exec, ii->claimed ? QEMU_PLUGIN_CB_RW_REGS : QEMU_PLUGIN_CB_RW_REGS_PC, ii);
       qemu_plugin_register_vcpu_mem_cb(insn, mem_access,
                                        QEMU_PLUGIN_CB_NO_REGS,
                                        QEMU_PLUGIN_MEM_RW, nullptr);
@@ -818,6 +975,8 @@ void at_exit(SNP_UDATA_ARGS)
       fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " memory footprints recorded\n", g_nspans);
    if (g_ndropped_lines)
       fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " cache lines touched beyond the spans their records hold (counted, not timed)\n", g_ndropped_lines);
+   if (g_exec_claimed || g_exec_trapped)
+      fprintf(stderr, "[SNIPER-QEMU] plugin-emulated instructions: %" PRIu64 " claimed at translation, %" PRIu64 " through the exception path\n", g_exec_claimed, g_exec_trapped);
    if (opt_verbose || getcode_fail)
       fprintf(stderr, "[SNIPER-QEMU] guest code reads: %" PRIu64 ", failed: %" PRIu64 "\n",
               getcode_calls, getcode_fail);
@@ -863,6 +1022,8 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
          }
          ame::square_n = n;
       }
+      else if (key == "claim")    opt_claim = val != "0" && val != "off" && val != "false";   /* claim=0: emulate via the exception path even when the QEMU can claim */
+      else if (key == "trace")    opt_trace = val != "0" && val != "off" && val != "false";   /* trace=0: a functional run, the models only */
       else if (key == "verbose")  opt_verbose = true;
       else if (key == "response") opt_response = true;
       else if (key == "time")     opt_time = true;
@@ -894,6 +1055,10 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    SNP_REG_TB_TRANS(id, tb_trans);
    SNP_REG_SYSCALL(id, syscall_enter);
    SNP_REG_VCPU_INIT(id, vcpu_init);
+#if QEMU_PLUGIN_VERSION >= 7
+   if (SNP_HAVE_CLAIM)
+      qemu_plugin_register_vcpu_insn_claim_cb(id, insn_claim, nullptr);
+#endif
    SNP_REG_VCPU_EXIT(id, vcpu_exit);
    SNP_REG_ATEXIT(id, at_exit);
    return 0;

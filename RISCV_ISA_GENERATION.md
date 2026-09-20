@@ -175,6 +175,17 @@ Building on the target is what keeps it free of glibc-version trouble: a
 binary built on a newer distribution than the one it runs on fails on
 glibc symbol versions, and a static one cannot host the plugin.
 
+The patch's third part is four additions to QEMU's plugin API for an
+extension emulated in a plugin (frontend/qemu-plugin/README.md,
+"Emulating an extension"): a translation-time claim of instructions the
+target cannot decode (the RISC-V translator consults the plugins before
+raising illegal-instruction, so a claimed instruction costs a helper call
+and the block continues), `qemu_plugin_raise_exception`, plugin-defined
+registers in the gdb register list, and plugin-backed CSRs.  The
+`riscv-plugin-api` harness case checks all four; `tools/riscv/regen-qemu-patch.sh`
+regenerates the patch from the pristine and the patched trees and now
+picks up every file that differs between them.
+
 ## The whole chain in one command
 
 `make riscv-ime-check` runs `tools/riscv/ime-check.sh`: regenerate and

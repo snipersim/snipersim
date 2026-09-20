@@ -297,3 +297,43 @@ DMA streams through its port (`ame_tile.cc`); the core retires `acc.task`
 at once and stalls only at `acc.wait`, for whatever remains of the
 transfer-compute-transfer timeline.  `test/llm-agent/agent.c -DUSE_DMA`
 issues every weight product as a task; `riscv-llm-couplings` runs it.
+
+## Emulating an extension: the plugin-API additions
+
+The AME and Xsnacc instructions are executed by models inside this plugin,
+because QEMU does not know them.  On a stock QEMU that costs an
+illegal-instruction exception per instruction: the translator ends the
+block with the exception, the plugin's callback runs first and moves the
+PC past the instruction with `qemu_plugin_set_pc`, which exits the CPU
+loop before the exception fires, and execution resumes with a block
+lookup.  `tools/riscv/qemu-11.1.1-ime.patch` adds four calls to QEMU's
+plugin API that remove the exception path and give the emulated unit the
+rest of what an architectural extension has:
+
+| call | what it does |
+|---|---|
+| `qemu_plugin_register_vcpu_insn_claim_cb` | a translation-time claim: the RISC-V translator offers every instruction it cannot decode to the plugins before it emits the exception; a plugin that recognises one registers its execution callback on it and returns true, the target emits nothing, and the block continues at the next instruction |
+| `qemu_plugin_raise_exception(vaddr, cause, tval)` | an architectural exception from a callback: the model's ownership and datatype faults become illegal-instruction exceptions, a square row at an unmapped address a load or store access fault; in user mode the CPU loop delivers them as SIGILL and SIGSEGV |
+| `qemu_plugin_register_vcpu_registers` | plugin-defined registers in the vcpu's gdb register list: the unit's seven CSRs, the datatype registers and the M and accumulator squares (103 registers under the feature `org.riscv.ame`), readable by gdb, by `qemu_plugin_read_register` and by other plugins |
+| `qemu_plugin_register_sysreg_cb` | plugin-backed CSRs: `csrr`/`csrw` of `amenlen`, `ameudsz`, `amestype`, `ameown`, `amefflags`, `amexsat` and `amestatus` reach the model instead of trapping; the read-only ranges stay read-only |
+
+The plugin binds the four weakly (`qemu_plugin_ext.h`): loaded into a
+stock QEMU (the x86 frontend) the pointers are null and it takes the older
+path, loaded into the patched QEMU it claims.  `claim=0` forces the
+exception path for comparison; `trace=0` runs the models without a trace
+file (a functional run).  The exit summary counts both paths:
+`plugin-emulated instructions: N claimed at translation, M through the
+exception path`.  The user-mode QEMU runs the plugins' vcpu-init work
+before a debugger attaches (`-g`), so the registers are in the target
+description gdb reads.
+
+What the claim is worth: 4 million `ame.release` instructions (the
+cheapest for the model) run in 0.18 s claimed and 0.31 s through the
+exception path, about 35 ns per instruction; the agent's 4.7 million AME
+instructions in a functional run take 3.1 s against 3.3 s, since the
+model's own callback (register reads through the gdb path, memory
+through the debug path) dominates; under tracing the SIFT write per
+instruction hides both (38.6 against 38.9 s).  The probe
+`test/qemu-plugin-probe/rv-ame-api.c` checks every addition and the
+harness case `riscv-plugin-api` runs it, the gdb protocol read included.
+

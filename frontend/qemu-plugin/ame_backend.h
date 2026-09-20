@@ -46,7 +46,18 @@ namespace ame
       int32_t M[NUM_M][MAXN * MAXN] = {{0}};
       int32_t Acc[NUM_ACC][MAXN * MAXN] = {{0}};
       uint64_t executed = 0, errors = 0;
+      /* the seven CSRs' context state (amenlen, ameudsz and ameown derive from
+       * square_n, the element size and `owned`) */
+      uint64_t stype = 0, fflags = 0, xsat = 0, status = 0;
+      uint64_t fault_addr = 0; bool fault_store = false;   /* the last failed guest memory access */
    };
+   /* the CSR addresses (provisional, from the draft's state chapter) */
+   const unsigned CSR_AMENLEN = 0xCC0, CSR_AMEUDSZ = 0xCC1, CSR_AMESTYPE = 0xCC2, CSR_AMEOWN = 0xCC3,
+                  CSR_AMEFFLAGS = 0xCC4, CSR_AMEXSAT = 0xCC5, CSR_AMESTATUS = 0x800;
+   uint64_t csr_read(const Backend &b, unsigned csr);
+   void csr_write(Backend &b, unsigned csr, uint64_t val);
+   /* RISC-V exception causes the model raises */
+   const unsigned EXCP_ILLEGAL = 2, EXCP_LOAD_ACCESS = 5, EXCP_STORE_ACCESS = 7;
 
    /* What an instruction needs from its host: registers, memory, and a way
     * to report the accesses it made (for the trace's footprint records). */
@@ -58,6 +69,9 @@ namespace ame
       std::function<bool(uint64_t, const void *, unsigned)> write_mem;
       std::function<void(uint64_t, unsigned, bool)> note_access;   /* addr, bytes, is_store */
       std::function<void(const std::string &)> error;
+      /* raise an architectural exception (cause, trap value); empty when the
+       * host cannot, in which case the error is only reported */
+      std::function<void(unsigned, uint64_t)> trap;
    };
 
    /* Execute the AME instruction `op` (an rvisa opcode id of class ame_*)

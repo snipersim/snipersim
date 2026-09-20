@@ -26,6 +26,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -1142,6 +1143,132 @@ def case_riscv_llm_wide(p, g, workdir):
             return False, 'DRAM writes (%d/token) are not small against reads (%d/token): clean lines written back?' % (writes, reads)
     return True, '; '.join(' '.join(l.split()) for l in lines)
 
+def gdb_read_feature(port, feature, names, timeout=30):
+    """Attach to a gdbstub, fetch the target description, and read the named
+    registers of one feature the way gdb would: (features, regs, values)."""
+    deadline = time.time() + timeout
+    s = None
+    while time.time() < deadline:
+        try:
+            s = socket.create_connection(('127.0.0.1', port), timeout=timeout)
+            break
+        except OSError:
+            time.sleep(0.2)
+    if s is None:
+        raise RuntimeError('no gdbstub on port %d' % port)
+    def recv():
+        data = b''
+        while b'#' not in data or len(data) < data.index(b'#') + 3:
+            data += s.recv(4096)
+        s.sendall(b'+')
+        return data[data.index(b'$') + 1:data.index(b'#')].decode('latin1')
+    def pkt(p):
+        s.sendall(('$%s#%02x' % (p, sum(p.encode()) % 256)).encode())
+        return recv()
+    def xfer(name):
+        out, off = '', 0
+        while True:
+            r = pkt('qXfer:features:read:%s:%x,fff' % (name, off))
+            out += r[1:]
+            off += len(r) - 1
+            if r[:1] == 'l':
+                return out
+    try:
+        s.sendall(b'+')
+        pkt('qSupported:xmlRegisters=riscv;qXfer:features:read+')
+        feats = re.findall(r'href="([^"]+)"', xfer('target.xml'))
+        xml = xfer(feature + '.xml') if feature + '.xml' in feats else ''
+        regs = re.findall(r'<reg name="([^"]+)" bitsize="(\d+)" regnum="(\d+)"', xml)
+        values = {}
+        for name, bits, num in regs:
+            if name in names:
+                values[name] = pkt('p%x' % int(num))
+        s.sendall(b'$k#6b')
+    finally:
+        s.close()
+    return feats, regs, values
+
+def case_riscv_plugin_api(p, g, workdir):
+    """The plugin-API additions of the QEMU patch: instructions claimed at translation, exceptions the plugin's model raises, the AME CSRs it backs, and the unit's registers in the vcpu's gdb list."""
+    r, why = riscv_ime_prerequisites(workdir)
+    if r is None:
+        return None, why
+    cc = os.environ['SNIPER_RISCV_CC']
+    def build(src, out, extra):
+        return run([cc, '--target=riscv64-linux-gnu', '-march=rv64gcv', '-mabi=lp64d', '-O2', '-ffreestanding',
+                    '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-I', os.path.join(SNIPER_ROOT, 'include')]
+                   + extra + ['-o', out, os.path.join(PROBE_DIR, src)], 120)
+    guests = {}
+    for mode in (0, 1, 2):
+        guests[mode] = os.path.join(workdir, 'rv-ame-api%d' % mode)
+        rc, out = build('rv-ame-api.c', guests[mode], ['-DMODE=%d' % mode])
+        if rc != 0:
+            return False, 'could not build rv-ame-api.c mode %d (exit %s)' % (mode, rc)
+    loop = os.path.join(workdir, 'rv-ame-loop')
+    rc, out = build('rv-ame-loop.c', loop, [])
+    if rc != 0:
+        return False, 'could not build rv-ame-loop.c (exit %s)' % rc
+    def plug(opts):
+        return [r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s%s' % (p['frontend'], os.path.join(workdir, 'api'), opts), '--']
+    def emulated(out):
+        m = re.search(r'plugin-emulated instructions: (\d+) claimed at translation, (\d+) through the exception path', out)
+        return (int(m.group(1)), int(m.group(2))) if m else None
+    # the probe through claimed instructions: every check passes, the CSRs answer, nothing trapped
+    rc, out = run(plug('') + [guests[0]], 120, cwd=workdir)
+    if rc != 100:
+        return False, 'the API probe exited %s with the plugin (100 = every check passed): %s' % (rc, out.strip()[-200:])
+    if emulated(out) != (11, 0):
+        return False, 'claimed run: expected 11 instructions claimed and 0 trapped, got %s' % (emulated(out),)
+    m = re.search(r'AME registers: (\d+) in the gdbstub list under org.riscv.ame, amenlen reads (\d+)', out)
+    if not m or int(m.group(1)) != 103 or int(m.group(2)) != 4:
+        return False, 'the unit registers are not in the vcpu register list: %s' % (m.group(0) if m else 'no report')
+    # the same through the exception path (claim=0): every instruction trapped and re-entered
+    rc, out = run(plug(',claim=0') + [guests[0]], 120, cwd=workdir)
+    if rc != 100 or emulated(out) != (0, 11):
+        return False, 'exception path: exit %s, %s' % (rc, emulated(out))
+    # without the plugin QEMU does not know the CSRs
+    rc, out = run([r['qemu'], '-cpu', r['cpu'], guests[0]], 60, cwd=workdir)
+    if rc != -signal.SIGILL:
+        return False, 'without the plugin the CSR read should be an illegal instruction (exit %s)' % rc
+    # the model's exceptions reach the guest as the architecture's signals
+    rc, out = run(plug('') + [guests[1]], 60, cwd=workdir)
+    if rc != -signal.SIGILL or 'without owning' not in out:
+        return False, 'use without ownership: exit %s, expected SIGILL with the model\'s report' % rc
+    rc, out = run(plug('') + [guests[2]], 60, cwd=workdir)
+    if rc != -signal.SIGSEGV or 'failed at 0x10' not in out:
+        return False, 'a square load from an unmapped address: exit %s, expected SIGSEGV with the model\'s report' % rc
+    # the registers over the gdb protocol
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    proc = subprocess.Popen([r['qemu'], '-cpu', r['cpu'], '-g', str(port), '-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'apigdb')), '--', guests[0]],
+                            cwd=workdir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    try:
+        feats, regs, values = gdb_read_feature(port, 'org.riscv.ame', ('amenlen', 'ameudsz', 'm0'))
+    except Exception as e:
+        return False, 'gdb protocol: %s' % e
+    finally:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        proc.communicate()
+    if 'org.riscv.ame.xml' not in feats:
+        return False, 'gdb target description lacks the plugin feature: %s' % feats
+    if len(regs) != 103 or values.get('amenlen') != '0400000000000000' or values.get('ameudsz') != '2000000000000000' or len(values.get('m0', '')) != 128:
+        return False, 'gdb: %d registers, amenlen %s, ameudsz %s, m0 %d hex digits' % (len(regs), values.get('amenlen'), values.get('ameudsz'), len(values.get('m0', '')))
+    # the mechanism's cost: 4 M emulated instructions, no tracing, claimed and trapped
+    times = {}
+    for opt, want in ((',trace=0,claim=1', (4000000, 0)), (',trace=0,claim=0', (0, 4000000))):
+        started = time.time()
+        rc, out = run(plug(opt) + [loop], 300, cwd=workdir)
+        times[opt] = time.time() - started
+        if rc != 100 or emulated(out) != want:
+            return False, 'loop guest%s: exit %s, %s' % (opt, rc, emulated(out))
+    return True, ('11 claimed / 0 trapped and 0 / 11; SIGILL and SIGSEGV delivered with the model\'s report; 103 registers under org.riscv.ame over the gdb protocol (amenlen 4); '
+                  '4 M emulated instructions: %.2f s claimed, %.2f s through the exception path' % (times[',trace=0,claim=1'], times[',trace=0,claim=0']))
+
 def case_riscv_ame_couplings(p, g, workdir):
     """The attached tile (AmeTile) runs a 32x32x32 AME product under every coupling: tile counts exact, timing responds."""
     r, why = riscv_gemm_prerequisites(workdir)
@@ -1223,6 +1350,7 @@ CASES = {
     'riscv-footprint-lines': case_riscv_footprint_lines,
     'riscv-vector-datapath': case_riscv_vector_datapath,
     'riscv-llm-wide':      case_riscv_llm_wide,
+    'riscv-plugin-api':    case_riscv_plugin_api,
 }
 
 
