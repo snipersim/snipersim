@@ -15,7 +15,9 @@
 
 AmeTile *AmeTile::create(Core *core)
 {
-   const String coupling = Sim()->getCfg()->getString("perf_model/ame_tile/coupling");
+   /* Only the RISC-V configurations name a coupling; every other configuration
+    * has no attached tile (ica: the matrix classes cost on the core). */
+   const String coupling = Sim()->getCfg()->hasKey("perf_model/ame_tile/coupling") ? Sim()->getCfg()->getString("perf_model/ame_tile/coupling") : String("ica");
    if (coupling == "ica")
       return NULL;
    const MemComponent::component_t llc = (MemComponent::component_t)(Sim()->getCfg()->getInt("perf_model/cache/levels") - 2 + MemComponent::L2_CACHE);
