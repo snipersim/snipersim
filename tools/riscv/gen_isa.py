@@ -435,6 +435,7 @@ def emit(rows, classes, out_dir, roots, policy_path):
           'const unsigned MAX_FIELDS = %d;' % MAX_FIELDS,
           'const unsigned MAX_SEGS = %d;' % MAX_SEGS, '',
           '} // namespace rvisa', '#endif', '']
+    os.makedirs(out_dir, exist_ok=True)
     open(os.path.join(out_dir, 'riscv_isa_gen.h'), 'w').write('\n'.join(h))
 
     c = hdr + ['#include "riscv_isa.h"', '', 'namespace rvisa {', '', 'const ClassInfo class_table[NUM_CLASSES] = {']

@@ -67,6 +67,9 @@ DEFAULT_CORES = (1, 2, 4)
 # Complete machines: must run on their own.
 EXPECT_PASS = [
     'dunnington', 'dunnington16', 'gainestown', 'nehalem-lite', 'silvermont',
+    # the RISC-V core model is built by default (RISCV=ON); the decoder follows
+    # the ISA the trace declares, so an x86 workload runs on these too
+    'riscv', 'riscv-mediumboom',
 ]
 
 # Overlay fragments: tune one aspect and must be layered on a complete config.
@@ -94,8 +97,6 @@ EXPECT_FAIL = {
     'cortex-a53': 'ARM target: needs an ARM frontend and an ARM trace',
     'cortex-a72': 'ARM target: needs an ARM frontend and an ARM trace',
     'kingscross': 'mesh topology fixed at 16:4, so it needs 64 cores',
-    'riscv': 'needs a RISC-V build ("Unknown core model riscv")',
-    'riscv-mediumboom': 'needs a RISC-V build ("Unknown core model riscv")',
     'sampling': 'sampling is only supported with the Pin frontend',
 }
 
@@ -117,7 +118,15 @@ MODES = ('fast-forward', 'detailed')
 # set-lock downgrade along with the data copy, leaking shared_cores-1 mutexes
 # to the network thread; see the comment at the release in cache_cntlr.cc.
 # If a config lands back here with "timed out", look there first.
-EXPECT_FAIL_DETAILED = {}
+EXPECT_FAIL_DETAILED = {
+    # The RISC-V configurations select the RISC-V decoder (general/arch), and
+    # this suite's workload is an x86 binary: fast-forward never decodes, the
+    # timing model does and asserts on the first x86 instruction.  They are for
+    # RISC-V traces (RISCV_AI_ACCELERATOR_STACK.md); the riscv-* cases of
+    # test_qemu.py cover them.
+    'riscv': 'the RISC-V decoder cannot decode an x86 trace',
+    'riscv-mediumboom': 'the RISC-V decoder cannot decode an x86 trace',
+}
 
 # Not a configuration to run on its own.
 EXCLUDE = {'base'}
@@ -151,6 +160,9 @@ FRAGMENT_EXPECT_FAIL = {
     'dram_configs/readwrite_2ctrl_153gbps':
         'two memory controllers, but they may only sit at the master node of a '
         'shared cache, which no shipped base provides',
+    'mmu_configs/mmu_spec':
+        'the speculative MMU needs an engine and the allocator it predicts '
+        'from (address_translation_schemes/revelator layers all three)',
 }
 
 
