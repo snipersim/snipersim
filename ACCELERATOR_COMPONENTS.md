@@ -304,22 +304,30 @@ reads per token and no writes; the memory side only matters for the
 | kernel | unit and coupling | cycles / token | instructions / token | vs RVV |
 |---|---|---|---|---|
 | scalar (F extension) | core | 683,660 | 1,161,416 | 0.20x |
-| RVV 1.0, e32 m4 | core | 138,687 | 211,908 | 1.00x |
-| int4 weights, dequantised on RVV (`-DUSE_W4`) | core | 125,290 | 188,556 | 1.11x |
-| IME 0.9, fp32 2x2 tiles | in-core | 264,998 | 264,759 | 0.52x |
-| AME draft, fp32 4x4 squares | in-core (`ica`) | 127,939 | 146,247 | 1.08x |
-| AME draft | attached tile, port at L2 (`oca_l2`) | 144,455 | 146,247 | 0.96x |
-| AME draft | attached tile, near-core with transfer engine (`nca`) | 142,846 | 146,247 | 0.97x |
-| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 86,646 | 99,548 | 1.60x |
-| DMA-attached accelerator | near-core | 86,646 | 99,548 | 1.60x |
+| RVV 1.0, e32 m4 | core | 82,322 | 133,436 | 1.00x |
+| int4 weights, dequantised on RVV (`-DUSE_W4`) | core | 68,297 | 107,784 | 1.21x |
+| IME 0.9, fp32 2x2 tiles | in-core | 207,689 | 187,128 | 0.40x |
+| AME draft, fp32 4x4 squares | in-core (`ica`) | 70,910 | 68,616 | 1.16x |
+| AME draft | attached tile, port at L2 (`oca_l2`) | 87,318 | 68,616 | 0.94x |
+| AME draft | attached tile, near-core with transfer engine (`nca`) | 85,700 | 68,616 | 0.96x |
+| DMA-attached accelerator, one task per weight product | tile datapath, port at L2 | 26,240 | 19,412 | 3.14x |
+| DMA-attached accelerator | near-core | 26,240 | 19,412 | 3.14x |
 
-(The int4 row dequantises inside the dot product, 8x fewer weight bytes
-for 11 percent fewer cycles on a model that fits in the L2.  The tile
-kernels dispatch each step over a group's token blocks through one
-switch that falls through the blocks, one indirect jump per step instead
-of one per block: IME's instruction count fell from 456,315 to 264,759
-per token and AME's from 171,228 to 146,247; the 4x4 rows gained 2 to 9
-percent in time, the 32x32 rows of section 8 close to half.)
+Every kernel outside the weight products now runs on the vector unit
+too: layer normalisation, GELU and the attention over the KV cache
+(softmax and the weighted sum of the value rows), as strip loops that
+run at any VLEN; the harness derives every vector-class instruction
+count of the RVV build from the model's shape and requires it exact.
+That work had been the floor under every row: with it vectorised the
+RVV row went from 138,687 to 82,322 cycles per token, and the DMA
+accelerator, whose time was almost all that scalar work between tasks,
+from 86,646 to 26,240 (its 13 tasks per token cost 9,275 cycles of
+compute).  The int4 row dequantises inside the dot product, 8x fewer
+weight bytes for 17 percent fewer cycles on a model that fits in the
+L2.  The tile kernels dispatch each step over a group's token blocks
+through one switch that falls through the blocks, one indirect jump per
+step instead of one per block, which took the 32x32 rows of section 8
+to half.
 
 The same kernels with the prefill token-serial, the shape measured
 before the class B kernel existed: RVV 141,698, IME 472,610, AME
@@ -345,30 +353,29 @@ What the numbers say:
   square.  IME's 2x2 tiles at VLEN=128 carry too little work per
   instruction to catch up: 452,697 instructions per token against RVV's
   211,559.
-- **The attached tile costs about 11 percent over the in-core cost on
-  this workload**, from the dispatch latency and the in-order queue: the
-  tile executes 45,876 ops per token in program order, and the ROB fills
-  behind it.  Moving the port from L1 to L2 changed little, because the
+- **The attached tile costs about 20 percent over the in-core cost on
+  this workload** (11 percent before the vector kernels shrank the rest),
+  from the dispatch latency and the in-order queue: the tile executes
+  45,876 ops per token in program order, and the ROB fills behind it.  Moving the port from L1 to L2 changed little, because the
   tile pipelines its rows and the out-of-order window covers their
   latency; the near-core transfer engine prefetched every row and gained
   0.4 percent for the same reason.  On the pure GEMM the spread between
   couplings is under 1 percent.  Where the port sits will matter for a
   workload that misses in L2, and for several units sharing it.
-- **The DMA-attached accelerator is the fastest configuration**, 1.56x
-  over RVV and 1.46x over AME in the core.  Per token: 13 tasks, 148,360
+- **The DMA-attached accelerator is the fastest configuration**, 3.1x
+  over RVV and 2.7x over AME in the core.  Per token: 13 tasks, 148,360
   multiply-accumulates, 9,275 cycles of compute at 16 per cycle, 3,190
   cycles of streaming, 196 KB streamed in (weights once per batch in
-  prefill, once per token in decode), and 13,036 cycles stalled at
+  prefill, once per token in decode), and about 13,000 cycles stalled at
   `acc.wait` (the wait holds the instruction window until the task's
-  output is written).  The other 75,000 cycles per token are the core's
-  own work between tasks: attention over the KV cache on the RVV dot
-  product, layer normalisation, GELU, the embedding and cache writes.
-  That is now the bottleneck, and it says what the next step is on this
-  path: attention as a task or on the unit, and issuing the next
-  independent task before waiting on the previous one (the kernel waits
-  immediately today), which would recover part of the stall.  A unit 64x
-  faster (1,024 multiply-accumulates per cycle) cuts the stall to 3,911
-  cycles and the total to 79,218: the floor is the core, not the unit.
+  output is written).  The rest, about 13,000 cycles per token, is the
+  core's own work between tasks, now on the vector unit: attention over
+  the KV cache, layer normalisation, GELU, the embedding and cache
+  writes.  Before those kernels were vectorised that work was 75,000
+  cycles and the whole row 86,646; the wait stall is now the largest
+  single term, and issuing the next independent task before waiting on
+  the previous one (the kernel waits immediately today) is the next step
+  on this path.
 - **Near-core and L2 are identical for tasks**, because a task's blocks
   are streamed as a whole when the task starts; the transfer engine's
   prefetch-at-dispatch applies to instructions, not to tasks.
@@ -408,16 +415,18 @@ it -- with a 16-byte datapath the same 4,096-bit run is 7x slower
 
 | kernel | at the baseline geometry | at 32x32 (RVV: 4,096 bits) | change |
 |---|---|---|---|
-| RVV 1.0 | 138,686 (VLEN 128) | 102,665 | 1.35x |
-| IME 0.9 in core | 264,998 (2x2) | 51,197 | 5.2x |
-| AME in core | 127,939 (4x4) | 54,071 | 2.37x |
-| AME on the tile, near-core | 142,846 (4x4) | 58,027 | 2.46x |
-| DMA accelerator | 86,646 (16 MACs/cycle) | 79,218 (1,024 MACs/cycle) | 1.09x |
+| RVV 1.0 | 82,322 (VLEN 128) | 43,523 | 1.89x |
+| IME 0.9 in core | 207,689 (2x2) | 33,401 | 6.2x |
+| AME in core | 70,910 (4x4) | 36,605 | 1.94x |
+| AME on the tile, near-core | 85,700 (4x4) | 40,564 | 2.11x |
+| DMA accelerator | 26,240 (16 MACs/cycle) | 17,116 (1,024 MACs/cycle) | 1.53x |
 
-Instructions per token: AME 146,247 to 70,593, IME 264,759 to 67,655,
-RVV 211,908 to 144,134.  (Before the fall-through block dispatch the
-32x32 rows were 92,983 for IME and 94,161 for AME: with 16 token blocks
-per group the per-block switch had cost as much as the matrix work.)  Every count is exact at both geometries; the
+Instructions per token: AME 68,616 to 48,063, IME 187,128 to 44,667,
+RVV 133,436 to 62,866.  (Two changes since the first 32x32 measurement
+of 91,000 to 102,000 per row: the fall-through block dispatch, with 16
+token blocks per group the per-block switch had cost as much as the
+matrix work, and the vector kernels for everything outside the weight
+products.)  Every count is exact at both geometries; the
 AME 32 run executes 17,374 squares, which is what 6+2+8+2 output blocks
 of 32 rows over 2 K-slices per layer, 3 layers, the head and the 16
 prefill batches imply, and the tile receives every byte of every square
@@ -429,12 +438,14 @@ lifted).
 What the numbers say:
 
 - **Bigger tiles help, and the dispatch must keep up.**  The two
-  matrix units land within 6 percent of each other at 32x32, 51,000 to
-  54,000 cycles per token, half the vector unit at 4,096 bits and below
-  the DMA accelerator, whose 79,000 is dominated by the core's own
-  scalar work between tasks (attention over the KV cache, normalisation,
-  GELU, the embedding), the floor a wider unit cannot remove; the vector
-  kernels for that work are the next items.
+  matrix units land within 10 percent of each other at 32x32, 33,000 to
+  37,000 cycles per token, against 43,500 for the vector unit at 4,096
+  bits; the DMA accelerator is 26,240 at 16 multiply-accumulates per
+  cycle and 17,116 at 1,024, because its weight products cost no
+  instructions at all and the wait on each task is what remains.  With the activations
+  and attention on the vector unit, the remaining floor under every row
+  is the embedding, the KV-cache writes and the scalar control between
+  kernels.
 - **At batch 1 the wide unit is almost all padding.**  A decode matvec
   fills one column of a 32x32 square: 32,768 multiply-accumulates for
   1,024 useful ones, 3 percent utilisation.  The prefill batches of 8 to
@@ -477,27 +488,30 @@ bandwidth (an edge LPDDR figure; the configuration's default is 5):
 
 | kernel | weight format | unit | cycles / token | instructions / token | DRAM reads + writes / token | bytes / token |
 |---|---|---|---|---|---|---|
-| fp32, 32x32 squares | fp32, 101 MB | AME in core | 6,802,694 | 3,006,245 | 580,598 + 6,573 | 37.6 MB |
-| fp32, 32x32 squares | fp32 | AME tile, near-core | 6,441,976 | 3,006,245 | 580,628 + 6,580 | 37.6 MB |
-| int4, dequantised in the dot product | int4, 12.7 MB | RVV, 128 bits | 13,805,144 | 11,788,868 | 83,918 + 3,704 | 5.6 MB |
-| int4 | int4 | RVV, 4,096 bits over a 64-byte datapath | 13,438,056 | 3,893,196 | 83,918 + 3,704 | 5.6 MB |
-| fp32 direct | fp32 | RVV, 128 and 4,096 bits | simulating: 877 M and 175 M instructions per run | | | |
+| fp32, 32x32 squares | fp32, 101 MB | AME in core | 4,720,808 | 964,436 | 580,563 + 6,560 | 37.6 MB |
+| fp32, 32x32 squares | fp32 | AME tile, near-core | 4,362,078 | 964,436 | 580,654 + 6,600 | 37.6 MB |
+| int4, dequantised in the dot product | int4, 12.7 MB | RVV, 128 bits | 11,674,228 | 9,735,915 | 83,906 + 3,686 | 5.6 MB |
+| int4 | int4 | RVV, 4,096 bits over a 64-byte datapath | 11,328,176 | 1,741,848 | 83,906 + 3,686 | 5.6 MB |
+| fp32 direct, token-serial prefill | fp32 | RVV, 128 bits | 32,121,251 | 15,127,571 | 1,526,792 + 5,097 | 98.0 MB |
+| fp32 direct | fp32 | RVV, 4,096 bits over a 64-byte datapath | 62,854,584 | 1,258,097 | 1,526,943 + 5,097 | 98.1 MB |
 
 (51 tokens: one prompt of 35 tokens prefilled in two batches, 16
 decoded; every run reproduces the numpy model's tokens.  The DRAM
-columns count 64-byte lines; 18 passes over the model in 51 tokens gives
-35.7 MB of fp32 weights per token and 4.5 MB of int4, the rest is the KV
-cache and activations.  The writes are the activations' evictions, 1 to
-4 percent of the reads.)
+columns count 64-byte lines; the square kernels load a weight block once
+per batch, 18 passes over the model in 51 tokens, 35.7 MB of fp32
+weights per token and 4.5 MB of int4, the rest is the KV cache and
+activations; the plain vector build runs the prefill token-serially and
+streams the whole model for every token.  The writes are the
+activations' evictions, 1 to 4 percent of the reads.)
 
 These rows were measured after two memory-side corrections that every
 earlier wide figure lacked (commit "Memory side"): a directory the size
 of the L2 had written every clean line back to DRAM (writes equalled
 reads) and cost a flush round trip per L2 miss, and the decoder had
-delivered half the rows of each 32x32 square.  The uncorrected fp32 row
-was 6.7 million cycles per token at 40 MB per token; the corrected one
-moves 6 percent fewer bytes for about the same time, because the missing
-rows now cost what the spurious writes had.
+delivered half the rows of each 32x32 square.  The fp32 square row was
+6.8 million cycles per token with the scalar activations and attention;
+the vector kernels for those took it to 4.7 million, and the int4 rows
+from 13.8 and 13.4 million to 11.7 and 11.3.
 
 What the numbers say:
 
@@ -508,8 +522,8 @@ What the numbers say:
   token, the int4 stream 0.44 million: that is the floor each format can
   reach, and the gap between them is the prize.
 - **The int4 rows are bound by DRAM latency, not by instructions.**
-  Cutting the kernel from 11.8 million to 3.9 million instructions per
-  token (128 to 4,096 bits) gained 3 percent, and both rows sit 30x above
+  Cutting the kernel from 9.7 million to 1.7 million instructions per
+  token (128 to 4,096 bits) gained 3 percent, and both rows sit 25x above
   their bandwidth floor.  The dot product walks one 256-byte weight row
   at a time, the configuration has no hardware prefetcher
   (`prefetcher = none` at every level of `config/riscv.cfg`), and the
@@ -518,23 +532,28 @@ What the numbers say:
   were serial, and the run takes 13.4 million.  The fp32 square loads
   fare better because one instruction issues 64 lines at once (8.5
   misses in flight on average), which is why the format that moves 6.7x
-  more bytes is 2x faster.  A stream prefetcher or a DMA engine in front
+  more bytes is 2.4x faster.  The plain fp32 vector rows show the same
+  limit from the other side: the 4,096-bit unit, whose every weight load
+  is a 32-line footprint, spends 95 percent of its cycles stalled on DRAM
+  against 67 percent at 128 bits on the same 82 million line misses,
+  about 5 misses in flight against 14, and is 2x slower on the same
+  bytes (62.9 against 32.1 million cycles per token, with 12x fewer
+  instructions).  A stream prefetcher or a DMA engine in front
   of the vector unit is the lever, and it is worth more than the
   instruction count: the accelerator form of the int4 kernel (the task
   path of section 3.4, streaming rows and dequantising inside the unit)
   would let the byte count become the time.
-- **The fp32 run reaches 43 percent of the bandwidth**, 6.8 million
-  cycles against a 2.9 million floor, latency-bound on the in-order row
-  path of the square loads; the near-core transfer engine, which
-  prefetches at dispatch a few instructions ahead, gains 5 percent (6.44
-  million).  The stream needs a prefetcher that runs whole squares ahead.
-- **The core's own work is about 2 million cycles per token.**  Of the
-  fp32 run's 3.0 million instructions, 1.9 million are the generic
-  scalar work and 386,000 the scalar multiply-adds of attention over the
-  KV cache, normalisation and GELU; at d = 512 that is the floor under
-  every row once the weight stream is fixed.  Vectorising attention and
-  the activations (the next items on the list) pairs with the compressed
-  weights.
+- **The fp32 square run reaches 62 percent of the bandwidth**, 4.7
+  million cycles against a 2.9 million floor, latency-bound on the
+  in-order row path of the square loads; the near-core transfer engine,
+  which prefetches at dispatch a few instructions ahead, gains 8 percent
+  (4.36 million).  The stream needs a prefetcher that runs whole squares
+  ahead.
+- **The core's own work is now under a million instructions per token.**
+  With attention, normalisation and GELU on the vector unit the fp32
+  square run issues 964,000 instructions per token (3.0 million before),
+  and the gap to the bandwidth floor is the weight stream's latency, not
+  the core: the accelerator form pairs with the compressed weights.
 
 `tools/llm/wide-sweep.sh` reproduces every row; the harness case
 `riscv-llm-wide` runs the two fast configurations and requires the DRAM
