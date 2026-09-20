@@ -581,13 +581,16 @@ def llm_dims(keys='DLV'):
             d[m.group(1)] = int(m.group(2))
     return tuple(d[k] for k in keys)
 
-def llm_vector_counts(vlen, prefilled, generated, batches, att_dots):
+def llm_vector_counts(vlen, prefilled, generated, batches, att_dots, att_strips):
     """The riscv.v_<class> counts the RVV build implies.  Its vector work is
     three strip loops over e32,m4 groups of VL = VLEN/8 elements: the dot
     product (every matvec row, the head, and att_dots q.k products of HD
     elements, a count the guest reports because it depends on the positions),
     layer normalisation (three passes over D) and GELU (one pass over 4D);
-    the per-strip instruction counts are those of the loops in agent.c."""
+    attention adds, per (token, layer, head) call over n_t = pos + 1 scores, a
+    max reduction and an exp pass in strips (att_strips, reported by the guest)
+    and one multiply-accumulate per value row into an HD-wide accumulator.
+    The per-strip instruction counts are those of the loops in agent.c."""
     D, L, V, H = llm_dims('DLVH')
     VL = vlen // 8
     S = lambda n: (n + VL - 1) // VL
@@ -604,6 +607,13 @@ def llm_vector_counts(vlen, prefilled, generated, batches, att_dots):
     s = S(4 * D)
     e['v_cfg'] += gelu * s; e['v_load'] += gelu * s; e['v_store'] += gelu * s
     e['v_fp_muladd'] += gelu * 15 * s; e['v_fp_addsub'] += gelu * 13 * s; e['v_fp_div'] += gelu * s; e['v_int_alu'] += gelu * 3 * s
+    calls, sh = tokens * L * H, S(D // H)                    # attention: one call per (token, layer, head)
+    e['v_cfg'] += (att_strips + 2 * calls) + (att_strips + 2 * calls) + calls * sh
+    e['v_load'] += att_strips + att_strips + att_dots * sh
+    e['v_store'] += att_strips + calls * sh
+    e['v_fp_addsub'] += (att_strips + 3 * calls) + (12 * att_strips + 2 * calls)
+    e['v_fp_muladd'] += 9 * att_strips + (calls + att_dots) * sh
+    e['v_int_alu'] += (2 * att_strips + 2 * calls) + calls * sh
     return {'riscv.' + k: v for k, v in e.items()}
 
 # Unit geometry per kernel variant: the matrix side S (an IME tile or an AME
@@ -726,7 +736,7 @@ def case_riscv_llm_simulate(p, g, workdir):
         if not mb:
             return False, '%s: no prefill batch sizes in the guest output' % variant
         batches = [int(t) for t in mb.group(1).split()]
-        att = re.search(r'attention: (\d+) dots', out)      # the guest's output, before the simulator's replaces it
+        att = re.search(r'attention: (\d+) dots, (\d+) softmax strips', out)      # the guest's output, before the simulator's replaces it
         if variant == 'w4':
             # every layer product of every token runs as one int4 matvec (the head stays fp32)
             D, L, V = llm_dims()
@@ -764,7 +774,7 @@ def case_riscv_llm_simulate(p, g, workdir):
             if not att:
                 return False, 'rvv: no attention dot count in the guest output'
             vlen = int(re.search(r'vlen=(\d+)', r['cpu']).group(1))
-            for k, v in sorted(llm_vector_counts(vlen, prefilled, generated, batches, int(att.group(1))).items()):
+            for k, v in sorted(llm_vector_counts(vlen, prefilled, generated, batches, int(att.group(1)), int(att.group(2))).items()):
                 got = int(stats.get(k, 0))
                 if got != v:
                     return False, 'rvv: %s = %d, the kernels imply %d' % (k, got, v)

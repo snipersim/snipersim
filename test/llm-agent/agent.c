@@ -622,8 +622,136 @@ static void w4_matvec(float *y, const float *x, const struct w4_mat *m, const fl
 static float Kc[GPT_L][GPT_T][GPT_D], Vc[GPT_L][GPT_T][GPT_D];   /* KV cache */
 static float x[GPT_D], h[GPT_D], qkv[3 * GPT_D], att[GPT_D], o[GPT_D], m1[4 * GPT_D], m2[GPT_D], logits[GPT_V];
 static float scores[GPT_T];
+
+/* ---------------------------------------------------------- attention over the KV cache
+ * One head of one query against n_t cached keys and values: scores by the
+ * dot product, softmax, the weighted sum of the value rows.  The vector
+ * build does the softmax as strip loops over the n_t scores (a max
+ * reduction, the exp of the shifted scores with a running sum, the same
+ * range reduction and polynomial as GELU) and the weighted sum as one
+ * multiply-accumulate of each value row into an HD-wide accumulator; the
+ * scalar build is the original loop.  att_strips counts the softmax strips
+ * for the harness's derived counts (they depend on the positions). */
+static long n_att_dots, n_att_strips;
+#ifdef USE_RVV
+static float vmax_(const float *v, long n)
+{
+   float m; const float neg = -1e30f;
+   __asm__ volatile(
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vfmv.v.f v8, %[neg]\n\t"
+      "1:\n\t"
+      "vsetvli t0, %[n], e32, m4, tu, mu\n\t"
+      "vle32.v v0, (%[p])\n\t"
+      "vfmax.vv v8, v8, v0\n\t"
+      "slli t1, t0, 2\n\t"
+      "add %[p], %[p], t1\n\t"
+      "sub %[n], %[n], t0\n\t"
+      "bnez %[n], 1b\n\t"
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vfredmax.vs v12, v8, v8\n\t"
+      "vfmv.f.s %[m], v12"
+      : [m] "=f"(m), [p] "+r"(v), [n] "+r"(n) : [neg] "f"(neg) : "t0", "t1", "memory");
+   return m;
+}
+/* v[i] = exp(v[i] - mx) in place; returns the sum, counts the strips */
+static float vexp_(float *v, long n, float mx, long *strips)
+{
+   float sum; long c = 0;
+   const float hi = 88.0f, lo = -87.0f, inv = 1.4426950408889634f, ln2 = 0.6931471805599453f, half = 0.5f, one = 1.0f;
+   const float c6 = 0.0013888889f, c5 = 0.008333334f, c4 = 0.041666668f, c3 = 0.16666667f;
+   const long b127 = 127;
+   __asm__ volatile(
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vmv.v.i v16, 0\n\t"
+      "1:\n\t"
+      "vsetvli t0, %[n], e32, m4, tu, mu\n\t"
+      "vle32.v v0, (%[p])\n\t"
+      "vfsub.vf v8, v0, %[mx]\n\t"
+      "vfmin.vf v8, v8, %[hi]\n\t"
+      "vfmax.vf v8, v8, %[lo]\n\t"
+      "vfmul.vf v4, v8, %[inv]\n\t"
+      "vfcvt.x.f.v v12, v4\n\t"
+      "vfcvt.f.x.v v4, v12\n\t"
+      "vfnmsac.vf v8, %[ln2], v4\n\t"
+      "vfmul.vf v4, v8, %[c6]\n\t"
+      "vfadd.vf v4, v4, %[c5]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[c4]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[c3]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[half]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[one]\n\t"
+      "vfmul.vv v4, v4, v8\n\t"
+      "vfadd.vf v4, v4, %[one]\n\t"
+      "vadd.vx v12, v12, %[b127]\n\t"
+      "vsll.vi v12, v12, 23\n\t"
+      "vfmul.vv v4, v4, v12\n\t"
+      "vse32.v v4, (%[p])\n\t"
+      "vfadd.vv v16, v16, v4\n\t"
+      "addi %[c], %[c], 1\n\t"
+      "slli t1, t0, 2\n\t"
+      "add %[p], %[p], t1\n\t"
+      "sub %[n], %[n], t0\n\t"
+      "bnez %[n], 1b\n\t"
+      "vsetvli t0, zero, e32, m4, ta, ma\n\t"
+      "vmv.s.x v12, zero\n\t"
+      "vfredusum.vs v12, v16, v12\n\t"
+      "vfmv.f.s %[s], v12"
+      : [s] "=f"(sum), [p] "+r"(v), [n] "+r"(n), [c] "+r"(c)
+      : [mx] "f"(mx), [hi] "f"(hi), [lo] "f"(lo), [inv] "f"(inv), [ln2] "f"(ln2),
+        [c6] "f"(c6), [c5] "f"(c5), [c4] "f"(c4), [c3] "f"(c3), [half] "f"(half), [one] "f"(one), [b127] "r"(b127)
+      : "t0", "t1", "memory");
+   *strips += c;
+   return sum;
+}
+/* out[0..hd) = (sum_t p[t] * V[t][0..hd)) * rs, V rows stride floats apart */
+static void vaxpy_(float *out, const float *p, const float *V, long stride, long n_t, long hd, float rs)
+{
+   for (long i = 0; i < hd; )
+   {
+      long vl, t = n_t; const float *vp = V + i, *pp = p;
+      __asm__ volatile(
+         "vsetvli %[vl], %[n], e32, m4, ta, ma\n\t"
+         "vmv.v.i v8, 0\n\t"
+         "1:\n\t"
+         "flw ft0, (%[pp])\n\t"
+         "vle32.v v0, (%[vp])\n\t"
+         "vfmacc.vf v8, ft0, v0\n\t"
+         "add %[vp], %[vp], %[sb]\n\t"
+         "addi %[pp], %[pp], 4\n\t"
+         "addi %[t], %[t], -1\n\t"
+         "bnez %[t], 1b\n\t"
+         "vfmul.vf v8, v8, %[rs]\n\t"
+         "vse32.v v8, (%[out])"
+         : [vl] "=&r"(vl), [vp] "+r"(vp), [pp] "+r"(pp), [t] "+r"(t)
+         : [n] "r"(hd - i), [sb] "r"(stride * 4), [rs] "f"(rs), [out] "r"(out + i) : "ft0", "memory");
+      i += vl;
+   }
+}
+static void attend(float *out, const float *q, const float *K, const float *V, long n_t, float scale)
+{
+   for (long t = 0; t < n_t; t++) scores[t] = dot(q, K + t * GPT_D, HD) * scale;
+   n_att_dots += n_t;
+   const float mx = vmax_(scores, n_t);
+   const float sum = vexp_(scores, n_t, mx, &n_att_strips);
+   vaxpy_(out, scores, V, GPT_D, n_t, HD, 1.0f / sum);
+}
+#else
+static void attend(float *out, const float *q, const float *K, const float *V, long n_t, float scale)
+{
+   float mx = -1e30f;
+   for (long t = 0; t < n_t; t++) { scores[t] = dot(q, K + t * GPT_D, HD) * scale; if (scores[t] > mx) mx = scores[t]; }
+   n_att_dots += n_t;
+   float sum = 0;
+   for (long t = 0; t < n_t; t++) { scores[t] = expf_(scores[t] - mx); sum += scores[t]; }
+   for (int i = 0; i < HD; i++) out[i] = 0;
+   for (long t = 0; t < n_t; t++) { float p = scores[t] / sum; for (int i = 0; i < HD; i++) out[i] += p * V[t * GPT_D + i]; }
+}
+#endif
 static int pos;
-static long n_att_dots;                        /* q.k dot products, for the harness's derived vector counts */
 
 #define W(off) (GPT_W + (off))
 /* the per-layer weight offsets, one row per layer up to 16 (a deeper model adds rows here) */
@@ -698,17 +826,8 @@ static void forward(int tok)
       layernorm(h, x, W(L[0]), W(L[1]), GPT_D);
       LAYER_MATVEC(qkv, h, 0, W(L[2]), W(L[3]), GPT_D, 3 * GPT_D);
       for (int i = 0; i < GPT_D; i++) { Kc[l][pos][i] = qkv[GPT_D + i]; Vc[l][pos][i] = qkv[2 * GPT_D + i]; }
-      n_att_dots += (long)GPT_H * (pos + 1);
       for (int hh = 0; hh < GPT_H; hh++)
-      {
-         const float *q = qkv + hh * HD;
-         float mx = -1e30f;
-         for (int t = 0; t <= pos; t++) { scores[t] = dot(q, &Kc[l][t][hh * HD], HD) * scale; if (scores[t] > mx) mx = scores[t]; }
-         float sum = 0;
-         for (int t = 0; t <= pos; t++) { scores[t] = expf_(scores[t] - mx); sum += scores[t]; }
-         for (int i = 0; i < HD; i++) att[hh * HD + i] = 0;
-         for (int t = 0; t <= pos; t++) { float p = scores[t] / sum; for (int i = 0; i < HD; i++) att[hh * HD + i] += p * Vc[l][t][hh * HD + i]; }
-      }
+         attend(att + hh * HD, qkv + hh * HD, &Kc[l][0][hh * HD], &Vc[l][0][hh * HD], pos + 1, scale);
       LAYER_MATVEC(o, att, 1, W(L[4]), W(L[5]), GPT_D, GPT_D);
       for (int i = 0; i < GPT_D; i++) x[i] += o[i];
       layernorm(h, x, W(L[6]), W(L[7]), GPT_D);
@@ -739,18 +858,8 @@ static void forward_batch(const int *toks, int T)
       for (int t = 0; t < T; t++)
          for (int i = 0; i < GPT_D; i++) { Kc[l][pos + t][i] = QKVb[t][GPT_D + i]; Vc[l][pos + t][i] = QKVb[t][2 * GPT_D + i]; }
       for (int t = 0; t < T; t++)
-         n_att_dots += (long)GPT_H * (pos + t + 1);
-      for (int t = 0; t < T; t++)
          for (int hh = 0; hh < GPT_H; hh++)
-         {
-            const float *q = QKVb[t] + hh * HD;
-            float mx = -1e30f;
-            for (int u = 0; u <= pos + t; u++) { scores[u] = dot(q, &Kc[l][u][hh * HD], HD) * scale; if (scores[u] > mx) mx = scores[u]; }
-            float sum = 0;
-            for (int u = 0; u <= pos + t; u++) { scores[u] = expf_(scores[u] - mx); sum += scores[u]; }
-            for (int i = 0; i < HD; i++) ATTb[t][hh * HD + i] = 0;
-            for (int u = 0; u <= pos + t; u++) { float pr = scores[u] / sum; for (int i = 0; i < HD; i++) ATTb[t][hh * HD + i] += pr * Vc[l][u][hh * HD + i]; }
-         }
+            attend(ATTb[t] + hh * HD, QKVb[t] + hh * HD, &Kc[l][0][hh * HD], &Vc[l][0][hh * HD], pos + t + 1, scale);
       LAYER_GEMM(&Ob[0][0], GPT_D, &ATTb[0][0], GPT_D, 1, W(L[4]), W(L[5]), T, GPT_D, GPT_D);
       for (int t = 0; t < T; t++) for (int i = 0; i < GPT_D; i++) Xb[t][i] += Ob[t][i];
       for (int t = 0; t < T; t++) layernorm(Hb[t], Xb[t], W(L[6]), W(L[7]), GPT_D);
@@ -849,7 +958,7 @@ void _start(void)
    }
    out("tokens: "); outn(n_prefill); out(" prefilled, "); outn(n_generated); out(" generated\n");
    out("prefill batches:"); for (int i = 0; i < nbatches; i++) { out(" "); outn(batches[i]); } out("\n");
-   out("attention: "); outn(n_att_dots); out(" dots\n");
+   out("attention: "); outn(n_att_dots); out(" dots, "); outn(n_att_strips); out(" softmax strips\n");
 #ifdef USE_W4
    out("w4: "); outn(n_w4_matvec); out(" int4 matvecs\n");
 #endif
