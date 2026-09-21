@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""Extract the '# verify:' blocks of a document and emit one bash script that
+runs them in order (the env block sourced into the shell, every other block in
+a subshell), printing a banner and the exit status per block.  Usage:
+  doc-verify.py DOC.md [--long] > run.sh"""
+import re, sys
+doc = sys.argv[1]; want_long = '--long' in sys.argv
+text = open(doc).read()
+blocks = re.findall(r'```bash\n(# verify:[^\n]*)\n(.*?)```', text, re.S)
+out = ['#!/bin/bash', 'export PS4="+ "']
+for head, body in blocks:
+    name = head.split('# verify:', 1)[1].strip()
+    is_long = name.startswith('long:')
+    if is_long != want_long and name != 'env':      # the env block is sourced by both passes
+        continue
+    out.append('echo "=== BLOCK %s ==="' % name)
+    if name == 'env':
+        out.append(body)
+    else:
+        out.append('( set -x\n%s\n); echo "=== END %s status=$? ==="' % (body, name))
+print('\n'.join(out))
