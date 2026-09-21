@@ -143,6 +143,24 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 VOID cacheOnlyUpdateInsCount(THREADID threadid, UINT32 icount)
 {
    thread_data[threadid].icount_cacheonly_pending += icount;
+
+   /* The pending count normally rides along with the next memory access.
+      A stretch without one -- a compute loop -- sends nothing, so the
+      simulator's clock for this core stands still while the thread runs on
+      natively; with the barrier active in warm-up mode every other core
+      then waits for this one, and on a sampled run (Pac-Sim) the regions
+      cut by the running thread contained it alone.  So once the count
+      outgrows the flow-control window it goes out as an instruction count,
+      which advances the clock and, being answered, holds the thread to the
+      simulator's pace like any other report. */
+   if (thread_data[threadid].icount_cacheonly_pending > KnobFlowControlFF.Value() && thread_data[threadid].output)
+   {
+      Sift::Mode mode = thread_data[threadid].output->InstructionCount(thread_data[threadid].icount_cacheonly_pending);
+      thread_data[threadid].icount_cacheonly += thread_data[threadid].icount_cacheonly_pending;
+      thread_data[threadid].icount_cacheonly_pending = 0;
+      thread_data[threadid].icount_reported = 0;
+      setInstrumentationMode(mode);
+   }
 }
 
 VOID cacheOnlyConsumeAddresses(THREADID threadid)

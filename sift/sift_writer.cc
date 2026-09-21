@@ -383,6 +383,11 @@ Sift::Mode Sift::Writer::InstructionCount(uint32_t icount)
    // wait for reply
    Record respRec;
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+   if (response->fail())
+   {
+      channelLost();
+      return Sift::ModeUnknown;
+   }
    if (respRec.Other.zero != 0)
    {
       return Sift::ModeUnknown;
@@ -399,6 +404,11 @@ Sift::Mode Sift::Writer::InstructionCount(uint32_t icount)
       return Sift::ModeUnknown;
    }
    response->read(reinterpret_cast<char*>(&mode), sizeof(Mode));
+   if (response->fail())
+   {
+      channelLost();
+      return Sift::ModeUnknown;
+   }
    return mode;
 }
 
@@ -493,6 +503,11 @@ int32_t Sift::Writer::NewThread()
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      if (response->fail())
+      {
+         channelLost();
+         return -1;
+      }
       if (respRec.Other.zero != 0)
       {
          return -1;
@@ -509,6 +524,11 @@ int32_t Sift::Writer::NewThread()
                return -1;
             }
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
+            if (response->fail())
+            {
+               channelLost();
+               return -1;
+            }
             #if VERBOSE > 0
             std::cerr << "[DEBUG:" << m_id << "] Got NewThreadResponse thread=" << retcode << std::endl;
             #endif
@@ -586,6 +606,7 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
       if (response->fail())
       {
+         channelLost();
          return 1;
       }
       if (respRec.Other.zero != 0)
@@ -604,9 +625,16 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
                return 1;
             }
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
+            if (response->fail())
+            {
+               channelLost();
+               return 1;
+            }
             return retcode;
          case RecOtherMemoryRequest:
             handleMemoryRequest(respRec);
+            if (!response)
+               return 1;
             break;
 	 case RecOtherShutdown:
 	    frontEndStop();
@@ -650,6 +678,11 @@ int32_t Sift::Writer::Join(int32_t thread)
       #endif
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      if (response->fail())
+      {
+         channelLost();
+         return -1;
+      }
       if (respRec.Other.zero != 0)
       {
          return -1;
@@ -666,6 +699,11 @@ int32_t Sift::Writer::Join(int32_t thread)
                return -1;
             }
             response->read(reinterpret_cast<char*>(&retcode), sizeof(retcode));
+            if (response->fail())
+            {
+               channelLost();
+               return -1;
+            }
             return retcode;
             break;
 	 case RecOtherShutdown:
@@ -702,6 +740,7 @@ Sift::Mode Sift::Writer::Sync()
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
       if (response->fail())
       {
+         channelLost();
          return Sift::ModeUnknown;
       }
       if (respRec.Other.zero != 0)
@@ -721,9 +760,16 @@ Sift::Mode Sift::Writer::Sync()
                return Sift::ModeUnknown;
             }
             response->read(reinterpret_cast<char*>(&mode), sizeof(Mode));
+            if (response->fail())
+            {
+               channelLost();
+               return Sift::ModeUnknown;
+            }
             return mode;
          case RecOtherMemoryRequest:
             handleMemoryRequest(respRec);
+            if (!response)
+               return Sift::ModeUnknown;
             break;
 	 case RecOtherShutdown:
 	    frontEndStop();
@@ -756,6 +802,11 @@ int32_t Sift::Writer::Fork()
 
    Record respRec;
    response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+   if (response->fail())
+   {
+      channelLost();
+      return -1;
+   }
 
    if (response->fail())
    {
@@ -780,6 +831,7 @@ int32_t Sift::Writer::Fork()
    response->read(reinterpret_cast<char*>(&result), sizeof(int32_t));
    if (response->fail())
    {
+      channelLost();
       return -1;
    }
    return result;
@@ -814,6 +866,11 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
       Record respRec;
 
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      if (response->fail())
+      {
+         channelLost();
+         return 0;
+      }
       // printf("Record type: %" PRIu8 "\n", respRec.Other.type);
       // printf("Record zero: %" PRIu8 "\n", respRec.Other.zero);
 
@@ -828,12 +885,19 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
             sift_assert(respRec.Other.size == sizeof(uint64_t));
             uint64_t ack;
             response->read(reinterpret_cast<char*>(&ack), sizeof(uint64_t));
+            if (response->fail())
+            {
+               channelLost();
+               return 0;
+            }
 
             
             return ack; // 0 - no error; 1 - otherwise
          }
          case RecOtherMemoryRequest:
             handleMemoryRequest(respRec);
+            if (!response)
+               return 0;
             break;
 	 case RecOtherShutdown:
 	    frontEndStop();
@@ -882,12 +946,24 @@ bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuR
             sift_assert(respRec.Other.size <= sizeof(uint8_t) + sizeof(EmuReply));
             uint8_t result;
             response->read(reinterpret_cast<char*>(&result), sizeof(uint8_t));
+            if (response->fail())
+            {
+               channelLost();
+               return false;
+            }
             // Support servers which still use a smaller EmuReply
             response->read(reinterpret_cast<char*>(&res), respRec.Other.size - sizeof(uint8_t));
+            if (response->fail())
+            {
+               channelLost();
+               return false;
+            }
             return result;
          }
          case RecOtherMemoryRequest:
             handleMemoryRequest(respRec);
+            if (!response)
+               return false;
             break;
 	 case RecOtherShutdown:
 	    frontEndStop();
@@ -1016,9 +1092,29 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
       return;
    }
    response->read(reinterpret_cast<char*>(&addr), sizeof(addr));
+   if (response->fail())
+   {
+      channelLost();
+      return;
+   }
    response->read(reinterpret_cast<char*>(&size), sizeof(size));
+   if (response->fail())
+   {
+      channelLost();
+      return;
+   }
    response->read(reinterpret_cast<char*>(&lock), sizeof(lock));
+   if (response->fail())
+   {
+      channelLost();
+      return;
+   }
    response->read(reinterpret_cast<char*>(&type), sizeof(type));
+   if (response->fail())
+   {
+      channelLost();
+      return;
+   }
    uint32_t payload_size = respRec.Other.size - (sizeof(addr)+sizeof(size)+sizeof(lock)+sizeof(type));
    if (!handleAccessMemoryFunc)
    {
@@ -1074,6 +1170,11 @@ void Sift::Writer::handleMemoryRequest(Record &respRec)
       }
       char *payload = new char[payload_size];
       response->read(reinterpret_cast<char*>(payload), payload_size);
+      if (response->fail())
+      {
+         channelLost();
+         return;
+      }
       // Do the write here via a callback to write the data to the appropriate address
       handleAccessMemoryFunc(handleAccessMemoryArg, lock, type, addr, (uint8_t*)payload, payload_size);
       Record rec;
@@ -1176,6 +1277,27 @@ void Sift::Writer::send_va2pa(uint64_t va)
             m_va2pa[vp] = true;
          }
       }
+   }
+}
+
+/* The simulator closed this thread's channel -- its trace thread was stopped
+   because the application ended (a sibling's exit_group) and the reader went
+   away.  The recorder side runs on natively; every later request must find
+   no channel rather than read whatever a closed pipe returns (an
+   uninitialised record whose type could be anything, Shutdown included, which
+   exited the process from inside an analysis routine) or write into a pipe
+   with no reader (SIGPIPE). */
+void Sift::Writer::channelLost()
+{
+   if (response)
+   {
+      delete response;
+      response = NULL;
+   }
+   if (output)
+   {
+      delete output;
+      output = NULL;
    }
 }
 

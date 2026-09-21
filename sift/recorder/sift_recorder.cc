@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cassert>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <strings.h>
 // stat is not supported in Pin 3.0
@@ -35,6 +36,7 @@
 #include "pinboost_debug.h"
 #include "icountsniper.h"
 #include "../../include/sim_api.h"
+#include "pacsim.h"
 
 using namespace CONTROLLER;
 
@@ -203,6 +205,12 @@ int main(int argc, char **argv)
 #endif
    PIN_InitSymbols();
 
+   /* A write into a SIFT channel whose reader has gone (the simulator stops
+      a thread's reader when its application ends) must fail, not kill the
+      process: the recorder notices a failed channel and lets the application
+      run on natively (Sift::Writer::channelLost). */
+   signal(SIGPIPE, SIG_IGN);
+
    if (KnobMaxThreads.Value() > 0)
    {
       max_num_threads = KnobMaxThreads.Value();
@@ -335,6 +343,9 @@ int main(int argc, char **argv)
    }
 
    pinboost_register("SIFT_RECORDER", KnobDebug.Value());
+
+   if (KnobPacSimEnable.Value())
+      pacsim::activate();
 
    PIN_StartProgram();
 

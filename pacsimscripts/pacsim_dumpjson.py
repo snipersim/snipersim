@@ -285,6 +285,14 @@ class PacSimDumpStats:
 
                         self.time_each_feature_level[3] += time
                         self.num_each_feature_level[3]+= insnum
+                    elif feature.get("fs", 0) > 0:
+                        # The recorder extrapolated this region itself, from
+                        # the whole run (a later measurement of its cluster
+                        # included); nothing here improves on that.
+                        feature["solved"] = True
+                        time = feature["fs"]
+                        self.time_each_feature_level[3] += time
+                        self.num_each_feature_level[3] += insnum
                     else:
                         feature["solved"] = True
                         if numtimeperins == 0:

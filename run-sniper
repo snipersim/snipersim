@@ -431,10 +431,19 @@ for o, a in opts:
 # tracing would still produce a sim.out, and nothing in it would say the
 # sampling never happened.
 if enable_pacsim:
+  # The pre-ROI region keeps the default cache warm-up: the sampler's own
+  # warm-up covers the stretches between its measured regions, not the run-up
+  # to the ROI, and starting the ROI cold (inst_mode_init=fast_forward, as
+  # this once set) made the first measured region carry every first-touch
+  # miss and page fault of the working set -- a third of the estimate's error
+  # on the barrier workload.
   print('[PacSim] Dynamic sampling enabled.')
-  print('[PacSim] inst_mode_init is set to fast_forward rather than cache_warmup,')
-  print('[PacSim] because Pac-Sim schedules its own warm-up.')
-  sniperoptions.append('-g --general/inst_mode_init=fast_forward')
+  # Between measured regions the cores run on the fast-forward model, whose
+  # barrier quantum is 100 us against the detailed model's 100 ns: a thread
+  # could run a whole region ahead of the others on its own, and the sampler,
+  # which cuts regions in the order the recorder sees them, would take that
+  # thread's solo stretch for a region of its own.  Same quantum in both.
+  sniperoptions.append('-g --perf_model/fast_forward/oneipc/interval=%s' % '100')
 
 
 # Which build to run.  Settled here, before anything is launched: run-sniper
@@ -1025,7 +1034,7 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
     try:
       from pacsimscripts import pacsim_dumpjson
       sim_time, wall_time, l2_miss_rate = pacsim_dumpjson.get_full_time(outputdir, sim_root, False)
-      print('[PacSim] Estimated sim time %.3fs, wall time %.3fs, L2 miss rate %.4f'
+      print('[PacSim] Estimated sim time %.6gs, wall time %.3fs, L2 miss rate %.4f'
             % (sim_time, wall_time, l2_miss_rate))
     except Exception as e:
       print('[PacSim] Could not estimate run time:', e, file=sys.stderr)

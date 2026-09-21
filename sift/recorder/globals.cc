@@ -17,6 +17,13 @@ KNOB<BOOL> KnobRoutineTracing(KNOB_MODE_WRITEONCE, "pintool", "sniper:rtntrace",
 KNOB<BOOL> KnobRoutineTracingOutsideDetailed(KNOB_MODE_WRITEONCE, "pintool", "sniper:rtntrace_outsidedetail", "0", "routine tracing");
 KNOB<BOOL> KnobDebug(KNOB_MODE_WRITEONCE, "pintool", "sniper:debug", "0", "start debugger on internal exception");
 KNOB<BOOL> KnobVerbose(KNOB_MODE_WRITEONCE, "pintool", "sniper:verbose", "0", "verbose output");
+KNOB<INT64> KnobPacSimEnable(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim", "0", "Pac-Sim online sampling: 0 off, 1 on");
+KNOB<std::string> KnobPacSimDir(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-dir", ".", "directory for pacsim_regions.json");
+KNOB<UINT64> KnobPacSimRegionSize(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-region-size", "50000", "sampled region size, in thousands of instructions of the main thread");
+KNOB<UINT64> KnobPacSimMinRegionSize(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-min-region-size", "2000", "shorter regions join the next one (thousands of instructions)");
+KNOB<double> KnobPacSimClusterThreshold(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-cluster-threshold", "0.2", "BBV distance below which two regions share a cluster");
+KNOB<UINT64> KnobPacSimMinMeasurements(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-min-measurements", "2", "measure a cluster this many times before fast-forwarding its later instances (the first carries its warm-up)");
+KNOB<BOOL> KnobPacSimWarmup(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-warmup", "1", "keep caches warm (cache-only mode) between measured regions instead of counting instructions only");
 KNOB<BOOL> KnobTrackVMAs(KNOB_MODE_WRITEONCE, "pintool", "sniper:vma", "0", "track VMAs");
 
 KNOB<UINT64> KnobStopAddress(KNOB_MODE_WRITEONCE, "pintool", "sniper:stop", "0", "stop address (0 = disabled)");
@@ -52,6 +59,7 @@ std::deque<ADDRINT> tidptrs;
 PIN_LOCK output_lock;
 INT32 child_app_id = -1;
 BOOL in_roi = false;
+BOOL emulation_ended = false;
 BOOL any_thread_in_detail = false;
 Sift::Mode current_mode = Sift::ModeIcount;
 std::unordered_map<ADDRINT, bool> routines;

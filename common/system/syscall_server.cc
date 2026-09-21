@@ -143,6 +143,12 @@ IntPtr SyscallServer::futexWait(thread_id_t thread_id, int *uaddr, int val, int 
       bool success = sim_futex->enqueueWaiter(thread_id, mask, curr_time, timeout_time, end_time);
       if (success)
          return 0;
+      else if (timeout_time == SubsecondTime::MaxTime())
+         /* No timeout could have expired: the wait was aborted (abortWaits)
+            because its application is exiting.  glibc treats ETIMEDOUT from a
+            wait it gave no timeout as fatal ("The futex facility returned an
+            unexpected error code.") and aborts; EINTR it retries. */
+         return -EINTR;
       else
          return -ETIMEDOUT;
    }

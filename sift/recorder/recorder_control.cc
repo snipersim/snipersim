@@ -1,4 +1,5 @@
 #include "recorder_control.h"
+#include "pacsim.h"
 #include "globals.h"
 #include "threads.h"
 #include "syscall_modeling.h"
@@ -65,6 +66,8 @@ void beginROI(THREADID threadid, const CONTEXT * ctxt)
 
    in_roi = true;
    setInstrumentationMode(Sift::ModeDetailed);
+   if (KnobPacSimEnable.Value())
+      pacsim::roiBegin(threadid);
 
    if (KnobEmulateSyscalls.Value())
    {
@@ -86,6 +89,9 @@ void beginROI(THREADID threadid, const CONTEXT * ctxt)
 
 void endROI(THREADID threadid, const CONTEXT * ctxt)
 {
+   if (KnobPacSimEnable.Value())
+      pacsim::roiEnd(threadid);
+
    if (KnobEmulateSyscalls.Value())
    {
         // In simulations with MPI, generate the app crash
@@ -97,6 +103,12 @@ void endROI(THREADID threadid, const CONTEXT * ctxt)
            args[0] = 0; // Assume success
            thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
            thread_data[threadid].output->End();
+           /* The simulator has ended the application: it stops every other
+              thread's stream and answers nothing more.  From here on every
+              thread's system calls run natively -- a sibling that keeps
+              emulating into a closed channel gets a failed request back as
+              a return value, which glibc's futex wait treats as fatal. */
+           emulation_ended = true;
        }
     }
 
@@ -159,7 +171,7 @@ void setInstrumentationMode(Sift::Mode mode)
 ADDRINT handleMagic(THREADID threadid, const CONTEXT * ctxt, ADDRINT gax, ADDRINT gbx, ADDRINT gcx)
 {
    uint64_t res = gax; // Default: don't modify gax
-   
+
    if (KnobUseResponseFiles.Value() && thread_data[threadid].running && thread_data[threadid].output)
    {
       res = thread_data[threadid].output->Magic(gax, gbx, gcx);

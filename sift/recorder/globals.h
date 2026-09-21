@@ -38,6 +38,14 @@ extern KNOB<BOOL> KnobRoutineTracing;
 extern KNOB<BOOL> KnobRoutineTracingOutsideDetailed;
 extern KNOB<BOOL> KnobDebug;
 extern KNOB<BOOL> KnobVerbose;
+/* Pac-Sim online sampling (pacsim.h); record-trace passes -sniper:pacsim 1 and -sniper:pacsim-dir for run-sniper --pacsim */
+extern KNOB<INT64> KnobPacSimEnable;
+extern KNOB<std::string> KnobPacSimDir;
+extern KNOB<UINT64> KnobPacSimRegionSize;
+extern KNOB<UINT64> KnobPacSimMinRegionSize;
+extern KNOB<double> KnobPacSimClusterThreshold;
+extern KNOB<BOOL> KnobPacSimWarmup;
+extern KNOB<UINT64> KnobPacSimMinMeasurements;
 extern KNOB<UINT64> KnobStopAddress;
 extern KNOB<UINT64> KnobMaxThreads;
 extern KNOB<UINT64> KnobExtraePreLoaded;
@@ -63,6 +71,8 @@ extern PIN_LOCK output_lock;
 extern std::deque<ADDRINT> tidptrs;
 extern INT32 child_app_id;
 extern BOOL in_roi;
+/* set at ROI end with syscall emulation: the simulator has ended the application, no more emulated calls */
+extern BOOL emulation_ended;
 extern BOOL any_thread_in_detail;
 extern Sift::Mode current_mode;
 extern const bool verbose;

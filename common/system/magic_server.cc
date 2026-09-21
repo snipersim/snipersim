@@ -51,6 +51,27 @@ UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, 
    return res;
 }
 
+/* The L2's accesses (or misses), summed over every core: the cache
+   controller registers its counters per block type ("loads-data",
+   "load-misses-page_table_data", ...), which dumpstats sums into "loads";
+   the fast cache model registers the plain names.  Pac-Sim reads these
+   through SIM_CMD_GET_L2_COUNT / SIM_CMD_GET_L2_MISS_COUNT. */
+static UInt64 sumCacheMetric(const char *cache, bool misses)
+{
+   static const char *types[] = { "", "-page_table_data", "-page_table_instruction", "-instruction", "-data", "-victima_tlb" };
+   const char *bases[2] = { misses ? "load-misses" : "loads", misses ? "store-misses" : "stores" };
+   UInt64 total = 0;
+   for (UInt32 core = 0; core < Sim()->getConfig()->getApplicationCores(); core++)
+      for (int b = 0; b < 2; b++)
+         for (unsigned t = 0; t < sizeof(types) / sizeof(types[0]); t++)
+         {
+            StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject(cache, core, String(bases[b]) + types[t]);
+            if (m)
+               total += m->recordMetric();
+         }
+   return total;
+}
+
 UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
 {
    switch(cmd)
@@ -125,18 +146,27 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
       case SIM_CMD_MHZ_GET:
          return getFrequency(arg0);
       case SIM_CMD_GET_SIM_TIME:
-      {   
-          StatsMetricBase * tmp = Sim()->getStatsManager()->getMetricObject("barrier", 0,"global_time");
-          if(tmp == NULL) {
-            return 0;
-          } else { 
-            UInt64 ret = tmp->recordMetric();
-            return ret;
-          }   
-//         Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
-//         SubsecondTime curr_elapsed_time = core->getPerformanceModel()->getElapsedTime();
-//         return curr_elapsed_time.getFS();
-      }   
+      {
+         /* The simulated time so far: the furthest any application core has
+            got, in femtoseconds -- the same figure a run reports at its end
+            (performance_model.elapsed_time), so that a sum of its deltas over
+            the stretches of a run adds up to the run.  Not the barrier's
+            global time, which is the slowest core's: while a core that
+            started late catches up with the others (the barrier holds them
+            for it) the global time advances over a span the others have
+            already been through, and the deltas double-count it. */
+         UInt64 t = 0;
+         for (UInt32 core_i = 0; core_i < Sim()->getConfig()->getApplicationCores(); core_i++)
+         {
+            Core *core = Sim()->getCoreManager()->getCoreFromID(core_i);
+            if (core && core->getPerformanceModel())
+            {
+               UInt64 ct = core->getPerformanceModel()->getElapsedTime().getFS();
+               if (ct > t) t = ct;
+            }
+         }
+         return t;
+      }
       case SIM_CMD_GET_INS_NUM:
       {   
           StatsMetricBase * tmp = Sim()->getStatsManager()->getMetricObject("core", arg0,"instructions");
@@ -148,63 +178,19 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             return ret;
           }   
       } 
-          case SIM_CMD_GET_L2_COUNT:
+      case SIM_CMD_GET_CORE_TIME:
       {
-          UInt32 total_cores = Sim()->getConfig()->getApplicationCores();
-          UInt64 total_load_count=0;
-          UInt64 total_store_count=0;
-
-          for (uint32_t core_i = 0 ; core_i < total_cores ; core_i++) {
-                StatsMetricBase * tmp = Sim()->getStatsManager()->getMetricObject("L2", core_i,"stores");
-                UInt64 store_count;
-                if(tmp == NULL) {
-                  store_count = 0;
-                } else {
-                  UInt64 ret = tmp->recordMetric();
-                  store_count = ret;
-                }
-                tmp = Sim()->getStatsManager()->getMetricObject("L2", core_i,"loads");
-                UInt64 load_count;
-                if(tmp == NULL) {
-                  load_count = 0;
-                } else {
-                  UInt64 ret = tmp->recordMetric();
-                  load_count = ret;
-                }
-                total_load_count += load_count;
-                total_store_count += store_count;
-          }
-          //return load_count + store_count;
-          return total_load_count + total_store_count;
+         /* The calling core's own elapsed time: behind the furthest core's
+            by however much this core lags -- a thread that started late,
+            or was descheduled -- which is how far it will run before it
+            moves the run's time at all. */
+         Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
+         return (core && core->getPerformanceModel()) ? core->getPerformanceModel()->getElapsedTime().getFS() : 0;
       }
-   case SIM_CMD_GET_L2_MISS_COUNT:
-      {   
-          UInt32 total_cores = Sim()->getConfig()->getApplicationCores();
-//          SInt64 total_cores = Sim()->getConfig()->getInt("general/total_cores")
-          UInt64 total_load_count=0;
-          UInt64 total_store_count=0;
-          for (uint32_t core_i = 0 ; core_i < total_cores ; core_i++) {
-                StatsMetricBase * tmp = Sim()->getStatsManager()->getMetricObject("L2", core_i,"store-misses");
-                UInt64 store_count;
-                if(tmp == NULL) {
-                  store_count = 0;
-                } else { 
-                  UInt64 ret = tmp->recordMetric();
-                  store_count = ret;
-                }
-                tmp = Sim()->getStatsManager()->getMetricObject("L2", core_i,"load-misses");
-                UInt64 load_count;
-                if(tmp == NULL) {
-                  load_count = 0;
-                } else { 
-                  UInt64 ret = tmp->recordMetric();
-                  load_count = ret;
-                }
-                total_load_count += load_count;
-                total_store_count += store_count;
-          }
-          return total_load_count + total_store_count;
-      }
+      case SIM_CMD_GET_L2_COUNT:
+         return sumCacheMetric("L2", false);
+      case SIM_CMD_GET_L2_MISS_COUNT:
+         return sumCacheMetric("L2", true);
    case SIM_CMD_GET_BARRIER_REACHED:
       {  
          bool reached = Sim()->getClockSkewMinimizationServer()->onlyMainCoreRunning();

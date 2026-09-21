@@ -96,7 +96,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          thread_data[threadid].output->Output(fd, buf, count);
    }
 
-   if (KnobEmulateSyscalls.Value() && thread_data[threadid].output)
+   if (KnobEmulateSyscalls.Value() && thread_data[threadid].output && !emulation_ended)
    {
       switch(syscall_number)
       {

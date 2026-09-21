@@ -147,7 +147,7 @@ static void *work(void *arg)
       }
    }
 
-   pthread_barrier_wait(&gate);
+   pthread_barrier_wait(&gate);   /* every task's result is stored */
    return NULL;
 }
 
@@ -187,10 +187,6 @@ int main(void)
    pthread_barrier_wait(&gate);
 
    pthread_barrier_wait(&gate);
-   SimRoiEnd();
-
-   for (int i = 0; i < NTHREADS; i++)
-      pthread_join(th[i], NULL);
 
    /* Summed in task order, not completion order. */
    for (int i = 0; i < NTASKS; i++)
@@ -198,11 +194,21 @@ int main(void)
       total += task_result[i];
       seen  += task_visited[i];
    }
+   /* The results are stored before the last gate, and main sums and prints
+    * them after it, still inside the ROI: whatever happens to the process
+    * once the region is closed and the workers exit -- the recorder has died
+    * there, inside SDE, with the workers leaving while main went on -- the
+    * checksum is already out, and the sampled run can be compared with the
+    * full one. */
+   printf("tasked: threads=%d tasks=%d checksum=%.6f visited=%llu\n",
+          NTHREADS, NTASKS, total, (unsigned long long)seen);
+   fflush(stdout);
+   SimRoiEnd();
+
+   for (int i = 0; i < NTHREADS; i++)
+      pthread_join(th[i], NULL);
 
    pthread_barrier_destroy(&gate);
    free(chase);
-
-   printf("tasked: threads=%d tasks=%d checksum=%.6f visited=%llu\n",
-          NTHREADS, NTASKS, total, (unsigned long long)seen);
    return 0;
 }

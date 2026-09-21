@@ -86,6 +86,18 @@ bool pinboost_backtrace(EXCEPTION_INFO *pExceptInfo, PHYSICAL_CONTEXT *pPhysCtxt
    //}
    fprintf(fp, "\n");
    fprintf(fp, "%s\n", PIN_ExceptionToString(pExceptInfo).c_str());
+   /* the process map, so the faulting address can be attributed to a module */
+   {
+      FILE *maps = fopen("/proc/self/maps", "r");
+      if (maps)
+      {
+         char line[512];
+         fprintf(fp, "--- maps ---\n");
+         while (fgets(line, sizeof(line), maps))
+            fputs(line, fp);
+         fclose(maps);
+      }
+   }
    fclose(fp);
 
    if (getenv("SNIPER_ROOT") == NULL)

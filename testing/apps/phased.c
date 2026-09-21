@@ -140,11 +140,11 @@ static void *work(void *arg)
       }
    }
 
-   /* Phases done; main closes the region before joining. */
-   pthread_barrier_wait(&gate);
-
    result[id]  = acc;
    visited[id] = seen;
+
+   /* Phases done; main sums, prints and closes the region before joining. */
+   pthread_barrier_wait(&gate);
    return NULL;
 }
 
@@ -185,25 +185,29 @@ int main(void)
    pthread_barrier_wait(&gate);      /* let them run */
 
    pthread_barrier_wait(&gate);      /* every worker has finished its phases */
-   SimRoiEnd();
-
-   for (int i = 0; i < NTHREADS; i++)
-      pthread_join(th[i], NULL);
 
    for (int i = 0; i < NTHREADS; i++)
    {
       total += result[i];
       seen  += visited[i];
    }
+   /* The results are stored before the last gate, and main sums and prints
+    * them after it, still inside the ROI: whatever happens to the process
+    * once the region is closed and the workers exit -- the recorder has died
+    * there, inside SDE, with the workers leaving while main went on -- the
+    * checksum is already out, and the sampled run can be compared with the
+    * full one. */
+   printf("phased: threads=%d phases=%d checksum=%.6f visited=%llu\n",
+          NTHREADS, NPHASES, total, (unsigned long long)seen);
+   fflush(stdout);
+   SimRoiEnd();
+
+   for (int i = 0; i < NTHREADS; i++)
+      pthread_join(th[i], NULL);
 
    pthread_barrier_destroy(&barrier);
    pthread_barrier_destroy(&gate);
    for (int i = 0; i < NTHREADS; i++)
       free(chase[i]);
-
-   /* Printed so the run cannot be optimised away and so both the sampled and
-    * the full run can be shown to have executed the same program. */
-   printf("phased: threads=%d phases=%d checksum=%.6f visited=%llu\n",
-          NTHREADS, NPHASES, total, (unsigned long long)seen);
    return 0;
 }

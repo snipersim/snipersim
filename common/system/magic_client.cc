@@ -35,6 +35,7 @@ UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UI
    case SIM_CMD_GET_SIM_TIME:
    case SIM_CMD_GET_L2_COUNT:
    case SIM_CMD_GET_L2_MISS_COUNT:
+   case SIM_CMD_GET_CORE_TIME:
    case SIM_CMD_GET_INS_NUM:
    case SIM_CMD_GET_BARRIER_REACHED:
 

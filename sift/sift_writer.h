@@ -49,6 +49,8 @@ namespace Sift
          uint64_t va2pa_lookup(uint64_t va);
 
 	 void frontEndStop();
+	 /* the simulator closed our channel: nothing is written or read again */
+	 void channelLost();
 
       public:
          Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false, bool requires_icache_per_insn = false, bool send_va2pa_mapping = false, GetCodeFunc2 getCodeFunc2 = NULL, void *GetCodeFunc2Data = NULL);

@@ -21,6 +21,7 @@
 #define SIM_CMD_GET_SIM_TIME    16
 #define SIM_CMD_GET_BARRIER_REACHED 18
 #define SIM_CMD_GET_L2_COUNT    1000
+#define SIM_CMD_GET_CORE_TIME   1002   /* the calling core's elapsed time, fs */
 #define SIM_CMD_GET_L2_MISS_COUNT 1001
 
 // MimicOS userspace magic instructions
