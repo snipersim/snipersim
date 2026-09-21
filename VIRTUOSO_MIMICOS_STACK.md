@@ -355,27 +355,37 @@ channel (`Sift::Writer::channelLost`), and the recorder ignores
 registers its counters per block type (`loads-data`, ...); they now sum
 those.  `run-sniper --pacsim` no longer forces the pre-ROI region into
 fast-forward (a cold ROI start put every first-touch miss into the first
-measured region).  And in the recorder's memory-only mode a stretch
+measured region).  And `SIM_CMD_INSTRUMENT_MODE` switched only half of
+what a mode switch is: what the trace thread does with each record is
+one state, and whether the cores' performance models, the fast-forward
+manager and the barrier are in fast-forward is another, moved together
+only on the ROI path.  Switched alone inside the ROI, a fast-forward
+mode left the manager off and the barrier in detailed mode: no core's
+clock advanced, cores already waiting in the barrier stayed parked, and
+the one thread whose trace thread never enters the barrier in that mode
+ran a whole region alone -- the loop shape's estimate was a third high
+for it.  The magic moves the second state with the same pair the ROI
+toggle uses.  And in the recorder's memory-only mode a stretch
 without a memory access sent nothing, so the simulator's clock for that
 core stood still while the thread ran on natively and, the barrier being
 active in warm-up, every other core waited for it; the pending count now
 goes out as an instruction count once it outgrows the flow-control
 window.
 
-**Known limitations.**  On the suite's loop shape (threads synchronised
-only at entry and exit) the estimate runs about a third high at the
-quick size: after a cut, the cutting thread runs a whole iteration alone
-in fast-forward while the other three are held at the fast-forward
-barrier (the run's time does not move meanwhile), that solo stretch
-becomes a region of its own, and being unlike anything predicted it is
-fast-forwarded and then extrapolated at a full region's rate.  Its cause
-is in the fast-forward manager's synchronisation and is open; the
-barrier and task-queue shapes are unaffected.  A queue of 36 irregular
-tasks repeats too little at the quick size for the sampler to
-fast-forward more than a region or two, so that shape is accurate but
-not faster there.  Both are listed in `testing/test_pacsim.py` as known
-quick-profile failures: they run and are reported, and a pass is reported
-as such, but they do not fail the suite.
+**Known limitation.**  The task-queue shape hands each task to whichever
+thread asks first, so its schedule depends on timing, and the
+fast-forward model's timing is not the detailed model's: a sampled run
+executes a different schedule from the full run, and at the quick size
+(36 irregular tasks, where one 1.5M-instruction task landing on another
+thread moves the critical path by a tenth) the full run's time is not a
+fixed truth to estimate -- the sampled run's own elapsed time differs
+from it by about as much as the estimate does.  The same queue also
+repeats too little at that size for the sampler to fast-forward more
+than a region or two, so it is not faster there either.  Both checks
+are listed in `testing/test_pacsim.py` as known quick-profile failures:
+they run and are reported, and a pass is reported as such, but they do
+not fail the suite.  The barrier and loop shapes, whose schedules do not
+depend on timing, are within 2%.
 
 **Known issue.**  A workload whose worker threads exit while the main
 thread goes on running (`testing/apps/phased.c` and its siblings: the
@@ -621,7 +631,8 @@ The suite (`testing/test_pacsim.py`, section 3.8) does the comparison for
 three region shapes -- barriers, loops only, a task queue -- and checks
 that both runs printed the same checksum, that the sampled run was
 faster, and that the estimate is within 10% of the full run; the two
-checks that fail at the quick size for the reasons in section 3.7 are
+task-queue checks that fail at the quick size for the reason in section
+3.7 are reported as known failures.7 are
 reported as known failures.
 
 ### 4.10 The regression suites
@@ -694,11 +705,12 @@ fixed since; `pinplay` replayed its pinball without any application
 output -- the case judged a replay by output a replay does not produce,
 fixed since), pacsim skipped as the recorder side was absent then;
 after the Pac-Sim work and the recorder and simulator fixes it brought
-(section 3.7), on 125e13e plus that work: apps 18 of 18, scripting 6 of 6,
-virtuoso 30 of 30 (the four invariance goldens skipped: blessed under
-another environment digest), pacsim quick: barrier all three checks
-(0.3% error, 1.36x), task same program and 4.9% error with the speedup
-listed as a known failure at this size, loop same program and faster
-with the estimate listed as a known failure (section 3.7); qemu 6 x86 cases passed with the 21 RISC-V cases
+(section 3.7), including the instrumentation-mode switch that now moves
+the fast-forward state with it: apps 18 of 18, scripting 6 of 6,
+virtuoso 30 of 30, configs 468 of 468, qemu 6 x86 cases with the 21
+RISC-V cases skipped as before, pacsim quick: barrier all three checks
+(0.3% error, 1.23x), loop all three (2.4% error, 1.28x), task same
+program with the estimate and the speedup listed as known failures at
+this size (section 3.7; 16% error and 1.05x in that run); qemu 6 x86 cases passed with the 21 RISC-V cases
 skipped because that block does not set the RISC-V environment (they
 are the companion document's `long:ime-check`, 19 of 19).

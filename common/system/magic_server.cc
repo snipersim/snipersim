@@ -7,6 +7,7 @@
 #include "performance_model.h"
 #include "instruction.h"
 #include "fastforward_performance_model.h"
+#include "fastforward_performance_manager.h"
 #include "core_manager.h"
 #include "dvfs_manager.h"
 #include "hooks_manager.h"
@@ -814,6 +815,27 @@ UInt64 MagicServer::setInstrumentationMode(UInt64 sim_api_opt)
       break;
    default:
       LOG_PRINT_ERROR("Unexpected magic instrument opt type: %lx.", sim_api_opt);
+   }
+   /* The instrumentation mode alone is only half of a switch.  What the
+      trace thread does with each record is one state; whether each core's
+      performance model is in fast-forward, whether the fast-forward manager
+      is running and whether the barrier is in fast-forward mode is another,
+      and the two are moved together only on the ROI path
+      (MagicServer::enablePerformance / disablePerformance).  Switched on its
+      own inside the ROI, a fast-forward mode left the manager disabled and
+      the barrier in detailed mode: no core's clock advanced (the detailed
+      model drops instruction counts unless it is fast-forwarding), cores
+      already waiting in the barrier stayed parked, and the one thread whose
+      trace thread never enters the barrier in that mode ran a whole region
+      alone (Pac-Sim's loop shape).  So the same pair the ROI toggle uses
+      moves the second state here too, when it has not been moved already. */
+   if (m_performance_enabled && Sim()->getFastForwardPerformanceManager())
+   {
+      const bool want_fastforward = inst_mode != InstMode::DETAILED;
+      if (want_fastforward && !Sim()->getFastForwardPerformanceManager()->isEnabled())
+         Simulator::disablePerformanceModels();
+      else if (!want_fastforward && Sim()->getFastForwardPerformanceManager()->isEnabled())
+         Simulator::enablePerformanceModels();
    }
    Sim()->setInstrumentationMode(inst_mode, true /* update_barrier */);
 

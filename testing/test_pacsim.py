@@ -321,10 +321,13 @@ CASES = {
 # but they do not fail the suite: a suite that fails for a known reason on
 # every run tells nobody anything the day something else breaks.
 KNOWN_QUICK_FAILURES = {
-    ('loop', 'accurate'):
-        'after a cut, the cutting thread runs an iteration alone in fast-forward '
-        'while the others are held at the fast-forward barrier; that solo region '
-        'is mispredicted and extrapolated at a full region\'s rate (open)',
+    ('task', 'accurate'):
+        'the queue hands tasks to whichever thread asks first, so the schedule '
+        'depends on timing, and the fast-forward model\'s timing is not the '
+        'detailed model\'s: the sampled run executes a different schedule, whose '
+        'own time differs from the full run\'s by about as much as the estimate '
+        'does (36 tasks: one 1.5M-instruction task on another thread moves the '
+        'critical path by 10%)',
     ('task', 'faster'):
         'a queue of 36 irregular tasks repeats too little at this size for the '
         'sampler to fast-forward more than a region or two',

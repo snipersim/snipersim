@@ -12,6 +12,7 @@ class FastForwardPerformanceManager
       FastForwardPerformanceManager();
       void enable();
       void disable();
+      bool isEnabled() const { return m_enabled; }
 
    protected:
       friend class FastforwardPerformanceModel;
