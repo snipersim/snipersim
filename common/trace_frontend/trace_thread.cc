@@ -373,6 +373,11 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
 
       default:
       {
+         /* Once our application is exiting (a sibling ran exit_group), no
+            request may park this thread again: answer at once, so the
+            recorder thread returns to a process that is being torn down. */
+         if (m_stop)
+            return 0;
          LOG_ASSERT_ERROR(size == sizeof(SyscallMdl::syscall_args_t), "Syscall arguments not the correct size");
 
          SyscallMdl::syscall_args_t *args = (SyscallMdl::syscall_args_t *) data;

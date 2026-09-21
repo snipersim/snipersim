@@ -2,6 +2,7 @@
 #include "trace_thread.h"
 #include "simulator.h"
 #include "thread_manager.h"
+#include "syscall_server.h"
 #include "hooks_manager.h"
 #include "config.hpp"
 #include "sim_api.h"
@@ -404,6 +405,19 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
      {
        // Ask thread to stop
        (*it)->stop();
+       /* A sibling parked in an emulated futex or sleep has its recorder
+          thread blocked inside the analysis routine that sent the request,
+          waiting for our answer.  The exiting process cannot finish while a
+          thread sits there (Pin waits for every thread to leave the code
+          cache), so the wait is ended now: the thread resumes with a failed
+          wait, its answer goes out, the recorder thread returns, and the
+          exit proceeds.  Without this, an OpenMP worker docked at the end of
+          a parallel region held the process, its recorder and this run
+          forever (test/mpi-omp). */
+       {
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         Sim()->getSyscallServer()->abortWaits((*it)->getThread()->getId(), time);
+       }
        // Threads are often blocked on a futex in this case, so call signalDone in their place
        signalDone(*it, time, true /* aborted */);
      }

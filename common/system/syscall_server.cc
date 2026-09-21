@@ -448,3 +448,35 @@ SubsecondTime SimFutex::getNextTimeout(SubsecondTime time)
    }
    return next;
 }
+
+bool SimFutex::removeWaiter(thread_id_t thread_id)
+{
+   for(ThreadQueue::iterator it = m_waiting.begin(); it != m_waiting.end(); ++it)
+   {
+      if (it->thread_id == thread_id)
+      {
+         m_waiting.erase(it);
+         return true;
+      }
+   }
+   return false;
+}
+
+void SyscallServer::abortWaits(thread_id_t thread_id, SubsecondTime time)
+{
+   bool queued = false;
+   for(SimFutex::ThreadQueue::iterator it = m_sleeping.begin(); it != m_sleeping.end(); ++it)
+   {
+      if (it->thread_id == thread_id)
+      {
+         m_sleeping.erase(it);
+         queued = true;
+         break;
+      }
+   }
+   for(FutexMap::iterator it = m_futexes.begin(); it != m_futexes.end(); ++it)
+      queued |= it->second.removeWaiter(thread_id);
+   if (queued && Sim()->getThreadManager()->getThreadState(thread_id) == Core::STALLED)
+      Sim()->getThreadManager()->resumeThread(thread_id, INVALID_THREAD_ID, time, (void*)false);
+}
+
