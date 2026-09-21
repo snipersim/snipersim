@@ -54,6 +54,22 @@ def fft_self_check(out, rc):
     return True, '%d x TEST PASSED' % n
 
 
+def pinplay_check(out, rc):
+    """The replay ran to completion, and the pinball's recorded run passed
+    the FFT's own check.  A replay does not reproduce the application's
+    output (its writes were logged, not re-executed), so the verdict comes
+    from the recording: test/pinplay keeps it in record.log.  Before this,
+    the case passed only when the pinball happened to be re-recorded in the
+    same run, and failed on every replay of an existing one."""
+    m = re.search(r'Finished replaying thread .*?, (\d+) instructions', out)
+    if not m:
+        return False, 'the replayer did not report a completed replay'
+    ok, why = fft_self_check(out, rc)
+    if not ok:
+        return False, why + ' (recorded run)'
+    return True, 'replayed %s instructions; recorded run: %s' % (m.group(1), why)
+
+
 def api_in_simulator(out, rc):
     if 'API Test: Not running in the simulator' in out:
         return False, 'SimInSimulator() returned false while simulated'
@@ -145,7 +161,7 @@ CASES = {
     'fft-hetero-cfg':  (fft_self_check, None),
     'fft-marker':      (fft_self_check, None),
     'fft-nn':          (fft_self_check, None),
-    'pinplay':         (fft_self_check, None),
+    'pinplay':         (pinplay_check, None),
     'api':             (api_in_simulator, None),
     'dvfs':            (dvfs_readback, None),
     'mpi':             (mpi_pi, 'mpich'),
