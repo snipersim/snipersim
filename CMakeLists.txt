@@ -1,10 +1,12 @@
 
 # Sniper — host-side build.
 #
-# Phase 1 of the build rework: this builds the parts of Sniper that use the host
-# toolchain (libcarbon_sim, libsift, libdecoder, lib/sniper, siftdump).  The
-# Pin/SDE recorder, the Pin frontend and the DynamoRIO frontend are still built
-# by the Makefile; the two coexist.
+# Builds everything: the simulator (libcarbon_sim, libsift, libdecoder,
+# lib/sniper, siftdump), the SDE SIFT recorder (through Intel's mfile.py, see
+# cmake/SniperPinTools.cmake), and optionally the DynamoRIO front end
+# (SNIPER_ENABLE_DYNAMORIO), the ARM decoder (SNIPER_ENABLE_ARM), the QEMU
+# plugin (SNIPER_ENABLE_QEMU) and the userspace MimicOS kernel.  The top-level
+# Makefile is a forwarder that fetches the dependencies and calls this.
 #
 #   cmake -S . -B build/release -G Ninja
 #   cmake --build build/release
@@ -115,7 +117,7 @@ endif()
 # an ARM build compiled arm_decoder.cc and then failed to link on cs_open,
 # cs_option and the rest.  The old decoder_lib/Makefile named
 # ../../capstone/libcapstone.a explicitly and that went with it.
-if(SNIPER_ENABLE_ARM OR SNIPER_ENABLE_DYNAMORIO)
+if(SNIPER_ENABLE_ARM)
   find_library(SNIPER_CAPSTONE_LIBRARY NAMES capstone
                HINTS "${CMAKE_CURRENT_SOURCE_DIR}/capstone" NO_DEFAULT_PATH)
   if(NOT SNIPER_CAPSTONE_LIBRARY)

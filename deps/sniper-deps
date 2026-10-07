@@ -18,7 +18,7 @@ a symlink into it.  Several checkouts then share one copy, and `rm -rf` on a
 build tree stops being a 20-minute mistake.
 
 Feature selection matches the Makefile: --frontend, --torch/--no-torch,
---mcpat/--no-mcpat, --arm, --riscv, --dynamorio, --qemu.
+--mcpat/--no-mcpat, --arm, --dynamorio, --qemu, --riscv-ime, --mpi.
 
 Some dependencies ship as source and have to be built.  --jobs bounds that;
 the top-level make forwards its own -j, so a dependency build does not quietly
@@ -62,7 +62,7 @@ def enabled_features(args):
         feats.add('torch')
     if args.mcpat:
         feats.add('mcpat')
-    for name in ('arm', 'riscv', 'dynamorio', 'qemu', 'mpi', 'riscv_ime'):
+    for name in ('arm', 'dynamorio', 'qemu', 'mpi', 'riscv_ime'):
         if getattr(args, name):
             feats.add(name.replace('_', '-'))
     return feats
@@ -451,13 +451,12 @@ def cmd_gc(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--frontend', default='sde', choices=('sde', 'pin', 'pinplay', 'none'))
+    ap.add_argument('--frontend', default='sde', choices=('sde', 'none'))
     ap.add_argument('--torch', action='store_true', default=True)
     ap.add_argument('--no-torch', dest='torch', action='store_false')
     ap.add_argument('--mcpat', action='store_true', default=True)
     ap.add_argument('--no-mcpat', dest='mcpat', action='store_false')
     ap.add_argument('--arm', action='store_true')
-    ap.add_argument('--riscv', action='store_true')
     ap.add_argument('--riscv-ime', dest='riscv_ime', action='store_true',
                     help='QEMU riscv64 user mode with the IME 0.9 patch and plugin support')
     ap.add_argument('--dynamorio', action='store_true')

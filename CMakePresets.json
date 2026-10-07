@@ -36,16 +36,6 @@
     },
 
     {
-      "name": "x86-pin-release",
-      "inherits": "base",
-      "displayName": "x86 / Pin / release",
-      "description": "The plain Pin kit rather than SDE. Needs: deps/sniper-deps --frontend pin fetch",
-      "cacheVariables": {
-        "SNIPER_FRONTEND": "pin"
-      }
-    },
-
-    {
       "name": "x86-modern-abi",
       "inherits": "base",
       "displayName": "x86 / SDE / modern libstdc++ ABI",
@@ -60,7 +50,7 @@
       "name": "riscv-release",
       "inherits": "base",
       "displayName": "RISC-V",
-      "description": "RISC-V decoder. Needs an rv8 checkout: deps/sniper-deps --riscv fetch, or -DSNIPER_RV8_HOME=<path>",
+      "description": "RISC-V core model with the decoder generated from the UDB (no external dependency); the QEMU front end is built with SNIPER_ENABLE_QEMU.",
       "cacheVariables": {
         "SNIPER_ENABLE_RISCV": "ON"
       }
@@ -70,7 +60,7 @@
       "name": "arm64-frontend",
       "inherits": "base",
       "displayName": "ARM64 frontend only",
-      "description": "For the ARM board: builds sift and the DynamoRIO frontend, no x86 simulator. Build with --target dr_frontend. README.arm64 walks through this by hand today.",
+      "description": "For the ARM board: builds sift and the DynamoRIO frontend, no x86 simulator. Build with --target dr_frontend; see docs/ARM64.md.",
       "cacheVariables": {
         "SNIPER_FRONTEND": "none",
         "SNIPER_ENABLE_ARM": "ON",
@@ -83,7 +73,6 @@
   "buildPresets": [
     { "name": "x86-sde-release", "configurePreset": "x86-sde-release" },
     { "name": "x86-sde-debug",   "configurePreset": "x86-sde-debug" },
-    { "name": "x86-pin-release", "configurePreset": "x86-pin-release" },
     { "name": "x86-modern-abi",  "configurePreset": "x86-modern-abi" },
     { "name": "riscv-release",   "configurePreset": "riscv-release" },
     {

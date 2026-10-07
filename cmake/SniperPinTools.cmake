@@ -40,38 +40,6 @@ set_target_properties(sift_pincrt PROPERTIES
   CXX_EXTENSIONS OFF)
 target_compile_options(sift_pincrt PRIVATE ${SNIPER_PIN_NO_HOST_FLAGS})
 
-# --- the Pin frontend -------------------------------------------------------
-#
-# A pintool, so a MODULE library: Pin loads it, nothing links against it.
-add_library(pin_frontend MODULE
-  "${CMAKE_SOURCE_DIR}/frontend/pin-frontend/pin_frontend.cc"
-  "${CMAKE_SOURCE_DIR}/frontend/pin-frontend/globals.cc"
-  "${CMAKE_SOURCE_DIR}/frontend/bbv_count.cc")
-
-target_include_directories(pin_frontend PRIVATE
-  "${CMAKE_SOURCE_DIR}/frontend"
-  "${CMAKE_SOURCE_DIR}/sift"
-  "${CMAKE_SOURCE_DIR}/common/misc")
-
-# The kit defines TARGET_IA32E and HOST_IA32E but not TARGET_INTEL64, which is
-# what frontend_syscall.tcc keys the 64-bit clone() argument layout off; without
-# it neither arm of the #if is taken and tidptr is never declared.  The tools'
-# own makefiles added this (pin-frontend/makefile.rules, recorder/makefile.sde.rules).
-target_compile_definitions(pin_frontend PRIVATE TARGET_INTEL64)
-
-target_link_libraries(pin_frontend PRIVATE
-  sift_pincrt
-  Sniper::PinTool
-  ${Pin_TOOL_LIBS})
-
-set_target_properties(pin_frontend PROPERTIES
-  PREFIX ""
-  SUFFIX "${Pin_TOOL_SUFFIX}"
-  CXX_STANDARD 17
-  CXX_EXTENSIONS OFF
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
-target_compile_options(pin_frontend PRIVATE ${SNIPER_PIN_NO_HOST_FLAGS})
-
 # --- the SDE SIFT recorder -------------------------------------------------
 #
 # Built by Intel's sift/recorder/mfile.py, not by CMake.  It is an SDE tool

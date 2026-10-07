@@ -136,8 +136,7 @@ def build_dir():
 
 def recorder_paths():
     import glob
-    pats = ('sift/recorder/obj-*/sift_recorder',
-            'sift/recorder/obj-*/sde_sift_recorder.so')
+    pats = ('sift/recorder/obj-*/sde_sift_recorder.so',)
     out = []
     for p in pats:
         out += glob.glob(os.path.join(SNIPER_ROOT, p))

@@ -47,32 +47,6 @@
       "marker": "pinplay-scripts",
       "description": "PinPlay helper scripts used by the SDE recorder build. Kept at the top level rather than under sde_kit/, which is a symlink into the shared cache"
     },
-    "pin": {
-      "kind": "tarball",
-      "version": "3.31-98869-gfa6f126a8",
-      "url": "https://snipersim.org/packages/pin-external-3.31-98869-gfa6f126a8-gcc-linux.tar.gz",
-      "sha256": "82216144e3df768f0203b671ff48605314f13266903eb42dac01b91310eba956",
-      "strip_components": 1,
-      "install_path": "pin_kit",
-      "when": [
-        "frontend:pin"
-      ],
-      "marker": "intel64/lib/libpindwarf.so",
-      "description": "Intel Pin kit, for the plain-Pin frontend"
-    },
-    "pinplay": {
-      "kind": "tarball",
-      "version": "3.11-pin-3.11-97998-g7ecce2dac",
-      "url": "https://snipersim.org/packages/pinplay-dcfg-3.11-pin-3.11-97998-g7ecce2dac-gcc-linux.tar.bz2",
-      "sha256": "d584efb868217fea1ca2796ad5f41eb61679c2769fc859dd299a6fd5bf175f45",
-      "strip_components": 1,
-      "install_path": "pin_kit",
-      "when": [
-        "frontend:pinplay"
-      ],
-      "marker": "intel64/lib-ext/libpin3dwarf.so",
-      "description": "PinPlay-enabled Pin kit"
-    },
     "xed": {
       "kind": "git",
       "url": "https://github.com/intelxed/xed.git",

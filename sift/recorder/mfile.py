@@ -141,16 +141,13 @@ mbuild.msgb('PINPLAY IS BEING USED')
 env.add_define('PINPLAY')
 env.add_include_dir(pinplay_include_dir)
 env.add_include_dir(instlib_include_dir)
-# SIFT headers and library.
-#
-# By default these come from ./sift, a directory of symlinks to the real sources
-# that this tool's makefile creates at build time, and from a copy of libsift
-# built inside it.  That is why SIFT used to be compiled three times: once for
-# the host and once privately for each PinCRT tool.
-#
-# SNIPER_SIFT_INCLUDE and SNIPER_SIFT_LIBDIR let the caller point at a single
-# shared PinCRT build instead.  Unset, the historical behaviour is unchanged.
-_sift_include = os.environ.get('SNIPER_SIFT_INCLUDE', './sift')
+# SIFT headers and library: the shared PinCRT build of libsift that CMake
+# (cmake/SniperPinTools.cmake) points this tool at through SNIPER_SIFT_INCLUDE
+# and SNIPER_SIFT_LIBDIR.  The tool is only ever built from there.
+for _v in ('SNIPER_SIFT_INCLUDE', 'SNIPER_SIFT_LIBDIR'):
+    if not os.environ.get(_v):
+        mbuild.die('%s is not set: build the recorder through CMake (make), not by hand' % _v)
+_sift_include = os.environ['SNIPER_SIFT_INCLUDE']
 for _d in _sift_include.split(os.pathsep):
     if _d:
         env.add_include_dir(_d)
@@ -162,7 +159,7 @@ add_link_libs(env)
 env.add_link_dir(pin_lib_dir)
 if have_pin_crt:
     env.add_link_dir(pin_crt_dir)
-env.add_link_dir(os.environ.get('SNIPER_SIFT_LIBDIR', './sift/obj-intel64'))
+env.add_link_dir(os.environ['SNIPER_SIFT_LIBDIR'])
 if env.on_linux():
     env['LINKFLAGS'] += ' -Wl,--hash-style=sysv '
     env['LINKFLAGS'] += ' -Wl,--rpath,\$ORIGIN/../../../../%(arch)s/pin_lib:\$ORIGIN/../../../../%(arch)s/xed_lib:\$ORIGIN/pin_lib:\$ORIGIN/xed_lib'

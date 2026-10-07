@@ -18,8 +18,8 @@ set(CMAKE_C_FLAGS_DEBUG     "-O0 -g" CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS_DEBUG   "-O0 -g" CACHE STRING "" FORCE)
 
 set(SNIPER_FRONTEND "sde" CACHE STRING
-    "Instrumentation frontend: sde, pin, pinplay or none")
-set_property(CACHE SNIPER_FRONTEND PROPERTY STRINGS sde pin pinplay none)
+    "Instrumentation frontend: sde (the SIFT recorder as an SDE tool) or none")
+set_property(CACHE SNIPER_FRONTEND PROPERTY STRINGS sde none)
 
 option(SNIPER_ENABLE_RISCV     "RISC-V core model (decoder generated from the UDB)" ON)
 option(SNIPER_ENABLE_ARM       "Build the ARM decoder (needs Capstone)"          OFF)
