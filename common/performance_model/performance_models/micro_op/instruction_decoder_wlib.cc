@@ -2,7 +2,6 @@
 #include "instruction.h"
 #include "micro_op.h"
 #include "simulator.h"
-#include <x86_decoder.h>  // TODO delete
 
 //extern "C" {
 //#include <xed-reg-class.h>

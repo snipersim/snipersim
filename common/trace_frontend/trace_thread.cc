@@ -28,7 +28,6 @@
 #include <sys/syscall.h>
 #include <sched.h>
 
-#include <x86_decoder.h>  // TODO remove when the decode function in microop perf model is adapted
 
 #include "debug_config.h"
 #include <sstream>
