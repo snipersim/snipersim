@@ -73,6 +73,12 @@ void RobSmtPerformanceModel::notifyElapsedTimeUpdate()
    m_rob_timer->synchronize(m_thread_id, m_elapsed_time.getElapsedTime());
 }
 
+void RobSmtPerformanceModel::threadLeavesCore()
+{
+   ScopedLock sl(m_rob_timer->m_lock);
+   m_rob_timer->threadLeavesCore(m_thread_id);
+}
+
 void RobSmtPerformanceModel::enableDetailedModel()
 {
    m_enabled = true;

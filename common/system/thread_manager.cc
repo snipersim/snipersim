@@ -177,6 +177,7 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    core->setState(Core::IDLE);
 
    m_thread_tls->set(NULL);
+   core->getPerformanceModel()->threadLeavesCore();
    thread->setCore(NULL);
    thread->updateCoreTLS();
 
@@ -244,7 +245,12 @@ void ThreadManager::moveThread(thread_id_t thread_id, core_id_t core_id, Subseco
    CLOG("thread", "Move %d from %d to %d", thread_id, thread->getCore() ? thread->getCore()->getId() : -1, core_id);
 
    if (Core *core = thread->getCore())
+   {
+      // Detaching the thread below clears core->getThread(): let the timing
+      // model finish whatever still needs the thread on its core.
+      core->getPerformanceModel()->threadLeavesCore();
       core->setState(Core::IDLE);
+   }
 
    if (core_id == INVALID_CORE_ID)
    {

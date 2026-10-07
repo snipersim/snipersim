@@ -240,30 +240,16 @@ FRAGMENT_CORES = {
 
 # Known to fail in detailed mode at one core count only, with the reason;
 # listed rather than skipped so that one starting to work is reported.
+# (rob_smt2 at two logical cores used to be here: the SMT ROB timer drained a
+# departed thread's memory uops against a core with no thread.  Fixed; the
+# case must pass, at both core counts.)
 FRAGMENT_EXPECT_FAIL_DETAILED_CORES = {
-    # Two logical cores are one physical SMT core, and five threads on it are
-    # time-sliced by the scheduler; the run dies with SIGSEGV in
-    # RobSmtTimer::issueInstruction -> Core::accessMemory ->
-    # Core::initiateMemoryAccess (core.cc:375) about a second into the ROI,
-    # after the application reports "The futex facility returned an
-    # unexpected error code".  Deterministic at two logical cores; at four
-    # (two physical) it passed in isolation and crashed the same way in a
-    # full sweep on a loaded host, so the crash is the SMT timer's, not the
-    # core count's.  Absent with the interval core's SMT model (smt2 on
-    # gainestown) and with a single thread.  The defect stands until the
-    # SMT ROB timer is fixed; these entries make the suite say when it is.
-    'core_configs/rob_smt2': {2: 'SIGSEGV in RobSmtTimer::issueInstruction with '
-                                 'five threads time-sliced on one physical SMT core'},
 }
 
 # Known to fail intermittently in detailed mode at one core count: the run is
 # reported as passed either way, with the outcome of this run in the note, so
 # the suite stays quiet while the defect is on record and loud about nothing.
 FRAGMENT_INTERMITTENT_DETAILED_CORES = {
-    # The same crash as above at four logical cores (two physical): it passed
-    # in isolation and crashed the same way in a full sweep on a loaded host.
-    'core_configs/rob_smt2': {4: 'SIGSEGV in RobSmtTimer::issueInstruction, '
-                                 'deterministic at one physical core'},
 }
 
 # Counters that must be non-zero after the detailed run: the one each variant

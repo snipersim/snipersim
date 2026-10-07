@@ -36,6 +36,13 @@ public:
       (an out-of-order model waits for more instructions before it runs a
       cycle, so the last window would otherwise never commit). */
    virtual void drain() {}
+   /* The thread on this core is about to be detached from it (descheduled,
+      migrated or exited).  The thread manager calls this before it clears
+      core->getThread(), so a model that still holds work needing the thread's
+      context -- the memory accesses an SMT ROB timer defers to issue time,
+      which the memory subsystem attributes to the core's current thread --
+      resolves it now, while the core is still that thread's. */
+   virtual void threadLeavesCore() {}
 
    UInt64 getInstructionCount() const { return m_instruction_count; }
 

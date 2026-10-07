@@ -182,6 +182,7 @@ private:
    SubsecondTime* findCpiComponent(smtthread_id_t thread_num);
    bool tryIssue(smtthread_id_t thread_num, SubsecondTime &next_event, bool would_have_skipped = false);
    void issueInstruction(smtthread_id_t thread_num, uint64_t idx, SubsecondTime &next_event);
+   void issueMemoryAccess(smtthread_id_t thread_num, DynamicMicroOp &uop);
 
    void computeCurrentWindowsize();
 
@@ -199,6 +200,7 @@ public:
 
    virtual void execute();
    virtual void synchronize(smtthread_id_t thread_id, SubsecondTime time);
+   void threadLeavesCore(smtthread_id_t thread_num);
 };
 
 #endif /* RobSmtTimer_H_ */

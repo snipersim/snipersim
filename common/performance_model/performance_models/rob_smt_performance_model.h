@@ -18,6 +18,7 @@ protected:
    virtual void enableDetailedModel();
    virtual void disableDetailedModel();
    virtual void synchronize();
+   virtual void threadLeavesCore();
 private:
    RobSmtTimer *m_rob_timer;
    UInt8 m_thread_id;

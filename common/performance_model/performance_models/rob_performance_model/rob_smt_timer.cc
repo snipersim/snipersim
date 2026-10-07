@@ -744,9 +744,58 @@ SubsecondTime RobSmtTimer::doDispatch()
    return next_event;
 }
 
-void RobSmtTimer::issueInstruction(smtthread_id_t thread_num, uint64_t idx, SubsecondTime &next_event)
+// Send a memory uop's access to the memory hierarchy (issue_memops_at_issue).
+// The access is attributed to the thread currently on the uop's logical core,
+// so it must happen while that is still the thread the uop belongs to: at
+// issue in the common case, or from threadLeavesCore() when the thread is
+// detached from the core with the uop still unissued.
+void RobSmtTimer::issueMemoryAccess(smtthread_id_t thread_num, DynamicMicroOp &uop)
 {
    SmtThread *smt_thread = m_threads[thread_num];
+
+   MemoryResult res = smt_thread->core->accessMemory(
+      Core::NONE,
+      uop.getMicroOp()->isLoad() ? Core::READ : Core::WRITE,
+      uop.getAddress().address,
+      NULL,
+      uop.getMicroOp()->getMemoryAccessSize(),
+      Core::MEM_MODELED_RETURN,
+      uop.getMicroOp()->getInstruction() ? uop.getMicroOp()->getInstruction()->getAddress() : static_cast<uint64_t>(NULL),
+      now.getElapsedTime()
+   );
+   uint64_t latency = SubsecondTime::divideRounded(res.latency, now.getPeriod());
+
+   uop.setExecLatency(uop.getExecLatency() + latency); // execlatency already contains bypass latency
+   uop.setDCacheHitWhere(res.hit_where);
+}
+
+// The thread on logical core thread_num is being detached from it (end of its
+// quantum, a stall that lets another thread in, migration, exit).  Its uops
+// stay in this core's ROB and pre-ROB queue and are drained later by whichever
+// thread drives the shared timer, with core->getThread() by then NULL or a
+// different thread; the memory subsystem resolves a core's accesses through
+// that pointer.  So perform the deferred accesses of every memory uop that has
+// not issued yet now, while the core still belongs to the thread; issue finds
+// them resolved and skips the access.  Called with m_lock held, which keeps
+// the sibling's execute() out until this is done.
+void RobSmtTimer::threadLeavesCore(smtthread_id_t thread_num)
+{
+   RobThread *thread = m_rob_threads[thread_num];
+
+   for(uint64_t i = 0; i < thread->rob.size(); ++i)
+   {
+      DynamicMicroOp &uop = *thread->rob.at(i).uop;
+
+      if ((uop.getMicroOp()->isLoad() || uop.getMicroOp()->isStore())
+         && uop.getDCacheHitWhere() == HitWhere::UNKNOWN)
+      {
+         issueMemoryAccess(thread_num, uop);
+      }
+   }
+}
+
+void RobSmtTimer::issueInstruction(smtthread_id_t thread_num, uint64_t idx, SubsecondTime &next_event)
+{
    RobThread *thread = m_rob_threads[thread_num];
    RobEntry *entry = &thread->rob[idx];
    DynamicMicroOp &uop = *entry->uop;
@@ -754,20 +803,7 @@ void RobSmtTimer::issueInstruction(smtthread_id_t thread_num, uint64_t idx, Subs
    if ((uop.getMicroOp()->isLoad() || uop.getMicroOp()->isStore())
       && uop.getDCacheHitWhere() == HitWhere::UNKNOWN)
    {
-      MemoryResult res = smt_thread->core->accessMemory(
-         Core::NONE,
-         uop.getMicroOp()->isLoad() ? Core::READ : Core::WRITE,
-         uop.getAddress().address,
-         NULL,
-         uop.getMicroOp()->getMemoryAccessSize(),
-         Core::MEM_MODELED_RETURN,
-         uop.getMicroOp()->getInstruction() ? uop.getMicroOp()->getInstruction()->getAddress() : static_cast<uint64_t>(NULL),
-         now.getElapsedTime()
-      );
-      uint64_t latency = SubsecondTime::divideRounded(res.latency, now.getPeriod());
-
-      uop.setExecLatency(uop.getExecLatency() + latency); // execlatency already contains bypass latency
-      uop.setDCacheHitWhere(res.hit_where);
+      issueMemoryAccess(thread_num, uop);
    }
 
    if (uop.getMicroOp()->isLoad())
