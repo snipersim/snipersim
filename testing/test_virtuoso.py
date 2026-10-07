@@ -1111,6 +1111,22 @@ FEATURES = {
                         'mmu.total_walk_latency_data',
                         registered=('hash_table_chaining.conflicts_12',
                                     'hash_table_chaining.resizes_12'))),
+
+    # Step 14: Hash, Don't Cache, the linear-probing hashed page table, on
+    # the same path as pagetable_ht: walks per page size under the table's
+    # name (pt_hash_hdc), faults resolved through updatePageTableFrames,
+    # walks charged, checksum reached.  Collisions and resizes only have
+    # to exist, for the same reason.
+    'pagetable_hdc': (
+        ['address_translation_schemes/hdc_baseline_alloc'], 1,
+        require_nonzero('pt_hash_hdc.page_table_walks_12',
+                        'pt_hash_hdc.page_table_walks_21',
+                        'pt_hash_hdc.accesses_12',
+                        'pt_hash_hdc.page_faults',
+                        'mmu.page_table_walks',
+                        'mmu.total_walk_latency_data',
+                        registered=('pt_hash_hdc.collisions_12',
+                                    'pt_hash_hdc.resizes_12'))),
 }
 
 

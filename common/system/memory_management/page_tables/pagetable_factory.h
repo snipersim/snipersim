@@ -3,6 +3,8 @@
 #include "pagetable_radix.h"
 // Step 13: the hashed page table with chaining
 #include "pagetable_ht.h"
+// Step 14: Hash, Don't Cache
+#include "pagetable_hdc.h"
 #include "config.hpp"
 #include "mimicos.h"
 
@@ -53,8 +55,24 @@ namespace ParametricDramDirectoryMSI
 			return new PageTableHT(app_id, name, type, page_sizes, page_size_list, page_table_size_list, is_guest);
 		}
 
+		// Step 14: Hash, Don't Cache
+		static PageTable *createHDCPageTable(int app_id, String name, String type, int page_sizes, int *page_size_list, int *page_table_size_list, bool is_guest)
+		{
+			std::cout << "[HDC Page Table] Creating Hash, Don't Cache table [SIGMETRICS 2016] " << name << " for app id: " << app_id << std::endl;
+			for (int i = 0; i < page_sizes; i++)
+				std::cout << "[HDC Page Table] Page size " << page_size_list[i] << ": " << page_table_size_list[i] << " entries" << std::endl;
+			return new PageTableHDC(app_id, name, type, page_sizes, page_size_list, page_table_size_list, is_guest);
+		}
+
 		static PageTable *createPageTable(String type, String name, UInt64 app_id, bool is_guest = false)
 		{
+			// Step 14: Hash, Don't Cache
+			if (type == "hash_dont_cache")
+			{
+				int page_sizes, *page_size_list, *page_table_size_list;
+				readHashedPageTableConfig(name, is_guest, page_sizes, page_size_list, page_table_size_list);
+				return createHDCPageTable(app_id, name, type, page_sizes, page_size_list, page_table_size_list, is_guest);
+			}
 			// Step 13: the hashed page table with chaining
 			if (type == "hash_table")
 			{

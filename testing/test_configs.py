@@ -316,6 +316,9 @@ FRAGMENT_REQUIRE_NONZERO = {
     # under its own name, one counter per page size.
     'address_translation_schemes/ht_baseline_alloc': ('hash_table_chaining.page_table_walks_12', 'hash_table_chaining.page_faults'),
     'address_translation_schemes/reservethp_ht': ('hash_table_chaining.page_table_walks_12', 'hash_table_chaining.page_faults'),
+    # Step 14: Hash, Don't Cache registers under pt_hash_hdc.
+    'address_translation_schemes/hdc_baseline_alloc': ('pt_hash_hdc.page_table_walks_12', 'pt_hash_hdc.page_faults'),
+    'address_translation_schemes/reservethp_hdc': ('pt_hash_hdc.page_table_walks_12', 'pt_hash_hdc.page_faults'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.
