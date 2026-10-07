@@ -212,18 +212,21 @@ void MPLRUBanditController::loadConfig(core_id_t core_id, const String& cfgname)
    
    PerCoreState& state = m_per_core_state[core_id];
    
-   // Helper lambdas for safe config reading
+   // Every knob is optional with a built-in default.  A missing key has to
+   // be tested for: the configuration layer exits on one rather than
+   // throwing, so a try/catch around the lookup (as this once was) never
+   // caught anything and the default was unreachable -- a config that set
+   // only the knobs it cared about (reservethp_mplru_bandit.cfg) could not
+   // start.
+   const String base = cfgname + "/mplru/controller/";
    auto getBool = [&](const String& key, bool def) -> bool {
-      try { return Sim()->getCfg()->getBoolArray(cfgname + "/mplru/controller/" + key, core_id); }
-      catch (...) { return def; }
+      return Sim()->getCfg()->hasKey(base + key) ? Sim()->getCfg()->getBoolArray(base + key, core_id) : def;
    };
    auto getInt = [&](const String& key, int def) -> int {
-      try { return Sim()->getCfg()->getIntArray(cfgname + "/mplru/controller/" + key, core_id); }
-      catch (...) { return def; }
+      return Sim()->getCfg()->hasKey(base + key) ? (int)Sim()->getCfg()->getIntArray(base + key, core_id) : def;
    };
    auto getFloat = [&](const String& key, float def) -> float {
-      try { return Sim()->getCfg()->getFloatArray(cfgname + "/mplru/controller/" + key, core_id); }
-      catch (...) { return def; }
+      return Sim()->getCfg()->hasKey(base + key) ? (float)Sim()->getCfg()->getFloatArray(base + key, core_id) : def;
    };
    
    state.enabled = getBool("enabled", true);

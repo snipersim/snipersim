@@ -171,12 +171,15 @@ EXCLUDE = {'base'}
 # numa_reserve_thp allocators, page-size prediction and the no-PWC filter --
 # were probed the same way, layered on gainestown in both modes at 1, 2 and
 # 4 cores, and all pass; that is why none of them appears below.  The engine
-# fragments under spec_engine_configs/ are not enumerated, as before: an
-# engine only runs under the spec MMU with its allocator, and the schemes
-# that layer all three are what gets run.
+# fragments under spec_engine_configs/ used not to be enumerated, because an
+# engine only runs under the spec MMU with its allocator; they are now, each
+# with that MMU and allocator in front of it (FRAGMENT_EXTRA_BASE), so the
+# engine-only fragments Virtuoso ships (the lean selector and the standalone
+# parameter block) get run as well.
 FRAGMENT_DIRS = ('address_translation_schemes', 'common_configs', 'core_configs',
                  'cxl_configs', 'dram_configs', 'mmu_configs', 'pagetable_configs',
-                 'physical_memory_allocators',
+                 'physical_memory_allocators', 'prefetcher_configs',
+                 'spec_engine_configs',
                  # The variants that were compiled but selected by nothing: the
                  # L2 replacement policies, the GHB prefetcher and the
                  # sequential cache timing model; the limited and LimitLESS
@@ -195,6 +198,35 @@ FRAGMENT_EXTRA_BASE = {
     'dram_configs/ddr4_2400_open_page': ['dram_configs/ddr4_2400'],
     'dram_configs/ddr4_2400_open_page_split_column': ['dram_configs/ddr4_2400'],
     'dram_configs/ddr4_2400_closed_page': ['dram_configs/ddr4_2400'],
+    # Overrides on an MMU config: the CHiRP L2-TLB replacement policy, and
+    # the TRAIL prefetch-queue block (self-contained for the prefetcher but
+    # not for the TLBs it attaches to).  base.cfg has the mmu_base keys too,
+    # but the override is meant for the config it documents.
+    'mmu_configs/l2tlb_chirp': ['mmu_configs/mmu_base'],
+    'mmu_configs/trail_aggressive': ['mmu_configs/mmu_base'],
+    # A speculative engine runs under the spec MMU, over the allocator whose
+    # placement it predicts; the Revelator engines soft-disable themselves
+    # over any other allocator, and the NUMA one reads the NUMA topology.
+    'spec_engine_configs/spec_engine_revelator':
+        ['mmu_configs/mmu_spec', 'physical_memory_allocators/revelator_alloc'],
+    'spec_engine_configs/spec_engine_revelator_open':
+        ['mmu_configs/mmu_spec', 'physical_memory_allocators/revelator_simple_alloc'],
+    'spec_engine_configs/spec_engine_revelator_thp':
+        ['mmu_configs/mmu_spec', 'physical_memory_allocators/revelator_thp_alloc'],
+    'spec_engine_configs/spec_engine_revelator_simple':
+        ['mmu_configs/mmu_spec', 'physical_memory_allocators/revelator_simple_alloc'],
+    'spec_engine_configs/spec_engine_numa_revelator':
+        ['dram_configs/ddr4_2400', 'numa', 'mmu_configs/mmu_spec',
+         'physical_memory_allocators/numa_revelator_alloc'],
+    # The lean selector sets only the engine type and the parameter block
+    # only the engine's knobs: the pair is Virtuoso's way of running the
+    # Revelator engine standalone over reserve_thp (where it soft-disables).
+    'spec_engine_configs/spec_engine_revelator_lean':
+        ['mmu_configs/mmu_spec', 'physical_memory_allocators/reserve_thp',
+         'spec_engine_configs/revelator_engine_params'],
+    'spec_engine_configs/revelator_engine_params':
+        ['mmu_configs/mmu_spec', 'physical_memory_allocators/reserve_thp',
+         'spec_engine_configs/spec_engine_revelator_lean'],
 }
 
 # Fragments that need something the build may not have, with its name.  A
@@ -323,6 +355,96 @@ FRAGMENT_REQUIRE_NONZERO = {
     # and its Cuckoo Walk Cache under mmu_cwc.
     'address_translation_schemes/ech_baseline_alloc': ('pt_elastic_cuckoo.ptws_total', 'pt_elastic_cuckoo.page_faults', 'mmu_cwc.cwc_accesses'),
     'address_translation_schemes/reservethp_ech': ('pt_elastic_cuckoo.ptws_total', 'pt_elastic_cuckoo.page_faults', 'mmu_cwc.cwc_accesses'),
+    # The Virtuoso configs ported in one piece (VIRTUOSO_PORT_SERIES.md
+    # step 3), each on the counter its selection alone registers or drives:
+    #   chirp     CacheSetInfoCHiRP registers chirp-* under the TLB's cache
+    #             name and nothing else does; this workload hardly misses
+    #             the L2 TLB (a handful of alive-correct predictions at one
+    #             core, none at two), so the counters are only required to
+    #             exist (FRAGMENT_REQUIRE_REGISTERED).
+    #   trail     tlb_temporal_pte.* are the TRAIL prefetcher's; at the
+    #             default geometry it sees the demand accesses but learns too
+    #             little to predict reliably (a couple of predictions with
+    #             one address layout, none with another: this suite does not
+    #             pin ASLR), so only those are required.  test_virtuoso's
+    #             trail case is where the chain is proved, on the stress
+    #             geometry under setarch -R.
+    #   dp/atp/recency/temporal_pte
+    #             the TLB prefetcher each MMU config selects, on its queries.
+    #   perfect_translation
+    #             translates (num_translations) without ever walking: the
+    #             walk count is required to be ZERO (FRAGMENT_REQUIRE_ZERO).
+    #   no_translation
+    #             general/translation_enabled = false: the MMU is built but
+    #             never asked, so num_translations is required to be zero.
+    #   pwc_stressed
+    #             a one-entry PWC misses at every level; victima's leaf probe
+    #             then has to answer (leaf_hits).
+    #   reserve_thp / reserve_asap
+    #             the reserve_thp allocator registers under its type, so the
+    #             asap-named instance counts as reserve_thp too.
+    #   spec engines
+    #             total_prefetches is the engine's; the allocator counter
+    #             says it was the one the engine predicts for.  The lean
+    #             selector and the parameter block soft-disable over
+    #             reserve_thp, so they only have to run.
+    #   ddr       the detailed DDR model's row-buffer accounting.
+    #   ghb_l1    the L1-D controller's prefetch count, zero without one.
+    'mmu_configs/trail_aggressive': ('tlb_temporal_pte.demand_accesses',),
+    'mmu_configs/mmu_distance': ('dp_tlb.queries', 'dp_tlb.predictions_issued'),
+    'address_translation_schemes/baseline_distance': ('dp_tlb.queries', 'dp_tlb.predictions_issued'),
+    'address_translation_schemes/parametric_atp': ('tlb_atp.queries',),
+    'address_translation_schemes/parametric_recency': ('recency_tlb.queries',),
+    'address_translation_schemes/parametric_distance': ('dp_tlb.queries', 'dp_tlb.predictions_issued'),
+    'address_translation_schemes/parametric_temporal_pte': ('tlb_temporal_pte.demand_accesses',),
+    'address_translation_schemes/perfect_translation': ('mmu.num_translations',),
+    'address_translation_schemes/perfect_translation_xor': ('mmu.num_translations',),
+    'address_translation_schemes/perfect_translation_1c_tlb':
+        ('mmu.num_translations', 'mmu.total_tlb_latency'),
+    'address_translation_schemes/baseline_pwc_stressed':
+        ('pwc_L2.miss', 'pwc_L3.miss', 'pwc_L4.miss'),
+    'address_translation_schemes/victima_pwc_stressed':
+        ('pwc_L2.miss', 'mmu.victima_leaf_probes', 'mmu.victima_leaf_hits'),
+    'address_translation_schemes/reservethp': ('reserve_thp.total_allocations',),
+    'address_translation_schemes/reservethp_4channel': ('reserve_thp.total_allocations',),
+    'physical_memory_allocators/reserve_thp_4k': ('reserve_thp.four_kb_allocated',),
+    'physical_memory_allocators/reserve_asap': ('reserve_thp.total_allocations',),
+    'spec_engine_configs/spec_engine_revelator':
+        ('revelator.total_prefetches', 'revelator_allocator.hash1_tries'),
+    'spec_engine_configs/spec_engine_revelator_open':
+        ('revelator.total_prefetches', 'revelator_simple.total_data_allocations'),
+    'spec_engine_configs/spec_engine_revelator_thp':
+        ('revelator.total_prefetches', 'revelator_thp.total_data_allocations'),
+    'spec_engine_configs/spec_engine_revelator_simple':
+        ('revelator.total_prefetches', 'revelator_simple.total_data_allocations'),
+    'spec_engine_configs/spec_engine_numa_revelator':
+        ('numa_revelator.total_prefetches', 'numa_revelator_allocator.hash1_tries'),
+    'dram_configs/ddr4_2666_6ch': ('ddr.page-hits', 'ddr.page-miss'),
+    'dram_configs/ddr5_4800_4channel': ('ddr.page-hits', 'ddr.page-miss'),
+    'prefetcher_configs/ghb_l1': ('L1-D.prefetches',),
+}
+
+# Counters that must merely exist after the detailed run (test_virtuoso's
+# `registered`): a variant's own counter that this workload legitimately
+# leaves at zero, where being registered is still what tells the variant
+# from its absence.
+FRAGMENT_REQUIRE_REGISTERED = {
+    'mmu_configs/l2tlb_chirp':
+        ('mmu_TLB_L2_1_cache.chirp-alive-correct', 'mmu_TLB_L2_1_cache.chirp-dead-correct'),
+    'address_translation_schemes/baseline_chirp':
+        ('mmu_TLB_L2_1_cache.chirp-alive-correct', 'mmu_TLB_L2_1_cache.chirp-dead-correct'),
+}
+
+# Counters that must exist and read ZERO after the detailed run: the
+# evidence of a feature that removes something.  Checked in detailed mode,
+# like the non-zero ones, and always together with a non-zero counter from
+# the same run (above) so that an empty run cannot pass by having nothing.
+FRAGMENT_REQUIRE_ZERO = {
+    'address_translation_schemes/perfect_translation': ('mmu.page_table_walks', 'mmu.total_translation_latency'),
+    'address_translation_schemes/perfect_translation_xor': ('mmu.page_table_walks', 'mmu.total_translation_latency'),
+    'address_translation_schemes/perfect_translation_1c_tlb': ('mmu.page_table_walks',),
+    'address_translation_schemes/no_translation': ('mmu.num_translations',),
+    'address_translation_schemes/no_translation_xor': ('mmu.num_translations',),
 }
 
 # Lines the run must print, for variants whose evidence is their output.
@@ -423,20 +545,26 @@ def counter(stats, name):
     return int(v)
 
 
-def check_nonzero(outdir, names):
+def check_nonzero(outdir, names, zeros=(), registered=()):
     """Every named counter must exist and be non-zero (test_virtuoso's
-    require_nonzero, on a results directory)."""
+    require_nonzero, on a results directory); every one in `zeros` must
+    exist and be zero; every one in `registered` must exist."""
     try:
         stats = read_stats(outdir)
     except Exception as e:
         return False, 'cannot read statistics: %s' % e
-    missing = [n for n in names if n not in stats]
+    missing = [n for n in names + tuple(zeros) + tuple(registered) if n not in stats]
     if missing:
         return False, 'counter not registered: %s' % ', '.join(missing)
     zero = [n for n in names if counter(stats, n) == 0]
     if zero:
         return False, 'counter stayed zero: %s' % ', '.join(zero)
-    return True, ', '.join('%s=%d' % (n, counter(stats, n)) for n in names)
+    nonzero = [n for n in zeros if counter(stats, n) != 0]
+    if nonzero:
+        return False, 'counter not zero: %s' % ', '.join(
+            '%s=%d' % (n, counter(stats, n)) for n in nonzero)
+    return True, ', '.join('%s=%d' % (n, counter(stats, n))
+                           for n in names + tuple(zeros) + tuple(registered))
 
 
 
@@ -466,7 +594,8 @@ def run_in_own_group(cmd, timeout, **kwargs):
         return subprocess.CompletedProcess(cmd, p.returncode, out, None)
 
 def run_config(names, ncores, workdir, workload, timeout, mode,
-               expect_output=None, counters=(), app='workload'):
+               expect_output=None, counters=(), app='workload', zeros=(),
+               registered=()):
     tag = '+'.join(names)
     outdir = os.path.join(workdir, 'out-%s-%s-n%d' % (tag, mode, ncores))
     shutil.rmtree(outdir, ignore_errors=True)
@@ -489,8 +618,8 @@ def run_config(names, ncores, workdir, workload, timeout, mode,
         if expect_output and not expect_output.search(p.stdout):
             return False, 'expected output %r not seen' % expect_output.pattern
         # The variant's counters, on the run that attached the timing models.
-        if counters and mode == 'detailed':
-            ok, detail = check_nonzero(outdir, counters)
+        if (counters or zeros or registered) and mode == 'detailed':
+            ok, detail = check_nonzero(outdir, counters, zeros, registered)
         shutil.rmtree(outdir, ignore_errors=True)
         return ok, detail
 
@@ -549,6 +678,8 @@ def main():
             'app': FRAGMENT_WORKLOAD.get(fragment, 'workload'),
             'cores': FRAGMENT_CORES.get(fragment, cores),
             'counters': FRAGMENT_REQUIRE_NONZERO.get(fragment, ()),
+            'zeros': FRAGMENT_REQUIRE_ZERO.get(fragment, ()),
+            'registered': FRAGMENT_REQUIRE_REGISTERED.get(fragment, ()),
             'output': FRAGMENT_EXPECT_OUTPUT.get(fragment),
             'fail_cores': FRAGMENT_EXPECT_FAIL_DETAILED_CORES.get(fragment, {}),
             'flaky_cores': FRAGMENT_INTERMITTENT_DETAILED_CORES.get(fragment, {}),
@@ -636,7 +767,8 @@ def main():
                     started = time.time()
                     ok, detail = run_config(names, ncores, workdir, workload,
                                             limit, mode, c['output'],
-                                            c['counters'], c['app'])
+                                            c['counters'], c['app'], c['zeros'],
+                                            c['registered'])
                     took = time.time() - started
                     if flaky_note and want_ok:
                         log.record('%s [%s]' % (full, mode), took, 'PASS')
