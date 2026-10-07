@@ -786,6 +786,55 @@ FEATURES = {
                         # fell below half hash-placed frames, so it is zero
                         registered=('revelator.deactivated_invocations',))),
 
+    # The three sniper-space allocators nothing selected, each under the
+    # baseline MMU so that only the allocator differs from baseline.  Every
+    # allocator registers its counters under its memory_allocator_name, so
+    # the prefix is the discriminator: a run on reserve_thp has none of them.
+    #
+    # revelator_simple: hashed 4KB data frames and hashed leaf page-table
+    # frames, nothing else.  Both hash paths have to have placed something,
+    # and every data allocation has to have gone through the hash (the
+    # total equals the hash count, and there was no fallback).  The
+    # page-table path is only reached through the Revelator exception
+    # handler, which is why the scheme selects it.
+    'revelator_simple_allocator': (
+        ['address_translation_schemes/baseline_revelator_simple'], 1,
+        require_nonzero('revelator_simple.total_data_allocations',
+                        'revelator_simple.hash1_successful_data_allocations',
+                        'revelator_simple.total_hash_data_allocations',
+                        'revelator_simple.total_page_table_allocations',
+                        'revelator_simple.hash1_successful_pt_allocations',
+                        'revelator_simple.total_hash_pt_allocations')),
+
+    # revelator_thp: the hashed 2MB stage comes first and, with nothing
+    # poisoned, serves every data fault -- so the 2MB counter is what moves
+    # and the 4KB hash and THP reservation stages are never reached.  The
+    # leaf page-table frames are hashed as for revelator_simple.
+    'revelator_thp_allocator': (
+        ['address_translation_schemes/baseline_revelator_thp'], 1,
+        require_nonzero('revelator_thp.total_data_allocations',
+                        'revelator_thp.revelator_2mb_data_allocated',
+                        'revelator_thp.total_page_table_allocations',
+                        'revelator_thp.hash1_successful_pt_allocations',
+                        'revelator_thp.total_hash_pt_allocations')),
+
+    # numa_reserve_thp: the reservation allocator per NUMA node.  A fault
+    # on the local policy reserves a 2MB region on its node and promotes it
+    # once the threshold is met (0.0 here, so at once), and page-table
+    # frames come from the node's kernel region through this allocator's
+    # own bump path, which is the only one that counts them as
+    # page_table_pages_used.  The per-node counters (node0_allocs, ...) are
+    # not asserted on: the allocator registers its statistics before it
+    # allocates the per-node arrays, and the registration is guarded on the
+    # arrays existing, so they are never registered at all.
+    'numa_reserve_thp': (
+        ['address_translation_schemes/baseline_numa_reserve_thp'], 1,
+        require_nonzero('numa_reserve_thp.total_allocations',
+                        'numa_reserve_thp.local_allocs',
+                        'numa_reserve_thp.two_mb_reserved',
+                        'numa_reserve_thp.two_mb_promoted',
+                        'numa_reserve_thp.page_table_pages_used')),
+
 }
 
 
