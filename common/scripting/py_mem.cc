@@ -1,3 +1,8 @@
+// Python 3.10 and later refuse the "#" length formats unless PY_SSIZE_T_CLEAN is
+// defined before Python.h is included: Py_BuildValue("s#") then raised
+// SystemError, and every script that read application memory through
+// sim.mem.read (output-as-markers) died in its hook.
+#define PY_SSIZE_T_CLEAN
 #include "hooks_py.h"
 #include "simulator.h"
 #include "core_manager.h"
@@ -17,7 +22,7 @@ readMemory(PyObject *self, PyObject *args)
    char *buf = new char[size];
    core->accessMemory(Core::NONE, Core::READ, address, buf, size, Core::MEM_MODELED_NONE);
 
-   PyObject *res = Py_BuildValue("s#", buf, size);
+   PyObject *res = Py_BuildValue("s#", buf, (Py_ssize_t)size);
    delete [] buf;
 
    return res;

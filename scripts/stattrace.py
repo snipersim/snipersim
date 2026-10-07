@@ -36,7 +36,7 @@ class StatTrace:
       return
 
     if filename:
-      self.fd = file(os.path.join(sim.config.output_dir, filename), 'w')
+      self.fd = open(os.path.join(sim.config.output_dir, filename), 'w', buffering=1)  # line-buffered: on disk when the simulator exits
       self.isTerminal = False
     else:
       self.fd = sys.stdout
