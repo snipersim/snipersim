@@ -84,7 +84,7 @@ target_include_directories(dr_frontend PRIVATE
 target_link_libraries(dr_frontend sift z)
 
 # OUTPUT_NAME dr-frontend, not the target name: drrun loads libdr-frontend.so,
-# which is what README.arm64 and the tool config below both name.
+# which is what docs/ARM64.md and the tool config below both name.
 set_target_properties(dr_frontend PROPERTIES
   OUTPUT_NAME dr-frontend
   CXX_STANDARD 11
