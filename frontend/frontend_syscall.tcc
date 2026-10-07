@@ -185,6 +185,7 @@ void FrontendSyscallModelBase <T>::doSyscall
          case SYS_sched_setaffinity:
          case SYS_sched_getaffinity:
          case SYS_nanosleep:
+         case SYS_clock_nanosleep:   // what glibc's usleep/sleep/nanosleep issue
             m_thread_data[threadid].last_syscall_number = syscall_number;
             m_thread_data[threadid].last_syscall_emulated = true;
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in emulated option" << std::endl;

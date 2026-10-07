@@ -165,6 +165,11 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          case SYS_sched_setaffinity:
          case SYS_sched_getaffinity:
          case SYS_nanosleep:
+         // usleep(3), sleep(3) and nanosleep(3) all reach the kernel as
+         // clock_nanosleep since glibc 2.31; left native, the thread sleeps in
+         // host time while the simulator believes it is running, and its core
+         // never arrives at the barrier.
+         case SYS_clock_nanosleep:
             thread_data[threadid].last_syscall_number = syscall_number;
             thread_data[threadid].last_syscall_emulated = true;
             thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));

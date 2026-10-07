@@ -16,6 +16,7 @@
 #include "circular_log.h"
 
 #include <errno.h>
+#include <time.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>
 
@@ -118,16 +119,66 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
       }
 
       case SYS_nanosleep:
+      case SYS_clock_nanosleep:
       {
-         const struct timespec *req = (struct timespec *)args.arg0;
-         struct timespec *rem = (struct timespec *)args.arg1;
+         /* A sleep in simulated time: the thread is parked until the barrier
+            has advanced the clock to its wake-up time, so the sleep costs
+            exactly what it asked for, however long the host takes.
+
+            Both entries matter.  usleep(3), sleep(3) and nanosleep(3) all
+            reach the kernel as clock_nanosleep since glibc 2.31, and the
+            frontend only emulates what is listed here.  Left native, the
+            thread sleeps in host time while the simulator believes it is
+            running: a thread that only ever sleeps and does kernel-mode
+            (untimed) work never moves its core's clock, and every other core
+            then waits at the barrier for one that cannot arrive. */
+         const struct timespec *req;
+         struct timespec *rem;
+         bool absolute = false;
+         clockid_t clock = CLOCK_REALTIME;
+         if (syscall_number == SYS_nanosleep)
+         {
+            req = (const struct timespec *)args.arg0;
+            rem = (struct timespec *)args.arg1;
+         }
+         else
+         {
+            clock = (clockid_t)args.arg0;
+            absolute = ((int)args.arg1 & TIMER_ABSTIME) != 0;
+            req = (const struct timespec *)args.arg2;
+            rem = (struct timespec *)args.arg3;
+         }
          Core *core = m_thread->getCore();
          SubsecondTime start_time = core->getPerformanceModel()->getElapsedTime();
 
          struct timespec local_req;
          core->accessMemory(Core::NONE, Core::READ, (IntPtr) req, (char*) &local_req, sizeof(local_req));
 
-         SubsecondTime time_wake = start_time + SubsecondTime::SEC(local_req.tv_sec) + SubsecondTime::NS(local_req.tv_nsec);
+         SubsecondTime time_wake;
+         if (!absolute)
+         {
+            time_wake = start_time + SubsecondTime::SEC(local_req.tv_sec) + SubsecondTime::NS(local_req.tv_nsec);
+         }
+         else if (Sim()->getConfig()->getOSEmuClockReplace())
+         {
+            /* An absolute deadline on the clock the guest reads through
+               SYS_clock_gettime above: emulation start plus elapsed time. */
+            SubsecondTime deadline = SubsecondTime::SEC(local_req.tv_sec) + SubsecondTime::NS(local_req.tv_nsec);
+            SubsecondTime base = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart());
+            time_wake = deadline > base ? deadline - base : SubsecondTime::Zero();
+            if (time_wake < start_time)
+               time_wake = start_time;
+         }
+         else
+         {
+            /* The guest took its deadline from the host clock; only the host
+               knows how far away it is. */
+            struct timespec now;
+            clock_gettime(clock, &now);
+            SInt64 remaining_ns = (SInt64)(local_req.tv_sec - now.tv_sec) * 1000000000 + (local_req.tv_nsec - now.tv_nsec);
+            time_wake = start_time + (remaining_ns > 0 ? SubsecondTime::NS(remaining_ns) : SubsecondTime::Zero());
+         }
+
          SubsecondTime end_time;
          Sim()->getSyscallServer()->handleSleepCall(m_thread->getId(), time_wake, start_time, end_time);
 
@@ -136,7 +187,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
 
          core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::SLEEP));
 
-         if (rem)
+         if (rem && !absolute)
          {
             // Interruption not supported, always return 0 remaining time
             struct timespec local_rem;
