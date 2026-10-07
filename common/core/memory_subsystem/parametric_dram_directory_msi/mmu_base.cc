@@ -118,23 +118,28 @@ namespace ParametricDramDirectoryMSI
                 m_num_numa_nodes = MMU_MAX_NUMA_NODES;
         }
         
-        registerStatsMetric("mmu_walker", core->getId(), "memory_accesses", &stats.memory_accesses);
-        registerStatsMetric("mmu_walker", core->getId(), "memory_accesses_before_filtering", &stats.memory_accesses_before_filtering);
+        // Walker statistics go under "<mmu name>_walker": mmu_walker for the
+        // usual "mmu", as before, and host_mmu_walker for the host MMU a
+        // virtualised run nests the guest MMU on -- a fixed "mmu_walker" made
+        // the second MMU on a core abort on a duplicate statistic.
+        String walker_stats_name = _name + "_walker";
+        registerStatsMetric(walker_stats_name, core->getId(), "memory_accesses", &stats.memory_accesses);
+        registerStatsMetric(walker_stats_name, core->getId(), "memory_accesses_before_filtering", &stats.memory_accesses_before_filtering);
 
-        registerStatsMetric("mmu_walker", core->getId(), "DRAM_accesses", &walker_stats.DRAM_accesses);
-        registerStatsMetric("mmu_walker", core->getId(), "DRAM_accesses_local", &walker_stats.DRAM_accesses_local);
-        registerStatsMetric("mmu_walker", core->getId(), "DRAM_accesses_remote", &walker_stats.DRAM_accesses_remote);
+        registerStatsMetric(walker_stats_name, core->getId(), "DRAM_accesses", &walker_stats.DRAM_accesses);
+        registerStatsMetric(walker_stats_name, core->getId(), "DRAM_accesses_local", &walker_stats.DRAM_accesses_local);
+        registerStatsMetric(walker_stats_name, core->getId(), "DRAM_accesses_remote", &walker_stats.DRAM_accesses_remote);
         for (UInt32 i = 0; i < m_num_numa_nodes; i++) {
             String numa_stat_name = "DRAM_accesses_numa_node" + String(std::to_string(i).c_str());
-            registerStatsMetric("mmu_walker", core->getId(), numa_stat_name, &walker_stats.DRAM_accesses_per_numa_node[i]);
+            registerStatsMetric(walker_stats_name, core->getId(), numa_stat_name, &walker_stats.DRAM_accesses_per_numa_node[i]);
         }
-        registerStatsMetric("mmu_walker", core->getId(), "L1D_accesses", &walker_stats.L1D_accesses);
-        registerStatsMetric("mmu_walker", core->getId(), "L2_accesses", &walker_stats.L2_accesses);
-        registerStatsMetric("mmu_walker", core->getId(), "NUCA_accesses", &walker_stats.NUCA_accesses);
-        registerStatsMetric("mmu_walker", core->getId(), "DRAM_accesses_prefetch", &walker_stats.DRAM_accesses_prefetch);
-        registerStatsMetric("mmu_walker", core->getId(), "L1D_accesses_prefetch", &walker_stats.L1D_accesses_prefetch);
-        registerStatsMetric("mmu_walker", core->getId(), "L2_accesses_prefetch", &walker_stats.L2_accesses_prefetch);
-        registerStatsMetric("mmu_walker", core->getId(), "NUCA_accesses_prefetch", &walker_stats.NUCA_accesses_prefetch);
+        registerStatsMetric(walker_stats_name, core->getId(), "L1D_accesses", &walker_stats.L1D_accesses);
+        registerStatsMetric(walker_stats_name, core->getId(), "L2_accesses", &walker_stats.L2_accesses);
+        registerStatsMetric(walker_stats_name, core->getId(), "NUCA_accesses", &walker_stats.NUCA_accesses);
+        registerStatsMetric(walker_stats_name, core->getId(), "DRAM_accesses_prefetch", &walker_stats.DRAM_accesses_prefetch);
+        registerStatsMetric(walker_stats_name, core->getId(), "L1D_accesses_prefetch", &walker_stats.L1D_accesses_prefetch);
+        registerStatsMetric(walker_stats_name, core->getId(), "L2_accesses_prefetch", &walker_stats.L2_accesses_prefetch);
+        registerStatsMetric(walker_stats_name, core->getId(), "NUCA_accesses_prefetch", &walker_stats.NUCA_accesses_prefetch);
     }
 
 	MemoryManagementUnitBase::~MemoryManagementUnitBase()

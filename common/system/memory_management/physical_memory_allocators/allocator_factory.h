@@ -84,19 +84,29 @@ public:
 
         std::cout << "[MimicOS] Kernel size in MB: " << kernel_size << std::endl;
 
+        // The reserve_thp and baseline allocators register their statistics
+        // under their type, so a virtualised run -- which gives the guest OS
+        // an allocator of its own -- would register two "baseline" allocators
+        // and abort on the duplicate.  The guest's keeps the host's name with
+        // a _guest suffix (baseline_guest.total_allocations); the host's name
+        // is unchanged, so no existing statistic moves.
+        String stats_name = allocator_type;
+        if (mimicos_name == "mimicos_guest")
+            stats_name = allocator_type + "_guest";
+
         if (allocator_type == "reserve_thp")
         {
             // Based on FreeBSD's reservation-based THP allocator
             String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
             int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
             float threshold_for_promotion = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/threshold_for_promotion");
-            return new SniperReserveTHPAllocator(allocator_type, memory_size, max_order, kernel_size, frag_type, threshold_for_promotion);
+            return new SniperReserveTHPAllocator(stats_name, memory_size, max_order, kernel_size, frag_type, threshold_for_promotion);
         }
         else if (allocator_type == "baseline")
         {
             String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
             int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
-            return new SniperBaselineAllocator(allocator_type, memory_size, max_order, kernel_size, frag_type);
+            return new SniperBaselineAllocator(stats_name, memory_size, max_order, kernel_size, frag_type);
         }
         else if (allocator_type == "numa_reserve_thp")
         { // NUMA-aware Reservation-based THP allocator

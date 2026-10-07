@@ -681,6 +681,30 @@ FEATURES = {
         ['address_translation_schemes/os_daemons'], 1,
         require_nonzero('kcompactd.scans', 'khugepaged.scans')),
 
+    # Virtualised execution: a guest MMU nested on a host MMU.  Under the
+    # default MMU none of these counters exists -- there is no host MMU, no
+    # guest page table and no guest OS -- so "registered" is the first thing
+    # the check tells apart.  Then both stages of the nested walk have to have
+    # run: the guest page table walked and faulted (its frames come from the
+    # guest OS), the host page table walked and faulted for the guest-physical
+    # addresses, and the host MMU translated the guest page-table accesses the
+    # guest walk made -- which is what makes the walk two-dimensional rather
+    # than two consecutive one-dimensional ones.
+    'virt': (
+        ['address_translation_schemes/virt'], 1,
+        require_nonzero('mmu.num_page_table_walks',
+                        'mmu.guest_page_faults',
+                        'mmu.host_page_faults',
+                        'mmu.total_guest_walk_latency',
+                        'mmu.total_host_walk_latency',
+                        'host_mmu.num_translations',
+                        'host_mmu.page_table_walks',
+                        'radix_4level_guest.page_table_walks',
+                        'radix_4level_guest.page_faults',
+                        'radix_4level_host.page_table_walks',
+                        'radix_4level_host.page_faults',
+                        'baseline_guest.total_allocations')),
+
     'radix_fault_split': (
         ['address_translation_schemes/baseline'], 1,
         lambda stats: (

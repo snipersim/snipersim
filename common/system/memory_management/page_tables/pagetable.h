@@ -134,6 +134,7 @@ namespace ParametricDramDirectoryMSI
 		virtual int getMaxLevel() { return -1; }; // This function should be overriden by the derived class (e.g., in RadixPageTable there are maximum 4 levels)
 		String getName() { return name; };
 		String getType() { return type; };
+		bool isGuest() const { return is_guest; }; // A guest (VM) page table: its frames come from the guest OS
 		virtual void deletePage(IntPtr address) {};
 		virtual int updatePageTableFrames(IntPtr address, IntPtr core_id, IntPtr ppn, int page_size, std::vector<UInt64> frames) = 0;
 

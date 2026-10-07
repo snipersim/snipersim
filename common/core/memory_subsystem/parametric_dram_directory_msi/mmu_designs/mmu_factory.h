@@ -5,6 +5,7 @@
 #include "mmu_spec.h"
 #include "mmu_victima.h"
 #include "mmu_hw_faults.h"
+#include "mmu_virt.h"
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -32,6 +33,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "hw_fault") // Page faults handled in hardware
 			{
 				return new MemoryManagementUnitHWFault(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "virt") // Baseline MMU design that supports virtualized execution (nested on a host MMU)
+			{
+				return new MemoryManagementUnitVirt(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{

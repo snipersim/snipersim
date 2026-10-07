@@ -5,6 +5,7 @@
 #include "mimicos.h"
 #include "memory_management/physical_memory_allocators/physical_memory_allocator.h"
 #include "thread.h"
+#include "pagetable.h"
 #include "debug_config.h"
 
 // Static lock definition for thread-safe page fault handling across all cores
@@ -65,8 +66,11 @@ void SniperExceptionHandler::handle_page_fault(FaultCtx &ctx)
     log_file << "[EXCEPTION_HANLDER] We need to allocate: " << (ctx.alloc_in.metadata_frames) << " frames" << std::endl;
 #endif
 
-    assert(this->getAllocator() != NULL);
-    const auto &[ppn, page_size] = this->getAllocator()->allocate(FOUR_KIB, ctx.vpn << BASE_PAGE_SHIFT, core_id, false, ctx.alloc_in.is_instruction);
+    // A guest page table faults into guest-physical memory, a host one into
+    // host-physical memory; the allocator follows the page table in ctx.
+    PhysicalMemoryAllocator *allocator = this->allocatorFor(ctx);
+    assert(allocator != NULL);
+    const auto &[ppn, page_size] = allocator->allocate(FOUR_KIB, ctx.vpn << BASE_PAGE_SHIFT, core_id, false, ctx.alloc_in.is_instruction);
 
 #if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
     log_file << "[EXCEPTION_HANDLER] Allocated page: " << ppn << " with page size: " << page_size << std::endl;
@@ -100,11 +104,12 @@ void SniperExceptionHandler::allocate_page_table_frames(FaultCtx &ctx,
 
     int page_table_frames = num_requested_frames;
     std::vector<UInt64> &frames = ctx.alloc_out.prealloc_frames;
+    PhysicalMemoryAllocator *allocator = this->allocatorFor(ctx);
 
     // TODO: migrate other allocators - allocate metadata frames stage
     for (int i = 0; i < page_table_frames; i++)
     {
-        UInt64 frame = this->getAllocator()->handle_page_table_allocations(FOUR_KIB, core_id);
+        UInt64 frame = allocator->handle_page_table_allocations(FOUR_KIB, core_id);
 #if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
         log_file << "[EXCEPTION_HANDLER] Giving away page table frame: " << frame << std::endl;
         std::cout << "[EXCEPTION_HANDLER] Giving away page table frame: " << frame << std::endl;
@@ -120,10 +125,11 @@ void SniperExceptionHandler::allocate_page_table_frames(FaultCtx &ctx,
         frames.push_back(frame);
     }
 
-    // TODO migrate virtualisation (is_guest)
+    // Virtualisation: the page table to update is the one named in ctx, which
+    // for a guest fault is the guest page table (see update_page_table_frames).
 
     // create a function update_page_table_frames that will update the page table frames
-    int frames_used = update_page_table_frames(address, core_id, ppn, page_size, frames);
+    int frames_used = update_page_table_frames(ctx, address, core_id, ppn, page_size, frames);
 
 #if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
     log_file << "[EXCEPTION_HANDLER] Page table frames used: " << frames_used << std::endl;
@@ -141,19 +147,19 @@ void SniperExceptionHandler::allocate_page_table_frames(FaultCtx &ctx,
 #endif
     for (int i = 0; i < (page_table_frames - frames_used); i++)
     {
-        this->getAllocator()->handle_page_table_deallocations(FOUR_KIB);
+        allocator->handle_page_table_deallocations(FOUR_KIB);
     }
     return;
 }
 
-int SniperExceptionHandler::update_page_table_frames(UInt64 address, UInt64 core_id, UInt64 ppn, int page_size, std::vector<UInt64> &frames)
+int SniperExceptionHandler::update_page_table_frames(FaultCtx &ctx, UInt64 address, UInt64 core_id, UInt64 ppn, int page_size, std::vector<UInt64> &frames)
 {
 
 #if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
     log_file << "[EXCEPTION_HANDLER] Updating page table frames for address: " << address << " with ppn: " << ppn << " and page size: " << page_size << std::endl;
     std::cout << "[EXCEPTION_HANDLER] Updating page table frames for address: " << address << " with ppn: " << ppn << " and page size: " << page_size << std::endl;
 #endif
-    MimicOS *os = Sim()->getMimicOS();
+    MimicOS *os = this->osFor(ctx);
     assert(os);
     Core *core_faulter = Sim()->getCoreManager()->getCoreFromID(core_id);
     assert(core_faulter);
@@ -171,8 +177,13 @@ int SniperExceptionHandler::update_page_table_frames(UInt64 address, UInt64 core
     log_file << "[EXCEPTION_HANDLER] Updating page table frames for address: " << address << " with ppn: " << ppn << " and page size: " << page_size << std::endl;
     std::cout << "[EXCEPTION_HANDLER] Updating page table frames for address: " << address << " with ppn: " << ppn << " and page size: " << page_size << std::endl;
 #endif
-    assert(os->getPageTable(app_id_faulter));
-    int frames_used = os->getPageTable(app_id_faulter)->updatePageTableFrames(address, core_id, ppn, page_size, frames);
+    // The page table that faulted is the one to map into.  It is the faulting
+    // application's page table in its OS; for a guest fault raised by the virt
+    // MMU that OS is the guest's, where the host-only lookup used to land the
+    // mapping in the host page table and leave the guest walk faulting forever.
+    ParametricDramDirectoryMSI::PageTable *page_table = ctx.page_table ? ctx.page_table : os->getPageTable(app_id_faulter);
+    assert(page_table);
+    int frames_used = page_table->updatePageTableFrames(address, core_id, ppn, page_size, frames);
 #if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
     log_file << "[EXCEPTION_HANDLER] Frames used: " << frames_used << std::endl;
     std::cout << "[EXCEPTION_HANDLER] Frames used: " << frames_used << std::endl;
@@ -181,6 +192,20 @@ int SniperExceptionHandler::update_page_table_frames(UInt64 address, UInt64 core
     return frames_used;
 }
 
+
+MimicOS* SniperExceptionHandler::osFor(const FaultCtx &ctx)
+{
+    if (ctx.page_table != NULL && ctx.page_table->isGuest())
+        return Sim()->getMimicOS_VM();
+    return Sim()->getMimicOS();
+}
+
+PhysicalMemoryAllocator* SniperExceptionHandler::allocatorFor(const FaultCtx &ctx)
+{
+    if (ctx.page_table != NULL && ctx.page_table->isGuest())
+        return Sim()->getMimicOS_VM()->getMemoryAllocator();
+    return this->getAllocator();
+}
 
 PhysicalMemoryAllocator* SniperExceptionHandler::getAllocator() { 
     if (m_allocator == NULL) {

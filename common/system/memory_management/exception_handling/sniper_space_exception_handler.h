@@ -4,6 +4,8 @@
 #include "misc/exception_handler_base.h"
 #include <fstream>
 
+class MimicOS;
+
 class SniperExceptionHandler : public ExceptionHandlerBase {
 private:
     std::ofstream log_file;
@@ -26,9 +28,13 @@ public:
 
 private:
     // Helper functions
+    // The OS a fault belongs to: the guest OS when the faulting page table is
+    // a guest one (the virt MMU raises those), the host OS otherwise.
+    MimicOS* osFor(const FaultCtx& ctx);
+    PhysicalMemoryAllocator* allocatorFor(const FaultCtx& ctx);
     void allocate_page_table_frames(FaultCtx& ctx,
                                     UInt64 address, UInt64 core_id, UInt64 ppn, int page_size, int num_requested_frames);
-    int update_page_table_frames(UInt64 address, UInt64 core_id, UInt64 ppn, int page_size, std::vector<UInt64> &frames);
+    int update_page_table_frames(FaultCtx& ctx, UInt64 address, UInt64 core_id, UInt64 ppn, int page_size, std::vector<UInt64> &frames);
 };
 
 #endif // SNIPER_SPACE_EXCEPTION_HANDLER_H

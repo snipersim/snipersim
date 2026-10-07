@@ -173,6 +173,10 @@ FRAGMENT_EXPECT_FAIL = {
     'mmu_configs/mmu_spec':
         'the speculative MMU needs an engine and the allocator it predicts '
         'from (address_translation_schemes/revelator layers all three)',
+    'mmu_configs/mmu_virt':
+        'the virt MMU nests on a host MMU and a guest OS, which only '
+        'general/virtualized_environment creates, with a guest page table '
+        'and allocator (address_translation_schemes/virt layers all of it)',
 }
 
 
