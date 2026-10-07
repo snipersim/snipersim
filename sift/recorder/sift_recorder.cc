@@ -193,8 +193,14 @@ VOID Handler(CONTROLLER::EVENT_TYPE ev, VOID * v, CONTEXT * ctxt, VOID * ip, THR
 int main(int argc, char **argv)
 {
 #if defined(SDE_INIT)
-	sde_pin_init(argc,argv);
-	sde_init();
+   sde_pin_init(argc,argv);
+   /* The tracing layer, which owns SDE's PinPlay engine, is activated by
+      the tool: its knobs are read before sde_init() and it starts after,
+      the way the kit's example-replay does.  Without this a -replay run
+      records the null application in the pinball's stead, silently. */
+   sde_tracing_flags(argc, argv);
+   sde_init();
+   sde_tracing_activate(argc, argv);
 #else
    if (PIN_Init(argc,argv))
    {

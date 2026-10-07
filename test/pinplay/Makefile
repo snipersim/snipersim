@@ -56,6 +56,7 @@ make_pinball: fft-pinball/pinball.address
 # the one printed while the pinball was recorded, kept in record.log; the
 # replayer's own message file says whether the replay ran to completion.
 run_pinball: fft-pinball/pinball.address
+	@rm -f pinball_replay.app*.txt pinball_result.app*
 	../../run-sniper -n 1 -c gainestown --pinballs=fft-pinball/pinball.address --pinplay-addr-trans
 	@echo "replay: $$(grep -m1 'Finished replaying' pinball_replay.app0.txt || echo 'no replay message')"
 	@echo "recorded run:"; grep -E 'Checksum|TEST' fft-pinball/record.log
