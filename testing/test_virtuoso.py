@@ -155,6 +155,46 @@ def live_feed_check(stats):
                    parks, quanta, switches, exits, 'drawn' if drawn else 'NOT drawn (rc %d)' % frame.returncode))
 
 
+def mimicos_daemons_check(stats):
+    """The userspace kernel's daemons: each ran, at its simulated interval."""
+    out = stats['__stdout__']
+    scans = {}
+    for name in ('kcompactd', 'khugepaged', 'kswapd'):
+        m = re.search(r'\[MimicOS\] %s stopped\. Scans=(\d+)' % name, out)
+        scans[name] = int(m.group(1)) if m else -1
+    # A daemon waits out its interval in simulated time, so over the
+    # application's run it scans elapsed / interval times, give or take the
+    # one at either end.  A daemon whose clock stood still would wake at
+    # every barrier and scan thousands of times; one that never ran, zero.
+    elapsed = as_numbers(stats.get('performance_model.elapsed_time', [0]))
+    idle = as_numbers(stats.get('performance_model.idle_elapsed_time', [0]))
+    parked = as_numbers(stats.get('performance_model.cpiSyncFutex', [0]))
+    interval_fs = 50 * 10**9                              # 50 us
+    expected = int(elapsed[0] // interval_fs)
+    faults = counter(stats, 'mmu.page_faults')
+    ok = (all(0 < n and abs(n - expected) <= 1 for n in scans.values())
+          # the three daemon cores spent the run parked in their timed
+          # wait, a futex with a deadline on the simulated clock
+          and len(parked) >= 4 and all(t > 0 for t in parked[1:4])
+          # and the kernel's exit woke them rather than waiting out an
+          # interval: the application's core idled for well under one
+          and idle[0] < interval_fs / 10
+          # the application ran to completion and the kernel reached its exit
+          # reports, the daemons having changed nothing in its memory use:
+          # the fault count and the mapping check are those of
+          # reservethp_32GB.ini without daemons
+          and '[TRACE:0] -- DONE --' in out
+          and 'shutdown event received' in out
+          and faults == 67
+          and ('Core 0 checked 28 unique VA->PA mappings, 28 unique PA->VA '
+               'mappings, 0 violations') in out)
+    return ok, ('kcompactd/khugepaged/kswapd scans %d/%d/%d (expected %d +-1 '
+                'over %d us), parked per core %s us, core 0 idle %d ns, %d faults'
+                % (scans['kcompactd'], scans['khugepaged'], scans['kswapd'],
+                   expected, elapsed[0] // 10**9,
+                   [int(t // 10**9) for t in parked[:4]], idle[0] // 10**6, faults))
+
+
 def counter(stats, name):
     """A statistic as a plain int, summed over cores.  0 when absent."""
     v = stats.get(name)
@@ -531,6 +571,30 @@ FEATURES = {
         ('startup_mimicos', r'Scheduler stats: csw=', None,
          ['mimicos/configs/two_app_smp.ini',
           'test/sniper-in-sniper/fft.sift', '/tmp/sniper_two_app_check.txt'])),
+
+    # The userspace kernel's daemons: kswapd, kcompactd and khugepaged as
+    # kernel pthreads, each sleeping for its scan interval between scans.
+    # Four cores: the static scheduler gives each daemon a core of its own,
+    # and with fewer the daemon's pthread_create aborts the run.
+    #
+    # The daemon's wait has to be a simulated one.  It used to usleep(),
+    # which reaches the kernel as clock_nanosleep, and the frontend did not
+    # emulate that: the thread slept in host time while the simulator held
+    # it running, and as a kernel thread its instructions are never timed,
+    # so its core's clock never moved.  The moment the application's core
+    # reached the first barrier it waited for the daemon's core, which
+    # could not arrive, and the kernel never returned from its first
+    # SimContextSwitch.  The check ties the scan counts to the simulated
+    # run time, so it fails both when a daemon never runs and when its
+    # clock stands still; and it bounds the kernel's idle time, since a
+    # stop() that waited out a parked daemon's interval charged the rest
+    # of it (10ms by default) to the run.
+    'mimicos_daemons': (
+        ['address_translation_schemes/userspace_baseline'], 4,
+        mimicos_daemons_check,
+        ('startup_mimicos', r'kswapd stopped\. Scans=', None,
+         ['mimicos/configs/reservethp_daemons_32GB.ini',
+          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_daemons_check.txt'])),
 
     # More software threads than cores.  Eight threads with a barrier between
     # rounds on four cores (the shape of fft -p 8 on -n 4), which deadlocked

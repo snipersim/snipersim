@@ -24,6 +24,9 @@
 #include "fixed_types.h"
 #include <pthread.h>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <vector>
 #include <algorithm>
 #include <bitset>
@@ -130,7 +133,11 @@ public:
     {
         if (!m_running.load())
             return;
-        m_running.store(false);
+        {
+            std::lock_guard<std::mutex> lock(m_wake_mutex);
+            m_running.store(false);
+        }
+        m_wake_cv.notify_all();
         if (m_thread_id != 0) {
             pthread_join(m_thread_id, nullptr);
             m_thread_id = 0;
@@ -275,6 +282,8 @@ private:
     CompactdConfig m_config;
     std::atomic<bool> m_running;
     pthread_t m_thread_id;
+    std::mutex m_wake_mutex;                 // guards m_running for the interval wait
+    std::condition_variable m_wake_cv;       // stop() wakes a parked daemon through it
 
     // Allocator data (bound via bind())
     std::map<UInt64, std::tuple<UInt64, std::bitset<512>, bool>>* m_two_mb_map;
@@ -295,6 +304,20 @@ private:
     /**
      * @brief Main daemon loop. Sleeps between scans.
      */
+    /* The interval wait, as a kernel thread does it: parked until the
+       interval elapses or stop() wakes it (kthread_stop(), not a sleep to
+       be waited out).  A timed condition wait reaches the simulator as a
+       futex with a deadline on the emulated clock, so the interval is a
+       simulated one and the wake-up at stop() is immediate.  A usleep()
+       here could not be interrupted: the kernel's exit then sat out the
+       rest of the interval (10ms by default) in simulated time, which
+       the run's elapsed time reported as the application's. */
+    void wait_interval(std::unique_lock<std::mutex>& lock)
+    {
+        m_wake_cv.wait_for(lock, std::chrono::microseconds(m_config.scan_interval_us),
+                           [this] { return !m_running.load(); });
+    }
+
     void run_loop()
     {
 #if DEBUG_COMPACTD >= DEBUG_BASIC
@@ -302,14 +325,14 @@ private:
                      std::to_string(m_config.scan_interval_us) + "us");
 #endif
 
+        std::unique_lock<std::mutex> lock(m_wake_mutex);
         while (m_running.load()) {
-            // Sleep for the configured interval (usleep, POSIX-compatible with Sniper)
-            usleep(m_config.scan_interval_us);
-
+            wait_interval(lock);
             if (!m_running.load())
                 break;
-
+            lock.unlock();
             compact_once();
+            lock.lock();
         }
 
 #if DEBUG_COMPACTD >= DEBUG_BASIC

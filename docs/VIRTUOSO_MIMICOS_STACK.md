@@ -452,11 +452,13 @@ gates), `fork_child` and `sift_child_app_id` (children traced),
 payload and its cost bucket), `mimicos_pcp_allocator` (fast and slow
 allocation paths), `mimicos_scheduler` (round-robin quanta),
 `mimicos_two_app_smp` (two applications on two kernel workers to
-shutdown), `live_feed` (the feed and a dashboard frame),
-`oversubscription` (eight threads on four cores finish), `numa_revelator`
-(the per-node engine trains, hints and prefetches), `virt` (both stages
-of the nested walk run), and the cases for the variants nothing selected
-before: `stride` (the stride prefetcher's walks resolve),
+shutdown), `mimicos_daemons` (the kernel's kswapd, kcompactd and
+khugepaged threads scan at their simulated interval), `live_feed` (the
+feed and a dashboard frame), `oversubscription` (eight threads on four
+cores finish), `numa_revelator` (the per-node engine trains, hints and
+prefetches), `virt` (both stages of the nested walk run), and the cases
+for the variants nothing selected before: `stride` (the stride
+prefetcher's walks resolve),
 `revelator_open_addressing` (probe 0 and probe 1 issued, probe 0 hits),
 `revelator_thp` (2MB predictions issued and hit, page-table predictions
 issued), `revelator_simple_allocator`, `revelator_thp_allocator` and
