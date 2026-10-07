@@ -180,6 +180,10 @@ FRAGMENT_DIRS = ('address_translation_schemes', 'common_configs', 'core_configs'
                  'cxl_configs', 'dram_configs', 'mmu_configs', 'pagetable_configs',
                  'physical_memory_allocators', 'prefetcher_configs',
                  'spec_engine_configs',
+                 # The multicore schemes: each includes a scheme and sets its
+                 # own core count, which FRAGMENT_CORES repeats so that the
+                 # run has the cores the config was written for.
+                 'address_translation_schemes/multicore',
                  # The variants that were compiled but selected by nothing: the
                  # L2 replacement policies, the GHB prefetcher and the
                  # sequential cache timing model; the limited and LimitLESS
@@ -272,6 +276,12 @@ FRAGMENT_CORES = {
     # array (prefetcher[] = "ip_stride", "ip_stride"; rob_timer/
     # issue_memops_at_issue[] = ...), and a third core has no entry to read.
     'core_configs/biglittle': (1, 2),
+    # The core count each multicore scheme sets for itself.
+    'address_translation_schemes/multicore/parametric_baseline_2c': (2,),
+    'address_translation_schemes/multicore/parametric_baseline_4c': (4,),
+    'address_translation_schemes/multicore/parametric_baseline_8c': (8,),
+    'address_translation_schemes/multicore/parametric_baseline_16c': (16,),
+    'address_translation_schemes/multicore/parametric_asp_4c': (4,),
 }
 
 # Known to fail in detailed mode at one core count only, with the reason;
@@ -460,6 +470,22 @@ FRAGMENT_REQUIRE_NONZERO = {
     'prefetcher_configs/sms_l1': ('sms.prefetches_issued', 'L1-D.prefetches'),
     'prefetcher_configs/berti_l1': ('berti.prefetches_issued', 'L1-D.prefetches'),
     'prefetcher_configs/ipcp_l1': ('ipcp.prefetches_issued', 'L1-D.prefetches'),
+    # The ASP TLB prefetcher with lookahead and degree (step 6): the prefetch
+    # queue is on, ASP is trained (threshold_reached), and it attempts and
+    # resolves prefetches.  The 1:3 ratio of threshold_reached to attempts
+    # (degree = 3) is checked by test_virtuoso's asp case.
+    'mmu_configs/mmu_base_prefetch':
+        ('asp_tlb.queries', 'asp_tlb.threshold_reached', 'asp_tlb.prefetch_attempts',
+         'asp_tlb.successful_prefetches'),
+    'address_translation_schemes/baseline_asp':
+        ('asp_tlb.threshold_reached', 'asp_tlb.prefetch_attempts', 'asp_tlb.successful_prefetches'),
+    'address_translation_schemes/parametric_asp':
+        ('asp_tlb.threshold_reached', 'asp_tlb.prefetch_attempts', 'asp_tlb.successful_prefetches'),
+    'address_translation_schemes/parametric_asp_datapf':
+        ('asp_tlb.prefetch_attempts', 'ip_stride.gen_prefetch', 'streamer.gen_prefetch'),
+    'address_translation_schemes/parametric_baseline_datapf':
+        ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
+    'address_translation_schemes/multicore/parametric_asp_4c': ('asp_tlb.prefetch_attempts',),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's

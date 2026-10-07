@@ -76,14 +76,15 @@ namespace ParametricDramDirectoryMSI
 		int table_size;
 		int prefetch_threshold;
 		bool extra_prefetch;
-		int lookahead;
-		int degree;
+		int lookahead;      // strides between the access and the first prefetch
+		int degree;         // prefetches per trained access
+		bool install_pq;    // false: walk the PTE (warming the cache) but install nothing in the PQ
 		entry_prefetcher *table;
 
 		std::string log_file_name;
 		std::ofstream log_file;
 
-		ArbitraryStridePrefetcher(Core *_core, MemoryManagerBase *_memory_manager, ShmemPerfModel *_shmem_perf_model, int table_bits, int prefetch_threshold, bool extra_prefetch, int lookahead, int degree, String name);
+		ArbitraryStridePrefetcher(Core *_core, MemoryManagerBase *_memory_manager, ShmemPerfModel *_shmem_perf_model, int table_bits, int prefetch_threshold, bool extra_prefetch, int lookahead, int degree, String name, bool install_pq = true);
 		std::vector<query_entry> performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction = false, bool tlb_hit = false, bool pq_hit = false, int page_size = 12) override;
 	};
 }

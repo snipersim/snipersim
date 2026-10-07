@@ -10,7 +10,7 @@ namespace ParametricDramDirectoryMSI
 	ArbitraryStridePrefetcher::ArbitraryStridePrefetcher(
 		Core *_core, MemoryManagerBase *_memory_manager, ShmemPerfModel *_shmem_perf_model,
 		int table_bits, int _prefetch_threshold, bool _extra_prefetch,
-		int _lookahead, int _degree, String name)
+		int _lookahead, int _degree, String name, bool _install_pq)
 		: TLBPrefetcherBase(_core, _memory_manager, _shmem_perf_model, name),
 		  core(_core),
 		  memory_manager(_memory_manager),
@@ -18,7 +18,8 @@ namespace ParametricDramDirectoryMSI
 		  prefetch_threshold(_prefetch_threshold),
 		  extra_prefetch(_extra_prefetch),
 		  lookahead(_lookahead),
-		  degree(_degree)
+		  degree(_degree),
+		  install_pq(_install_pq)
 	{
 		int entries = 1 << table_bits;
 		table_size = entries;
@@ -125,24 +126,31 @@ namespace ParametricDramDirectoryMSI
 
 				long long abs_stride = (table[index].stride >= 0) ? table[index].stride : -table[index].stride;
 				stats.sum_abs_stride += static_cast<UInt64>(abs_stride);
-				stats.prefetch_distance_sum += static_cast<UInt64>(abs_stride);
 
-				long long prefetch_vpn_signed = static_cast<long long>(VPN) + table[index].stride;
-				IntPtr prefetch_vpn = static_cast<IntPtr>(prefetch_vpn_signed);
-				query_entry prefetch_result = PTWTransparent(prefetch_vpn << 12, eip, lock, modeled, count, pt);
-
-				stats.prefetch_attempts++;
-
-				if (prefetch_result.ppn != 0)
+				// Agile TLB Prefetching's ASP: degree pages at a time, starting
+				// lookahead strides ahead -- VPN + (lookahead + d) * stride for
+				// d in [0, degree).  (This used to take one step, VPN + stride,
+				// whatever the two knobs said.)
+				for (int d = 0; d < degree; d++)
 				{
-					stats.successful_prefetches++;
-					stats.trained_entries++;
-					result.push_back(prefetch_result);
-				}
-				else
-				{
-					stats.failed_prefetches++;
-					stats.trained_but_no_prefetch++;
+					long long offset = static_cast<long long>(lookahead + d) * table[index].stride;
+					IntPtr prefetch_vpn = static_cast<IntPtr>(static_cast<long long>(VPN) + offset);
+					stats.prefetch_distance_sum += static_cast<UInt64>(offset >= 0 ? offset : -offset);
+
+					query_entry prefetch_result = PTWTransparent(prefetch_vpn << 12, eip, lock, modeled, count, pt);
+					stats.prefetch_attempts++;
+
+					if (prefetch_result.ppn != 0)
+					{
+						stats.successful_prefetches++;
+						stats.trained_entries++;
+						result.push_back(prefetch_result);
+					}
+					else
+					{
+						stats.failed_prefetches++;
+						stats.trained_but_no_prefetch++;
+					}
 				}
 
 				if (extra_prefetch)
@@ -179,6 +187,11 @@ namespace ParametricDramDirectoryMSI
 			table[index].stride = -1;
 			table[index].saturation_counter = 0;
 		}
+
+		// Cache-only mode: the walks above have brought the PTE lines into the
+		// cache hierarchy; dropping their results installs nothing in the PQ.
+		if (!install_pq)
+			result.clear();
 
 		return result;
 	}

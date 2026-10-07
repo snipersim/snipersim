@@ -719,6 +719,26 @@ FEATURES = {
         require_nonzero('ipcp.pref_called', 'ipcp.cs_prefetches',
                         'ipcp.prefetches_issued', 'L1-D.prefetches')),
 
+    # The ASP TLB prefetcher's lookahead and degree (port series step 6).
+    # mmu_base_prefetch.cfg sets lookahead=4 degree=3: once an entry is
+    # trained (threshold_reached) ASP walks VPN + (4 + d) * stride for d in
+    # 0..2, so every trained access attempts exactly three prefetches --
+    # it attempted one, VPN + stride, before, whatever the knobs said.  The
+    # ratio is the check, together with the walks that resolved; the
+    # before/after counts are in the commit that added this.
+    'asp': (
+        ['address_translation_schemes/baseline_asp'], 1,
+        lambda stats: (
+            counter(stats, 'asp_tlb.threshold_reached') > 0
+            and counter(stats, 'asp_tlb.prefetch_attempts')
+                == 3 * counter(stats, 'asp_tlb.threshold_reached')
+            and counter(stats, 'asp_tlb.successful_prefetches') > 0,
+            'threshold_reached=%d prefetch_attempts=%d (degree 3) successful=%d failed=%d'
+            % (counter(stats, 'asp_tlb.threshold_reached'),
+               counter(stats, 'asp_tlb.prefetch_attempts'),
+               counter(stats, 'asp_tlb.successful_prefetches'),
+               counter(stats, 'asp_tlb.failed_prefetches')))),
+
     # F6: page faults handled in hardware rather than by the OS.  The split is
     # the whole point of the design, so the check is that faults were taken and
     # that hardware took them -- the same workload routes all 91 to the OS under
