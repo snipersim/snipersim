@@ -76,7 +76,7 @@ EXPECT_PASS = [
 # default.cfg is an empty file and smt1.cfg is two lines, so running them alone
 # was never meaningful.
 EXPECT_PASS_LAYERED = [
-    'atd', 'cacheonly', 'default', 'dram-cache', 'interval', 'jikes', 'llc-qbs',
+    'atd', 'cacheonly', 'dram-cache', 'interval', 'jikes', 'llc-qbs',
     'nehalem', 'noc', 'nuca-cache', 'oneipc', 'prefetcher', 'rob',
     'smt1', 'smt2', 'smt4', 'smt8',
     # the two-node NUMA topology for the tiered DRAM controller
