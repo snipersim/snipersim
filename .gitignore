@@ -125,3 +125,10 @@ mpich
 mpich-src
 qemu-riscv
 sail-riscv
+
+# Workload sources copied by the test Makefiles, the fft-marker binary, the
+# host-local trace the sniper-in-sniper cases need, and a removed test's leftovers
+test/*/fft.c
+test/fft-marker/fft
+test/sniper-in-sniper/fft.sift
+test/signal/

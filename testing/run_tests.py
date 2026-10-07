@@ -176,7 +176,7 @@ def resolve_mimicos_binary(sniper_root, override=None):
         if os.path.isfile(path):
             return path
 
-    return os.path.join(sniper_root, "mimicos", "build", "startup_mimicos")
+    return os.path.join(sniper_root, "build", "default", "bin", "startup_mimicos")
 
 
 def main():

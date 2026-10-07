@@ -256,7 +256,9 @@ def _parse_tlist_with_metrics(tlist_path: str) -> List[Tuple[str, str, str, str]
             lines = [ln.strip() for ln in f if ln.strip()]
         if not lines:
             return rows
-        trace_dir = lines[0]
+        # The first line is the trace directory; $VARS in it are expanded, so a
+        # list can name $SNIPER_TRACES/<set> instead of one host's mount point.
+        trace_dir = os.path.expandvars(lines[0])
         for line in lines[1:]:
             parts = [p.strip() for p in line.split(",")]
             if len(parts) == 4:

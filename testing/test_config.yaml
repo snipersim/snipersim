@@ -11,11 +11,15 @@
 # ── Traces ──────────────────────────────────────────────────────────────────
 trace_suite:
   smoke:
+    # The lists name their trace directory as $SNIPER_TRACES/<set>: point that
+    # variable at the directory holding the trace sets before running a suite.
     tracelist_base_path: "traces/"
     tracelists:
       - smoke_test.tlist
 
   smoke_sift:
+    # The lists name their trace directory as $SNIPER_TRACES/<set>: point that
+    # variable at the directory holding the trace sets before running a suite.
     tracelist_base_path: "traces/"
     tracelists:
       - smoke_sift.tlist
