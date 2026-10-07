@@ -83,7 +83,7 @@ _cmake_flags += $(CMAKE_ARGS)
 _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
              $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs regress_qemu regress_pacsim validate_pacsim regress_apps regress_virtuoso riscv-ime-check help
+.PHONY: all deps configure build clean distclean regress regress_scripting regress_riscv_isa regress_configs regress_qemu regress_pacsim validate_pacsim regress_apps regress_virtuoso riscv-ime-check help
 
 all: build
 
@@ -138,7 +138,7 @@ distclean:
 # the moment you most want the rest of the picture and the moment the report
 # would not have printed.  SNIPER_REGRESS_LOG is where the suites append their
 # per-check timings; see testing/common/runlog.py.
-REGRESS_SUITES = scripting configs qemu pacsim apps virtuoso
+REGRESS_SUITES = scripting riscv_isa configs qemu pacsim apps virtuoso
 
 # FAILFAST=ON stops at the first failing check, keeps the work directory it ran
 # in, and skips the remaining suites.  For debugging one failure, not for a
@@ -172,6 +172,11 @@ regress_scripting:
 
 regress_configs:
 	@$(SIM_ROOT)/testing/test_configs.py
+
+# The generated RISC-V decoder: the tables always; the regeneration check when
+# SNIPER_UDB_ROOTS names the specification checkouts (else it skips itself).
+regress_riscv_isa:
+	@$(SIM_ROOT)/testing/test_riscv_isa.py
 
 # Skips itself with a reason unless QEMU and the frontend are built (QEMU=ON).
 regress_qemu:

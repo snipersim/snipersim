@@ -49,15 +49,25 @@ def check_regen():
                                 '--ame', ame, '--out', overlay], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             if p.returncode != 0:
                 return False, 'AME converter failed: %s' % p.stdout.strip().splitlines()[-1]
+        # The generator also writes the C header the guests include and refreshes
+        # the class block of the configuration fragment in place: both are
+        # regenerated into copies and compared with the tree's.
+        cfg_rel = os.path.join('config', 'common_configs', 'riscv_isa_classes.cfg')
+        shutil.copy(os.path.join(ROOT, cfg_rel), os.path.join(tmp, 'riscv_isa_classes.cfg'))
         cmd += ['--udb', overlay,
-                '--policy', os.path.join(ROOT, 'tools', 'riscv', 'isa_policy.yaml'), '--out', tmp]
+                '--policy', os.path.join(ROOT, 'tools', 'riscv', 'isa_policy.yaml'), '--out', tmp,
+                '--header', os.path.join(tmp, 'riscv_insn.h'),
+                '--config', os.path.join(tmp, 'riscv_isa_classes.cfg')]
         p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         if p.returncode != 0:
             return False, 'generator failed: %s' % p.stdout.strip().splitlines()[-1]
-        for f in ('riscv_isa_gen.h', 'riscv_isa_gen.cc'):
-            if not filecmp.cmp(os.path.join(tmp, f), os.path.join(ROOT, 'decoder_lib', f), shallow=False):
-                return False, '%s differs from the checked-in file: regenerate and commit' % f
-        return True, 'checked-in tables match a fresh generation (%s)' % p.stdout.strip().splitlines()[-1]
+        for f, tree in (('riscv_isa_gen.h', os.path.join('decoder_lib', 'riscv_isa_gen.h')),
+                        ('riscv_isa_gen.cc', os.path.join('decoder_lib', 'riscv_isa_gen.cc')),
+                        ('riscv_insn.h', os.path.join('include', 'riscv_insn.h')),
+                        ('riscv_isa_classes.cfg', cfg_rel)):
+            if not filecmp.cmp(os.path.join(tmp, f), os.path.join(ROOT, tree), shallow=False):
+                return False, '%s differs from the checked-in %s: regenerate and commit' % (f, tree)
+        return True, 'checked-in tables, header and class block match a fresh generation (%s)' % p.stdout.strip().splitlines()[-1]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -63,7 +63,7 @@ of the ratified ISA.
 
 Timing is deliberately a placeholder per class: refine a class's latency in
 the policy (defaults) or in the config (`perf_model/core/riscv/<class>_latency`,
-`<class>_issue_cycles`) without touching code.  `make riscv-isa-gen` (with
+`<class>_issue_cycles`) without touching code.  `cmake --build build/default --target riscv-isa-gen` (with
 `SNIPER_UDB_ROOTS` set at configure time) or a direct run of the generator
 rewrites the tables and the config blocks; `testing/test_riscv_isa.py`
 fails when the checked-in tables are out of step with the sources.
@@ -248,7 +248,7 @@ the disagreement).  Three harness cases hang off it:
    misfiled instruction is visible).
 3. Regenerate: `python3 tools/riscv/gen_isa.py --udb <upstream> --udb <overlay>
    --udb tools/riscv/overlay --policy tools/riscv/isa_policy.yaml --out decoder_lib
-   --config config/riscv.cfg --config config/riscv-mediumboom.cfg
+   --config config/common_configs/riscv_isa_classes.cfg
    --header include/riscv_insn.h`, rebuild, run `testing/test_riscv_isa.py`
    and the `riscv-*` harness cases (`make riscv-ime-check` does all of it).
 4. If the instructions touch memory in a shape two addresses cannot
