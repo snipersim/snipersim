@@ -22,6 +22,29 @@
  *   nr_hugepages_2mb = 1024      # Number of 2MB huge pages in pool
  *   nr_hugepages_1gb = 0         # Number of 1GB huge pages in pool
  *   overcommit = false           # Allow allocations beyond reserved pool
+ *   min_vma_mb = 0               # VMAs of at least this many MB are backed
+ *                                # by the pool (0: none, the service is inert)
+ *   backed_ranges = ""           # explicit "start-end,start-end" (hex) VMA
+ *                                # ranges backed by the pool, in addition
+ *
+ * Which memory the pool backs
+ * ---------------------------
+ * On Linux a region is hugetlbfs-backed because the application asked for
+ * it -- mmap(MAP_HUGETLB) or a file on a hugetlbfs mount.  The trace does
+ * not carry that request: the recorder's VMA log is the address ranges of
+ * /proc/self/maps and nothing else.  So the choice is made here, from
+ * configuration, over the application's VMAs: a 2 MB-aligned block of
+ * virtual memory is backed by the pool when it lies entirely inside a VMA
+ * of at least min_vma_mb MB, or entirely inside a VMA and one of the
+ * backed_ranges.  Blocks at a VMA's unaligned edges get base pages from the
+ * ordinary allocator, as the partial huge pages Linux refuses would.  The
+ * page-fault handler (sniper_space_exception_handler.cc) asks backs() and
+ * takes the 2 MB frame from allocateHugePage(); when the pool is empty the
+ * fault falls back to the allocator and the failure is counted.
+ *
+ * The pool's frames sit in the kernel-reserved region of physical memory
+ * (below the allocator's kernel_size, above the page-table frames that grow
+ * up from its start), so they alias nothing the allocator hands out.
  *
  * @author kanellok
  */
@@ -35,6 +58,7 @@
 #include <fstream>
 #include <cstddef>
 #include "fixed_types.h"
+#include "memory_management/misc/vma.h"
 
 // Huge page size constants (in 4KB base pages)
 #define HUGEPAGE_2MB_PAGES  512      // 2MB = 512 * 4KB
@@ -162,6 +186,35 @@ public:
     UInt64 getAppHugePages(int app_id, HugePageSize size = HugePageSize::SIZE_2MB) const;
 
     /**
+     * @brief Whether the pool backs a block of an application's address space
+     *
+     * The stand-in for MAP_HUGETLB: true when [block_base, block_end) lies
+     * entirely inside one of the application's VMAs of at least min_vma_mb
+     * MB, or inside a VMA and one of the configured backed_ranges.  With
+     * min_vma_mb = 0 and no backed_ranges nothing qualifies and the service
+     * is inert.
+     *
+     * @param block_base  First address of the (aligned) block
+     * @param block_end   One past its last address
+     * @param vmas        The application's VMAs
+     */
+    bool backs(IntPtr block_base, IntPtr block_end, const std::vector<VMA>& vmas) const;
+
+    /**
+     * @brief Whether any backing criterion is configured at all
+     */
+    bool hasBackingCriterion() const { return m_min_vma_mb > 0 || !m_backed_ranges.empty(); }
+
+    /**
+     * @brief One past the last physical page of the pool (in 4KB units)
+     *
+     * For the owner to check that the pool fits in the memory it was placed
+     * in.
+     */
+    IntPtr getPoolEndPPN() const { return m_pool_end_ppn; }
+    IntPtr getPoolBasePPN() const { return m_pool_base_ppn; }
+
+    /**
      * @brief Check if hugetlbfs is enabled
      *
      * @return true if enabled in configuration
@@ -214,6 +267,12 @@ private:
 
     // Base physical address for huge page pool (in 4KB pages)
     IntPtr m_pool_base_ppn;
+    IntPtr m_pool_end_ppn;
+
+    // Backing criterion (see the header comment): the VMA size threshold in
+    // MB, and the explicit [start, end) ranges.
+    UInt64 m_min_vma_mb;
+    std::vector<std::pair<IntPtr, IntPtr>> m_backed_ranges;
 
     // ========================================================================
     // Private Helpers

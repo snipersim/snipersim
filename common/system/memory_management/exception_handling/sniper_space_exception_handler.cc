@@ -7,6 +7,7 @@
 #include "thread.h"
 #include "pagetable.h"
 #include "debug_config.h"
+#include "hugetlbfs/hugetlbfs.h"
 
 // Static lock definition for thread-safe page fault handling across all cores
 // SpinLock: non-fair, avoids FIFO ordering overhead of ticket lock
@@ -70,7 +71,61 @@ void SniperExceptionHandler::handle_page_fault(FaultCtx &ctx)
     // host-physical memory; the allocator follows the page table in ctx.
     PhysicalMemoryAllocator *allocator = this->allocatorFor(ctx);
     assert(allocator != NULL);
-    const auto &[ppn, page_size] = allocator->allocate(FOUR_KIB, ctx.vpn << BASE_PAGE_SHIFT, core_id, false, ctx.alloc_in.is_instruction);
+    MimicOS *os = this->osFor(ctx);
+    assert(os);
+
+    UInt64 ppn = static_cast<UInt64>(-1);
+    UInt64 page_size = 0;
+    // The address the mapping is installed at: the faulting page, or the
+    // whole 2 MB block when a huge page backs it.
+    UInt64 map_address = ctx.vpn << BASE_PAGE_SHIFT;
+
+    // 1a. The hugetlbfs pool, when it backs this block of the faulting
+    // application's address space (MimicOS::hugePageBlockFor: the service
+    // enabled, the block inside a VMA its criterion accepts).  The pool hands
+    // out a 2 MB frame whose base ppn is in 4 KB units -- the same shape the
+    // reserve_thp allocator returns for a promoted region -- and the mapping
+    // is installed at the block's base with page_size 21, so the radix table
+    // writes one level-2 PTE and the walk finds a 2 MB translation.  An empty
+    // pool is counted by the service (allocation_failures,
+    // pool_exhausted_events) and the fault falls through to the allocator.
+    if (os->isHugeTLBfsEnabled())
+    {
+        Core *core_faulter = Sim()->getCoreManager()->getCoreFromID(core_id);
+        Thread *thread_faulter = core_faulter ? core_faulter->getThread() : NULL;
+        if (thread_faulter)
+        {
+            int app_id = thread_faulter->getAppId();
+            IntPtr block = os->hugePageBlockFor(app_id, map_address);
+            if (block != static_cast<IntPtr>(-1))
+            {
+                IntPtr huge_ppn = os->allocateHugePage(app_id, block, true);
+                if (huge_ppn != static_cast<IntPtr>(-1))
+                {
+                    ppn = huge_ppn;
+                    page_size = HUGEPAGE_2MB_BITS;
+                    map_address = block;
+#if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
+                    log_file << "[EXCEPTION_HANDLER] hugetlbfs 2MB page for block 0x" << std::hex << block
+                             << std::dec << ": ppn " << ppn << std::endl;
+#endif
+                }
+#if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
+                else
+                    log_file << "[EXCEPTION_HANDLER] hugetlbfs pool exhausted for block 0x" << std::hex << block
+                             << std::dec << ", falling back to the allocator" << std::endl;
+#endif
+            }
+        }
+    }
+
+    // 1b. The physical memory allocator.
+    if (ppn == static_cast<UInt64>(-1))
+    {
+        const auto &[alloc_ppn, alloc_page_size] = allocator->allocate(FOUR_KIB, map_address, core_id, false, ctx.alloc_in.is_instruction);
+        ppn = alloc_ppn;
+        page_size = alloc_page_size;
+    }
 
 #if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
     log_file << "[EXCEPTION_HANDLER] Allocated page: " << ppn << " with page size: " << page_size << std::endl;
@@ -81,7 +136,7 @@ void SniperExceptionHandler::handle_page_fault(FaultCtx &ctx)
     ctx.alloc_out.page_size = page_size;
 
     // 2. Update PTs
-    allocate_page_table_frames(ctx, ctx.vpn << BASE_PAGE_SHIFT, core_id, ppn, page_size, ctx.alloc_in.metadata_frames);
+    allocate_page_table_frames(ctx, map_address, core_id, ppn, page_size, ctx.alloc_in.metadata_frames);
 #if DEBUG_EXCEPTION_HANDLER >= DEBUG_BASIC
     log_file << "[EXCEPTION_HANDLER] Page table frames allocated for address: " << (ctx.vpn << BASE_PAGE_SHIFT) <<
                 " -- allocated " << ctx.alloc_out.prealloc_frames.size() << " frames" << std::endl;

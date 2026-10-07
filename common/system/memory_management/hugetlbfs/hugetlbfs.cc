@@ -28,6 +28,8 @@ HugeTLBfs::HugeTLBfs()
     , m_free_hugepages_1gb(0)
     , m_overcommit(false)
     , m_pool_base_ppn(0)
+    , m_pool_end_ppn(0)
+    , m_min_vma_mb(0)
 {
     // Read configuration
     m_enabled = Sim()->getCfg()->getBoolDefault("perf_model/hugetlbfs/enabled", false);
@@ -46,6 +48,34 @@ HugeTLBfs::HugeTLBfs()
     }
     m_overcommit = Sim()->getCfg()->getBoolDefault("perf_model/hugetlbfs/overcommit", false);
 
+    // The backing criterion: which of an application's VMAs the pool stands
+    // behind (see the header).  Nothing in a trace says MAP_HUGETLB, so it is
+    // configuration or nothing.
+    m_min_vma_mb = Sim()->getCfg()->getIntDefault("perf_model/hugetlbfs/min_vma_mb", 0);
+    std::string spec;
+    if (Sim()->getCfg()->hasKey("perf_model/hugetlbfs/backed_ranges"))
+        spec = Sim()->getCfg()->getString("perf_model/hugetlbfs/backed_ranges").c_str();
+    size_t pos = 0;
+    while (pos < spec.size()) {
+        size_t comma = spec.find(',', pos);
+        if (comma == std::string::npos) comma = spec.size();
+        std::string item = spec.substr(pos, comma - pos);
+        pos = comma + 1;
+        size_t dash = item.find('-');
+        if (item.find_first_not_of(" \t") == std::string::npos) continue;
+        if (dash == std::string::npos) {
+            std::cerr << "[HUGETLBFS] backed_ranges: expected start-end, got '" << item << "'" << std::endl;
+            exit(1);
+        }
+        IntPtr start = std::stoull(item.substr(0, dash), nullptr, 16);
+        IntPtr end = std::stoull(item.substr(dash + 1), nullptr, 16);
+        if (end <= start) {
+            std::cerr << "[HUGETLBFS] backed_ranges: empty range '" << item << "'" << std::endl;
+            exit(1);
+        }
+        m_backed_ranges.push_back(std::make_pair(start, end));
+    }
+
     // Setup logging
     m_log_file_name = "hugetlbfs.log";
     m_log_file_name = std::string(Sim()->getConfig()->getOutputDirectory().c_str()) + "/" + m_log_file_name;
@@ -55,6 +85,12 @@ HugeTLBfs::HugeTLBfs()
     std::cout << "[HUGETLBFS]   2MB huge pages: " << m_nr_hugepages_2mb << std::endl;
     std::cout << "[HUGETLBFS]   1GB huge pages: " << m_nr_hugepages_1gb << std::endl;
     std::cout << "[HUGETLBFS]   Overcommit: " << (m_overcommit ? "enabled" : "disabled") << std::endl;
+    if (m_min_vma_mb > 0)
+        std::cout << "[HUGETLBFS]   Backing VMAs of at least " << m_min_vma_mb << " MB" << std::endl;
+    if (!m_backed_ranges.empty())
+        std::cout << "[HUGETLBFS]   Backing " << m_backed_ranges.size() << " configured address range(s)" << std::endl;
+    if (!hasBackingCriterion())
+        std::cout << "[HUGETLBFS]   No backing criterion (min_vma_mb = 0, no backed_ranges): the pool backs nothing" << std::endl;
 
     // Initialize statistics
     memset(&m_stats, 0, sizeof(m_stats));
@@ -115,6 +151,7 @@ void HugeTLBfs::initializePool()
         current_ppn += HUGEPAGE_1GB_PAGES;  // Advance by 262144 pages (1GB)
     }
     m_free_hugepages_1gb = m_nr_hugepages_1gb;
+    m_pool_end_ppn = current_ppn;
 
     m_log_file << "[HUGETLBFS] Pool initialized:" << std::endl;
     m_log_file << "[HUGETLBFS]   2MB pool: " << m_nr_hugepages_2mb << " pages, base PPN: 0x" 
@@ -289,6 +326,33 @@ int HugeTLBfs::deallocateAllForApp(int app_id)
 #endif
 
     return count;
+}
+
+// ============================================================================
+// Backing Criterion
+// ============================================================================
+
+bool HugeTLBfs::backs(IntPtr block_base, IntPtr block_end, const std::vector<VMA>& vmas) const
+{
+    if (!m_enabled || !hasBackingCriterion())
+        return false;
+
+    const IntPtr min_bytes = m_min_vma_mb << 20;
+    bool inside_vma = false;
+    for (const auto& vma : vmas) {
+        if (vma.getBase() > block_base || vma.getEnd() < block_end)
+            continue;               // does not cover the whole block
+        inside_vma = true;
+        if (m_min_vma_mb > 0 && vma.getEnd() - vma.getBase() >= min_bytes)
+            return true;
+    }
+    if (!inside_vma)
+        return false;               // not mapped by the application at all
+    for (const auto& range : m_backed_ranges) {
+        if (range.first <= block_base && range.second >= block_end)
+            return true;
+    }
+    return false;
 }
 
 // ============================================================================

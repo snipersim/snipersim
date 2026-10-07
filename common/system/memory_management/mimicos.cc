@@ -169,6 +169,22 @@ MimicOS::MimicOS(bool is_guest)
                   << m_hugetlbfs->getTotalHugePages(HugeTLBfs::HugePageSize::SIZE_2MB) << " 2MB pages and "
                   << m_hugetlbfs->getTotalHugePages(HugeTLBfs::HugePageSize::SIZE_1GB) << " 1GB pages" << std::endl;
 #endif
+            // The pool's frames are carved from the kernel-reserved region
+            // of physical memory, which the allocator never hands out as
+            // data pages and whose page-table frames grow up from its
+            // start.  A pool that does not fit there would alias the
+            // allocator's frames, so it is refused rather than mapped.
+            if (m_memory_allocator) {
+                IntPtr kernel_end_ppn = m_memory_allocator->getKernelSizeMB() << 8;   // MB -> 4 KB pages
+                if (m_hugetlbfs->getPoolEndPPN() > kernel_end_ppn) {
+                    std::cerr << "[FATAL] [MimicOS] hugetlbfs pool [ppn 0x" << std::hex
+                              << m_hugetlbfs->getPoolBasePPN() << ", 0x" << m_hugetlbfs->getPoolEndPPN()
+                              << std::dec << ") does not fit in the allocator's kernel region (kernel_size = "
+                              << m_memory_allocator->getKernelSizeMB()
+                              << " MB): reduce nr_hugepages_2mb/nr_hugepages_1gb" << std::endl;
+                    exit(1);
+                }
+            }
         } else {
 #if DEBUG_MIMICOS >= DEBUG_BASIC
             m_log << "[MimicOS] HugeTLBfs service disabled" << std::endl;
@@ -474,6 +490,34 @@ void MimicOS::deletePageTableEntry(IntPtr victim_address, int app_id)
 }
 
 // ============ HugeTLBfs Management ============
+
+IntPtr MimicOS::hugePageBlockFor(int app_id, IntPtr vaddr)
+{
+    if (!m_hugetlbfs || !m_hugetlbfs->isEnabled() || !m_hugetlbfs->hasBackingCriterion())
+        return static_cast<IntPtr>(-1);
+
+    auto* app = getApplication(app_id);
+    if (!app || app->getVMAs().empty())
+        return static_cast<IntPtr>(-1);
+
+    const IntPtr block_base = vaddr & ~((static_cast<IntPtr>(1) << HUGEPAGE_2MB_BITS) - 1);
+    const IntPtr block_end = block_base + (static_cast<IntPtr>(1) << HUGEPAGE_2MB_BITS);
+
+    auto& blocks = m_hugetlb_blocks[app_id];
+    auto it = blocks.find(block_base);
+    bool backed;
+    if (it != blocks.end()) {
+        backed = it->second;
+    } else {
+        backed = m_hugetlbfs->backs(block_base, block_end, app->getVMAs());
+        blocks[block_base] = backed;
+#if DEBUG_MIMICOS >= DEBUG_BASIC
+        m_log << "[MimicOS] HugeTLBfs " << (backed ? "backs" : "does not back")
+              << " block 0x" << std::hex << block_base << std::dec << " of app " << app_id << std::endl;
+#endif
+    }
+    return backed ? block_base : static_cast<IntPtr>(-1);
+}
 
 IntPtr MimicOS::allocateHugePage(int app_id, IntPtr vaddr, bool size_2mb)
 {

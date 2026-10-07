@@ -72,6 +72,8 @@ public:
         return temp;
     }
     String getName() { return m_name; }
+    UInt64 getMemorySizeMB() const { return m_memory_size; }
+    UInt64 getKernelSizeMB() const { return m_kernel_size; }
     
     // Allocate from reserved instruction area
     virtual std::pair<UInt64, UInt64> allocateInstruction(UInt64 size)

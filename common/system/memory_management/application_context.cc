@@ -73,6 +73,21 @@ bool ApplicationContext::parseVMAsFromFile(const std::string& trace_file_path)
         return true;
     }
 
+    // 1b. The recorder's own name for it.  `record-trace --vma -o X` writes
+    //     X.sift and X.vma, and the trace is named here with its .sift, so
+    //     the file is <trace minus .sift>.vma rather than <trace>.vma.
+    std::string recorder_path;
+    {
+        const std::string sift = ".sift";
+        if (trace_file_path.size() > sift.size() &&
+            trace_file_path.compare(trace_file_path.size() - sift.size(), sift.size(), sift) == 0) {
+            recorder_path = trace_file_path.substr(0, trace_file_path.size() - sift.size()) + ".vma";
+            if (parseVMAsFromPlainFile(recorder_path)) {
+                return true;
+            }
+        }
+    }
+
     // 2. Try <trace>.vma.json (vma_infer JSON sitting next to the trace)
     std::string json_beside = trace_file_path + ".vma.json";
     if (parseVMAsFromJSON(json_beside)) {
@@ -100,6 +115,8 @@ bool ApplicationContext::parseVMAsFromFile(const std::string& trace_file_path)
     std::cerr << "[ApplicationContext] WARNING: No VMA source found for trace: "
               << trace_file_path << std::endl;
     std::cerr << "[ApplicationContext]   Tried: " << plain_path << std::endl;
+    if (!recorder_path.empty())
+        std::cerr << "[ApplicationContext]   Tried: " << recorder_path << std::endl;
     std::cerr << "[ApplicationContext]   Tried: " << json_beside << std::endl;
     std::cerr << "[ApplicationContext]   Hint:  Run `python -m vma_infer --trace <trace> --out <trace>.vma.json`" << std::endl;
     return false;

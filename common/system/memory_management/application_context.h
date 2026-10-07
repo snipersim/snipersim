@@ -77,6 +77,7 @@ public:
      * 
      * Tries the following sources in order:
      *   1. <trace_file_path>.vma          (simple hex range format)
+     *   1b. <trace_file_path minus .sift>.vma  (what record-trace --vma writes)
      *   2. <trace_file_path>.vma.json      (vma_infer JSON output)
      *   3. <vma_json_dir>/<trace_name>.vma.json  (centralised dir from config)
      *

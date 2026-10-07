@@ -269,6 +269,24 @@ public:
     const HugeTLBfs* getHugeTLBfs() const { return m_hugetlbfs.get(); }
     
     /**
+     * @brief The 2 MB block the pool backs at a virtual address, if any
+     *
+     * The page-fault handler's question: does the hugetlbfs pool stand
+     * behind this address?  The block is the 2 MB-aligned block containing
+     * vaddr; it is backed when the service's criterion (see hugetlbfs.h:
+     * min_vma_mb, backed_ranges) accepts it against the application's VMAs.
+     * The answer is cached per block, since the VMAs are fixed once parsed
+     * and the walk over them is linear.
+     *
+     * @param app_id  Application that faulted
+     * @param vaddr   Faulting virtual address
+     * @return The block's base address, or -1 when the pool does not back it
+     *         (service disabled, no criterion, no VMAs, or a block not
+     *         wholly inside a qualifying VMA)
+     */
+    IntPtr hugePageBlockFor(int app_id, IntPtr vaddr);
+
+    /**
      * @brief Allocate a huge page for an application
      * 
      * Convenience method that delegates to HugeTLBfs service.
@@ -598,6 +616,8 @@ private:
         return 0;
     }
     std::unique_ptr<HugeTLBfs> m_hugetlbfs;
+    // hugePageBlockFor()'s cache: (app_id, block base) -> backed
+    std::unordered_map<int, std::unordered_map<IntPtr, bool>> m_hugetlb_blocks;
     
     // ============ Per-Application State ============
     std::unordered_map<int, std::unique_ptr<ApplicationContext>> m_applications;
