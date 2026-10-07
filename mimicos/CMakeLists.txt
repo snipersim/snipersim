@@ -6,10 +6,9 @@
 # against sniper_base -- no PinCRT, no legacy libstdc++ ABI, none of the
 # simulator's compile contract applies to it.
 #
-# It used to be built by its own makefile, invoked by hand; testing/run_tests.py
-# still documents "run 'make -C mimicos' first".  Building it here means it
-# lands in the build directory with everything else and a second build
-# configuration gets its own copy.
+# It used to be built by its own makefile, invoked by hand.  Building it here
+# means it lands in the build directory with everything else and a second
+# build configuration gets its own copy.
 
 file(GLOB_RECURSE MIMICOS_SOURCES CONFIGURE_DEPENDS
      "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"

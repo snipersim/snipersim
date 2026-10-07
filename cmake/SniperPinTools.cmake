@@ -44,9 +44,9 @@ target_compile_options(sift_pincrt PRIVATE ${SNIPER_PIN_NO_HOST_FLAGS})
 #
 # Built by Intel's sift/recorder/mfile.py, not by CMake.  It is an SDE tool
 # rather than a plain pintool, and reproducing that link from the probed
-# makefile variables was tried and fails: sift/recorder/makefile.sde.rules
-# specifies -lsde, but that rules file is not what builds the tool -- it
-# delegates to mfile.py, which links -lpin instead.  The result is 2.6 MB larger
+# makefile variables was tried and fails: the recorder's former
+# makefile.sde.rules specified -lsde, but that rules file was not what built
+# the tool -- it delegated to mfile.py, which links -lpin instead.  The result is 2.6 MB larger
 # with ten extra undefined Pin symbols, links cleanly, and dies at run time with
 #
 #     dlopen failed: cannot locate symbol "PIN_StopApplicationThreads"
