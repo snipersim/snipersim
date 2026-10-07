@@ -182,10 +182,13 @@ def mimicos_daemons_check(stats):
           # the application ran to completion and the kernel reached its exit
           # reports, the daemons having changed nothing in its memory use:
           # the fault count and the mapping check are those of
-          # reservethp_32GB.ini without daemons
+          # reservethp_32GB.ini without daemons.  (67 until the ip_stride
+          # L1-D prefetcher came on in meteor_lake_pcore.cfg: the count is
+          # timing-dependent by one fault, and the no-daemons reference
+          # measured on that config is 68 with the same 28/28/0 mappings.)
           and '[TRACE:0] -- DONE --' in out
           and 'shutdown event received' in out
-          and faults == 67
+          and faults == 68
           and ('Core 0 checked 28 unique VA->PA mappings, 28 unique PA->VA '
                'mappings, 0 violations') in out)
     return ok, ('kcompactd/khugepaged/kswapd scans %d/%d/%d (expected %d +-1 '
@@ -668,6 +671,25 @@ FEATURES = {
     'victima': (
         ['address_translation_schemes/victima'], 1,
         require_nonzero('mmu.victima_leaf_probes', 'mmu.victima_leaf_hits')),
+
+    # The ip_stride data prefetcher at the L1-D, which meteor_lake_pcore.cfg
+    # (and so every scheme) selects as upstream does.  The whole chain: an
+    # RPT entry reaches STEADY, generates addresses, and the controller
+    # issues them (L1-D.prefetches is its count, zero without a prefetcher).
+    # gen_prefetch and L1-D.prefetches are both required because the
+    # controller drops a generated address it already holds.
+    'ip_stride': (
+        ['address_translation_schemes/baseline'], 1,
+        require_nonzero('ip_stride.pref_called', 'ip_stride.steady',
+                        'ip_stride.gen_prefetch', 'L1-D.prefetches')),
+
+    # The streamer at the L2 (prefetcher_configs/streamer_l2 on baseline):
+    # a stream's confidence has to reach the threshold (steady) before it
+    # generates, and the L2 controller has to issue what it generates.
+    'streamer': (
+        ['address_translation_schemes/baseline', 'prefetcher_configs/streamer_l2'], 1,
+        require_nonzero('streamer.pref_called', 'streamer.steady',
+                        'streamer.gen_prefetch', 'L2.prefetches')),
 
     # F6: page faults handled in hardware rather than by the OS.  The split is
     # the whole point of the design, so the check is that faults were taken and

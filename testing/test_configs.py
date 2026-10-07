@@ -268,6 +268,10 @@ FRAGMENT_CORES = {
     # Its sequence "1|1|1|2" has four slots, one core each: the scheduler
     # refuses to start with fewer cores than slots.
     'scheduler_configs/sequential': (4,),
+    # One big core and one little one: every per-core key is a two-entry
+    # array (prefetcher[] = "ip_stride", "ip_stride"; rob_timer/
+    # issue_memops_at_issue[] = ...), and a third core has no entry to read.
+    'core_configs/biglittle': (1, 2),
 }
 
 # Known to fail in detailed mode at one core count only, with the reason;
@@ -422,6 +426,34 @@ FRAGMENT_REQUIRE_NONZERO = {
     'dram_configs/ddr4_2666_6ch': ('ddr.page-hits', 'ddr.page-miss'),
     'dram_configs/ddr5_4800_4channel': ('ddr.page-hits', 'ddr.page-miss'),
     'prefetcher_configs/ghb_l1': ('L1-D.prefetches',),
+    # The ip_stride and streamer data prefetchers (port series step 4),
+    # on the counter each registers for the addresses it generated and the
+    # controller's count of the prefetches it issued for them.  The core
+    # configs that select ip_stride at the L1-D keep L2 at none, except
+    # wimpy; biglittle's per-core array puts the streamer on core 1 only,
+    # which a one-core run never builds, so only ip_stride is required.
+    'core_configs/meteor_lake_pcore': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/beefy': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/wimpy': ('ip_stride.gen_prefetch', 'streamer.gen_prefetch',
+                           'L1-D.prefetches', 'L2.prefetches'),
+    'core_configs/revelator_core': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/cascade_lake_xeon': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/cortex_a53': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/cortex_a55': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/cortex_a720': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/cortex_x4': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/oryon_xelite': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'core_configs/biglittle': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'prefetcher_configs/ip_stride_l1': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
+    'prefetcher_configs/streamer_l2': ('streamer.gen_prefetch', 'L2.prefetches'),
+    'prefetcher_configs/aggressive_multilevel':
+        ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
+    'prefetcher_configs/conservative':
+        ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
+    'prefetcher_configs/datapf_ipstride_notrans_streamer':
+        ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
+    'prefetcher_configs/meteor_lake_prefetch':
+        ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's
