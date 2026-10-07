@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-import sys, Image, ImageDraw
+import sys
+from PIL import Image, ImageDraw
 
 if len(sys.argv) < 2:
   print('Usage: %s <filename> [<time_min>] [<time_max>]' % sys.argv[0])

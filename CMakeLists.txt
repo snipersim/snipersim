@@ -18,7 +18,7 @@
 # release binary, and enabling RISC-V left all 237 core objects compiled with
 # SNIPER_RISCV=0 while the decoder was built with it set.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)   # Python3 Development.Embed
 
 project(sniper
   VERSION 8.1

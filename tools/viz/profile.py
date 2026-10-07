@@ -1,4 +1,4 @@
-import os, sys, json, collections, distutils.spawn
+import os, sys, json, collections, shutil
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend( [os.path.abspath(os.path.join(HOME, '..'))] )
 import gen_profile, sniper_lib, sniper_config, sniper_stats
@@ -26,7 +26,7 @@ def createJSONData(resultsdir, outputdir, verbose = False):
   gprof2dot_py = os.path.join(HOME, '..', 'gprof2dot.py')
   dotbasefile = os.path.join(profiledir, 'sim.profile')
   os.system('%s --format=callgrind --output=%s.dot %s' % (gprof2dot_py, dotbasefile, callgrindfile))
-  if not distutils.spawn.find_executable('dot'):
+  if not shutil.which('dot'):
     raise RuntimeError("Could not find `dot' executable, make sure graphviz is installed")
   os.system('dot -Tsvg %s.dot -o %s.svg' % (dotbasefile, dotbasefile))
   os.system('dot -Tpng %s.dot -o %s.png' % (dotbasefile, dotbasefile))

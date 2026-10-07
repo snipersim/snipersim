@@ -311,7 +311,7 @@ if __name__ == '__main__':
     gprof2dot_py = os.path.join(HOME, 'gprof2dot.py')
     dotbasefile = os.path.join(outputdir, 'sim.profile')
     os.system('%s --format=callgrind --output=%s.dot %s' % (gprof2dot_py, dotbasefile, callgrindfile))
-    import distutils.spawn
-    if distutils.spawn.find_executable('dot'):
+    import shutil
+    if shutil.which('dot'):
       os.system('dot -Tpng %s.dot -o %s.png' % (dotbasefile, dotbasefile))
       os.system('dot -Tsvg %s.dot -o %s.svg' % (dotbasefile, dotbasefile))
