@@ -367,8 +367,8 @@ python3 tools/riscv/gen_ame_udb.py --ame $AME_SPEC --out $WORK/overlay && ls $WO
 (`UDB_UPSTREAM` and `UDB_IME` are the two UDB checkouts, `AME_SPEC` the
 `riscv-attached-matrix-extension` checkout; the verification record names
 the revisions used.)  To adopt a new specification: drop it in, run the
-`gen_isa.py` line with `--out decoder_lib --config config/riscv.cfg
---config config/riscv-mediumboom.cfg --header include/riscv_insn.h`,
+`gen_isa.py` line with `--out decoder_lib --config
+config/common_configs/riscv_isa_classes.cfg --header include/riscv_insn.h`,
 rebuild, and run the drift check.
 
 ### 4.4 gemm3: four ways, traced, simulated, counted, and on the Sail model
@@ -524,6 +524,7 @@ $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api -- $WORK/rv-ame-
 rvcc -o $WORK/rv-ame-loop test/qemu-plugin-probe/rv-ame-loop.c
 time $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,trace=0 -- $WORK/rv-ame-loop
 time $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,trace=0,claim=0 -- $WORK/rv-ame-loop
+[ $? -eq 100 ] && echo "rv-ame-loop: exit 100, the probe's success code"
 ```
 
 The unit's registers over the gdb protocol (any gdb with RISC-V support
@@ -600,35 +601,39 @@ which is what the stream engine of the accelerator form would remove.
 
 ## 6. Verification record
 
-Run on 2026-09-20/21 against commit `344f0d5` of `dev-mimicos-v2` (80-core
-Debian 12 host; clang 15 with lld for the guests; the RISC-V Unified
-Database at `b4e9fea`, the IME 0.9 pipeline's UDB overlay, and the AME
-draft at `8d27acd` as the specification roots), the same way as the
-companion document: every `# verify:` block extracted in order into one
-script, the `env` block sourced, each other block in a traced subshell
-with its status recorded and its output read.
+Re-run on 2026-10-06 against commit `1dcf651` of `dev-mimicos-v2-update`
+(80-core Debian 12 host; clang 15 with lld for the guests; the RISC-V
+Unified Database at `b4e9fea`, the IME 0.9 pipeline's UDB overlay, and
+the AME draft at `8d27acd` as the specification roots), the same way as
+the companion document (`make doc-verify`): every `# verify:` block
+extracted in order, the `env` block sourced, each other block in a
+traced subshell with its status recorded and its output read.  Every
+block passed.
 
 | block | result |
 |---|---|
 | `env`, `build` | build with the RISC-V and QEMU features; the patched riscv64 QEMU and the Sail model present in the dependency cache |
-| `decoder` | tables check passes; regeneration from the specification roots is byte-identical to the committed tables (1,436 instructions, 38 classes); the AME overlay regenerates 138 instructions with 0 encoding mismatches |
-| `gemm3` | exit 100; 308 footprints; every class count and footprint byte exact (`expected_counts.py --ame`) |
-| `gemm3-32-sail` | the 32x32 build exits 100 on 2.44 M instructions; the Sail model reports `SUCCESS` |
-| `agent-kernels` | scalar, RVV, IME, int4 exit 100; AME and DMA on the plugin models 8/8; 4,694,780 AME instructions claimed at translation |
+| `decoder` | tables check passes; regeneration from the specification roots is byte-identical to the committed tables, header and class fragment (1,436 instructions from 68 extensions, 38 classes); the AME overlay regenerates |
+| `gemm3` | exit 100; 6,992 instructions, 308 footprints, 41 AME instructions claimed at translation; every class count and footprint byte exact (`expected_counts.py --ame`) |
+| `gemm3-32-sail` | the 32x32 build exits 100 on 2.44 M instructions (8,236 footprints); the Sail model reports `SUCCESS` |
+| `agent-kernels` | scalar, RVV, IME and int4 exit 100 (276 prefilled, 103 generated tokens); AME and DMA on the plugin models; 4,694,780 AME instructions claimed at translation |
 | `agent-vlen` | RVV at 65,536 bits exit 100 |
-| `agent-simulate` | 379 tokens simulated; cycles and instructions per token and the vector-class count printed |
-| `agent-tile` | AME on the tile under `oca_l2` and `nca` with `ame_tile.mma` exact; the DMA accelerator at 16 and 1,024 MACs per cycle with its task count and MACs |
-| `agent-32` | IME and AME at 32x32 exit 100 with `ame_n=32`; simulated in the core |
+| `agent-simulate` | 379 tokens simulated: 82,323 cycles and 133,436 instructions per token, 4,122,504 vector multiply-adds |
+| `agent-tile` | AME on the tile under `oca_l2` and `nca` (26.0 M instructions, 3.32 M footprints) with `ame_tile.mma` exact; the DMA accelerator with its task count and bytes |
+| `agent-32` | IME and AME at 32x32 exit 100 with `ame_n=32` (17.1 M instructions, 71,762 AME instructions claimed); simulated in the core |
 | `quantize` | the committed int4 files regenerate identically (40/40) |
 | `train` | a 300-step model trained, built and run: every line as numpy (exit 6, some answers wrong, as expected of a short training) |
 | `vlen` | the probe agrees at 128, 1,024, 4,096 and 65,536 bits; the gather at 65,536 bits records its footprints and counts the dropped lines |
-| `plugin-api` | mode 0 exit 100 with 11 claimed; `claim=0` 11 trapped; without the plugin SIGILL; mode 1 SIGILL and mode 2 SIGSEGV with the model's report; 4 M emulated instructions 0.18 s claimed against 0.35 s trapped |
+| `plugin-api` | mode 0 exit 100 with the CSRs, ownership and a claimed product checked; `claim=0` trapped; without the plugin SIGILL; mode 1 SIGILL and mode 2 SIGSEGV with the model's report; 4 M instructions claimed at translation against 4 M through the exception path, timed; the loop probe exits 100 |
 | `gdb` | the target description carries `org.riscv.ame` with 103 registers; `amenlen` reads 4, `ameudsz` 32 |
-| `patch` | the patch regenerates from the two trees with no change |
-| `harness` | the 11 listed cases pass |
+| `patch` | the patch regenerates from the two trees; on this host the riscv64 tree also carries the plugin-wait patch of the Pac-Sim-on-QEMU work, so the regenerated file adds those hunks and is otherwise identical to the committed one |
+| `harness` | the listed cases pass |
 | `long:wide`, `long:ime-check` | see below |
 
-Corrected during the pass (each re-run to a pass): the generator's
+The earlier record (2026-09-20/21, against `344f0d5` of `dev-mimicos-v2`)
+is superseded by this one.
+
+Corrected during the earlier pass (each re-run to a pass): the generator's
 report must not be piped into `head` (the pipe closes before the tables
 are written); the Sail model's `--config-override` takes a JSON file, not
 an inline string; the class count is 38, not 37.  Fixed in the tree:

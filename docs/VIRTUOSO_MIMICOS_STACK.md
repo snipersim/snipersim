@@ -691,30 +691,34 @@ make regress_qemu
 
 ## 5. Verification record
 
-Run on 2026-09-20/21 against commit `344f0d5` of `dev-mimicos-v2` (the
-`pacsim` and `pacsim-virtuoso` blocks and the suites' last line against
-`e3a5ca0`, which carries the Pac-Sim work) on an
-80-core Debian 12 host (gcc 12.2, Python 3.11, SDE 10.13.1, MPICH 4.2.3
-from the dependency cache), by extracting every `# verify:` block in
-order into one script and executing it: the `env` block sourced, every
-other block in its own subshell with tracing on, its exit status
-recorded.  Each block's output was read, not only its status.
+Re-run on 2026-10-06 against commit `1dcf651` of `dev-mimicos-v2-update`
+(the release cleanup series) on the same 80-core Debian 12 host (gcc
+12.2, Python 3.11, SDE 10.13.1, MPICH 4.2.3 from the dependency cache),
+the same way as before: every `# verify:` block extracted in order into
+one script (`make doc-verify`), the `env` block sourced, every other
+block in its own subshell with tracing on, its exit status recorded and
+its output read.  Every block passed.
 
 | block | result |
 |---|---|
-| `env`, `build` | fetch, configure and build from a clean dependency cache; `deps/sniper-deps status` reports every dependency present |
+| `env`, `build` | configure and build (dependencies from the shared cache); `deps/sniper-deps status` reports every dependency present |
 | `first` | the FFT prints `TEST PASSED`; statistics and the CPI stack read back |
-| `configs` | DDR5, CXL and the four-core scheme run with the workload's checksum; `ddr.*`, `cxl.*` and `mmu.*` counters present |
-| `traces` | a stored trace of 2.4 M instructions recorded, dumped and replayed |
-| `qemu` | user-mode trace of 32.0 M instructions simulated; the full-system probe counts exactly 3,003,007 |
-| `mmu` | every scheme runs and its feature counter is non-zero: baseline 91 faults; TRAIL 15 predictions, 120 prefetches; Berti 82 strides; Agile 33 prefetch walks; Revelator 91 prefetches, 91 hash hits; Victima 91 probes, 69 hits; hardware faults 91 handled, 0 to the OS; kcompactd and khugepaged 3,361 scans; the 1536-entry TLB 1,333,262 hits |
-| `mimicos` | 48 fast and 2 slow allocations; the round-robin scheduler configured with 115 expired quanta; two applications on two workers, two shutdown events, scheduler statistics printed |
-| `live` | the stream stamped and tagged; the feed's header record; a dashboard frame with the CPI stack, both cores and the kernel's log lines |
-| `pacsim` | both runs print `checksum=59.570582 visited=1512832`; the sampled run cut 13 regions and measured 6; estimate 7.45076 ms against the full run's 7.47614 ms (0.3%); 122 s full, 94 s sampled |
-| `pacsim-virtuoso` | every scheme's sampled run prints the full run's checksum (29.785291) and an estimate (baseline 1.81 ms, Revelator 1.63 ms, Victima 1.81 ms, TRAIL 1.72 ms, hardware faults 1.81 ms); the schemes' counters accumulate under sampling: 272 page-table walks per worker core, 544 Revelator prefetches, 238 Victima leaf hits, 248 to 288 TRAIL prefetches, 10 hardware-handled faults |
+| `configs` | DDR5, CXL and the four-core scheme run with the workload's checksum; `ddr.*` (3,442 page hits), `cxl.*` and `mmu.*` (91 faults, 182 walks) counters present |
+| `traces` | a stored trace of 2.4 M instructions recorded, dumped and replayed (1.5 M cycles, 1.58 IPC) |
+| `qemu` | user-mode trace of 32.1 M instructions simulated; the full-system probe counts exactly 3,003,007 |
+| `mmu` | every scheme runs and its feature counter is non-zero: baseline 91 faults; TRAIL 14 predictions, 112 successful prefetches; Berti 82 strides; Agile 32 prefetch walks; Revelator 91 prefetches, 97 hash hits; Victima 91 probes, 69 hits; hardware faults 91 handled in hardware, 0 by the OS; the daemons 3,358 scans each |
+| `mimicos` | the kernel's allocation counters, the round-robin scheduler's 115 expired quanta, two applications on two workers with their shutdown events and scheduler statistics printed |
+| `live` | the stream stamped and tagged; the feed's header record (4 cores, 50,000 ns interval); a dashboard frame with the CPI stack, the cores and the kernel's log lines |
+| `pacsim` | both runs print `checksum=59.570582 visited=1512832`; the sampled run cut 13 regions and measured 6; estimate 7.448 ms against the full run's 7.476 ms (0.4%) |
+| `pacsim-virtuoso` | every scheme's sampled run prints the full run's checksum (59.570582) and an estimate (baseline 2.99 ms, Revelator 3.01 ms, Victima 2.99 ms, TRAIL 3.17 ms, hardware faults 2.99 ms); the schemes' counters accumulate in the sampled runs |
 | `long:suites` | see below |
 
-Corrected during the pass (each re-run to a pass): the stored-trace
+The earlier record (2026-09-20/21, against `344f0d5` and `e3a5ca0` of
+`dev-mimicos-v2`) is superseded by this one; the series between the two
+is the release cleanup (phases 1 to 7 in the commit history), the
+Revelator exception handler, the virt MMU and the NUMA Revelator.
+
+Corrected during the earlier pass (each re-run to a pass): the stored-trace
 example named the file with an application and thread suffix, which only
 live recording uses (a standalone `record-trace` writes `<prefix>.sift`);
 the full-system probe example lacked the `isa-debug-exit` device the boot
