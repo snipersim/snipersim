@@ -174,7 +174,7 @@ add_library(decoder STATIC ${DECODER_SOURCES})
 target_link_libraries(decoder PUBLIC sniper_common)
 set_target_properties(decoder PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # The RISC-V decoder is generated from the RISC-V Unified Database
-# (tools/riscv/gen_isa.py); `make riscv-isa-gen` regenerates it when
+# (tools/riscv/gen_isa.py); `cmake --build <build> --target riscv-isa-gen` regenerates it when
 # SNIPER_UDB_ROOTS lists the specification checkouts to build it from.
 set(SNIPER_UDB_ROOTS "" CACHE STRING "UDB roots (;-separated) for tools/riscv/gen_isa.py: upstream, then overlays")
 if(SNIPER_UDB_ROOTS)
@@ -193,8 +193,7 @@ if(SNIPER_UDB_ROOTS)
             --udb "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/overlay"
             --policy "${CMAKE_CURRENT_SOURCE_DIR}/tools/riscv/isa_policy.yaml"
             --out "${CMAKE_CURRENT_SOURCE_DIR}/decoder_lib"
-            --config "${CMAKE_CURRENT_SOURCE_DIR}/config/riscv.cfg"
-            --config "${CMAKE_CURRENT_SOURCE_DIR}/config/riscv-mediumboom.cfg"
+            --config "${CMAKE_CURRENT_SOURCE_DIR}/config/common_configs/riscv_isa_classes.cfg"
             --header "${CMAKE_CURRENT_SOURCE_DIR}/include/riscv_insn.h"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Regenerating the RISC-V decoder tables from the Unified Database")
@@ -211,7 +210,7 @@ set_target_properties(carbon PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # The simulator binary.
 file(GLOB STANDALONE_SOURCES CONFIGURE_DEPENDS
-     "${CMAKE_CURRENT_SOURCE_DIR}/standalone/*.cc")
+     "${CMAKE_CURRENT_SOURCE_DIR}/simulator/*.cc")
 
 add_executable(sniper ${STANDALONE_SOURCES})
 target_link_libraries(sniper PRIVATE carbon sift decoder sniper_common)
