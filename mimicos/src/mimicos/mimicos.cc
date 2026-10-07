@@ -1409,8 +1409,14 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
 
         UInt64 bytes = (1 << 12);
 
-        //For simplicity, we assume core_id = 0 for now
-        auto core_id = 0;
+        /* The allocation is made as this worker's core (poll_for_signal's
+           core_id): the Linux-style allocator keeps one page set per CPU and
+           pops from it without a lock, on the assumption that only that CPU's
+           worker touches it.  A local `core_id = 0` here used to send every
+           worker to CPU 0's page set, and two workers handling faults at the
+           same time raced on its free list: the same frame handed out twice
+           (the MMU's sanity check then aborts on a PA mapped by two VAs) or
+           the list corrupted. */
 
         /* Linux-mimicking VMA lookup: walk the small sorted VMA cache.
            Returns true if VPN was already seen (warm), false otherwise.
