@@ -1,6 +1,8 @@
 #pragma once
 #include "pagetable.h"
 #include "pagetable_radix.h"
+// Step 13: the hashed page table with chaining
+#include "pagetable_ht.h"
 #include "config.hpp"
 #include "mimicos.h"
 
@@ -26,8 +28,40 @@ namespace ParametricDramDirectoryMSI
 			return pt;
 		}
 
+		// The hashed page tables take one table size per page size; their keys
+		// sit under the OS that owns them, beside the radix table's.
+		static void readHashedPageTableConfig(String name, bool is_guest, int &page_sizes, int *&page_size_list, int *&page_table_size_list)
+		{
+			String mimicos_name = is_guest ? Sim()->getMimicOS_VM()->getName() : Sim()->getMimicOS()->getName();
+			String cfg = "perf_model/" + mimicos_name + "/" + name;
+			page_sizes = Sim()->getCfg()->getInt(cfg + "/page_sizes");
+			page_size_list = new int[page_sizes];
+			page_table_size_list = new int[page_sizes];
+			for (int i = 0; i < page_sizes; i++)
+			{
+				page_size_list[i] = Sim()->getCfg()->getIntArray(cfg + "/page_size_list", i);
+				page_table_size_list[i] = Sim()->getCfg()->getIntArray(cfg + "/page_table_size_list", i);
+			}
+		}
+
+		// Step 13: the hashed page table with chaining
+		static PageTable *createHTPageTable(int app_id, String name, String type, int page_sizes, int *page_size_list, int *page_table_size_list, bool is_guest)
+		{
+			std::cout << "[HT Page Table] Creating hashed page table with chaining " << name << " for app id: " << app_id << std::endl;
+			for (int i = 0; i < page_sizes; i++)
+				std::cout << "[HT Page Table] Page size " << page_size_list[i] << ": " << page_table_size_list[i] << " root entries" << std::endl;
+			return new PageTableHT(app_id, name, type, page_sizes, page_size_list, page_table_size_list, is_guest);
+		}
+
 		static PageTable *createPageTable(String type, String name, UInt64 app_id, bool is_guest = false)
 		{
+			// Step 13: the hashed page table with chaining
+			if (type == "hash_table")
+			{
+				int page_sizes, *page_size_list, *page_table_size_list;
+				readHashedPageTableConfig(name, is_guest, page_sizes, page_size_list, page_table_size_list);
+				return createHTPageTable(app_id, name, type, page_sizes, page_size_list, page_table_size_list, is_guest);
+			}
 			if (type == "radix")
 			{
 				String mimicos_name;
@@ -50,7 +84,7 @@ namespace ParametricDramDirectoryMSI
 				return createRadixPageTable(app_id, name, type, page_sizes, page_size_list, levels, frame_size, is_guest);
 			}
 			else
-				assert(0 && "Invalid page table type (only 'radix' supported in this build)");
+				assert(0 && "Invalid page table type");
 		}
 	};
 }

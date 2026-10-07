@@ -1089,6 +1089,28 @@ FEATURES = {
                         'spectlb.invocations', 'spectlb.allocations',
                         'spectlb.hits', 'spectlb.correct_predictions',
                         'L2.prefetches')),
+
+    # Step 13: the hashed page table with chaining, under the baseline MMU
+    # on the sniper-space fault path end to end.  The page table is
+    # selected by the OS (page_table_type), the MMU walks whatever it is
+    # given, and the fault handler maps into it; so the walk counters have
+    # to move (registered under the table's name, hash_table_chaining, one
+    # per page size), faults have to have been resolved through
+    # updatePageTableFrames (page_faults, and the application reaching its
+    # checksum, which run_sniper requires of every case), and the walks
+    # have to have been charged (mmu.total_walk_latency_data).  The
+    # conflicts counter is registered but a few hundred pages in 65536
+    # slots never chain, so it only has to exist.
+    'pagetable_ht': (
+        ['address_translation_schemes/ht_baseline_alloc'], 1,
+        require_nonzero('hash_table_chaining.page_table_walks_12',
+                        'hash_table_chaining.page_table_walks_21',
+                        'hash_table_chaining.accesses_12',
+                        'hash_table_chaining.page_faults',
+                        'mmu.page_table_walks',
+                        'mmu.total_walk_latency_data',
+                        registered=('hash_table_chaining.conflicts_12',
+                                    'hash_table_chaining.resizes_12'))),
 }
 
 

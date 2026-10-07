@@ -25,6 +25,7 @@
 
 // > Page Tables
 #define DEBUG_PAGE_TABLE_RADIX      DEBUG_NONE /* 0, 1 or 2 */
+#define DEBUG_PAGE_TABLE_HASH       DEBUG_NONE /* 0, 1 or 2 */  // The hashed page tables: chaining (HT), Hash Don't Cache, elastic cuckoo
 
 // ROB Performance Model specific
 #define DEBUG_ROB_TIMER             DEBUG_NONE /* 0, 1 or 2 */

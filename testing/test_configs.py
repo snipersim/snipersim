@@ -312,6 +312,10 @@ FRAGMENT_REQUIRE_NONZERO = {
     # under spectlb; as for the oracle only the stress scheme exercises
     # them (see spectlb_stress.cfg).
     'address_translation_schemes/spectlb_stress': ('spec_tlb.accesses', 'spectlb.hits'),
+    # Step 13: the hashed page table with chaining registers its walks
+    # under its own name, one counter per page size.
+    'address_translation_schemes/ht_baseline_alloc': ('hash_table_chaining.page_table_walks_12', 'hash_table_chaining.page_faults'),
+    'address_translation_schemes/reservethp_ht': ('hash_table_chaining.page_table_walks_12', 'hash_table_chaining.page_faults'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.
