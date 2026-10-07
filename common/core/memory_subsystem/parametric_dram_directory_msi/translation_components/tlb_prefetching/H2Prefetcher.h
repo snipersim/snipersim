@@ -29,6 +29,13 @@ namespace ParametricDramDirectoryMSI
 		IntPtr B_address;
 		IntPtr C_address;
 
+		struct
+		{
+			UInt64 prefetch_attempts;      /* candidate walks issued (two per access once three pages are known) */
+			UInt64 successful_prefetches;  /* candidates that resolved to a page */
+			UInt64 failed_prefetches;
+		} stats;
+
 		H2Prefetcher(Core *_core, MemoryManagerBase *_memory_manager, ShmemPerfModel *_shmem_perf_model, String name);
 		std::vector<query_entry> performPrefetch(IntPtr address, IntPtr eip, Core::lock_signal_t lock, bool modeled, bool count, PageTable *pt, bool instruction = false, bool tlb_hit = false, bool pq_hit = false, int page_size = 12) override;
 	};

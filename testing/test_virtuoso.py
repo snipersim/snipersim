@@ -736,6 +736,16 @@ FEATURES = {
         require_nonzero('tlb_stride.prefetch_attempts',
                         'tlb_stride.successful_prefetches')),
 
+    # The H2 TLB prefetcher: two candidate walks per access once it has seen
+    # three demand pages, for the demand page plus each of the two most
+    # recent strides.  It registered no statistics until now; tlb_h2.* are
+    # its own, and as for stride both the attempts and the walks that
+    # resolved are required.
+    'h2': (
+        ['address_translation_schemes/baseline_h2'], 1,
+        require_nonzero('tlb_h2.prefetch_attempts',
+                        'tlb_h2.successful_prefetches')),
+
     # The open-addressing Revelator engine: one hash gives the home frame and
     # the engine probes linearly from it, so every prediction is a set of
     # probing_depth frames.  The *_probe_N names are registered only by this
