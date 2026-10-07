@@ -22,6 +22,25 @@
 #ifndef AME_TILE_H
 #define AME_TILE_H
 
+#if !SNIPER_RISCV
+/* No RISC-V model in this build: nothing is ever attached. */
+#include "fixed_types.h"
+#include "subsecond_time.h"
+#include "hit_where.h"
+class Core;
+class DynamicMicroOp;
+class ComponentTime;
+class AmeTile
+{
+public:
+   static AmeTile *create(Core *) { return NULL; }
+   bool owns(const DynamicMicroOp &) const { return false; }
+   bool holds_until_done(const DynamicMicroOp &) const { return false; }
+   void dispatch(const DynamicMicroOp &, SubsecondTime) {}
+   uint64_t issue(DynamicMicroOp &, const ComponentTime &, HitWhere::where_t &) { return 0; }
+};
+#else
+
 #include "fixed_types.h"
 #include "subsecond_time.h"
 #include "mem_component.h"
@@ -82,5 +101,6 @@ private:
    SubsecondTime m_task_dma, m_task_compute, m_task_wait;
    SubsecondTime stream(Core::mem_op_t op, IntPtr addr, UInt32 size, IntPtr eip, SubsecondTime start, SubsecondTime &busy);
 };
+#endif /* SNIPER_RISCV */
 
 #endif

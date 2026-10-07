@@ -169,7 +169,11 @@ file(GLOB DECODER_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decoder
 if(NOT SNIPER_ENABLE_ARM)
   list(FILTER DECODER_SOURCES EXCLUDE REGEX "/arm[^/]*\\.cc$")
 endif()
-
+if(NOT SNIPER_ENABLE_RISCV)
+  # The decoder needs the RISC-V model; the generated class tables (riscv_isa*)
+  # stay, since the BOOM core model reads them whatever the ISA option.
+  list(FILTER DECODER_SOURCES EXCLUDE REGEX "/riscv_decoder\\.cc$")
+endif()
 add_library(decoder STATIC ${DECODER_SOURCES})
 target_link_libraries(decoder PUBLIC sniper_common)
 set_target_properties(decoder PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -203,6 +207,12 @@ endif()
 file(GLOB_RECURSE CARBON_SOURCES CONFIGURE_DEPENDS
      "${CMAKE_CURRENT_SOURCE_DIR}/common/*.cc"
      "${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp")
+
+if(NOT SNIPER_ENABLE_RISCV)
+  # The attached matrix tile executes RISC-V AME instructions; without the
+  # RISC-V model ame_tile.h provides the stub the ROB timer links against.
+  list(FILTER CARBON_SOURCES EXCLUDE REGEX "/ame_tile\\.cc$")
+endif()
 
 add_library(carbon STATIC ${CARBON_SOURCES})
 target_link_libraries(carbon PUBLIC sniper_common sift decoder)
