@@ -473,15 +473,6 @@ void MimicOS::deletePageTableEntry(IntPtr victim_address, int app_id)
     }
 }
 
-// ============ Deprecated ============
-
-void MimicOS::handle_page_fault(IntPtr address, IntPtr core_id, int frames)
-{
-    // DEPRECATED: Page fault handling has been migrated to exception handlers
-    // See: ExceptionHandlerFactory in common/system/memory_management/exception_handling/
-    std::cerr << "[MimicOS] WARNING: handle_page_fault() is deprecated. Use exception handlers instead." << std::endl;
-}
-
 // ============ HugeTLBfs Management ============
 
 IntPtr MimicOS::allocateHugePage(int app_id, IntPtr vaddr, bool size_2mb)
@@ -572,7 +563,6 @@ void MimicOS::initPerCorePageFaultState(UInt32 num_cores)
         for (UInt32 i = 0; i < num_cores; ++i) {
             m_event_queue_locks.emplace_back(new std::mutex());
         }
-        m_scratch_messages.resize(num_cores);
     }
 }
 

@@ -450,13 +450,6 @@ public:
         return m_event_queues[core_id].size();
     }
 
-    /* Shims for call sites that still hold a MimicOSMessage*.  The scratch
-       slot holds the event most recently popped for that core.
-       DEPRECATED -- new code uses popEvent or peekFront. */
-    MimicOSMessage* getMessage(int core_id) {
-        if (core_id < 0 || (size_t)core_id >= m_scratch_messages.size()) core_id = 0;
-        return &m_scratch_messages[core_id];
-    }
     bool isMessageReady(int core_id) { return isEventReady(core_id); }
     void consumeMessage(int /*core_id*/) { /* no-op: popEvent already removed it */ }
     
@@ -544,13 +537,6 @@ public:
      */
     bool isPerCoreStatsInitialized() const { return !m_per_core_stats.empty(); }
     
-    // ============ Deprecated ============
-    
-    /**
-     * @deprecated Use exception handlers instead
-     */
-    void handle_page_fault(IntPtr address, IntPtr core_id, int frames);
-
 private:
     // ============ Identity ============
     String m_name;
@@ -626,9 +612,6 @@ private:
     std::vector<std::deque<MimicOSMessage>>  m_event_queues;
     std::vector<std::unique_ptr<std::mutex>> m_event_queue_locks;
     std::vector<thread_id_t>                 m_idle_waiters;   // per core, INVALID_THREAD_ID when none
-    /* Landing slot for the deprecated getMessage() shim; real delivery pops
-       into a caller-provided buffer. */
-    std::vector<MimicOSMessage> m_scratch_messages;
     std::atomic<uint64_t> m_fast_fault_charge_cycles{0};
     bool m_last_pf_caused_swapping;
     
