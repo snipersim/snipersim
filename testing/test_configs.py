@@ -308,6 +308,10 @@ FRAGMENT_REQUIRE_NONZERO = {
     # stress scheme invokes it: at the default geometry every walk of this
     # workload faults (see spec_oracle_stress.cfg), and the engine stays idle.
     'address_translation_schemes/spec_oracle_stress': ('oracle.invocations', 'oracle.prefetches'),
+    # Step 10: SpecTLB's own TLB registers under spec_tlb and the engine
+    # under spectlb; as for the oracle only the stress scheme exercises
+    # them (see spectlb_stress.cfg).
+    'address_translation_schemes/spectlb_stress': ('spec_tlb.accesses', 'spectlb.hits'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.

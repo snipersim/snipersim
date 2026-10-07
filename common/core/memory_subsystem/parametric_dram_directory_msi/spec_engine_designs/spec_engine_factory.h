@@ -13,6 +13,8 @@
 #include "asap_engine.h"
 // Step 9: oracle
 #include "oracle_spec.h"
+// Step 10: SpecTLB
+#include "spectlb.h"
 
 namespace ParametricDramDirectoryMSI
 {
@@ -68,6 +70,11 @@ namespace ParametricDramDirectoryMSI
             else if (type == "oracle")
             {
                 return new OracleSpec(core, memory_manager, shmem_perf_model, name);
+            }
+            // Step 10: SpecTLB, the reserved-region data-side engine.
+            else if (type == "specTLB")
+            {
+                return new SpecTLB(core, memory_manager, shmem_perf_model, name);
             }
             // SpOT only if the deferred comparison engines are ever pulled in.
             else

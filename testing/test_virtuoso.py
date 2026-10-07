@@ -1072,6 +1072,23 @@ FEATURES = {
     'oracle_spec': (
         ['address_translation_schemes/spec_oracle_stress'], 1,
         require_nonzero('oracle.invocations', 'oracle.prefetches', 'L2.prefetches')),
+
+    # Step 10: SpecTLB, the reserved-region data-side engine.  A TLB miss
+    # looks the address up in a small TLB of reserved 2MB regions and, on a
+    # hit, prefetches the data line at the region's base plus the offset
+    # within 2MB; a miss installs the region after the walk, if the
+    # reserve_thp allocator reports it reserved.  The whole chain has to
+    # run: lookups (spec_tlb.accesses, registered by the TLB it builds),
+    # regions installed, hits that issued a prefetch, and predictions that
+    # were right -- under reserve_thp every 4KB page of a reserved region
+    # sits at its offset, so a hit's line is the translation's own.  Needs
+    # the stress geometry for the reason oracle_spec does.
+    'spectlb': (
+        ['address_translation_schemes/spectlb_stress'], 1,
+        require_nonzero('spec_tlb.accesses', 'spec_tlb.hits',
+                        'spectlb.invocations', 'spectlb.allocations',
+                        'spectlb.hits', 'spectlb.correct_predictions',
+                        'L2.prefetches')),
 }
 
 
