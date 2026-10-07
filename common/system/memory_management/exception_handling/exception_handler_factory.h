@@ -3,6 +3,7 @@
 
 #include "misc/exception_handler_base.h"
 #include "sniper_space_exception_handler.h"
+#include "revelator_exception_handler.h"
 #include "user_space_exception_handler.h"
 #include "simulator.h"
 #include "config.hpp"
@@ -62,9 +63,13 @@ private:
         if (handler_type == "default" || handler_type == "sniper") {
             return new SniperExceptionHandler(core);
         }
+        else if (handler_type == "revelator") {
+            return new RevelatorExceptionHandler(core);
+        }
         else {
-            std::cerr << "[EXCEPTION_HANDLER_FACTORY] Unknown handler type: " << handler_type << ", using default" << std::endl;
-            return new SniperExceptionHandler(core);
+            std::cerr << "[EXCEPTION_HANDLER_FACTORY] Unknown exception handler type '" << handler_type
+                      << "' (general/exception_handler_type): known types are default, sniper, revelator" << std::endl;
+            abort();
         }
     }
 };

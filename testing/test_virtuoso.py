@@ -201,11 +201,17 @@ FEATURES = {
     # one, and a disabled engine still runs, still produces a plausible IPC and
     # still registers every counter -- reading zero.  So the check is that the
     # engine issued prefetches and that the allocator's hash placement was used.
+    # F4: the Revelator exception handler places the leaf page-table frame
+    # through the allocator's hashed path (allocate with
+    # is_pagetable_allocation), which is what the speculative engine relies
+    # on; hash1_successful_pt_allocations counts exactly those placements
+    # and stays zero under the default handler.
     'revelator': (
         ['address_translation_schemes/revelator'], 1,
         require_nonzero('revelator.total_prefetches',
                         'revelator_allocator.hash1_tries',
-                        'revelator_allocator.hash1_hits')),
+                        'revelator_allocator.hash1_hits',
+                        'revelator_allocator.hash1_successful_pt_allocations')),
 
     # F5: Victima probes the cache for leaf PTE lines.  leaf_hits is the
     # discriminating counter: MMUCacheInterface::isLinePresent has a default
