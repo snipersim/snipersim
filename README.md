@@ -67,6 +67,18 @@ program such as `/bin/true` is not a useful check: it exits before the
 simulator has anything to model, and it has been seen to pass while the
 simulator was in fact broken.
 
+## Documentation
+
+- `docs/VIRTUOSO_MIMICOS_STACK.md`: the x86 side of the tree, verified command by command: the build and dependencies, the front ends, the memory and address-translation models (Virtuoso, MimicOS), Pac-Sim, the output stream and live feed, the test suites.
+- `docs/RISCV_AI_ACCELERATOR_STACK.md`: the RISC-V side: the decoder generated from the Unified Database, the QEMU front end, the vector and matrix units and the attached accelerators.
+- `docs/RISCV_ISA_GENERATION.md`: how the RISC-V decoder, header and configuration block are generated.
+- `docs/ACCELERATOR_COMPONENTS.md`: every software and hardware component of the matrix-acceleration path, and the measurements.
+- `docs/ARM64.md`: recording ARM64 traces with the DynamoRIO front end and simulating them.
+- `docs/COMPILATION.md`: compiling an application to run under Sniper.
+- `docs/TEMPORAL_PTE_TUNING.md`: tuning the temporal PTE prefetcher.
+- `make doc-verify` runs every `# verify:` block of the two stack documents; `make doxygen` builds the API reference into `docs/doxygen/`.
+- `docker/`: Ubuntu 22.04 and 24.04 images with everything the build needs (`make -C docker`).
+
 ## Publications
 
 If you are using Sniper, please let us know by posting a message on

@@ -1,3 +1,27 @@
+Version 9.0 (in preparation)
+  * The build is CMake behind a make forwarder, with presets; every external
+    dependency is declared in deps/manifest.json with a pinned version and
+    digest and fetched into a shared cache by deps/sniper-deps
+  * Front ends: the SIFT recorder as an SDE tool (Pac-Sim restored, pinball
+    replay), the DynamoRIO client for x86-64 and ARM64 (fixed and tested),
+    the QEMU TCG-plugin front end (x86 user and full system, RISC-V user mode
+    with the IME, AME and accelerator extensions); the plain-Pin, PinPlay-kit,
+    rv8 and Spike paths are gone
+  * Virtuoso v2 and MimicOS: the MMU framework with the radix and range page
+    tables, page-walk caches, a two-level TLB hierarchy with eight prefetchers,
+    speculative translation (Revelator, NUMA Revelator), Victima, hardware
+    page faults, the virtualised (nested) MMU, the Linux daemons, and MimicOS
+    in the simulator and as a user-space kernel
+  * Memory: a refactored DRAM interface, a detailed DDR model, CXL.mem, a
+    tiered controller; non-power-of-two caches and TLBs
+  * RISC-V: a decoder generated from the Unified Database, the vector and
+    matrix (IME, AME) units, an attached matrix tile and a DMA-attached
+    accelerator, with workloads and exact-count checks
+  * Pac-Sim sampled simulation, with tools/dumpstats.py reporting its estimate
+  * One stamped output stream per run, an lnav format, a live feed and dashboard
+  * make regress: seven suites (scripting, decoder tables, configurations,
+    QEMU, Pac-Sim, workloads, Virtuoso); Python 3 throughout; C++20
+
 Version 8.1
   * Update from Python2 to Python3
   * Support for c++20

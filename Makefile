@@ -83,7 +83,7 @@ _cmake_flags += $(CMAKE_ARGS)
 _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
              $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-.PHONY: all deps configure build clean distclean regress regress_scripting regress_riscv_isa regress_configs regress_qemu regress_pacsim validate_pacsim regress_apps regress_virtuoso riscv-ime-check help
+.PHONY: all deps configure build clean distclean regress regress_scripting regress_riscv_isa regress_configs regress_qemu regress_pacsim validate_pacsim regress_apps regress_virtuoso riscv-ime-check doc-verify doxygen help
 
 all: build
 
@@ -224,6 +224,18 @@ help:
 
 # The RISC-V / IME 0.9 chain, end to end: specification -> generated decoder,
 # QEMU with the IME patch, a workload built with a stock clang, the harness.
+# Every `# verify:` block of the two stack documents, in order; --long adds the
+# blocks marked long (hours).  DOC_VERIFY_FLAGS=--long make doc-verify
+DOC_VERIFY_FLAGS ?=
+doc-verify:
+	@for d in docs/VIRTUOSO_MIMICOS_STACK.md docs/RISCV_AI_ACCELERATOR_STACK.md; do \
+	  echo "== $$d"; python3 tools/doc-verify.py $$d $(DOC_VERIFY_FLAGS) > build/doc-verify-$$(basename $$d .md).sh && bash build/doc-verify-$$(basename $$d .md).sh || exit $$?; \
+	done
+
+# The API reference, into docs/doxygen/
+doxygen:
+	cd docs && doxygen Doxyfile
+
 riscv-ime-check:
 	@tools/riscv/ime-check.sh
 .PHONY: riscv-ime-check
