@@ -452,7 +452,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--frontend', default='sde', choices=('sde', 'none'))
-    ap.add_argument('--torch', action='store_true', default=True)
+    ap.add_argument('--torch', action='store_true', default=False,
+                    help='libtorch, for the nn branch predictor (off by default, as in the build)')
     ap.add_argument('--no-torch', dest='torch', action='store_false')
     ap.add_argument('--mcpat', action='store_true', default=True)
     ap.add_argument('--no-mcpat', dest='mcpat', action='store_false')

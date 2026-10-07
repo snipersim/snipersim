@@ -19,6 +19,8 @@ something the workload already reports rather than a number invented here:
   - test/dvfs sets a frequency and reads it back.
   - test/mpi computes pi.
   - test/smc rewrites its own code and prints the result.
+  - test/fft-nn selects the libtorch branch predictor and is skipped when the
+    build has no libtorch (TORCH=ON).
   - test/dr-frontend runs the FFT through the DynamoRIO front end instead of
     the SDE recorder, and requires both its verdict and the front-end's banner.
 
@@ -172,7 +174,7 @@ CASES = {
     'fft-hetero':      (fft_self_check, None),
     'fft-hetero-cfg':  (fft_self_check, None),
     'fft-marker':      (fft_self_check, None),
-    'fft-nn':          (fft_self_check, None),
+    'fft-nn':          (fft_self_check, 'torch'),
     'pinplay':         (pinplay_check, None),
     'dr-frontend':     (dr_frontend_check, 'dynamorio'),
     'api':             (api_in_simulator, None),
@@ -191,6 +193,16 @@ def unavailable(reason):
     if reason == 'mpich':
         if not os.path.isfile(os.path.join(SNIPER_ROOT, 'mpich', 'bin', 'mpiexec')):
             return 'no MPI (deps/sniper-deps --mpi fetch)'
+    if reason == 'torch':
+        # The nn branch predictor needs libtorch, which the build carries only
+        # with TORCH=ON; the build's own config says whether it does.
+        build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
+        try:
+            cfg = open(os.path.join(build, 'config', 'sniper.py')).read()
+        except OSError:
+            cfg = ''
+        if re.search(r'^torch_home=""', cfg, re.M) or 'torch_home=' not in cfg:
+            return 'no libtorch in %s (make TORCH=ON)' % build
     if reason == 'dynamorio':
         build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
         if not os.path.isfile(os.path.join(build, 'lib', 'libdr-frontend.so')):

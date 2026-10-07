@@ -25,7 +25,7 @@ option(SNIPER_ENABLE_RISCV     "RISC-V core model (decoder generated from the UD
 option(SNIPER_ENABLE_ARM       "Build the ARM decoder (needs Capstone)"          OFF)
 option(SNIPER_ENABLE_DYNAMORIO "Build the DynamoRIO frontend"                    OFF)
 option(SNIPER_ENABLE_QEMU      "Build the QEMU TCG plugin frontend"              OFF)
-option(SNIPER_ENABLE_TORCH     "Build the libtorch branch predictor"             ON)
+option(SNIPER_ENABLE_TORCH     "Build the libtorch branch predictor (nn)"        OFF)
 option(SNIPER_ENABLE_MCPAT     "Use McPAT for power and area"                    ON)
 
 set(SNIPER_CHAMPSIM_INCLUDE "" CACHE PATH

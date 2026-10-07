@@ -39,13 +39,14 @@ DEPS := $(SIM_ROOT)/deps/sniper-deps
 # Feature selection, forwarded to both the dependency fetcher and CMake so the
 # two cannot disagree about what this build needs.
 FRONTEND ?= sde
-TORCH ?= ON
+TORCH ?= OFF       # the libtorch branch predictor (perf_model/branch_predictor/type = nn)
 MCPAT ?= ON
 RISCV ?= ON
 ARM ?= OFF
 DYNAMORIO ?= OFF
 QEMU ?= OFF
 RISCV_IME ?= OFF   # QEMU riscv64 with the IME 0.9 patch, for the RISC-V/IME checks
+MPI ?= OFF         # MPICH, for test/mpi and test/mpi-omp
 BUILD_TYPE ?= Release
 DYNAMORIO_DIR ?=
 CMAKE_ARGS ?=
@@ -57,6 +58,7 @@ _deps_flags += $(if $(filter ON,$(ARM)),--arm,)
 _deps_flags += $(if $(filter ON,$(DYNAMORIO)),--dynamorio,)
 _deps_flags += $(if $(filter ON,$(QEMU)),--qemu,)
 _deps_flags += $(if $(filter ON,$(RISCV_IME)),--riscv-ime,)
+_deps_flags += $(if $(filter ON,$(MPI)),--mpi,)
 
 _cmake_flags := -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
 _cmake_flags += -DSNIPER_FRONTEND=$(FRONTEND)

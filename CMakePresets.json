@@ -17,7 +17,7 @@
       "name": "x86-sde-release",
       "inherits": "base",
       "displayName": "x86 / SDE / release",
-      "description": "The default configuration: SDE frontend, optimised, libtorch on.",
+      "description": "The default configuration: SDE frontend, optimised, libtorch off (SNIPER_ENABLE_TORCH=ON adds the nn branch predictor and forces the pre-cxx11 libstdc++ ABI).",
       "cacheVariables": {
         "SNIPER_FRONTEND": "sde",
         "SNIPER_LINK_INTO_TREE": "ON"
@@ -32,17 +32,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "SNIPER_LINK_INTO_TREE": "OFF"
-      }
-    },
-
-    {
-      "name": "x86-modern-abi",
-      "inherits": "base",
-      "displayName": "x86 / SDE / modern libstdc++ ABI",
-      "description": "libtorch off, so the tree builds without -D_GLIBCXX_USE_CXX11_ABI=0. The legacy ABI is forced only by the pre-cxx11 libtorch build; this is the configuration to test before dropping it everywhere.",
-      "cacheVariables": {
-        "SNIPER_FRONTEND": "sde",
-        "SNIPER_ENABLE_TORCH": "OFF"
       }
     },
 
@@ -73,7 +62,6 @@
   "buildPresets": [
     { "name": "x86-sde-release", "configurePreset": "x86-sde-release" },
     { "name": "x86-sde-debug",   "configurePreset": "x86-sde-debug" },
-    { "name": "x86-modern-abi",  "configurePreset": "x86-modern-abi" },
     { "name": "riscv-release",   "configurePreset": "riscv-release" },
     {
       "name": "arm64-frontend",
