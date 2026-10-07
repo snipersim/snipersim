@@ -162,7 +162,7 @@ def prerequisites():
             continue
 
     return None, ('the SIFT recorder does not implement Pac-Sim '
-                  '(no "%s" knob); see pacsimscripts/README.md'
+                  '(no "%s" knob); see tools/pacsim/README.md'
                   % PACSIM_KNOB.decode())
 
 
@@ -267,10 +267,19 @@ def measure(p, workdir, mode, args):
         raise RuntimeError('the sampled run reported no estimate')
     estimate = float(m.group(1))
 
+    # The after-the-fact path: tools/dumpstats.py on the sampled directory
+    # must report the same estimate the run printed.
+    p = subprocess.run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'dumpstats.py'), '-d', samp_dir],
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    m = re.search(r'^pacsim\.estimated_sim_time = ([0-9.e+-]+)', p.stdout, re.M)
+    dumpstats_estimate = float(m.group(1)) if m else None
+    dumpstats_output = p.stdout
+
     return {
         'truth': truth, 'estimate': estimate,
         'wall_full': wall_full, 'wall_sampled': wall_samp,
         'checksum_full': truth_sum, 'checksum_sampled': samp_sum,
+        'dumpstats_estimate': dumpstats_estimate, 'dumpstats_output': dumpstats_output,
     }
 
 
@@ -310,8 +319,20 @@ def case_accurate(r, args):
     return True, detail
 
 
+def case_dumpstats(r, args):
+    """tools/dumpstats.py on the sampled directory reports the estimate the run
+    printed: the one function behind both paths, reached through the tool."""
+    if r['dumpstats_estimate'] is None:
+        tail = r['dumpstats_output'].strip().splitlines()[-1:] or ['(no output)']
+        return False, 'dumpstats printed no pacsim.estimated_sim_time: %s' % tail[0]
+    if abs(r['dumpstats_estimate'] - r['estimate']) > 1e-6 * max(1.0, abs(r['estimate'])):
+        return False, 'dumpstats %g s, run-sniper %g s' % (r['dumpstats_estimate'], r['estimate'])
+    return True, 'dumpstats reports the same %g s' % r['estimate']
+
+
 CASES = {
     'same-program': case_same_program,
+    'dumpstats': case_dumpstats,
     'faster':       case_faster,
     'accurate':     case_accurate,
 }

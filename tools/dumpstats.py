@@ -3,7 +3,8 @@
 import sys, os, getopt, sniper_lib, sniper_stats
 
 def usage():
-  print('Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers | -e|--events | -c|--config ] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [--through-time|tt <statname>]  [-d <resultsdir (default: .)>]')
+  print('Usage:', sys.argv[0], '[-h (help)] [-l|--list | -t|--topology | -m|--markers | -e|--events | -c|--config ] [--partial <section-start>:<section-end> (default: roi-begin:roi-end)] [--through-time|tt <statname>] [--pacsim | --no-pacsim] [--pacsim-segs] [-d <resultsdir (default: .)>]')
+  print('A directory written by a Pac-Sim run (run-sniper --pacsim) also gets its estimated run time, pacsim.*, unless --no-pacsim; --pacsim insists on it, --pacsim-segs lists the sampled regions.')
 
 
 jobid = 0
@@ -16,9 +17,11 @@ do_markers = False
 do_events = False
 do_stats = True
 do_config = False
+do_pacsim = None      # None: when the directory holds Pac-Sim region data
+do_pacsim_segs = False
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmtec", [ 'list', 'markers', 'topology', 'events', 'config', 'partial=', 'tt=', 'through-time=' ])
+  opts, args = getopt.getopt(sys.argv[1:], "hj:d:lmtec", [ 'list', 'markers', 'topology', 'events', 'config', 'partial=', 'tt=', 'through-time=', 'pacsim', 'no-pacsim', 'pacsim-segs' ])
 except getopt.GetoptError as e:
   print(e)
   usage()
@@ -53,6 +56,13 @@ for o, a in opts:
   if o in ('-c', '--config'):
     do_config = True
     do_stats = False
+  if o == '--pacsim':
+    do_pacsim = True
+  if o == '--no-pacsim':
+    do_pacsim = False
+  if o == '--pacsim-segs':
+    do_pacsim = True
+    do_pacsim_segs = True
 
 if args:
   usage()
@@ -125,6 +135,35 @@ if do_config:
   for k, v in sorted(config.items()):
     print('%s=%s' % (k, v))
 
+
+# Pac-Sim: a sampled run's estimate, from the same function run-sniper --pacsim
+# calls at the end of the run (tools/pacsim/pacsim_dumpjson.py), so the two can
+# never disagree.  Reported before the measured statistics, which for a sampled
+# run cover only the regions simulated in detail.
+PACSIM_REGION_FILES = ('pacsim_regions.json', 'intra_mtng.json')
+
+def pacsim_present(d):
+  return any(os.path.isfile(os.path.join(d, f)) for f in PACSIM_REGION_FILES)
+
+if do_pacsim or (do_pacsim is None and do_stats and pacsim_present(resultsdir)):
+  from pacsim import pacsim_dumpjson
+  sim_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+  if not pacsim_present(resultsdir):
+    print('%s holds no Pac-Sim region data (%s): not a sampled run' % (resultsdir, ' or '.join(PACSIM_REGION_FILES)), file=sys.stderr)
+    sys.exit(1)
+  sim_time, wall_time, l2_miss_rate = pacsim_dumpjson.get_full_time(resultsdir, sim_root, False)
+  print('pacsim.estimated_sim_time =', sim_time)
+  print('pacsim.wall_time =', wall_time)
+  print('pacsim.l2_miss_rate =', l2_miss_rate)
+  if do_pacsim_segs:
+    state = pacsim_dumpjson.get_dump_state(resultsdir, sim_root)
+    state.print_full_time()
+    print('pacsim.regions =', len(state.feature_stack))
+    for i, feature in enumerate(state.feature_stack):
+      insts = feature.get('insnums', [])
+      print('pacsim.region[%d] = instructions %d, time %g s%s' % (
+          i, sum(insts) if insts else 0, feature.get('fs', 0) / 1e15,
+          ', measured' if feature.get('detailed', feature.get('measured', False)) else ''))
 
 if do_stats:
 
