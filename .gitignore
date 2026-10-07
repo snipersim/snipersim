@@ -84,3 +84,44 @@ pin-log.txt
 testing/goldens/
 test/llm-agent-wide/*.bin
 test/llm-agent-wide/*.h
+
+# What the test workloads leave behind (make run in test/*): the compiled
+# workload, simulation output, logs, viz, power and topology files, and the
+# pinball; test/shared/Makefile.shared's clean rule removes them.
+test/*/logs/
+test/*/simulation/
+test/*/sim-inside/
+test/*/viz/
+test/*/power.*
+test/*/topo.*
+test/pinplay/fft-pinball*
+test/pinplay/pinball_replay.*
+test/pinplay/fft.c
+test/dr-frontend/fft.c
+test/api/api
+test/aso/fft
+test/demo-scheduling/fft
+test/dr-frontend/fft
+test/dvfs/dvfs
+test/fft-dvfs/fft
+test/fft-hetero-cfg/fft
+test/fft-hetero/fft
+test/fft-nn/fft
+test/fft/fft
+test/fork/fork
+test/mpi-omp/hybrid
+test/mpi/pi
+test/pinplay/fft
+test/smc/smc
+test/spinloop/spinloop
+test/true/true
+
+# A run started from the tree root, and the Pin OS log
+logs/
+pinos.log.*
+
+# Install paths of deps/sniper-deps not listed above
+mpich
+mpich-src
+qemu-riscv
+sail-riscv
