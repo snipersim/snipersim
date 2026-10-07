@@ -691,6 +691,34 @@ FEATURES = {
         require_nonzero('streamer.pref_called', 'streamer.steady',
                         'streamer.gen_prefetch', 'L2.prefetches')),
 
+    # The four ChampSim-derived data prefetchers (port series step 5), each
+    # layered on baseline through its fragment.  Each check follows the
+    # prefetcher's own chain to the issue: SPP has to hit its signature
+    # table and issue; SMS has to see a region twice (ft_hits), find a
+    # recorded pattern (pht_hits) and replay it; Berti has to learn a
+    # berti (berti_predictions) and issue; IPCP has to classify an IP as
+    # a constant stride and issue for it.  prefetches_issued is each
+    # prefetcher's count of addresses it handed over, and the controller's
+    # count says they were taken.
+    'spp': (
+        ['address_translation_schemes/baseline', 'prefetcher_configs/spp_l2'], 1,
+        require_nonzero('spp.pref_called', 'spp.st_hits', 'spp.prefetches_issued',
+                        'L2.prefetches')),
+    'sms': (
+        ['address_translation_schemes/baseline', 'prefetcher_configs/sms_l1'], 1,
+        require_nonzero('sms.pref_called', 'sms.ft_hits', 'sms.pht_hits',
+                        'sms.prefetches_generated', 'sms.prefetches_issued',
+                        'L1-D.prefetches')),
+    'berti_data': (
+        ['address_translation_schemes/baseline', 'prefetcher_configs/berti_l1'], 1,
+        require_nonzero('berti.pref_called', 'berti.current_pages_hits',
+                        'berti.berti_predictions', 'berti.prefetches_issued',
+                        'L1-D.prefetches')),
+    'ipcp': (
+        ['address_translation_schemes/baseline', 'prefetcher_configs/ipcp_l1'], 1,
+        require_nonzero('ipcp.pref_called', 'ipcp.cs_prefetches',
+                        'ipcp.prefetches_issued', 'L1-D.prefetches')),
+
     # F6: page faults handled in hardware rather than by the OS.  The split is
     # the whole point of the design, so the check is that faults were taken and
     # that hardware took them -- the same workload routes all 91 to the OS under

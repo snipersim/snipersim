@@ -454,6 +454,12 @@ FRAGMENT_REQUIRE_NONZERO = {
         ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
     'prefetcher_configs/meteor_lake_prefetch':
         ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
+    # The SPP, SMS, Berti and IPCP data prefetchers (step 5), each on its
+    # own issue count and the controller's.
+    'prefetcher_configs/spp_l2': ('spp.prefetches_issued', 'L2.prefetches'),
+    'prefetcher_configs/sms_l1': ('sms.prefetches_issued', 'L1-D.prefetches'),
+    'prefetcher_configs/berti_l1': ('berti.prefetches_issued', 'L1-D.prefetches'),
+    'prefetcher_configs/ipcp_l1': ('ipcp.prefetches_issued', 'L1-D.prefetches'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's
