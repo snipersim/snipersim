@@ -437,7 +437,7 @@ before it.
 prints where the wall clock went (`testing/regress_report.py`);
 `FAILFAST=ON` stops at the first failure.
 
-The 25 feature cases and what each asserts: `dram_queueing` (the
+The feature cases and what each asserts: `dram_queueing` (the
 per-stage DDR delays accumulate), `radix_fault_split` (prefetch faults
 counted apart), `revelator` (the engine speculates: `total_prefetches`,
 hash tries and hits), `victima` (leaf probes and hits), `hw_fault`
@@ -452,8 +452,20 @@ gates), `fork_child` and `sift_child_app_id` (children traced),
 payload and its cost bucket), `mimicos_pcp_allocator` (fast and slow
 allocation paths), `mimicos_scheduler` (round-robin quanta),
 `mimicos_two_app_smp` (two applications on two kernel workers to
-shutdown), `live_feed` (the feed and a dashboard frame), and
-`oversubscription` (eight threads on four cores finish).
+shutdown), `live_feed` (the feed and a dashboard frame),
+`oversubscription` (eight threads on four cores finish), `numa_revelator`
+(the per-node engine trains, hints and prefetches), `virt` (both stages
+of the nested walk run), and the cases for the variants nothing selected
+before: `stride` (the stride prefetcher's walks resolve),
+`revelator_open_addressing` (probe 0 and probe 1 issued, probe 0 hits),
+`revelator_thp` (2MB predictions issued and hit, page-table predictions
+issued), `revelator_simple_allocator`, `revelator_thp_allocator` and
+`numa_reserve_thp` (each allocator's own hash, 2MB and page-table
+counters), `page_size_prediction` (the L2 latency is exactly the
+predicted-hit and miss charges), `no_pwc` (walks charged with no page
+walk cache registered), `mimicos_baseline_allocator` (every fault
+unclassified under the plain buddy) and `mimicos_one_app_sched` (the
+application taken from the kernel's `[apps]` list on one kernel core).
 
 ---
 

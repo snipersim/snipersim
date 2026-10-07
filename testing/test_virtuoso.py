@@ -883,6 +883,49 @@ FEATURES = {
             % (counter(stats, 'radix_4level.page_table_walks'),
                counter(stats, 'mmu.total_walk_latency_data')))),
 
+    # The userspace kernel's baseline allocator: a plain buddy with no
+    # reservation, promotion or per-CPU pool.  The kernel reports which
+    # path every fault took, and this allocator does not say -- it has no
+    # fast and slow paths to tell apart -- so every fault reports
+    # alloc_path=unknown, and not one reports fast or slow, which is the
+    # linux_buddy_anon signature mimicos_pcp_allocator requires.  The
+    # factory's creation line pins which allocator was built, since
+    # reserve_thp reports unknown as well.
+    'mimicos_baseline_allocator': (
+        ['address_translation_schemes/userspace_baseline'], 2,
+        lambda stats: (
+            'Created VirtuosoBaselineAllocator' in stats['__stdout__']
+            and stats['__stdout__'].count('alloc_path=unknown') > 0
+            and stats['__stdout__'].count('alloc_path=fast') == 0
+            and stats['__stdout__'].count('alloc_path=slow') == 0,
+            'baseline allocator built; %d faults, all alloc_path=unknown'
+            % stats['__stdout__'].count('alloc_path=')),
+        ('startup_mimicos', r'alloc_path=', None,
+         ['mimicos/configs/baseline_32GB.ini',
+          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_baseline_alloc_check.txt'])),
+
+    # one_app_sched.ini: the application comes from the [apps] section of
+    # the kernel's configuration rather than from the command line, with
+    # the round-robin scheduler on one kernel core -- the configuration the
+    # two-application case was bisected against, and which nothing ran.
+    # The kernel has to size itself from the list (one core, so no kernel
+    # pthread), register the listed trace as a task at the application's
+    # real thread id, run it to its exit (exactly one shutdown, since there
+    # is one worker to receive it) and come out with its reports.
+    'mimicos_one_app_sched': (
+        ['address_translation_schemes/userspace_baseline'], 2,
+        lambda stats: (
+            'Scheduler] Configured: policy=rr_simple cores=1' in stats['__stdout__']
+            and 'Registered app trace as Task id=0 atid=0x10000' in stats['__stdout__']
+            and stats['__stdout__'].count('shutdown event received') == 1
+            and 'Scheduler stats:' in stats['__stdout__']
+            and 'Assertion' not in stats['__stdout__']
+            and counter(stats, 'trace_thread.quanta_expired') > 0,
+            'one kernel core, task at atid 0x10000, one shutdown, '
+            '%d quanta expired' % counter(stats, 'trace_thread.quanta_expired')),
+        ('startup_mimicos', r'Scheduler stats: csw=', None,
+         ['mimicos/configs/one_app_sched.ini',
+          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_one_app_check.txt'])),
 }
 
 
