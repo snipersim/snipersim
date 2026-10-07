@@ -11,6 +11,7 @@
 #include "memory_management/policies/revelator_policy.h"
 #include "memory_management/policies/revelator_simple_policy.h"
 #include "memory_management/policies/revelator_thp_policy.h"
+#include "memory_management/policies/numa_revelator_policy.h"
 
 // include/memory_management/physical_memory_allocators/
 #include "../../include/memory_management/physical_memory_allocators/reserve_thp.h"
@@ -19,6 +20,7 @@
 #include "../../include/memory_management/physical_memory_allocators/revelator.h"
 #include "../../include/memory_management/physical_memory_allocators/revelator_simple.h"
 #include "../../include/memory_management/physical_memory_allocators/revelator_thp.h"
+#include "../../include/memory_management/physical_memory_allocators/numa_revelator.h"
 // PhysicalMemoryAllocator*
 #include "../../include/memory_management/physical_memory_allocators/physical_memory_allocator.h"
 
@@ -32,6 +34,7 @@ using SniperNumaReserveTHPAllocator = NumaReservationTHPAllocator<Sniper::NumaRe
 using SniperRevelatorAllocator       = RevelatorAllocator<Sniper::Revelator::RevelatorSniperPolicy>;
 using SniperRevelatorTHPAllocator    = RevelatorTHPAllocator<Sniper::RevelatorTHP::RevelatorTHPSniperPolicy>;
 using SniperRevelatorSimpleAllocator = RevelatorSimpleAllocator<Sniper::RevelatorSimple::RevelatorSimpleSniperPolicy>;
+using SniperNumaRevelatorAllocator   = NumaRevelatorAllocator<Sniper::NumaRevelator::NumaRevelatorSniperPolicy>;
 
 // --------------------------------------------------------------------------
 // Helper: parse a comma-separated integer list from a config string
@@ -150,6 +153,34 @@ public:
             int number_of_hashes = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/number_of_hashes");
             return new SniperRevelatorSimpleAllocator(allocator_name, rev_memory_size, max_order,
                                                       kernel_size, frag_type, number_of_hashes);
+        }
+        else if (allocator_type == "numa_revelator")
+        { // NUMA-aware Revelator (Kanellopoulos+, ISCA 2026)
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            int number_of_hashes = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/number_of_hashes");
+            double targ_frag = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/target_fragmentation");
+            bool enable_aggressive_swapouts = Sim()->getCfg()->getBool("perf_model/" + allocator_name + "/enable_aggressive_swapouts");
+            int infrequency_threshold = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/infrequency_threshold");
+            double hash1_usage_threshold = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/hash1_usage_threshold");
+
+            // NUMA-specific parameters
+            UInt32 num_numa_nodes = (UInt32)Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/num_numa_nodes");
+            NumaPolicy numa_policy = parseNumaPolicy(Sim()->getCfg()->getString("perf_model/" + allocator_name + "/numa_policy"));
+            double utilization_threshold = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/utilization_threshold");
+            UInt32 max_speculation_nodes = (UInt32)Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_speculation_nodes");
+            std::vector<UInt64> per_node_cap = parseCommaSeparatedUInt64(Sim()->getCfg()->getString("perf_model/" + allocator_name + "/per_node_capacity_mb"));
+            std::vector<UInt64> per_node_kern = parseCommaSeparatedUInt64(Sim()->getCfg()->getString("perf_model/" + allocator_name + "/per_node_kernel_mb"));
+
+            std::cout << "[MimicOS] Creating NUMA Revelator: " << num_numa_nodes << " nodes, policy="
+                      << numaPolicyToString(numa_policy) << std::endl;
+
+            return new SniperNumaRevelatorAllocator(
+                allocator_name, max_order, kernel_size, frag_type,
+                number_of_hashes, memory_size, targ_frag,
+                enable_aggressive_swapouts, infrequency_threshold, hash1_usage_threshold,
+                num_numa_nodes, numa_policy, utilization_threshold, max_speculation_nodes,
+                per_node_cap, per_node_kern);
         }
         else
         {

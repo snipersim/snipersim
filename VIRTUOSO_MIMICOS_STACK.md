@@ -143,8 +143,8 @@ kernel).
 **MMU types** (`[perf_model/mmu] type`): `default` (a four-level radix
 walk through the page-walk caches with `page_table_walkers` MSHRs and
 page-size prediction), `spec` (speculative translation; the engine under
-`[perf_model/mmu/spec] type` is `revelator`, `revelator_open_addressing`
-or `revelator_thp`), `victima` (leaf page-table entries cached in the
+`[perf_model/mmu/spec] type` is `revelator`, `revelator_open_addressing`,
+`revelator_thp` or `numa_revelator`), `victima` (leaf page-table entries cached in the
 L2 as `VICTIMA_TLB_BLOCK` lines, probed on an L2-TLB miss), `hw_fault`
 (page faults taken in hardware).  Statistics under `mmu.*`
 (`num_translations`, `page_faults`, `page_table_walks`, `tlb_hits_data`,
@@ -182,6 +182,24 @@ placement so the engine can predict a frame from its virtual page) and
 its exception handler; its counters are `revelator.*` (`hits_<i>`,
 `prefetches_<i>`, `total_prefetches`) and `revelator_allocator.hash*`.
 
+**NUMA Revelator** (`address_translation_schemes/numa_revelator.cfg`) is
+the same hash placement scoped to a NUMA node: `numa.cfg` gives the
+tiered DRAM controller its nodes (`[perf_model/dram/numa]`, a
+`remote_latency_ns` penalty, `dram.numa_node<n>_{local,remote}_accesses`),
+`physical_memory_allocators/numa_revelator_alloc.cfg` the allocator that
+hashes within the node the placement policy picks (`local`, `bind`,
+`interleave`, `preferred`; counters `numa_revelator_allocator.*`:
+`hash*`, `node<n>_allocs`, `node<n>_spills`, `local_allocs`), and
+`spec_engine_configs/spec_engine_numa_revelator.cfg` the engine that
+predicts a frame per candidate node, choosing the nodes from PTW-trained
+saturating counters with a radix NUMA hint table as the fallback
+(counters `numa_revelator.*`: `prefetches_<i>`, `prefetches_pt_<i>`,
+`node<n>_predictions`, `train_updates`, `hint_lookups`, `hint_hits`,
+`counter_confident`).  The engine's data-side prediction only runs on a
+walk that does not fault, which at the default TLB geometry a smoke
+workload never produces; `numa_revelator_stress.cfg` shrinks the TLBs so
+it does, and is what the `numa_revelator` feature check runs.
+
 ### 3.5 MimicOS
 
 **Host side** (`common/system/memory_management/mimicos.cc`,
@@ -189,7 +207,8 @@ constructed before the core manager because the MMUs consult it as they
 are built): `[perf_model/mimicos_host]` names the page table (`radix`,
 `config/pagetable_configs/4_level_radix.cfg`), the physical memory
 allocator (`baseline`, `reserve_thp`, `numa_reserve_thp`, `revelator`,
-`revelator_thp`, `revelator_simple`; `config/physical_memory_allocators/`),
+`revelator_thp`, `revelator_simple`, `numa_revelator`;
+`config/physical_memory_allocators/`),
 `page_fault_latency`, swap, hugetlbfs, and the Linux daemon models
 `kswapd`, `khugepaged` and `kcompactd` (each with `_enabled`, a scan
 interval and thresholds, default off; counters `kswapd.*`,

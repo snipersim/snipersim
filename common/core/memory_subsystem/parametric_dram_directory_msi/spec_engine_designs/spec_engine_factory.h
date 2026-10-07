@@ -8,6 +8,7 @@
 #include "revelator.h"
 #include "revelator_open_addressing_engine.h"
 #include "revelator_thp_engine.h"
+#include "numa_revelator.h"
 
 namespace ParametricDramDirectoryMSI
 {
@@ -51,9 +52,11 @@ namespace ParametricDramDirectoryMSI
             {
                 return new RevelatorTHP(core, memory_manager, shmem_perf_model, name);
             }
-            // numa_revelator arrives with the NUMA allocator; specTLB, asap,
-            // SpOT and oracle only if the deferred comparison engines (G4) are
-            // ever pulled in.
+            else if (type == "numa_revelator") {
+                return new NumaRevelator(core, memory_manager, shmem_perf_model, name);
+            }
+            // specTLB, asap, SpOT and oracle only if the deferred comparison
+            // engines (G4) are ever pulled in.
             else
             {
                 std::cerr << "Invalid SpecEngine type: " << type << std::endl;

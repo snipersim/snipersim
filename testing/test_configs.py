@@ -79,9 +79,19 @@ EXPECT_PASS_LAYERED = [
     'atd', 'cacheonly', 'default', 'dram-cache', 'interval', 'jikes', 'llc-qbs',
     'nehalem', 'noc', 'nuca-cache', 'oneipc', 'prefetcher', 'rob',
     'smt1', 'smt2', 'smt4', 'smt8',
+    # the two-node NUMA topology for the tiered DRAM controller
+    'numa',
 ]
 LAYER_BASE = 'gainestown'
 LAYER_BASE_BY_MODE = {}
+
+# Overlays needing something between the base and themselves.
+LAYERED_EXTRA_BASE = {
+    # Its nodes are DDR models, and no complete machine config sets the
+    # [perf_model/dram/ddr] keys (gainestown's DRAM is the constant model):
+    # the DRAM fragment that does goes in front, as numa.cfg documents.
+    'numa': ['dram_configs/ddr4_2400'],
+}
 
 # Per-overlay layering base, for overlays that cannot sit on the default one.
 # Empty: oneipc used to be sent to nehalem-lite because it tripped the
@@ -295,7 +305,8 @@ def main():
             base = LAYER_BASE_OVERRIDE.get(n, layer_base)
             if base == n:          # nehalem-lite layered onto itself is not a case
                 continue
-            out.append(('%s + %s' % (base, n), [base, n], True, None))
+            names = [base] + LAYERED_EXTRA_BASE.get(n, []) + [n]
+            out.append((' + '.join(names), names, True, None))
         for n in sorted(EXPECT_FAIL):
             out.append((n, [n], False, EXPECT_FAIL[n]))
         for n in shipped_fragments():

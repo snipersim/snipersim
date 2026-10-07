@@ -213,6 +213,30 @@ FEATURES = {
                         'revelator_allocator.hash1_hits',
                         'revelator_allocator.hash1_successful_pt_allocations')),
 
+    # The NUMA Revelator: the same hash placement, scoped to a NUMA node.
+    # Every counter here is registered only by the NUMA engine and allocator
+    # (prefixes numa_revelator / numa_revelator_allocator), so plain revelator
+    # reads them as absent.  The engine has to train from PTWs, consult the
+    # hint table while the counters are undecided and find a hint there, be
+    # confident off the counters at least once, and prefetch on both the data
+    # and the page-table side; the allocator has to place frames on the
+    # CPU-local node by hash.  The stress scheme (shrunk TLBs) is what makes
+    # the data side run at all: see numa_revelator_stress.cfg.
+    'numa_revelator': (
+        ['address_translation_schemes/numa_revelator_stress'], 1,
+        require_nonzero('numa_revelator.total_prefetches',
+                        'numa_revelator.prefetches_0',
+                        'numa_revelator.prefetches_pt_0',
+                        'numa_revelator.node0_predictions',
+                        'numa_revelator.train_updates',
+                        'numa_revelator.hint_lookups',
+                        'numa_revelator.hint_hits',
+                        'numa_revelator.counter_confident',
+                        'numa_revelator_allocator.hash1_tries',
+                        'numa_revelator_allocator.hash1_hits',
+                        'numa_revelator_allocator.node0_allocs',
+                        'numa_revelator_allocator.local_allocs')),
+
     # F5: Victima probes the cache for leaf PTE lines.  leaf_hits is the
     # discriminating counter: MMUCacheInterface::isLinePresent has a default
     # implementation returning false, so an incorrectly wired Victima still
