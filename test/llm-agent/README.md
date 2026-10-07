@@ -43,7 +43,7 @@ counts.  The unit geometry is a compile-time choice: `-DAME_N=32` for
 32x32 squares (the plugin takes `ame_n=32`), `-DIME_VLEN=4096
 -DIME_LMUL=8 -DIME_LAMBDA=4` for 32x32 IME tiles (QEMU with
 `vlen=4096`); batches shorter than a tile are padded.
-ACCELERATOR_COMPONENTS.md section 8 has the limits and the measurements.
+docs/ACCELERATOR_COMPONENTS.md section 8 has the limits and the measurements.
 
 Harness cases (`testing/test_qemu.py`): `riscv-llm-agent` runs the five
 kernels under the IME QEMU (AME and DMA through the plugin) and requires
@@ -53,7 +53,7 @@ instructions per token, and requires the matrix-unit instruction counts
 to equal what the model's shape and the prefill batches imply;
 `riscv-llm-couplings` simulates the AME build on the attached tile and
 the DMA build on the accelerator under the L2 and near-core couplings.
-Results are in ACCELERATOR_COMPONENTS.md, section 7.
+Results are in docs/ACCELERATOR_COMPONENTS.md, section 7.
 
 Build by hand:
 

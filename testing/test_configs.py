@@ -132,7 +132,7 @@ EXPECT_FAIL_DETAILED = {
     # The RISC-V configurations select the RISC-V decoder (general/arch), and
     # this suite's workload is an x86 binary: fast-forward never decodes, the
     # timing model does and asserts on the first x86 instruction.  They are for
-    # RISC-V traces (RISCV_AI_ACCELERATOR_STACK.md); the riscv-* cases of
+    # RISC-V traces (docs/RISCV_AI_ACCELERATOR_STACK.md); the riscv-* cases of
     # test_qemu.py cover them.
     'riscv': 'the RISC-V decoder cannot decode an x86 trace',
     'riscv-mediumboom': 'the RISC-V decoder cannot decode an x86 trace',

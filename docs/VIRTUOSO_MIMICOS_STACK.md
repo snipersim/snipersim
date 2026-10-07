@@ -7,7 +7,7 @@ Revelator, Victima, the hardware fault path), the two halves of MimicOS
 (the host model inside the simulator and the userspace kernel that runs
 under it), the run stream and live feed, Pac-Sim, and every regression
 suite.  The RISC-V side, the accelerator models and the AI workloads are
-in the companion `RISCV_AI_ACCELERATOR_STACK.md`.
+in the companion `RISCV_AI_ACCELERATOR_STACK.md` (this directory).
 
 Every command in this document was run, in the order written, on the
 commit named in the verification record at the end.  Commands sit in
@@ -41,7 +41,7 @@ marked as such.
 
 ## 2. How it got here
 
-The branch is 305 commits on Sniper 7.4.  In order of landing:
+The branch (`dev-mimicos-v2-update`) is Sniper 7.4 plus the work below, in order of landing:
 
 1. **Sniper 8.1 and its tooling.**  The SDE-based recorder as the default frontend (Pin and PinPlay selectable), DynamoRIO support, a first Pac-Sim, the branch predictor merge.
 2. **The DRAM series.**  A refactored `DramPerfModel` interface carrying the access type through the hierarchy, a pluggable address-mapping framework, a detailed DDR model with row-buffer simulation, a CXL.mem Type-3 model, a tiered heterogeneous controller, and the DDR and CXL configuration files.
@@ -51,7 +51,8 @@ The branch is 305 commits on Sniper 7.4.  In order of landing:
 6. **The build.**  Python 3 scripting, the recursive make replaced by CMake with presets, dependencies declared in a manifest and fetched into a shared cache, the in-Pin simulator retired, the SDE recorder built with one PinCRT SIFT, ccache, out-of-tree builds with one owner per tree.
 7. **Frontends and correctness.**  The QEMU TCG-plugin frontend (x86 user and full system) and the probe that settled its design; the QSim frontend retired; a double free in every SIFT reader, a set-lock downgrade in the cache controller, self-modifying code made to simulate, MPI supplied and made to run, several recorder and syscall fixes.
 8. **Testing.**  Every configuration run at one, two and four cores in both modes; a scripting-hooks suite; a shipped-configuration sweep; checks on what the `test/` workloads produce, not only that they ran; Pac-Sim restored as a real entry point with a validation that sampling is faster and agrees; timing reports; `--failfast`.
-9. **Virtuoso v2**, staged by blast radius (`VIRTUOSO_V2_INTEGRATION.md`): inert additions (O), config-gated features (F: speculative translation and Revelator, Victima, hardware faults, the Linux daemons, the userspace substrate), invasive changes one number-moving commit at a time (I: non-power-of-two caches and TLBs, sub-line prefetch credit, the prefetch hooks, TRAIL and Berti, Agile, Recency and Distance), and the frontend surgery (K: the reserved magic commands, the per-thread ROI barrier, fork children, per-core event queues, the reader pool, shutdown, quanta, fast-fault replay, the in-tree kernel).
+9. **Virtuoso v2**, staged by blast radius: inert additions (O), config-gated features (F: speculative translation and Revelator, Victima, hardware faults, the Linux daemons, the userspace substrate), invasive changes one number-moving commit at a time (I: non-power-of-two caches and TLBs, sub-line prefetch credit, the prefetch hooks, TRAIL and Berti, Agile, Recency and Distance), and the frontend surgery (K: the reserved magic commands, the per-thread ROI barrier, fork children, per-core event queues, the reader pool, shutdown, quanta, fast-fault replay, the in-tree kernel).
+   What the staged port left out, by decision: Midgard (no live lines upstream), `address_space.{h,cc}` (unused), the `fast_detailed` configurations, the duplicate `.cc` allocators that would have collided with the templates.  The Revelator exception handler, planned as step F4 and missed, is in the tree since the release cleanup, as are the `virt` (nested) MMU and the NUMA Revelator engine and allocator; what upstream Virtuoso still has beyond this tree is listed in the release notes.
 10. **Output and oversubscription.**  One stamped stream from every process, the lnav format, the live feed and dashboard, and more threads than cores no longer deadlocking the SDE frontend.
 11. **RISC-V and the accelerators** (the companion document).
 

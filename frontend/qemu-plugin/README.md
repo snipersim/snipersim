@@ -53,7 +53,7 @@ extension under development, for one.  An instruction the generated tables do
 not know (an extension whose specification is not in the policy yet) is
 reported once per encoding and costed as a generic instruction, so a trace
 with a few of them still simulates; modelling it is a policy edit and a
-regeneration (RISCV_ISA_GENERATION.md).
+regeneration (docs/RISCV_ISA_GENERATION.md).
 
 `testing/test_qemu.py` has `riscv-user-trace` and `riscv-user-simulate`,
 which take the QEMU and a RISC-V compiler from the environment and skip,
@@ -198,7 +198,7 @@ today.
 ## RISC-V vector and matrix (IME) instructions
 
 Sniper's RISC-V decoder is generated from the RISC-V Unified Database
-(`tools/riscv/gen_isa.py`, see RISCV_ISA_GENERATION.md): the same
+(`tools/riscv/gen_isa.py`, see docs/RISCV_ISA_GENERATION.md): the same
 tables give every instruction, the vector extension and the Integrated
 Matrix Extension (IME, Zvvm freeze 0.9) included, a class with flags.  The
 plugin links those tables (`decoder_lib/riscv_isa*.cc`) and uses them for

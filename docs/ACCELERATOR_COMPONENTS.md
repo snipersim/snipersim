@@ -6,7 +6,7 @@ the software that generates and runs it, the hardware models that time
 it, how each unit connects to the core, how a program drives it, and the
 commands that build and run the examples.  It ends with the measurements
 of the two workloads on every unit.  The decoder generation is described in
-`RISCV_ISA_GENERATION.md`.
+`RISCV_ISA_GENERATION.md` (this directory).
 
 ## 1. The path at a glance
 

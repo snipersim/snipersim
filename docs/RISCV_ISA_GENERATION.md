@@ -112,7 +112,7 @@ writes an X register.
 
 ## Xsnacc: an extension that exists only to carry a task interface
 
-The DMA-attached accelerator (ACCELERATOR_COMPONENTS.md) has no instructions of its own; a core
+The DMA-attached accelerator (ACCELERATOR_COMPONENTS.md, this directory) has no instructions of its own; a core
 hands it a descriptor and waits.  So that the same path carries it,
 `tools/riscv/overlay/spec/std/isa/inst/Xsnacc` defines two hints on the
 CUSTOM-3 opcode, `acc.task xs1` and `acc.wait`, classed `acc_task` (a

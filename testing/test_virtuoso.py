@@ -180,7 +180,7 @@ def require_nonzero(*names):
 
 # Feature checks.  Each entry is (config list, ncores, check) where check takes
 # the statistics dict and returns (ok, detail).  Populated by the integration
-# steps as they land; see VIRTUOSO_V2_INTEGRATION.md.
+# steps as they land; docs/VIRTUOSO_MIMICOS_STACK.md section 2 lists them.
 FEATURES = {
     # O5: the detailed DRAM model's per-stage queueing breakdown.  baseline
     # drives real DRAM traffic, so every stage should accumulate; a stage stuck

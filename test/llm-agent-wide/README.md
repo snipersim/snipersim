@@ -36,4 +36,4 @@ cycles, instructions and DRAM accesses per token:
 The harness case `riscv-llm-wide` runs `fp32-ame32` and `w4-rvv4k`, the
 two fast ones, when the model is present (a few hundred million
 instructions each; `fp32-rvv` records 877 million and simulates for
-hours).  Results: ACCELERATOR_COMPONENTS.md section 9.
+hours).  Results: docs/ACCELERATOR_COMPONENTS.md section 9.
