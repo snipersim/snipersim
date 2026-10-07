@@ -165,16 +165,22 @@ def counter(stats, name):
     return int(v)
 
 
-def require_nonzero(*names):
-    """Check builder: every named counter must exist and be non-zero."""
+def require_nonzero(*names, registered=()):
+    """Check builder: every named counter must exist and be non-zero.
+
+    `registered` names counters that only have to exist -- a feature's own
+    counter that the workload legitimately leaves at zero, where existing is
+    still what tells the feature apart from its absence.
+    """
     def check(stats):
-        missing = [n for n in names if n not in stats]
+        missing = [n for n in names + tuple(registered) if n not in stats]
         if missing:
             return False, 'counter not registered: %s' % ', '.join(missing)
         zero = [n for n in names if counter(stats, n) == 0]
         if zero:
             return False, 'counter stayed zero: %s' % ', '.join(zero)
-        return True, ', '.join('%s=%d' % (n, counter(stats, n)) for n in names)
+        return True, ', '.join('%s=%d' % (n, counter(stats, n))
+                               for n in names + tuple(registered))
     return check
 
 
@@ -729,6 +735,56 @@ FEATURES = {
         ['address_translation_schemes/baseline_stride'], 1,
         require_nonzero('tlb_stride.prefetch_attempts',
                         'tlb_stride.successful_prefetches')),
+
+    # The open-addressing Revelator engine: one hash gives the home frame and
+    # the engine probes linearly from it, so every prediction is a set of
+    # probing_depth frames.  The *_probe_N names are registered only by this
+    # engine (vanilla Revelator counts per hash, THP per page size), so a run
+    # on any other engine reads them as absent.  It has to predict on both
+    # sides -- data and page table -- and probe 1 has to be issued as well as
+    # probe 0, or the probing is not happening; and probe 0 has to hit, which
+    # it can only do if the allocator put the frame at the engine's home hash
+    # (revelator_simple's first hash is the same CityHash placement).  The
+    # data side only runs on a walk that does not fault, hence the stress
+    # scheme: see revelator_open_stress.cfg.  Probe 1 never hits here: with
+    # nothing poisoned no home frame is ever taken, so no page is displaced
+    # to the next frame, which is what probe 1 is for.
+    'revelator_open_addressing': (
+        ['address_translation_schemes/revelator_open_stress'], 1,
+        require_nonzero('revelator.total_prefetches',
+                        'revelator.prefetches_probe_0',
+                        'revelator.prefetches_probe_1',
+                        'revelator.hits_probe_0',
+                        'revelator.prefetches_pt_probe_0',
+                        'revelator_simple.hash1_successful_data_allocations')),
+
+    # The Revelator THP engine on the revelator_thp allocator.  The engine
+    # exits unless that allocator is selected, and the allocator feeds its
+    # placement statistics back to the engine on every fault; here every
+    # data fault gets a hashed 2MB region, so the feedback switches the
+    # engine to 2MB-only prediction before its first invocation.  In that
+    # mode it issues one prediction per hash, indexed from 0, and the slot
+    # at index 0 is the one it named _4KB_0 at construction -- so the data
+    # side lands in prefetches_4KB_0 / hits_4KB_0 (the _2MB_1 slot is only
+    # used while predicting both sizes).  The names with a page-size infix
+    # are registered only by this engine.  The data side needs the stress
+    # geometry, and a harsher one than the other engines: the workload's
+    # data is six 2MB pages, which fit in the TLBs every other stress scheme
+    # shrinks to (revelator_thp_stress.cfg).  The hits prove the engine's
+    # region hash is the allocator's; the page-table side cannot hit here
+    # because a 2MB mapping has no leaf page-table frame, so only its
+    # prefetches are required.
+    'revelator_thp': (
+        ['address_translation_schemes/revelator_thp_stress'], 1,
+        require_nonzero('revelator.total_prefetches',
+                        'revelator.prefetches_pt_4KB_0',
+                        'revelator.prefetches_4KB_0',
+                        'revelator.hits_4KB_0',
+                        'revelator_thp.revelator_2mb_data_allocated',
+                        'revelator_thp.hash1_successful_pt_allocations',
+                        # registered only by this engine; the allocator never
+                        # fell below half hash-placed frames, so it is zero
+                        registered=('revelator.deactivated_invocations',))),
 
 }
 
