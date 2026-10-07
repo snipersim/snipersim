@@ -135,6 +135,11 @@ class TraceThread : public Runnable
 
    public:
       bool m_stopped;
+      /* set last thing before the reader's function returns: the thread is
+         out of the simulator, and teardown may proceed as far as it is
+         concerned (TraceManager::wait) */
+      volatile bool m_finished;
+      bool started() const { return m_started; }
    private:
 
       // ChampSim instruction cache statistics

@@ -92,6 +92,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_cleanup(cleanup)
    , m_started(false)
    , m_stopped(false)
+   , m_finished(false)
    , m_champsim_icache_hits(0)
    , m_champsim_icache_misses(0)
    , m_riscv_spans(0)
@@ -1787,6 +1788,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
    Sim()->getTraceManager()->signalDone(this, time_end, m_stop /*aborted*/);
+   m_finished = true;
 }
 
 
@@ -1964,6 +1966,7 @@ void TraceThread::m_run_func_default()
 
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
    Sim()->getTraceManager()->signalDone(this, time_end, m_stop /*aborted*/);
+   m_finished = true;
 }
 
 void TraceThread::spawn()

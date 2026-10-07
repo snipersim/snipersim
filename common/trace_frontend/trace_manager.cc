@@ -513,6 +513,30 @@ void TraceManager::mark_done()
 void TraceManager::wait()
 {
    m_done.wait();
+
+   /* The stop signalled above reaches the readers asynchronously: a reader
+      still in its loop sees it at its next record and then leaves through
+      its exit path -- draining its core's timing model, logging the thread's
+      exit -- which uses the managers the caller is about to delete.  With
+      only stop()'s one-second sleep between the two, a busy host produced a
+      crash in StatsManager::logEvent from ThreadManager::onThreadExit in a
+      quarter of the runs of a two-thread ROI-barrier case.  So wait here,
+      on the main thread, for every reader that started to finish -- but
+      bounded: a reader parked in a read that no front end will ever
+      complete would hold the exit forever. */
+   for (int i = 0; i < 2000; i++)
+   {
+      bool pending = false;
+      {
+         ScopedLock sl(m_lock);
+         for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
+            if ((*it)->started() && !(*it)->m_finished)
+               pending = true;
+      }
+      if (!pending)
+         break;
+      usleep(5000);
+   }
 }
 
 void TraceManager::run()
