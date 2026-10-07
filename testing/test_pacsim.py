@@ -60,7 +60,7 @@ APPS = os.path.join(SNIPER_ROOT, 'testing', 'apps')
 
 # The three region shapes Pac-Sim has to cope with.
 #
-# Pac-Sim types each region it records (sift/recorder/mtng.h): MultiThread and
+# Pac-Sim types each region it records (sift/recorder/pacsim.h): MultiThread and
 # SingleThread records are delimited by global barriers, IntraBarrier records
 # are found inside a barrier interval.  A workload that only ever offers
 # barriers exercises one of those paths and says nothing about the other, so
@@ -125,9 +125,10 @@ PACSIM_KNOB = b'sniper:pacsim'
 
 
 def build_dir():
-    for name in ('build/release', 'build/default', '.'):
-        if os.path.isfile(os.path.join(SNIPER_ROOT, name, 'lib', 'sniper')):
-            return os.path.join(SNIPER_ROOT, name)
+    env = os.environ.get('SNIPER_BUILD_DIR')
+    for name in ([env] if env else []) + [os.path.join(SNIPER_ROOT, 'build', 'default'), SNIPER_ROOT]:
+        if os.path.isfile(os.path.join(name, 'lib', 'sniper')):
+            return name
     if os.path.isfile(os.path.join(SNIPER_ROOT, 'lib', 'sniper')):
         return SNIPER_ROOT
     return None
