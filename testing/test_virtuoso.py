@@ -823,17 +823,19 @@ FEATURES = {
     # once the threshold is met (0.0 here, so at once), and page-table
     # frames come from the node's kernel region through this allocator's
     # own bump path, which is the only one that counts them as
-    # page_table_pages_used.  The per-node counters (node0_allocs, ...) are
-    # not asserted on: the allocator registers its statistics before it
-    # allocates the per-node arrays, and the registration is guarded on the
-    # arrays existing, so they are never registered at all.
+    # page_table_pages_used, and the per-node counters, which the allocator
+    # registers now that it allocates the per-node arrays before the policy
+    # registers them: every allocation of the smoke workload lands on node 0.
     'numa_reserve_thp': (
         ['address_translation_schemes/baseline_numa_reserve_thp'], 1,
         require_nonzero('numa_reserve_thp.total_allocations',
                         'numa_reserve_thp.local_allocs',
                         'numa_reserve_thp.two_mb_reserved',
                         'numa_reserve_thp.two_mb_promoted',
-                        'numa_reserve_thp.page_table_pages_used')),
+                        'numa_reserve_thp.page_table_pages_used',
+                        'numa_reserve_thp.node0_allocs',
+                        'numa_reserve_thp.node0_2mb_reserved',
+                        'numa_reserve_thp.node0_2mb_promoted')),
 
     # Page-size prediction at the L2 TLB.  The MMU registers the hit and
     # miss counters under every configuration and only moves them on an L2
