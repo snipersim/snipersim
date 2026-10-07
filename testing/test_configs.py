@@ -319,6 +319,10 @@ FRAGMENT_REQUIRE_NONZERO = {
     # Step 14: Hash, Don't Cache registers under pt_hash_hdc.
     'address_translation_schemes/hdc_baseline_alloc': ('pt_hash_hdc.page_table_walks_12', 'pt_hash_hdc.page_faults'),
     'address_translation_schemes/reservethp_hdc': ('pt_hash_hdc.page_table_walks_12', 'pt_hash_hdc.page_faults'),
+    # Step 15: the elastic cuckoo table registers under pt_elastic_cuckoo
+    # and its Cuckoo Walk Cache under mmu_cwc.
+    'address_translation_schemes/ech_baseline_alloc': ('pt_elastic_cuckoo.ptws_total', 'pt_elastic_cuckoo.page_faults', 'mmu_cwc.cwc_accesses'),
+    'address_translation_schemes/reservethp_ech': ('pt_elastic_cuckoo.ptws_total', 'pt_elastic_cuckoo.page_faults', 'mmu_cwc.cwc_accesses'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.

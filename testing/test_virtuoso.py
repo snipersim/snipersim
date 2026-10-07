@@ -1127,6 +1127,28 @@ FEATURES = {
                         'mmu.total_walk_latency_data',
                         registered=('pt_hash_hdc.collisions_12',
                                     'pt_hash_hdc.resizes_12'))),
+
+    # Step 15: the elastic cuckoo page table with its Cuckoo Walk Cache.
+    # The table's walks (ptws_total, hit_at_level0: the 4KB table resolved
+    # them, num_accesses0: the ways probed), faults resolved through
+    # updatePageTableFrames, and the checksum, as for the other hashed
+    # tables; plus the walk filter, which this scheme selects with
+    # ptw_filter_type = cwc: the CWC was consulted on every walk
+    # (mmu_cwc.cwc_accesses) and, the workload living in a handful of 1GB
+    # rows, hit (mmu_cwc.cwc_hits).  Evictions and rehashes only have to
+    # exist: a few hundred pages in 262144 slots never cuckoo.
+    'pagetable_ech': (
+        ['address_translation_schemes/ech_baseline_alloc'], 1,
+        require_nonzero('pt_elastic_cuckoo.ptws_total',
+                        'pt_elastic_cuckoo.hit_at_level0',
+                        'pt_elastic_cuckoo.num_accesses0',
+                        'pt_elastic_cuckoo.page_faults',
+                        'mmu_cwc.cwc_accesses',
+                        'mmu_cwc.cwc_hits',
+                        'mmu.page_table_walks',
+                        'mmu.total_walk_latency_data',
+                        registered=('pt_elastic_cuckoo.evictions',
+                                    'pt_elastic_cuckoo.rehashes'))),
 }
 
 

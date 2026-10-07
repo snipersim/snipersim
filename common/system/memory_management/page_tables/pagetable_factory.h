@@ -5,6 +5,8 @@
 #include "pagetable_ht.h"
 // Step 14: Hash, Don't Cache
 #include "pagetable_hdc.h"
+// Step 15: the elastic cuckoo page table
+#include "pagetable_cuckoo.h"
 #include "config.hpp"
 #include "mimicos.h"
 
@@ -64,8 +66,30 @@ namespace ParametricDramDirectoryMSI
 			return new PageTableHDC(app_id, name, type, page_sizes, page_size_list, page_table_size_list, is_guest);
 		}
 
+		// Step 15: the elastic cuckoo page table
+		static PageTable *createCuckooPageTable(int app_id, String name, String type, int page_sizes, int *page_size_list, int *page_table_size_list, double rehash_threshold, float scale, int ways, bool is_guest)
+		{
+			std::cout << "[ECH Page Table] Creating elastic cuckoo page table [ASPLOS 2020] " << name << " for app id: " << app_id
+			          << " with " << ways << " ways, rehash threshold " << rehash_threshold << ", scale " << scale << std::endl;
+			for (int i = 0; i < page_sizes; i++)
+				std::cout << "[ECH Page Table] Page size " << page_size_list[i] << ": " << page_table_size_list[i] << " entries per way" << std::endl;
+			return new PageTableCuckoo(app_id, name, type, page_sizes, page_size_list, page_table_size_list, rehash_threshold, scale, ways, is_guest);
+		}
+
 		static PageTable *createPageTable(String type, String name, UInt64 app_id, bool is_guest = false)
 		{
+			// Step 15: the elastic cuckoo page table
+			if (type == "elastic_cuckoo")
+			{
+				int page_sizes, *page_size_list, *page_table_size_list;
+				readHashedPageTableConfig(name, is_guest, page_sizes, page_size_list, page_table_size_list);
+				String mimicos_name = is_guest ? Sim()->getMimicOS_VM()->getName() : Sim()->getMimicOS()->getName();
+				String cfg = "perf_model/" + mimicos_name + "/" + name;
+				double rehash_threshold = Sim()->getCfg()->getFloat(cfg + "/rehash_threshold");
+				float scale = Sim()->getCfg()->getFloat(cfg + "/scale");
+				int ways = Sim()->getCfg()->getInt(cfg + "/ways");
+				return createCuckooPageTable(app_id, name, type, page_sizes, page_size_list, page_table_size_list, rehash_threshold, scale, ways, is_guest);
+			}
 			// Step 14: Hash, Don't Cache
 			if (type == "hash_dont_cache")
 			{
