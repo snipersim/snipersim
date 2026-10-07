@@ -108,7 +108,7 @@ def get_name(jobid = None, resultsdir = None):
 #     L1-D.loads
 #
 # is now L1-D.loads-data, L1-D.loads-instruction, L1-D.loads-page_table_data
-# and L1-D.loads-page_table_instruction, with no total anywhere.
+# and L1-D.loads-page_table_instruction, for a while with no total anywhere.
 #
 # Every consumer that asked for the total broke.  mcpat.py died with
 #
@@ -116,8 +116,12 @@ def get_name(jobid = None, resultsdir = None):
 #
 # on any run at all, which is why power modelling stopped working.
 #
-# The totals are synthesised here rather than in each tool, so that a script
-# asking for L1-D.loads gets the number it has always meant.  Only these
+# The cache controller registers the totals again (L1-D.loads,
+# L1-D.load-misses, ...: the sum over block types, kept by cache_cntlr.cc
+# itself), and a real total is left alone below.  The synthesis stays for
+# results written before that, and for the suffixed families that have no
+# registered total (loads-prefetch, load-overlapping-misses, ...), so that a
+# script asking for L1-D.loads gets the number it has always meant.  Only these
 # suffixes are aggregated -- matching any trailing "-word" would merge
 # genuinely distinct counters such as load-misses-E-data, which splits by
 # coherence state as well and must not be folded in.

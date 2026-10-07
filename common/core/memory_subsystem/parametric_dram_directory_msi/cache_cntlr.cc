@@ -471,8 +471,21 @@ namespace ParametricDramDirectoryMSI
 		registerStatsMetric(name, core_id, String("tloads"), &stats.tloads);
 		registerStatsMetric(name, core_id, String("tstores"), &stats.tstores);
 		registerStatsMetric(name, core_id, String("tload-misses"), &stats.tload_misses);
-		registerStatsMetric(name, core_id, String("tstore-misses"), &stats.tstore_misses);   
- 
+		registerStatsMetric(name, core_id, String("tstore-misses"), &stats.tstore_misses);
+
+		// The same totals under the names the cache registered before the
+		// per-block-type split (loads-data, load-misses-page_table_data, ...,
+		// below): the t* counters above are what updateCounters() increments
+		// alongside the per-type ones, so "load-misses" is exactly their sum.
+		// Everything written against the old names looks these up by name --
+		// ThreadStatNamedStat users (SchedulerSequential, the function-stats
+		// routine tracer), the PAPI emulation in trace_thread.cc, and the
+		// Python tools -- and found nothing, which for the sequential
+		// scheduler meant an assertion in its constructor on every workload.
+		registerStatsMetric(name, core_id, "loads", &stats.tloads);
+		registerStatsMetric(name, core_id, "stores", &stats.tstores);
+		registerStatsMetric(name, core_id, "load-misses", &stats.tload_misses);
+		registerStatsMetric(name, core_id, "store-misses", &stats.tstore_misses);
 
 		for (CacheBlockInfo::block_type_t type = CacheBlockInfo::block_type_t::PAGE_TABLE_DATA; type < CacheBlockInfo::block_type_t::NUM_BLOCK_TYPES; type = CacheBlockInfo::block_type_t(int(type) + 1))
 		{

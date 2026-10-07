@@ -52,24 +52,35 @@ UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, 
    return res;
 }
 
-/* The L2's accesses (or misses), summed over every core: the cache
-   controller registers its counters per block type ("loads-data",
-   "load-misses-page_table_data", ...), which dumpstats sums into "loads";
-   the fast cache model registers the plain names.  Pac-Sim reads these
-   through SIM_CMD_GET_L2_COUNT / SIM_CMD_GET_L2_MISS_COUNT. */
+/* The L2's accesses (or misses), summed over every core.  The plain name
+   ("loads", "load-misses") is the total: the fast cache model registers
+   only that, and the cache controller registers it next to its per-block-
+   type counters ("loads-data", "load-misses-page_table_data", ...), which
+   it is the sum of.  Where only the per-type counters exist (a statistics
+   source without the total) they are summed instead; never both, or the
+   accesses would be counted twice.  Pac-Sim reads these through
+   SIM_CMD_GET_L2_COUNT / SIM_CMD_GET_L2_MISS_COUNT. */
 static UInt64 sumCacheMetric(const char *cache, bool misses)
 {
-   static const char *types[] = { "", "-page_table_data", "-page_table_instruction", "-instruction", "-data", "-victima_tlb" };
+   static const char *types[] = { "-page_table_data", "-page_table_instruction", "-instruction", "-data", "-victima_tlb" };
    const char *bases[2] = { misses ? "load-misses" : "loads", misses ? "store-misses" : "stores" };
    UInt64 total = 0;
    for (UInt32 core = 0; core < Sim()->getConfig()->getApplicationCores(); core++)
       for (int b = 0; b < 2; b++)
+      {
+         StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject(cache, core, bases[b]);
+         if (m)
+         {
+            total += m->recordMetric();
+            continue;
+         }
          for (unsigned t = 0; t < sizeof(types) / sizeof(types[0]); t++)
          {
-            StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject(cache, core, String(bases[b]) + types[t]);
+            m = Sim()->getStatsManager()->getMetricObject(cache, core, String(bases[b]) + types[t]);
             if (m)
                total += m->recordMetric();
          }
+      }
    return total;
 }
 

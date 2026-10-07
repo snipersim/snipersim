@@ -501,14 +501,24 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
 
         m_papi_counters[PAPI_TOT_CYC] = cycles;
 
-        UInt64 load_misses_l1d = Sim()->getStatsManager()->getMetricObject("L1-D", m_thread->getCore()->getId(), "load-misses")->recordMetric();
-        UInt64 store_misses_l1d= Sim()->getStatsManager()->getMetricObject("L1-D", m_thread->getCore()->getId(), "store-misses")->recordMetric();
+        // The caches' totals ("load-misses": the sum over block types, which
+        // the cache controller registers next to its per-type counters).  A
+        // level the machine does not have (no L3, say) counts zero misses
+        // rather than dereferencing the NULL the lookup returns.
+        core_id_t core_id = m_thread->getCore()->getId();
+        auto cacheMisses = [core_id](const char *cache, const char *metric) -> UInt64
+        {
+          StatsMetricBase *m = Sim()->getStatsManager()->getMetricObject(cache, core_id, metric);
+          return m ? m->recordMetric() : 0;
+        };
+        UInt64 load_misses_l1d = cacheMisses("L1-D", "load-misses");
+        UInt64 store_misses_l1d= cacheMisses("L1-D", "store-misses");
 
-        UInt64 load_misses_l2  = Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "load-misses")->recordMetric();
-        UInt64 store_misses_l2 = Sim()->getStatsManager()->getMetricObject("L2", m_thread->getCore()->getId(), "store-misses")->recordMetric();
+        UInt64 load_misses_l2  = cacheMisses("L2", "load-misses");
+        UInt64 store_misses_l2 = cacheMisses("L2", "store-misses");
 
-        UInt64 load_misses_l3  = Sim()->getStatsManager()->getMetricObject("L3", m_thread->getCore()->getId(), "load-misses")->recordMetric();
-        UInt64 store_misses_l3 = Sim()->getStatsManager()->getMetricObject("L3", m_thread->getCore()->getId(), "store-misses")->recordMetric();
+        UInt64 load_misses_l3  = cacheMisses("L3", "load-misses");
+        UInt64 store_misses_l3 = cacheMisses("L3", "store-misses");
 
 
         m_papi_counters[PAPI_L1_DCM] = load_misses_l1d + store_misses_l1d;
