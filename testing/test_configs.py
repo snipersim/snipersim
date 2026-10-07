@@ -327,6 +327,12 @@ FRAGMENT_EXPECT_OUTPUT = {
     'scheduler_configs/sequential': re.compile(
         r'\[SCHED\] 4: Pushed to core queue 3\b.*\[SCHED\] 4: Scheduled\..*'
         r'\[REPORT\]\[THREAD:4\] +CYCLES: \d+ TIME:\d+ INSTR:\d+ L1D-miss:\d+', re.S),
+    # hugetlbfs: the service is built with its backing criterion.  Only a
+    # trace-driven run has VMAs for the pool to back (test_virtuoso.py's
+    # hugetlbfs case), so with this suite's live workload the service stays
+    # inert and its evidence is that it initialised with the criterion.
+    'address_translation_schemes/hugetlbfs':
+        re.compile(r'\[HUGETLBFS\]\s+Backing VMAs of at least 4 MB'),
 }
 
 # Fragments that cannot work, with the reason.  Listed rather than skipped, so

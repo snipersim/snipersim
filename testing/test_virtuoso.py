@@ -1002,6 +1002,51 @@ FEATURES = {
         ('startup_mimicos', r'Scheduler stats: csw=', None,
          ['mimicos/configs/one_app_sched.ini',
           'test/sniper-in-sniper/fft.sift', '/tmp/sniper_one_app_check.txt'])),
+
+    # The sniper-space HugeTLBfs service: a pre-reserved pool of 2 MB pages
+    # that the page-fault handler maps the application's large VMAs from.
+    # The service existed with every counter structurally zero -- MimicOS
+    # built it, nothing called allocateHugePage -- and this is the check that
+    # it is now on the fault path end to end: a frame handed out
+    # (allocations_2mb), installed as one 2 MB PTE that the walk then finds
+    # (page_size_discovery_1, the radix table's level-2 hits) and translated
+    # from the 2 MB DTLB (mmu_TLB_L1_2.hits, the L1 TLB whose only page size
+    # is 21).  The scheme turns the allocator's own THP promotion off, so
+    # those two counters have no other source: two_mb_promoted must read 0.
+    #
+    # The pool has two pages and the guest's region holds at least three
+    # whole aligned 2 MB blocks, so exactly two frames go out, the third
+    # request fails (allocation_failures, pool_exhausted_events) and that
+    # fault falls back to the allocator -- both halves of the path run.
+    #
+    # Trace-driven, and that is not incidental: the pool backs VMAs, and
+    # VMAs come only from the recorder's log (record-trace --vma), so the
+    # guest is recorded first and the trace simulated.  Its checksum is
+    # checked where it is produced, at recording time.
+    'hugetlbfs': (
+        ['address_translation_schemes/hugetlbfs'], 1,
+        lambda stats: (
+            counter(stats, 'hugetlbfs.allocations_2mb') == 2
+            and counter(stats, 'hugetlbfs.allocation_failures') > 0
+            and counter(stats, 'hugetlbfs.pool_exhausted_events') > 0
+            and counter(stats, 'radix_4level.page_size_discovery_1') > 0
+            and counter(stats, 'mmu_TLB_L1_2.hits') > 0
+            and 'reserve_thp.two_mb_promoted' in stats
+            and counter(stats, 'reserve_thp.two_mb_promoted') == 0
+            and counter(stats, 'mmu.sanity_check_violations') == 0
+            and 'Parsing VMAs (plain) from' in stats['__stdout__'],
+            'pool of 2: allocations_2mb=%d, allocation_failures=%d, '
+            'pool_exhausted_events=%d; 2MB walks=%d, 2MB DTLB hits=%d, '
+            'allocator promotions=%d, sanity violations=%d'
+            % (counter(stats, 'hugetlbfs.allocations_2mb'),
+               counter(stats, 'hugetlbfs.allocation_failures'),
+               counter(stats, 'hugetlbfs.pool_exhausted_events'),
+               counter(stats, 'radix_4level.page_size_discovery_1'),
+               counter(stats, 'mmu_TLB_L1_2.hits'),
+               counter(stats, 'reserve_thp.two_mb_promoted'),
+               counter(stats, 'mmu.sanity_check_violations'))),
+        ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
+         r'hugetlb_workload sum=50528256')),
 }
 
 
@@ -1082,9 +1127,49 @@ def env_digest():
     ).hexdigest()[:12]
 
 
+def record_trace(app, name, expect):
+    """Record a guest with the SDE recorder's VMA logging, once per build.
+
+    `record-trace --vma -o <dir>/trace` writes trace.sift and trace.vma, the
+    latter the address ranges of /proc/self/maps, which is the only VMA
+    information a simulation ever sees (MimicOS loads it next to the trace).
+    The guest's output is checked here, where it is produced: a stored trace
+    replays no syscalls, so the simulation prints nothing of the guest's.
+    Kept beside the goldens for the same reason the binaries are, and
+    re-recorded when the binary is newer.  Returns the .sift path.
+    """
+    tracedir = os.path.join(GOLDEN_DIR, name + '.trace')
+    sift = os.path.join(tracedir, 'trace.sift')
+    vma = os.path.join(tracedir, 'trace.vma')
+    if (os.path.exists(sift) and os.path.exists(vma)
+            and os.path.getmtime(sift) >= os.path.getmtime(app)):
+        return sift, None
+    shutil.rmtree(tracedir, ignore_errors=True)
+    os.makedirs(tracedir)
+    cmd = []
+    if have_setarch():
+        cmd += ['setarch', '-R']
+    cmd += [os.path.join(SNIPER_ROOT, 'record-trace'), '--vma',
+            '-o', os.path.join(tracedir, 'trace'), '--', app]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                       text=True, cwd=SNIPER_ROOT, env=run_env(),
+                       start_new_session=True)
+    if p.returncode != 0:
+        return None, 'record-trace exit %d' % p.returncode
+    if not expect.search(p.stdout):
+        return None, 'recorded guest produced no output'
+    if not (os.path.exists(sift) and os.path.exists(vma)):
+        return None, 'record-trace wrote no trace.sift/trace.vma'
+    return sift, None
+
+
 def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
-               extra_env=None, app_args=None):
-    """One simulation, with ASLR pinned so the statistics are reproducible."""
+               extra_env=None, app_args=None, traces=None):
+    """One simulation, with ASLR pinned so the statistics are reproducible.
+
+    With `traces`, a trace-driven run (--traces=) of those .sift files instead
+    of a live guest; `workload` is then ignored.
+    """
     shutil.rmtree(outdir, ignore_errors=True)
     cmd = []
     if have_setarch():
@@ -1092,8 +1177,12 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
     cmd += [os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', str(ncores)]
     # a name starting with '-' is passed to run-sniper as it is (e.g. '-slive:50000')
     cmd += [n if n.startswith('-') else '-c' + n for n in names]
-    cmd += ['-d', outdir, '--', workload]
-    cmd += list(app_args or [])
+    cmd += ['-d', outdir]
+    if traces:
+        cmd += ['--traces=' + ','.join(traces)]
+    else:
+        cmd += ['--', workload]
+        cmd += list(app_args or [])
     try:
         p = subprocess.run(cmd, timeout=timeout, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True, cwd=SNIPER_ROOT,
@@ -1347,12 +1436,19 @@ def main():
             # A feature may name its own guest binary: (cfgs, ncores, check,
             # (source, output_pattern)).  Checks that only need counters keep
             # the three-element form and run the shared workload.
+            traces = None
             if len(entry) == 4:
                 cfgs, ncores, check, guest = entry
                 # (source, output_pattern) or (source, output_pattern, env)
+                # or (source, output_pattern, env, args); a fifth element is
+                # the guest's own output pattern and makes the run
+                # trace-driven: the guest is recorded with the VMA log first
+                # (record_trace) and the simulation replays the trace, so
+                # output_pattern is then what the simulation prints.
                 src, pattern = guest[0], guest[1]
                 extra_env = guest[2] if len(guest) > 2 else None
                 app_args = guest[3] if len(guest) > 3 else None
+                record_pattern = guest[4] if len(guest) > 4 else None
                 if src.endswith('.c'):
                     app = build_app(src, os.path.splitext(src)[0])
                 elif src == 'startup_mimicos':
@@ -1376,12 +1472,18 @@ def main():
                 app, expect = workload, WORKLOAD_OUTPUT
                 extra_env = None
                 app_args = None
+                record_pattern = None
             print('%-22s ' % fname, end='')
             sys.stdout.flush()
             started = time.time()
             outdir = os.path.join(workdir, 'feat-' + fname)
-            out, err = run_sniper(cfgs, ncores, outdir, app, args.timeout,
-                                  expect, extra_env, app_args)
+            err = None
+            if record_pattern:
+                sift, err = record_trace(app, fname, re.compile(record_pattern))
+                traces = [sift]
+            if not err:
+                out, err = run_sniper(cfgs, ncores, outdir, app, args.timeout,
+                                      expect, extra_env, app_args, traces)
             took = time.time() - started
             if err:
                 log.record('feature:' + fname, took, 'FAIL')

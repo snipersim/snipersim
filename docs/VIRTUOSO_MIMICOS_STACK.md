@@ -201,6 +201,36 @@ walk that does not fault, which at the default TLB geometry a smoke
 workload never produces; `numa_revelator_stress.cfg` shrinks the TLBs so
 it does, and is what the `numa_revelator` feature check runs.
 
+**HugeTLBfs** (`address_translation_schemes/hugetlbfs.cfg`) is the
+sniper-space service in `common/system/memory_management/hugetlbfs/`: a
+pool of 2 MB (and 1 GB) pages reserved at construction
+(`[perf_model/hugetlbfs] enabled`, `nr_hugepages_2mb`,
+`nr_hugepages_1gb`, `overcommit`; counters `hugetlbfs.allocations_2mb`,
+`allocation_failures`, `pool_exhausted_events`, ...), carved from the
+kernel-reserved region of physical memory below the allocator's
+`kernel_size`.  On Linux a region is hugetlbfs-backed because the
+application asked (`mmap(MAP_HUGETLB)`, a hugetlbfs mount), and a trace
+does not record the request -- the recorder's VMA log is the ranges of
+`/proc/self/maps` -- so which VMAs the pool backs is a configured
+criterion: `min_vma_mb = N` backs every VMA of at least N MB,
+`backed_ranges = "start-end,..."` names ranges outright, and the default
+`min_vma_mb = 0` leaves the service inert.  The page-fault handler
+(`sniper_space_exception_handler.cc`) asks `MimicOS::hugePageBlockFor`
+whether the faulting 2 MB-aligned block lies wholly inside a backed VMA,
+takes the frame from `allocateHugePage` and installs it at the block's
+base with page size 21 -- one level-2 PTE in the radix table, the same
+way the `reserve_thp` allocator's promoted regions are mapped -- and
+falls back to the allocator's base pages when the pool is empty (counted
+by the service).  The scheme switches the allocator's own THP promotion
+off (`threshold_for_promotion = 1.0`), so every 2 MB mapping under it is
+the pool's; the `hugetlbfs` feature check records an 8 MB guest with
+`record-trace --vma` and replays the trace, since VMAs come only from a
+trace, and requires a two-page pool to hand out exactly two frames
+(`allocations_2mb = 2`), run dry on the rest (`allocation_failures`,
+`pool_exhausted_events`), be found by the walk
+(`radix_4level.page_size_discovery_1`) and hit in the 2 MB DTLB
+(`mmu_TLB_L1_2.hits`) with `reserve_thp.two_mb_promoted = 0`.
+
 ### 3.5 MimicOS
 
 **Host side** (`common/system/memory_management/mimicos.cc`,
