@@ -715,6 +715,21 @@ FEATURES = {
                                        counter(stats, 'radix_4level.prefetch_page_faults'))
             if 'radix_4level.prefetch_page_faults' in stats
             else 'prefetch_page_faults not registered')),
+
+    # The fixed-window stride TLB prefetcher: on every access to the prefetch
+    # queue's TLB it walks the page table for the +/-length neighbours of the
+    # demand page.  It registers under tlb_stride, which no other prefetcher
+    # does, so the counters are absent unless prefetcher_list names it.  It
+    # activates at the default geometry: the queue is consulted on every L1
+    # miss, and each consultation is four candidate walks whatever the TLB
+    # size -- so no stress scheme.  Both the attempts and the walks that
+    # resolved are required: an attempt count alone would pass for a
+    # prefetcher whose walks all come back empty.
+    'stride': (
+        ['address_translation_schemes/baseline_stride'], 1,
+        require_nonzero('tlb_stride.prefetch_attempts',
+                        'tlb_stride.successful_prefetches')),
+
 }
 
 
