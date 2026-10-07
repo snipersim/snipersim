@@ -77,7 +77,18 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_champsim_trace(false)
    , m_champsim_access_size(Sift::CHAMPSIM_DEFAULT_MEM_SIZE)
    , m_address_randomization(Sim()->getCfg()->getBool("traceinput/address_randomization"))
-   , m_appid_from_coreid(Sim()->getCfg()->getString("scheduler/type") == "sequential" ? true : false)
+   // The sequential scheduler treats the threads with the same core affinity
+   // as chunks of one process -- pinball sets, where each pinball is an
+   // application of its own and the pinballs of one process go on one core --
+   // so va2pa() numbers their physical address space by core rather than by
+   // application.  That merge needs several applications.  A single
+   // multi-threaded program has one address space whichever core each thread
+   // is on: numbered by core, a worker on core 1 and the main thread on core 0
+   // got different physical addresses for the same futex, the FUTEX_WAKE at
+   // the worker's exit found no waiter, and pthread_join never returned (the
+   // run deadlocked with every thread but main finished).
+   , m_appid_from_coreid(Sim()->getCfg()->getString("scheduler/type") == "sequential"
+                         && Sim()->getCfg()->getInt("traceinput/num_apps") > 1)
    , m_stop(false)
    , m_bbv_base(0)
    , m_bbv_count(0)
@@ -276,9 +287,10 @@ UInt64 TraceThread::va2pa(UInt64 va, bool *noMapping)
 
    UInt64 haddr;
 
-   // When the scheduler is set to sequential, every thread with same core affinity
-   // will be considered chunks of the same process, therefore they have the same
-   // physical address space.
+   // When the scheduler is set to sequential and there are several applications
+   // (pinball sets), every thread with the same core affinity is considered a
+   // chunk of the same process, therefore they have the same physical address
+   // space.  See the constructor for why a single application is left alone.
    if (m_appid_from_coreid)
    {
         haddr = UInt64(m_thread->getCore()->getId());

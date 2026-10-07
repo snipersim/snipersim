@@ -221,6 +221,7 @@ FRAGMENT_WORKLOAD = {
     'core_configs/rob_smt2': 'threaded',
     'scheduler_configs/roaming': 'threaded',
     'scheduler_configs/big_small': 'threaded',
+    'scheduler_configs/sequential': 'threaded',
 }
 
 # Core counts for fragments that cannot use the default ones; replaces --cores
@@ -232,6 +233,9 @@ FRAGMENT_CORES = {
     # Tags cores 0 and 1 big and 2 and 3 small; with fewer than three cores
     # there is no small core for the threads to start on.
     'scheduler_configs/big_small': (4,),
+    # Its sequence "1|1|1|2" has four slots, one core each: the scheduler
+    # refuses to start with fewer cores than slots.
+    'scheduler_configs/sequential': (4,),
 }
 
 # Known to fail in detailed mode at one core count only, with the reason;
@@ -289,6 +293,12 @@ FRAGMENT_INTERMITTENT_DETAILED_CORES = {
 #               types only differ at the sharer limit, which a single-threaded
 #               workload never reaches (nothing is shared), so this says the
 #               directory was built and used, not that the limit was hit.
+#   sequential  the per-thread statistic SchedulerSequential alone registers
+#               (ThreadStatNamedStat "l1d_load_miss", the L1-D's load-misses
+#               total while the thread was on the core), which is what its
+#               constructor used to assert on when the cache controller did
+#               not register that total.  Non-zero means the lookup resolved
+#               and the per-thread accounting ran.
 FRAGMENT_REQUIRE_NONZERO = {
     'core_configs/rob_smt2': ('rob_timer.cpiSMT',),
     'core_configs/nn_branch_predictor': ('branch_predictor_alternate.num-correct',
@@ -303,12 +313,20 @@ FRAGMENT_REQUIRE_NONZERO = {
     'dram_configs/ddr4_2400_closed_page': ('ddr.page-hits', 'ddr.page-miss'),
     'directory_configs/limited_no_broadcast': ('directory.entries-allocated',),
     'directory_configs/limitless': ('directory.entries-allocated',),
+    'scheduler_configs/sequential': ('thread.l1d_load_miss', 'thread.l1d_store_miss'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.
 FRAGMENT_EXPECT_OUTPUT = {
     # big_small/debug = true: the scheduler reports each promotion decision.
     'scheduler_configs/big_small': re.compile(r'\[SchedulerBigSmall\] thread \d+ (stalled|ended)'),
+    # sequential/verbose = true: thread 4 (the fourth worker) is queued behind
+    # thread 3 on core 3 and scheduled when it exits, and the end-of-run
+    # [REPORT] has a line per thread.  Both in one pattern, since a fragment
+    # has one; the order is that of the run (the report comes last).
+    'scheduler_configs/sequential': re.compile(
+        r'\[SCHED\] 4: Pushed to core queue 3\b.*\[SCHED\] 4: Scheduled\..*'
+        r'\[REPORT\]\[THREAD:4\] +CYCLES: \d+ TIME:\d+ INSTR:\d+ L1D-miss:\d+', re.S),
 }
 
 # Fragments that cannot work, with the reason.  Listed rather than skipped, so
