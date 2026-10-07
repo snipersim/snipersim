@@ -60,6 +60,9 @@ static droption_t<unsigned int> DRStopAddress
 static droption_t<bool> DRSSH
 (DROPTION_SCOPE_CLIENT, "ssh", false, "frontend and backend connected by network",
  "Backend and frontend communicate over the network.");
+static droption_t<unsigned int> DRTrackVMAs
+(DROPTION_SCOPE_CLIENT, "vma", 0, "track VMAs",
+ "If not 0, record the process's memory map to <output>.vma every 10,000 detailed instructions (the recorder's -sniper:vma).");
 
 namespace frontend
 {

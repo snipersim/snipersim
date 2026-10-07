@@ -39,6 +39,7 @@ template <typename T> class OptionsBase
   uint64_t get_flow_control_ff();
   bool get_ssh();
   uint64_t get_stop_address();
+  bool get_track_vma();
 
   /// Set protected fields
   void set_current_mode(Sift::Mode mode);
@@ -95,6 +96,10 @@ template <typename T> class OptionsBase
   
   /// Frontend and backend communicate over the network
   bool ssh;
+
+  /// Record the process's memory map (/proc/self/maps) to <output>.vma while
+  /// tracing in detail, as the SIFT recorder's -sniper:vma does
+  bool track_vma;
 };
 
 // TODO Change name from options to config or something similar

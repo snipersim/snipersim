@@ -19,6 +19,8 @@ something the workload already reports rather than a number invented here:
   - test/dvfs sets a frequency and reads it back.
   - test/mpi computes pi.
   - test/smc rewrites its own code and prints the result.
+  - test/dr-frontend runs the FFT through the DynamoRIO front end instead of
+    the SDE recorder, and requires both its verdict and the front-end's banner.
 
 Skips cleanly, with a reason, when a workload needs something absent -- an MPI
 that has not been fetched, a Pin kit for pinball replay.
@@ -68,6 +70,16 @@ def pinplay_check(out, rc):
     if not ok:
         return False, why + ' (recorded run)'
     return True, 'replayed %s instructions; recorded run: %s' % (m.group(1), why)
+
+
+def dr_frontend_check(out, rc):
+    """The FFT ran under the DynamoRIO front end and passed its own check.
+    The front-end line is required so that a run that silently fell back to
+    the SDE recorder cannot pass as a DynamoRIO run."""
+    if '[RECORD-TRACE] Using DynamoRIO frontend' not in out:
+        return False, 'record-trace did not select the DynamoRIO frontend'
+    ok, why = fft_self_check(out, rc)
+    return ok, (why + ' under DynamoRIO') if ok else why
 
 
 def api_in_simulator(out, rc):
@@ -162,6 +174,7 @@ CASES = {
     'fft-marker':      (fft_self_check, None),
     'fft-nn':          (fft_self_check, None),
     'pinplay':         (pinplay_check, None),
+    'dr-frontend':     (dr_frontend_check, 'dynamorio'),
     'api':             (api_in_simulator, None),
     'dvfs':            (dvfs_readback, None),
     'mpi':             (mpi_pi, 'mpich'),
@@ -178,6 +191,12 @@ def unavailable(reason):
     if reason == 'mpich':
         if not os.path.isfile(os.path.join(SNIPER_ROOT, 'mpich', 'bin', 'mpiexec')):
             return 'no MPI (deps/sniper-deps --mpi fetch)'
+    if reason == 'dynamorio':
+        build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
+        if not os.path.isfile(os.path.join(build, 'lib', 'libdr-frontend.so')):
+            return 'no DynamoRIO frontend in %s (make DYNAMORIO=ON)' % build
+        if not os.path.isfile(os.path.join(SNIPER_ROOT, 'dynamorio', 'build', 'bin64', 'drrun')):
+            return 'no DynamoRIO (deps/sniper-deps --dynamorio fetch)'
     return None
 
 

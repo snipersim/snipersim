@@ -2,6 +2,7 @@
 #define _FRONTEND_CALLBACKS_H_
 
 #include "frontend_options.h"
+#include <fstream>
 #include "sift_format.h"
 #include "frontend_threads.h"
 #include "frontend_utils.h"
@@ -43,6 +44,11 @@ template <typename T> class FrontendCallbacks
   
   /// Method to send a magic instruction (command) to the backend
   static addr_t handleMagic(threadid_t threadid, addr_t reg_0, addr_t reg_1, addr_t reg_2);
+
+  /// With -vma, append the process's memory map to <output>.vma every
+  /// 10,000 detailed instructions of this thread (what sift/recorder's
+  /// writeToVMATrace does), for the VMA-aware allocators of MimicOS
+  static void writeVMATrace(threadid_t threadid);
   
   private:
   // Variables
@@ -54,6 +60,9 @@ template <typename T> class FrontendCallbacks
   
   /// Information over the frontend threads
   static thread_data_t* m_thread_data;
+
+  /// The <output>.vma stream, opened on first use
+  static std::ofstream* m_vma_output;
   
 };
 

@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <poll.h>
 #include <fcntl.h>
+#if !defined(PIN_CRT)
+#include <sys/syscall.h>
+#endif
 
 #include <algorithm>
 #include <cassert>
@@ -182,22 +185,41 @@ static int open_reader_without_waiting(const char * filename)
 	return ::open(filename, O_RDONLY | O_NONBLOCK);
 }
 
+/* The open(2) behind the writer.  A DynamoRIO client's libc open() is
+   redirected by DR's private loader to its own os_open_protected(), which
+   takes DR's flag set rather than POSIX's and so fails on these flags (with
+   errno untouched); the direct syscall is not redirected.  PinCRT has no
+   syscall(), and Pin does not redirect open(), so it keeps the libc call. */
+static int raw_open(const char * filename, int flags, int mode)
+{
+#if defined(PIN_CRT)
+	return ::open(filename, flags, mode);
+#else
+	return (int) ::syscall(SYS_openat, AT_FDCWD, filename, flags, mode);
+#endif
+}
+
 static int open_writer_without_waiting(const char * filename)
 {
 	for (;;)
 	{
 		// On a FIFO with no reader this fails with ENXIO rather than waiting
-		int fd = ::open(filename, O_WRONLY | O_NONBLOCK | O_CREAT | O_TRUNC, 0666);
+		int fd = raw_open(filename, O_WRONLY | O_NONBLOCK | O_CREAT | O_TRUNC, 0666);
 		if (fd >= 0)
 		{
 			// The reader is there, so a blocking open returns at once; use
 			// that fd, since fcntl(F_SETFL) cannot be relied on (PinCRT).
-			int bfd = ::open(filename, O_WRONLY);
+			int bfd = raw_open(filename, O_WRONLY, 0);
 			::close(fd);
+			if (bfd < 0)
+				std::cerr << "[SIFT] open(" << filename << ", O_WRONLY) failed: " << strerror(errno) << std::endl;
 			return bfd;
 		}
 		if (errno != ENXIO)
+		{
+			std::cerr << "[SIFT] open(" << filename << ", O_WRONLY|O_NONBLOCK|O_CREAT) failed: " << strerror(errno) << std::endl;
 			return fd;
+		}
 		struct timespec ts = { 0, 1000000 };   // 1 ms: the reader is not there yet
 		::nanosleep(&ts, NULL);
 	}
@@ -207,6 +229,11 @@ cvofstream::cvofstream(const char * filename)
 {
 	int fd = open_writer_without_waiting(filename);
 	this->stream = fd < 0 ? NULL : ::fdopen(fd, "wb");
+	if (fd >= 0 && !this->stream)
+	{
+		std::cerr << "[SIFT] fdopen(" << filename << ") failed: " << strerror(errno) << std::endl;
+		::close(fd);
+	}
 }
 cvofstream::~cvofstream()
 {

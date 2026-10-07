@@ -33,6 +33,7 @@ FrontendOptions<DRFrontend>::FrontendOptions(int argc, const char* argv[])
   flow_control = DRFlowControl.get_value();
   flow_control_ff = DRFlowControlFF.get_value();
   this->ssh = DRSSH.get_value();
+  this->track_vma = DRTrackVMAs.get_value() != 0;
 }
 
 

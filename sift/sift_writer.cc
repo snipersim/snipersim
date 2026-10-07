@@ -91,6 +91,7 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
 
    if (!output->is_open())
    {
+      std::cerr << "[SIFT:" << m_id << "] Error: could not open " << filename << " for writing; no trace will be produced" << std::endl;
       delete output;
       output = nullptr;
       return;

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include "../include/sim_api.h"
 
 namespace frontend
@@ -10,6 +11,45 @@ template <typename T>
 FrontendOptions<T>* FrontendCallbacks<T>::m_options;
 template <typename T>
 FrontendControl<T>* FrontendCallbacks<T>::m_control;
+template <typename T>
+std::ofstream* FrontendCallbacks<T>::m_vma_output = NULL;
+
+template <typename T>
+void FrontendCallbacks <T>::writeVMATrace(threadid_t threadid)
+{
+  if (m_thread_data[threadid].icount_detailed % 10000 != 0)
+    return;
+
+  if (!m_vma_output)
+  {
+    std::string name = m_options->get_output_file() + ".vma";
+    m_vma_output = new std::ofstream(name.c_str());
+    if (!m_vma_output->is_open())
+    {
+      std::cerr << "[SIFT_RECORDER:" << m_options->get_app_id() << "] Error: could not open " << name << " for writing" << std::endl;
+      return;
+    }
+    if (m_options->get_verbose())
+      std::cerr << "[SIFT_RECORDER:" << m_options->get_app_id() << "] Recording VMAs to " << name << std::endl;
+  }
+
+  // The same format as sift/recorder/recorder_base.cc: a "VMA: <detailed
+  // instruction count>" header, then one address range per mapping.
+  std::ifstream maps("/proc/self/maps");
+  if (!maps)
+  {
+    std::cerr << "[SIFT_RECORDER:" << m_options->get_app_id() << "] Unable to open /proc/self/maps" << std::endl;
+    return;
+  }
+  *m_vma_output << "VMA: " << m_thread_data[threadid].icount_detailed << " " << std::endl;
+  std::string line;
+  while (std::getline(maps, line))
+  {
+    size_t hyphen = line.find('-');
+    if (hyphen != std::string::npos)
+      *m_vma_output << line.substr(0, line.find(' ', hyphen)) << std::endl;
+  }
+}
 
 template <typename T>
 void FrontendCallbacks <T>::countInsns(threadid_t threadid, int32_t count)
@@ -57,6 +97,9 @@ void FrontendCallbacks <T>::sendInstruction(threadid_t threadid, addr_t addr, ui
 
   ++m_thread_data[threadid].icount;
   ++m_thread_data[threadid].icount_detailed;
+
+  if (m_options->get_track_vma())
+    writeVMATrace(threadid);
 
   // Reconstruct basic blocks (we could ask Pin, but do it the same way as TraceThread will do it)
   if (m_thread_data[threadid].bbv_end || m_thread_data[threadid].bbv_last != addr)
