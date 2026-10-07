@@ -1059,6 +1059,19 @@ FEATURES = {
     'asap': (
         ['address_translation_schemes/asap'], 1,
         require_nonzero('asap.asap_invocations', 'asap.asap_hits')),
+
+    # Step 9: the oracle data-side engine, the upper bound of address
+    # speculation.  The MMU invokes it after every walk that did not fault,
+    # with the physical address the walk resolved, and it prefetches that
+    # line at the time the walk started.  Its two counters are its own; the
+    # L2's prefetch count is what shows the line was actually issued to the
+    # cache rather than counted and dropped.  It needs the stress geometry
+    # for the reason revelator_thp does: under reserve_thp every data fault
+    # gets a 2MB page, and at the default geometry no walk is fault-free, so
+    # the data side never runs (spec_oracle_stress.cfg).
+    'oracle_spec': (
+        ['address_translation_schemes/spec_oracle_stress'], 1,
+        require_nonzero('oracle.invocations', 'oracle.prefetches', 'L2.prefetches')),
 }
 
 

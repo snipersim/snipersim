@@ -304,6 +304,10 @@ FRAGMENT_REQUIRE_NONZERO = {
     # invokes it; both schemes layer that MMU with the engine.
     'address_translation_schemes/asap': ('asap.asap_invocations', 'asap.asap_hits'),
     'address_translation_schemes/parametric_asap': ('asap.asap_invocations', 'asap.asap_hits'),
+    # Step 9: the oracle engine registers under its own name.  Only the
+    # stress scheme invokes it: at the default geometry every walk of this
+    # workload faults (see spec_oracle_stress.cfg), and the engine stays idle.
+    'address_translation_schemes/spec_oracle_stress': ('oracle.invocations', 'oracle.prefetches'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.

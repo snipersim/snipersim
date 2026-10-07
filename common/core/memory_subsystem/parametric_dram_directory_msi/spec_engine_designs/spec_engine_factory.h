@@ -11,6 +11,8 @@
 #include "numa_revelator.h"
 // Step 8: ASAP
 #include "asap_engine.h"
+// Step 9: oracle
+#include "oracle_spec.h"
 
 namespace ParametricDramDirectoryMSI
 {
@@ -61,6 +63,11 @@ namespace ParametricDramDirectoryMSI
             else if (type == "asap")
             {
                 return new ASAP(core, memory_manager, shmem_perf_model, name);
+            }
+            // Step 9: the oracle data-side engine.
+            else if (type == "oracle")
+            {
+                return new OracleSpec(core, memory_manager, shmem_perf_model, name);
             }
             // SpOT only if the deferred comparison engines are ever pulled in.
             else
