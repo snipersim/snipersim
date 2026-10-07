@@ -1,10 +1,6 @@
 # A copy of this file is distributed with the binaries of Sniper and Benchmarks
 
-import sys, os, re, signal, subprocess, io, sniper_stats, sniper_config
-try:
-  import json
-except ImportError:
-  import localjson as json
+import sys, os, re, signal, subprocess, io, json, sniper_stats, sniper_config
 
 
 try:
