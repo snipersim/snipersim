@@ -17,16 +17,12 @@ int main(int argc, char* argv[])
       descendant, which makes a hung simulation impossible to inspect. */
    if (getenv("SNIPER_ALLOW_PTRACE"))
       prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
-   /* Line-buffered even when stdout is a pipe (run-sniper's), so each
-      complete line reaches the merged stream when it is written. */
-   setvbuf(stdout, NULL, _IOLBF, 0);
-   // Set thread name for Sniper-in-Sniper simulations
-   SimSetThreadName("main");
-
-   // To make sure output shows up immediately, make stdout and stderr line buffered
-   // (if we're writing into a pipe to run-graphite, or redirected to a file by the job runner, the default will be block buffered)
+   // To make sure output shows up immediately, make stdout and stderr line
+   // buffered (into run-sniper's pipe, or a file: the default is block buffered)
    setvbuf(stdout, NULL, _IOLBF, 0);
    setvbuf(stderr, NULL, _IOLBF, 0);
+   // Set thread name for Sniper-in-Sniper simulations
+   SimSetThreadName("main");
 
    const char *ld_orig = getenv("SNIPER_SCRIPT_LD_LIBRARY_PATH");
    if (ld_orig)

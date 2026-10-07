@@ -83,7 +83,7 @@ _cmake_flags += $(CMAKE_ARGS)
 _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
              $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs regress_qemu regress_virtuoso help
+.PHONY: all deps configure build clean distclean regress regress_scripting regress_configs regress_qemu regress_pacsim validate_pacsim regress_apps regress_virtuoso riscv-ime-check help
 
 all: build
 
