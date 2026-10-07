@@ -131,18 +131,6 @@ if(SNIPER_ENABLE_ARM OR SNIPER_ENABLE_DYNAMORIO)
   target_link_libraries(sniper_common INTERFACE Sniper::Capstone)
 endif()
 
-# perf_event.h: copied from the running kernel's headers when available, with a
-# vendored fallback.  The Makefile did this with a shell conditional.
-set(_perf_event "${CMAKE_CURRENT_SOURCE_DIR}/include/linux/perf_event.h")
-if(NOT EXISTS "${_perf_event}")
-  if(EXISTS "/usr/include/linux/perf_event.h")
-    configure_file("/usr/include/linux/perf_event.h" "${_perf_event}" COPYONLY)
-  else()
-    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/include/linux/perf_event_2.6.32.h"
-                   "${_perf_event}" COPYONLY)
-  endif()
-endif()
-
 # ---------------------------------------------------------------------------
 # Targets
 # ---------------------------------------------------------------------------

@@ -35,14 +35,12 @@ debug_offset.out
 graphite.out
 cpi-stack.jpg
 output_files
-tools/cpistack-collect/cpistack-*
 
 # compiled libraries
 # lib/sniper is the symlink SNIPER_LINK_INTO_TREE makes into a build directory;
 # everything else the build produces now lives under build/.
 lib/sniper
 docs
-include/linux/perf_event.h
 
 # result files
 results/
@@ -50,11 +48,7 @@ results/
 
 # dependencies
 pin_kit
-linux_2_6_32
 mcpat
-riscv/riscv-tools
-riscv/rv8
-riscv/Speckle
 xed_kit
 xed_build
 pinplay-tools
