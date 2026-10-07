@@ -24,28 +24,19 @@ RUN apt-get update && apt-get install -y \
     libbz2-dev \
     libdb++-dev \
  && rm -rf /var/lib/apt/lists/*
-# For building RISC-V Tools
+# For the dependencies deps/sniper-deps builds: QEMU (ninja, glib, pixman),
+# DynamoRIO and Capstone (cmake), the RISC-V guests (clang, lld), ccache
 RUN apt-get update && apt-get install -y \
-    autoconf \
-    automake \
-    autotools-dev \
-    bc \
-    bison \
-    curl \
-    device-tree-compiler \
-    flex \
-    gawk \
-    gperf \
-    libexpat-dev \
-    libgmp-dev \
-    libmpc-dev \
-    libmpfr-dev \
-    libtool \
-    libusb-1.0-0-dev \
-    patchutils \
+    ninja-build \
     pkg-config \
-    texinfo \
-    zlib1g-dev \
+    libglib2.0-dev \
+    libpixman-1-dev \
+    liblzma-dev \
+    ccache \
+    clang \
+    lld \
+    python3-numpy \
+    python3-yaml \
  && rm -rf /var/lib/apt/lists/*
 # Helper utilities
 RUN apt-get update && apt-get install -y \
