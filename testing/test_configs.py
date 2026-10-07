@@ -184,6 +184,10 @@ FRAGMENT_DIRS = ('address_translation_schemes', 'common_configs', 'core_configs'
                  # own core count, which FRAGMENT_CORES repeats so that the
                  # run has the cores the config was written for.
                  'address_translation_schemes/multicore',
+                 # The TRAIL comparison matrix: one substrate (ip_stride +
+                 # streamer data prefetchers, CHiRP L2 TLB), one L2-TLB
+                 # prefetcher per file.
+                 'address_translation_schemes/trail_comparison_v4',
                  # The variants that were compiled but selected by nothing: the
                  # L2 replacement policies, the GHB prefetcher and the
                  # sequential cache timing model; the limited and LimitLESS
@@ -486,6 +490,31 @@ FRAGMENT_REQUIRE_NONZERO = {
     'address_translation_schemes/parametric_baseline_datapf':
         ('ip_stride.gen_prefetch', 'streamer.gen_prefetch', 'L1-D.prefetches', 'L2.prefetches'),
     'address_translation_schemes/multicore/parametric_asp_4c': ('asp_tlb.prefetch_attempts',),
+    # The TRAIL comparison matrix (step 7), each file on the L2-TLB
+    # prefetcher(s) it selects, on the substrate's data prefetchers, and on
+    # the walker's new count of lines fetched from beyond the L2.
+    #   perfect_l2tlb  translates without ever walking: walks and the
+    #                  beyond-L2 fetches are required to be zero.
+    'address_translation_schemes/trail_comparison_v4/v4_noprefetch':
+        ('mmu_walker.beyond_l2_fetches_demand', 'ip_stride.gen_prefetch', 'streamer.gen_prefetch'),
+    'address_translation_schemes/trail_comparison_v4/v4_perfect_l2tlb':
+        ('mmu.num_translations', 'mmu.tlb_hits_data', 'ip_stride.gen_prefetch'),
+    'address_translation_schemes/trail_comparison_v4/v4_asp':
+        ('asp_tlb.prefetch_attempts', 'mmu_walker.beyond_l2_fetches_demand'),
+    'address_translation_schemes/trail_comparison_v4/v4_asp_atp':
+        ('asp_tlb.prefetch_attempts', 'tlb_atp.queries'),
+    'address_translation_schemes/trail_comparison_v4/v4_asp_berti':
+        ('asp_tlb.prefetch_attempts', 'tlb_berti.strides_learned'),
+    'address_translation_schemes/trail_comparison_v4/v4_asp_dp':
+        ('asp_tlb.prefetch_attempts', 'dp_tlb.queries'),
+    'address_translation_schemes/trail_comparison_v4/v4_asp_recency':
+        ('asp_tlb.prefetch_attempts', 'recency_tlb.queries'),
+    'address_translation_schemes/trail_comparison_v4/v4_asp_stride':
+        ('asp_tlb.prefetch_attempts', 'tlb_stride.prefetch_attempts'),
+    'address_translation_schemes/trail_comparison_v4/v4_dp': ('dp_tlb.queries', 'dp_tlb.predictions_issued'),
+    'address_translation_schemes/trail_comparison_v4/v4_recency': ('recency_tlb.queries',),
+    'address_translation_schemes/trail_comparison_v4/v4_trail': ('tlb_temporal_pte.demand_accesses',),
+    'address_translation_schemes/trail_comparison_v4/v4_trail_sidecar': ('tlb_temporal_pte.demand_accesses',),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's
@@ -509,6 +538,8 @@ FRAGMENT_REQUIRE_ZERO = {
     'address_translation_schemes/perfect_translation_1c_tlb': ('mmu.page_table_walks',),
     'address_translation_schemes/no_translation': ('mmu.num_translations',),
     'address_translation_schemes/no_translation_xor': ('mmu.num_translations',),
+    'address_translation_schemes/trail_comparison_v4/v4_perfect_l2tlb':
+        ('mmu.page_table_walks', 'mmu_walker.beyond_l2_fetches_demand'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.

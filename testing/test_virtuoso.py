@@ -726,6 +726,38 @@ FEATURES = {
     # it attempted one, VPN + stride, before, whatever the knobs said.  The
     # ratio is the check, together with the walks that resolved; the
     # before/after counts are in the commit that added this.
+    # The MMU-base remainder (port series step 7).  beyond_l2_fetches_demand
+    # is the walker's count of page-table lines it had to fetch from the
+    # NUCA or DRAM on a demand walk, registered only now: on the TRAIL
+    # substrate without an L2-TLB prefetcher every walk is a demand one, so
+    # it has to accumulate while the prefetch side stays registered at zero.
+    'beyond_l2_fetches': (
+        ['address_translation_schemes/trail_comparison_v4/v4_noprefetch'], 1,
+        require_nonzero('mmu.page_table_walks', 'mmu_walker.beyond_l2_fetches_demand',
+                        registered=('mmu_walker.beyond_l2_fetches_prefetch',))),
+
+    # perfect_l2_tlb: the L1 TLBs miss as configured, every miss is answered
+    # as an L2 hit, and no walk ever happens -- so translations and the L2
+    # TLB's latency (tlb_latency_1, charged only on an L1 miss answered at
+    # level 1) accumulate while the walk count and the walker's beyond-L2
+    # fetches stay at zero.  tlb_misses_data is zero here by construction:
+    # it counts translations no TLB level answered.
+    'perfect_l2_tlb': (
+        ['address_translation_schemes/trail_comparison_v4/v4_perfect_l2tlb'], 1,
+        lambda stats: (
+            counter(stats, 'mmu.num_translations') > 0
+            and counter(stats, 'mmu.tlb_latency_1') > 0
+            and counter(stats, 'mmu.tlb_misses_data') == 0
+            and counter(stats, 'mmu.page_table_walks') == 0
+            and counter(stats, 'mmu_walker.beyond_l2_fetches_demand') == 0
+            and counter(stats, 'mmu_walker.beyond_l2_fetches_prefetch') == 0,
+            'translations=%d l2_hit_latency=%d tlb_misses=%d walks=%d beyond_l2_demand=%d'
+            % (counter(stats, 'mmu.num_translations'),
+               counter(stats, 'mmu.tlb_latency_1'),
+               counter(stats, 'mmu.tlb_misses_data'),
+               counter(stats, 'mmu.page_table_walks'),
+               counter(stats, 'mmu_walker.beyond_l2_fetches_demand')))),
+
     'asp': (
         ['address_translation_schemes/baseline_asp'], 1,
         lambda stats: (

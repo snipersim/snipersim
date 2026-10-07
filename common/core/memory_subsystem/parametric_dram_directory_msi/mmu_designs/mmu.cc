@@ -65,6 +65,8 @@
 #include "instruction.h"
 #include "core.h"
 #include "thread.h"
+#include "simulator.h"
+#include "hooks_manager.h"
 
 // === Standard Library ===
 #include <iostream>
@@ -120,6 +122,11 @@ namespace ParametricDramDirectoryMSI
         // Initialize CSV logs for detailed per-page analysis
 #if ENABLE_MMU_CSV_LOGS
         initializePerPageLogs();
+        // Nothing destroys the MMU when the simulation ends, so the logs are
+        // dumped from HOOK_SIM_END, which fires once at the very end
+        // (HOOK_PRE_STAT_WRITE fires at every ROI boundary, with the maps
+        // still empty the first time).
+        Sim()->getHooksManager()->registerHook(HookType::HOOK_SIM_END, hook_sim_end, (UInt64)this, HooksManager::ORDER_NOTIFY_PRE);
 #endif
 
         // Initialize MMU components in order
@@ -453,7 +460,23 @@ namespace ParametricDramDirectoryMSI
                 translation_stats.total_tlb_latency += l1_dtlb_latency;
                 translation_stats.total_translation_latency += l1_dtlb_latency;
             }
-            
+
+            // Perfect prefetch: bring the data line of every demand
+            // translation into the L2 -- the same data-side help an
+            // aggressive prefetcher gives the other cells -- but only when
+            // the line is not there already; prefetching on every one of
+            // the ~1 access per load thrashes the L2 instead.
+            // translateWithoutTiming returns the full physical address, so
+            // the line is its 64-byte-aligned value.
+            if (perfect_prefetch_enabled && !instruction) {
+                IntPtr cache_line = physical_address & ~((IntPtr)63);
+                MMUCacheInterface* l2 = memory_manager->getCacheCntlrAt(core->getId(), MemComponent::component_t::L2_CACHE);
+                if (l2 && !l2->isLinePresent(cache_line)) {
+                    SubsecondTime t_now = shmem_perf_model->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                    l2->handleMMUPrefetch(eip, cache_line, t_now, CacheBlockInfo::block_type_t::DATA);
+                }
+            }
+
             mmu_log->debug("Perfect translation: VA " + mmu_log->hex(address) + 
                           " -> PA " + mmu_log->hex(physical_address) + 
                           " (L1 dTLB latency: " + std::to_string(l1_dtlb_latency.getNS()) + "ns)");
@@ -575,6 +598,27 @@ namespace ParametricDramDirectoryMSI
 
 
         // ====================================================================
+        // Perfect L2 TLB: every L1 miss hits the L2
+        // ====================================================================
+        // The translation comes from translateWithoutTiming (which handles
+        // the page fault itself) and is accounted as an L2 TLB hit: hit_tlb
+        // and tlb_block_info_hit stay NULL, and the hit path below charges
+        // the L2 TLB's configured latency.  The PPN is kept at 4 KB
+        // granularity for the page's base, as a TLB entry's is: for a 2 MB
+        // page the low nine bits of (pa >> 12) belong to the offset.
+        if (!hit && perfect_l2_tlb_enabled)
+        {
+            auto [physical_address, ps] = translateWithoutTiming(address, page_table);
+            ppn_result = (physical_address >> ps) << (ps - 12);
+            page_size = ps;
+            hit = true;
+            hit_level = 1;
+
+            mmu_log->log("Perfect L2 TLB: VA " + mmu_log->hex(address) +
+                         " -> PPN " + mmu_log->hex(ppn_result) + " (forced L2 hit, no PTW)");
+        }
+
+        // ====================================================================
         // Track TLB hits between PTWs (for temporal analysis)
         // ====================================================================
         if (hit)
@@ -611,11 +655,17 @@ namespace ParametricDramDirectoryMSI
         if (hit)
         {
             // Extract translation data from the hitting TLB entry
-            ppn_result = tlb_block_info_hit->getPPN();
-            page_size = tlb_block_info_hit->getPageSize();
+            // (already set when the perfect L2 TLB answered)
+            if (tlb_block_info_hit != NULL) {
+                ppn_result = tlb_block_info_hit->getPPN();
+                page_size = tlb_block_info_hit->getPageSize();
+            }
 
-            mmu_log->log("TLB Hit at level " + std::to_string(hit_level) + 
-                        " at TLB " + std::string(hit_tlb->getName().c_str()));
+            if (hit_tlb != NULL)
+                mmu_log->log("TLB Hit at level " + std::to_string(hit_level) + 
+                            " at TLB " + std::string(hit_tlb->getName().c_str()));
+            else
+                mmu_log->log("TLB Hit at level " + std::to_string(hit_level) + " (perfect L2 TLB)");
             
             // Get the appropriate TLB path (instruction or data) for latency
             const TLBSubsystem& tlb_path = instruction ? 
@@ -648,14 +698,15 @@ namespace ParametricDramDirectoryMSI
                 // latency of the specific TLB that scored a hit.
                 if (hit_level != 1 ){
 
-                    if (tlb_path[hit_level][j] == hit_tlb)
+                    if (hit_tlb != NULL && tlb_path[hit_level][j] == hit_tlb)
 					{
 						translation_stats.total_tlb_latency += hit_tlb->getLatency();
 						charged_tlb_latency += hit_tlb->getLatency();
 						translation_stats.tlb_latency_per_level[hit_level] += hit_tlb->getLatency();
 					}
-                    mmu_log->debug("Charging TLB Hit Latency: " + std::to_string(hit_tlb->getLatency().getNS()) + 
-                                 "ns at level " + std::to_string(hit_level));
+                    if (hit_tlb != NULL)
+                        mmu_log->debug("Charging TLB Hit Latency: " + std::to_string(hit_tlb->getLatency().getNS()) + 
+                                     "ns at level " + std::to_string(hit_level));
                 }
 
 				// Page Size Prediction hit latency logic for L2 TLB hits
@@ -885,7 +936,30 @@ namespace ParametricDramDirectoryMSI
                 }
             } while (caused_page_fault && !userspace_mimicos_enabled);
 
-            
+            // ----------------------------------------------------------------
+            // In-PTE payload writeback (TRAIL).  The demand walk has just
+            // brought this access's PTE lines into the cache; a prefetcher
+            // that updated an in-PTE payload during this access (learned a
+            // delta) now dirties the PTE's line, so that its eviction costs a
+            // DRAM writeback.  A no-op unless model_payload_writeback is on.
+            // ----------------------------------------------------------------
+            if (!caused_page_fault)
+            {
+                const TLBSubsystem& tlbs_wb = tlb_subsystem->getTLBSubsystem();
+                for (UInt32 wi = 0; wi < tlbs_wb.size(); wi++)
+                    for (UInt32 wj = 0; wj < tlbs_wb[wi].size(); wj++)
+                    {
+                        TLB *t = tlbs_wb[wi][wj];
+                        if (!t->getPrefetch())
+                            continue;
+                        TLBPrefetcherBase **pfs = t->getPrefetchers();
+                        int npf = t->getNumPrefetchers();
+                        for (int wk = 0; wk < npf; wk++)
+                            if (pfs[wk])
+                                pfs[wk]->flushPendingPayloadWritebacks(page_table);
+                    }
+            }
+
             // ----------------------------------------------------------------
             // Userspace MimicOS: Return to let kernel handle page fault
             // ----------------------------------------------------------------
@@ -1431,6 +1505,9 @@ namespace ParametricDramDirectoryMSI
     void MemoryManagementUnit::dumpPerPageLogs()
     {
 #if ENABLE_MMU_CSV_LOGS
+        if (m_per_page_logs_dumped)
+            return;
+        m_per_page_logs_dumped = true;
         if (translation_latency_log.is_open())
         {
             // CSV Header

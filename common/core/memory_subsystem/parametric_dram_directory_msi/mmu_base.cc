@@ -50,6 +50,21 @@ namespace ParametricDramDirectoryMSI
             std::cout << "[MMU_BASE] PERFECT TRANSLATION MODE ENABLED - zero translation latency" << std::endl;
         }
 
+        // Perfect L2 TLB: the L1 TLBs behave as configured, every L1 miss
+        // hits the L2 TLB, and no walk is ever performed
+        perfect_l2_tlb_enabled = Sim()->getCfg()->getBoolDefault("perf_model/"+_name+"/perfect_l2_tlb", false);
+        if (perfect_l2_tlb_enabled) {
+            std::cout << "[MMU_BASE] PERFECT L2 TLB MODE ENABLED - L1 misses always hit L2" << std::endl;
+        }
+
+        // Perfect prefetch: under perfect translation, prefetch the data line
+        // of every demand translation into the L2, so the perfect cell is an
+        // upper bound against cells that have a data-side prefetcher too
+        perfect_prefetch_enabled = Sim()->getCfg()->getBoolDefault("perf_model/"+_name+"/perfect_prefetch", false);
+        if (perfect_prefetch_enabled) {
+            std::cout << "[MMU_BASE] PERFECT PREFETCH MODE ENABLED - MMU prefetches data into L2 on every translation" << std::endl;
+        }
+
         // Per-access PTW logging (runtime config option)
         ptw_access_logging_enabled = Sim()->getCfg()->getBoolDefault("perf_model/"+_name+"/ptw_access_logging", false);
         try {
@@ -140,6 +155,8 @@ namespace ParametricDramDirectoryMSI
         registerStatsMetric(walker_stats_name, core->getId(), "L1D_accesses_prefetch", &walker_stats.L1D_accesses_prefetch);
         registerStatsMetric(walker_stats_name, core->getId(), "L2_accesses_prefetch", &walker_stats.L2_accesses_prefetch);
         registerStatsMetric(walker_stats_name, core->getId(), "NUCA_accesses_prefetch", &walker_stats.NUCA_accesses_prefetch);
+        registerStatsMetric(walker_stats_name, core->getId(), "beyond_l2_fetches_demand", &walker_stats.beyond_l2_fetches_demand);
+        registerStatsMetric(walker_stats_name, core->getId(), "beyond_l2_fetches_prefetch", &walker_stats.beyond_l2_fetches_prefetch);
     }
 
 	MemoryManagementUnitBase::~MemoryManagementUnitBase()
@@ -464,7 +481,12 @@ namespace ParametricDramDirectoryMSI
 							// never tagged, and the prefetch walker statistics below could never fire.
 							latency = accessCache(packet, t_now+fetch_delay[tab], is_prefetch, temp_hit_where);
 							
-							// Track prefetch-specific walker stats
+							// Track prefetch-specific walker stats, and the lines fetched from
+							// beyond the L2 either way: the bandwidth the walk cost
+							bool beyond_l2 = (temp_hit_where == HitWhere::where_t::NUCA_CACHE ||
+							                  temp_hit_where == HitWhere::where_t::DRAM_LOCAL ||
+							                  temp_hit_where == HitWhere::where_t::DRAM_REMOTE ||
+							                  temp_hit_where == HitWhere::where_t::DRAM);
 							if (is_prefetch) {
 								if (temp_hit_where == HitWhere::where_t::L1_OWN)
 									walker_stats.L1D_accesses_prefetch++;
@@ -474,6 +496,11 @@ namespace ParametricDramDirectoryMSI
 									walker_stats.NUCA_accesses_prefetch++;
 								else if (temp_hit_where == HitWhere::where_t::DRAM_LOCAL || temp_hit_where == HitWhere::where_t::DRAM_REMOTE || temp_hit_where == HitWhere::where_t::DRAM)
 									walker_stats.DRAM_accesses_prefetch++;
+								if (beyond_l2)
+									walker_stats.beyond_l2_fetches_prefetch++;
+							} else {
+								if (beyond_l2)
+									walker_stats.beyond_l2_fetches_demand++;
 							}
 							
 							// Clear context after access
@@ -624,11 +651,17 @@ namespace ParametricDramDirectoryMSI
 			bool is_pagefault = ptw_result.fault_happened;
 			int requested_frames = ptw_result.requested_frames;
 
-			// Read shadow PTE payload for temporal prefetching
+			// Read the shadow payload for temporal prefetching from the plane
+			// the translation came from: the PTE plane (keyed by the 4 KB VPN)
+			// for a 4 KB page, the PMD plane (keyed by the 2 MB VPN) for a 2 MB
+			// one -- a 2 MB translation used to read the PTE plane at its 4 KB
+			// VPN, where no payload is ever learned for it.
 			PayloadWord leaf_payload_bits;
 			if (!is_pagefault) {
-				uint64_t vpn = address >> 12;
-				leaf_payload_bits = page_table->readPayloadBits(vpn);
+				if (page_size == 21)
+					leaf_payload_bits = page_table->readPMDPayloadBits(address >> 21);
+				else
+					leaf_payload_bits = page_table->readPayloadBits(address >> 12);
 			}
 
 			auto* mimicos = Sim()->getMimicOS();
@@ -671,10 +704,23 @@ namespace ParametricDramDirectoryMSI
 					ptw_result = filterPTWResult(address, ptw_result, page_table, count);
 				}
 				ptw_cycles = calculatePTWCycles(ptw_result, count, modeled, eip, lock, address, instruction, is_prefetch);
-			}	
-			
+			}
+			// A prefetch walk that page-faulted still resolved its translation
+			// (restart_walk materialised the page), so it pays for that walk
+			// like any other: a translation prefetch into an unmapped page was
+			// free before.  Demand faults are unaffected -- they walk again
+			// with restart_walk false and are charged on the replay.
+			else if (is_pagefault && is_prefetch)
+			{
+				stats.memory_accesses_before_filtering += ptw_result.accesses.size();
+				if (nested_mmu == nullptr)
+				{
+					ptw_result = filterPTWResult(address, ptw_result, page_table, count);
+				}
+				ptw_cycles = calculatePTWCycles(ptw_result, count, modeled, eip, lock, address, instruction, is_prefetch);
+			}
 
-			
+
 			mmu_base_log->debug("Finished PTW for address: ", address);
 			mmu_base_log->debug("PTW latency: ", ptw_cycles);
 			mmu_base_log->debug("Physical Page Number: ", ppn_result);

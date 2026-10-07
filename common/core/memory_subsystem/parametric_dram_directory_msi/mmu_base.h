@@ -86,6 +86,10 @@ namespace ParametricDramDirectoryMSI
             UInt64 L1D_accesses_prefetch;
             UInt64 L2_accesses_prefetch;
             UInt64 NUCA_accesses_prefetch;
+            // Lines a walk fetched from beyond the L2 (NUCA or DRAM), the
+            // bandwidth a walk costs, split by demand and prefetch walks
+            UInt64 beyond_l2_fetches_demand;
+            UInt64 beyond_l2_fetches_prefetch;
         } walker_stats;
 
         UInt32 m_num_numa_nodes;
@@ -93,6 +97,8 @@ namespace ParametricDramDirectoryMSI
 
         bool count_page_fault_latency_enabled;
         bool perfect_translation_enabled;  // If true: translation happens (PA remapping) but with zero latency
+        bool perfect_l2_tlb_enabled;       // If true: the L1 TLBs work as configured and every L1 miss hits the L2 TLB (no walk)
+        bool perfect_prefetch_enabled;     // If true (with perfect_translation): every demand translation also prefetches its data line into the L2, so the perfect cell has the data-side advantage a real prefetcher would give it
 
 
 

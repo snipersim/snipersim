@@ -177,6 +177,16 @@ namespace ParametricDramDirectoryMSI
 		void updatePageMetrics(IntPtr virtual_address, SubsecondTime translation_latency, bool performed_ptw, SubsecondTime translation_start_time, UInt64 translation_index, SubsecondTime walk_latency, SubsecondTime tlb_hit_latency, SubsecondTime tlb_miss_latency);
 		void dumpPerPageLogs();
 		void initializePerPageLogs();
+
+	private:
+		// The per-page CSV logs are written once, from the simulation-end
+		// hook: destructors do not run at the end of a simulation.
+		bool m_per_page_logs_dumped = false;
+		static SInt64 hook_sim_end(UInt64 user, UInt64 args)
+		{
+			((MemoryManagementUnit*)user)->dumpPerPageLogs();
+			return 0;
+		}
 	};
 
 }
