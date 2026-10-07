@@ -19,20 +19,15 @@ The estimated run time is printed at the end of the run. To get it again later
 from a directory of output, `pacsim.py -d <dir>` reports the same number from
 the same code.
 
-## Status of the recorder
+## The recorder
 
-Pac-Sim's recorder side -- the online BBV clustering and intra-barrier analysis
-that make the sampling adaptive rather than periodic -- is **not currently in
-the tree**. It was removed by commit `f472416`, which replaced the SIFT recorder
-with a different implementation; the last commit carrying a working Pac-Sim
-recorder is `0c5db2a`. What remains here is the simulator-side magic interface
-(`SIM_CMD_GET_SIM_TIME`, `GET_INS_NUM`, `GET_BARRIER_REACHED`) and these
-analysis scripts, so restoring Pac-Sim means porting the recorder onto the
-current one rather than reverting a patch.
-
-Until that lands, `--pacsim` stops with an error rather than running. That is
-deliberate: an unsampled run produces output that looks perfectly ordinary and
-says nothing about the sampling not having happened.
+Pac-Sim's recorder side -- the online BBV clustering and the intra-barrier
+analysis that make the sampling adaptive rather than periodic -- lives in
+`sift/recorder/pacsim.{h,cc}` and is built into the SDE recorder.  If
+`--pacsim` is given to a recorder that does not carry it (an old build),
+`record-trace` stops with an error rather than tracing unsampled: an
+unsampled run produces output that looks ordinary and says nothing about
+the sampling not having happened.
 
 # Citation
 

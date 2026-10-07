@@ -280,14 +280,8 @@ def require_pacsim(tool_path):
   recorder: %s
   expected: a KNOB named "%s"
 
-Pac-Sim's recorder side -- the online BBV clustering and intra-barrier
-analysis that make the sampling adaptive rather than periodic -- was removed
-from the tree in commit f472416, which replaced the whole recorder with a
-different implementation.  The simulator side is still present (the
-SIM_CMD_GET_SIM_TIME / GET_INS_NUM / GET_BARRIER_REACHED magic interface), as
-are the analysis scripts in pacsimscripts/, so what is missing is the recorder
-port.  The last commit carrying a working PacSim recorder is 0c5db2a.
-
+The recorder in the tree carries Pac-Sim (sift/recorder/pacsim.cc); a
+recorder without the knob is an old or a differently configured build.
 Running without it would trace the application unsampled and report timings
 that are not Pac-Sim's, so this is an error rather than a warning.""" % (
       tool_path, PACSIM_KNOB.decode()), file=sys.stderr)

@@ -1,10 +1,10 @@
 /* Long-running loops with no barriers: the shape LoopPoint-style sampling is for.
  *
- * Pac-Sim's region records are typed (sift/recorder/mtng.h, RecordType).
+ * Pac-Sim's region records are typed (sift/recorder/pacsim.h, RecordType).
  * MultiThread and SingleThread records describe regions delimited by global
  * barriers; IntraBarrier records describe regions found *inside* a barrier
  * interval, which is what the analysis scripts count as looppoints
- * (markerdistribution() in pacsimscripts/mtng_dumpjson.py).
+ * (markerdistribution() in pacsimscripts/pacsim_dumpjson.py).
  *
  * testing/apps/phased.c produces the first kind: it synchronises on a barrier
  * between every phase, so there is always an obvious place to cut.  This file
