@@ -1047,6 +1047,18 @@ FEATURES = {
                counter(stats, 'mmu.sanity_check_violations'))),
         ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
          r'hugetlb_workload sum=50528256')),
+
+    # Step 8: ASAP, the page-table-side engine of the speculative MMU.  It
+    # acts only on the page-table invocation, which hands it the entries the
+    # functional walk visited, and prefetches the lines of the depth-2 and
+    # depth-3 entries (the PD and PT of a radix walk) into the L2 so they are
+    # in flight while the first two levels resolve.  Both counters are its
+    # own: invocations says the MMU called it on the walk side, hits that it
+    # found entries deep enough to prefetch -- an engine fed only the
+    # data-side invocation would register both and move neither.
+    'asap': (
+        ['address_translation_schemes/asap'], 1,
+        require_nonzero('asap.asap_invocations', 'asap.asap_hits')),
 }
 
 

@@ -300,6 +300,10 @@ FRAGMENT_REQUIRE_NONZERO = {
     'directory_configs/limited_no_broadcast': ('directory.entries-allocated',),
     'directory_configs/limitless': ('directory.entries-allocated',),
     'scheduler_configs/sequential': ('thread.l1d_load_miss', 'thread.l1d_store_miss'),
+    # Step 8: ASAP registers under its own name and only the speculative MMU
+    # invokes it; both schemes layer that MMU with the engine.
+    'address_translation_schemes/asap': ('asap.asap_invocations', 'asap.asap_hits'),
+    'address_translation_schemes/parametric_asap': ('asap.asap_invocations', 'asap.asap_hits'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.
