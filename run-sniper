@@ -17,7 +17,6 @@ def usage():
         '  [-c [objname:]<name[.cfg]>,<name2[.cfg]>,...]' + \
         '  [-c <sniper-options: section/key=value>]' + \
         '  [-s <script>]' + \
-        '  [--dev]' + \
         '  [--roi]' + \
         '  [--roi-script]' + \
         '  [--pacsim|--dynamic-sampling]' + \
@@ -117,7 +116,6 @@ use_pa = True
 use_pinplay = False
 sde_arch = ''
 genstats = True
-use_dev = False
 
 if not sys.argv[1:]:
   usage()
@@ -219,7 +217,6 @@ try:
     sys.argv[1:],
     "hvn:m:d:c:g:s:",
     [
-      "dev",
       "roi", "roi-script",
       "pacsim", "dynamic-sampling",
       "smc",
@@ -258,8 +255,6 @@ for o, a in opts:
     sys.exit()
   if o == '-v':
     verbose = True
-  if o == '--dev':
-    use_dev = True
   if o == '-n':
     ncores = int(a)
     ncores_explicit = True
@@ -845,13 +840,13 @@ if standalone:
       f.write(' quit\n')
       f.write('end\n')
     f.close()
-    sniper_bin = 'sniper_dev' if use_dev else 'sniper'
+    sniper_bin = 'sniper'
     gdbcmd = 'gdb -quiet --command=%(fn)s %(BUILD_DIR)s/lib/%(sniper_bin)s --args ' % locals()
   elif use_wrap_sim:
     gdbcmd = '%(use_wrap_sim)s ' % locals()
   else:
     gdbcmd = ''
-  sniper_bin = 'sniper_dev' if use_dev else 'sniper'
+  sniper_bin = 'sniper'
   cmd = gdbcmd + '%(BUILD_DIR)s/lib/%(sniper_bin)s' % locals() + optcmd
 
 queue = queue.Queue()
