@@ -18,10 +18,15 @@ Dockerfile%.build: Dockerfile%
 BUILD_ALL_TARGETS=$(foreach f,$(DOCKER_FILES),$(f).build)
 build-all: $(BUILD_ALL_TARGETS)
 
+# The suites pin ASLR with setarch -R (personality(2), which Docker's default
+# seccomp profile denies) and Pin and run-sniper --gdb need ptrace; -sniper:pa
+# (physical addresses) would also need --cap-add SYS_ADMIN.
+DOCKER_RUN_OPT?=--security-opt seccomp=unconfined --cap-add SYS_PTRACE
+
 run-root:
-	docker run --rm -it -v "${HOME}:${HOME}" $(DOCKER_IMAGE)
+	docker run --rm -it $(DOCKER_RUN_OPT) -v "${HOME}:${HOME}" $(DOCKER_IMAGE)
 
 run:
-	docker run --rm -it -v "${HOME}:${HOME}" --user $(shell id -u):$(shell id -g) -w "${PWD}" $(DOCKER_IMAGE)
+	docker run --rm -it $(DOCKER_RUN_OPT) -v "${HOME}:${HOME}" --user $(shell id -u):$(shell id -g) -w "${PWD}" $(DOCKER_IMAGE)
 
 .PHONY: all build-all run-root run

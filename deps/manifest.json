@@ -183,7 +183,7 @@
       "command": [
         "sh",
         "-c",
-        "mkdir -p build && cd build && cmake -DDEBUG=ON .. && make -j{jobs}"
+        "mkdir -p build && cd build && cmake -DDEBUG=ON -DBUILD_DOCS=OFF .. && make -j{jobs}"
       ],
       "description": "DynamoRIO built in place; DynamoRIO_DIR points at dynamorio/build/cmake"
     },

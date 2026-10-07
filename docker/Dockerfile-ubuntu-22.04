@@ -3,51 +3,67 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ARG TZ_ARG=UTC
 ENV TZ=${TZ_ARG}
-# Add i386 support for support for Pin
-RUN dpkg --add-architecture i386
-RUN apt-get update && apt-get install -y \
+
+# The host build: CMake (3.21 or newer for the presets) with Ninja, GCC with C++20,
+# Python 3 with the embedding headers (the scripting interface) and venv (QEMU's
+# build), Boost headers, SQLite, zlib, bzip2 and lzma; ccache is picked up when
+# present.  deps/sniper-deps fetches with Python and clones with git (so
+# ca-certificates), and unpacks tarballs (xz-utils, bzip2).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    ninja-build \
+    ccache \
+    git \
+    ca-certificates \
+    bzip2 \
+    xz-utils \
+    pkg-config \
     python3 \
     python3-dev \
     python3-venv \
-    screen \
-    tmux \
-    binutils \
-    libc6:i386 \
-    libncurses5:i386 \
-    libstdc++6:i386 \
- && rm -rf /var/lib/apt/lists/*
-# For building Sniper
-RUN apt-get update && apt-get install -y \
-    automake \
-    build-essential \
-    cmake \
-    curl \
-    wget \
+    python3-setuptools \
+    python3-wheel \
     libboost-dev \
     libsqlite3-dev \
     zlib1g-dev \
     libbz2-dev \
-    libdb++-dev \
+    liblzma-dev \
  && rm -rf /var/lib/apt/lists/*
-# For the dependencies deps/sniper-deps builds: QEMU (ninja, glib, pixman),
-# DynamoRIO and Capstone (cmake), the RISC-V guests (clang, lld), ccache
-RUN apt-get update && apt-get install -y \
-    ninja-build \
-    pkg-config \
+
+# The dependencies deps/sniper-deps builds from source: QEMU (ninja, glib, pixman;
+# it vendors its own meson and builds a venv), DynamoRIO and Capstone (cmake,
+# make, perl from build-essential), MPICH (gcc, make).  libfdt-dev spares QEMU a
+# git clone of dtc.  The SDE kit, libtorch, McPAT and the Sail model are prebuilt
+# 64-bit binaries and need nothing further.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-dev \
     libpixman-1-dev \
-    liblzma-dev \
-    ccache \
-    clang \
-    lld \
+    libfdt-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# The RISC-V guests (test/riscv-gemm, test/llm-agent, the probes) are built with
+# clang 15 or newer targeting riscv64 and linked with lld; SNIPER_RISCV_CC names
+# the compiler for the harness and the documents.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang-15 \
+    lld-15 \
+ && rm -rf /var/lib/apt/lists/*
+ENV SNIPER_RISCV_CC=/usr/bin/clang-15
+
+# The tools: numpy (Pac-Sim's estimator, the LLM trainer), yaml (the RISC-V decoder
+# generator), gnuplot (CPI stacks, bottle graphs), graphviz (run-sniper --profile),
+# matplotlib (tools/pca.py), less (dumpstats on a terminal), gdb (run-sniper --gdb),
+# lnav (the run stream), doxygen (make doxygen).
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-numpy \
     python3-yaml \
- && rm -rf /var/lib/apt/lists/*
-# Helper utilities
-RUN apt-get update && apt-get install -y \
+    python3-matplotlib \
+    gnuplot-nox \
+    graphviz \
+    less \
     gdb \
-    gfortran \
-    git \
-    g++ \
+    lnav \
+    doxygen \
     vim \
  && rm -rf /var/lib/apt/lists/*
