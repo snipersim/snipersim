@@ -835,6 +835,54 @@ FEATURES = {
                         'numa_reserve_thp.two_mb_promoted',
                         'numa_reserve_thp.page_table_pages_used')),
 
+    # Page-size prediction at the L2 TLB.  The MMU registers the hit and
+    # miss counters under every configuration and only moves them on an L2
+    # hit with prediction switched on, so under every other scheme they
+    # read zero.  What makes the prediction observable beyond that is the
+    # latency it charges: every L2 hit costs correct_prediction_latency (4
+    # cycles) or misprediction_latency (10) instead of the TLB's own 12, so
+    # the level-1 latency has to come out to exactly that sum -- which it
+    # cannot do if the branch is being taken without the predictor being
+    # consulted, or with the flat latency still charged.  The workload is
+    # all 4KB pages, so the predictor is right every time after warm-up and
+    # the miss counter stays at zero; it is only required to exist.
+    'page_size_prediction': (
+        ['address_translation_schemes/baseline_pagesize_prediction'], 1,
+        lambda stats: (
+            counter(stats, 'mmu.page_size_prediction_hits') > 0
+            and 'mmu.page_size_prediction_misses' in stats
+            and abs(counter(stats, 'mmu.tlb_latency_1')
+                    * float(stats.get('fs_to_cycles', 0) or 0)
+                    - (4 * counter(stats, 'mmu.page_size_prediction_hits')
+                       + 10 * counter(stats, 'mmu.page_size_prediction_misses'))) < 1,
+            'hits=%d misses=%d; L2 latency %d cycles = 4*hits + 10*misses'
+            % (counter(stats, 'mmu.page_size_prediction_hits'),
+               counter(stats, 'mmu.page_size_prediction_misses'),
+               round(counter(stats, 'mmu.tlb_latency_1')
+                     * float(stats.get('fs_to_cycles', 0) or 0))))),
+
+    # The "default" page-table-walk filter, which passes every walk through
+    # untouched.  It registers nothing, and that absence is its signature:
+    # the "pwc" filter every other scheme runs under builds the page walk
+    # caches, which register pwc_L2..L4 (access, miss) under every one of
+    # them, and announces itself on stdout.  So the check is that walks
+    # happened and were charged, and that not one pwc_ counter exists and
+    # the announcement never printed.  The cost is visible in the numbers
+    # too -- 3.1e9 fs of walk latency for 182 walks here against 2.0e9
+    # under baseline -- but a ratio against another run is not something
+    # one run can assert on.
+    'no_pwc': (
+        ['address_translation_schemes/baseline_no_pwc'], 1,
+        lambda stats: (
+            counter(stats, 'radix_4level.page_table_walks') > 0
+            and counter(stats, 'mmu.total_walk_latency_data') > 0
+            and not any(k.startswith('pwc_') for k in stats)
+            and 'Page walk caches are enabled' not in stats['__stdout__'],
+            'walks=%d walk_latency=%d; no pwc_ counter registered, no PWC '
+            'announcement'
+            % (counter(stats, 'radix_4level.page_table_walks'),
+               counter(stats, 'mmu.total_walk_latency_data')))),
+
 }
 
 

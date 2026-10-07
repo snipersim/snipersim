@@ -150,7 +150,15 @@ EXCLUDE = {'base'}
 # above do; they were simply never enumerated.
 #
 # Probed rather than assumed: every one was run layered and standalone, and the
-# results are recorded here.
+# results are recorded here.  The fragments and schemes added for the
+# test_virtuoso.py variant checks -- the stride prefetcher, the Revelator
+# open-addressing and THP engines, the revelator_simple, revelator_thp and
+# numa_reserve_thp allocators, page-size prediction and the no-PWC filter --
+# were probed the same way, layered on gainestown in both modes at 1, 2 and
+# 4 cores, and all pass; that is why none of them appears below.  The engine
+# fragments under spec_engine_configs/ are not enumerated, as before: an
+# engine only runs under the spec MMU with its allocator, and the schemes
+# that layer all three are what gets run.
 FRAGMENT_DIRS = ('address_translation_schemes', 'common_configs', 'core_configs',
                  'cxl_configs', 'dram_configs', 'mmu_configs', 'pagetable_configs',
                  'physical_memory_allocators')
