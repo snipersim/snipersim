@@ -4,7 +4,7 @@
  * MultiThread and SingleThread records describe regions delimited by global
  * barriers; IntraBarrier records describe regions found *inside* a barrier
  * interval, which is what the analysis scripts count as looppoints
- * (markerdistribution() in pacsimscripts/pacsim_dumpjson.py).
+ * (markerdistribution() in tools/pacsim/pacsim_dumpjson.py).
  *
  * testing/apps/phased.c produces the first kind: it synchronises on a barrier
  * between every phase, so there is always an obvious place to cut.  This file

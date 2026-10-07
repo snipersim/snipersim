@@ -16,8 +16,11 @@ the simulator starts in fast-forward rather than cache warm-up, because Pac-Sim
 schedules its own warm-up, and the recorder is told to do the live sampling.
 
 The estimated run time is printed at the end of the run. To get it again later
-from a directory of output, `pacsim.py -d <dir>` reports the same number from
-the same code.
+from a directory of output, `tools/dumpstats.py -d <dir>` reports it next to the
+ordinary statistics whenever the directory holds Pac-Sim region data
+(`pacsim.estimated_sim_time`, `pacsim.wall_time`, `pacsim.l2_miss_rate`;
+`--pacsim-segs` lists the regions), and `tools/pacsim.py -d <dir>` prints the
+estimate alone; all three paths call the same function.
 
 ## The recorder
 

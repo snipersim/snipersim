@@ -6,7 +6,7 @@
  * for detail only when the region about to start looks unlike anything
  * measured so far; the rest is fast-forwarded and extrapolated from the
  * measured members of its cluster.  Regions and their measurements are
- * written to <pacsim-dir>/pacsim_regions.json, which pacsimscripts/
+ * written to <pacsim-dir>/pacsim_regions.json, which tools/pacsim/
  * pacsim_dumpjson.py turns into the estimated run time (run-sniper prints
  * it).  Liu, Sabu, Chaudhari, Kang, Carlson, "Pac-Sim: Simulation of
  * multi-threaded workloads using intelligent, live sampling", TACO 2024.

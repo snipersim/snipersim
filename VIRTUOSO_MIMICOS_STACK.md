@@ -34,7 +34,7 @@ marked as such.
 | MimicOS, userspace kernel | `mimicos/` (`build/default/bin/startup_mimicos`) | A kernel that runs as a guest program under simulation, drives applications from their traces, takes their page faults, schedules them, and talks to the simulator only through magic instructions |
 | Multicore and NUMA | `common/misc/ticket_lock.h`, `common/system/barrier_sync_server.cc`, `include/memory_management/numa/` | A fair ticket lock, barrier core parking, NUMA-aware allocation, the `none` clock-skew scheme |
 | Output | `tools/run_sniper.py`, `tools/lnav/`, `scripts/live.py`, `tools/sniper-live` | One stamped, tagged run stream from every process; an lnav format for it; a live feed in simulated time and a terminal dashboard |
-| Pac-Sim | `sift/recorder/pacsim.{h,cc}`, `pacsimscripts/`, `pacsim.py`, `run-sniper --pacsim` | Sampled simulation that chooses, while the application runs, what to simulate in detail and what to keep warm, and estimates the whole run's time; the recorder side was restored on this branch (section 3.7) |
+| Pac-Sim | `sift/recorder/pacsim.{h,cc}`, `tools/pacsim/`, `tools/pacsim.py`, `tools/dumpstats.py`, `run-sniper --pacsim` | Sampled simulation that chooses, while the application runs, what to simulate in detail and what to keep warm, and estimates the whole run's time; the recorder side was restored on this branch (section 3.7) |
 | Tests | `testing/test_{scripting,configs,qemu,pacsim,apps,virtuoso}.py`, `testing/run_tests.py`, `make regress` | Six suites behind one `make regress`; an invariance-and-activation suite for every Virtuoso feature; an MMU experiment runner |
 
 ---
@@ -282,7 +282,7 @@ output).  This is Pac-Sim (Liu, Sabu, Chaudhari, Kang, Carlson, TACO
 
 **What runs where.**  The simulator side (the magic commands
 `SIM_CMD_GET_SIM_TIME`, `GET_L2_COUNT`, `GET_L2_MISS_COUNT`,
-`INSTRUMENT_MODE`; `run-sniper`'s plumbing; `pacsimscripts/`, which turns
+`INSTRUMENT_MODE`; `run-sniper`'s plumbing; `tools/pacsim/`, which turns
 the recorder's region file into the estimate; `testing/test_pacsim.py`)
 was in the tree.  The recorder side was not (removed with the upstream
 recorder on 2026-03-22, commit `f472416`); it is now
@@ -348,7 +348,7 @@ the original's method:
   measures the last region and writes `<output dir>/pacsim_regions.json`
   (`feature_stack[]` with `insnums`, `bbv`, `fs`, `l2count`, `l2misscount`,
   `clusterid`, `pc`, `recordtype`, `feature_level` 1 = measured);
-  `pacsimscripts/pacsim_dumpjson.py` sums it, re-extrapolating what it can
+  `tools/pacsim/pacsim_dumpjson.py` sums it, re-extrapolating what it can
   from earlier measurements and keeping the recorder's figure otherwise.
 
 `record-trace` still checks the built recorder for the `sniper:pacsim`

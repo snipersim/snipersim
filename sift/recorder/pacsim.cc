@@ -26,9 +26,9 @@ static const unsigned NT = MAX_NUM_THREADS_DEFAULT;
 static const unsigned DIM = Bbv::NUM_BBV;
 
 enum class Mode { Detailed, FastForward };
-/* the region types pacsimscripts reads (1 and 2 are barrier points, the rest loop points) */
+/* the region types tools/pacsim reads (1 and 2 are barrier points, the rest loop points) */
 enum class RecordType : int { PointUndef = 0, MultiThread = 1, SingleThread = 2, IntraBarrier = 3, EndPgm = 7 };
-/* where a region's time came from (pacsimscripts: 1 = measured) */
+/* where a region's time came from (tools/pacsim: 1 = measured) */
 enum class Level : int { Unknown = 0, FromSelf = 1, FromLocal = 2, FromGlobal = 3, FromFastForward = 4, FromOtherCluster = 5, FromGlobalAvg = 6 };
 /* what was predicted and what happened: (F)ast-forward or (D)etailed, before and after */
 enum class Predict : int { F2F = 0, F2D = 1, D2F = 2, D2D = 3 };

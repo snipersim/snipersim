@@ -100,7 +100,7 @@ class PacSimDumpStats:
             return path
     raise FileNotFoundError(
         "no Pac-Sim region data in %s: looked for %s.  This file is written by "
-        "the SIFT recorder during a sampled run; see pacsimscripts/README.md "
+        "the SIFT recorder during a sampled run; see tools/pacsim/README.md "
         "for its status." % (d, " or ".join(self.REGION_FILES)))
 
   def populate_cluster_stats(self):
