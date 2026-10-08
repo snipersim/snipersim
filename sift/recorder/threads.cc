@@ -25,12 +25,33 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    sift_assert(threadid < max_num_threads);
    sift_assert(thread_data[threadid].bbv == NULL);
 
-   // The first thread (master) doesn't need to join with anyone else
+   // The first thread (master) doesn't need to join with anyone else.
+   //
+   // Every clone() of a thread queued its clear-tid word, the one
+   // pthread_join waits on.  Take this thread's own, not the oldest: threads
+   // cloned back to back reach this callback in either order, and a thread
+   // holding its sibling's word clears it and wakes the sibling's
+   // pthread_join when it exits -- before the sibling has run, when the
+   // scheduler holds the sibling back (the sequential scheduler queues it for
+   // its core), so the joiner reads results that were never written.  The
+   // clone passed the child's TLS base (CLONE_SETTLS), which is the FS base
+   // the child starts with: that identifies the entry exactly.
    PIN_GetLock(&new_threadid_lock, threadid);
    if (tidptrs.size() > 0)
    {
-      thread_data[threadid].tid_ptr = tidptrs.front();
-      tidptrs.pop_front();
+#if defined(TARGET_INTEL64) || defined(TARGET_IA32E)
+      ADDRINT fs_base = PIN_GetContextReg(ctxt, REG_SEG_FS_BASE);
+#else
+      ADDRINT fs_base = 0;
+#endif
+      auto it = tidptrs.begin();
+      for (; it != tidptrs.end(); ++it)
+         if (it->tls && it->tls == fs_base)
+            break;
+      if (it == tidptrs.end())
+         it = tidptrs.begin();   // no TLS to match on: the oldest-first pairing
+      thread_data[threadid].tid_ptr = it->tid_ptr;
+      tidptrs.erase(it);
    }
    PIN_ReleaseLock(&new_threadid_lock);
 

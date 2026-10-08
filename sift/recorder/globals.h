@@ -68,7 +68,11 @@ extern UINT64 detailed_target;
 extern PIN_LOCK access_memory_lock;
 extern PIN_LOCK new_threadid_lock;
 extern PIN_LOCK output_lock;
-extern std::deque<ADDRINT> tidptrs;
+// A cloned thread's clear-tid word (what pthread_join waits on) and its TLS
+// base (CLONE_SETTLS): the child is matched to its word by the FS base it
+// starts with, since threads cloned back to back start in either order.
+struct cloned_thread_t { ADDRINT tid_ptr; ADDRINT tls; };
+extern std::deque<cloned_thread_t> tidptrs;
 extern INT32 child_app_id;
 extern BOOL in_roi;
 /* set at ROI end with syscall emulation: the simulator has ended the application, no more emulated calls */

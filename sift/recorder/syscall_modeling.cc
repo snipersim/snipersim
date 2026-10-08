@@ -105,12 +105,16 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          // then when the thread ends, write 0 to the tid mutex and futex_wake it
          case SYS_clone3_sniper:
          {
-            if (args[0] && CLONE_THREAD)
+            struct clone_args_sniper* clone3_args = (struct clone_args_sniper*)args[0];
+            // The flags are in the argument struct: testing the pointer
+            // (`args[0] && CLONE_THREAD`, always true) treated every clone3 --
+            // posix_spawn's included -- as a new thread.
+            if (clone3_args && (clone3_args->flags & CLONE_THREAD))
             {
-               struct clone_args_sniper* clone3_args = (struct clone_args_sniper*)args[0];
                ADDRINT tidptr = clone3_args->parent_tid;
+               ADDRINT tls = (clone3_args->flags & CLONE_SETTLS) ? clone3_args->tls : 0;
                PIN_GetLock(&new_threadid_lock, threadid);
-               tidptrs.push_back(tidptr);
+               tidptrs.push_back({tidptr, tls});
                PIN_ReleaseLock(&new_threadid_lock);
                /* New thread */
                thread_data[threadid].output->NewThread();
@@ -130,14 +134,16 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 
                #if defined(TARGET_IA32)
                   ADDRINT tidptr = args[2];
+                  ADDRINT tls = 0;   // i386 passes a user_desc, not a base: oldest-first pairing
                #elif defined(TARGET_INTEL64) || defined(TARGET_IA32E)
                   ADDRINT tidptr = args[3];
+                  ADDRINT tls = (args[0] & CLONE_SETTLS) ? args[4] : 0;
                #else
                   #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64 | TARGET_IA32E"
                #endif
 
                PIN_GetLock(&new_threadid_lock, threadid);
-               tidptrs.push_back(tidptr);
+               tidptrs.push_back({tidptr, tls});
                PIN_ReleaseLock(&new_threadid_lock);
                /* New thread */
                thread_data[threadid].output->NewThread();
