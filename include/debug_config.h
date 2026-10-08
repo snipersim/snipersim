@@ -22,6 +22,8 @@
 #define DEBUG_MMU_VIRT              DEBUG_NONE  /* 0, 1 or 2 */  // The virtualised (nested) MMU, mmu_virt.cc
 #define DEBUG_MMU_DMT               DEBUG_NONE  /* 0, 1 or 2 */  // Direct Memory Translation, mmu_dmt.cc
 #define DEBUG_MMU_POMTLB            DEBUG_NONE  /* 0, 1 or 2 */  // Part-of-Memory TLB, mmu_pomtlb.cc
+#define DEBUG_MMU_RANGE             DEBUG_NONE  /* 0, 1 or 2 */  // Redundant Memory Mappings, mmu_range.cc
+#define DEBUG_RLB                   DEBUG_NONE  /* 0, 1 or 2 */  // The range lookaside buffer, rangelb.cc
 #define DEBUG_MAGIC_SERVER          DEBUG_NONE  /* 0, 1 or 2 */
 #define DEBUG_TRACE_THREAD          DEBUG_NONE  /* 0, 1 or 2 */
 

@@ -8,6 +8,7 @@
 #include "mmu_virt.h"
 #include "mmu_dmt.h"
 #include "mmu_pomtlb.h"
+#include "mmu_range.h"
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -47,6 +48,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "pomtlb") // Part-of-Memory TLB: an in-memory TLB between the L2 TLB and the walker
 			{
 				return new MemoryManagementUnitPOMTLB(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "range") // Redundant Memory Mappings: range translations in an RLB and a range table
+			{
+				return new RangeMMU(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{

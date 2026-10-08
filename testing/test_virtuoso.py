@@ -1422,6 +1422,45 @@ FEATURES = {
         ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
          r'hugetlb_workload sum=50528256')),
 
+    # Step 20: the range MMU with its range lookaside buffer, over
+    # eager paging (rmm.cfg).  Every hardware TLB miss looks the address up
+    # in the RLB (rlb.accesses); a miss there walks the range table the
+    # eager-paging handler filled and fills the RLB
+    # (requests_resolved_by_range_table, rlb.insertions); a range hit
+    # resolves the translation without a page table walk
+    # (requests_resolved_by_rlb), so the walks are only the faults' and
+    # the addresses no range covers (range_table_misses).  Trace-driven,
+    # for the VMAs the ranges come from.
+    'rmm': (
+        ['address_translation_schemes/rmm'], 1,
+        lambda stats: (
+            counter(stats, 'rlb.accesses') > 0
+            and counter(stats, 'rlb.hits') + counter(stats, 'rlb.misses') == counter(stats, 'rlb.accesses')
+            and counter(stats, 'mmu.requests_resolved_by_rlb') == counter(stats, 'rlb.hits')
+            and counter(stats, 'mmu.requests_resolved_by_rlb') > 0
+            and counter(stats, 'mmu.requests_resolved_by_range_table') > 0
+            and counter(stats, 'mmu.requests_resolved_by_range_table') == counter(stats, 'rlb.insertions')
+            and counter(stats, 'mmu.requests_resolved_by_rlb')
+                + counter(stats, 'mmu.requests_resolved_by_range_table')
+                + counter(stats, 'mmu.range_table_misses') == counter(stats, 'rlb.accesses')
+            and counter(stats, 'mmu.page_table_walks') > 0
+            and counter(stats, 'mmu.page_table_walks') < counter(stats, 'rlb.accesses')
+            and counter(stats, 'eager_paging_allocator.total_allocated_vmas') > 0
+            and counter(stats, 'mmu.sanity_check_violations') == 0,
+            'rlb.accesses=%d hits=%d misses=%d insertions=%d resolved_by_rlb=%d '
+            'resolved_by_range_table=%d range_table_misses=%d walks=%d faults=%d vmas=%d'
+            % (counter(stats, 'rlb.accesses'),
+               counter(stats, 'rlb.hits'),
+               counter(stats, 'rlb.misses'),
+               counter(stats, 'rlb.insertions'),
+               counter(stats, 'mmu.requests_resolved_by_rlb'),
+               counter(stats, 'mmu.requests_resolved_by_range_table'),
+               counter(stats, 'mmu.range_table_misses'),
+               counter(stats, 'mmu.page_table_walks'),
+               counter(stats, 'mmu.page_faults'),
+               counter(stats, 'eager_paging_allocator.total_allocated_vmas'))),
+        ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
+         r'hugetlb_workload sum=50528256')),
 }
 
 

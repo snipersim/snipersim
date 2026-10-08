@@ -157,6 +157,9 @@ EXPECT_FAIL_DETAILED = {
     # (fast-forward never faults).  test_virtuoso's eager_paging case runs
     # it trace-driven.
     'physical_memory_allocators/eager_paging': 'eager paging needs the trace\'s VMAs (none in a live run)',
+    # Step 20: the RMM scheme pages eagerly; test_virtuoso's rmm case runs
+    # it trace-driven.
+    'address_translation_schemes/rmm': 'eager paging needs the trace\'s VMAs (none in a live run)',
 }
 
 # Not a configuration to run on its own.
@@ -550,6 +553,10 @@ FRAGMENT_REQUIRE_NONZERO = {
     'address_translation_schemes/spot': ('spot_allocator.no_vma_allocations',),
     'address_translation_schemes/parametric_spot': ('spot_allocator.no_vma_allocations',),
     'spec_engine_configs/spec_engine_spot': ('spot_allocator.no_vma_allocations',),
+    # Step 20: the range MMU looks every TLB miss up in its RLB; with no
+    # eager-paging ranges (the default allocator) every lookup misses and
+    # nothing is resolved by range (zero, below).
+    'mmu_configs/mmu_rmm': ('rlb.accesses', 'rlb.misses', 'mmu.page_table_walks'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's
@@ -589,6 +596,8 @@ FRAGMENT_REQUIRE_ZERO = {
     'address_translation_schemes/spot': ('spot_allocator.vmas_placed', 'spot.allocations'),
     'address_translation_schemes/parametric_spot': ('spot_allocator.vmas_placed', 'spot.allocations'),
     'spec_engine_configs/spec_engine_spot': ('spot_allocator.vmas_placed', 'spot.allocations'),
+    # Step 20: no ranges, so nothing resolved by range.
+    'mmu_configs/mmu_rmm': ('mmu.requests_resolved_by_rlb', 'mmu.requests_resolved_by_range_table'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.
