@@ -1386,6 +1386,42 @@ FEATURES = {
         ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
          r'hugetlb_workload sum=50528256')),
 
+    # Step 19: eager paging, the allocator of Redundant Memory Mappings.
+    # The first fault in a VMA lays the whole VMA out as the fewest
+    # contiguous ranges the buddy allocator can give (total_allocated_vmas,
+    # total_allocated_physical_ranges) and maps every page of them
+    # (eager_paging.pages_mapped), so the faults are counted per VMA, not
+    # per page: the guest's 8 MB region alone is 2048 pages and the run
+    # faults far fewer times than that.  Trace-driven, for the VMAs; a run
+    # without any stops with a message saying so (the configs sweep lists
+    # the fragment as expected to fail there).
+    'eager_paging': (
+        ['address_translation_schemes/baseline', 'physical_memory_allocators/eager_paging'], 1,
+        lambda stats: (
+            counter(stats, 'eager_paging_allocator.total_allocated_vmas') > 0
+            and counter(stats, 'eager_paging_allocator.total_allocated_physical_ranges')
+                >= counter(stats, 'eager_paging_allocator.total_allocated_vmas')
+            and counter(stats, 'eager_paging_allocator.total_allocated_pages') >= 2048
+            and counter(stats, 'eager_paging.pages_mapped')
+                == counter(stats, 'eager_paging_allocator.total_allocated_pages')
+            and counter(stats, 'eager_paging.vma_faults')
+                == counter(stats, 'eager_paging_allocator.total_allocated_vmas')
+            and counter(stats, 'mmu.page_faults') > 0
+            and counter(stats, 'mmu.page_faults') < 2048
+            and counter(stats, 'mmu.sanity_check_violations') == 0,
+            'vmas=%d ranges=%d pages=%d (mapped %d) vma_faults=%d no_vma_faults=%d '
+            'mmu.page_faults=%d sanity_violations=%d'
+            % (counter(stats, 'eager_paging_allocator.total_allocated_vmas'),
+               counter(stats, 'eager_paging_allocator.total_allocated_physical_ranges'),
+               counter(stats, 'eager_paging_allocator.total_allocated_pages'),
+               counter(stats, 'eager_paging.pages_mapped'),
+               counter(stats, 'eager_paging.vma_faults'),
+               counter(stats, 'eager_paging.no_vma_faults'),
+               counter(stats, 'mmu.page_faults'),
+               counter(stats, 'mmu.sanity_check_violations'))),
+        ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
+         r'hugetlb_workload sum=50528256')),
+
 }
 
 

@@ -13,6 +13,7 @@
 #include "memory_management/policies/revelator_thp_policy.h"
 #include "memory_management/policies/numa_revelator_policy.h"
 #include "memory_management/policies/spot_policy.h"
+#include "memory_management/policies/eager_paging_policy.h"
 
 // include/memory_management/physical_memory_allocators/
 #include "../../include/memory_management/physical_memory_allocators/reserve_thp.h"
@@ -23,6 +24,7 @@
 #include "../../include/memory_management/physical_memory_allocators/revelator_thp.h"
 #include "../../include/memory_management/physical_memory_allocators/numa_revelator.h"
 #include "../../include/memory_management/physical_memory_allocators/spot.h"
+#include "../../include/memory_management/physical_memory_allocators/eager_paging.h"
 // PhysicalMemoryAllocator*
 #include "../../include/memory_management/physical_memory_allocators/physical_memory_allocator.h"
 
@@ -38,6 +40,7 @@ using SniperRevelatorTHPAllocator    = RevelatorTHPAllocator<Sniper::RevelatorTH
 using SniperRevelatorSimpleAllocator = RevelatorSimpleAllocator<Sniper::RevelatorSimple::RevelatorSimpleSniperPolicy>;
 using SniperNumaRevelatorAllocator   = NumaRevelatorAllocator<Sniper::NumaRevelator::NumaRevelatorSniperPolicy>;
 using SniperSpotAllocator            = SpotAllocator<Sniper::Spot::SpotSniperPolicy>;
+using SniperEagerPagingAllocator     = EagerPagingAllocator<Sniper::EagerPaging::MetricsPolicy>;
 
 // --------------------------------------------------------------------------
 // Helper: parse a comma-separated integer list from a config string
@@ -200,6 +203,12 @@ public:
             String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
             int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
             return new SniperSpotAllocator(allocator_name, memory_size, max_order, kernel_size, frag_type);
+        }
+        else if (allocator_type == "eager_paging")
+        { // Redundant Memory Mappings' eager paging: a VMA laid out whole as contiguous ranges on its first fault
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            return new SniperEagerPagingAllocator(allocator_name, memory_size, max_order, kernel_size, frag_type);
         }
         else
         {

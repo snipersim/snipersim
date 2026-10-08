@@ -151,6 +151,12 @@ EXPECT_FAIL_DETAILED = {
     # test_qemu.py cover them.
     'riscv': 'the RISC-V decoder cannot decode an x86 trace',
     'riscv-mediumboom': 'the RISC-V decoder cannot decode an x86 trace',
+    # Step 19: eager paging lays a VMA out whole on its first fault, and
+    # VMAs come only from a trace's VMA log; this suite's live workload has
+    # none, so the first fault stops the run with a message saying so
+    # (fast-forward never faults).  test_virtuoso's eager_paging case runs
+    # it trace-driven.
+    'physical_memory_allocators/eager_paging': 'eager paging needs the trace\'s VMAs (none in a live run)',
 }
 
 # Not a configuration to run on its own.

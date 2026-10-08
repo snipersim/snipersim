@@ -12,6 +12,7 @@
 #include "memory_management/policies/numa_reserve_thp_policy.h"
 #include "memory_management/policies/numa_revelator_policy.h"
 #include "memory_management/policies/spot_policy.h"
+#include "memory_management/policies/eager_paging_policy.h"
 
 namespace Sniper {
     namespace Buddy {
@@ -83,5 +84,10 @@ struct BuddyPolicyFor<Sniper::NumaRevelator::NumaRevelatorSniperPolicy> {
 
 template <>
 struct BuddyPolicyFor<Sniper::Spot::SpotSniperPolicy> {
+    using type = Sniper::Buddy::MetricsPolicy;
+};
+
+template <>
+struct BuddyPolicyFor<Sniper::EagerPaging::MetricsPolicy> {
     using type = Sniper::Buddy::MetricsPolicy;
 };

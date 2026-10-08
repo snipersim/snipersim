@@ -4,6 +4,7 @@
 #include "misc/exception_handler_base.h"
 #include "sniper_space_exception_handler.h"
 #include "revelator_exception_handler.h"
+#include "eager_paging_exception_handler.h"
 #include "user_space_exception_handler.h"
 #include "simulator.h"
 #include "config.hpp"
@@ -72,9 +73,12 @@ private:
         else if (handler_type == "revelator") {
             return new RevelatorExceptionHandler(core);
         }
+        else if (handler_type == "eager_paging") {
+            return new EagerPagingExceptionHandler(core);
+        }
         else {
             std::cerr << "[EXCEPTION_HANDLER_FACTORY] Unknown exception handler type '" << handler_type
-                      << "' (general/exception_handler_type): known types are default, sniper, spot, revelator" << std::endl;
+                      << "' (general/exception_handler_type): known types are default, sniper, spot, revelator, eager_paging" << std::endl;
             abort();
         }
     }

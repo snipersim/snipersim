@@ -951,15 +951,19 @@ namespace ParametricDramDirectoryMSI
                     {
                         mmu_log->log("Handling page fault in sniper-space mode, calling exception handler");
                         
-                        // Get the exception handler for this core
-                        ExceptionHandlerBase *base_handler = Sim()->getCoreManager()->getCoreFromID(core->getId())->getExceptionHandler();
-                        SniperExceptionHandler* sniper_handler = dynamic_cast<SniperExceptionHandler*>(base_handler);
-                        
-                        // Initialize fault context and handle the fault
-                        // Use requested_frames from PTW result - this is the actual number of PT frames needed
-                        // Pass the instruction flag to allocate from the correct memory region
-                        ExceptionHandlerBase::FaultCtx fault_ctx = sniper_handler->initFaultCtx(page_table, address, core->getId(), ptw_result.requested_frames, instruction);
-                        sniper_handler->handle_page_fault(fault_ctx);
+                        // The core's exception handler, whichever kind it is
+                        // (the generic FaultCtx dispatch: an eager-paging or
+                        // Spot handler is not a SniperExceptionHandler, and a
+                        // cast to one was null here).  requested_frames is the
+                        // number of page-table frames the walk found missing;
+                        // the instruction flag selects the memory region.
+                        ExceptionHandlerBase *handler = Sim()->getCoreManager()->getCoreFromID(core->getId())->getExceptionHandler();
+                        ExceptionHandlerBase::FaultCtx fault_ctx{};
+                        fault_ctx.vpn = address >> 12;
+                        fault_ctx.page_table = page_table;
+                        fault_ctx.alloc_in.metadata_frames = ptw_result.requested_frames;
+                        fault_ctx.alloc_in.is_instruction = instruction;
+                        handler->handle_page_fault(fault_ctx);
                         
                         mmu_log->log("Page fault handled, restarting PTW for address " + mmu_log->hex(address));
                         // Loop will retry PTW now that page is mapped

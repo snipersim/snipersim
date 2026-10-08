@@ -1,4 +1,5 @@
 #include "pagetable_radix.h"
+#include "pagetable_fault.h"
 #include "pagetable.h"
 #include "simulator.h"
 #include "memory_management/physical_memory_allocators/physical_memory_allocator.h"
@@ -167,12 +168,9 @@ namespace ParametricDramDirectoryMSI
 
                                                 assert(!userspace_mimicos_enabled);
                                                 
-                                                ExceptionHandlerBase *base_handler = Sim()->getCoreManager()->getCoreFromID(core_id)->getExceptionHandler();
-                                                SniperExceptionHandler* sniper_handler = dynamic_cast<SniperExceptionHandler*>(base_handler);
-
-                                                
-                                                ExceptionHandlerBase::FaultCtx fault_ctx = sniper_handler->initFaultCtx(this, address, core_id, getMaxLevel());
-                                                sniper_handler->handle_page_fault(fault_ctx);
+                                                // The generic FaultCtx dispatch of pagetable_fault.h, as the
+                                                // hashed tables raise it: the core's handler, whatever kind.
+                                                raisePageFaultFromWalk(this, address, core_id, getMaxLevel());
                                         }
 
                                         if (!is_prefetch) stats.page_faults++;
@@ -221,12 +219,8 @@ namespace ParametricDramDirectoryMSI
 
                                                 assert(!userspace_mimicos_enabled);
                                                 
-                                                ExceptionHandlerBase *base_handler = Sim()->getCoreManager()->getCoreFromID(core_id)->getExceptionHandler();
-                                                SniperExceptionHandler* sniper_handler = dynamic_cast<SniperExceptionHandler*>(base_handler);
-
-
-                                                ExceptionHandlerBase::FaultCtx fault_ctx = sniper_handler->initFaultCtx(this, address, core_id, getMaxLevel());
-                                                sniper_handler->handle_page_fault(fault_ctx);
+                                                // The generic FaultCtx dispatch of pagetable_fault.h, as above.
+                                                raisePageFaultFromWalk(this, address, core_id, getMaxLevel());
                                         }
 
                                         if (!is_prefetch) stats.page_faults++;

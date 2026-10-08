@@ -45,6 +45,7 @@
 
 #define DEBUG_BASELINE_ALLOCATOR    DEBUG_NONE /* 0, 1 or 2 */
 #define DEBUG_SPOT_ALLOCATOR        DEBUG_NONE /* 0, 1 or 2 */ // The SpOT contiguity-aware allocator
+#define DEBUG_EAGER_PAGING          DEBUG_NONE /* 0, 1 or 2 */ // Eager paging: the allocator and its exception handler
 
 #define DEBUG_TLB                   DEBUG_NONE /* 0, 1 or 2 */
 
