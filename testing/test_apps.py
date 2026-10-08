@@ -84,6 +84,24 @@ def dr_frontend_check(out, rc):
     return ok, (why + ' under DynamoRIO') if ok else why
 
 
+def dr_threads_check(out, rc):
+    """A threaded program under the DynamoRIO front end: every worker was
+    traced (the front end used to abort on the first thread glibc created
+    with clone3) and the total is right, which needs every pthread_join to
+    have waited for its own worker."""
+    if '[RECORD-TRACE] Using DynamoRIO frontend' not in out:
+        return False, 'record-trace did not select the DynamoRIO frontend'
+    traced = len(set(re.findall(r'\[TRACE:(\d+)\] -- DONE --', out)))
+    if traced < 5:
+        return False, 'only %d of 5 threads traced' % traced
+    m = re.search(r'threads=4 total=([0-9.]+)', out)
+    if not m:
+        return False, 'the workload printed no total'
+    if m.group(1) != '37.589880':
+        return False, 'wrong total %s (want 37.589880)' % m.group(1)
+    return True, 'total=%s, %d threads traced, under DynamoRIO' % (m.group(1), traced)
+
+
 def api_in_simulator(out, rc):
     if 'API Test: Not running in the simulator' in out:
         return False, 'SimInSimulator() returned false while simulated'
@@ -177,6 +195,7 @@ CASES = {
     'fft-nn':          (fft_self_check, 'torch'),
     'pinplay':         (pinplay_check, None),
     'dr-frontend':     (dr_frontend_check, 'dynamorio'),
+    'dr-threads':      (dr_threads_check, 'dynamorio'),
     'api':             (api_in_simulator, None),
     'dvfs':            (dvfs_readback, None),
     'mpi':             (mpi_pi, 'mpich'),

@@ -16,7 +16,7 @@ FrontendOptions<T>* FrontendSyscallModelBase<T>::m_options;
 template <typename T>
 FELock<T>* FrontendSyscallModelBase<T>::m_new_threadid_lock;
 template <typename T>
-std::deque<uint64_t>* FrontendSyscallModelBase<T>::tidptrs;
+std::deque<cloned_thread_t>* FrontendSyscallModelBase<T>::tidptrs;
 
 template <typename T>
 bool FrontendSyscallModelBase <T>::handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal,
@@ -130,11 +130,16 @@ void FrontendSyscallModelBase <T>::doSyscall
             if (args[0] & CLONE_THREAD)
             {
                // Store the thread's tid ptr for later use  -- FIXME!!
+               // clone(flags, stack, parent_tid, child_tid, tls) on x86-64,
+               // clone(flags, stack, parent_tid, tls, child_tid) on i386 and
+               // the ARMs; glibc points parent_tid and child_tid at the same
+               // word (CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID).
                #if defined(TARGET_IA32) || defined(ARM_32) || defined(ARM_64)  // from man clone
                   addr_t tidptr = args[2];
                #elif defined(TARGET_INTEL64) || defined(X86_64)
                   addr_t tidptr = args[3];
                #endif
+               addr_t stack = args[1];
                if (m_options->get_verbose())
                {
                   std::cerr << "[FRONTEND] Clone thread: going to acquire lock" << std::endl;
@@ -144,7 +149,7 @@ void FrontendSyscallModelBase <T>::doSyscall
                {
                   std::cerr << "[FRONTEND] Clone thread: pushing back tidptr" << std::endl;
                }
-               tidptrs->push_back(tidptr);
+               tidptrs->push_back({tidptr, stack});
                if (m_options->get_verbose())
                {
                   std::cerr << "[FRONTEND] Clone thread: going to release lock" << std::endl;
@@ -168,6 +173,28 @@ void FrontendSyscallModelBase <T>::doSyscall
             }
             break;
          }
+
+#ifdef SYS_clone3
+         // glibc 2.34 and later create threads with clone3; without this
+         // case no thread created that way was announced to the simulator.
+         case SYS_clone3:
+         {
+            struct clone_args_fe
+            {
+               uint64_t flags, pidfd, child_tid, parent_tid, exit_signal, stack, stack_size, tls;
+            };
+            const clone_args_fe* cl = (const clone_args_fe*)args[0];
+            if (cl && (cl->flags & CLONE_THREAD))
+            {
+               m_new_threadid_lock->acquire_lock(threadid);
+               // The child starts with its stack pointer at the top of the area.
+               tidptrs->push_back({cl->parent_tid, cl->stack + cl->stack_size});
+               m_new_threadid_lock->release_lock();
+               m_thread_data[threadid].output->NewThread();
+            }
+            break;
+         }
+#endif
 
          // System calls not emulated (passed through to OS)
          case SYS_read:

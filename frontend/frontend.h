@@ -73,7 +73,7 @@ template <typename T> class Frontend
   
   /// Structure that keeps thread IDs from emulated clone syscalls
   /// that are used in the frontend thread creation
-  std::deque<uint64_t> tidptrs;
+  std::deque<cloned_thread_t> tidptrs;
 
   /// Lock for the creation of new threads (used in the Threads and SyscallModel modules)
   //shared_ptr<FELock<T>> new_threadid_lock;

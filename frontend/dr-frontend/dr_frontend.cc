@@ -142,8 +142,16 @@ void DRFrontend::event_thread_init(void *drcontext)
   std::unordered_map<ptr_uint_t, ptr_uint_t> bt;
   map_taken_branch.push_back(bt);
 
-  // Call the generic frontend callback for a thread start
-  m_threads->threadStart(next_threadid);
+  // Call the generic frontend callback for a thread start, with the stack
+  // pointer the thread starts with: clone() set it, and the generic layer
+  // pairs the thread with its own pthread_join word by it.  DynamoRIO hands
+  // out the application context in the init event of every thread but the
+  // first, which has no join word anyway.
+  uint64_t start_sp = 0;
+  dr_mcontext_t mc = {sizeof(mc), DR_MC_CONTROL,};
+  if (dr_get_mcontext(drcontext, &mc))
+    start_sp = (uint64_t)mc.xsp;
+  m_threads->threadStart(next_threadid, start_sp);
 
   // Update the thread counter
   next_threadid++;

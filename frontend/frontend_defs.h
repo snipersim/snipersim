@@ -24,6 +24,17 @@ typedef uint32_t syscall_args_t[6];
 typedef uint64_t syscall_args_t[6];
 #endif
 
+// A cloned thread's clear-tid word (what pthread_join waits on) and the
+// stack pointer clone() gave it.  The child is matched to its entry by the
+// stack pointer it starts with: threads cloned back to back start in either
+// order, and a thread holding its sibling's word wakes the sibling's join
+// when it exits, before the sibling may have run.
+struct cloned_thread_t
+{
+  uint64_t tid_ptr;
+  uint64_t stack;
+};
+
 typedef struct
 {
   Sift::Writer* output;

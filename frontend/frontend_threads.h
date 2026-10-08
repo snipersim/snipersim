@@ -25,10 +25,11 @@ template <typename T> class FrontendThreads
 {
 public:
   FrontendThreads(FrontendOptions<T>* opts, FrontendControl<T>* control, thread_data_t* td, uint32_t* pnt, 
-                  FELock<T>* ntid_lock, std::deque<uint64_t>* tids);
+                  FELock<T>* ntid_lock, std::deque<cloned_thread_t>* tids);
   ~FrontendThreads();
   void initThreads();
-  static void threadStart(threadid_t threadid);
+  // stack: the new thread's stack pointer at its first instruction, 0 if unknown
+  static void threadStart(threadid_t threadid, uint64_t stack = 0);
   static void threadFinish(threadid_t threadid, int32_t flags);
   static void callFinishHelper(threadid_t threadid);
   static void threadFinishHelper(void *arg);
@@ -43,7 +44,7 @@ public:
 
   /// Structure that keeps thread IDs from emulated clone syscalls
   /// that are later used in the frontend thread creation
-  static std::deque<uint64_t>* tidptrs;
+  static std::deque<cloned_thread_t>* tidptrs;
 
 
   //static void threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v);

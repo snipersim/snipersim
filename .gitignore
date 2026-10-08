@@ -98,6 +98,8 @@ test/pinplay/fft-pinball*
 test/pinplay/pinball_replay.*
 test/pinplay/fft.c
 test/dr-frontend/fft.c
+test/dr-threads/threaded.c
+test/dr-threads/threaded
 test/api/api
 test/aso/fft
 test/demo-scheduling/fft

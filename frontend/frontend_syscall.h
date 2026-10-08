@@ -23,7 +23,7 @@ template <typename T> class FrontendSyscallModelBase
 {
   public:
   /// Constructor
-  FrontendSyscallModelBase(FrontendOptions<T>* opts, thread_data_t* td, FELock<T> *ntid_lock, std::deque<uint64_t>* tids);
+  FrontendSyscallModelBase(FrontendOptions<T>* opts, thread_data_t* td, FELock<T> *ntid_lock, std::deque<cloned_thread_t>* tids);
 
   /// Destructor
   ~FrontendSyscallModelBase();
@@ -54,7 +54,7 @@ template <typename T> class FrontendSyscallModelBase
   
   /// Structure that keeps thread IDs from emulated clone syscalls
   /// that are used in the frontend thread creation
-  static std::deque<uint64_t>* tidptrs;
+  static std::deque<cloned_thread_t>* tidptrs;
   
   /// Memory lock to access a memory location
   // Has to be declared static because it is used in a static method (handleAccessMemory)

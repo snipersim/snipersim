@@ -16,7 +16,7 @@ uint32_t* FrontendThreads<T>::p_num_threads;
 template <typename T>
 FELock<T>* FrontendThreads<T>::new_threadid_lock;
 template <typename T>
-std::deque<uint64_t>* FrontendThreads<T>::tidptrs;
+std::deque<cloned_thread_t>* FrontendThreads<T>::tidptrs;
 template <typename T>
 FrontendControl<T>* FrontendThreads<T>::m_control;
 template <typename T>
@@ -24,7 +24,7 @@ FrontendOptions<T>* FrontendThreads<T>::m_options;
 
 template <typename T> 
 FrontendThreads<T>::FrontendThreads(FrontendOptions<T>* opts, FrontendControl<T>* control, thread_data_t* td, 
-                                    uint32_t* pnt, FELock<T>* ntid_lock, std::deque<uint64_t>* tids)
+                                    uint32_t* pnt, FELock<T>* ntid_lock, std::deque<cloned_thread_t>* tids)
 {
   m_options = opts;
   new_threadid_lock = ntid_lock;
@@ -42,16 +42,25 @@ FrontendThreads<T>::~FrontendThreads()
  
 // The thread that watched this new thread start is responsible for setting up the connection with the simulator
 template <typename T>
-void FrontendThreads<T>::threadStart(threadid_t threadid)
+void FrontendThreads<T>::threadStart(threadid_t threadid, uint64_t stack)
 {     
   sift_assert(m_thread_data[threadid].bbv == NULL);
 
-  // The first thread (master) doesn't need to join with anyone else
+  // The first thread (master) doesn't need to join with anyone else.
+  // Take this thread's own clear-tid word, not the oldest one queued: the
+  // clone() gave the child its stack pointer, which is the one it starts
+  // with (see cloned_thread_t).
   new_threadid_lock->acquire_lock(threadid);
   if (tidptrs->size() > 0)
   {
-    m_thread_data[threadid].tid_ptr = tidptrs->front();
-    tidptrs->pop_front();
+    auto it = tidptrs->begin();
+    for (; it != tidptrs->end(); ++it)
+      if (stack && it->stack == stack)
+        break;
+    if (it == tidptrs->end())
+      it = tidptrs->begin();   // stack unknown: the oldest-first pairing
+    m_thread_data[threadid].tid_ptr = it->tid_ptr;
+    tidptrs->erase(it);
   }
   new_threadid_lock->release_lock();
  

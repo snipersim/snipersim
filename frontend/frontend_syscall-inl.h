@@ -4,7 +4,7 @@ namespace frontend
 template <typename T> 
 inline 
 FrontendSyscallModelBase<T>::FrontendSyscallModelBase
-(FrontendOptions<T>* opts, thread_data_t* td, FELock<T>* ntid_lock, std::deque<uint64_t>* tids)
+(FrontendOptions<T>* opts, thread_data_t* td, FELock<T>* ntid_lock, std::deque<cloned_thread_t>* tids)
 {
   m_options = opts;
   m_thread_data = td;
