@@ -25,6 +25,12 @@ public:
 		INSTRUCTION,         // Instruction fetches
 		DATA,                // Regular data accesses
 		VICTIMA_TLB_BLOCK,   // Victima: a leaf PTE line used as a TLB block (8 PTEs / 64B)
+		// Utopia (Kanellopoulos et al., MICRO 2023) RestSeg metadata, appended
+		// after VICTIMA_TLB_BLOCK so that no existing type is renumbered
+		UTOPIA_FP,           // fingerprint array line
+		UTOPIA_TAR,          // tag array line
+		UTOPIA_RADIX_INTERNAL, // radix way table internal node (pointer array)
+		UTOPIA_RADIX_LEAF,   // radix way table leaf (packed valid+way entries)
 		NUM_BLOCK_TYPES
 	};
 
@@ -32,7 +38,11 @@ public:
 	static inline bool isMetadataBlockType(block_type_t block_type) {
 		return (block_type == PAGE_TABLE_DATA ||
 		        block_type == PAGE_TABLE_INSTRUCTION ||
-		        block_type == VICTIMA_TLB_BLOCK);
+		        block_type == VICTIMA_TLB_BLOCK ||
+		        block_type == UTOPIA_FP ||
+		        block_type == UTOPIA_TAR ||
+		        block_type == UTOPIA_RADIX_INTERNAL ||
+		        block_type == UTOPIA_RADIX_LEAF);
 	}
 	
 	// For backward compatibility - PAGE_TABLE is an alias for PAGE_TABLE_DATA

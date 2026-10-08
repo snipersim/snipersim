@@ -292,6 +292,14 @@ namespace ParametricDramDirectoryMSI
 			return "data";
 		case CacheBlockInfo::block_type_t::VICTIMA_TLB_BLOCK:
 			return "victima_tlb";
+		case CacheBlockInfo::block_type_t::UTOPIA_FP:
+			return "utopia_fp";
+		case CacheBlockInfo::block_type_t::UTOPIA_TAR:
+			return "utopia_tar";
+		case CacheBlockInfo::block_type_t::UTOPIA_RADIX_INTERNAL:
+			return "utopia_radix_internal";
+		case CacheBlockInfo::block_type_t::UTOPIA_RADIX_LEAF:
+			return "utopia_radix_leaf";
 
 		default:
 			return "??";

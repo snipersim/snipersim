@@ -797,6 +797,7 @@ Cache::logCacheContentDistribution(UInt64 access_count)
 	UInt64 instruction_blocks = 0;
 	UInt64 pt_data_blocks = 0;      // Page table for data translations
 	UInt64 pt_instr_blocks = 0;     // Page table for instruction translations
+	UInt64 utopia_blocks = 0;       // Utopia RestSeg metadata (FP, TAR, radix way table)
 	UInt64 invalid_blocks = 0;
 
 	for (UInt32 set_idx = 0; set_idx < m_num_sets; ++set_idx) {
@@ -821,6 +822,12 @@ Cache::logCacheContentDistribution(UInt64 access_count)
 					case CacheBlockInfo::block_type_t::PAGE_TABLE_INSTRUCTION:
 						pt_instr_blocks++;
 						break;
+					case CacheBlockInfo::block_type_t::UTOPIA_FP:
+					case CacheBlockInfo::block_type_t::UTOPIA_TAR:
+					case CacheBlockInfo::block_type_t::UTOPIA_RADIX_INTERNAL:
+					case CacheBlockInfo::block_type_t::UTOPIA_RADIX_LEAF:
+						utopia_blocks++;   // Utopia RestSeg metadata: translation metadata, not data
+						break;
 					default:
 						// Treat unknown types as data
 						data_blocks++;
@@ -833,7 +840,7 @@ Cache::logCacheContentDistribution(UInt64 access_count)
 	}
 
 	// Calculate percentages (of valid blocks)
-	UInt64 total_metadata = pt_data_blocks + pt_instr_blocks;
+	UInt64 total_metadata = pt_data_blocks + pt_instr_blocks + utopia_blocks;
 	double data_pct = (valid_blocks > 0) ? (100.0 * (data_blocks + instruction_blocks) / valid_blocks) : 0.0;
 	double metadata_pct = (valid_blocks > 0) ? (100.0 * total_metadata / valid_blocks) : 0.0;
 
