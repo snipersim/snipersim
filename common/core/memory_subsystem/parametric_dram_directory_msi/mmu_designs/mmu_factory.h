@@ -9,6 +9,7 @@
 #include "mmu_dmt.h"
 #include "mmu_pomtlb.h"
 #include "mmu_range.h"
+#include "mmu_utopia.h"  // step 23: Utopia
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -52,6 +53,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "range") // Redundant Memory Mappings: range translations in an RLB and a range table
 			{
 				return new RangeMMU(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "utopia") // Utopia: RestSeg walk and UTLB beside the page table walk (Kanellopoulos et al., MICRO 2023)
+			{
+				return new MemoryManagementUnitUtopia(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{

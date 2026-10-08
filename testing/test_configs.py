@@ -248,6 +248,9 @@ FRAGMENT_EXTRA_BASE = {
     # reads its table geometry from the allocator's block.
     'spec_engine_configs/spec_engine_spot':
         ['mmu_configs/mmu_spec', 'physical_memory_allocators/spot'],
+    # Step 23: the Utopia MMU walks the RestSegs of the Utopia allocator;
+    # over any other allocator it has none and only walks the page table.
+    'mmu_configs/mmu_utopia': ['physical_memory_allocators/utopia'],
 }
 
 # Fragments that need something the build may not have, with its name.  A
@@ -562,6 +565,20 @@ FRAGMENT_REQUIRE_NONZERO = {
     # run the fault handler maps the RestSeg pages in the page table as well).
     'physical_memory_allocators/utopia': ('utopia.total_allocations', 'utopia.restseg_allocations'),
     'physical_memory_allocators/utopia_4k': ('utopia.total_allocations', 'utopia.restseg_allocations'),
+    # Step 23: the Utopia MMU translates RestSeg pages without the page
+    # table: the RestSeg walk after a fault (data_in_restseg) and the UTLB
+    # (utlb.accesses) are its own.
+    'mmu_configs/mmu_utopia': ('mmu.data_in_restseg', 'utlb.accesses'),
+    'address_translation_schemes/utopia': ('mmu.data_in_restseg', 'utlb.accesses'),
+    'address_translation_schemes/utopia_smoke': ('mmu.data_in_restseg', 'utlb.accesses'),
+    'address_translation_schemes/utopia_mplru': ('mmu.data_in_restseg', 'utlb.accesses'),
+    'address_translation_schemes/utopia_mplru_bandit': ('mmu.data_in_restseg', 'utlb.accesses'),
+    # The stress scheme's one-entry UTLB hits only when the same page misses
+    # the TLBs twice running, which depends on the address layout this
+    # suite does not pin (3-4 hits with one layout, none with another):
+    # test_virtuoso's utopia_mmu case is where data_in_utlb is proved.
+    'address_translation_schemes/utopia_stress': ('mmu.data_in_restseg', 'mmu.data_in_restseg_no_fault'),
+    'address_translation_schemes/utopia_fpatar': ('mmu.data_in_restseg', 'fpacache.access', 'tarcache.access'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's

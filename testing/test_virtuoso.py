@@ -1477,6 +1477,49 @@ FEATURES = {
                         'utopia_handler.restseg_faults',
                         registered=('utopia.flexseg_allocations', 'utopia.migrations',
                                     'utopia.restseg_evictions'))),
+
+    # Step 23: the Utopia MMU over the Utopia allocator.  Every data page of
+    # the workload lands in the 2MB RestSeg (the handler counts those faults
+    # in restseg_faults and maps nothing for them), so the MMU has to
+    # translate them without the page table: after the fault the RestSeg
+    # walk answers (data_in_restseg), later TLB misses are answered by the
+    # UTLB (utlb.accesses, utlb.hits, data_in_utlb) or by the walk again
+    # (data_in_restseg_no_fault), and the walk's radix way-table lookups
+    # (radix_lookups_restseg0, radix_leaf_accesses: the leaf line was read
+    # through the cache hierarchy) are what mmu_utopia.cfg selects.  The
+    # FPA/TAR caches exist but, with the radix walk selected and the caches
+    # bypassed, are never accessed: registered only, as are the FlexSeg
+    # walks (no page of this workload goes there) and the migrations (the
+    # cost policy is off).  Needs the stress geometry (utopia_stress.cfg):
+    # at the default one the seven 2MB pages fit in the L1 TLB after their
+    # faults and the UTLB and the walk are never asked again, and with a
+    # one-entry UTLB the walk answers the misses the UTLB cannot.
+    'utopia_mmu': (
+        ['address_translation_schemes/utopia_stress'], 1,
+        require_nonzero('utopia.restseg_allocations', 'utopia_handler.restseg_faults',
+                        'mmu.data_in_restseg', 'mmu.data_in_restseg_no_fault',
+                        'mmu.data_in_utlb', 'utlb.accesses', 'utlb.hits',
+                        'mmu.radix_lookups_restseg0', 'mmu.radix_hits_restseg0',
+                        'mmu.radix_leaf_accesses', 'mmu.total_rsw_memory_requests',
+                        'mmu.num_translations',
+                        registered=('fpacache.access', 'tarcache.access', 'mmu.data_in_flexseg',
+                                    'mmu.flextorest_migrations', 'mmu.sanity_check_violations'))),
+
+    # Step 23: the other RestSeg walk -- the per-core fingerprint array and
+    # tag array through the fpacache and tarcache (radix_lookup_enabled
+    # false, the caches on) -- on the same allocator: the FPA is read on
+    # every walk (fpa_accesses_restseg0, fpacache.access), the TAR only
+    # when a fingerprint matched (tar_accesses_restseg0, tarcache.access),
+    # and the walks that missed the caches went to the hierarchy.
+    'utopia_fpatar': (
+        ['address_translation_schemes/utopia_fpatar'], 1,
+        require_nonzero('utopia.restseg_allocations', 'mmu.data_in_restseg',
+                        'mmu.data_in_restseg_no_fault', 'utlb.hits',
+                        'mmu.fpa_accesses_restseg0', 'mmu.tar_accesses_restseg0',
+                        'fpacache.access', 'tarcache.access',
+                        'mmu.total_rsw_memory_requests',
+                        registered=('mmu.fpa_cache_hits_restseg0', 'mmu.fp_filtered_restseg0',
+                                    'utopia.restseg0_fingerprint_checks'))),
 }
 
 

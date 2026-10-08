@@ -18,6 +18,8 @@
 #include <algorithm>
 
 #include "debug_config.h"
+#include "memory_management/physical_memory_allocators/utopia.h"  // step 23: RestSeg pages have no page table entry
+#include "misc/exception_handler_base.h"
 
 // ============================================================================
 // Compile-Time Configuration
@@ -747,6 +749,54 @@ namespace ParametricDramDirectoryMSI
 	std::pair<IntPtr, int> MemoryManagementUnitBase::translateWithoutTiming(IntPtr address, PageTable *page_table)
 	{
 		mmu_base_log->debug("Perfect translation (zero latency) for address:", SimLog::hex(address));
+
+		// Under the Utopia allocator a RestSeg page has no page table entry:
+		// its translation is the RestSeg's.  A page in no RestSeg is walked
+		// functionally; a fault goes to the core's handler (the Utopia one
+		// places the page), after which it is either in a RestSeg or mapped.
+		Utopia *utopia = dynamic_cast<Utopia *>(Sim()->getMimicOS()->getMemoryAllocator());
+		if (utopia != nullptr && utopia->getNumRestSegs() > 0 && !page_table->isGuest())
+		{
+			int app_id = core->getThread() ? core->getThread()->getAppId() : 0;
+			auto in_restseg = [&](std::pair<IntPtr, int> &out) -> bool {
+				for (int i = 0; i < utopia->getNumRestSegs(); i++)
+				{
+					RestSeg *restseg = utopia->getRestSeg(i);
+					if (!restseg->inRestSeg(address, app_id, false))
+						continue;
+					int page_size_bits = restseg->getPageSizeBits();
+					IntPtr ppn = restseg->calculatePhysicalAddress(address, app_id);
+					out = std::make_pair((ppn * 4096) + (address & ((IntPtr(1) << page_size_bits) - 1)), page_size_bits);
+					return true;
+				}
+				return false;
+			};
+			std::pair<IntPtr, int> found;
+			if (in_restseg(found))
+				return found;
+			PTWResult walk = page_table->initializeWalk(address, false, false, false /* no restart */);
+			if (walk.fault_happened)
+			{
+				ExceptionHandlerBase *handler = core->getExceptionHandler();
+				ExceptionHandlerBase::FaultCtx fault_ctx{};
+				fault_ctx.vpn = address >> 12;
+				fault_ctx.page_table = page_table;
+				fault_ctx.alloc_in.metadata_frames = walk.requested_frames;
+				fault_ctx.alloc_in.is_instruction = false;
+				handler->handle_page_fault(fault_ctx);
+				if (in_restseg(found))
+					return found;
+				walk = page_table->initializeWalk(address, false, false, false);
+				if (walk.fault_happened)
+				{
+					std::cerr << "[MMU_BASE] Perfect translation: the page is in no RestSeg and the walk still faults after the handler: VA=0x"
+					          << std::hex << address << std::dec << std::endl;
+					abort();
+				}
+			}
+			IntPtr page_offset = address & ((1ULL << walk.page_size) - 1);
+			return std::make_pair((walk.ppn * 4096) + page_offset, walk.page_size);
+		}
 
 		// Perform the page table walk - this handles page faults and returns PPN
 		// We use restart_walk_after_fault=true so faults are handled automatically
