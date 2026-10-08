@@ -515,6 +515,11 @@ FRAGMENT_REQUIRE_NONZERO = {
     'address_translation_schemes/trail_comparison_v4/v4_recency': ('recency_tlb.queries',),
     'address_translation_schemes/trail_comparison_v4/v4_trail': ('tlb_temporal_pte.demand_accesses',),
     'address_translation_schemes/trail_comparison_v4/v4_trail_sidecar': ('tlb_temporal_pte.demand_accesses',),
+    # Step 11: Direct Memory Translation registers the leaf accesses it
+    # charged under the MMU's name; the page walk caches it never consults
+    # are required to read zero (below).
+    'mmu_configs/mmu_dmt': ('mmu.page_table_walks', 'mmu.dmt_leaf_accesses'),
+    'address_translation_schemes/dmt': ('mmu.page_table_walks', 'mmu.dmt_leaf_accesses'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's
@@ -540,6 +545,10 @@ FRAGMENT_REQUIRE_ZERO = {
     'address_translation_schemes/no_translation_xor': ('mmu.num_translations',),
     'address_translation_schemes/trail_comparison_v4/v4_perfect_l2tlb':
         ('mmu.page_table_walks', 'mmu_walker.beyond_l2_fetches_demand'),
+    # Step 11: DMT reads the leaf line directly; the page walk caches are
+    # built (the config enables them) and never consulted.
+    'mmu_configs/mmu_dmt': ('pwc_L2.access', 'mmu.dmt_fallback_walks'),
+    'address_translation_schemes/dmt': ('pwc_L2.access', 'mmu.dmt_fallback_walks'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.

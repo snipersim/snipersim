@@ -1251,6 +1251,42 @@ FEATURES = {
                         'mmu.total_walk_latency_data',
                         registered=('pt_elastic_cuckoo.evictions',
                                     'pt_elastic_cuckoo.rehashes'))),
+
+    # Step 11: Direct Memory Translation.  A TLB miss costs one memory
+    # access, the line of the leaf entry, instead of the radix walk's four:
+    # the functional walk is the radix table's, the charge is the one line.
+    # The proof is the walker's accounting: every charged walk read exactly
+    # one line (dmt_leaf_accesses, the MMU's own counter, equals the
+    # walker's memory_accesses), the demand faults were charged nothing (so
+    # the charged walks are the walks less the faults), no walk fell back to
+    # the radix charge, and the page walk caches -- built, since the config
+    # enables them -- were never consulted.  The checksum says the
+    # translations were right.
+    'dmt': (
+        ['address_translation_schemes/dmt'], 1,
+        lambda stats: (
+            counter(stats, 'mmu.page_table_walks') > 0
+            and counter(stats, 'mmu.page_faults') > 0
+            and counter(stats, 'mmu.dmt_leaf_accesses')
+                == counter(stats, 'mmu.page_table_walks') - counter(stats, 'mmu.page_faults')
+            and counter(stats, 'mmu_walker.memory_accesses') == counter(stats, 'mmu.dmt_leaf_accesses')
+            and 'mmu.dmt_fallback_walks' in stats
+            and counter(stats, 'mmu.dmt_fallback_walks') == 0
+            and 'pwc_L2.access' in stats
+            and counter(stats, 'pwc_L2.access') == 0
+            and counter(stats, 'pwc_L3.access') == 0
+            and counter(stats, 'pwc_L4.access') == 0
+            and counter(stats, 'mmu.total_table_walk_latency') > 0,
+            'walks=%d faults=%d leaf_accesses=%d walker_accesses=%d fallback=%d '
+            'pwc_accesses=%d walk_latency=%d'
+            % (counter(stats, 'mmu.page_table_walks'),
+               counter(stats, 'mmu.page_faults'),
+               counter(stats, 'mmu.dmt_leaf_accesses'),
+               counter(stats, 'mmu_walker.memory_accesses'),
+               counter(stats, 'mmu.dmt_fallback_walks'),
+               counter(stats, 'pwc_L2.access') + counter(stats, 'pwc_L3.access') + counter(stats, 'pwc_L4.access'),
+               counter(stats, 'mmu.total_table_walk_latency')))),
+
 }
 
 

@@ -6,6 +6,7 @@
 #include "mmu_victima.h"
 #include "mmu_hw_faults.h"
 #include "mmu_virt.h"
+#include "mmu_dmt.h"
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -37,6 +38,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "virt") // Baseline MMU design that supports virtualized execution (nested on a host MMU)
 			{
 				return new MemoryManagementUnitVirt(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "dmt") // Direct Memory Translation: a walk is one access of the leaf entry
+			{
+				return new MemoryManagementUnitDMT(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{
