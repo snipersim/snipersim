@@ -14,6 +14,7 @@
 #include "memory_management/policies/spot_policy.h"
 #include "memory_management/policies/eager_paging_policy.h"
 #include "memory_management/policies/utopia_policy.h"  // step 22: Utopia
+#include "memory_management/policies/asap_policy.h"  // step 25: ASAP
 
 namespace Sniper {
     namespace Buddy {
@@ -96,5 +97,11 @@ struct BuddyPolicyFor<Sniper::EagerPaging::MetricsPolicy> {
 // step 22: the Utopia allocator's FlexSeg buddy
 template <>
 struct BuddyPolicyFor<Sniper::Utopia::MetricsPolicy> {
+    using type = Sniper::Buddy::MetricsPolicy;
+};
+
+// step 25: the ASAP allocator's buddy
+template <>
+struct BuddyPolicyFor<Sniper::ASAP::MetricsPolicy> {
     using type = Sniper::Buddy::MetricsPolicy;
 };

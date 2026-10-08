@@ -585,6 +585,8 @@ FRAGMENT_REQUIRE_NONZERO = {
     'physical_memory_allocators/utopia_coalesce': ('utopia_coalesce.coalescing_promotions', 'utopia_coalesce.restseg_allocations'),
     'mmu_configs/mmu_utopia_coalesce': ('mmu.radix_2mb_lookups', 'mmu.data_in_restseg'),
     'address_translation_schemes/utopia_coalesce': ('utopia_coalesce.coalescing_promotions', 'mmu.radix_2mb_lookups', 'mmu.data_in_restseg'),
+    # Step 25: the ASAP allocator registers under its type name.
+    'physical_memory_allocators/asap': ('asap.four_kb_allocated', 'asap.total_allocations'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's

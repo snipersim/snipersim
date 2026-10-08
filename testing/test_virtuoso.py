@@ -1543,6 +1543,15 @@ FEATURES = {
                         'mmu.data_in_restseg', 'utlb.accesses',
                         registered=('utopia_coalesce.coalescing_hits', 'utopia_coalesce.restseg0_allocations',
                                     'mmu.radix_2mb_misses', 'mmu.sanity_check_violations'))),
+
+    # Step 25: the ASAP allocator -- the reservation-based THP allocator
+    # under its own name, registering asap.* -- on a fragmented FlexSeg
+    # (no 2MB region to reserve), so every data page is a buddy 4KB page
+    # (four_kb_allocated) and the reservation counters only have to exist.
+    'asap_allocator': (
+        ['address_translation_schemes/baseline', 'physical_memory_allocators/asap'], 1,
+        require_nonzero('asap.four_kb_allocated', 'asap.total_allocations',
+                        registered=('asap.two_mb_reserved', 'asap.two_mb_promoted'))),
 }
 
 

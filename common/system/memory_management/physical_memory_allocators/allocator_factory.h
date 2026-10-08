@@ -15,6 +15,7 @@
 #include "memory_management/policies/spot_policy.h"
 #include "memory_management/policies/eager_paging_policy.h"
 #include "memory_management/policies/utopia_policy.h"  // step 22: Utopia
+#include "memory_management/policies/asap_policy.h"  // step 25: ASAP
 
 // include/memory_management/physical_memory_allocators/
 #include "../../include/memory_management/physical_memory_allocators/reserve_thp.h"
@@ -46,6 +47,7 @@ using SniperSpotAllocator            = SpotAllocator<Sniper::Spot::SpotSniperPol
 using SniperEagerPagingAllocator     = EagerPagingAllocator<Sniper::EagerPaging::MetricsPolicy>;
 using SniperUtopiaAllocator          = Utopia;  // step 22: UtopiaAllocator<Sniper::Utopia::MetricsPolicy>
 using SniperUtopiaCoalesceAllocator  = UtopiaCoalesce;  // step 24: UtopiaHashCoalesce<Sniper::Utopia::MetricsPolicy>
+using SniperASAPAllocator            = ReservationTHPAllocator<Sniper::ASAP::MetricsPolicy>;  // step 25: ASAP is reserve_thp under its own name
 
 // --------------------------------------------------------------------------
 // Helper: parse a comma-separated integer list from a config string
@@ -112,6 +114,13 @@ public:
             int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
             float threshold_for_promotion = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/threshold_for_promotion");
             return new SniperReserveTHPAllocator(stats_name, memory_size, max_order, kernel_size, frag_type, threshold_for_promotion);
+        }
+        else if (allocator_type == "asap")
+        { // ASAP [Margaritov+ MICRO 2019]: the reservation-based THP allocator under ASAP's name
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            float threshold_for_promotion = Sim()->getCfg()->getFloat("perf_model/" + allocator_name + "/threshold_for_promotion");
+            return new SniperASAPAllocator(stats_name, memory_size, max_order, kernel_size, frag_type, threshold_for_promotion);
         }
         else if (allocator_type == "baseline")
         {
