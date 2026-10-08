@@ -235,6 +235,10 @@ FRAGMENT_EXTRA_BASE = {
     'spec_engine_configs/revelator_engine_params':
         ['mmu_configs/mmu_spec', 'physical_memory_allocators/reserve_thp',
          'spec_engine_configs/spec_engine_revelator_lean'],
+    # Step 17: the SpOT engine predicts the SpOT allocator's placement and
+    # reads its table geometry from the allocator's block.
+    'spec_engine_configs/spec_engine_spot':
+        ['mmu_configs/mmu_spec', 'physical_memory_allocators/spot'],
 }
 
 # Fragments that need something the build may not have, with its name.  A
@@ -530,6 +534,16 @@ FRAGMENT_REQUIRE_NONZERO = {
     # placed (vmas_placed zero, below); test_virtuoso's trace-driven case
     # is where the placement is proved.
     'physical_memory_allocators/spot': ('spot_allocator.no_vma_allocations', 'mmu.page_faults'),
+    # Step 17: the SpOT engine under the spec MMU over the SpOT allocator,
+    # which on the live workload places nothing (no_vma_allocations).  The
+    # engine's lookup follows a fault-free walk, and at the default geometry
+    # every walk of this workload faults (see spec_oracle_stress.cfg), so
+    # its counters are only required to exist (FRAGMENT_REQUIRE_REGISTERED)
+    # and learn nothing (allocations zero); test_virtuoso's trace-driven
+    # spot case is where the engine is proved.
+    'address_translation_schemes/spot': ('spot_allocator.no_vma_allocations',),
+    'address_translation_schemes/parametric_spot': ('spot_allocator.no_vma_allocations',),
+    'spec_engine_configs/spec_engine_spot': ('spot_allocator.no_vma_allocations',),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's
@@ -541,6 +555,10 @@ FRAGMENT_REQUIRE_REGISTERED = {
         ('mmu_TLB_L2_1_cache.chirp-alive-correct', 'mmu_TLB_L2_1_cache.chirp-dead-correct'),
     'address_translation_schemes/baseline_chirp':
         ('mmu_TLB_L2_1_cache.chirp-alive-correct', 'mmu_TLB_L2_1_cache.chirp-dead-correct'),
+    # Step 17: the SpOT engine's own counters, idle on the live workload.
+    'address_translation_schemes/spot': ('spot.cache_accesses', 'spot.predictions_made'),
+    'address_translation_schemes/parametric_spot': ('spot.cache_accesses', 'spot.predictions_made'),
+    'spec_engine_configs/spec_engine_spot': ('spot.cache_accesses', 'spot.predictions_made'),
 }
 
 # Counters that must exist and read ZERO after the detailed run: the
@@ -561,6 +579,10 @@ FRAGMENT_REQUIRE_ZERO = {
     'address_translation_schemes/dmt': ('pwc_L2.access', 'mmu.dmt_fallback_walks'),
     # Step 16: no VMAs on the live workload, so nothing is placed.
     'physical_memory_allocators/spot': ('spot_allocator.vmas_placed', 'spot_allocator.offset_allocations'),
+    # Step 17: nothing placed, so nothing learned.
+    'address_translation_schemes/spot': ('spot_allocator.vmas_placed', 'spot.allocations'),
+    'address_translation_schemes/parametric_spot': ('spot_allocator.vmas_placed', 'spot.allocations'),
+    'spec_engine_configs/spec_engine_spot': ('spot_allocator.vmas_placed', 'spot.allocations'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.

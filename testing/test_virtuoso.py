@@ -1357,6 +1357,35 @@ FEATURES = {
         ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
          r'hugetlb_workload sum=50528256')),
 
+    # Step 17: the SpOT engine over that allocator, under the speculative
+    # MMU.  After a walk the engine learns the VMA's offset for the load's
+    # PC once the allocator has placed more than predefined_allocation_
+    # threshold (32) of the VMA's pages at it (spot.allocations); on a TLB
+    # miss whose PC hits a confident entry it prefetches the line at
+    # VPN - offset into the L2 (predictions_made, scored against the walk
+    # in predictions_correct).  Every TLB miss looks the PC up
+    # (cache_accesses).  Trace-driven, for the VMAs the allocator places.
+    'spot': (
+        ['address_translation_schemes/spot'], 1,
+        lambda stats: (
+            counter(stats, 'spot.cache_accesses') > 0
+            and counter(stats, 'spot.allocations') > 0
+            and counter(stats, 'spot.predictions_made') > 0
+            and counter(stats, 'spot.predictions_correct') > 0
+            and counter(stats, 'spot_allocator.offset_allocations') > 0
+            and counter(stats, 'mmu.sanity_check_violations') == 0,
+            'cache_accesses=%d hits=%d allocations=%d predictions_made=%d correct=%d '
+            'L2.prefetches=%d allocator offset_allocations=%d'
+            % (counter(stats, 'spot.cache_accesses'),
+               counter(stats, 'spot.cache_hits'),
+               counter(stats, 'spot.allocations'),
+               counter(stats, 'spot.predictions_made'),
+               counter(stats, 'spot.predictions_correct'),
+               counter(stats, 'L2.prefetches'),
+               counter(stats, 'spot_allocator.offset_allocations'))),
+        ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
+         r'hugetlb_workload sum=50528256')),
+
 }
 
 

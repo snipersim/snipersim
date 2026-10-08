@@ -15,6 +15,7 @@
 #include "oracle_spec.h"
 // Step 10: SpecTLB
 #include "spectlb.h"
+#include "spot_engine.h"
 
 namespace ParametricDramDirectoryMSI
 {
@@ -75,6 +76,10 @@ namespace ParametricDramDirectoryMSI
             else if (type == "specTLB")
             {
                 return new SpecTLB(core, memory_manager, shmem_perf_model, name);
+            }
+            else if (type == "SpOT") // Speculative Offset-based Translation: the SpOT allocator's VMA offsets, cached per PC
+            {
+                return new Spot(core, memory_manager, shmem_perf_model, name);
             }
             // SpOT only if the deferred comparison engines are ever pulled in.
             else
