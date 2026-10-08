@@ -1461,6 +1461,22 @@ FEATURES = {
                counter(stats, 'eager_paging_allocator.total_allocated_vmas'))),
         ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
          r'hugetlb_workload sum=50528256')),
+    # Step 22: the Utopia allocator and its fault handler, under the baseline
+    # MMU (the Utopia MMU is step 23).  The allocator registers under its
+    # name: total_allocations counts every allocate() call, and
+    # restseg_allocations (here all restseg_2mb_allocations: the 2MB RestSeg
+    # is first in the hierarchy and the FlexSeg starts fragmented) says the
+    # pages were placed in a RestSeg -- the placement only Utopia makes.
+    # The handler counts the faults it served by segment; with no RestSeg
+    # walker in the baseline MMU it maps the RestSeg pages in the page
+    # table too, which is what lets the workload reach its checksum.
+    'utopia_allocator': (
+        ['address_translation_schemes/baseline', 'physical_memory_allocators/utopia'], 1,
+        require_nonzero('utopia.total_allocations', 'utopia.restseg_allocations',
+                        'utopia.restseg_2mb_allocations', 'utopia.restseg0_allocations',
+                        'utopia_handler.restseg_faults',
+                        registered=('utopia.flexseg_allocations', 'utopia.migrations',
+                                    'utopia.restseg_evictions'))),
 }
 
 

@@ -110,3 +110,6 @@
 #define DEBUG_MAGIC_SERVER          DEBUG_NONE /* 0, 1 or 2 */ // magic-instruction handling
 #define DEBUG_TRACE_THREAD          DEBUG_NONE /* 0, 1 or 2 */ // thread create/exit, context switches
 #define DEBUG_MMU_PREFETCH          DEBUG_NONE /* 0, 1 or 2 */ // MMU-driven page-table prefetch
+
+// step 22: the Utopia allocator, its fault handler and (step 23) its MMU.
+#define DEBUG_UTOPIA                DEBUG_NONE /* 0, 1 or 2 */

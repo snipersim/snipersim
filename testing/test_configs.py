@@ -557,6 +557,11 @@ FRAGMENT_REQUIRE_NONZERO = {
     # eager-paging ranges (the default allocator) every lookup misses and
     # nothing is resolved by range (zero, below).
     'mmu_configs/mmu_rmm': ('rlb.accesses', 'rlb.misses', 'mmu.page_table_walks'),
+    # Step 22: the Utopia allocator registers under its name; restseg_allocations
+    # is the placement only it makes (under the baseline MMU of the layered
+    # run the fault handler maps the RestSeg pages in the page table as well).
+    'physical_memory_allocators/utopia': ('utopia.total_allocations', 'utopia.restseg_allocations'),
+    'physical_memory_allocators/utopia_4k': ('utopia.total_allocations', 'utopia.restseg_allocations'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's

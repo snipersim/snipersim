@@ -26,8 +26,8 @@ public:
             return fault_ctx;
     }
 
-private:
-    // Helper functions
+protected:
+    // Helper functions, for the handlers that derive from this one as well
     // The OS a fault belongs to: the guest OS when the faulting page table is
     // a guest one (the virt MMU raises those), the host OS otherwise.
     MimicOS* osFor(const FaultCtx& ctx);

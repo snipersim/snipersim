@@ -14,6 +14,7 @@
 #include "memory_management/policies/numa_revelator_policy.h"
 #include "memory_management/policies/spot_policy.h"
 #include "memory_management/policies/eager_paging_policy.h"
+#include "memory_management/policies/utopia_policy.h"  // step 22: Utopia
 
 // include/memory_management/physical_memory_allocators/
 #include "../../include/memory_management/physical_memory_allocators/reserve_thp.h"
@@ -25,6 +26,7 @@
 #include "../../include/memory_management/physical_memory_allocators/numa_revelator.h"
 #include "../../include/memory_management/physical_memory_allocators/spot.h"
 #include "../../include/memory_management/physical_memory_allocators/eager_paging.h"
+#include "../../include/memory_management/physical_memory_allocators/utopia.h"  // step 22: Utopia
 // PhysicalMemoryAllocator*
 #include "../../include/memory_management/physical_memory_allocators/physical_memory_allocator.h"
 
@@ -41,6 +43,7 @@ using SniperRevelatorSimpleAllocator = RevelatorSimpleAllocator<Sniper::Revelato
 using SniperNumaRevelatorAllocator   = NumaRevelatorAllocator<Sniper::NumaRevelator::NumaRevelatorSniperPolicy>;
 using SniperSpotAllocator            = SpotAllocator<Sniper::Spot::SpotSniperPolicy>;
 using SniperEagerPagingAllocator     = EagerPagingAllocator<Sniper::EagerPaging::MetricsPolicy>;
+using SniperUtopiaAllocator          = Utopia;  // step 22: UtopiaAllocator<Sniper::Utopia::MetricsPolicy>
 
 // --------------------------------------------------------------------------
 // Helper: parse a comma-separated integer list from a config string
@@ -209,6 +212,12 @@ public:
             String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
             int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
             return new SniperEagerPagingAllocator(allocator_name, memory_size, max_order, kernel_size, frag_type);
+        }
+        else if (allocator_type == "utopia")
+        { // Utopia: RestSegs (set-associative, no page table walk) over a reserve_thp FlexSeg [Kanellopoulos+ MICRO 2023]
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            return new SniperUtopiaAllocator(stats_name, memory_size, max_order, kernel_size, frag_type);
         }
         else
         {
