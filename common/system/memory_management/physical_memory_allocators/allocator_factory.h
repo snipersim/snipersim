@@ -27,6 +27,7 @@
 #include "../../include/memory_management/physical_memory_allocators/spot.h"
 #include "../../include/memory_management/physical_memory_allocators/eager_paging.h"
 #include "../../include/memory_management/physical_memory_allocators/utopia.h"  // step 22: Utopia
+#include "../../include/memory_management/physical_memory_allocators/utopia_hash_coalesce.h"  // step 24: Utopia coalesce
 // PhysicalMemoryAllocator*
 #include "../../include/memory_management/physical_memory_allocators/physical_memory_allocator.h"
 
@@ -44,6 +45,7 @@ using SniperNumaRevelatorAllocator   = NumaRevelatorAllocator<Sniper::NumaRevela
 using SniperSpotAllocator            = SpotAllocator<Sniper::Spot::SpotSniperPolicy>;
 using SniperEagerPagingAllocator     = EagerPagingAllocator<Sniper::EagerPaging::MetricsPolicy>;
 using SniperUtopiaAllocator          = Utopia;  // step 22: UtopiaAllocator<Sniper::Utopia::MetricsPolicy>
+using SniperUtopiaCoalesceAllocator  = UtopiaCoalesce;  // step 24: UtopiaHashCoalesce<Sniper::Utopia::MetricsPolicy>
 
 // --------------------------------------------------------------------------
 // Helper: parse a comma-separated integer list from a config string
@@ -218,6 +220,12 @@ public:
             String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
             int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
             return new SniperUtopiaAllocator(stats_name, memory_size, max_order, kernel_size, frag_type);
+        }
+        else if (allocator_type == "utopia_coalesce")
+        { // Utopia with 2MB regions coalesced into one way of the 4KB RestSeg
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            return new SniperUtopiaCoalesceAllocator(stats_name, memory_size, max_order, kernel_size, frag_type);
         }
         else
         {

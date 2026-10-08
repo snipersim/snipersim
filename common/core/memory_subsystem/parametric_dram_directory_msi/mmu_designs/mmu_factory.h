@@ -10,6 +10,7 @@
 #include "mmu_pomtlb.h"
 #include "mmu_range.h"
 #include "mmu_utopia.h"  // step 23: Utopia
+#include "mmu_utopia_coalesce.h"  // step 24: Utopia coalesce
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -57,6 +58,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "utopia") // Utopia: RestSeg walk and UTLB beside the page table walk (Kanellopoulos et al., MICRO 2023)
 			{
 				return new MemoryManagementUnitUtopia(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "utopia_coalesce") // Utopia whose RestSeg walk reads the coalesced 2MB way table first
+			{
+				return new MemoryManagementUnitUtopiaCoalesce(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{

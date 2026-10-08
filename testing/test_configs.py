@@ -251,6 +251,8 @@ FRAGMENT_EXTRA_BASE = {
     # Step 23: the Utopia MMU walks the RestSegs of the Utopia allocator;
     # over any other allocator it has none and only walks the page table.
     'mmu_configs/mmu_utopia': ['physical_memory_allocators/utopia'],
+    # Step 24: the coalesce MMU over the coalescing allocator
+    'mmu_configs/mmu_utopia_coalesce': ['physical_memory_allocators/utopia_coalesce'],
 }
 
 # Fragments that need something the build may not have, with its name.  A
@@ -579,6 +581,10 @@ FRAGMENT_REQUIRE_NONZERO = {
     # test_virtuoso's utopia_mmu case is where data_in_utlb is proved.
     'address_translation_schemes/utopia_stress': ('mmu.data_in_restseg', 'mmu.data_in_restseg_no_fault'),
     'address_translation_schemes/utopia_fpatar': ('mmu.data_in_restseg', 'fpacache.access', 'tarcache.access'),
+    # Step 24: the coalescing allocator's promotions and the MMU's 2MB walk.
+    'physical_memory_allocators/utopia_coalesce': ('utopia_coalesce.coalescing_promotions', 'utopia_coalesce.restseg_allocations'),
+    'mmu_configs/mmu_utopia_coalesce': ('mmu.radix_2mb_lookups', 'mmu.data_in_restseg'),
+    'address_translation_schemes/utopia_coalesce': ('utopia_coalesce.coalescing_promotions', 'mmu.radix_2mb_lookups', 'mmu.data_in_restseg'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's

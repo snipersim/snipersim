@@ -726,6 +726,24 @@ private:
     mutable UInt64 radix_hits = 0;
     mutable UInt64 radix_misses = 0;
 
+    // Coalescing (utopia_hash_coalesce.h): per set, a bitmap of its free
+    // ways (bit w set: way w free; up to 64 ways), and a second radix way
+    // table keyed by the 2MB VPN for the regions placed whole in one way
+    std::vector<uint64_t> set_way_bitmap;
+    std::unique_ptr<UtopiaRadixWayTableManager> radix_way_tables_2mb;
+    mutable UInt64 coalesced_2mb_lookups = 0;
+    mutable UInt64 coalesced_2mb_hits = 0;
+
+    void updateWayBitmap(UInt32 set_index, int way, bool is_free)
+    {
+        if (way < 0 || way >= (int)associativity || way >= 64 || set_index >= num_sets)
+            return;
+        if (is_free)
+            set_way_bitmap[set_index] |= (1ULL << way);
+        else
+            set_way_bitmap[set_index] &= ~(1ULL << way);
+    }
+
     mutable std::unique_ptr<SimLog> m_log;
 
     void fillRegionPref(bool success_from_region_pref, UInt64 region_id, int used_way)
@@ -792,6 +810,8 @@ public:
         fingerprint_bases.resize(num_cores, 0);
         free_sets_per_way.assign(associativity, num_sets);
         radix_way_tables = std::make_unique<UtopiaRadixWayTableManager>(page_size_bits, associativity, nullptr);
+        radix_way_tables_2mb = std::make_unique<UtopiaRadixWayTableManager>(21, associativity, nullptr);
+        set_way_bitmap.assign(num_sets, (associativity >= 64) ? ~0ULL : ((1ULL << associativity) - 1));
 
         std::string page_size_str = (page_size_bits == 21) ? "2MB" : (page_size_bits == 12) ? "4KB" :
                                     (page_size_bits == 30) ? "1GB" : std::to_string(page_size_bits);
@@ -803,6 +823,7 @@ public:
     void setRadixAllocator(std::function<IntPtr(size_t)> alloc_fn)
     {
         radix_way_tables = std::make_unique<UtopiaRadixWayTableManager>(page_size_bits, associativity, alloc_fn);
+        radix_way_tables_2mb = std::make_unique<UtopiaRadixWayTableManager>(21, associativity, alloc_fn);
     }
 
     static constexpr UInt32 FOLD_MASK = ~(UInt32)511;   // the index bits the tag is folded into
@@ -868,7 +889,11 @@ public:
     {
         UInt64 vpn = address >> page_size_bits;
         radix_lookups++;
-        bool found = radix_way_tables->lookup_way(vpn, app_id, way_out);
+        bool found = false;
+        if (page_size_bits == 12)
+            found = radix_way_tables_2mb->lookup_way(address >> 21, app_id, way_out);
+        if (!found)
+            found = radix_way_tables->lookup_way(vpn, app_id, way_out);
         if (found)
             radix_hits++;
         else
@@ -970,6 +995,8 @@ public:
             allocations++;
             if (used_free_way && used_way >= 0 && used_way < (int)associativity && free_sets_per_way[used_way] > 0)
                 free_sets_per_way[used_way]--;
+            if (used_way >= 0)
+                updateWayBitmap(set_index, used_way, false);
             if (use_region_pref)
                 fillRegionPref(success_from_region_pref, region_id, used_way);
             maybeRotateGlobalWay();
@@ -987,6 +1014,87 @@ public:
             radix_way_tables->set_mapping(vpn, app_id, used_way);
         return std::make_tuple(true, false, (IntPtr)0);
     }
+
+    // ---- coalescing --------------------------------------------------------
+
+    // Place a page in one given way (no fallback, no eviction); a page
+    // already present is a hit.  With update_radix false the per-page way
+    // table is left alone: the region's 2MB entry stands for it.
+    bool tryInsertAtWay(IntPtr address, int app_id, int way, bool update_radix = true)
+    {
+        std::lock_guard<std::mutex> guard(lock);
+        UInt64 tag;
+        UInt32 set_index;
+        splitAddress(address, tag, set_index);
+        int used_way = -1;
+        bool was_hit = false;
+        if (!sets[set_index].tryInsertAtWay(tag, app_id + 1, utopiaFingerprint(tag, fingerprint_bits), way, used_way, was_hit))
+            return false;
+        if (!was_hit && used_way >= 0)
+        {
+            allocations++;
+            updateWayBitmap(set_index, used_way, false);
+            if (used_way < (int)associativity && free_sets_per_way[used_way] > 0)
+                free_sets_per_way[used_way]--;
+            if (update_radix)
+                radix_way_tables->set_mapping(address >> page_size_bits, app_id, used_way);
+        }
+        return true;
+    }
+
+    // The lowest way free in every set of the 512 pages from start_vpn, or
+    // -1: the AND of the sets' free-way bitmaps, stopping once it is empty
+    int findCommonFreeWay(UInt64 start_vpn)
+    {
+        std::lock_guard<std::mutex> guard(lock);
+        uint64_t candidates = (associativity >= 64) ? ~0ULL : ((1ULL << associativity) - 1);
+        for (int i = 0; i < 512; i++)
+        {
+            UInt64 tag;
+            UInt32 set_index;
+            splitAddress((start_vpn + i) << 12, tag, set_index);
+            candidates &= set_way_bitmap[set_index];
+            if (candidates == 0)
+                return -1;
+        }
+        return __builtin_ctzll(candidates);
+    }
+
+    void setCoalesced2MBWay(UInt64 region_start_vpn, int app_id, int way) { radix_way_tables_2mb->set_mapping(region_start_vpn >> 9, app_id, way); }
+    void clearCoalesced2MBWay(UInt64 region_start_vpn, int app_id) { radix_way_tables_2mb->clear_mapping(region_start_vpn >> 9, app_id); }
+    int lookupCoalesced2MBWay(UInt64 region_start_vpn, int app_id) const
+    {
+        coalesced_2mb_lookups++;
+        int way_out = -1;
+        if (radix_way_tables_2mb->lookup_way(region_start_vpn >> 9, app_id, way_out))
+        {
+            coalesced_2mb_hits++;
+            return way_out;
+        }
+        return -1;
+    }
+
+    // The 2MB page a coalesced region is: the frame of the first of its 512
+    // consecutive sets in the way (way-major layout, low index bits unfolded)
+    IntPtr coalescedRegionPPN(IntPtr aligned_address, int way) const
+    {
+        UInt64 tag;
+        UInt32 set_index;
+        splitAddress(aligned_address, tag, set_index);
+        return calculatePPNFromWay(set_index & ~(UInt32)511, way);
+    }
+
+    // The lines of a 2MB-table lookup, root first
+    void calculateRadixLevelAddressesCoalesced(IntPtr address, int app_id, std::vector<std::pair<IntPtr, bool>> &level_addresses) const
+    {
+        level_addresses.clear();
+        std::vector<std::tuple<int, IntPtr, bool>> traversal;
+        radix_way_tables_2mb->getTraversalAddresses(address >> 21, app_id, traversal);
+        for (const auto &entry : traversal)
+            level_addresses.push_back(std::make_pair(std::get<1>(entry), std::get<2>(entry)));
+    }
+    UInt64 *getCoalesced2MBLookupsPtr() { return &coalesced_2mb_lookups; }
+    UInt64 *getCoalesced2MBHitsPtr() { return &coalesced_2mb_hits; }
 
     // ---- translation -------------------------------------------------------
 
@@ -1176,6 +1284,8 @@ public:
         UInt64 migrations = 0;
         UInt64 restseg_allocations = 0;       // sum of the two RestSeg counts
         UInt64 flexseg_allocations = 0;       // sum of the two FlexSeg counts
+        UInt64 coalescing_promotions = 0;     // 2MB regions placed whole in one way (utopia_hash_coalesce.h)
+        UInt64 coalescing_hits = 0;           // faults in a region coalesced already
     };
 
     // Cost-based Top-K migration: the MMU scores each 4KB FlexSeg page by what
@@ -1299,12 +1409,15 @@ public:
             auto rs = std::make_unique<RestSeg>(i + 1, rs_size, rs_page_size, rs_assoc, num_cores, fingerprint_bits, fingerprint_enabled);
 
             // The segment's frames come from the kernel region, aligned to its
-            // page size.  One extra page is taken so that the aligned segment
-            // still ends inside what was reserved.
-            UInt64 page_bytes = 1ULL << rs_page_size;
+            // page size or to 2MB, whichever is larger: 512 consecutive
+            // frames of a 4KB RestSeg are a 2MB page only from a 2MB-aligned
+            // base (the coalescing of utopia_hash_coalesce.h).  One extra
+            // alignment unit is taken so that the aligned segment still ends
+            // inside what was reserved.
+            UInt64 align_bytes = std::max(1ULL << rs_page_size, 2ULL << 20);
             UInt64 rs_bytes = rs->getSizeMB() * 1024ULL * 1024ULL;
-            UInt64 base_ppn = this->handle_page_table_allocations(rs_bytes + page_bytes);
-            UInt64 pages_per_page = page_bytes / 4096;
+            UInt64 base_ppn = this->handle_page_table_allocations(rs_bytes + align_bytes);
+            UInt64 pages_per_page = align_bytes / 4096;
             UInt64 aligned_base_ppn = ((base_ppn + pages_per_page - 1) / pages_per_page) * pages_per_page;
             rs->setBase(aligned_base_ppn);
 

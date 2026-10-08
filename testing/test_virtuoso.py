@@ -1520,6 +1520,29 @@ FEATURES = {
                         'mmu.total_rsw_memory_requests',
                         registered=('mmu.fpa_cache_hits_restseg0', 'mmu.fp_filtered_restseg0',
                                     'utopia.restseg0_fingerprint_checks'))),
+
+    # Step 24: Utopia with 2MB coalescing in the 4KB RestSeg.  The allocator
+    # places a region's 512 pages in one way of 512 consecutive sets when
+    # one is free in all of them (coalescing_promotions, counted under its
+    # type name utopia_coalesce) and returns it as a 2MB page -- the check
+    # comes before the 2MB RestSeg in the hierarchy, so every data region
+    # of the workload is a promotion and the 2MB RestSeg stays empty; the
+    # MMU's RestSeg walk reads the 2MB way table first (radix_2mb_lookups,
+    # and the hits that spared the per-page walk: the walks after the
+    # faults, data_in_restseg) with its leaf lines through the cache
+    # hierarchy.  At the default geometry the regions then live in the L1
+    # TLB (as for utopia_mmu); the UTLB is proved there.
+    'utopia_coalesce': (
+        ['address_translation_schemes/utopia_coalesce'], 1,
+        require_nonzero('utopia_coalesce.coalescing_promotions',
+                        'utopia_coalesce.restseg_allocations',
+                        'utopia_coalesce.restseg1_coalesced_2mb_hits',
+                        'utopia_handler.restseg_faults',
+                        'mmu.radix_2mb_lookups', 'mmu.radix_2mb_hits',
+                        'mmu.radix_2mb_leaf_accesses',
+                        'mmu.data_in_restseg', 'utlb.accesses',
+                        registered=('utopia_coalesce.coalescing_hits', 'utopia_coalesce.restseg0_allocations',
+                                    'mmu.radix_2mb_misses', 'mmu.sanity_check_violations'))),
 }
 
 

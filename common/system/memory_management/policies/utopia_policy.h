@@ -123,6 +123,11 @@ struct MetricsPolicy
         }
     }
 
+    // A counter of an allocator derived from the Utopia one (utopia_hash_coalesce.h)
+    static void register_counter(const String& name, const String& key, UInt64* ptr) {
+        registerStatsMetric(name, 0, key, ptr);
+    }
+
     // ---- logging ----
     template<typename... Args>
     void log(const Args&... args) const { if (sim_log) sim_log->info(args...); }

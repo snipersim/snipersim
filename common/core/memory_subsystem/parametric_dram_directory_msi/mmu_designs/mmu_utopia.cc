@@ -477,6 +477,7 @@ namespace ParametricDramDirectoryMSI
 		bool utlb_hit = false;
 		SubsecondTime utlb_latency = SubsecondTime::Zero();
 		uint8_t utlb_seg_id = 0;
+		uint8_t utlb_way_idx = 0;
 		int utlb_page_size = -1;
 		bool rsw_hit = false;
 		SubsecondTime rsw_latency = SubsecondTime::Zero();
@@ -494,6 +495,7 @@ namespace ParametricDramDirectoryMSI
 				{
 					utlb_hit = true;
 					utlb_seg_id = utlb_result.seg_id;
+					utlb_way_idx = utlb_result.way_idx;
 					utlb_page_size = utlb_result.page_size;
 					utlb_latency = utlb->getLatency();
 					if (count)
@@ -550,13 +552,22 @@ namespace ParametricDramDirectoryMSI
 			}
 		}
 
-		// A UTLB hit: the physical address from the RestSeg.  An entry whose
-		// page has since left the RestSeg (a migration eviction the shootdown
-		// did not reach) is dropped and the RSW result stands.
+		// A UTLB hit: the physical address from the RestSeg and the entry's
+		// way -- the region's 2MB page when the entry is a coalesced region
+		// of a 4KB RestSeg (step 24), the page's own frame otherwise.  An
+		// entry whose page is no longer in that way (a migration eviction the
+		// shootdown did not reach) is dropped and the RSW result stands.
 		if (!hit && utlb_hit)
 		{
 			RestSeg *restseg = m_utopia->getRestSeg(utlb_seg_id);
-			IntPtr ppn = restseg ? restseg->calculatePhysicalAddress(address, app_id) : (IntPtr)-1;
+			IntPtr ppn = (IntPtr)-1;
+			if (restseg && restseg->lookupWay(address, app_id) == (int)utlb_way_idx)
+			{
+				if (utlb_page_size > restseg->getPageSizeBits())
+					ppn = restseg->coalescedRegionPPN(address & ~((IntPtr(1) << utlb_page_size) - 1), utlb_way_idx);
+				else
+					ppn = restseg->calculatePPNFromWay(address, utlb_way_idx);
+			}
 			if (ppn != (IntPtr)-1)
 			{
 				ppn_result = ppn;
