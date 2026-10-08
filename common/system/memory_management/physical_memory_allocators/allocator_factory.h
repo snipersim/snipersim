@@ -12,6 +12,7 @@
 #include "memory_management/policies/revelator_simple_policy.h"
 #include "memory_management/policies/revelator_thp_policy.h"
 #include "memory_management/policies/numa_revelator_policy.h"
+#include "memory_management/policies/spot_policy.h"
 
 // include/memory_management/physical_memory_allocators/
 #include "../../include/memory_management/physical_memory_allocators/reserve_thp.h"
@@ -21,6 +22,7 @@
 #include "../../include/memory_management/physical_memory_allocators/revelator_simple.h"
 #include "../../include/memory_management/physical_memory_allocators/revelator_thp.h"
 #include "../../include/memory_management/physical_memory_allocators/numa_revelator.h"
+#include "../../include/memory_management/physical_memory_allocators/spot.h"
 // PhysicalMemoryAllocator*
 #include "../../include/memory_management/physical_memory_allocators/physical_memory_allocator.h"
 
@@ -35,6 +37,7 @@ using SniperRevelatorAllocator       = RevelatorAllocator<Sniper::Revelator::Rev
 using SniperRevelatorTHPAllocator    = RevelatorTHPAllocator<Sniper::RevelatorTHP::RevelatorTHPSniperPolicy>;
 using SniperRevelatorSimpleAllocator = RevelatorSimpleAllocator<Sniper::RevelatorSimple::RevelatorSimpleSniperPolicy>;
 using SniperNumaRevelatorAllocator   = NumaRevelatorAllocator<Sniper::NumaRevelator::NumaRevelatorSniperPolicy>;
+using SniperSpotAllocator            = SpotAllocator<Sniper::Spot::SpotSniperPolicy>;
 
 // --------------------------------------------------------------------------
 // Helper: parse a comma-separated integer list from a config string
@@ -191,6 +194,12 @@ public:
                 enable_aggressive_swapouts, infrequency_threshold, hash1_usage_threshold,
                 num_numa_nodes, numa_policy, utilization_threshold, max_speculation_nodes,
                 per_node_cap, per_node_kern);
+        }
+        else if (allocator_type == "spot")
+        { // SpOT: VMAs placed at a fixed VA-PA offset, for Speculative Offset-based Translation
+            String frag_type = Sim()->getCfg()->getString("perf_model/" + allocator_name + "/frag_type");
+            int max_order = Sim()->getCfg()->getInt("perf_model/" + allocator_name + "/max_order");
+            return new SniperSpotAllocator(allocator_name, memory_size, max_order, kernel_size, frag_type);
         }
         else
         {

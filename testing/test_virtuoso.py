@@ -1324,6 +1324,39 @@ FEATURES = {
                counter(stats, 'mmu.page_faults'),
                counter(stats, 'mmu.total_software_tlb_latency')))),
 
+    # Step 16: the SpOT allocator.  The first fault in a VMA places the
+    # whole VMA in a free contiguous range and fixes its VA-PA offset
+    # (vmas_placed); every later fault in it is served at exactly
+    # VPN - offset while that frame is free (offset_allocations), a buddy
+    # page otherwise (fallback_allocations).  VMAs come only from the
+    # trace's .vma file, so this is trace-driven like the hugetlbfs case:
+    # the guest's 8 MB region is one VMA of 2048 pages, placed once and
+    # then filled page by page at its offset.  Without VMAs (the live
+    # workload, which the configs sweep runs) every fault is a buddy page
+    # (no_vma_allocations) and nothing is placed.
+    'spot_allocator': (
+        ['address_translation_schemes/baseline', 'physical_memory_allocators/spot'], 1,
+        lambda stats: (
+            counter(stats, 'spot_allocator.vmas_placed') > 0
+            and counter(stats, 'spot_allocator.offset_allocations') >= 2048
+            and counter(stats, 'spot_allocator.offset_allocations')
+                + counter(stats, 'spot_allocator.fallback_allocations')
+                + counter(stats, 'spot_allocator.no_vma_allocations') > 0
+            and counter(stats, 'mmu.page_faults') > 0
+            and counter(stats, 'mmu.sanity_check_violations') == 0
+            and 'Parsing VMAs (plain) from' in stats['__stdout__'],
+            'vmas_placed=%d (in largest: %d) offset_allocations=%d fallback=%d no_vma=%d '
+            'page_faults=%d sanity_violations=%d'
+            % (counter(stats, 'spot_allocator.vmas_placed'),
+               counter(stats, 'spot_allocator.vmas_placed_in_largest'),
+               counter(stats, 'spot_allocator.offset_allocations'),
+               counter(stats, 'spot_allocator.fallback_allocations'),
+               counter(stats, 'spot_allocator.no_vma_allocations'),
+               counter(stats, 'mmu.page_faults'),
+               counter(stats, 'mmu.sanity_check_violations'))),
+        ('hugetlb_workload.c', r'\[SNIPER\] End', None, None,
+         r'hugetlb_workload sum=50528256')),
+
 }
 
 

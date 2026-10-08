@@ -525,6 +525,11 @@ FRAGMENT_REQUIRE_NONZERO = {
     'mmu_configs/mmu_pomtlb': ('pom_tlb_0.accesses', 'mmu.software_tlb_lookups', 'mmu.total_software_tlb_latency'),
     'address_translation_schemes/reservethp_pomtlb': ('pom_tlb_0.accesses', 'mmu.software_tlb_lookups', 'mmu.total_software_tlb_latency'),
     'address_translation_schemes/pomtlb_stress': ('pom_tlb_0.accesses', 'mmu.software_tlb_lookups', 'mmu.software_tlb_hits'),
+    # Step 16: the SpOT allocator on a live workload has no VMAs to place,
+    # so every fault is a buddy page (no_vma_allocations) and nothing is
+    # placed (vmas_placed zero, below); test_virtuoso's trace-driven case
+    # is where the placement is proved.
+    'physical_memory_allocators/spot': ('spot_allocator.no_vma_allocations', 'mmu.page_faults'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's
@@ -554,6 +559,8 @@ FRAGMENT_REQUIRE_ZERO = {
     # built (the config enables them) and never consulted.
     'mmu_configs/mmu_dmt': ('pwc_L2.access', 'mmu.dmt_fallback_walks'),
     'address_translation_schemes/dmt': ('pwc_L2.access', 'mmu.dmt_fallback_walks'),
+    # Step 16: no VMAs on the live workload, so nothing is placed.
+    'physical_memory_allocators/spot': ('spot_allocator.vmas_placed', 'spot_allocator.offset_allocations'),
 }
 
 # Lines the run must print, for variants whose evidence is their output.

@@ -63,12 +63,18 @@ private:
         if (handler_type == "default" || handler_type == "sniper") {
             return new SniperExceptionHandler(core);
         }
+        else if (handler_type == "spot") {
+            // The SpOT allocator's handler (upstream's SpotExceptionHandler) is
+            // the sniper-space handler line for line: a fault asks the
+            // allocator for the faulting page, and the allocator places it.
+            return new SniperExceptionHandler(core);
+        }
         else if (handler_type == "revelator") {
             return new RevelatorExceptionHandler(core);
         }
         else {
             std::cerr << "[EXCEPTION_HANDLER_FACTORY] Unknown exception handler type '" << handler_type
-                      << "' (general/exception_handler_type): known types are default, sniper, revelator" << std::endl;
+                      << "' (general/exception_handler_type): known types are default, sniper, spot, revelator" << std::endl;
             abort();
         }
     }
