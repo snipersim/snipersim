@@ -1287,6 +1287,43 @@ FEATURES = {
                counter(stats, 'pwc_L2.access') + counter(stats, 'pwc_L3.access') + counter(stats, 'pwc_L4.access'),
                counter(stats, 'mmu.total_table_walk_latency')))),
 
+    # Step 12: the Part-of-Memory TLB, a very large TLB in DRAM between the
+    # hardware TLBs and the walker.  Every hardware TLB miss looks the
+    # address up in the POM-TLB of each page size at once (pom_tlb_0 and
+    # pom_tlb_1, the TLB objects' own accesses: one each per lookup), each
+    # lookup a memory access of its set (total_software_tlb_latency); a hit
+    # resolves the translation without a walk, so the walks are the misses
+    # only, and a walk installs its translation (installs).  On the stress
+    # geometry, for the reason spec_oracle_stress exists: under reserve_thp
+    # every data page is 2 MB and six fit in the default hardware TLBs, so
+    # on reservethp_pomtlb itself the POM-TLBs see only first-touch faults
+    # (90 lookups, 0 hits); with the TLBs shrunk the re-references miss
+    # them and the POM-TLB answers (hits).
+    'pomtlb': (
+        ['address_translation_schemes/pomtlb_stress'], 1,
+        lambda stats: (
+            counter(stats, 'mmu.software_tlb_lookups') > 0
+            and counter(stats, 'pom_tlb_0.accesses') == counter(stats, 'mmu.software_tlb_lookups')
+            and counter(stats, 'pom_tlb_1.accesses') == counter(stats, 'mmu.software_tlb_lookups')
+            and counter(stats, 'mmu.software_tlb_hits') > 0
+            and counter(stats, 'mmu.software_tlb_hits') + counter(stats, 'mmu.software_tlb_misses')
+                == counter(stats, 'mmu.software_tlb_lookups')
+            and counter(stats, 'mmu.page_table_walks') - counter(stats, 'mmu.page_faults')
+                == counter(stats, 'mmu.software_tlb_misses')
+            and counter(stats, 'mmu.software_tlb_installs') == counter(stats, 'mmu.software_tlb_misses')
+            and counter(stats, 'mmu.total_software_tlb_latency') > 0,
+            'lookups=%d pom_tlb_0.accesses=%d pom_tlb_1.accesses=%d hits=%d misses=%d '
+            'installs=%d walks=%d faults=%d software_tlb_latency=%d'
+            % (counter(stats, 'mmu.software_tlb_lookups'),
+               counter(stats, 'pom_tlb_0.accesses'),
+               counter(stats, 'pom_tlb_1.accesses'),
+               counter(stats, 'mmu.software_tlb_hits'),
+               counter(stats, 'mmu.software_tlb_misses'),
+               counter(stats, 'mmu.software_tlb_installs'),
+               counter(stats, 'mmu.page_table_walks'),
+               counter(stats, 'mmu.page_faults'),
+               counter(stats, 'mmu.total_software_tlb_latency')))),
+
 }
 
 

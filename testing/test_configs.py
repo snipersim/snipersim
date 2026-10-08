@@ -520,6 +520,11 @@ FRAGMENT_REQUIRE_NONZERO = {
     # are required to read zero (below).
     'mmu_configs/mmu_dmt': ('mmu.page_table_walks', 'mmu.dmt_leaf_accesses'),
     'address_translation_schemes/dmt': ('mmu.page_table_walks', 'mmu.dmt_leaf_accesses'),
+    # Step 12: the POM-TLB's own TLB objects count their accesses, and the
+    # MMU the lookups' memory latency.
+    'mmu_configs/mmu_pomtlb': ('pom_tlb_0.accesses', 'mmu.software_tlb_lookups', 'mmu.total_software_tlb_latency'),
+    'address_translation_schemes/reservethp_pomtlb': ('pom_tlb_0.accesses', 'mmu.software_tlb_lookups', 'mmu.total_software_tlb_latency'),
+    'address_translation_schemes/pomtlb_stress': ('pom_tlb_0.accesses', 'mmu.software_tlb_lookups', 'mmu.software_tlb_hits'),
 }
 
 # Counters that must merely exist after the detailed run (test_virtuoso's

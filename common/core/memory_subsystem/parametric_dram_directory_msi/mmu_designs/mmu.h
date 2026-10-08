@@ -178,6 +178,22 @@ namespace ParametricDramDirectoryMSI
 		void dumpPerPageLogs();
 		void initializePerPageLogs();
 
+	protected:
+		// A translation level between the TLBs and the walker, which the
+		// POM-TLB MMU provides (its in-memory TLB): asked on a TLB miss
+		// before a walker is taken, with the latency of its lookup returned
+		// whether it hit or not; on a hit there is no walk.  After a walk
+		// that resolved a translation this level missed, the translation is
+		// handed to it.  The baseline has no such level.
+		virtual bool lookupBeyondTLBs(IntPtr /*address*/, IntPtr /*eip*/, bool /*instruction*/,
+		                              Core::lock_signal_t /*lock*/, bool /*modeled*/, bool /*count*/,
+		                              SubsecondTime &/*latency*/, IntPtr &/*ppn*/, int &/*page_size*/)
+		{
+			return false;
+		}
+		virtual void installBeyondTLBs(IntPtr /*address*/, IntPtr /*ppn*/, int /*page_size*/,
+		                               Core::lock_signal_t /*lock*/, bool /*count*/, bool /*instruction*/) {}
+
 	private:
 		// The per-page CSV logs are written once, from the simulation-end
 		// hook: destructors do not run at the end of a simulation.

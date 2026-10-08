@@ -21,6 +21,7 @@
 #define DEBUG_MMU_BASE              DEBUG_NONE  /* 0, 1 or 2 */  // Separate flag for mmu_base.cc
 #define DEBUG_MMU_VIRT              DEBUG_NONE  /* 0, 1 or 2 */  // The virtualised (nested) MMU, mmu_virt.cc
 #define DEBUG_MMU_DMT               DEBUG_NONE  /* 0, 1 or 2 */  // Direct Memory Translation, mmu_dmt.cc
+#define DEBUG_MMU_POMTLB            DEBUG_NONE  /* 0, 1 or 2 */  // Part-of-Memory TLB, mmu_pomtlb.cc
 #define DEBUG_MAGIC_SERVER          DEBUG_NONE  /* 0, 1 or 2 */
 #define DEBUG_TRACE_THREAD          DEBUG_NONE  /* 0, 1 or 2 */
 

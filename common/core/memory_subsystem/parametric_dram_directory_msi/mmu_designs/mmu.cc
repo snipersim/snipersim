@@ -844,8 +844,39 @@ namespace ParametricDramDirectoryMSI
 
 
 
-        // Only perform PTW on TLB miss
+        // ----------------------------------------------------------------
+        // A translation level between the TLBs and the walker (the POM-TLB
+        // MMU's in-memory TLB): asked on a TLB miss, before a walker is
+        // taken.  Its lookup is paid for whether it hits or not; on a hit
+        // there is no walk, and the translation is installed in the TLBs
+        // below as a walked one would be.  The baseline has no such level:
+        // the hook answers false at zero cost.
+        // ----------------------------------------------------------------
+        SubsecondTime beyond_tlb_latency = SubsecondTime::Zero();
+        bool beyond_tlb_hit = false;
         if (!hit)
+        {
+            IntPtr beyond_ppn = 0;
+            int beyond_page_size = 0;
+            beyond_tlb_hit = lookupBeyondTLBs(address, eip, instruction, lock, modeled, count,
+                                              beyond_tlb_latency, beyond_ppn, beyond_page_size);
+            if (beyond_tlb_latency > SubsecondTime::Zero())
+            {
+                SubsecondTime t_beyond = shmem_perf_model->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_beyond + beyond_tlb_latency);
+            }
+            if (beyond_tlb_hit)
+            {
+                ppn_result = beyond_ppn;
+                page_size = beyond_page_size;
+                translation_latency = charged_tlb_latency + beyond_tlb_latency;
+                mmu_log->log("Resolved beyond the TLBs: VA " + mmu_log->hex(address) +
+                             " -> PPN " + mmu_log->hex(ppn_result) + " (no PTW)");
+            }
+        }
+
+        // Only perform PTW on TLB miss
+        if (!hit && !beyond_tlb_hit)
         {   
             // Record time before PTW for latency calculation
             SubsecondTime time_for_pt = shmem_perf_model->getElapsedTime(ShmemPerfModel::_USER_THREAD);
@@ -886,7 +917,7 @@ namespace ParametricDramDirectoryMSI
                 total_walk_latency = ptw_result.latency;  // PTW latency (excludes fault handling)
                 caused_page_fault = ptw_result.page_fault;
                 performed_ptw = true;
-                translation_latency = charged_tlb_latency + total_walk_latency;
+                translation_latency = charged_tlb_latency + beyond_tlb_latency + total_walk_latency;
 
                 // Update statistics
                 if (count)
@@ -1015,6 +1046,9 @@ namespace ParametricDramDirectoryMSI
             // Extract results from PTW
             ppn_result = ptw_result.ppn;  // Physical Page Number
             page_size = ptw_result.page_size;    // Page size (12=4KB, 21=2MB)
+
+            // The level beyond the TLBs missed this one: hand it the walk's result
+            installBeyondTLBs(address, ppn_result, page_size, lock, count, instruction);
 
             mmu_log->debug("New time after charging PTW completion: " + 
                           std::to_string(shmem_perf_model->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS()) + "ns");
@@ -1162,7 +1196,7 @@ namespace ParametricDramDirectoryMSI
         // Note: PPN is always at 4KB granularity in our page table.
         // For huge pages, the offset includes the sub-page bits.
 
-        translation_latency = charged_tlb_latency + total_walk_latency;
+        translation_latency = charged_tlb_latency + beyond_tlb_latency + total_walk_latency;
         translation_stats.total_translation_latency += translation_latency;
         
         // ====================================================================
@@ -1234,14 +1268,13 @@ namespace ParametricDramDirectoryMSI
         // Track instruction vs data total translation latency
         if (count)
         {
-            SubsecondTime total_latency = charged_tlb_latency + total_walk_latency;
             if (instruction)
-                translation_stats.total_translation_latency_instruction += total_latency;
+                translation_stats.total_translation_latency_instruction += translation_latency;
             else
-                translation_stats.total_translation_latency_data += total_latency;
+                translation_stats.total_translation_latency_data += translation_latency;
         }
 
-        mmu_log->debug("Total translation latency: " + std::to_string((charged_tlb_latency + total_walk_latency).getNS()) + "ns");
+        mmu_log->debug("Total translation latency: " + std::to_string(translation_latency.getNS()) + "ns");
         mmu_log->debug("Total fault latency: " + std::to_string(total_fault_latency.getNS()) + "ns");
         mmu_log->section("Ending address translation for virtual address " + mmu_log->hex(address));
 

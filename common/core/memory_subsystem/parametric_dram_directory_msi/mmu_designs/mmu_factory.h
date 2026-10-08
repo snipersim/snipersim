@@ -7,6 +7,7 @@
 #include "mmu_hw_faults.h"
 #include "mmu_virt.h"
 #include "mmu_dmt.h"
+#include "mmu_pomtlb.h"
 #include "memory_manager_base.h"
 #include "config.hpp"
 
@@ -42,6 +43,10 @@ namespace ParametricDramDirectoryMSI
 			else if (type == "dmt") // Direct Memory Translation: a walk is one access of the leaf entry
 			{
 				return new MemoryManagementUnitDMT(core, memory_manager, shmem_perf_model, name, nested_mmu);
+			}
+			else if (type == "pomtlb") // Part-of-Memory TLB: an in-memory TLB between the L2 TLB and the walker
+			{
+				return new MemoryManagementUnitPOMTLB(core, memory_manager, shmem_perf_model, name, nested_mmu);
 			}
 			else
 			{
