@@ -3,6 +3,10 @@
 #include "one_bit_branch_predictor.h"
 #include "pentium_m_branch_predictor.h"
 #include "a53branchpredictor.h"
+#include "gshare_branch_predictor.h"
+#include "perceptron_branch_predictor.h"
+#include "hashed_perceptron_branch_predictor.h"
+#include "tage_branch_predictor.h"
 #if HAS_LIBTORCH
 #include "nn_branch_predictor.h"
 #endif
@@ -53,6 +57,32 @@ BranchPredictor* BranchPredictor::create(core_id_t core_id)
       }
       else if (type == "a53") {
           return new A53BranchPredictor("branch_predictor", core_id);
+      }
+      // Step 26 of the Virtuoso port series: ChampSim-style predictors.
+      // Their sizes are optional knobs with the published defaults.
+      else if (type == "gshare")
+      {
+         UInt32 history_length = cfg->hasKey("perf_model/branch_predictor/gshare/history_length")
+            ? cfg->getIntArray("perf_model/branch_predictor/gshare/history_length", core_id) : 14;
+         UInt32 table_size = cfg->hasKey("perf_model/branch_predictor/gshare/table_size")
+            ? cfg->getIntArray("perf_model/branch_predictor/gshare/table_size", core_id) : 16384;
+         return new GshareBranchPredictor("branch_predictor", core_id, history_length, table_size);
+      }
+      else if (type == "perceptron")
+      {
+         UInt32 history_length = cfg->hasKey("perf_model/branch_predictor/perceptron/history_length")
+            ? cfg->getIntArray("perf_model/branch_predictor/perceptron/history_length", core_id) : 24;
+         UInt32 num_perceptrons = cfg->hasKey("perf_model/branch_predictor/perceptron/num_perceptrons")
+            ? cfg->getIntArray("perf_model/branch_predictor/perceptron/num_perceptrons", core_id) : 163;
+         return new PerceptronBranchPredictor("branch_predictor", core_id, history_length, num_perceptrons);
+      }
+      else if (type == "hashed_perceptron")
+      {
+         return new HashedPerceptronBranchPredictor("branch_predictor", core_id);
+      }
+      else if (type == "tage")
+      {
+         return new TAGEBranchPredictor("branch_predictor", core_id);
       }
 #if HAS_LIBTORCH
       else if (type == "nn")

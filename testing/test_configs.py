@@ -357,6 +357,12 @@ FRAGMENT_REQUIRE_NONZERO = {
     'core_configs/rob_smt2': ('rob_timer.cpiSMT',),
     'core_configs/nn_branch_predictor': ('branch_predictor_alternate.num-correct',
                                          'branch_predictor_alternate.num-incorrect'),
+    # Step 26 of the Virtuoso port series: each predictor's own counter
+    # (branch_predictor.* is registered by every predictor alike).
+    'core_configs/gshare_branch_predictor': ('gshare.updates', 'branch_predictor.num-correct'),
+    'core_configs/perceptron_branch_predictor': ('perceptron.trainings', 'branch_predictor.num-correct'),
+    'core_configs/hashed_perceptron_branch_predictor': ('hashed_perceptron.trainings', 'branch_predictor.num-correct'),
+    'core_configs/tage_branch_predictor': ('tage.tagged_provided', 'tage.allocations', 'branch_predictor.num-correct'),
     'cache_configs/prefetcher_ghb': ('L2.prefetches', 'L2.hits-prefetch'),
     'cache_configs/replacement_mplru': ('L2.mplru-data-evicted',
                                         'L2.mplru-metadata-protected'),
