@@ -7,7 +7,7 @@ std::unordered_map<int, threadid_t>* FrontendSyscallModel<DRFrontend>::map_threa
 bool FrontendSyscallModel<DRFrontend>::event_pre_syscall(void *drcontext, int syscall_number)
 {
   // 1: Send a thread ID to the backend if not done yet :
-  int threadid = (*map_threadids)[dr_get_thread_id(drcontext)]; 
+  int threadid = DRFrontend::fe_tid(drcontext);
   setTID(threadid);
 
   // 2: Collect frontend-dependent syscall args 

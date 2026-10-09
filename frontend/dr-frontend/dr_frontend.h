@@ -108,6 +108,13 @@ class DRFrontend : public frontend::Frontend<DRFrontend>
     typedef struct {
       byte      *seg_base;
       instruction_t *inst_buf;
+      /// This thread's front-end thread id, assigned once in the thread-init
+      /// event.  Read from here, not from a shared table: DynamoRIO runs
+      /// thread-init events concurrently, in the new threads themselves.
+      threadid_t fe_tid;
+      /// Branch address -> taken target, for this thread's blocks only (the
+      /// code cache is thread-private, -thread_private in record-trace).
+      std::unordered_map<ptr_uint_t, ptr_uint_t> *taken;
     } per_thread_t;
     /// Allocated TLS slot offsets
     enum {
@@ -128,11 +135,14 @@ class DRFrontend : public frontend::Frontend<DRFrontend>
   // Variables
     /// Correspondance DR thread id / Frontend thread Id
     static std::unordered_map<int, threadid_t> map_threadids;
-    /// Maps with the address of a branch instruction and its taken target addresses.
-    /// Each thread has its own map, which is accessed with the Frontend thread Id.
-    static std::vector<std::unordered_map<ptr_uint_t,  ptr_uint_t>> map_taken_branch;
-    /// Number threads created so far
+    /// Number threads created so far; assigned under thread_lock
     static threadid_t next_threadid;
+    /// Serialises the thread-init and thread-exit bookkeeping
+    static void *thread_lock;
+  public:
+    /// The calling thread's front-end thread id
+    static threadid_t fe_tid(void *drcontext);
+  private:
     /// Start address of the application module
     static app_pc exe_start;
     /// Pointer to the linear address of the TLS base, can be obtained with dr_get_dr_segment_base 

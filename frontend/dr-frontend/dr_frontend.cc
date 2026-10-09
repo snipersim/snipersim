@@ -13,7 +13,12 @@
 
 // Static fields
 std::unordered_map<int, threadid_t> DRFrontend::map_threadids;
-std::vector<std::unordered_map<ptr_uint_t, ptr_uint_t>> DRFrontend::map_taken_branch;
+void *DRFrontend::thread_lock = NULL;
+
+threadid_t DRFrontend::fe_tid(void *drcontext)
+{
+  return ((per_thread_t *) drmgr_get_tls_field(drcontext, tls_idx))->fe_tid;
+}
 threadid_t DRFrontend::next_threadid = 0;
 app_pc DRFrontend::exe_start;
 int DRFrontend::tls_idx;
@@ -102,6 +107,7 @@ void DRFrontend::init()
   
   // Reserves a thread-local storage (tls) slot for every thread, returning the index of the slot
   tls_idx = drmgr_register_tls_field();
+  thread_lock = dr_mutex_create();
   DR_ASSERT(tls_idx != -1);
   // The TLS field provided by DR cannot be directly accessed from the code cache.
   // For better performance, we allocate raw TLS so that we can directly access and update it with a single instruction.
@@ -134,13 +140,17 @@ void DRFrontend::event_thread_init(void *drcontext)
   // put inst_buf to TLS as starting buf_ptr 
   BUF_PTR(data->seg_base) = data->inst_buf;
 
-  // get DR's internal threadid
-  int threadid_dr = dr_get_thread_id(drcontext);  
-  // add new thread to the mapping of Frontend <-> DR threadids
-  map_threadids[threadid_dr] = next_threadid;
-  // create a new map of branches taken or not taken
-  std::unordered_map<ptr_uint_t, ptr_uint_t> bt;
-  map_taken_branch.push_back(bt);
+  // Assign this thread's front-end id.  DynamoRIO runs thread-init events
+  // concurrently, in the new threads: unlocked, two threads could take the
+  // same id -- and share one stream, the second open closing the first's --
+  // while the shared table was being rehashed under other threads' lookups.
+  int threadid_dr = dr_get_thread_id(drcontext);
+  dr_mutex_lock(thread_lock);
+  threadid_t my_threadid = next_threadid++;
+  map_threadids[threadid_dr] = my_threadid;
+  dr_mutex_unlock(thread_lock);
+  data->fe_tid = my_threadid;
+  data->taken = new std::unordered_map<ptr_uint_t, ptr_uint_t>();
 
   // Call the generic frontend callback for a thread start, with the stack
   // pointer the thread starts with: clone() set it, and the generic layer
@@ -151,13 +161,11 @@ void DRFrontend::event_thread_init(void *drcontext)
   dr_mcontext_t mc = {sizeof(mc), DR_MC_CONTROL,};
   if (dr_get_mcontext(drcontext, &mc))
     start_sp = (uint64_t)mc.xsp;
-  m_threads->threadStart(next_threadid, start_sp);
+  m_threads->threadStart(my_threadid, start_sp);
 
-  // Update the thread counter
-  next_threadid++;
   if (m_options->get_verbose())
   {
-    std::cerr << "[Thread init end] Threadid: " << next_threadid << std::endl;
+    std::cerr << "[Thread init end] Threadid: " << my_threadid << std::endl;
   }
 }
 
@@ -165,10 +173,7 @@ void DRFrontend::event_thread_exit(void *drcontext)
 {
   process_instructions_buffer(drcontext); // dump remaining contents
   
-  // get DR's internal threadid
-  int threadid_dr = dr_get_thread_id(drcontext);  
-  // get thread id in the frontend of this DR threadid
-  threadid_t threadid_fe = map_threadids[threadid_dr];
+  threadid_t threadid_fe = fe_tid(drcontext);
   if (m_options->get_verbose())
   {
     std::cerr << "[Thread exit] Threadid: " << threadid_fe << std::endl;
@@ -182,6 +187,7 @@ void DRFrontend::event_thread_exit(void *drcontext)
   // free allocated memory for tls 
   per_thread_t *data = (per_thread_t *) drmgr_get_tls_field(drcontext, tls_idx);
   dr_raw_mem_free(data->inst_buf, MEM_BUF_SIZE);
+  delete data->taken;
   dr_thread_free(drcontext, data, sizeof(per_thread_t));
 
   m_threads->threadFinish(threadid_fe, 0);  // TODO are flags here relevant?
@@ -260,7 +266,8 @@ void DRFrontend::process_instructions_buffer(void *drcontext)
       // Check next instruction's address to see if the branch has been taken
       ptr_uint_t next_address = (ptr_uint_t)(instruction+1)->pc;
       // Compare with the recorded value for the taken path
-      taken = map_taken_branch[instruction->threadid][(ptr_uint_t)instruction->pc] == next_address;
+      auto t = data->taken->find((ptr_uint_t)instruction->pc);
+      taken = t != data->taken->end() && t->second == next_address;
     }
     
 /*    dr_fprintf(STDERR, "[%d] " PFX "(%d):%d[%d],b:%d,t:%d,p:%d,e:%d,a:%d,z:%d\n", instruction->threadid, (ptr_uint_t)instruction->pc, instruction->isize,
@@ -460,7 +467,7 @@ void DRFrontend::magic_clean_call()
   IF_X86
   (
     // Invoke the handleMagic callback with command (RAX) and arguments (RBX, RCX)
-    m_callbacks->handleMagic(map_threadids[dr_get_thread_id(drcontext)], 
+    m_callbacks->handleMagic(fe_tid(drcontext), 
                            reg_get_value(DR_REG_RAX, &mc), 
                            reg_get_value(DR_REG_RBX, &mc), 
                            reg_get_value(DR_REG_RCX, &mc) );
@@ -468,7 +475,7 @@ void DRFrontend::magic_clean_call()
   IF_AARCH64
   (
     // Invoke the handleMagic callback with command (X1) and arguments (X2, X3)
-    m_callbacks->handleMagic(map_threadids[dr_get_thread_id(drcontext)], 
+    m_callbacks->handleMagic(fe_tid(drcontext), 
                            reg_get_value(DR_REG_X1, &mc), 
                            reg_get_value(DR_REG_X2, &mc), 
                            reg_get_value(DR_REG_X3, &mc) );
@@ -478,7 +485,7 @@ void DRFrontend::magic_clean_call()
 void DRFrontend::invoke_endROI()
 {
   void * drcontext = dr_get_current_drcontext();
-  m_control->endROI(map_threadids[dr_get_thread_id(drcontext)]);
+  m_control->endROI(fe_tid(drcontext));
 }
 
 // instrumentation insertion -- after analysis
@@ -539,7 +546,7 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
     
       // Get parameters to pass to countInsns
       // 1: get threadid       
-      int threadid = map_threadids[dr_get_thread_id(drcontext)];  
+      int threadid = fe_tid(drcontext);  
       // 2: user_data with the number of instructions has been updated in event_bb_analysis
       num_instrs = (uint)(ptr_uint_t)user_data;
 
@@ -564,7 +571,7 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
       
       // Collect instruction's info to send to the backend using meta instructions
       // 1: current thread's id
-      int tid = map_threadids[dr_get_thread_id(drcontext)]; 
+      int tid = fe_tid(drcontext); 
       insert_save_int(drcontext, bb, instr, reg_ptr, reg_tmp, offsetof(instruction_t, threadid), tid);
 
       // 2: address of this instruction 
@@ -589,7 +596,7 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
       if (this_is_branch)
       {
         app_pc targ = instr_get_branch_target_pc(instr);
-        map_taken_branch[tid][(ptr_uint_t)address] = (ptr_uint_t)targ;
+        ((per_thread_t *) drmgr_get_tls_field(drcontext, tls_idx))->taken->insert_or_assign((ptr_uint_t)address, (ptr_uint_t)targ);
         // This part used to be implemented with a dedicated callback, but it is not supported for ARM
         //dr_insert_cbr_instrumentation_ex(drcontext, bb, instr, (void *)at_cbr, OPND_CREATE_INT32(tid)); 
       } 
