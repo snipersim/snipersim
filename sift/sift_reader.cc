@@ -370,10 +370,16 @@ bool Reader::Read(Instruction &inst)
    while(!m_seen_end)
    {
       Record rec;
+      errno = 0;        // so that a failure below reports this read, not an earlier call
       uint8_t byte = input->peek();
       if (input->fail())
       {
-         std::cerr << "[SIFT:" << m_id << "] Error: " << strerror(errno) << "\n";
+         if (errno)
+            std::cerr << "[SIFT:" << m_id << "] Error: " << strerror(errno) << "\n";
+         else
+            std::cerr << "[SIFT:" << m_id << "] stream ended without its End record: the recording"
+                      << " process exited or crashed without closing it, or dropped this thread's"
+                      << " channel (look for a [SIFT] or recorder message above)\n";
          return false;
       }
 

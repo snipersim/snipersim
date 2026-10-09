@@ -139,6 +139,8 @@ class cvofstream : public vostream
 {
    private:
       std::FILE *stream;
+      char *filename;
+      bool reported;      // a failed write has been reported (once per stream)
    public:
       cvofstream(const char * filename);
       virtual ~cvofstream();

@@ -62,7 +62,15 @@ def decode_wait_status(rc, tag = 'SNIPER'):
       print('[%s] SIGABRT indicates the process aborted (assertion failure or abort() call).' % tag)
     return 128 + signum  # Standard convention for signal-killed processes
   elif os.WIFEXITED(rc):
-    return os.WEXITSTATUS(rc)
+    code = os.WEXITSTATUS(rc)
+    # The recorder runs under bash -c, which reports a child killed by a
+    # signal as exit status 128 + the signal: name it, since a recorder that
+    # dies silently otherwise only shows as streams ending early.
+    if code > 128 and code < 128 + 65:
+      print('[%s] ERROR: exited with status %d: the process it ran was killed by signal %d' % (tag, code, code - 128))
+    elif code != 0:
+      print('[%s] exited with status %d' % (tag, code))
+    return code
   else:
     print('[%s] WARNING: Unknown process termination status: %d' % (tag, rc))
     return rc >> 8

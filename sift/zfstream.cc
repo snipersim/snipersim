@@ -226,6 +226,7 @@ static int open_writer_without_waiting(const char * filename)
 }
 
 cvofstream::cvofstream(const char * filename)
+	: stream(NULL), filename(strdup(filename)), reported(false)
 {
 	int fd = open_writer_without_waiting(filename);
 	this->stream = fd < 0 ? NULL : ::fdopen(fd, "wb");
@@ -239,14 +240,27 @@ cvofstream::~cvofstream()
 {
 	if (this->stream)
 		std::fclose(this->stream);
+	free(this->filename);
 }
+/* A write the simulator never receives ends the thread's stream short, and
+   the simulator can only report the end, not why: say why here, once. */
 void cvofstream::write(const char* s, std::streamsize n)
 {
-	std::fwrite(s, 1, n, this->stream);
+	if (std::fwrite(s, 1, n, this->stream) != (size_t)n && !this->reported)
+	{
+		this->reported = true;
+		std::cerr << "[SIFT] write to " << this->filename << " failed: " << strerror(errno)
+		          << " -- the simulator will see this thread's stream end early" << std::endl;
+	}
 }
 void cvofstream::flush()
 {
-	std::fflush(this->stream);
+	if (std::fflush(this->stream) != 0 && !this->reported)
+	{
+		this->reported = true;
+		std::cerr << "[SIFT] write to " << this->filename << " failed: " << strerror(errno)
+		          << " -- the simulator will see this thread's stream end early" << std::endl;
+	}
 }
 bool cvofstream::fail()
 {

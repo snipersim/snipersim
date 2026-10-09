@@ -1290,6 +1290,9 @@ void Sift::Writer::send_va2pa(uint64_t va)
    with no reader (SIGPIPE). */
 void Sift::Writer::channelLost()
 {
+   if (output || response)
+      std::cerr << "[SIFT:" << m_id << "] channel to the simulator lost (its response pipe failed, see above);"
+                << " this thread's stream ends here and the thread runs on natively" << std::endl;
    if (response)
    {
       delete response;
@@ -1305,8 +1308,10 @@ void Sift::Writer::channelLost()
 void Sift::Writer::frontEndStop()
 {
   // Front end has been shut-down, shut-down ourselves as well...
-  #if VERBOSE > 2
-  printf("[FRONT-END] Front-end being forcefully stopped.\n");
-  #endif
+  // exit() from here skips the front end's own exit handlers, so no other
+  // thread's stream is closed with its End record: say so, or the simulator's
+  // "stream ended without its End record" for those threads has no cause.
+  std::cerr << "[SIFT:" << m_id << "] the simulator asked the front end to stop (Shutdown);"
+            << " exiting the recording process now" << std::endl;
   exit(0);
 }
