@@ -11,11 +11,45 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sched.h>
+#include <stdio.h>
 
 // #define DEBUG
 
+static std::vector<int> getAvailableHostCpus()
+{
+   std::vector<int> cpus;
+   cpu_set_t available;
+
+   CPU_ZERO(&available);
+   if (sched_getaffinity(0, sizeof(available), &available) < 0)
+   {
+      perror("TraceManager: sched_getaffinity");
+      return cpus;
+   }
+
+   for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu)
+      if (CPU_ISSET(cpu, &available))
+         cpus.push_back(cpu);
+
+   return cpus;
+}
+
 TraceManager::TraceManager()
-   : m_monitor(new Monitor(this)), m_threads(0), m_num_threads_started(0), m_num_threads_running(0), m_done(0), m_stop_with_first_app(Sim()->getCfg()->getBool("traceinput/stop_with_first_app")), m_app_restart(Sim()->getCfg()->getBool("traceinput/restart_apps")), m_emulate_syscalls(Sim()->getCfg()->getBool("traceinput/emulate_syscalls")), m_num_apps(Sim()->getCfg()->getInt("traceinput/num_apps")), m_num_apps_nonfinish(m_num_apps), m_app_info(m_num_apps), m_tracefiles(m_num_apps), m_responsefiles(m_num_apps)
+   : m_host_cpus(getAvailableHostCpus())
+   , m_monitor(new Monitor(this))
+   , m_threads(0)
+   , m_num_threads_started(0)
+   , m_num_threads_running(0)
+   , m_done(0)
+   , m_stop_with_first_app(Sim()->getCfg()->getBool("traceinput/stop_with_first_app"))
+   , m_app_restart(Sim()->getCfg()->getBool("traceinput/restart_apps"))
+   , m_emulate_syscalls(Sim()->getCfg()->getBool("traceinput/emulate_syscalls"))
+   , m_num_apps(Sim()->getCfg()->getInt("traceinput/num_apps"))
+   , m_num_apps_nonfinish(m_num_apps)
+   , m_app_info(m_num_apps)
+   , m_tracefiles(m_num_apps)
+   , m_responsefiles(m_num_apps)
 {
    setupTraceFiles(0);
 }
