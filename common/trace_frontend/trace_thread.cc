@@ -40,6 +40,10 @@ static void pinTraceThreadToCPU(int thread_id)
 {
    const std::vector<int> &cpus = Sim()->getTraceManager()->getHostCpus();
 
+   // Leave the inherited CPU pool available to the Linux scheduler.
+   if (!Sim()->getCfg()->getBool("traceinput/pin_threads"))
+      return;
+
    if (cpus.empty())
       return;
 
@@ -1179,13 +1183,11 @@ void TraceThread::m_run_func_with_userpace_mimicos()
    String threadName = String("trace-") + itostr(m_thread->getId());
    SimSetThreadName(threadName.c_str());
 
-   // Assign this worker a CPU from the startup affinity mask.
+   // Host pinning is independent of simulated-core scheduling.
    pinTraceThreadToCPU(m_thread->getId());
 
-   // Print which host CPU this thread is running on
-   int host_cpu = sched_getcpu();
-   std::cout << "[TraceThread] Thread " << m_thread->getId()
-             << " (app " << m_app_id << ") started on host CPU " << host_cpu << std::endl;
+   fprintf(stdout, "[TraceThread] Thread %d (app %d) started on host CPU %d, host TID %ld\n",
+           m_thread->getId(), m_app_id, sched_getcpu(), syscall(SYS_gettid));
 
 #if DEBUG_TRACE_THREAD >= DEBUG_DETAILED
    std::cout << "[TRACE:" << m_thread->getId() << "] -- " << threadName.c_str() << " --" << std::endl;
@@ -1550,13 +1552,11 @@ void TraceThread::m_run_func_default()
    String threadName = String("trace-") + itostr(m_thread->getId());
    SimSetThreadName(threadName.c_str());
 
-   // Assign this worker a CPU from the startup affinity mask.
+   // Host pinning is independent of simulated-core scheduling.
    pinTraceThreadToCPU(m_thread->getId());
 
-   // Print which host CPU this thread is running on
-   int host_cpu = sched_getcpu();
-   std::cout << "[TraceThread] Thread " << m_thread->getId()
-             << " (app " << m_app_id << ") started on host CPU " << host_cpu << std::endl;
+   fprintf(stdout, "[TraceThread] Thread %d (app %d) started on host CPU %d, host TID %ld\n",
+           m_thread->getId(), m_app_id, sched_getcpu(), syscall(SYS_gettid));
 
    Sim()->getThreadManager()->onThreadStart(m_thread->getId(), m_time_start);
 
