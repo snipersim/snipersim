@@ -25,6 +25,8 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sched.h>
+#include <errno.h>
+#include <stdio.h>
 
 #include <x86_decoder.h>  // TODO remove when the decode function in microop perf model is adapted
 
@@ -32,34 +34,23 @@
 #include <sstream>
 #include <vector>
 
-// ---------------------------------------------------------------------------
-// Pin calling thread to a distinct host CPU chosen from the process's
-// available set (typically constrained by SLURM's cgroup).  Thread-safe:
-// uses a static atomic counter so each caller gets a different CPU.
-// ---------------------------------------------------------------------------
+// New workers inherit their creator's affinity. Allocate from the startup
+// CPU pool rather than a mask already narrowed by another trace worker.
 static void pinTraceThreadToCPU(int thread_id)
 {
-   cpu_set_t available;
-   CPU_ZERO(&available);
-   if (sched_getaffinity(0, sizeof(available), &available) != 0)
-      return;  // cannot query – leave scheduling to the OS
-
-   // Collect the list of CPUs we are allowed to use
-   std::vector<int> cpus;
-   for (int c = 0; c < CPU_SETSIZE; ++c)
-      if (CPU_ISSET(c, &available))
-         cpus.push_back(c);
+   const std::vector<int> &cpus = Sim()->getTraceManager()->getHostCpus();
 
    if (cpus.empty())
       return;
 
-   // Pick a CPU using the thread id (wraps if more threads than CPUs)
+   // Reuse CPUs when there are more workers than available CPUs.
    int target = cpus[thread_id % cpus.size()];
-
    cpu_set_t mask;
    CPU_ZERO(&mask);
    CPU_SET(target, &mask);
-   sched_setaffinity(0, sizeof(mask), &mask);
+   if (sched_setaffinity(0, sizeof(mask), &mask) < 0)
+      fprintf(stderr, "[TraceThread] Cannot pin thread %d to host CPU %d: errno=%d\n",
+              thread_id, target, errno);
 }
 
 int TraceThread::m_isa = 0;
@@ -1188,7 +1179,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
    String threadName = String("trace-") + itostr(m_thread->getId());
    SimSetThreadName(threadName.c_str());
 
-   // Pin this trace thread to a distinct host CPU to avoid contention
+   // Assign this worker a CPU from the startup affinity mask.
    pinTraceThreadToCPU(m_thread->getId());
 
    // Print which host CPU this thread is running on
@@ -1559,7 +1550,7 @@ void TraceThread::m_run_func_default()
    String threadName = String("trace-") + itostr(m_thread->getId());
    SimSetThreadName(threadName.c_str());
 
-   // Pin this trace thread to a distinct host CPU to avoid contention
+   // Assign this worker a CPU from the startup affinity mask.
    pinTraceThreadToCPU(m_thread->getId());
 
    // Print which host CPU this thread is running on

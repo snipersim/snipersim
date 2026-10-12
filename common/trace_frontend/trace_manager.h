@@ -37,6 +37,8 @@ class TraceManager
          UInt32 num_runs;           //< Number of completed runs
       };
 
+      // Captured before trace workers narrow their inherited affinity.
+      const std::vector<int> m_host_cpus;
       Monitor *m_monitor;
       std::vector<TraceThread *> m_threads;
       UInt32 m_num_threads_started;
@@ -66,6 +68,7 @@ class TraceManager
       TraceManager();
       ~TraceManager();
       void init();
+      const std::vector<int> &getHostCpus() const { return m_host_cpus; }
       void start();
       void stop();
       void mark_done();
