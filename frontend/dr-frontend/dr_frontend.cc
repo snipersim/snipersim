@@ -158,7 +158,9 @@ void DRFrontend::event_thread_init(void *drcontext)
   // out the application context in the init event of every thread but the
   // first, which has no join word anyway.
   uint64_t start_sp = 0;
-  dr_mcontext_t mc = {sizeof(mc), DR_MC_CONTROL,};
+  dr_mcontext_t mc;
+  mc.size = sizeof(mc);
+  mc.flags = DR_MC_CONTROL;
   if (dr_get_mcontext(drcontext, &mc))
     start_sp = (uint64_t)mc.xsp;
   m_threads->threadStart(my_threadid, start_sp);
@@ -209,7 +211,12 @@ void DRFrontend::event_exit(void)
       !drmgr_unregister_bb_insertion_event(event_app_instruction) ||
       drreg_exit() != DRREG_SUCCESS)
     DR_ASSERT(false);
-    
+
+  // Debug DynamoRIO reports a client leak, and exits with status 255, for
+  // anything still allocated here
+  dr_mutex_destroy(thread_lock);
+  thread_lock = NULL;
+
   drmgr_exit();
   if (m_options->get_verbose())
   {
