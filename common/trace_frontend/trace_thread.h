@@ -66,8 +66,12 @@ class TraceThread : public Runnable
       bool m_appid_from_coreid;
       uint8_t m_address_randomization_table[256];
       bool m_stop;
-      std::unordered_map<IntPtr, Instruction *> m_icache;
-      std::unordered_map<IntPtr, const dl::DecodedInst *> m_decoder_cache;
+      // Keyed by the reader's static instruction, not its address: code that
+      // is rewritten in place gives a new static instruction at the same
+      // address, and so does another reader (the kernel's and the
+      // application's streams under userspace MimicOS) on this thread.
+      std::unordered_map<const Sift::StaticInstruction *, Instruction *> m_icache;
+      std::unordered_map<const Sift::StaticInstruction *, const dl::DecodedInst *> m_decoder_cache;
       
       // ChampSim instruction cache: key is (PC, is_branch, num_src_regs, num_dest_regs, num_loads, num_stores)
       // This allows reusing instructions when the same PC has the same operand signature

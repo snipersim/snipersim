@@ -400,10 +400,35 @@ bool Reader::Read(Instruction &inst)
             {
                assert(rec.Other.size == sizeof(uint64_t) + ICACHE_SIZE);
                uint64_t address;
-               uint8_t *bytes = new uint8_t[ICACHE_SIZE];
                input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
-               input->read(reinterpret_cast<char*>(bytes), ICACHE_SIZE);
-               icache[address] = bytes;
+               auto known = icache.find(address);
+               if (known == icache.end())
+               {
+                  uint8_t *bytes = new uint8_t[ICACHE_SIZE];
+                  input->read(reinterpret_cast<char*>(bytes), ICACHE_SIZE);
+                  icache[address] = bytes;
+               }
+               else
+               {
+                  // The page again: its code changed after it was first sent
+                  // (CodeTracker in the writer).  Take the new bytes, and drop
+                  // everything decoded from the old ones -- every instruction
+                  // starting in the page, and any from the previous page that
+                  // runs into it.
+                  input->read(reinterpret_cast<char*>(const_cast<uint8_t*>(known->second)), ICACHE_SIZE);
+                  // (15: the longest an instruction from the previous page can reach in)
+                  for (uint64_t a = address >= 15 ? address - 15 : 0; a < address + ICACHE_SIZE; ++a)
+                  {
+                     auto s = scache.find(a);
+                     if (s != scache.end() && s->second->addr + s->second->size > address)
+                     {
+                        const_cast<StaticInstruction*>(s->second)->dead = true;
+                        scache.erase(s);
+                     }
+                  }
+                  if (m_last_sinst && m_last_sinst->dead)
+                     m_last_sinst = NULL;
+               }
                break;
             }
 
@@ -422,7 +447,14 @@ bool Reader::Read(Instruction &inst)
                // Dropped rather than rewritten -- the old entry may still be
                // referenced as some other instruction's "next", and that
                // shortcut is disabled for these traces for exactly this reason.
-               scache.erase(address);
+               {
+                  auto s = scache.find(address);
+                  if (s != scache.end())
+                  {
+                     const_cast<StaticInstruction*>(s->second)->dead = true;
+                     scache.erase(s);
+                  }
+               }
                m_last_sinst = NULL;
 
                size_t size_left = size;
@@ -1027,7 +1059,8 @@ const StaticInstruction* Reader::getStaticInstruction(uint64_t addr, uint8_t siz
 
    // Lookup in a large unordered_map is quite expensive if we have to do this for every dynamic instruction
    // Therefore, keep a pointer to the probable next instruction in each (static) instruction
-   if (!m_code_may_change && m_last_sinst && m_last_sinst->next && m_last_sinst->next->addr == addr)
+   if (!m_code_may_change && m_last_sinst && m_last_sinst->next && m_last_sinst->next->addr == addr
+       && !m_last_sinst->next->dead)
    {
       sinst = m_last_sinst->next;
    }
@@ -1041,7 +1074,8 @@ const StaticInstruction* Reader::getStaticInstruction(uint64_t addr, uint8_t siz
       scache[addr] = sinst;
    }
 
-   if (m_last_sinst && m_last_sinst->next == NULL)
+   // Link, or re-link when the old successor's code was replaced
+   if (m_last_sinst && (m_last_sinst->next == NULL || m_last_sinst->next->dead))
    {
       ((StaticInstruction*)m_last_sinst)->next = sinst;
    }

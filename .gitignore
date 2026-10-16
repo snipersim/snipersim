@@ -100,6 +100,13 @@ test/pinplay/fft.c
 test/dr-frontend/fft.c
 test/dr-threads/threaded.c
 test/dr-threads/threaded
+test/smc-rewrite/smc_rewrite
+test/smc-rewrite/trace*
+test/smc-rewrite/record.log
+test/dr-smc-rewrite/smc_rewrite
+test/dr-smc-rewrite/smc_rewrite.c
+test/dr-smc-rewrite/trace*
+test/dr-smc-rewrite/record.log
 test/api/api
 test/aso/fft
 test/demo-scheduling/fft

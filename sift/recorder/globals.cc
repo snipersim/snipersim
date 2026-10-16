@@ -9,7 +9,8 @@ KNOB<UINT64> KnobDetailedTarget(KNOB_MODE_WRITEONCE, "pintool", "sniper:d", "0",
 KNOB<UINT64> KnobUseResponseFiles(KNOB_MODE_WRITEONCE, "pintool", "sniper:r", "0", "use response files (required for multithreaded applications or when emulating syscalls, default = 0)");
 KNOB<UINT64> KnobEmulateSyscalls(KNOB_MODE_WRITEONCE, "pintool", "sniper:e", "0", "emulate syscalls (required for multithreaded applications, default = 0)");
 KNOB<BOOL>   KnobSendPhysicalAddresses(KNOB_MODE_WRITEONCE, "pintool", "sniper:pa", "0", "send logical to physical address mapping");
-KNOB<BOOL>   KnobSmcSupport(KNOB_MODE_WRITEONCE, "pintool", "sniper:smc", "0", "support self-modifying code: send each instruction's bytes whenever they change");
+KNOB<BOOL>   KnobSmcSupport(KNOB_MODE_WRITEONCE, "pintool", "sniper:smc", "0", "strict self-modifying code support: compare every instruction's bytes with those last sent");
+KNOB<BOOL>   KnobSmcTrack(KNOB_MODE_WRITEONCE, "pintool", "sniper:smc-track", "1", "track code rewritten in place, detected when Pin re-translates it, and send its pages again");
 KNOB<UINT64> KnobFlowControl(KNOB_MODE_WRITEONCE, "pintool", "sniper:flow", "1000", "number of instructions to send before syncing up");
 KNOB<UINT64> KnobFlowControlFF(KNOB_MODE_WRITEONCE, "pintool", "sniper:flowff", "100000", "number of instructions to batch up before sending instruction counts in fast-forward mode");
 KNOB<INT64> KnobSiftAppId(KNOB_MODE_WRITEONCE, "pintool", "sniper:s", "0", "sift app id (default = 0)");

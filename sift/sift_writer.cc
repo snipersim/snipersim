@@ -48,6 +48,98 @@ __sift_assert_fail(__const char *__assertion, __const char *__file,
 }
 
 
+// ---------------------------------------------------------------------------
+// CodeTracker (see sift_writer.h).  A spin lock rather than std::mutex: this
+// file is also built against PinCRT, whose thread support is not the host's,
+// and every operation under the lock is rare (translation, page sends).
+namespace
+{
+   std::atomic_flag s_code_lock = ATOMIC_FLAG_INIT;
+   struct CodeLock
+   {
+      CodeLock() { while (s_code_lock.test_and_set(std::memory_order_acquire)) ; }
+      ~CodeLock() { s_code_lock.clear(std::memory_order_release); }
+   };
+   // The bytes of each code page as last sent (or since observed to change)
+   std::unordered_map<uint64_t, std::array<uint8_t, Sift::ICACHE_SIZE> > *s_code_pages = NULL;
+   // Pages logged as changed, in order; s_changes is its length
+   std::vector<uint64_t> *s_code_log = NULL;
+
+   void codeInit()
+   {
+      if (!s_code_pages)
+      {
+         s_code_pages = new std::unordered_map<uint64_t, std::array<uint8_t, Sift::ICACHE_SIZE> >();
+         s_code_log = new std::vector<uint64_t>();
+      }
+   }
+}
+
+bool Sift::CodeTracker::s_enabled = false;
+std::atomic<uint64_t> Sift::CodeTracker::s_changes(0);
+
+void Sift::CodeTracker::observe(uint64_t addr, const uint8_t *bytes, uint32_t size)
+{
+   if (!s_enabled || size == 0)
+      return;
+   CodeLock lock;
+   codeInit();
+   uint64_t a = addr, end = addr + size;
+   while (a < end)
+   {
+      uint64_t base = a & ICACHE_PAGE_MASK;
+      uint64_t offset = a & ICACHE_OFFSET_MASK;
+      uint64_t n = std::min<uint64_t>(end - a, ICACHE_SIZE - offset);
+      auto it = s_code_pages->find(base);
+      // A page nobody has sent yet needs nothing: it will be sent as it is
+      if (it != s_code_pages->end() && memcmp(&it->second[offset], bytes + (a - addr), n) != 0)
+      {
+         // Keep the snapshot current, so that the writers' re-sends of this
+         // page compare equal and do not log it a second time
+         memcpy(&it->second[offset], bytes + (a - addr), n);
+         s_code_log->push_back(base);
+         s_changes.store(s_code_log->size(), std::memory_order_release);
+      }
+      a += n;
+   }
+}
+
+void Sift::CodeTracker::changedPages(uint64_t from, uint64_t to, std::vector<uint64_t> &pages)
+{
+   CodeLock lock;
+   for (uint64_t i = from; i < to && s_code_log && i < s_code_log->size(); ++i)
+      pages.push_back((*s_code_log)[i]);
+}
+
+uint64_t Sift::CodeTracker::pageSent(uint64_t base, const uint8_t *bytes, uint64_t seen)
+{
+   CodeLock lock;
+   codeInit();
+   auto it = s_code_pages->find(base);
+   if (it == s_code_pages->end())
+   {
+      std::array<uint8_t, ICACHE_SIZE> &page = (*s_code_pages)[base];
+      memcpy(page.data(), bytes, ICACHE_SIZE);
+      return seen;
+   }
+   if (memcmp(it->second.data(), bytes, ICACHE_SIZE) == 0)
+      return seen;
+   // Changed since another writer sent it, and not yet observed: the other
+   // writers' copies are stale
+   memcpy(it->second.data(), bytes, ICACHE_SIZE);
+   bool caught_up = (s_code_log->size() == seen);
+   s_code_log->push_back(base);
+   s_changes.store(s_code_log->size(), std::memory_order_release);
+   return caught_up ? seen + 1 : seen;
+}
+
+uint64_t Sift::CodeTracker::pagesTracked()
+{
+   CodeLock lock;
+   return s_code_pages ? s_code_pages->size() : 0;
+}
+// ---------------------------------------------------------------------------
+
 Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn, bool send_va2pa_mapping, GetCodeFunc2 getCodeFunc2, void* getCodeFunc2Data)
    : response(NULL)
    , getCodeFunc(getCodeFunc)
@@ -65,6 +157,8 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    , m_id(id)
    , m_requires_icache_per_insn(requires_icache_per_insn)
    , m_send_va2pa_mapping(send_va2pa_mapping)
+   // A new writer has sent nothing yet, so no earlier change concerns it
+   , m_code_changes_seen(CodeTracker::changes())
 {
    memset(hsize, 0, sizeof(hsize));
    memset(haddr, 0, sizeof(haddr));
@@ -256,6 +350,22 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
    }
    else
    {
+      // Code changed since pages were sent (CodeTracker): forget the changed
+      // pages, so that they are sent again below with their current bytes.
+      // The common case is one relaxed comparison per instruction.
+      if (CodeTracker::enabled())
+      {
+         uint64_t changes = CodeTracker::changes();
+         if (changes != m_code_changes_seen)
+         {
+            std::vector<uint64_t> pages;
+            CodeTracker::changedPages(m_code_changes_seen, changes, pages);
+            for (uint64_t page : pages)
+               icache.erase(page);
+            m_code_changes_seen = changes;
+         }
+      }
+
       // Send ICACHE record?
       for(uint64_t base_addr = addr & ICACHE_PAGE_MASK; base_addr <= ((addr + size - 1) & ICACHE_PAGE_MASK); base_addr += ICACHE_SIZE)
       {
@@ -280,6 +390,8 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
             output->write(reinterpret_cast<char*>(buffer), ICACHE_SIZE);
 
             icache[base_addr] = true;
+            if (CodeTracker::enabled())
+               m_code_changes_seen = CodeTracker::pageSent(base_addr, buffer, m_code_changes_seen);
          }
       }
    }

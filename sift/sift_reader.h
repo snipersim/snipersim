@@ -39,6 +39,10 @@ namespace Sift
          uint8_t size;
          uint8_t data[16];
          const StaticInstruction *next;
+         // The code this was decoded from has since been replaced: the object
+         // is kept (others may still point to it as their "next") but is never
+         // handed out again.
+         bool dead = false;
    };
 
    // Dynamic information

@@ -5,12 +5,16 @@ $(TARGET): $(TARGET).o
 	$(CC) $(TARGET).o -lm $(SNIPER_LDFLAGS) -o $(TARGET)
 
 run_$(TARGET):
-	# --smc sets both halves: the simulator knob and the recorder's
-	# per-instruction icache.  The config knob alone is not enough --
-	# without the recorder's, the trace carries each instruction's
-	# original bytes and nothing else, so the rewritten code never
-	# reaches the simulator.
+	# The default: code rewritten in place is noticed when Pin
+	# re-translates it, and its page is sent to the simulator again.
+	../../run-sniper -n 1 -c gainestown -- ./smc
+
+# The strict mode: every instruction is checked against the bytes last
+# sent (slower; for code the default cannot see change).
+run-strict: smc
 	../../run-sniper --smc -n 1 -c gainestown -- ./smc
 
+# Without tracking, the trace carries the original bytes of the rewritten
+# code and the program goes wrong in simulation.
 run-fail: smc
-	../../run-sniper -n 1 -c gainestown -- ./smc
+	../../run-sniper --no-smc -n 1 -c gainestown -- ./smc

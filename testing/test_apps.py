@@ -166,6 +166,27 @@ def smc_result(out, rc):
     return True, 'rewritten code executed'
 
 
+def smc_rewrite_check(out, rc):
+    """Code rewritten in place (test/smc-rewrite): the simulation completes
+    with every run returning its own value, and the trace carries each run's
+    own bytes at the rewritten address -- A, then B (a different first
+    instruction, of a different length), then A again.  Before code changes
+    were tracked, the trace repeated A's bytes for all three."""
+    for tag, want in (('A first', 1), ('B rewritten', 2), ('A again', 1)):
+        m = re.search(r'%s pc=0x[0-9a-f]+ returned=(-?\d+)' % tag, out)
+        if not m:
+            return False, 'no %r line from the simulated run' % tag
+        if int(m.group(1)) != want:
+            return False, '%s returned %s, expected %d' % (tag, m.group(1), want)
+    traced = re.findall(r'^traced [0-9a-f]+ ((?:[0-9a-f]{2} ?)+)', out, re.M)
+    firsts = [t.split()[:2] for t in traced]
+    want = [['b8', '01'], ['31', 'c0'], ['b8', '01']]
+    if firsts != want:
+        return False, 'traced bytes at the rewritten address %s, expected %s' % (
+            [' '.join(f) for f in firsts], [' '.join(w) for w in want])
+    return True, 'simulated; traced A, B, A at one address: %s' % ', '.join(' '.join(f) for f in firsts)
+
+
 def prints(needle, note):
     def check(out, rc, needle=needle, note=note):
         return (True, note) if needle in out else (False, 'missing %r' % needle)
@@ -201,6 +222,8 @@ CASES = {
     'mpi':             (mpi_pi, 'mpich'),
     'mpi-omp':         (hybrid_sum, 'mpich'),
     'smc':             (smc_result, None),
+    'smc-rewrite':     (smc_rewrite_check, None),
+    'dr-smc-rewrite':  (smc_rewrite_check, 'dynamorio'),
     'fork':            (prints('Hello world', 'forked child ran'), None),
     'spinloop':        (prints('done', 'threads finished'), None),
     'true':            (exits_zero, None),

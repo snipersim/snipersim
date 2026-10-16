@@ -327,6 +327,10 @@ int main(int argc, char **argv)
 
    initThreads();
    initRecorderControl();
+   // Code rewritten in place (JITs, loaders, self-modifying code) is tracked
+   // by default; strict mode (-sniper:smc) compares every instruction instead
+   Sift::CodeTracker::enable(KnobSmcTrack.Value() && !KnobSmcSupport.Value());
+
    initRecorderBase();
    initEmulation();
 

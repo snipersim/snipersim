@@ -40,6 +40,7 @@ template <typename T> class OptionsBase
   bool get_ssh();
   uint64_t get_stop_address();
   bool get_track_vma();
+  bool get_smc_track();
 
   /// Set protected fields
   void set_current_mode(Sift::Mode mode);
@@ -100,6 +101,9 @@ template <typename T> class OptionsBase
   /// Record the process's memory map (/proc/self/maps) to <output>.vma while
   /// tracing in detail, as the SIFT recorder's -sniper:vma does
   bool track_vma;
+  /// Track code rewritten in place (Sift::CodeTracker): seen when the
+  /// instrumentation engine re-translates it, its pages are sent again
+  bool smc_track = true;
 };
 
 // TODO Change name from options to config or something similar

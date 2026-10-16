@@ -274,6 +274,16 @@ static VOID traceCallback(TRACE trace, void *v)
    {
       for (INS ins = BBL_InsHead(bbl);; ins = INS_Next(ins))
       {
+         // Pin re-translates code that has been written since it was last
+         // translated: tell the writers when the bytes differ from the ones
+         // they sent (Sift::CodeTracker).  Translation time only.
+         if (Sift::CodeTracker::enabled())
+         {
+            uint8_t bytes[16];
+            size_t got = PIN_SafeCopy(bytes, reinterpret_cast<void*>(INS_Address(ins)), INS_Size(ins));
+            Sift::CodeTracker::observe(INS_Address(ins), bytes, got);
+         }
+
          // Simics-style magic instruction: xchg bx, bx
          if (INS_IsXchg(ins) && INS_OperandReg(ins, 0) == REG_BX && INS_OperandReg(ins, 1) == REG_BX)
          {

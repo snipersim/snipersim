@@ -76,6 +76,9 @@ uint64_t    g_ndropped_lines = 0;  /* cache lines an instruction touched beyond 
  * them), otherwise emulated from the illegal-instruction path with a loop
  * exit per instruction.  opt_claim=0 forces the older path for comparison. */
 bool        opt_claim = true;
+/* Code rewritten in place (Sift::CodeTracker): QEMU re-translates code after
+ * it is written, and tb_trans reports the new bytes.  smc=0 turns it off. */
+bool        opt_smc = true;
 bool        opt_trace = true;      /* trace=0: no SIFT output and no tracing callbacks, only the plugin models (a functional run) */
 uint64_t    g_exec_claimed = 0, g_exec_trapped = 0;
 std::mutex  g_claim_lock;
@@ -901,6 +904,8 @@ void tb_trans(SNP_TB_TRANS_ARGS)
        * execution of the block. */
       uint8_t bytes[XED_MAX_INSTRUCTION_BYTES] = {0};
       size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(bytes));
+      if (got)
+         Sift::CodeTracker::observe(ii->vaddr, bytes, (uint32_t)got);
       if (g_arch == ARCH_RISCV)
       {
          ii->is_branch = got ? riscv_is_conditional_branch(bytes, got) : false;
@@ -1022,6 +1027,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
          }
          ame::square_n = n;
       }
+      else if (key == "smc")      opt_smc = val != "0" && val != "off" && val != "false";     /* smc=0: send each code page once, as before */
       else if (key == "claim")    opt_claim = val != "0" && val != "off" && val != "false";   /* claim=0: emulate via the exception path even when the QEMU can claim */
       else if (key == "trace")    opt_trace = val != "0" && val != "off" && val != "false";   /* trace=0: a functional run, the models only */
       else if (key == "verbose")  opt_verbose = true;
@@ -1034,6 +1040,8 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
          return -1;
       }
    }
+
+   Sift::CodeTracker::enable(opt_smc);
 
    if (opt_response && in_system_mode)
    {

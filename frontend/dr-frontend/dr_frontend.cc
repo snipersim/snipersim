@@ -10,6 +10,7 @@
 #include "dr_fe_lock.h"
 #include "dr_fe_control.h"
 #include "dr_fe_threads.h"
+#include "sift_writer.h"
 
 // Static fields
 std::unordered_map<int, threadid_t> DRFrontend::map_threadids;
@@ -75,6 +76,9 @@ void DRFrontend::init()
     DR_ASSERT(false);
     
   dr_set_client_name("Sniper's frontend based on DynamoRIO", "http://snipersim.org");
+
+  // Code rewritten in place is tracked unless -smc 0 (Sift::CodeTracker)
+  Sift::CodeTracker::enable(m_options->get_smc_track());
   
   // Get main module address
   module_data_t *exe = dr_get_main_module();
@@ -230,7 +234,24 @@ dr_emit_flags_t DRFrontend::event_bb_analysis(void *drcontext, void *tag, instrl
                   bool for_trace, bool translating, void **user_data)
 {
     uint num_instrs = 0;
-    
+
+    // DynamoRIO builds a new block for code written since it was last
+    // translated: tell the writers when the bytes differ from the ones they
+    // sent (Sift::CodeTracker).  Block-building time only; traces are made
+    // of blocks already seen, and translating only recreates state.
+    if (Sift::CodeTracker::enabled() && !for_trace && !translating)
+    {
+      for (instr_t *instr = instrlist_first_app(bb); instr != NULL; instr = instr_get_next_app(instr))
+      {
+        app_pc pc = instr_get_app_pc(instr);
+        int len = instr_length(drcontext, instr);
+        uint8_t bytes[16];
+        size_t got = 0;
+        if (pc != NULL && len > 0 && len <= 16 && dr_safe_read(pc, len, bytes, &got))
+          Sift::CodeTracker::observe((uint64_t)pc, bytes, (uint32_t)got);
+      }
+    }
+
     // Only count instructions if we are not in detailed simulation
     if (m_control->get_any_thread_in_detail())
       return DR_EMIT_DEFAULT;

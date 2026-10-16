@@ -122,6 +122,11 @@ template <typename T> inline bool OptionsBase<T>::get_ssh()
   return ssh;
 }
 
+template <typename T> inline bool OptionsBase<T>::get_smc_track()
+{
+  return smc_track;
+}
+
 template <typename T> inline bool OptionsBase<T>::get_track_vma()
 {
   return track_vma;

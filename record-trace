@@ -10,7 +10,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print('Collect SIFT instruction trace')
   print('Usage:')
-  print('  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--maxthreads] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0])
+  print('  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--smc|--no-smc] [--maxthreads] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0])
   sys.exit(2)
 
 # From http://stackoverflow.com/questions/6767649/how-to-get-process-status-using-pid
@@ -60,9 +60,12 @@ if not sys.argv[1:]:
 
 enable_pacsim = False
 enable_smc = False
+# Code rewritten in place is tracked by default (Sift::CodeTracker); --no-smc
+# turns that off, --smc selects the strict per-instruction mode instead
+track_smc = True
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "sde-arch=", "pacsim", "smc" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "sde-arch=", "pacsim", "smc", "no-smc" ])
 except getopt.GetoptError as e:
   # print help information and exit:
   print(e)
@@ -141,6 +144,8 @@ for o, a in opts:
     enable_pacsim = True
   if o == '--smc':
     enable_smc = True
+  if o == '--no-smc':
+    track_smc = False
   if o == '--vma':
     log_vma = True
 
@@ -241,10 +246,13 @@ def has_knob(tool_path, knob):
 
 
 def smc_knob():
-  # Self-modifying code: the recorder must re-send an instruction's bytes when
-  # they change, which it only does in per-instruction icache mode.  Emitted
-  # only when asked for, since it makes every instruction carry its bytes.
-  return ' -sniper:smc 1' if enable_smc else ''
+  # Code rewritten in place.  By default the recorder notices it when Pin
+  # re-translates the code and sends the changed pages again; --smc is the
+  # strict mode, where every instruction carries its bytes (slower), and
+  # --no-smc sends each code page once, as releases before 9.0 did.
+  if enable_smc:
+    return ' -sniper:smc 1'
+  return '' if track_smc else ' -sniper:smc-track 0'
 
 
 def pacsim_knob(tool_path):
@@ -304,6 +312,10 @@ if frontend:
     DR_libpath = 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%(dynamorio_home)s/lib64/debug' % locals()
     dr_args = '-thread_private'
     bool_args = ''
+    # Code rewritten in place: tracked unless --no-smc.  The DynamoRIO front
+    # end has no strict per-instruction mode; --smc gets the tracking.
+    if not track_smc:
+       bool_args += '-smc 0 '
     if value_pa == 1:
        bool_args += '-pa '
     if verbose:

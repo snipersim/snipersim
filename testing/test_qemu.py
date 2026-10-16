@@ -309,6 +309,55 @@ def riscv_prerequisites(workdir):
     return {'qemu': qemu, 'guest': guest}, None
 
 
+def case_riscv_smc_rewrite(p, g, workdir):
+    """Code rewritten in place is traced with its new bytes, and simulates.
+
+    The guest runs code A, rewrites the same address with compressed code B,
+    then with A again (rv-smc-rewrite.c).  The plugin reports each
+    re-translation to the trace writer (Sift::CodeTracker), which sends the
+    page again; before that, the trace carried A's bytes for all three runs.
+    smc=0 turns the tracking off and must give the old, stale trace."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    guest = os.path.join(workdir, 'rv-smc-rewrite')
+    if not os.path.isfile(guest):
+        rc, out = run([os.environ['SNIPER_RISCV_CC'], '--target=riscv64-linux-gnu', '-march=rv64gc',
+                       '-mabi=lp64d', '-O1', '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start',
+                       '-o', guest, os.path.join(PROBE_DIR, 'rv-smc-rewrite.c')], 120)
+        if rc != 0:
+            return False, 'could not build rv-smc-rewrite.c (exit %s)' % rc
+    seen = {}
+    for smc in ('1', '0'):
+        prefix = os.path.join(workdir, 'smc%s' % smc)
+        rc, out = run([r['qemu'], '-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc),
+                       '--', guest], 300, cwd=workdir)
+        if rc != 0:
+            return False, 'qemu-riscv64 exited %s (smc=%s)' % (rc, smc)
+        m = re.search(r'B rewritten pc=0x([0-9a-f]+) returned=2', out)
+        if not m:
+            return False, 'the guest did not run code B correctly (smc=%s)' % smc
+        pc = m.group(1)
+        rc, dump = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
+        if rc != 0:
+            return False, 'siftdump could not read the trace (exit %s)' % rc
+        seen[smc] = [l.split()[1:3] for l in dump.splitlines()
+                     if l.split() and l.split()[0].lstrip('0') == pc.lstrip('0')]
+    want = [['13', '05'], ['09', '45'], ['13', '05']]
+    if seen['1'] != want:
+        return False, 'traced %s at the rewritten address, expected %s' % (seen['1'], want)
+    if seen['0'] == want:
+        return False, 'smc=0 traced the new bytes too: the option has no effect'
+    outdir = os.path.join(workdir, 'smcsim')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + os.path.join(workdir, 'smc1') + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'simulating the trace failed (exit %s)' % rc
+    return True, 'traced A, B, A at one address (%s); smc=0 gives the stale %s; simulated' % (
+        ', '.join(' '.join(x) for x in seen['1']), ', '.join(' '.join(x) for x in seen['0']))
+
+
 def case_riscv_user_trace(p, g, workdir):
     """The frontend traces a RISC-V guest: the exact count, and the trace reads back."""
     r, why = riscv_prerequisites(workdir)
@@ -1331,6 +1380,7 @@ CASES = {
     'system-vapa':      case_system_vapa,
     'system-modes':     case_system_modes,
     'riscv-user-trace':    case_riscv_user_trace,
+    'riscv-smc-rewrite':   case_riscv_smc_rewrite,
     'riscv-user-simulate': case_riscv_user_simulate,
     'riscv-ime-trace':     case_riscv_ime_trace,
     'riscv-ime-simulate':  case_riscv_ime_simulate,

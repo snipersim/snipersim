@@ -209,7 +209,7 @@ TraceThread::~TraceThread()
       unlink(m_tracefile.c_str());
       unlink(m_responsefile.c_str());
    }
-   for(std::unordered_map<IntPtr, const dl::DecodedInst *>::iterator i = m_decoder_cache.begin() ; i != m_decoder_cache.end() ; ++i)
+   for(auto i = m_decoder_cache.begin() ; i != m_decoder_cache.end() ; ++i)
    {
       delete (*i).second;
    }
@@ -565,10 +565,10 @@ Instruction* TraceThread::decode(Sift::Instruction &inst)
 {
 
    //printf("PC: %lx Size: %d num_addresses=%d is_branch=%d\n", inst.sinst->addr, inst.sinst->size, inst.num_addresses, inst.is_branch);
-   if (m_decoder_cache.count(inst.sinst->addr) == 0)
-      m_decoder_cache[inst.sinst->addr] = staticDecode(inst);
+   if (m_decoder_cache.count(inst.sinst) == 0)
+      m_decoder_cache[inst.sinst] = staticDecode(inst);
    
-   const dl::DecodedInst& dec_inst = *(m_decoder_cache[inst.sinst->addr]);
+   const dl::DecodedInst& dec_inst = *(m_decoder_cache[inst.sinst]);
 
    OperandList list;
 
@@ -822,10 +822,10 @@ const dl::DecodedInst* TraceThread::staticDecode(Sift::Instruction &inst)
 
 void TraceThread::handleInstructionWarmup(Sift::Instruction &inst, Sift::Instruction &next_inst, Core *core, bool do_icache_warmup, UInt64 icache_warmup_addr, UInt64 icache_warmup_size)
 {
-   if (m_decoder_cache.count(inst.sinst->addr) == 0)
-      m_decoder_cache[inst.sinst->addr] = staticDecode(inst);
+   if (m_decoder_cache.count(inst.sinst) == 0)
+      m_decoder_cache[inst.sinst] = staticDecode(inst);
    
-   const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst->addr]);
+   const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst]);
 
    // Warmup instruction caches
 
@@ -1004,12 +1004,12 @@ void TraceThread::handleInstructionDetailed(Sift::Instruction &inst, Sift::Instr
 
    // Set up instruction
 
-   if (m_icache.count(inst.sinst->addr) == 0)
-      m_icache[inst.sinst->addr] = decode(inst);
+   if (m_icache.count(inst.sinst) == 0)
+      m_icache[inst.sinst] = decode(inst);
    // Here get the decoder instruction without checking, because we must have it for sure
-   const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst->addr]);
+   const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst]);
 
-   Instruction *ins = m_icache[inst.sinst->addr];
+   Instruction *ins = m_icache[inst.sinst];
    DynamicInstruction *dynins = prfmdl->createDynamicInstruction(ins, va2pa(inst.sinst->addr));
 
    // Add dynamic instruction info

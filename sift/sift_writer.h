@@ -6,6 +6,8 @@
 
 #include <unordered_map>
 #include <array>
+#include <vector>
+#include <atomic>
 #include <fstream>
 #include <assert.h>
 
@@ -14,6 +16,46 @@ class vostream;
 
 namespace Sift
 {
+   /* Code that changes after a writer has sent it.
+
+      Writers send code a page at a time, once (RecOtherIcache), and the
+      reader and the simulator cache what they decoded from it by address, so
+      code that is rewritten in place -- a JIT, a loader reusing a page, any
+      self-modifying program -- would be simulated with the bytes it had when
+      its page was first sent.  The binary translators every front end is
+      built on (Pin, DynamoRIO, QEMU) re-translate code after it is written,
+      so translation is where a change can be seen cheaply: a front end calls
+      observe() for each instruction it translates, and when the bytes differ
+      from what the writers last sent for that page, the page is logged as
+      changed.  Every writer compares one counter per instruction with the
+      value it last saw, and only when it moved drops the logged pages, which
+      it then sends again -- current bytes -- before the next instruction from
+      them.  The reader drops what it decoded from the old bytes.
+
+      One instance per process (the front ends' writers are per thread, the
+      code is shared).  Off unless a front end enables it. */
+   class CodeTracker
+   {
+      public:
+         static void enable(bool on) { s_enabled = on; }
+         static bool enabled() { return s_enabled; }
+         // Front end, at translation: the instruction at addr now has these bytes
+         static void observe(uint64_t addr, const uint8_t *bytes, uint32_t size);
+         // Writers: the number of page changes logged so far
+         static uint64_t changes() { return s_changes.load(std::memory_order_acquire); }
+         // Writers: the pages logged as changed in [from, to)
+         static void changedPages(uint64_t from, uint64_t to, std::vector<uint64_t> &pages);
+         // Writers: this page was just sent with these bytes.  Returns the new
+         // "seen" value for a writer that had seen `seen` changes, so that a
+         // change the writer itself just logged does not make it send again.
+         static uint64_t pageSent(uint64_t base, const uint8_t *bytes, uint64_t seen);
+         // Statistics, for verbose output and tests
+         static uint64_t pagesTracked();
+      private:
+         static bool s_enabled;
+         static std::atomic<uint64_t> s_changes;
+   };
+
    class Writer
    {
       typedef void (*GetCodeFunc)(uint8_t *dst, const uint8_t *src, uint32_t size);
@@ -42,6 +84,7 @@ namespace Sift
          uint32_t m_id;
          bool m_requires_icache_per_insn;
          bool m_send_va2pa_mapping;
+         uint64_t m_code_changes_seen;   // CodeTracker::changes() when this writer last caught up
 
          void initResponse();
          void handleMemoryRequest(Record &respRec);

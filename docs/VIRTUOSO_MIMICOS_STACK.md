@@ -96,7 +96,10 @@ name[:args]`), and one of: a command line after `--`, `--traces=` for
 stored SIFT or ChampSim traces, `--pinballs=`, `--pid=` or
 `--trace-manual`.  Other options: `--roi` (only the region of interest is
 simulated in detail), `--fast-forward`, `--cache-only`,
-`--no-cache-warming`, `--pacsim`, `--smc` (self-modifying code), `--live`,
+`--no-cache-warming`, `--pacsim`, `--smc` and `--no-smc` (code rewritten
+in place is tracked by default on every front end and its pages are sent
+again; `--smc` is the strict per-instruction mode of the SDE recorder,
+`--no-smc` turns tracking off), `--live`,
 `--mpi`, `--power`, `--viz`, `--profile`, `--gdb`, `--build-dir=`,
 `--frontend=`, `--sim-end=`.  An explicit `-n` beats a configuration's
 `total_cores`.  Output lands in `<dir>/simulation/` (`sim.cfg`,

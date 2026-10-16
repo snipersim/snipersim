@@ -17,6 +17,11 @@ Version 9.0 (in preparation)
   * RISC-V: a decoder generated from the Unified Database, the vector and
     matrix (IME, AME) units, an attached matrix tile and a DMA-attached
     accelerator, with workloads and exact-count checks
+  * Code rewritten in place (JITs, loaders, self-modifying code) is traced
+    with its new bytes by default, on the SDE, DynamoRIO and QEMU front ends:
+    each notices the rewrite when it re-translates the code and sends the
+    page again, and the trace reader and simulator drop the old decode.
+    --no-smc turns it off; --smc keeps the strict per-instruction mode
   * Pac-Sim sampled simulation, with tools/dumpstats.py reporting its estimate
   * One stamped output stream per run, an lnav format, a live feed and dashboard
   * make regress: seven suites (scripting, decoder tables, configurations,
