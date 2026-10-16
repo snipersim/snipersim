@@ -287,6 +287,23 @@ void SchedulerPinnedBase::reschedule(SubsecondTime time, core_id_t core_id, bool
    }
 
    m_quantum_left[core_id] = m_quantum;
+
+   // The thread just taken off this core may be allowed on a core that is
+   // idle right now -- typically because its affinity changed (big_small
+   // moves threads between the big and the small cores), so it was taken off
+   // a core it may no longer use.  Put it there now.  Waiting for the next
+   // periodic() is not enough: periodic() may already have passed that core
+   // in this round, and if the last running thread then stalls or exits,
+   // nothing advances time to call periodic() again -- every core idle, a
+   // runnable thread waiting, and the simulation hung (test/demo-scheduling,
+   // about one run in forty).
+   if (current_thread_id != INVALID_THREAD_ID && current_thread_id != new_thread_id
+       && m_threads_runnable[current_thread_id] && !m_thread_info[current_thread_id].isRunning())
+   {
+      core_id_t free_core_id = findFreeCoreForThread(current_thread_id);
+      if (free_core_id != INVALID_CORE_ID)
+         reschedule(time, free_core_id, false);
+   }
 }
 
 String SchedulerPinnedBase::ThreadInfo::getAffinityString() const
