@@ -236,7 +236,20 @@ BarrierSyncServer::isBarrierReached()
       }
       else if (isCoreRunning(core_id))
       {
-         if (m_local_clock_list[core_id] < m_next_barrier_time)
+         /* A running core that has not checked in has not reached the
+            barrier, whatever m_local_clock_list says: that is the time of
+            its last check-in, and it can be stale.  Leaving fast-forward
+            (FastForwardPerformanceManager::disable) moves the next barrier
+            to the latest time of the cores running at that moment and
+            releases everyone; a core whose thread was stalled then keeps a
+            fast-forward time beyond it.  When that thread runs again its
+            core looked "reached", and once every other thread stalled,
+            barrierRelease() was entered with nobody in the barrier and
+            looped forever, holding the thread manager lock (Pac-Sim runs
+            hung at a fast-forward to detailed switch, about one in twenty).
+            For a core that has not checked in this test was the same
+            whenever its recorded time was current. */
+         if (!m_barrier_acquire_list[core_id] || m_local_clock_list[core_id] < m_next_barrier_time)
          {
             // Core running on this core has not reached the barrier
             // Wait for it to sync
@@ -281,6 +294,20 @@ BarrierSyncServer::barrierRelease(thread_id_t caller_id, bool continue_until_rel
 
    bool core_resumed = false;
    bool must_wait = true;
+
+   /* Nothing to release: the loop below ends only by releasing a core that is
+      in the barrier.  Advancing time with nobody waiting is what advance()
+      asks for (continue_until_release, to reach a sleeping thread's
+      timeout); anything else would loop forever. */
+   if (!continue_until_release)
+   {
+      bool anyone = false;
+      for (core_id_t core_id = 0; core_id < (core_id_t) Sim()->getConfig()->getApplicationCores(); core_id++)
+         anyone = anyone || m_barrier_acquire_list[core_id];
+      if (!anyone)
+         return false;
+   }
+
    while (!core_resumed)
    {
       m_global_time = m_next_barrier_time;
