@@ -392,6 +392,8 @@ void openFile(THREADID threadid)
 
    if (thread_data[threadid].thread_num != 0)
    {
+      if (KnobUseResponseFiles.Value() == 0)
+         std::cerr << "[SIFT_RECORDER] " << "error: the application started a second thread, and recording more than one thread needs the simulator's answers (response files): record it under run-sniper, or with record-trace -r 1 while a simulator reads the traces" << std::endl;
       sift_assert(KnobUseResponseFiles.Value() != 0);
    }
 

@@ -53,6 +53,8 @@ void FrontendControl <T>::openFile(threadid_t threadid)
 
   if (m_thread_data[threadid].thread_num != 0)
   {
+    if (m_options->get_response_files() == 0)
+      std::cerr << "[SNIPER_FRONTEND] " << "error: the application started a second thread, and recording more than one thread needs the simulator's answers (response files): record it under run-sniper, or with record-trace -r 1 while a simulator reads the traces" << std::endl;
     sift_assert(m_options->get_response_files() != 0);
   }
 
