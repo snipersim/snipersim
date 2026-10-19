@@ -20,7 +20,7 @@ KNOB<BOOL> KnobDebug(KNOB_MODE_WRITEONCE, "pintool", "sniper:debug", "0", "start
 KNOB<BOOL> KnobVerbose(KNOB_MODE_WRITEONCE, "pintool", "sniper:verbose", "0", "verbose output");
 KNOB<INT64> KnobPacSimEnable(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim", "0", "Pac-Sim online sampling: 0 off, 1 on");
 KNOB<std::string> KnobPacSimDir(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-dir", ".", "directory for pacsim_regions.json");
-KNOB<UINT64> KnobPacSimRegionSize(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-region-size", "50000", "sampled region size, in thousands of instructions of the main thread");
+KNOB<UINT64> KnobPacSimRegionSize(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-region-size", "50000", "sampled region size, in thousands of instructions summed over all threads (a region ends at the first loop back-edge after it)");
 KNOB<UINT64> KnobPacSimMinRegionSize(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-min-region-size", "2000", "shorter regions join the next one (thousands of instructions)");
 KNOB<double> KnobPacSimClusterThreshold(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-cluster-threshold", "0.2", "BBV distance below which two regions share a cluster");
 KNOB<UINT64> KnobPacSimMinMeasurements(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-min-measurements", "2", "measure a cluster this many times before fast-forwarding its later instances (the first carries its warm-up)");

@@ -91,6 +91,16 @@ MODES = {
         'quick': ['-DNITERS=18',  '-DCHASE_SLOTS=131072', '-DCHASE_STEPS=80000',
                   '-DCOMPUTE_ITERS=160000'],
         'full':  ['-DNITERS=24'],
+        # A region ends at the first loop back-edge, on any thread, once the
+        # threads have run the region size between them.  One iteration of
+        # this workload is about 1.5M instructions per thread, 6M for four:
+        # with 1M regions the cut fell at whichever thread next finished an
+        # iteration, so the regions -- and the estimate -- depended on how
+        # far apart the threads had drifted on the host (9 regions and -2%
+        # error in most runs, 10 to 14 regions and up to -22% in others).
+        # Two iterations' worth makes the cuts line up: 24 of 24 runs gave
+        # the same 5 regions and +0.6%.
+        'quick_region_size': 12000,
     },
     'task': {
         'src': 'tasked.c',
@@ -105,9 +115,10 @@ sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
 
 # The sampler's region sizes, per profile.  The recorder's defaults (regions of
 # 50M instructions, none shorter than 2M) are sized for real workloads; the
-# quick profile's whole ROI is under 10M instructions, so with the defaults it
-# would be one region, simulated in detail from end to end -- accurate, and
-# proving nothing about sampling.  The knobs scale with the workload, and so
+# quick profile's ROIs are a few regions of those at most (the loop workload's
+# is about 100M instructions), simulated in detail nearly end to end --
+# accurate, and proving nothing about sampling.  A mode can set its own region size
+# ('quick_region_size'), where its loop structure needs one.  The knobs scale with the workload, and so
 # does the fast-forward flow-control window: a thread may run that many
 # instructions ahead of the simulator between measured regions, and the
 # sampler cuts regions in the order the recorder sees them.  100K of run-ahead
@@ -253,8 +264,14 @@ def measure(p, workdir, mode, args):
     truth = elapsed_seconds(os.path.join(full_dir, 'simulation'))
 
     samp_dir = os.path.join(workdir, mode + '-sampled')
+    trace_args = list(PROFILE_TRACE_ARGS[args.profile])
+    region = MODES[mode].get(args.profile + '_region_size')
+    if region:
+        # Pin knobs are write-once: replace the profile's value, do not repeat it
+        trace_args = [a for a in trace_args if 'pacsim-region-size' not in a]
+        trace_args.append('--trace-args=-sniper:pacsim-region-size %d' % region)
     rc, out, wall_samp = simulate(exe, samp_dir, args.threads,
-                                  ['--pacsim'] + PROFILE_TRACE_ARGS[args.profile]
+                                  ['--pacsim'] + trace_args
                                   + ['--trace-args=' + a for a in args.trace_arg], args.timeout)
     if rc is None:
         raise RuntimeError('the sampled run timed out after %ds' % args.timeout)
