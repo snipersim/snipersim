@@ -86,6 +86,11 @@ def cache_key(name, dep, man=None):
         man = man or load_manifest()
         inputs = ''.join(cache_key(src, man['dependencies'][src], man)
                          for src in dep['from'])
+        # And by the patches applied to it: a patch is part of what is built,
+        # so editing one has to give a different entry, not the old build.
+        for patch in dep.get('patches', []):
+            with open(os.path.join(SNIPER_ROOT, patch), 'rb') as f:
+                inputs += hashlib.sha256(f.read()).hexdigest()[:16]
         return '%s-%s' % (name, hashlib.sha256(inputs.encode()).hexdigest()[:16])
     if dep['kind'] == 'git':
         return '%s-%s' % (name, dep['rev'][:16])
@@ -316,6 +321,14 @@ def fetch_build(name, dep, offline, jobs=None):
         shutil.copytree(cache_path(dep['copy_from'], man['dependencies'][dep['copy_from']]),
                         target, symlinks=True)
         os.remove(os.path.join(target, '.complete'))
+
+    # Patches to the copied source, in order, before the build command.  Kept
+    # out of the command so that the cache key can include their contents.
+    for patch in dep.get('patches', []):
+        path = os.path.join(SNIPER_ROOT, patch)
+        print('  applying %s' % patch)
+        if subprocess.run(['git', 'apply', path], cwd=target).returncode != 0:
+            raise SystemExit('error: %s does not apply to %s' % (patch, name))
 
     env = dict(os.environ)
     for k, v in dep.get('env', {}).items():

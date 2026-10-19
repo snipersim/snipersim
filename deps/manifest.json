@@ -16,7 +16,11 @@
     "",
     "'install_path' is where the source tree expects to find it.  The fetcher",
     "unpacks into a shared content-addressed cache and symlinks this path at it,",
-    "so several checkouts share one copy and the existing makefiles keep working."
+    "so several checkouts share one copy and the existing makefiles keep working.",
+    "",
+    "'patches' (builds only) lists patch files, relative to the Sniper root,",
+    "applied with git apply to the copied source before 'command'.  Their",
+    "contents are part of the cache key, so editing a patch rebuilds."
   ],
   "version": 1,
   "dependencies": {
@@ -173,6 +177,9 @@
         "dynamorio"
       ],
       "copy_from": "dynamorio",
+      "patches": [
+        "tools/dynamorio/os-map-file-null-reachable.patch"
+      ],
       "install_path": "dynamorio",
       "when": [
         "dynamorio"
@@ -185,7 +192,7 @@
         "-c",
         "mkdir -p build && cd build && cmake -DDEBUG=ON -DBUILD_DOCS=OFF .. && make -j{jobs}"
       ],
-      "description": "DynamoRIO built in place; DynamoRIO_DIR points at dynamorio/build/cmake"
+      "description": "DynamoRIO built in place, with tools/dynamorio/os-map-file-null-reachable.patch (a startup assert for non-PIE apps in about one run in sixteen); DynamoRIO_DIR points at dynamorio/build/cmake"
     },
     "qemu": {
       "kind": "git",
@@ -227,6 +234,9 @@
         "qemu"
       ],
       "copy_from": "qemu",
+      "patches": [
+        "tools/riscv/qemu-11.1.1-ime.patch"
+      ],
       "install_path": "qemu-riscv",
       "when": [
         "riscv-ime"
@@ -237,7 +247,7 @@
       "command": [
         "sh",
         "-c",
-        "git apply {root}/tools/riscv/qemu-11.1.1-ime.patch && mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
+        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
       "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on (vlen up to 65536, the RVV 1.0 maximum)"
     },

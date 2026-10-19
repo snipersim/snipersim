@@ -1,0 +1,19 @@
+--- a/core/unix/os.c
++++ b/core/unix/os.c
+@@ -4520,8 +4520,15 @@
+         /* Loop to handle races */
+         loop = true;
+     }
++    /* A NULL addr is "no preference", not address 0, so it never counts as
++     * reachable.  Taken as an address it is rel32-reachable whenever vmcode ends
++     * below 2GB -- the -vm_base placement used for non-PIE apps puts it there in
++     * about one run in sixteen -- and the loop below then retries NULL, which
++     * the kernel places outside the region every time, until
++     * MAX_MMAP_LOOP_ITERS: a debug-build assert, a failed map in release.
++     */
+     if ((!TEST(MAP_32BIT, flags) && TEST(MAP_FILE_REACHABLE, map_flags) &&
+-         (is_vmm_reserved_address(addr, *size, NULL, NULL) ||
++         (addr == NULL || is_vmm_reserved_address(addr, *size, NULL, NULL) ||
+           /* Try to honor a library's preferred address.  This does open up a race
+            * window during attach where another thread could take this spot,
+            * and with this current code we'll never go back and try to get VMM

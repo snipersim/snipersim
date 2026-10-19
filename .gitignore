@@ -56,7 +56,7 @@ mbuild
 sde_kit
 capstone
 capstone-src
-dynamorio
+/dynamorio
 dynamorio-src
 qemu
 qemu-src
