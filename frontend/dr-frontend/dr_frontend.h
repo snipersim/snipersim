@@ -115,6 +115,8 @@ class DRFrontend : public frontend::Frontend<DRFrontend>
       /// Branch address -> taken target, for this thread's blocks only (the
       /// code cache is thread-private, -thread_private in record-trace).
       std::unordered_map<ptr_uint_t, ptr_uint_t> *taken;
+      /// The thread's trace was ended at its exit system call (finish_thread)
+      bool finished;
     } per_thread_t;
     /// Allocated TLS slot offsets
     enum {
@@ -142,6 +144,12 @@ class DRFrontend : public frontend::Frontend<DRFrontend>
   public:
     /// The calling thread's front-end thread id
     static threadid_t fe_tid(void *drcontext);
+    /// End the calling thread's trace: its last instructions, the FUTEX_WAKE
+    /// a pthread_join waits for, and the end of the stream -- each a request
+    /// the simulator answers.  Called at the thread's exit system call, where
+    /// DynamoRIO holds no locks, and otherwise (a thread ended by exit_group)
+    /// from the thread-exit event.  Once per thread.
+    static void finish_thread(void *drcontext);
   private:
     /// Start address of the application module
     static app_pc exe_start;

@@ -32,6 +32,10 @@ bool FrontendSyscallModel<DRFrontend>::event_pre_syscall(void *drcontext, int sy
   // 4: Post-process
   if (!m_thread_data[threadid].last_syscall_emulated)  // Not emulated syscall, execute normally
   {
+    // The thread's last system call: end its trace now, while DynamoRIO
+    // holds no locks, rather than in the thread-exit event (see there)
+    if (syscall_number == SYS_exit)
+      DRFrontend::finish_thread(drcontext);
     return true;  // execute this syscall
   }
   else  // Emulated syscall, skip execution, setting return value from Sniper's emulation

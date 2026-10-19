@@ -155,6 +155,7 @@ void DRFrontend::event_thread_init(void *drcontext)
   dr_mutex_unlock(thread_lock);
   data->fe_tid = my_threadid;
   data->taken = new std::unordered_map<ptr_uint_t, ptr_uint_t>();
+  data->finished = false;
 
   // Call the generic frontend callback for a thread start, with the stack
   // pointer the thread starts with: clone() set it, and the generic layer
@@ -175,10 +176,28 @@ void DRFrontend::event_thread_init(void *drcontext)
   }
 }
 
+void DRFrontend::finish_thread(void *drcontext)
+{
+  per_thread_t *data = (per_thread_t *) drmgr_get_tls_field(drcontext, tls_idx);
+  if (data->finished)
+    return;
+  data->finished = true;
+  process_instructions_buffer(drcontext); // dump remaining contents
+  m_threads->threadFinish(fe_tid(drcontext), 0);  // TODO are flags here relevant?
+}
+
 void DRFrontend::event_thread_exit(void *drcontext)
 {
-  process_instructions_buffer(drcontext); // dump remaining contents
-  
+  /* Normally done already, at the thread's exit system call.  Doing it here
+     blocks while DynamoRIO holds thread_initexit_lock -- it calls this event
+     with that lock held -- and any other thread that needs the lock (to
+     start or end, or to flush code) then stops before its next trace
+     record.  The simulator's barrier waits for that thread's stream, so it
+     never answers this thread's FUTEX_WAKE or End, and nothing moves again
+     (test/dr-threads hung in about one run in thirty).  Here only for
+     threads that did not get there, such as those ended by exit_group. */
+  finish_thread(drcontext);
+
   threadid_t threadid_fe = fe_tid(drcontext);
   if (m_options->get_verbose())
   {
@@ -195,8 +214,6 @@ void DRFrontend::event_thread_exit(void *drcontext)
   dr_raw_mem_free(data->inst_buf, MEM_BUF_SIZE);
   delete data->taken;
   dr_thread_free(drcontext, data, sizeof(per_thread_t));
-
-  m_threads->threadFinish(threadid_fe, 0);  // TODO are flags here relevant?
 }
 
 void DRFrontend::event_exit(void)
