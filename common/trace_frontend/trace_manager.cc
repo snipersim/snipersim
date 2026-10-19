@@ -1,4 +1,63 @@
 #include "trace_manager.h"
+#include "performance_model.h"
+#include "clock_skew_minimization_object.h"
+#include <cinttypes>
+#include <csignal>
+#include <execinfo.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+
+/* SIGUSR1: print the hang report now (TraceManager::Monitor).  The handler
+   only sets a flag; the monitor thread prints. */
+static volatile sig_atomic_t s_report_requested = 0;
+static void requestReport(int) { s_report_requested = 1; }
+
+/* The report's stacks: each simulator thread in turn is sent SIGUSR2, and
+   writes its own backtrace to stderr from the handler.  backtrace() and
+   backtrace_symbols_fd() do not allocate once backtrace() has been called
+   once (it loads libgcc), which the monitor does before the first signal.
+   Addresses inside the simulator print as offsets; resolve them with
+     addr2line -f -C -e lib/sniper <offset> */
+static std::atomic<int> s_stack_done{0};
+static void dumpOwnStack(int)
+{
+   void *frames[64];
+   int n = backtrace(frames, 64);
+   char head[64];
+   int len = snprintf(head, sizeof(head), "[SNIPER]   stack of tid %ld:\n", (long)syscall(SYS_gettid));
+   if (write(2, head, len) < 0) {}
+   backtrace_symbols_fd(frames, n, 2);
+   s_stack_done.store(1, std::memory_order_release);
+}
+static void dumpAllStacks()
+{
+   void *warm[1];
+   backtrace(warm, 1);
+   struct sigaction sa;
+   memset(&sa, 0, sizeof(sa));
+   sa.sa_handler = dumpOwnStack;
+   sigemptyset(&sa.sa_mask);
+   sa.sa_flags = SA_RESTART;
+   sigaction(SIGUSR2, &sa, NULL);
+   const pid_t me = (pid_t)syscall(SYS_gettid);
+   DIR *dir = opendir("/proc/self/task");
+   if (!dir)
+      return;
+   while (struct dirent *e = readdir(dir))
+   {
+      const pid_t tid = (pid_t)atoi(e->d_name);
+      if (tid <= 0 || tid == me)
+         continue;
+      s_stack_done.store(0, std::memory_order_relaxed);
+      if (syscall(SYS_tgkill, getpid(), tid, SIGUSR2) != 0)
+         continue;
+      // A thread blocked with the signal masked never answers: give up on it
+      for (int i = 0; i < 200 && !s_stack_done.load(std::memory_order_acquire); i++)
+         usleep(5000);
+   }
+   closedir(dir);
+}
 #include "trace_thread.h"
 #include "simulator.h"
 #include "thread_manager.h"
@@ -178,6 +237,10 @@ thread_id_t TraceManager::newThread(app_id_t app_id, bool first, bool init_fifo,
    Thread *thread = Sim()->getThreadManager()->createThread(app_id, creator_thread_id);
    TraceThread *tthread = new TraceThread(thread, time, tracefile, responsefile, app_id, init_fifo /*cleaup*/);
    m_threads.push_back(tthread);
+   {
+      std::lock_guard<std::mutex> wl(m_watch_lock);
+      m_watch_threads.push_back(tthread);
+   }
 
    /* Every thread's reader goes in the pool, so stop() can reach all of them
       -- see the note there.  Whether the last *application* has exited is
@@ -637,6 +700,111 @@ void TraceManager::Monitor::run()
      sleep(1);
      ++n;
    }
+
+   /* The hang report (traceinput/hang_report): when nothing has moved for
+      that many seconds -- no trace thread has read further, no simulated time
+      has passed -- print where every thread is.  Once per stall; progress
+      re-arms it.  For runs that hang with nothing in the output, which a
+      debugger cannot always be attached to. */
+   const unsigned hang_seconds = Sim()->getCfg()->getInt("traceinput/hang_report");
+   // On request too, whatever hang_report is: for a run that is busy but
+   // going nowhere, which the stall detection cannot see
+   struct sigaction sa;
+   memset(&sa, 0, sizeof(sa));
+   sa.sa_handler = requestReport;
+   sigemptyset(&sa.sa_mask);
+   sa.sa_flags = SA_RESTART;
+   sigaction(SIGUSR1, &sa, NULL);
+   UInt64 last_sig = ~0ULL;
+   unsigned still = 0;
+   bool reported = false;
+   while (true)
+   {
+     sleep(1);
+     std::vector<TraceThread *> threads;
+     {
+       std::lock_guard<std::mutex> wl(m_manager->m_watch_lock);
+       threads = m_manager->m_watch_threads;
+     }
+     bool all_finished = !threads.empty();
+     UInt64 sig = Sim()->getClockSkewMinimizationServer()
+                  ? Sim()->getClockSkewMinimizationServer()->getGlobalTime().getFS() : 0;
+     for (TraceThread *t : threads)
+     {
+       // Each thread's simulated time: the trace position is not known for
+       // a pipe, and global time stands still while one thread runs ahead
+       Core *core = t->getThread()->getCore();
+       sig = sig * 1000003ULL + (core ? core->getPerformanceModel()->getElapsedTime().getFS() : 0);
+       if (!t->m_finished)
+         all_finished = false;
+     }
+     if (all_finished)
+       return;
+     if (s_report_requested)
+     {
+       s_report_requested = 0;
+       m_manager->reportHang(still);
+     }
+     if (hang_seconds == 0)
+       continue;
+     if (sig != last_sig)
+     {
+       last_sig = sig;
+       still = 0;
+       reported = false;
+       continue;
+     }
+     if (++still >= hang_seconds && !reported)
+     {
+       m_manager->reportHang(still);
+       reported = true;
+     }
+   }
+}
+
+void TraceManager::reportHang(unsigned seconds)
+{
+   std::vector<TraceThread *> threads;
+   {
+      std::lock_guard<std::mutex> wl(m_watch_lock);
+      threads = m_watch_threads;
+   }
+   ClockSkewMinimizationServer *css = Sim()->getClockSkewMinimizationServer();
+   fprintf(stderr, "[SNIPER] HANG REPORT: no progress for %u s; global time %" PRIu64 " ns; %zu trace threads\n",
+           seconds, css ? css->getGlobalTime().getNS() : 0, threads.size());
+   ThreadManager *tm = Sim()->getThreadManager();
+   static const char *state_names[] = { "RUNNING", "INITIALIZING", "STALLED", "SLEEPING", "WAKING_UP", "IDLE", "BROKEN" };
+   for (TraceThread *t : threads)
+   {
+      Thread *th = t->getThread();
+      int state = (int)tm->getThreadState(th->getId());
+      Core *core = th->getCore();
+      int64_t arg = t->m_where_arg.load(std::memory_order_relaxed);
+      fprintf(stderr, "[SNIPER]   thread %d (app %d): %s, core %d, local time %" PRIu64 " ns, %" PRIu64 " instructions, at %s",
+              th->getId(), th->getAppId(),
+              state >= 0 && state < (int)(sizeof(state_names) / sizeof(state_names[0])) ? state_names[state] : "?",
+              core ? core->getId() : -1,
+              core ? core->getPerformanceModel()->getElapsedTime().getNS() : 0,
+              core ? core->getPerformanceModel()->getInstructionCount() : 0,
+              t->m_where.load(std::memory_order_relaxed));
+      if (arg >= 0)
+         fprintf(stderr, " (%" PRId64 ")", arg);
+      fprintf(stderr, "%s%s",
+              t->isBlockedInSyscall() ? ", in a blocking syscall" : "",
+              t->m_finished ? ", finished" : "");
+      UInt64 pos = t->getProgressValue();
+      if (pos != ~0ULL)   // unknown for a pipe
+         fprintf(stderr, ", trace position %" PRIu64, pos);
+      fprintf(stderr, "\n");
+   }
+   fflush(stderr);
+   if (css)
+   {
+      // printState() writes to stdout
+      css->printState();
+      fflush(stdout);
+   }
+   dumpAllStacks();
 }
 
 void TraceManager::Monitor::spawn()

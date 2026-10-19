@@ -176,6 +176,12 @@ class TraceManager
 
       Monitor *m_monitor;
       std::vector<TraceThread *> m_threads;
+      /* The same threads, for the hang report: its own lock, held only to
+         append or copy, so that a report can be made while m_lock is held
+         by whatever has hung. */
+      std::vector<TraceThread *> m_watch_threads;
+      std::mutex m_watch_lock;
+      void reportHang(unsigned seconds);
       UInt32 m_num_threads_started;
       UInt32 m_num_threads_running;
       Semaphore m_done;

@@ -1807,8 +1807,11 @@ void TraceThread::m_run_func_with_userpace_mimicos()
 
    SubsecondTime time_end = prfmdl->getElapsedTime();
 
+   m_where.store("exiting", std::memory_order_relaxed);
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
+   m_where.store("signalling done", std::memory_order_relaxed);
    Sim()->getTraceManager()->signalDone(this, time_end, m_stop /*aborted*/);
+   m_where.store("finished", std::memory_order_relaxed);
    m_finished = true;
 }
 
@@ -1864,6 +1867,7 @@ void TraceThread::m_run_func_default()
    bool have_next = have_first && m_trace.Read(next_inst);
    bool last_one = false;
    Sift::StaticInstruction fallthrough;
+   m_where.store("simulating", std::memory_order_relaxed);
    while(have_first)
    {
       if (!have_next)
@@ -1960,10 +1964,13 @@ void TraceThread::m_run_func_default()
       // by prfmdl->iterate (in handleInstructionDetailed),
       // or core->countInstructions (when using a fast-forward performance model)
       SubsecondTime time = prfmdl->getElapsedTime();
-      if (m_thread->reschedule(time, core))
       {
-         core = m_thread->getCore();
-         prfmdl = core->getPerformanceModel();
+         Where w(this, "rescheduling");
+         if (m_thread->reschedule(time, core))
+         {
+            core = m_thread->getCore();
+            prfmdl = core->getPerformanceModel();
+         }
       }
 
 
@@ -1971,8 +1978,12 @@ void TraceThread::m_run_func_default()
          break;
 
       inst = next_inst;
-      have_next = m_trace.Read(next_inst);
+      {
+         Where w(this, "reading trace");   // restores "simulating"
+         have_next = m_trace.Read(next_inst);
+      }
    }
+   m_where.store("finishing", std::memory_order_relaxed);
 
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
    
@@ -1985,8 +1996,11 @@ void TraceThread::m_run_func_default()
 
    SubsecondTime time_end = prfmdl->getElapsedTime();
 
+   m_where.store("exiting", std::memory_order_relaxed);
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());
+   m_where.store("signalling done", std::memory_order_relaxed);
    Sim()->getTraceManager()->signalDone(this, time_end, m_stop /*aborted*/);
+   m_where.store("finished", std::memory_order_relaxed);
    m_finished = true;
 }
 

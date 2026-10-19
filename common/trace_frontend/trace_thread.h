@@ -14,6 +14,7 @@
 #include <decoder.h>
 
 #include <unordered_map>
+#include <atomic>
 
 #define NUM_PAPI_COUNTERS 6
 
@@ -134,6 +135,24 @@ class TraceThread : public Runnable
       uint64_t m_instrs_this_quantum = 0;
       uint64_t m_quanta_expired      = 0;   //< for the statistic below
       bool m_blocked;
+
+   public:
+      /* Where this thread is, for the hang report (traceinput/hang_report):
+         set on entry to each front-end callback and around trace reads,
+         restored on exit, so a report names the innermost one.  A relaxed
+         pointer store, cheap enough to leave on. */
+      std::atomic<const char *> m_where{"starting"};
+      std::atomic<int64_t> m_where_arg{-1};
+      struct Where
+      {
+         TraceThread *t; const char *prev; int64_t prev_arg;
+         Where(TraceThread *t_, const char *w, int64_t arg = -1)
+            : t(t_), prev(t_->m_where.load(std::memory_order_relaxed)), prev_arg(t_->m_where_arg.load(std::memory_order_relaxed))
+         { t->m_where.store(w, std::memory_order_relaxed); t->m_where_arg.store(arg, std::memory_order_relaxed); }
+         ~Where() { t->m_where.store(prev, std::memory_order_relaxed); t->m_where_arg.store(prev_arg, std::memory_order_relaxed); }
+      };
+      bool isBlockedInSyscall() const { return m_blocked; }
+   private:
       bool m_cleanup;
       bool m_started;
 
@@ -220,21 +239,21 @@ class TraceThread : public Runnable
    public:
 
          static Sift::Mode __handleInstructionCountFunc(void* arg, uint32_t icount)
-      { return ((TraceThread*)arg)->handleInstructionCountFunc(icount); }
+      { Where w((TraceThread*)arg, "instruction-count callback"); return ((TraceThread*)arg)->handleInstructionCountFunc(icount); }
       static void __handleCacheOnlyFunc(void* arg, uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address)
       { ((TraceThread*)arg)->handleCacheOnlyFunc(icount, type, eip, address); }
       static void __handleOutputFunc(void* arg, uint8_t fd, const uint8_t *data, uint32_t size)
       { ((TraceThread*)arg)->handleOutputFunc(fd, data, size); }
       static uint64_t __handleSyscallFunc(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size)
-      { return ((TraceThread*)arg)->handleSyscallFunc(syscall_number, data, size); }
+      { Where w((TraceThread*)arg, "syscall", syscall_number); return ((TraceThread*)arg)->handleSyscallFunc(syscall_number, data, size); }
       static int32_t __handleNewThreadFunc(void* arg)
-      { return ((TraceThread*)arg)->handleNewThreadFunc(); }
+      { Where w((TraceThread*)arg, "new-thread callback"); return ((TraceThread*)arg)->handleNewThreadFunc(); }
       static int32_t __handleJoinFunc(void* arg, int32_t join_thread_id)
-      { return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
+      { Where w((TraceThread*)arg, "join callback", join_thread_id); return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
       static uint64_t __handleMagicFunc(void* arg, uint64_t a, uint64_t b, uint64_t c)
-      { return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
+      { Where w((TraceThread*)arg, "magic callback", (int64_t)a); return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
       static bool __handleEmuFunc(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
-      { return ((TraceThread*)arg)->handleEmuFunc(type, req, res); }
+      { Where w((TraceThread*)arg, "emulation callback", (int64_t)type); return ((TraceThread*)arg)->handleEmuFunc(type, req, res); }
       static void __handleRoutineChangeFunc(void* arg, Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip)
       { ((TraceThread*)arg)->handleRoutineChangeFunc(event, eip, esp, callEip); }
       static void __handleRoutineAnnounceFunc(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename)

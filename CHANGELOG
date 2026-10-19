@@ -23,6 +23,10 @@ Version 9.0 (in preparation)
     page again, and the trace reader and simulator drop the old decode.
     --no-smc turns it off; --smc keeps the strict per-instruction mode
   * Pac-Sim sampled simulation, with tools/dumpstats.py reporting its estimate
+  * A hang report: traceinput/hang_report=N prints every simulated thread's
+    state, core, time and blocking point, the barrier, and every simulator
+    thread's stack when nothing has moved for N seconds; SIGUSR1 prints it
+    on demand
   * One stamped output stream per run, an lnav format, a live feed and dashboard
   * make regress: seven suites (scripting, decoder tables, configurations,
     QEMU, Pac-Sim, workloads, Virtuoso); Python 3 throughout; C++20
