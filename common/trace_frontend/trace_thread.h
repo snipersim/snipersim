@@ -15,6 +15,8 @@
 
 #include <unordered_map>
 #include <atomic>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 #define NUM_PAPI_COUNTERS 6
 
@@ -143,6 +145,7 @@ class TraceThread : public Runnable
          pointer store, cheap enough to leave on. */
       std::atomic<const char *> m_where{"starting"};
       std::atomic<int64_t> m_where_arg{-1};
+      std::atomic<long> m_os_tid{0};   // the host thread running this one, for the hang report
       struct Where
       {
          TraceThread *t; const char *prev; int64_t prev_arg;
@@ -152,6 +155,7 @@ class TraceThread : public Runnable
          ~Where() { t->m_where.store(prev, std::memory_order_relaxed); t->m_where_arg.store(prev_arg, std::memory_order_relaxed); }
       };
       bool isBlockedInSyscall() const { return m_blocked; }
+      bool isStopRequested() const { return m_stop; }
    private:
       bool m_cleanup;
       bool m_started;
@@ -193,6 +197,7 @@ class TraceThread : public Runnable
       RunFunc m_current_run_func;
       
       void run(){
+         m_os_tid.store((long)syscall(SYS_gettid), std::memory_order_relaxed);
          (this->*m_current_run_func)();
       }
 

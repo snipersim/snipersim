@@ -780,8 +780,8 @@ void TraceManager::reportHang(unsigned seconds)
       int state = (int)tm->getThreadState(th->getId());
       Core *core = th->getCore();
       int64_t arg = t->m_where_arg.load(std::memory_order_relaxed);
-      fprintf(stderr, "[SNIPER]   thread %d (app %d): %s, core %d, local time %" PRIu64 " ns, %" PRIu64 " instructions, at %s",
-              th->getId(), th->getAppId(),
+      fprintf(stderr, "[SNIPER]   thread %d (app %d, tid %ld): %s, core %d, local time %" PRIu64 " ns, %" PRIu64 " instructions, at %s",
+              th->getId(), th->getAppId(), t->m_os_tid.load(std::memory_order_relaxed),
               state >= 0 && state < (int)(sizeof(state_names) / sizeof(state_names[0])) ? state_names[state] : "?",
               core ? core->getId() : -1,
               core ? core->getPerformanceModel()->getElapsedTime().getNS() : 0,
@@ -789,14 +789,22 @@ void TraceManager::reportHang(unsigned seconds)
               t->m_where.load(std::memory_order_relaxed));
       if (arg >= 0)
          fprintf(stderr, " (%" PRId64 ")", arg);
-      fprintf(stderr, "%s%s",
+      fprintf(stderr, "%s%s%s%s",
               t->isBlockedInSyscall() ? ", in a blocking syscall" : "",
+              t->isStopRequested() ? ", asked to stop" : "",
+              t->m_stopped ? ", done signalled" : "",
               t->m_finished ? ", finished" : "");
       UInt64 pos = t->getProgressValue();
       if (pos != ~0ULL)   // unknown for a pipe
          fprintf(stderr, ", trace position %" PRIu64, pos);
       fprintf(stderr, "\n");
    }
+   for (size_t a = 0; a < m_app_info.size(); a++)
+      fprintf(stderr, "[SNIPER]   app %zu: %u threads not done, %u runs complete\n", a, m_app_info[a].num_threads, m_app_info[a].num_runs);
+   fprintf(stderr, "[SNIPER]   stop() %s\n", m_stop_entered.load() ? "entered" : "not entered");
+   // A lock held by a thread that no longer runs is invisible in the stacks
+   fprintf(stderr, "[SNIPER]   locks: trace manager held by tid %ld, thread manager by tid %ld (0: free)\n",
+           m_lock.ownerTid(), tm->getLock().ownerTid());
    fflush(stderr);
    if (css)
    {

@@ -13,6 +13,8 @@ public:
 
    void acquire();
    void release();
+   // glibc records the owner's thread id in every mutex kind
+   long ownerTid() const { return _mutx.__data.__owner; }
 
 private:
    pthread_mutex_t _mutx;

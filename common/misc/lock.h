@@ -20,6 +20,9 @@ public:
 
    virtual void acquire() = 0;
    virtual void release() = 0;
+   /* The thread id of the holder, where the implementation knows it (0: free
+      or unknown).  For diagnostics only: racy by nature. */
+   virtual long ownerTid() const { return 0; }
    virtual void acquire_read() { acquire(); }
    virtual void release_read() { release(); }
 };
@@ -81,6 +84,8 @@ public:
    {
       _lock->release();
    }
+
+   long ownerTid() const { return _lock->ownerTid(); }
 
    void release_read()
    {
