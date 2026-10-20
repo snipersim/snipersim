@@ -1797,6 +1797,17 @@ void TraceThread::m_run_func_with_userpace_mimicos()
    }
 
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
+   /* Stopped from outside -- another thread of the application exited
+      (TraceManager::endApplication), or the run ended -- and so no longer
+      reading: tell the front end, or a request it sends now waits for an
+      answer for ever.  An OpenMP worker that asked for something just after
+      its rank's main thread called exit_group sat in that read, the process
+      could not finish exiting (Pin waits for every thread), the rank's main
+      trace never ended, and the run hung (test/mpi-omp, one run in six on a
+      loaded host).  A sibling parked in an emulated wait at that moment was
+      already released (SyscallServer::abortWaits); this covers the rest. */
+   if (m_stop)
+      (m_current_sift_reader ? m_current_sift_reader : &m_trace)->frontEndStop();
    
    // Clean up ChampSim instruction cache to avoid leaks (destructor is never called)
    if (m_champsim_trace) {
@@ -1986,6 +1997,17 @@ void TraceThread::m_run_func_default()
    m_where.store("finishing", std::memory_order_relaxed);
 
    printf("[TRACE:%u] -- %s --\n", m_thread->getId(), m_stop ? "STOP" : "DONE");
+   /* Stopped from outside -- another thread of the application exited
+      (TraceManager::endApplication), or the run ended -- and so no longer
+      reading: tell the front end, or a request it sends now waits for an
+      answer for ever.  An OpenMP worker that asked for something just after
+      its rank's main thread called exit_group sat in that read, the process
+      could not finish exiting (Pin waits for every thread), the rank's main
+      trace never ended, and the run hung (test/mpi-omp, one run in six on a
+      loaded host).  A sibling parked in an emulated wait at that moment was
+      already released (SyscallServer::abortWaits); this covers the rest. */
+   if (m_stop)
+      (m_current_sift_reader ? m_current_sift_reader : &m_trace)->frontEndStop();
    
    // Clean up ChampSim instruction cache to avoid leaks (destructor is never called)
    if (m_champsim_trace) {

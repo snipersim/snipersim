@@ -9,6 +9,7 @@
 #include <fstream>
 #include <cassert>
 #include <memory>
+#include <atomic>
 
 class vistream;
 class vostream;
@@ -199,6 +200,8 @@ namespace Sift
 
 
 	 void frontEndStop();
+      private:
+         std::atomic<bool> m_shutdown_sent{false};   // frontEndStop() has sent its answer
    };
 };
 

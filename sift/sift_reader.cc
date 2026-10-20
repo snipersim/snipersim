@@ -1222,7 +1222,10 @@ uint64_t Reader::va2pa(uint64_t va)
 
 void Reader::frontEndStop()
 {
-   if (response)
+   /* Once: the stopped thread itself and the end of the run (the reader pool)
+      can both ask, and the second record would go to a front end that has
+      closed its end */
+   if (response && !m_shutdown_sent.exchange(true))
       sendSimpleResponse(RecOtherType::RecOtherShutdown, NULL, 0);
 }
 
