@@ -88,7 +88,7 @@ MODES = {
     'loop': {
         'src': 'looped.c',
         'what': 'synchronised only on entry and exit: cuts must come from loops',
-        'quick': ['-DNITERS=18',  '-DCHASE_SLOTS=131072', '-DCHASE_STEPS=80000',
+        'quick': ['-DNITERS=36',  '-DCHASE_SLOTS=131072', '-DCHASE_STEPS=80000',
                   '-DCOMPUTE_ITERS=160000'],
         'full':  ['-DNITERS=24'],
         # A region ends at the first loop back-edge, on any thread, once the
@@ -99,7 +99,9 @@ MODES = {
         # far apart the threads had drifted on the host (9 regions and -2%
         # error in most runs, 10 to 14 regions and up to -22% in others).
         # Two iterations' worth makes the cuts line up: 24 of 24 runs gave
-        # the same 5 regions and +0.6%.
+        # the same 5 regions and +0.6%.  With 18 iterations that left too
+        # little to skip (4 of the 5 regions measured, 1.00x to 1.05x
+        # faster); with 36, 0.3% to 1.0% error and 1.4x to 1.7x faster.
         'quick_region_size': 12000,
     },
     'task': {
@@ -116,7 +118,7 @@ sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
 # The sampler's region sizes, per profile.  The recorder's defaults (regions of
 # 50M instructions, none shorter than 2M) are sized for real workloads; the
 # quick profile's ROIs are a few regions of those at most (the loop workload's
-# is about 100M instructions), simulated in detail nearly end to end --
+# is about 200M instructions), simulated in detail nearly end to end --
 # accurate, and proving nothing about sampling.  A mode can set its own region size
 # ('quick_region_size'), where its loop structure needs one.  The knobs scale with the workload, and so
 # does the fast-forward flow-control window: a thread may run that many
