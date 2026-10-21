@@ -37,6 +37,10 @@ namespace Sift
          //StaticInstruction();  // using default ctor
 
          uint64_t addr;
+         /* What identifies the code: addr, or in a CodePhysical trace the
+            physical address (with CODE_KEY_PHYSICAL), so that the same
+            virtual address in two processes is two instructions */
+         uint64_t key = 0;
          uint8_t size;
          uint8_t data[16];
          const StaticInstruction *next;
@@ -81,7 +85,11 @@ namespace Sift
       typedef uint64_t (*HandleSyscallFunc)(void* arg, uint16_t syscall_number, const uint8_t *data, uint32_t size);
       typedef int32_t (*HandleNewThreadFunc)(void* arg);
       typedef int32_t (*HandleJoinFunc)(void* arg, int32_t thread);
-      typedef uint64_t (*HandleMagicFunc)(void* arg, uint64_t a, uint64_t b, uint64_t c);
+      /* A magic instruction: returns the answer, and clears *respond when the
+         caller must not be answered (a MimicOS context switch: another stream
+         runs next, and the caller is answered later, when it is switched
+         back to -- sendResponseAfterContextSwitch). */
+      typedef uint64_t (*HandleMagicFunc)(void* arg, uint64_t a, uint64_t b, uint64_t c, bool *respond);
       typedef bool (*HandleEmuFunc)(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
       typedef void (*HandleRoutineChange)(void* arg, Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip);
       typedef void (*HandleRoutineAnnounce)(void* arg, uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
@@ -131,6 +139,8 @@ namespace Sift
          uint32_t m_id;
 
          bool m_trace_has_pa;
+         bool m_code_physical = false;   // code pages are keyed by physical page (CodePhysical)
+         uint64_t codeKey(uint64_t va_page) const;
          bool m_seen_end;
          uint8_t m_pending_spans_n;
          MemorySpan m_pending_spans[MAX_MEMORY_SPANS];

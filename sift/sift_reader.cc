@@ -291,6 +291,11 @@ bool Reader::initStream()
       m_trace_has_pa = true;
       hdr.options &= ~PhysicalAddress;
    }
+   if (hdr.options & CodePhysical)
+   {
+      m_code_physical = true;
+      hdr.options &= ~CodePhysical;
+   }
 
    // Remember it rather than only clearing it: this is the trace telling us
    // the program rewrites its own code.
@@ -401,12 +406,16 @@ bool Reader::Read(Instruction &inst)
                assert(rec.Other.size == sizeof(uint64_t) + ICACHE_SIZE);
                uint64_t address;
                input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
-               auto known = icache.find(address);
+               /* address is the page's virtual address; it is held under its
+                  key -- itself, or its physical page, whose mapping the
+                  writer sent first */
+               const uint64_t key = codeKey(address);
+               auto known = icache.find(key);
                if (known == icache.end())
                {
                   uint8_t *bytes = new uint8_t[ICACHE_SIZE];
                   input->read(reinterpret_cast<char*>(bytes), ICACHE_SIZE);
-                  icache[address] = bytes;
+                  icache[key] = bytes;
                }
                else
                {
@@ -416,11 +425,23 @@ bool Reader::Read(Instruction &inst)
                   // starting in the page, and any from the previous page that
                   // runs into it.
                   input->read(reinterpret_cast<char*>(const_cast<uint8_t*>(known->second)), ICACHE_SIZE);
-                  // (15: the longest an instruction from the previous page can reach in)
-                  for (uint64_t a = address >= 15 ? address - 15 : 0; a < address + ICACHE_SIZE; ++a)
+                  // (15: the longest an instruction from the previous page can
+                  // reach in; that page's key is not this one's minus a page
+                  // when code is keyed physically)
+                  const uint64_t prev_end = address >= ICACHE_SIZE ? codeKey(address - ICACHE_SIZE) + ICACHE_SIZE : 0;
+                  for (uint64_t a = prev_end >= 15 ? prev_end - 15 : 0; a < prev_end; ++a)
                   {
                      auto s = scache.find(a);
-                     if (s != scache.end() && s->second->addr + s->second->size > address)
+                     if (s != scache.end() && s->second->key + s->second->size > prev_end)
+                     {
+                        const_cast<StaticInstruction*>(s->second)->dead = true;
+                        scache.erase(s);
+                     }
+                  }
+                  for (uint64_t a = key; a < key + ICACHE_SIZE; ++a)
+                  {
+                     auto s = scache.find(a);
+                     if (s != scache.end())
                      {
                         const_cast<StaticInstruction*>(s->second)->dead = true;
                         scache.erase(s);
@@ -647,20 +668,36 @@ bool Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&b), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&c), sizeof(uint64_t));
                uint64_t result;
+               /* Whether to answer is the handler's to say, apart from the
+                  answer itself.  It used to be read off the answer -- 42 meant
+                  "no response" -- so any command whose honest answer was 42
+                  (a user command, SimGetProcId() on core 42, a 42 MHz clock)
+                  was never answered and its program hung. */
+               bool respond = true;
                if (handleMagicFunc)
-                  result = handleMagicFunc(handleMagicArg, a, b, c);
+                  result = handleMagicFunc(handleMagicArg, a, b, c, &respond);
                else
                   result = a; // Do not modify GAX register
 
-               if (result == 42)
-               {
-#ifdef DEBUG_SIFT_READER
-                  std::cout << "[Virtuoso: Magic Instruction] Received magic instruction with result 42: we should not respond to this" << std::endl;
-#endif
-                  return true;
-               }
+               if (!respond)
+                  return true;     // another stream runs next; see HandleMagicFunc
 
                sendSimpleResponse(RecOtherMagicInstructionResponse, &result, sizeof(result));
+               break;
+            }
+
+            case RecOtherMagicInstructionNoResponse:
+            {
+               assert(rec.Other.size == 3 * sizeof(uint64_t));
+               uint64_t a, b, c;
+               input->read(reinterpret_cast<char*>(&a), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&b), sizeof(uint64_t));
+               input->read(reinterpret_cast<char*>(&c), sizeof(uint64_t));
+               if (handleMagicFunc)
+               {
+                  bool respond = true;     // nothing to answer on, either way
+                  handleMagicFunc(handleMagicArg, a, b, c, &respond);
+               }
                break;
             }
 
@@ -1029,6 +1066,7 @@ const StaticInstruction* Reader::staticInfoInstruction(uint64_t addr, uint8_t si
 {
    StaticInstruction *sinst = new StaticInstruction();
    sinst->addr = addr;
+   sinst->key = m_code_physical ? (codeKey(addr & ICACHE_PAGE_MASK) | (addr & ICACHE_OFFSET_MASK)) : addr;
    sinst->size = size;
    sinst->next = NULL;
 
@@ -1038,8 +1076,9 @@ const StaticInstruction* Reader::staticInfoInstruction(uint64_t addr, uint8_t si
    {
       uint32_t offset = (dst == sinst->data) ? addr & ICACHE_OFFSET_MASK : 0;
       uint32_t _size = std::min(uint32_t(size), ICACHE_SIZE - offset);
-      assert(icache.count(base_addr));
-      memcpy(dst, icache[base_addr] + offset, _size);
+      const uint64_t key = codeKey(base_addr);
+      assert(icache.count(key));
+      memcpy(dst, icache[key] + offset, _size);
       dst += _size;
       size -= _size;
       base_addr += ICACHE_SIZE;
@@ -1056,22 +1095,23 @@ const StaticInstruction* Reader::getStaticInstruction(uint64_t addr, uint8_t siz
 #endif // !PINPLAY
 
    const StaticInstruction *sinst;
+   const uint64_t key = m_code_physical ? (codeKey(addr & ICACHE_PAGE_MASK) | (addr & ICACHE_OFFSET_MASK)) : addr;
 
    // Lookup in a large unordered_map is quite expensive if we have to do this for every dynamic instruction
    // Therefore, keep a pointer to the probable next instruction in each (static) instruction
-   if (!m_code_may_change && m_last_sinst && m_last_sinst->next && m_last_sinst->next->addr == addr
+   if (!m_code_may_change && m_last_sinst && m_last_sinst->next && m_last_sinst->next->key == key
        && !m_last_sinst->next->dead)
    {
       sinst = m_last_sinst->next;
    }
-   else if (scache.count(addr) && scache[addr]->size == size)
+   else if (scache.count(key) && scache[key]->size == size)
    {
-      sinst = scache[addr];
+      sinst = scache[key];
    }
    else
    {
       sinst = staticInfoInstruction(addr, size);
-      scache[addr] = sinst;
+      scache[key] = sinst;
    }
 
    // Link, or re-link when the old successor's code was replaced
@@ -1100,6 +1140,7 @@ const StaticInstruction* Reader::getChampSimStaticInstruction(uint64_t addr)
    else
    {
       StaticInstruction *new_sinst = new StaticInstruction();
+      new_sinst->key = addr;
       new_sinst->addr = addr;
       new_sinst->size = CHAMPSIM_DEFAULT_INST_SIZE;
       memset(new_sinst->data, 0, sizeof(new_sinst->data));
@@ -1195,6 +1236,17 @@ uint64_t Reader::getPosition()
 uint64_t Reader::getLength()
 {
    return filesize;
+}
+
+/* The key a code page is held under: its virtual address, or in a
+   CodePhysical trace its physical page, from the latest mapping the writer
+   sent (Writer::codeKey is the other half) */
+uint64_t Reader::codeKey(uint64_t va_page) const
+{
+   if (!m_code_physical)
+      return va_page;
+   auto it = vcache.find(va_page / PAGE_SIZE_SIFT);
+   return it == vcache.end() ? va_page : ((uint64_t)it->second * PAGE_SIZE_SIFT) | CODE_KEY_PHYSICAL;
 }
 
 uint64_t Reader::va2pa(uint64_t va)

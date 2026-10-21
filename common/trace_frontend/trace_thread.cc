@@ -422,9 +422,9 @@ int32_t TraceThread::handleJoinFunc(int32_t join_thread_id)
    return 0;
 }
 
-uint64_t TraceThread::handleMagicFunc(uint64_t a, uint64_t b, uint64_t c)
+uint64_t TraceThread::handleMagicFunc(uint64_t a, uint64_t b, uint64_t c, bool *respond)
 {
-   return handleMagicInstruction(m_thread->getId(), a, b, c);
+   return handleMagicInstruction(m_thread->getId(), a, b, c, respond);
 }
 
 void TraceThread::handleRoutineChangeFunc(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip)
@@ -810,6 +810,39 @@ void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, 
             core->readInstructionMemory(va2pa(eip), address);
          break;
    }
+}
+
+void TraceThread::checkIsaChange(int isa)
+{
+   static const char *const isa_names[] = { "IA-32", "x86-64", "RISC-V", "ARM (A32)", "Thumb",
+                                            "AArch64", "ARMv8 32-bit", "x86 real mode" };
+   const char *isa_name = isa >= 0 && isa < (int)(sizeof(isa_names) / sizeof(isa_names[0])) ? isa_names[isa] : "an unknown ISA";
+   bool ok;
+   switch (Sim()->getDecoder()->get_arch())
+   {
+      case dl::DL_ARCH_INTEL:
+         ok = isa == dl::DL_ISA_IA32 || isa == dl::DL_ISA_X86_64 || isa == dl::DL_ISA_IA16;
+         break;
+      case dl::DL_ARCH_RISCV:
+         ok = isa == dl::DL_ISA_RISCV;
+         break;
+      case dl::DL_ARCH_ARMv8:
+         ok = isa == dl::DL_ISA_AARCH64 || isa == dl::DL_ISA_V8_32 || isa == dl::DL_ISA_ARM32 || isa == dl::DL_ISA_THUMB;
+         break;
+      case dl::DL_ARCH_ARMv7:
+         ok = isa == dl::DL_ISA_ARM32 || isa == dl::DL_ISA_THUMB;
+         break;
+      default:
+         ok = false;
+   }
+   if (!ok)
+      LOG_PRINT_ERROR("The trace is %s code, but this configuration (general/arch=%s) models a core of another "
+                      "architecture.  Simulate it on %s.", isa_name,
+                      Sim()->getCfg()->getString("general/arch").c_str(),
+                      isa == dl::DL_ISA_RISCV ? "the riscv configuration"
+                      : (isa == dl::DL_ISA_AARCH64 ? "an ARM configuration (cortex-a53, cortex-a72)"
+                      : "an x86 configuration (gainestown, nehalem, ...)"));
+   m_isa_checked = isa;
 }
 
 const dl::DecodedInst* TraceThread::staticDecode(Sift::Instruction &inst)
@@ -1351,7 +1384,7 @@ void TraceThread::notifyAppExitAndSwitchToKernel()
 
    /* Hand the thread back to the kernel, and wake it.  The worker is parked
       inside the SimContextSwitchTo that scheduled this application -- that
-      command returns 42, which sends no response, so the recorder blocks
+      command is not answered (it clears respond), so the recorder blocks
       until one arrives.  The fault path sends it every time it switches back
       to the kernel; this path did not, and a worker whose application had
       exited stayed parked for good.  Whether that stalled the other core
@@ -1665,6 +1698,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
          }
          else
          {
+            checkIsa(inst);
             switch(Sim()->getInstrumentationMode())
             {
                case InstMode::FAST_FORWARD:
@@ -1952,6 +1986,7 @@ void TraceThread::m_run_func_default()
       }
       else
       {
+         checkIsa(inst);
          switch(Sim()->getInstrumentationMode())
          {
             case InstMode::FAST_FORWARD:

@@ -25,6 +25,9 @@ namespace Sift
    const uint64_t PAGE_SIZE_SIFT = 4096;
    const uint32_t ICACHE_SIZE = 0x1000;
    const uint64_t ICACHE_OFFSET_MASK = ICACHE_SIZE - 1;
+   /* The key of a code page identified by its physical address: bit 63 set,
+      so that it cannot be mistaken for a virtual page in the same caches. */
+   const uint64_t CODE_KEY_PHYSICAL = 1ULL << 63;
    const uint64_t ICACHE_PAGE_MASK = ~ICACHE_OFFSET_MASK;
 
    typedef struct
@@ -42,6 +45,11 @@ namespace Sift
       ArchIA32 = 2,
       IcacheVariable = 4,
       PhysicalAddress = 8,
+      /* Code is identified by its physical page (CODE_KEY_PHYSICAL), from
+         mappings the front end supplies (Writer::Mapping): a full-system
+         trace, where processes run different code at the same virtual
+         address and one physical page can appear at several. */
+      CodePhysical = 16,
    } Option;
 
    typedef union
@@ -117,6 +125,11 @@ namespace Sift
       RecOtherISAChange,
       RecOtherShutdown,
       RecOtherMemorySpans,
+      /* A magic instruction from a front end with no response channel (a
+         trace written to a file, a full-system QEMU): the simulator acts on
+         it -- an ROI marker switches the performance models -- and does not
+         answer, since nothing would read the answer. */
+      RecOtherMagicInstructionNoResponse,
       RecOtherEnd = 0xff,
    } RecOtherType;
 

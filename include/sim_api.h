@@ -78,44 +78,92 @@
 #define SIM_OPT_INSTRUMENT_FASTFORWARD 2
 
 
-#if defined(ARM_64)
+/* AArch64.  The command goes in x1 and the arguments in x2 and x3, which is
+   what the DynamoRIO front end reads; the answer comes back in x0, which the
+   command is also loaded into, so that natively -- no simulator to answer --
+   a magic returns its command exactly as the x86 one does, and
+   SimInSimulator() is false.  "bfm x0, x0, 0, 0" copies bit 0 of x0 onto
+   itself: a no-op on hardware, and what the front ends look for.
 
-#define SimMagic0(cmd) ({            \
-   unsigned long _cmd = (cmd), _res; \
-   asm volatile(                     \
-       "mov x1, %[x]\n"              \
-       "\tbfm x0, x0, 0, 0\n"        \
-       : [ret] "=r"(_res)            \
-       : [x] "r"(_cmd));             \
+   ARM_64 is the historical spelling; __aarch64__ is what compilers define,
+   and without it an AArch64 build fell through to the x86 asm below. */
+#if defined(ARM_64) || defined(__aarch64__)
+
+#define SimMagic0(cmd) ({                            \
+   register unsigned long _res __asm__("x0") = (cmd); \
+   unsigned long _cmd = (cmd);                       \
+   __asm__ __volatile__(                             \
+       "mov x1, %[x]\n"                              \
+       "\tbfm x0, x0, 0, 0\n"                        \
+       : "+r"(_res)                                  \
+       : [x] "r"(_cmd)                               \
+       : "x1", "memory");                            \
+   _res;                                             \
 })
 
 #define SimMagic1(cmd, arg0) ({                      \
-   unsigned long _cmd = (cmd), _arg0 = (arg0), _res; \
-   asm volatile(                                     \
+   register unsigned long _res __asm__("x0") = (cmd); \
+   unsigned long _cmd = (cmd), _arg0 = (arg0);       \
+   __asm__ __volatile__(                             \
        "mov x1, %[x]\n"                              \
        "\tmov x2, %[y]\n"                            \
        "\tbfm x0, x0, 0, 0\n"                        \
-       : [ret] "=r"(_res)                            \
+       : "+r"(_res)                                  \
        : [x] "r"(_cmd),                              \
          [y] "r"(_arg0)                              \
-       : "x2", "x1");                                \
+       : "x1", "x2", "memory");                      \
+   _res;                                             \
 })
 
 #define SimMagic2(cmd, arg0, arg1) ({                                \
-   unsigned long _cmd = (cmd), _arg0 = (arg0), _arg1 = (arg1), _res; \
-   asm volatile(                                                     \
+   register unsigned long _res __asm__("x0") = (cmd);                 \
+   unsigned long _cmd = (cmd), _arg0 = (arg0), _arg1 = (arg1);       \
+   __asm__ __volatile__(                                             \
        "mov x1, %[x]\n"                                              \
        "\tmov x2, %[y]\n"                                            \
        "\tmov x3, %[z]\n"                                            \
        "\tbfm x0, x0, 0, 0\n"                                        \
-       : [ret] "=r"(_res)                                            \
+       : "+r"(_res)                                                  \
        : [x] "r"(_cmd),                                              \
          [y] "r"(_arg0),                                             \
          [z] "r"(_arg1)                                              \
-       : "x1", "x2", "x3");                                          \
+       : "x1", "x2", "x3", "memory");                                \
+   _res;                                                             \
 })
 
-#else // end ARM_64
+/* RISC-V.  The command and the answer in a0, the arguments in a1 and a2, the
+   way a call passes them.  The marker is "slti zero, zero, 0x5a": an SLTI
+   that writes x0 is a HINT the ISA designates for custom use, so it runs as a
+   no-op on hardware and in QEMU, and natively a0 still holds the command. */
+#elif defined(__riscv)
+
+#define SIM_RISCV_MAGIC "slti zero, zero, 0x5a\n"
+
+#define SimMagic0(cmd) ({                                \
+   register unsigned long _res __asm__("a0") = (cmd);    \
+   __asm__ __volatile__(SIM_RISCV_MAGIC                  \
+       : "+r"(_res) : : "memory");                       \
+   _res;                                                 \
+})
+
+#define SimMagic1(cmd, arg0) ({                          \
+   register unsigned long _res __asm__("a0") = (cmd);    \
+   register unsigned long _a1 __asm__("a1") = (arg0);    \
+   __asm__ __volatile__(SIM_RISCV_MAGIC                  \
+       : "+r"(_res) : "r"(_a1) : "memory");              \
+   _res;                                                 \
+})
+
+#define SimMagic2(cmd, arg0, arg1) ({                    \
+   register unsigned long _res __asm__("a0") = (cmd);    \
+   register unsigned long _a1 __asm__("a1") = (arg0);    \
+   register unsigned long _a2 __asm__("a2") = (arg1);    \
+   __asm__ __volatile__(SIM_RISCV_MAGIC                  \
+       : "+r"(_res) : "r"(_a1), "r"(_a2) : "memory");    \
+   _res;                                                 \
+})
+
+#else // end ARM_64 and RISC-V
 
 #if defined(__i386)
 #define MAGIC_REG_A "eax"

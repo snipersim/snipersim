@@ -79,11 +79,13 @@ namespace Sift
          // and a seen/not-seen cache can never notice that.
          std::unordered_map<uint64_t, std::array<uint8_t, 16> > icache_bytes;
          int fd_va;
-         std::unordered_map<intptr_t, bool> m_va2pa;
+         std::unordered_map<uint64_t, uint64_t> m_va2pa;   // virtual page -> physical page last sent
+         uint64_t codeKey(uint64_t base_addr);
          char *m_response_filename;
          uint32_t m_id;
          bool m_requires_icache_per_insn;
          bool m_send_va2pa_mapping;
+         bool m_external_mappings;   // the front end supplies mappings (Mapping()), not /proc/self/pagemap
          uint64_t m_code_changes_seen;   // CodeTracker::changes() when this writer last caught up
 
          void initResponse();
@@ -96,7 +98,7 @@ namespace Sift
 	 void channelLost();
 
       public:
-         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false, bool requires_icache_per_insn = false, bool send_va2pa_mapping = false, GetCodeFunc2 getCodeFunc2 = NULL, void *GetCodeFunc2Data = NULL);
+         Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression = false, const char *response_filename = "", uint32_t id = 0, bool arch32 = false, bool requires_icache_per_insn = false, bool send_va2pa_mapping = false, GetCodeFunc2 getCodeFunc2 = NULL, void *GetCodeFunc2Data = NULL, bool code_physical = false);
          ~Writer();
          void End();
          void Instruction(uint64_t addr, uint8_t size, uint8_t num_addresses, uint64_t addresses[], bool is_branch, bool taken, bool is_predicate, bool executed);
@@ -116,6 +118,16 @@ namespace Sift
          // The byte ranges the next Instruction() accesses, when two addresses cannot describe them
          void MemorySpans(uint8_t count, const MemorySpan spans[], uint32_t dropped_lines = 0);
          bool IsOpen();
+
+         /* Full-system front ends: the page holding va is at pa, from now on.
+            Sent to the reader when the page's mapping changes -- a context
+            switch, a remap -- so data and code addresses follow the running
+            process.  Calling it marks the trace as identifying code by its
+            physical page (CodePhysical); call it before the first
+            Instruction(), for every code and data page an instruction uses,
+            before that Instruction().  Only for a writer constructed with
+            code_physical. */
+         void Mapping(uint64_t va, uint64_t pa);
 
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }
    };

@@ -15,6 +15,14 @@ extern "C" {
 }
 #endif
 
+/* Magic instructions, in stream order, as the simulator would receive them;
+   the application gets its command back, as it would natively. */
+static uint64_t print_magic(void*, uint64_t a, uint64_t b, uint64_t c, bool *)
+{
+   printf("magic %" PRIu64 " 0x%" PRIx64 " 0x%" PRIx64 "\n", a, b, c);
+   return a;
+}
+
 int main(int argc, char* argv[])
 {
    if (argc > 1 && strcmp(argv[1], "-d") == 0)
@@ -68,6 +76,7 @@ int main(int argc, char* argv[])
    else if (argc > 1)
    {
       Sift::Reader reader(argv[1]);
+      reader.setHandleMagicFunc(print_magic);
       //const xed_syntax_enum_t syntax = XED_SYNTAX_ATT;
 
       Sift::Instruction inst;
@@ -96,7 +105,12 @@ int main(int argc, char* argv[])
          if (inst.num_addresses > 0) {
             printf("                 -- addr");
             for(int i = 0; i < inst.num_addresses; ++i)
+            {
                printf(" %08" PRIx64, inst.addresses[i]);
+               // A trace with mappings: where the access went, as of this point in it
+               if (reader.getTraceHasPhysicalAddresses())
+                  printf("=%" PRIx64, reader.va2pa(inst.addresses[i]));
+            }
             printf("\n");
          }
          if (inst.is_branch)

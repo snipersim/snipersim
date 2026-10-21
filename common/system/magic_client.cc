@@ -7,11 +7,11 @@
 #include "thread.h"
 #include "thread_manager.h"
 
-static UInt64 handleMagic(thread_id_t thread_id, UInt64 cmd, UInt64 arg0 = 0, UInt64 arg1 = 0)
+static UInt64 handleMagic(thread_id_t thread_id, UInt64 cmd, UInt64 arg0 = 0, UInt64 arg1 = 0, bool *respond = nullptr)
 {
    Thread *thread = (thread_id == INVALID_THREAD_ID) ? NULL : Sim()->getThreadManager()->getThreadFromID(thread_id);
    Core *core = thread == NULL ? NULL : thread->getCore();
-   return Sim()->getMagicServer()->Magic(thread_id, core ? core->getId() : INVALID_CORE_ID, cmd, arg0, arg1);
+   return Sim()->getMagicServer()->Magic(thread_id, core ? core->getId() : INVALID_CORE_ID, cmd, arg0, arg1, respond);
 }
 
 void setInstrumentationMode(UInt64 opt)
@@ -19,7 +19,7 @@ void setInstrumentationMode(UInt64 opt)
    handleMagic(INVALID_THREAD_ID, SIM_CMD_INSTRUMENT_MODE, opt);
 }
 
-UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
+UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UInt64 arg1, bool *respond)
 {
    switch(cmd)
    {
@@ -53,7 +53,7 @@ UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UI
    case SIM_CMD_WAIT_FOR_ROI:
    case SIM_CMD_FAST_FAULT:
    case SIM_CMD_SET_FAST_FAULT_CHARGE:
-      return handleMagic(thread_id, cmd, arg0, arg1);
+      return handleMagic(thread_id, cmd, arg0, arg1, respond);
    case SIM_CMD_PROC_ID:
    {
       Core *core = Sim()->getCoreManager()->getCurrentCore();

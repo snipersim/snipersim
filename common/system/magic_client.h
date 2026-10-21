@@ -3,7 +3,9 @@
 
 #include "fixed_types.h"
 
-UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UInt64 arg1);
+/* respond, when given, is cleared by a command whose caller must not be
+   answered now (MagicServer::Magic) */
+UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UInt64 arg1, bool *respond = nullptr);
 
 void setInstrumentationMode(UInt64 opt);
 

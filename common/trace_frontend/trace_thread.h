@@ -213,7 +213,15 @@ class TraceThread : public Runnable
       int32_t handleNewThreadFunc();
       int32_t handleForkFunc();
       int32_t handleJoinFunc(int32_t thread);
-      uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c);
+      uint64_t handleMagicFunc(uint64_t a, uint64_t b, uint64_t c, bool *respond);
+      /* The trace's ISA against the configured core's (general/arch), each
+         time the trace's changes: an x86 trace on an ARM core either aborted
+         inside the ARM decoder or, in fast-forward, which decodes nothing,
+         ran as if all were well. */
+      void checkIsa(const Sift::Instruction &inst)
+      { if (inst.isa != m_isa_checked) checkIsaChange(inst.isa); }
+      void checkIsaChange(int isa);
+      int m_isa_checked = -1;
       bool handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res);
       void handleRoutineChangeFunc(Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip);
       void handleRoutineAnnounceFunc(uint64_t eip, const char *name, const char *imgname, uint64_t offset, uint32_t line, uint32_t column, const char *filename);
@@ -255,8 +263,8 @@ class TraceThread : public Runnable
       { Where w((TraceThread*)arg, "new-thread callback"); return ((TraceThread*)arg)->handleNewThreadFunc(); }
       static int32_t __handleJoinFunc(void* arg, int32_t join_thread_id)
       { Where w((TraceThread*)arg, "join callback", join_thread_id); return ((TraceThread*)arg)->handleJoinFunc(join_thread_id); }
-      static uint64_t __handleMagicFunc(void* arg, uint64_t a, uint64_t b, uint64_t c)
-      { Where w((TraceThread*)arg, "magic callback", (int64_t)a); return ((TraceThread*)arg)->handleMagicFunc(a, b, c); }
+      static uint64_t __handleMagicFunc(void* arg, uint64_t a, uint64_t b, uint64_t c, bool *respond)
+      { Where w((TraceThread*)arg, "magic callback", (int64_t)a); return ((TraceThread*)arg)->handleMagicFunc(a, b, c, respond); }
       static bool __handleEmuFunc(void* arg, Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
       { Where w((TraceThread*)arg, "emulation callback", (int64_t)type); return ((TraceThread*)arg)->handleEmuFunc(type, req, res); }
       static void __handleRoutineChangeFunc(void* arg, Sift::RoutineOpType event, uint64_t eip, uint64_t esp, uint64_t callEip)

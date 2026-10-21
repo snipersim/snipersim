@@ -82,9 +82,6 @@ DEFAULT_CORES = (1, 2, 4)
 # Complete machines: must run on their own.
 EXPECT_PASS = [
     'dunnington', 'dunnington16', 'gainestown', 'nehalem-lite', 'silvermont',
-    # the RISC-V core model is built by default (RISCV=ON); the decoder follows
-    # the ISA the trace declares, so an x86 workload runs on these too
-    'riscv', 'riscv-mediumboom',
 ]
 
 # Overlay fragments: tune one aspect and must be layered on a complete config.
@@ -119,8 +116,17 @@ LAYER_BASE_OVERRIDE = {}
 EXPECT_FAIL = {
     'beckton': 'cache sizes are not a power of two '
                '("Caches of non-power of 2 size need funky hash function")',
-    'cortex-a53': 'ARM target: needs an ARM frontend and an ARM trace',
-    'cortex-a72': 'ARM target: needs an ARM frontend and an ARM trace',
+    # The sweep's workload is an x86-64 program, and the simulator refuses a
+    # trace of another architecture than the configured core's.  These cores
+    # are simulated with AArch64 traces in testing/test_qemu.py (aarch64-*).
+    'cortex-a53': 'ARM core, x86-64 workload: refused (the trace ISA check)',
+    'cortex-a72': 'ARM core, x86-64 workload: refused (the trace ISA check)',
+    # Likewise the RISC-V cores, simulated with RISC-V traces in test_qemu.py
+    # (riscv-*; docs/RISCV_AI_ACCELERATOR_STACK.md).  Before the check, the
+    # x86 workload "passed" in fast-forward, which decodes nothing, and
+    # asserted in the RISC-V decoder in detailed mode.
+    'riscv': 'RISC-V core, x86-64 workload: refused (the trace ISA check)',
+    'riscv-mediumboom': 'RISC-V core, x86-64 workload: refused (the trace ISA check)',
     'kingscross': 'mesh topology fixed at 16:4, so it needs 64 cores',
     'sampling': 'sampling is only supported with the Pin frontend',
 }
@@ -144,13 +150,6 @@ MODES = ('fast-forward', 'detailed')
 # to the network thread; see the comment at the release in cache_cntlr.cc.
 # If a config lands back here with "timed out", look there first.
 EXPECT_FAIL_DETAILED = {
-    # The RISC-V configurations select the RISC-V decoder (general/arch), and
-    # this suite's workload is an x86 binary: fast-forward never decodes, the
-    # timing model does and asserts on the first x86 instruction.  They are for
-    # RISC-V traces (docs/RISCV_AI_ACCELERATOR_STACK.md); the riscv-* cases of
-    # test_qemu.py cover them.
-    'riscv': 'the RISC-V decoder cannot decode an x86 trace',
-    'riscv-mediumboom': 'the RISC-V decoder cannot decode an x86 trace',
     # Step 19: eager paging lays a VMA out whole on its first fault, and
     # VMAs come only from a trace's VMA log; this suite's live workload has
     # none, so the first fault stops the run with a message saying so

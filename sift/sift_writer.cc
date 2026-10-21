@@ -140,7 +140,7 @@ uint64_t Sift::CodeTracker::pagesTracked()
 }
 // ---------------------------------------------------------------------------
 
-Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn, bool send_va2pa_mapping, GetCodeFunc2 getCodeFunc2, void* getCodeFunc2Data)
+Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useCompression, const char *response_filename, uint32_t id, bool arch32, bool requires_icache_per_insn, bool send_va2pa_mapping, GetCodeFunc2 getCodeFunc2, void* getCodeFunc2Data, bool code_physical)
    : response(NULL)
    , getCodeFunc(getCodeFunc)
    , getCodeFunc2(getCodeFunc2)
@@ -156,7 +156,8 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
    , m_va2pa()
    , m_id(id)
    , m_requires_icache_per_insn(requires_icache_per_insn)
-   , m_send_va2pa_mapping(send_va2pa_mapping)
+   , m_send_va2pa_mapping(send_va2pa_mapping || code_physical)
+   , m_external_mappings(code_physical)
    // A new writer has sent nothing yet, so no earlier change concerns it
    , m_code_changes_seen(CodeTracker::changes())
 {
@@ -180,6 +181,8 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
       options |= IcacheVariable;
    if (m_send_va2pa_mapping)
       options |= PhysicalAddress;
+   if (m_external_mappings)
+      options |= CodePhysical;
 
    output = new cvofstream(filename);      // a FIFO open that does not wait inside stdio (zfstream.h)
 
@@ -307,6 +310,12 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
       return;
    }
 
+   // Mappings first: with code keyed by its physical page, the reader needs
+   // a page's mapping before the page itself
+   send_va2pa(addr);
+   for(int i = 0; i < num_addresses; ++i)
+      send_va2pa(addresses[i]);
+
    if (m_requires_icache_per_insn)
    {
       // Fetch first, then decide: with self-modifying code the bytes at an
@@ -369,7 +378,8 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
       // Send ICACHE record?
       for(uint64_t base_addr = addr & ICACHE_PAGE_MASK; base_addr <= ((addr + size - 1) & ICACHE_PAGE_MASK); base_addr += ICACHE_SIZE)
       {
-         if (! icache[base_addr])
+         const uint64_t key = codeKey(base_addr);
+         if (! icache[key])
          {
             #if VERBOSE > 2
             std::cerr << "[DEBUG:" << m_id << "] Write icache" << std::endl;
@@ -389,9 +399,9 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
             }
             output->write(reinterpret_cast<char*>(buffer), ICACHE_SIZE);
 
-            icache[base_addr] = true;
+            icache[key] = true;
             if (CodeTracker::enabled())
-               m_code_changes_seen = CodeTracker::pageSent(base_addr, buffer, m_code_changes_seen);
+               m_code_changes_seen = CodeTracker::pageSent(key, buffer, m_code_changes_seen);
          }
       }
    }
@@ -399,10 +409,6 @@ void Sift::Writer::Instruction(uint64_t addr, uint8_t size, uint8_t num_addresse
    #if VERBOSE > 2
    printf("%016lx (%d) A%u %c%c %c%c\n", addr, size, num_addresses, is_branch?'B':'.', is_branch?(taken?'T':'.'):'.', is_predicate?'C':'.', is_predicate?(executed?'E':'n'):'.');
    #endif
-
-   send_va2pa(addr);
-   for(int i = 0; i < num_addresses; ++i)
-      send_va2pa(addresses[i]);
 
    // Try as simple instruction
    if (addr == last_address && !is_predicate)
@@ -960,7 +966,11 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
    // send magic
    Record rec;
    rec.Other.zero = 0;
-   rec.Other.type = RecOtherMagicInstruction;
+   /* Without a response channel the record is a notice, not a question:
+      waiting would block on a channel that does not exist.  The application
+      sees its command back, as it does natively. */
+   const bool answered = strcmp(m_response_filename, "") != 0;
+   rec.Other.type = answered ? RecOtherMagicInstruction : RecOtherMagicInstructionNoResponse;
    rec.Other.size = 3 * sizeof(uint64_t);
    output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
    output->write(reinterpret_cast<char*>(&a), sizeof(uint64_t));
@@ -968,9 +978,9 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
    output->write(reinterpret_cast<char*>(&c), sizeof(uint64_t));
    output->flush();
 
+   if (!answered)
+      return a;
 
-   
-   
    initResponse();
 
    // wait for reply
@@ -1367,7 +1377,7 @@ void Sift::Writer::send_va2pa(uint64_t va)
       return;
    }
 
-   if (m_send_va2pa_mapping)
+   if (m_send_va2pa_mapping && !m_external_mappings)
    {
       uint64_t vp = static_cast<uintptr_t>(va) / PAGE_SIZE_SIFT;
       if (m_va2pa.count(vp) == 0)
@@ -1387,10 +1397,40 @@ void Sift::Writer::send_va2pa(uint64_t va)
             output->write(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
             output->write(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
 
-            m_va2pa[vp] = true;
+            m_va2pa[vp] = pp;
          }
       }
    }
+}
+
+void Sift::Writer::Mapping(uint64_t va, uint64_t pa)
+{
+   if (!output || !m_external_mappings)
+      return;
+   const uint64_t vp = va / PAGE_SIZE_SIFT, pp = pa / PAGE_SIZE_SIFT;
+   std::unordered_map<uint64_t, uint64_t>::iterator it = m_va2pa.find(vp);
+   if (it != m_va2pa.end() && it->second == pp)
+      return;                                     // the common case: unchanged
+   Record rec;
+   rec.Other.zero = 0;
+   rec.Other.type = RecOtherLogical2Physical;
+   rec.Other.size = 2 * sizeof(uint64_t);
+   output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+   output->write(reinterpret_cast<const char*>(&vp), sizeof(uint64_t));
+   output->write(reinterpret_cast<const char*>(&pp), sizeof(uint64_t));
+   m_va2pa[vp] = pp;
+}
+
+/* The key the code cache holds a page under: its virtual address, or, in a
+   CodePhysical trace, its physical page (with CODE_KEY_PHYSICAL), so that two
+   processes' code at one virtual address are two pages, and one page mapped
+   at two addresses is one */
+uint64_t Sift::Writer::codeKey(uint64_t base_addr)
+{
+   if (!m_external_mappings)
+      return base_addr;
+   std::unordered_map<uint64_t, uint64_t>::const_iterator it = m_va2pa.find(base_addr / PAGE_SIZE_SIFT);
+   return it == m_va2pa.end() ? base_addr : ((it->second * PAGE_SIZE_SIFT) | CODE_KEY_PHYSICAL);
 }
 
 /* The simulator closed this thread's channel -- its trace thread was stopped

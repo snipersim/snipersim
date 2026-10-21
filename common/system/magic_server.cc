@@ -29,7 +29,7 @@ MagicServer::MagicServer()
 MagicServer::~MagicServer()
 { }
 
-UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
+UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1, bool *respond)
 {
    /* SIM_CMD_WAIT_FOR_ROI blocks until some other thread completes the ROI
       barrier, so it must not be holding the thread manager lock while it
@@ -46,7 +46,7 @@ UInt64 MagicServer::Magic(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, 
    UInt64 res;
    {
       ScopedLock sl(Sim()->getThreadManager()->getLock());
-      res = Magic_unlocked(thread_id, core_id, cmd, arg0, arg1);
+      res = Magic_unlocked(thread_id, core_id, cmd, arg0, arg1, respond);
    }
 
    return res;
@@ -84,7 +84,7 @@ static UInt64 sumCacheMetric(const char *cache, bool misses)
    return total;
 }
 
-UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1)
+UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1, bool *respond)
 {
    switch(cmd)
    {
@@ -240,7 +240,11 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
 #if DEBUG_MAGIC_SERVER >= DEBUG_DETAILED
          LineOut() << "[MimicOS: Magic] Current SiftReader set to APP" << std::endl;
 #endif
-         return 42;
+         // The application's stream runs next; the kernel is answered when
+         // it is switched back to (TraceThread, sendResponseAfterContextSwitch)
+         if (respond)
+            *respond = false;
+         return 0;
       }
       case SIM_CMD_FAST_FAULT:
       {
@@ -337,12 +341,12 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
                       << "): no reader in pool; ignoring (thread_id="
                       << thread_id << ", core_id=" << core_id << ")"
                       << std::endl;
-            /* 0, not 42.  42 suppresses the SIFT response record, which is
-               right when the switch succeeded -- the caller is not resumed
-               and another stream takes over.  Nothing was installed here, so
-               the caller's own stream is still current and must be answered,
-               or it blocks forever waiting for a response that is never
-               sent.  Virtuoso returns 42 on this path, which strands a
+            /* Answered, unlike a switch that succeeded (where the caller is
+               not resumed and another stream takes over).  Nothing was
+               installed here, so the caller's own stream is still current
+               and must be answered, or it blocks forever waiting for a
+               response that is never sent.  Virtuoso withholds it on this
+               path, which strands a
                kernel that asked for a thread that has since exited. */
             return 0;
          }
@@ -366,14 +370,16 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             names nothing and the kernel has nothing to reschedule. */
          trace_thread->setRunningAppTid(app_tid);
 
-         /* 42, like SIM_CMD_CONTEXT_SWITCH: the Sift::Reader path takes it as
-            "send no response record", because the caller is not meant to
-            resume -- the newly installed stream runs next.  That makes this a
-            kernel-only command: a guest that calls it for itself is never
-            answered and blocks, which is why the check below exercises the
-            lookup through the miss path and leaves the install to a kernel. */
+         /* Not answered, like SIM_CMD_CONTEXT_SWITCH: the caller is not meant
+            to resume -- the newly installed stream runs next.  That makes
+            this a kernel-only command: a guest that calls it for itself is
+            never answered and blocks, which is why the check below exercises
+            the lookup through the miss path and leaves the install to a
+            kernel. */
          Sim()->getMimicOS()->notifyEvent((int)core_id, MimicOS::EVENT_SWITCH_TO, arg0);
-         return 42;
+         if (respond)
+            *respond = false;
+         return 0;
       }
       case SIM_CMD_GET_INJECTED_APP_ID:
       {
