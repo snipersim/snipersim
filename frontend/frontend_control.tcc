@@ -60,26 +60,20 @@ void FrontendControl <T>::openFile(threadid_t threadid)
 
   char filename[1024] = {0};
   char response_filename[1024] = {0};
-  char remote_filename[1024] = {0};
-  char remote_response_filename[1024] = {0};
   if (m_options->get_response_files() == false)
   {
     if (m_options->get_blocksize()) {
       sprintf(filename, "%s.%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_thread_data[threadid].blocknum);
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.%" PRIu64 ".sift", m_thread_data[threadid].blocknum);
     } else {
       sprintf(filename, "%s.sift", m_options->get_output_file().c_str());
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.sift");
     }
   }
   else
   {
     if (m_options->get_blocksize()) {
       sprintf(filename, "%s.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_thread_data[threadid].blocknum, m_options->get_app_id(), m_thread_data[threadid].thread_num);
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", m_thread_data[threadid].blocknum, m_options->get_app_id(), m_thread_data[threadid].thread_num);
     } else {
       sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_options->get_app_id(), m_thread_data[threadid].thread_num);
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_app_id(), m_thread_data[threadid].thread_num);
     }
   }
 
@@ -89,7 +83,6 @@ void FrontendControl <T>::openFile(threadid_t threadid)
   if (m_options->get_response_files())
   {
     sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_options->get_app_id(), m_thread_data[threadid].thread_num);
-    sprintf(remote_response_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks_response.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_app_id(), m_thread_data[threadid].thread_num);
     if (m_options->get_verbose())
       std::cerr << "[SNIPER_FRONTEND:" << m_options->get_app_id() << ":" << m_thread_data[threadid].thread_num << "] Response = [" << response_filename << "]" << std::endl;
   }
@@ -106,54 +99,6 @@ void FrontendControl <T>::openFile(threadid_t threadid)
                                                        m_options->get_response_files() ? false : true,
                                                        response_filename, threadid, arch32, false, 
                                                        m_options->get_send_physical_address());
-    // Frontend and backend communicate over network: open socat pipes
-    if (m_options->get_ssh())
-    {
-      std::cerr << "SOCAT at work" << std::endl;
-      // Send trace, invoking socat at frontend machine (as server)
-      // Receive trace, invoking socat at backend machine over ssh (as client)
-      std::string command = "ssh cecilia@172.18.20.127 socat -u TCP-LISTEN:8888,reuseaddr OPEN:";
-      command += (const char*)remote_filename;
-      command += ",creat";
-      FILE *in1, *in2, *in3, *in4;
-      if(!(in1 = popen(command.c_str(), "r"))){
-        std::cerr << "Error executing command: " << command << std::endl;
-      } else {
-        std::cerr << "Command: " << command << std::endl;
-      }
-      command = "socat -u FILE:";
-      command += (const char*)filename;
-      command += ",ignoreeof TCP:172.18.20.127:8888,retry";
-      if(!(in2 = popen(command.c_str(), "r"))){
-        std::cerr << "Error executing command: " << command << std::endl;
-      } else {
-        std::cerr << "Command: " << command << std::endl;
-      }
-        std::cerr << "File closed for command: " << command << std::endl;
-
-      // Open also response files pipes?
-      if (m_options->get_response_files())
-      {
-        // Send response, invoking socat at backend machine over ssh (as server)
-        command = "ssh cecilia@172.18.20.127 socat -u FILE:";
-        command += (const char*)remote_response_filename;
-        command += ",ignoreeof TCP-LISTEN:9999,reuseaddr";
-        if(!(in3 = popen(command.c_str(), "r"))){
-          std::cerr << "Error executing command: " << command << std::endl;
-      } else {
-        std::cerr << "Command: " << command << std::endl;
-      }
-        // Receive response, invoking socat at frontend machine (as client)
-        command = "socat -u TCP:172.18.20.127:9999,retry OPEN:";
-        command += (const char*)response_filename;
-        command += ",append";
-        if(!(in4 = popen(command.c_str(), "r"))){
-          std::cerr << "Error executing command: " << command << std::endl;
-      } else {
-        std::cerr << "Command: " << command << std::endl;
-      }
-      }
-    }
   } catch (...) {
     std::cerr << "[SNIPER_FRONTEND:" << m_options->get_app_id() << ":" << m_thread_data[threadid].thread_num << "] Error: Unable to open the output file " << filename << std::endl;
     exit(1);

@@ -117,11 +117,6 @@ template <typename T> inline FrontendISA FrontendOptions<T>::get_theISA()
   return theISA;
 }
 
-template <typename T> inline bool OptionsBase<T>::get_ssh()
-{
-  return ssh;
-}
-
 template <typename T> inline bool OptionsBase<T>::get_smc_track()
 {
   return smc_track;

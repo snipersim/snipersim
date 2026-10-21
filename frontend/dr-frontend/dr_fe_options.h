@@ -57,9 +57,6 @@ static droption_t<bool> DRVerbose
 static droption_t<unsigned int> DRStopAddress
 (DROPTION_SCOPE_CLIENT, "stop", 0, "stop address",
  "Stop address (0 = disabled).");
-static droption_t<bool> DRSSH
-(DROPTION_SCOPE_CLIENT, "ssh", false, "frontend and backend connected by network",
- "Backend and frontend communicate over the network.");
 static droption_t<unsigned int> DRSmcTrack
 (DROPTION_SCOPE_CLIENT, "smc", 1, "track code rewritten in place",
  "If not 0 (the default), code that is rewritten after it was traced (JITs, loaders, self-modifying code) is detected when DynamoRIO re-translates it, and its pages are sent to the simulator again.");

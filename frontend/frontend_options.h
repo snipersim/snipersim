@@ -37,7 +37,6 @@ template <typename T> class OptionsBase
   bool get_send_physical_address();
   uint64_t get_flow_control();
   uint64_t get_flow_control_ff();
-  bool get_ssh();
   uint64_t get_stop_address();
   bool get_track_vma();
   bool get_smc_track();
@@ -96,7 +95,6 @@ template <typename T> class OptionsBase
   uint64_t flow_control_ff;
   
   /// Frontend and backend communicate over the network
-  bool ssh;
 
   /// Record the process's memory map (/proc/self/maps) to <output>.vma while
   /// tracing in detail, as the SIFT recorder's -sniper:vma does
