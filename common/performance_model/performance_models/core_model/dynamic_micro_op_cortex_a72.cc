@@ -61,6 +61,16 @@ DynamicMicroOpCortexA72::uop_port_t DynamicMicroOpCortexA72::getPort(const Micro
             case ARM64_INS_ORN: 
             case ARM64_INS_ORR: 
             case ARM64_INS_SUB:
+            /* Capstone 5 reports these by their own names where Capstone 4 gave
+               the instruction above them (ADDS as ADD, a register MOV as ORR):
+               kept in the class they had.  CMP, TST and the rest that both
+               versions name alike stay where they were (CMP deliberately out,
+               below). */
+            case ARM64_INS_ADDS:
+            case ARM64_INS_SUBS:
+            case ARM64_INS_ANDS:
+            case ARM64_INS_BICS:
+            case ARM64_INS_MOV:
             //case ARM64_INS_CMP:
                return uop->getDecodedInstruction()->has_modifiers() ?  // Instructions with shifters and extenders
                       DynamicMicroOpCortexA72::UOP_PORT3 : 

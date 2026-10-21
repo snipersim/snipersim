@@ -61,8 +61,14 @@ void Simulator::createDecoder()
         dla = dl::DL_ARCH_INTEL;
       else if (architecture == "riscv")
         dla = dl::DL_ARCH_RISCV;
+      // The Cortex configurations ask for armv8; nothing here mapped it, so
+      // no ARM trace had ever been simulated
+      else if (architecture == "armv8" || architecture == "arm")
+        dla = dl::DL_ARCH_ARMv8;
+      else if (architecture == "armv7")
+        dla = dl::DL_ARCH_ARMv7;
       else
-        LOG_PRINT_ERROR("Unknown architecture %s, should be intel or arm.", architecture.c_str());
+        LOG_PRINT_ERROR("Unknown architecture %s, should be intel, riscv, armv7 or armv8.", architecture.c_str());
       // Get mode
       dl::dl_mode dlm;
       String mode = Sim()->getCfg()->getString("general/mode");
@@ -75,8 +81,8 @@ void Simulator::createDecoder()
       // Get syntax 
       dl::dl_syntax dls;
       String syntax = Sim()->getCfg()->getString("general/syntax");
-      if (dla == dl::DL_ARCH_RISCV)
-        dls = dl::DL_SYNTAX_DEFAULT;
+      if (dla == dl::DL_ARCH_RISCV || dla == dl::DL_ARCH_ARMv7 || dla == dl::DL_ARCH_ARMv8)
+        dls = dl::DL_SYNTAX_DEFAULT;      // Capstone's, for ARM
       else if (syntax == "intel")
         dls = dl::DL_SYNTAX_INTEL;
       else if (syntax == "att")
@@ -88,6 +94,9 @@ void Simulator::createDecoder()
 
       m_factory = new dl::DecoderFactory;
       m_decoder = m_factory->CreateDecoder(dla, dlm, dls);  // create decoder for [arch, mode, syntax]
+      if (!m_decoder)
+        LOG_PRINT_ERROR("This Sniper was built without the %s decoder (make %s=ON).", architecture.c_str(),
+                        dla == dl::DL_ARCH_RISCV ? "RISCV" : "ARM");
       m_decoder->set_vector_bytes(getCfg()->getIntDefault("perf_model/core/riscv/vector_bytes", 16));
       m_decoder->set_ext_memory_uops(getCfg()->getIntDefault("perf_model/core/riscv/memory_uops", 16));
    }

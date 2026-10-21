@@ -362,11 +362,55 @@ bool ARMDecoder::op_write_mem(const DecodedInst * inst, unsigned int mem_idx)
   return ret;
 }
 
+/* SVE operands.  Capstone 5 decodes SVE but leaves the access of its Z and
+ * P register operands unset, so an SVE instruction read and wrote nothing as
+ * far as the timing model could tell: no dependency ran through a vector or
+ * predicate register, and a reduction's accumulator chain went as fast as
+ * independent work.  For an instruction with a Z or P operand, operands
+ * Capstone gave no access get the architecture's convention: the first is the
+ * destination (also read when the instruction accumulates into it), the rest
+ * are sources, and a store or a predicate test writes no register.  Returns
+ * the CS_AC_ bits, or 0 when this is not such an operand. */
+static bool is_sve_reg(unsigned r)
+{
+  return (r >= ARM64_REG_Z0 && r <= ARM64_REG_Z31) || (r >= ARM64_REG_P0 && r <= ARM64_REG_P15);
+}
+
+static uint8_t sve_access(const cs_insn *csi, unsigned int idx)
+{
+  const cs_arm64 *a = &csi->detail->arm64;
+  if (idx >= a->op_count || a->operands[idx].type != ARM64_OP_REG || a->operands[idx].access)
+    return 0;
+  bool sve = false;
+  for (unsigned i = 0; i < a->op_count && !sve; i++)
+    sve = a->operands[i].type == ARM64_OP_REG && is_sve_reg(a->operands[i].reg);
+  if (!sve)
+    return 0;
+  const char *m = csi->mnemonic;
+  if (strncmp(m, "st", 2) == 0 || strncmp(m, "prf", 3) == 0 || strcmp(m, "ptest") == 0)
+    return CS_AC_READ;                               /* no register destination */
+  if (idx > 0)
+    return CS_AC_READ;
+  static const char *const accumulate[] = {
+    "mla", "mls", "mad", "msb", "fmla", "fmls", "fnmla", "fnmls", "fmad", "fmsb", "fnmad", "fnmsb",
+    "sdot", "udot", "usdot", "sudot", "bfdot", "fcmla", "cmla", "smmla", "ummla", "usmmla", "fmmla",
+    "bfmmla", "sqrdmlah", "sqrdmlsh", "sqdmlalb", "sqdmlalt", "smlalb", "smlalt", "umlalb", "umlalt",
+    "bfmlalb", "bfmlalt", "fmlalb", "fmlalt", "movprfx" };
+  for (const char *acc : accumulate)
+    if (strcmp(m, acc) == 0)
+      return CS_AC_READ | CS_AC_WRITE;
+  return CS_AC_WRITE;
+}
+
 bool ARMDecoder::op_read_reg (const DecodedInst * inst, unsigned int idx)
 {
 
   cs_insn * csi = ((ARMDecodedInst *)inst)->get_capstone_inst();
   cs_detail *detail = csi->detail;
+
+  if (m_arch == DL_ARCH_ARMv8)
+    if (uint8_t ac = sve_access(csi, idx))
+      return ac & CS_AC_READ;
 
   switch (m_arch == DL_ARCH_ARMv8 ? detail->arm64.operands[idx].access : detail->arm.operands[idx].access) {
   case CS_AC_READ:
@@ -399,6 +443,10 @@ bool ARMDecoder::op_write_reg (const DecodedInst * inst, unsigned int idx)
 {
    cs_insn * csi = ((ARMDecodedInst *)inst)->get_capstone_inst();
    cs_detail *detail = csi->detail;
+
+   if (m_arch == DL_ARCH_ARMv8)
+     if (uint8_t ac = sve_access(csi, idx))
+       return (ac & CS_AC_WRITE) != 0;
 
    switch (m_arch == DL_ARCH_ARMv8 ? detail->arm64.operands[idx].access : detail->arm.operands[idx].access) {
    case CS_AC_WRITE:
@@ -519,39 +567,27 @@ unsigned int ARMDecoder::size_mem_reg(const DecodedInst * inst)
   return size_reg;
 }
 
-unsigned int ARMDecoder::get_bytes_vess(unsigned int vec_elem)
-{
-  switch(vec_elem)
-  {
-    case ARM64_VESS_B: 
-      return 1;
-      
-	case ARM64_VESS_H:
-      return 2;
-      
-	case ARM64_VESS_S:
-      return 4;
-      
-    case ARM64_VESS_D:
-      return 8;
-    
-    default:
-      return 0;
-  }
-}
 
+/* The element size of a vector arrangement.  Capstone 5 also gives the
+   single-element arrangements (1B, 1H, 1S, 1D) and the 32/64-bit ones (4B, 2H)
+   that ARMv8.2 dot products and FP16 use. */
 unsigned int ARMDecoder::get_bytes_vas(unsigned int vec_elem)
 {
   switch(vec_elem)
   {
+    case ARM64_VAS_1B:
+    case ARM64_VAS_4B:
     case ARM64_VAS_8B:
     case ARM64_VAS_16B:
       return 1;
       
+    case ARM64_VAS_1H:
+    case ARM64_VAS_2H:
     case ARM64_VAS_4H:
     case ARM64_VAS_8H:
       return 2;
       
+    case ARM64_VAS_1S:
     case ARM64_VAS_2S:
     case ARM64_VAS_4S:
       return 4;
@@ -579,10 +615,12 @@ unsigned int ARMDecoder::get_simd_mem_bytes(const DecodedInst * inst)
     cs_arm64_op *op = &(arm64->operands[i]);
     if (op->type == ARM64_OP_REG)
     {
-      // loads/stores single structure - check the Vector size element
-      if (op->vess != ARM64_VESS_INVALID) 
+      // loads/stores single structure (one indexed element, v0.s[1]) - the
+      // element size.  Capstone 4 had a separate field for it (vess); 5
+      // gives the element's arrangement in vas and its index in vector_index
+      if (op->vector_index != -1 && op->vas != ARM64_VAS_INVALID)
       {
-        return this->get_bytes_vess(op->vess);
+        return this->get_bytes_vas(op->vas);
       }
       // loads/stores multiple structures - check the vector alignment  
       if (op->vas != ARM64_VAS_INVALID)
@@ -1150,30 +1188,28 @@ Decoder::decoder_reg ARMDecoder::last_reg()
   }
 }
 
+/* Every view of one architectural register as one number: X<k> as W<k>, and
+   the SIMD/FP views V, Q, D, S, H of register k as B<k>.  Stated by name: the
+   offsets this used to add were Capstone 4's enum values, and under
+   Capstone 5's numbering they sent S and Q registers to one range and H and
+   D to another, without any error. */
 uint32_t ARMDecoder::map_register(decoder_reg reg) {
-    int offset = 0;
-    if (reg >= ARM64_REG_X0 && reg <= ARM64_REG_X28) {
-        offset = -31;
-    }
-    else if (reg >= ARM64_REG_X29 && reg <= ARM64_REG_X30) {
-        offset = 196;
-    }
-    else if (reg >= ARM64_REG_V0 && reg <= ARM64_REG_V31) {
-        offset = -220;
-    }
-    else if (reg >= ARM64_REG_S0 && reg <= ARM64_REG_S31) {
-        offset = -128;
-    }
-    else if (reg >= ARM64_REG_Q0 && reg <= ARM64_REG_Q31) {
-        offset = -96;
-    }
-    else if (reg >= ARM64_REG_H0 && reg <= ARM64_REG_H31) {
-        offset = -64;
-    }
-    else if (reg >= ARM64_REG_D0 && reg <= ARM64_REG_D31) {
-        offset = -32;
-    }
-    return reg + offset;
+    if (m_arch == DL_ARCH_ARMv7)
+        return reg;
+    if (reg >= ARM64_REG_X0 && reg <= ARM64_REG_X28)
+        return ARM64_REG_W0 + (reg - ARM64_REG_X0);
+    if (reg == ARM64_REG_X29)
+        return ARM64_REG_W29;
+    if (reg == ARM64_REG_X30)
+        return ARM64_REG_W30;
+    /* Zk is the SVE view of Vk: one register, so a dependency runs between
+       NEON and SVE code that use it */
+    static const decoder_reg simd_first[] = { ARM64_REG_V0, ARM64_REG_Q0, ARM64_REG_D0, ARM64_REG_S0, ARM64_REG_H0, ARM64_REG_Z0 };
+    static const decoder_reg simd_last[]  = { ARM64_REG_V31, ARM64_REG_Q31, ARM64_REG_D31, ARM64_REG_S31, ARM64_REG_H31, ARM64_REG_Z31 };
+    for (unsigned f = 0; f < sizeof(simd_first) / sizeof(simd_first[0]); f++)
+        if (reg >= simd_first[f] && reg <= simd_last[f])
+            return ARM64_REG_B0 + (reg - simd_first[f]);
+    return reg;
 }
 
 unsigned int ARMDecoder::num_read_implicit_registers(const DecodedInst *inst) {

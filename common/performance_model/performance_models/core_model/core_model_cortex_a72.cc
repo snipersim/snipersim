@@ -12,6 +12,7 @@
 
 #include <capstone.h>
 #include <decoder.h>
+#include "arm_decoder.h"
 
 static unsigned int instructionLatencies[ARM64_INS_ENDING];
 static unsigned int bypassLatencies[DynamicMicroOpCortexA72::UOP_BYPASS_SIZE];
@@ -359,6 +360,15 @@ unsigned int CoreModelCortexA72::getInstructionLatency(const MicroOp *uop) const
    if (instruction_type == 65535 || instruction_type == 65534)  // FIXME Capstone library bug
      return 1;
    LOG_ASSERT_ERROR(instruction_type < ARM64_INS_ENDING, "Invalid instruction type %d", instruction_type);
+   /* DUP from a general register is 8 cycles (the table), DUP (element) --
+      also MOV from a vector element, which Capstone 5 reports as DUP -- is 3 */
+   if (instruction_type == ARM64_INS_DUP)
+   {
+      cs_insn *ci = const_cast<dl::ARMDecodedInst *>(static_cast<const dl::ARMDecodedInst *>(uop->getDecodedInstruction()))->get_capstone_inst();
+      if (ci && ci->detail && ci->detail->arm64.op_count > 1 && ci->detail->arm64.operands[1].type == ARM64_OP_REG
+          && ci->detail->arm64.operands[1].vector_index != -1)
+         return 3;
+   }
    return instructionLatencies[instruction_type];
 }
 

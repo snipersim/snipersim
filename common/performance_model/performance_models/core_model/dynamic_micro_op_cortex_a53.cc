@@ -68,6 +68,13 @@ DynamicMicroOpCortexA53::uop_port_t DynamicMicroOpCortexA53::getPort(const Micro
         case ARM64_INS_ORN:
         case ARM64_INS_ORR:
         case ARM64_INS_CMP:
+        /* Capstone 5 names for what Capstone 4 reported as the instructions
+           above (see dynamic_micro_op_cortex_a72.cc) */
+        case ARM64_INS_ADDS:
+        case ARM64_INS_SUBS:
+        case ARM64_INS_ANDS:
+        case ARM64_INS_BICS:
+        case ARM64_INS_MOV:
             return DynamicMicroOpCortexA53::UOP_PORT12;
         case ARM64_INS_BL:
         case ARM64_INS_BLR:

@@ -59,7 +59,6 @@ class ARMDecoder : public Decoder
     // Methods
     int index_mem_op(cs_insn * csi, unsigned int mem_idx);
     unsigned int size_mem_reg(const DecodedInst * inst);
-    unsigned int get_bytes_vess(unsigned int vec_elem);
     unsigned int get_bytes_vas(unsigned int vec_elem);
     unsigned int get_simd_mem_bytes(const DecodedInst * inst);
 
