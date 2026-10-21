@@ -19,7 +19,7 @@ PLUGIN_INC := $(firstword $(wildcard $(QEMU_SRC)/include/plugins) \
 
 CFLAGS  += -O2 -Wall -fPIC -I$(PLUGIN_INC) $(shell pkg-config --cflags glib-2.0)
 
-all: probe.so boot.img boot64.img st mt mtfork
+all: probe.so boot.img boot64.img bootas.img bootsmc.img st mt mtfork
 
 probe.so: probe.c compat.h
 	$(CC) $(CFLAGS) -shared -o $@ probe.c
@@ -34,10 +34,17 @@ boot.img: boot.S
 boot64.img: boot64.S
 	$(AS) --64 -o boot64.o boot64.S
 	$(LD) -m elf_x86_64 -Ttext 0x7c00 --oformat binary -o $@ boot64.o
+bootas.img: bootas.S
+	$(AS) --64 -o bootas.o bootas.S
+	$(LD) -m elf_x86_64 -Ttext 0x7c00 --oformat binary -o $@ bootas.o
+
+bootsmc.img: bootsmc.S
+	$(AS) --64 -o bootsmc.o bootsmc.S
+	$(LD) -m elf_x86_64 -Ttext 0x7c00 --oformat binary -o $@ bootsmc.o
 
 st mt mtfork: %: %.c
 	$(CC) -O1 -static -o $@ $< $(if $(filter-out st,$*),-lpthread)
 
 clean:
-	rm -f probe.so boot.o boot.img boot64.o boot64.img st mt mtfork
+	rm -f probe.so boot.o boot.img boot64.o boot64.img bootas.o bootas.img bootsmc.o bootsmc.img st mt mtfork
 .PHONY: all clean

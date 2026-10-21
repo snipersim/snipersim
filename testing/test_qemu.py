@@ -103,7 +103,7 @@ def build_guests(workdir):
     if rc != 0:
         raise RuntimeError('cannot build the probe:\n' + out)
     return {n: os.path.join(PROBE_DIR, n)
-            for n in ('probe.so', 'boot.img', 'boot64.img', 'st', 'mt')}
+            for n in ('probe.so', 'boot.img', 'boot64.img', 'bootas.img', 'bootsmc.img', 'st', 'mt')}
 
 
 # --- cases ------------------------------------------------------------------
@@ -229,6 +229,48 @@ def case_system_vapa(p, g, workdir):
     return True, '%d accesses, both APIs give 0x%x' % (len(hits), PA_EXPECT)
 
 
+def case_system_address_spaces(p, g, workdir):
+    """Two processes' code and data at one virtual address stay apart.
+
+    The guest (bootas.S) maps VA 0x40000000 to two physical pages, with
+    different code and a store to the same virtual address in each, and
+    switches CR3 between them four times.  QEMU translates code by physical
+    page, so it re-translates neither process's code after the first time:
+    a trace keyed by virtual address carried the second process's bytes for
+    every later run of the first.  The trace now carries each page's
+    physical address (Writer::Mapping, CodePhysical), so the code at that
+    address must alternate A, B, A, B, the stores must reach two physical
+    pages, and the whole trace -- BIOS, real mode, the switch into long mode
+    -- must simulate."""
+    prefix = os.path.join(workdir, 'as')
+    rc, out = run([p['system'], '-nographic', '-display', 'none', '-accel', 'tcg', '-m', '128',
+                   '-drive', 'file=%s,format=raw,if=floppy' % g['bootas.img'],
+                   '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04', '-no-reboot',
+                   '-plugin', '%s,output=%s' % (p['frontend'], prefix)], 300, cwd=workdir)
+    if rc is None:
+        return False, 'timed out'
+    if rc != 33:          # isa-debug-exit: (0x10 << 1) | 1, the guest's own checks passed
+        return False, 'the guest failed its own checks (exit %s)' % rc
+    trace = prefix + '.app0.th0.sift'
+    rc, dump = run([p['siftdump'], trace], 300)
+    if rc != 0:
+        return False, 'siftdump could not read the trace (exit %s)' % rc
+    code = [l.split()[1] for l in dump.splitlines() if l.split() and l.split()[0].lstrip('0') == '40000000']
+    if code != ['b8', '31'] * 4:
+        return False, 'first bytes at 0x40000000: %s, expected b8 and 31 alternately, 4 times each' % ' '.join(code)
+    stores = re.findall(r'-- addr 40000800=([0-9a-f]+)', dump)
+    if stores != ['200800', '400800'] * 4:
+        return False, 'stores to 0x40000800 went to %s, expected 200800 and 400800 alternately' % ' '.join(stores)
+    outdir = os.path.join(workdir, 'assim')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'gainestown', '-d', outdir,
+                   '--traces=' + trace], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'simulating the full-system trace failed (exit %s)' % rc
+    m = re.search(r'Simulated ([\d.]+)M instructions', out)
+    return True, 'code A/B alternate at one address, stores at two physical pages; simulated %sM instructions' % (
+        m.group(1) if m else '?')
+
+
 def case_system_modes(p, g, workdir):
     """The frontend tracks x86 mode switches through a real BIOS boot.
 
@@ -307,6 +349,153 @@ def riscv_prerequisites(workdir):
         if rc != 0:
             return None, 'could not build rv-loop.c (exit %s)' % rc
     return {'qemu': qemu, 'guest': guest}, None
+
+
+def riscv_system_guest(workdir, name, sources, flags=()):
+    """A bare-metal guest for QEMU's riscv64 virt board, or (None, why)."""
+    qemu = os.environ.get('SNIPER_QEMU_RISCV_SYSTEM') or \
+           os.path.join(SNIPER_ROOT, 'qemu-riscv-system', 'build', 'qemu-system-riscv64')
+    cc = os.environ.get('SNIPER_RISCV_CC')
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-system-riscv64 (make RISCV_IME=ON, or set SNIPER_QEMU_RISCV_SYSTEM)'
+    if not cc or not os.path.isfile(cc):
+        return None, 'SNIPER_RISCV_CC not set to a RISC-V compiler'
+    guest = os.path.join(workdir, name)
+    # -bios none starts the hart at 0x80000000, so the start code goes there
+    rc, out = run([cc, '--target=riscv64-unknown-elf', '-march=rv64gc', '-mabi=lp64d', '-mcmodel=medany',
+                   '-O1', '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,--section-start=.boot=0x80000000',
+                   '-Wl,-Ttext=0x80001000', '-Wl,-e,_start', '-o', guest] + list(flags) +
+                  [os.path.join(PROBE_DIR, s) for s in sources], 120)
+    if rc != 0:
+        return None, 'could not build %s (exit %s)' % (name, rc)
+    return {'qemu': qemu, 'guest': guest}, None
+
+
+def run_riscv_system(p, r, prefix, workdir):
+    return run([r['qemu'], '-M', 'virt', '-bios', 'none', '-nographic', '-kernel', r['guest'],
+                '-plugin', '%s,output=%s' % (p['frontend'], prefix)], 300, cwd=workdir)
+
+
+def case_riscv_system_simulate(p, g, workdir):
+    """RISC-V full system: a bare-metal guest on the virt board is traced from
+    the reset vector, with physical addresses, and simulates instruction for
+    instruction."""
+    r, why = riscv_system_guest(workdir, 'rv-bare', ['rv-bare.c'])
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'rvsys')
+    rc, out = run_riscv_system(p, r, prefix, workdir)
+    if rc != 0:
+        return False, 'qemu-system-riscv64 exited %s (the guest\'s own check failed, or it crashed)' % rc
+    if 'rv sum=3490074579968' not in out:
+        return False, 'the guest computed the wrong answer'
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+    written = int(m.group(1)) if m else 0
+    outdir = os.path.join(workdir, 'rvsys-sim')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'simulating the trace failed (exit %s)' % rc
+    stats = {}
+    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        if ' = ' in line:
+            k, v = line.split(' = ', 1)
+            stats[k.strip()] = v.strip().split(',')[0]
+    n = int(stats.get('core.instructions', 0))
+    if not written or abs(n - written) > written // 1000:
+        return False, 'simulated %d instructions of the %d traced' % (n, written)
+    return True, '%d instructions from the reset vector, traced and simulated' % written
+
+
+def case_riscv_system_address_spaces(p, g, workdir):
+    """RISC-V full system: two Sv39 address spaces with different code and data
+    at one virtual address stay apart in the trace (rv-as.c; bootas.S is the
+    x86 version)."""
+    r, why = riscv_system_guest(workdir, 'rv-as', ['rv-as.c', 'rv-as-code.S'])
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'rvas')
+    rc, out = run_riscv_system(p, r, prefix, workdir)
+    if rc != 0 or 'rv-as ok' not in out:
+        return False, 'the guest failed its own checks (exit %s)' % rc
+    rc, dump = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
+    if rc != 0:
+        return False, 'siftdump could not read the trace (exit %s)' % rc
+    code = [l.split()[1] for l in dump.splitlines() if l.split() and l.split()[0].lstrip('0') == '40000000']
+    if code != ['37', '09'] * 4:
+        return False, 'first bytes at 0x40000000: %s, expected 37 (lui) and 09 (c.li) alternately' % ' '.join(code)
+    stores = re.findall(r'-- addr 400007f0=([0-9a-f]+)', dump)
+    if stores != ['802007f0', '804007f0'] * 4:
+        return False, 'stores to 0x400007f0 went to %s, expected 802007f0 and 804007f0 alternately' % ' '.join(stores)
+    outdir = os.path.join(workdir, 'rvas-sim')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'simulating the trace failed (exit %s)' % rc
+    return True, 'code A/B alternate at one address, stores at two physical pages; simulated'
+
+
+def case_aarch64_user_simulate(p, g, workdir):
+    """ARM64 without ARM hardware: QEMU AArch64 user mode records, Sniper simulates.
+
+    Two guests, built with the same clang as the RISC-V ones: a64-loop.c, and
+    a64-stress.c -- scalar FP, auto-vectorised NEON, divides, load/store pairs,
+    a jump table, indirect calls and atomics, built for ARMv8.2 so the atomics
+    are LSE (ldadd, cas), which the Capstone pinned before 5.0 could not
+    decode.  Each is traced by the front end in qemu-aarch64 and simulated on
+    an out-of-order and an in-order ARM core (cortex-a72, cortex-a53); the
+    instruction counts must agree with the trace, and each guest's own answer
+    must be right."""
+    qemu = os.environ.get('SNIPER_QEMU_AARCH64') or os.path.join(SNIPER_ROOT, 'qemu-aarch64', 'build', 'qemu-aarch64')
+    cc = os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-aarch64 (make ARM=ON QEMU=ON, or set SNIPER_QEMU_AARCH64)'
+    if not cc or not os.path.isfile(cc):
+        return None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
+    guests = [('a64-loop', ['-O1'], 'a64 sum=3490074579968'),
+              ('a64-stress', ['-O3', '-fno-math-errno', '-march=armv8.2-a+lse+crc+fp16'],
+               'a64 stress=13765554095865117910')]
+    summary = []
+    for name, flags, answer in guests:
+        guest = os.path.join(workdir, name)
+        rc, out = run([cc, '--target=aarch64-linux-gnu'] + flags + ['-ffreestanding', '-nostdlib', '-static',
+                       '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, os.path.join(PROBE_DIR, name + '.c')], 120)
+        if rc != 0:
+            return None, 'could not build %s.c (exit %s)' % (name, rc)
+        prefix = os.path.join(workdir, name)
+        rc, out = run([qemu, '-cpu', 'max', '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest],
+                      300, cwd=workdir)
+        if rc != 0:
+            return False, '%s: qemu-aarch64 exited %s' % (name, rc)
+        if answer not in out:
+            return False, '%s computed the wrong answer' % name
+        m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+        if not m:
+            return False, '%s: the front end reported no instruction count' % name
+        written = int(m.group(1))
+        ipcs = []
+        for cfg in ('cortex-a72', 'cortex-a53'):
+            outdir = os.path.join(workdir, '%s-%s' % (name, cfg))
+            shutil.rmtree(outdir, ignore_errors=True)
+            rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', cfg, '-d', outdir,
+                           '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+            if rc != 0:
+                if 'built without the armv8 decoder' in out:
+                    return None, 'Sniper built without the ARM decoder (make ARM=ON)'
+                return False, '%s on %s: run-sniper exited %s' % (name, cfg, rc)
+            stats = {}
+            for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+                if ' = ' in line:
+                    k, v = line.split(' = ', 1)
+                    stats[k.strip()] = v.strip().split(',')[0]
+            n = int(stats.get('core.instructions', 0))
+            if abs(n - written) > written // 1000:
+                return False, '%s on %s simulated %d instructions of the %d traced' % (name, cfg, n, written)
+            m = re.search(r'Simulated [\d.]+M instructions, [\d.]+M cycles, ([\d.]+) IPC', out)
+            ipcs.append('%s %s' % (cfg.split('-')[1], m.group(1) if m else '?'))
+        summary.append('%s: %d instructions, IPC %s' % (name, written, ', '.join(ipcs)))
+    return True, '; '.join(summary)
 
 
 def case_riscv_smc_rewrite(p, g, workdir):
@@ -1372,6 +1561,313 @@ def case_riscv_ame_couplings(p, g, workdir):
     return True, 'tile counts exact under every coupling (%d ops, %d rows, %d squares); cycles %s' % (
         ops, rows, mma, ', '.join('%s %d' % (c, n) for c, n in cycles.items()))
 
+
+# --- code rewritten in place, and run-sniper driving QEMU ----------------------
+
+def sim_instructions(outdir):
+    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        if line.split(' = ')[0].strip() == 'core.instructions':
+            return int(line.split(' = ', 1)[1].split(',')[0])
+    return 0
+
+
+def simulate_trace(trace, cfg, outdir):
+    """run-sniper on one stored trace: (instructions, None) or (None, why)."""
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', cfg, '-d', outdir,
+                   '--traces=' + trace], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return None, 'simulating %s on %s failed (exit %s)' % (os.path.basename(trace), cfg, rc)
+    return sim_instructions(outdir), None
+
+
+def first_bytes_at(p, trace, pc, n=2):
+    """The first n bytes of every instruction the trace has at pc, in order."""
+    rc, dump = run([p['siftdump'], trace], 300)
+    if rc != 0:
+        return None
+    pc = pc.lstrip('0')
+    return [''.join(l.split()[1:1 + n]) for l in dump.splitlines()
+            if l.split() and l.split()[0].lstrip('0') == pc and not l.startswith('magic')]
+
+
+def smc_verdict(seen, want, what):
+    """smc=1 must trace each run's own bytes; smc=0, the stale ones."""
+    if seen['1'] != want:
+        return False, '%s: traced %s at the rewritten address, expected %s' % (what, seen['1'], want)
+    if seen['0'] == want:
+        return False, '%s: smc=0 traced the new bytes too: the option has no effect' % what
+    return True, None
+
+
+def case_system_smc_rewrite(p, g, workdir):
+    """Code rewritten in place in a whole x86 machine.
+
+    The boot sector (bootsmc.S) copies code A to 0x8000 and calls it, copies
+    code B over it -- a different first instruction, of a different length --
+    and calls it, then A again, in real mode.  With smc=1 the trace carries A,
+    B, A at 0x8000 and simulates; smc=0 must give the stale A, A, A."""
+    seen = {}
+    for smc in ('1', '0'):
+        prefix = os.path.join(workdir, 'xsmc%s' % smc)
+        rc, out = run([p['system'], '-nographic', '-display', 'none', '-accel', 'tcg', '-m', '128',
+                       '-drive', 'file=%s,format=raw,if=floppy' % g['bootsmc.img'],
+                       '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04', '-no-reboot',
+                       '-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc)], 300, cwd=workdir)
+        if rc != 33:
+            return False, 'the guest failed its own checks (exit %s, smc=%s)' % (rc, smc)
+        seen[smc] = first_bytes_at(p, prefix + '.app0.th0.sift', '8000')
+    ok, why = smc_verdict(seen, ['b801', '31c0', 'b801'], 'x86 full system')
+    if not ok:
+        return False, why
+    n, why = simulate_trace(os.path.join(workdir, 'xsmc1.app0.th0.sift'), 'gainestown', os.path.join(workdir, 'xsmc-sim'))
+    if n is None:
+        return False, why
+    return True, 'traced A, B, A at 0x8000 (smc=0: %s); %d instructions simulated' % (' '.join(seen['0']), n)
+
+
+def case_riscv_system_smc_rewrite(p, g, workdir):
+    """Code rewritten in place on a bare-metal RISC-V machine (rv-bare-smc.c):
+    A, then compressed B at the same address, then A, with fence.i between.
+    smc=1 traces each run's own bytes and simulates; smc=0 the stale ones."""
+    r, why = riscv_system_guest(workdir, 'rv-bare-smc', ['rv-bare-smc.c'])
+    if r is None:
+        return None, why
+    seen = {}
+    for smc in ('1', '0'):
+        prefix = os.path.join(workdir, 'rsmc%s' % smc)
+        rc, out = run([r['qemu'], '-M', 'virt', '-bios', 'none', '-nographic', '-kernel', r['guest'],
+                       '-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc)], 300, cwd=workdir)
+        if rc != 0:
+            return False, 'the guest failed its own checks (exit %s, smc=%s)' % (rc, smc)
+        m = re.search(r'B rewritten pc=0x([0-9a-f]+) returned=2', out)
+        if not m:
+            return False, 'the guest did not run code B correctly (smc=%s)' % smc
+        seen[smc] = first_bytes_at(p, prefix + '.app0.th0.sift', m.group(1))
+    ok, why = smc_verdict(seen, ['1305', '0945', '1305'], 'RISC-V full system')
+    if not ok:
+        return False, why
+    n, why = simulate_trace(os.path.join(workdir, 'rsmc1.app0.th0.sift'), 'riscv', os.path.join(workdir, 'rsmc-sim'))
+    if n is None:
+        return False, why
+    return True, 'traced A, B, A (smc=0: %s); %d instructions simulated' % (' '.join(seen['0']), n)
+
+
+def aarch64_tools():
+    qemu = os.environ.get('SNIPER_QEMU_AARCH64') or os.path.join(SNIPER_ROOT, 'qemu-aarch64', 'build', 'qemu-aarch64')
+    cc = os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')
+    if not os.path.isfile(qemu):
+        return None, None, 'no qemu-aarch64 (make ARM=ON QEMU=ON, or set SNIPER_QEMU_AARCH64)'
+    if not cc or not os.path.isfile(cc):
+        return None, None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
+    return qemu, cc, None
+
+
+def case_aarch64_smc_rewrite(p, g, workdir):
+    """Code rewritten in place on AArch64 (a64-smc-rewrite.c): A, then B at
+    the same address, then A, with the architecture's cache maintenance
+    between.  smc=1 traces each run's own bytes and simulates on cortex-a72;
+    smc=0 the stale ones."""
+    qemu, cc, why = aarch64_tools()
+    if why:
+        return None, why
+    guest = os.path.join(workdir, 'a64-smc-rewrite')
+    rc, out = run([cc, '--target=aarch64-linux-gnu', '-O1', '-ffreestanding', '-nostdlib', '-static',
+                   '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, os.path.join(PROBE_DIR, 'a64-smc-rewrite.c')], 120)
+    if rc != 0:
+        return None, 'could not build a64-smc-rewrite.c (exit %s)' % rc
+    seen = {}
+    for smc in ('1', '0'):
+        prefix = os.path.join(workdir, 'asmc%s' % smc)
+        rc, out = run([qemu, '-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc), '--', guest],
+                      300, cwd=workdir)
+        if rc != 0:
+            return False, 'qemu-aarch64 exited %s (smc=%s)' % (rc, smc)
+        if re.findall(r'returned=(\d)', out) != ['1', '2', '1']:
+            return False, 'the guest did not run A, B, A correctly (smc=%s)' % smc
+        pc = re.search(r'B rewritten pc=0x([0-9a-f]+)', out).group(1)
+        seen[smc] = first_bytes_at(p, prefix + '.app0.th0.sift', pc)
+    ok, why = smc_verdict(seen, ['2000', '4000', '2000'], 'AArch64')
+    if not ok:
+        return False, why
+    n, why = simulate_trace(os.path.join(workdir, 'asmc1.app0.th0.sift'), 'cortex-a72', os.path.join(workdir, 'asmc-sim'))
+    if n is None:
+        if 'built without the armv8 decoder' in (why or ''):
+            return None, 'Sniper built without the ARM decoder (make ARM=ON)'
+        return False, why
+    return True, 'traced A, B, A (smc=0: %s); %d instructions simulated' % (' '.join(seen['0']), n)
+
+
+def case_aarch64_sve_simulate(p, g, workdir):
+    """SVE: a guest built with +sve (a64-sve.c -- predicated loads and stores,
+    multiply-adds, a reduction, a gather) runs on QEMU's "max" CPU, which has
+    SVE, and gives the same answer as its build without SVE; its trace
+    simulates on cortex-a72 and cortex-a53 instruction for instruction.
+    Capstone 5 decodes SVE; the decoder gives its Z and P operands their read
+    and write roles (Capstone leaves them unset), so dependencies run through
+    them."""
+    qemu, cc, why = aarch64_tools()
+    if why:
+        return None, why
+    src = os.path.join(PROBE_DIR, 'a64-sve.c')
+    builds = {}
+    for name, march in (('a64-sve', 'armv8.2-a+sve'), ('a64-nosve', 'armv8.2-a')):
+        out = os.path.join(workdir, name)
+        rc, o = run([cc, '--target=aarch64-linux-gnu', '-O3', '-march=' + march, '-ffreestanding', '-nostdlib',
+                     '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', out, src], 120)
+        if rc != 0:
+            return None, 'could not build %s (exit %s)' % (name, rc)
+        builds[name] = out
+    rc, plain = run([qemu, '-cpu', 'max', builds['a64-nosve']], 120)
+    answer = re.search(r'sve sum=\d+ f=\d+', plain)
+    if rc != 0 or not answer:
+        return False, 'the build without SVE failed (exit %s)' % rc
+    prefix = os.path.join(workdir, 'sve')
+    rc, out = run([qemu, '-cpu', 'max', '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', builds['a64-sve']],
+                  300, cwd=workdir)
+    if rc != 0 or answer.group(0) not in out:
+        return False, 'the SVE build gave a different answer, or failed (exit %s)' % rc
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+    written = int(m.group(1)) if m else 0
+    summary = []
+    for cfg in ('cortex-a72', 'cortex-a53'):
+        n, why = simulate_trace(prefix + '.app0.th0.sift', cfg, os.path.join(workdir, 'sve-' + cfg))
+        if n is None:
+            if 'built without the armv8 decoder' in (why or ''):
+                return None, 'Sniper built without the ARM decoder (make ARM=ON)'
+            return False, why
+        if not written or abs(n - written) > written // 1000:
+            return False, '%s simulated %d instructions of the %d traced' % (cfg, n, written)
+        summary.append(cfg)
+    return True, '%s; %d instructions simulated on %s' % (answer.group(0), written, ' and '.join(summary))
+
+
+ROI_SUM = 'sum=2152578694144'    # roi.c and rv-bare-roi.c: 5 + 10 + 5 rounds of work
+
+
+def roi_guests(workdir):
+    """roi.c for each architecture there is a QEMU and a compiler for:
+    [(arch, qemu, guest, config)], and the reasons for any left out."""
+    out, missing = [], []
+    clang = os.environ.get('SNIPER_RISCV_CC')
+    builds = [('x86_64', os.path.join(SNIPER_ROOT, 'qemu', 'build', 'qemu-x86_64'), 'gainestown', [])]
+    qa, ca, why = aarch64_tools()
+    if why:
+        missing.append('aarch64: ' + why)
+    else:
+        builds.append(('aarch64', qa, 'cortex-a72', []))
+    qr = os.environ.get('SNIPER_QEMU_RISCV') or os.path.join(SNIPER_ROOT, 'qemu-riscv', 'build', 'qemu-riscv64')
+    if not os.path.isfile(qr) or not clang:
+        missing.append('riscv64: no qemu-riscv64 or SNIPER_RISCV_CC')
+    else:
+        builds.append(('riscv64', qr, 'riscv', ['-march=rv64gc', '-mabi=lp64d']))
+    for arch, qemu, cfg, flags in builds:
+        cc = clang if clang and os.path.isfile(clang) else 'cc'
+        guest = os.path.join(workdir, 'roi-' + arch)
+        cmd = [cc] + (['--target=%s-linux-gnu' % arch, '-fuse-ld=lld'] if cc != 'cc' else []) + flags + \
+              ['-O1', '-ffreestanding', '-nostdlib', '-static', '-Wl,-e,_start',
+               '-I', os.path.join(SNIPER_ROOT, 'include'), '-o', guest, os.path.join(PROBE_DIR, 'roi.c')]
+        rc, o = run(cmd, 120)
+        if rc != 0:
+            missing.append('%s: could not build roi.c' % arch)
+            continue
+        out.append((arch, qemu, guest, cfg))
+    return out, missing
+
+
+def case_run_sniper_qemu_roi(p, g, workdir):
+    """run-sniper drives QEMU user mode, live, with a region of interest.
+
+    roi.c brackets ten of twenty rounds of work with SimRoiStart() and
+    SimRoiEnd().  For each architecture: the front end's own trace with roi=1
+    holds about half the instructions of one without, with the markers (1, 2)
+    and the SimInSimulator() query (8) in order; then run-sniper
+    --frontend=qemu --roi runs the guest live, the guest learns it is
+    simulated (the answer reached its register), and the simulator counts the
+    ROI's instructions, to 0.1%."""
+    guests, missing = roi_guests(workdir)
+    summary = []
+    for arch, qemu, guest, cfg in guests:
+        counts = {}
+        for roi in ('0', '1'):
+            prefix = os.path.join(workdir, 'roi-%s-%s' % (arch, roi))
+            rc, out = run([qemu, '-plugin', '%s,output=%s,roi=%s' % (p['frontend'], prefix, roi), '--', guest],
+                          300, cwd=workdir)
+            if rc != 0 or ROI_SUM not in out:
+                return False, '%s: the guest failed under QEMU (exit %s, roi=%s)' % (arch, rc, roi)
+            m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+            counts[roi] = int(m.group(1)) if m else 0
+            rc, dump = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
+            magic = [l.split()[1] for l in dump.splitlines() if l.startswith('magic ')]
+            if magic != ['1', '2', '8']:
+                return False, '%s: magic records %s in the trace, expected 1 2 8 (roi=%s)' % (arch, magic, roi)
+        share = counts['1'] / float(counts['0'] or 1)
+        if not 0.45 <= share <= 0.55:
+            return False, '%s: the ROI trace holds %.0f%% of the instructions, expected about half' % (arch, 100 * share)
+        outdir = os.path.join(workdir, 'roi-%s-live' % arch)
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', cfg, '-d', outdir,
+                       '--frontend=qemu', '--roi', '--', guest], 900, cwd=SNIPER_ROOT)
+        if rc != 0:
+            return False, '%s: run-sniper --frontend=qemu exited %s' % (arch, rc)
+        if 'roi in_sim=1 ' + ROI_SUM not in out:
+            return False, '%s: the guest did not see the simulator answer (or computed the wrong sum)' % arch
+        n = sim_instructions(outdir)
+        if abs(n - counts['1']) > counts['1'] // 1000:
+            return False, '%s: simulated %d instructions, the ROI holds %d' % (arch, n, counts['1'])
+        summary.append('%s %d of %d' % (arch, n, counts['0']))
+    if not summary:
+        return None, '; '.join(missing)
+    return True, 'ROI simulated live: ' + ', '.join(summary) + ('' if not missing else ' (not run: %s)' % '; '.join(missing))
+
+
+def case_run_sniper_qemu_system(p, g, workdir):
+    """run-sniper drives full-system QEMU: --frontend=qemu-system-<arch> runs the
+    machine, recording, then simulates the traces.  RISC-V: a bare-metal
+    guest with an ROI (rv-bare-roi.c) simulates exactly the instructions the
+    front end traces with roi=1 -- the markers reach the simulator without a
+    response channel.  x86: the address-space boot image (bootas.S) ends with
+    isa-debug-exit 33, which is reported, and its whole run simulates."""
+    summary = []
+    r, why = riscv_system_guest(workdir, 'rv-bare-roi', ['rv-bare-roi.c'],
+                                ['-I', os.path.join(SNIPER_ROOT, 'include')])   # sim_api.h
+    if r is not None:
+        prefix = os.path.join(workdir, 'rvroi')
+        rc, out = run([r['qemu'], '-M', 'virt', '-bios', 'none', '-nographic', '-kernel', r['guest'],
+                       '-plugin', '%s,output=%s,roi=1' % (p['frontend'], prefix)], 300, cwd=workdir)
+        m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+        if rc != 0 or not m:
+            return False, 'rv-bare-roi failed under QEMU (exit %s)' % rc
+        traced = int(m.group(1))
+        outdir = os.path.join(workdir, 'rvroi-sim')
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                       '--frontend=qemu-system-riscv64', '--roi', '--',
+                       '-M', 'virt', '-bios', 'none', '-nographic', '-kernel', r['guest']], 900, cwd=SNIPER_ROOT)
+        if rc != 0 or 'rv roi ' + ROI_SUM not in out:
+            return False, 'run-sniper --frontend=qemu-system-riscv64 failed (exit %s)' % rc
+        n = sim_instructions(outdir)
+        if abs(n - traced) > traced // 1000:
+            return False, 'RISC-V: simulated %d instructions, the ROI holds %d' % (n, traced)
+        summary.append('RISC-V ROI %d instructions' % n)
+    outdir = os.path.join(workdir, 'bootas-sim')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'gainestown', '-d', outdir,
+                   '--frontend=qemu-system-x86_64', '--',
+                   '-nographic', '-display', 'none', '-accel', 'tcg', '-m', '128',
+                   '-drive', 'file=%s,format=raw,if=floppy' % g['bootas.img'],
+                   '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04', '-no-reboot'], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'run-sniper --frontend=qemu-system-x86_64 exited %s' % rc
+    if 'QEMU exited with status 33' not in out:
+        return False, 'x86: the guest\'s own checks did not pass (no status 33 reported)'
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+    n = sim_instructions(outdir)
+    if not m or abs(n - int(m.group(1))) > int(m.group(1)) // 1000:
+        return False, 'x86: simulated %d instructions of the %s traced' % (n, m.group(1) if m else '?')
+    summary.append('x86 boot %d instructions' % n)
+    return True, '; '.join(summary) + ('' if r is not None else ' (RISC-V not run: %s)' % why)
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
@@ -1379,8 +1875,12 @@ CASES = {
     'system-exact':     case_system_exact,
     'system-vapa':      case_system_vapa,
     'system-modes':     case_system_modes,
+    'system-address-spaces': case_system_address_spaces,
     'riscv-user-trace':    case_riscv_user_trace,
     'riscv-smc-rewrite':   case_riscv_smc_rewrite,
+    'aarch64-user-simulate': case_aarch64_user_simulate,
+    'riscv-system-simulate': case_riscv_system_simulate,
+    'riscv-system-address-spaces': case_riscv_system_address_spaces,
     'riscv-user-simulate': case_riscv_user_simulate,
     'riscv-ime-trace':     case_riscv_ime_trace,
     'riscv-ime-simulate':  case_riscv_ime_simulate,
@@ -1401,6 +1901,12 @@ CASES = {
     'riscv-vector-datapath': case_riscv_vector_datapath,
     'riscv-llm-wide':      case_riscv_llm_wide,
     'riscv-plugin-api':    case_riscv_plugin_api,
+    'system-smc-rewrite':  case_system_smc_rewrite,
+    'riscv-system-smc-rewrite': case_riscv_system_smc_rewrite,
+    'aarch64-smc-rewrite': case_aarch64_smc_rewrite,
+    'aarch64-sve-simulate': case_aarch64_sve_simulate,
+    'run-sniper-qemu-roi': case_run_sniper_qemu_roi,
+    'run-sniper-qemu-system': case_run_sniper_qemu_system,
 }
 
 

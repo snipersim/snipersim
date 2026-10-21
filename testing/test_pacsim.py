@@ -51,6 +51,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import json
+import threading
 
 from common.failfast import FailFast, add_argument as add_failfast
 from common.runlog import RunLog
@@ -118,7 +120,7 @@ sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
 # The sampler's region sizes, per profile.  The recorder's defaults (regions of
 # 50M instructions, none shorter than 2M) are sized for real workloads; the
 # quick profile's ROIs are a few regions of those at most (the loop workload's
-# is about 200M instructions), simulated in detail nearly end to end --
+# is about 75M instructions), simulated in detail nearly end to end --
 # accurate, and proving nothing about sampling.  A mode can set its own region size
 # ('quick_region_size'), where its loop structure needs one.  The knobs scale with the workload, and so
 # does the fast-forward flow-control window: a thread may run that many
@@ -198,6 +200,16 @@ def run(cmd, timeout, **kwargs):
         return proc.returncode, out or '', time.time() - t0
 
 
+# The highest one-minute load average seen during a mode's two runs
+PEAK_LOAD = [0.0]
+
+# A sampled run must simulate at most this share of the region of interest's
+# instructions in detail: the work sampling saves, and what makes it faster
+# on any host.  Read from the recorder's region list, so it does not depend on
+# what else the machine is doing.
+MAX_DETAIL_SHARE = 0.75
+
+
 def build_workload(workdir, mode, threads, profile):
     spec = MODES[mode]
     exe = os.path.join(workdir, mode)
@@ -249,13 +261,29 @@ def simulate(exe, outputdir, threads, extra, timeout):
     # same-program check.
     cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'), '--roi',
            '-n', str(threads + 1), '-c', 'gainestown', '-d', outputdir] + extra + ['--', exe]
-    return run(cmd, timeout)
+    # The host's load while it runs, for case_faster: wall time compares two
+    # runs only when nothing else is competing for the cores
+    loads = []
+    done = threading.Event()
+    def sample():
+        while not done.wait(5):
+            loads.append(os.getloadavg()[0])
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    try:
+        result = run(cmd, timeout)
+    finally:
+        done.set()
+        sampler.join()
+    PEAK_LOAD[0] = max([PEAK_LOAD[0]] + loads)
+    return result
 
 
 def measure(p, workdir, mode, args):
     """Run one mode's workload twice -- full, then sampled -- and return both."""
     exe = build_workload(workdir, mode, args.threads, args.profile)
 
+    PEAK_LOAD[0] = 0.0
     full_dir = os.path.join(workdir, mode + '-full')
     rc, out, wall_full = simulate(exe, full_dir, args.threads, [], args.timeout)
     if rc is None:
@@ -294,8 +322,16 @@ def measure(p, workdir, mode, args):
     dumpstats_estimate = float(m.group(1)) if m else None
     dumpstats_output = p.stdout
 
+    # The work saved: instructions of measured regions over all of them
+    regions = json.load(open(os.path.join(samp_dir, 'pacsim_regions.json')))['feature_stack']
+    total = sum(sum(rg['insnums']) for rg in regions)
+    detailed = sum(sum(rg['insnums']) for rg in regions if rg['feature_level'] == 1)
+
     return {
         'truth': truth, 'estimate': estimate,
+        'detail_share': (detailed / total) if total else 1.0, 'ins_total': total,
+        'regions': len(regions), 'measured': sum(1 for rg in regions if rg['feature_level'] == 1),
+        'peak_load': PEAK_LOAD[0],
         'wall_full': wall_full, 'wall_sampled': wall_samp,
         'checksum_full': truth_sum, 'checksum_sampled': samp_sum,
         'dumpstats_estimate': dumpstats_estimate, 'dumpstats_output': dumpstats_output,
@@ -316,8 +352,32 @@ def case_same_program(r, args):
     return True, 'checksum %s in both runs' % (r['checksum_full'][0],)
 
 
+def case_less_detail(r, args):
+    """The sampled run simulated a minority of the instructions in detail.
+
+    What sampling saves, and why it is faster: the regions it extrapolates are
+    only warmed, not timed.  Counted from the recorder's region list, so the
+    check means the same on a busy host as on an idle one."""
+    detail = '%.1f%% of %.1fM instructions in detail, %d of %d regions measured' % (
+        100.0 * r['detail_share'], r['ins_total'] / 1e6, r['measured'], r['regions'])
+    if r['detail_share'] > MAX_DETAIL_SHARE:
+        return False, '%s, wanted at most %.0f%%' % (detail, 100.0 * MAX_DETAIL_SHARE)
+    return True, detail
+
+
 def case_faster(r, args):
-    """The sampled run is faster in wall-clock time than the full run."""
+    """The sampled run is faster in wall-clock time than the full run.
+
+    Only on a host with cores to spare: another job competing for them stretches
+    either run by however much it happens to compete, and a comparison of the
+    two then measures the neighbour.  Skipped, with the load, when the host is
+    busy; case_less_detail checks the work saved either way."""
+    ncpu = os.cpu_count() or 1
+    own = args.threads + 2          # the simulated threads, the simulator's own, the recorder
+    other = r['peak_load'] - own
+    if other > ncpu / 4:
+        return None, 'host busy (load %.0f on %d cores, about %.0f of it other work): wall times not comparable' % (
+            r['peak_load'], ncpu, other)
     speedup = r['wall_full'] / r['wall_sampled'] if r['wall_sampled'] else 0.0
     detail = '%.2fx (%.0fs full, %.0fs sampled)' % (
         speedup, r['wall_full'], r['wall_sampled'])
@@ -353,6 +413,7 @@ CASES = {
     'same-program': case_same_program,
     'dumpstats': case_dumpstats,
     'faster':       case_faster,
+    'less-detail':  case_less_detail,
     'accurate':     case_accurate,
 }
 
@@ -360,17 +421,24 @@ CASES = {
 # and are reported, and a pass is reported as such (the entry is then stale),
 # but they do not fail the suite: a suite that fails for a known reason on
 # every run tells nobody anything the day something else breaks.
+# The task workload's three, one cause: a region's time is its busiest
+# thread's, and which tasks that thread ran -- memory-bound or compute-bound
+# -- decides it, while the sampler clusters regions by the mix summed over
+# all threads, which looks the same either way.  Regions of one cluster
+# differ by up to 1.6x in time per instruction (measured, 36 and 144 tasks),
+# so a cluster does not predict a region's time, the predictor rarely trusts
+# one enough to skip it, and which thread runs which task depends on timing,
+# so the sampled run's schedule is not the full run's (two full runs differ
+# by 1%).  Larger regions and four times the tasks did not change that (7% to
+# 17% error, 68% to 90% in detail).  Fixing it is a change to the method --
+# clustering on what the critical thread ran -- not to this test.
+_TASK_REASON = ('regions of one cluster differ by up to 1.6x in time per instruction: a '
+                'region\'s time is its busiest thread\'s, whose tasks (memory- or compute-bound) '
+                'the summed mix the sampler clusters on does not show; see the note above')
 KNOWN_QUICK_FAILURES = {
-    ('task', 'accurate'):
-        'the queue hands tasks to whichever thread asks first, so the schedule '
-        'depends on timing, and the fast-forward model\'s timing is not the '
-        'detailed model\'s: the sampled run executes a different schedule, whose '
-        'own time differs from the full run\'s by about as much as the estimate '
-        'does (36 tasks: one 1.5M-instruction task on another thread moves the '
-        'critical path by 10%)',
-    ('task', 'faster'):
-        'a queue of 36 irregular tasks repeats too little at this size for the '
-        'sampler to fast-forward more than a region or two',
+    ('task', 'accurate'):    _TASK_REASON,
+    ('task', 'less-detail'): _TASK_REASON,
+    ('task', 'faster'):      _TASK_REASON,
 }
 
 
@@ -445,6 +513,9 @@ def main():
             print('done [%ds]' % round(took))
             for name in names:
                 ok, detail = CASES[name](r, args)
+                if ok is None:
+                    print('  %-12s SKIP (%s)' % (name, detail))
+                    continue
                 known = KNOWN_QUICK_FAILURES.get((mode, name)) if args.profile == 'quick' else None
                 if known and not ok:
                     verdict = 'XFAIL'

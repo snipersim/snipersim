@@ -22,7 +22,8 @@ something the workload already reports rather than a number invented here:
   - test/fft-nn selects the libtorch branch predictor and is skipped when the
     build has no libtorch (TORCH=ON).
   - test/dr-frontend runs the FFT through the DynamoRIO front end instead of
-    the SDE recorder, and requires both its verdict and the front-end's banner.
+    the SDE recorder, and requires both its verdict and the front-end's banner;
+    test/qemu-frontend does the same through QEMU (run-sniper --frontend=qemu).
 
 Skips cleanly, with a reason, when a workload needs something absent -- an MPI
 that has not been fetched, a Pin kit for pinball replay.
@@ -72,6 +73,61 @@ def pinplay_check(out, rc):
     if not ok:
         return False, why + ' (recorded run)'
     return True, 'replayed %s instructions; recorded run: %s' % (m.group(1), why)
+
+
+def pa_check(out, rc):
+    """--pa on a host that allows it (test/pa): the program simulates, and in
+    its recorded trace the 64 pages it touched carry physical addresses --
+    none missing or equal to the virtual one, and as many frames as pages."""
+    if out.count('pa done') < 2:
+        return False, 'the program did not finish under run-sniper and record-trace'
+    m = re.search(r'^pa accesses=(\d+) frames=(\d+) unmapped=(\d+)', out, re.M)
+    if not m:
+        return False, 'no physical-address summary'
+    n, frames, bad = map(int, m.groups())
+    if n == 0 or bad or frames != 64:
+        return False, '%d accesses to the buffer, %d frames, %d without a physical address' % (n, frames, bad)
+    return True, '%d accesses to 64 pages, 64 physical frames' % n
+
+
+def pa_refused_check(out, rc):
+    """--pa without CAP_SYS_ADMIN (test/pa-refused): refused, with the reason."""
+    m = re.search(r'pa-refused exit=(\d+)', out)
+    if not m or m.group(1) == '0':
+        return False, 'run-sniper --pa went ahead on a host that cannot read physical frames'
+    if 'CAP_SYS_ADMIN' not in out:
+        return False, 'refused without saying why'
+    return True, 'refused (exit %s), naming CAP_SYS_ADMIN' % m.group(1)
+
+
+def vma_check(out, rc):
+    """record-trace --vma under SDE and DynamoRIO (test/dr-vma): both logs
+    start at instruction 0, and each shows vma.c's fixed region in the
+    snapshots taken while it was mapped and in none before or after -- the
+    region is mapped after the first stretch of work and unmapped before the
+    last, each far longer than the 10000 instructions between snapshots."""
+    if out.count('vma done') != 2:
+        return False, 'the program did not finish under both front ends'
+    got = {}
+    for fe, n, first, lo, hi in re.findall(r'^vma (\w+) snapshots=(\d+) first=(\S*) region=(\d+)\.\.(\d+)', out, re.M):
+        n, lo, hi = int(n), int(lo), int(hi)
+        if first != '0':
+            return False, '%s: first snapshot at instruction %s, not 0' % (fe, first)
+        if not (1 < lo <= hi < n):
+            return False, '%s: the region is in snapshots %d..%d of %d, expected strictly inside' % (fe, lo, hi, n)
+        got[fe] = '%d..%d of %d' % (lo, hi, n)
+    if sorted(got) != ['dr', 'sde']:
+        return False, 'no VMA summary for %s' % ', '.join(sorted({'dr', 'sde'} - set(got)))
+    return True, 'region mapped in snapshots SDE %s, DynamoRIO %s' % (got['sde'], got['dr'])
+
+
+def qemu_frontend_check(out, rc):
+    """The FFT ran under the QEMU front end and passed its own check; the
+    front-end line is required for the same reason as dr_frontend_check's."""
+    if '[RECORD-TRACE] Using the QEMU frontend' not in out:
+        return False, 'record-trace did not select the QEMU frontend'
+    ok, why = fft_self_check(out, rc)
+    return ok, (why + ' under QEMU') if ok else why
 
 
 def dr_frontend_check(out, rc):
@@ -224,6 +280,11 @@ CASES = {
     'smc':             (smc_result, None),
     'smc-rewrite':     (smc_rewrite_check, None),
     'dr-smc-rewrite':  (smc_rewrite_check, 'dynamorio'),
+    'qemu-frontend':   (qemu_frontend_check, 'qemu'),
+    'dr-vma':          (vma_check, 'dynamorio'),
+    'pa':              (pa_check, 'pa'),
+    'pa-refused':      (pa_refused_check, 'no-pa'),
+    'qemu-smc-rewrite': (smc_rewrite_check, 'qemu'),
     'fork':            (prints('Hello world', 'forked child ran'), None),
     'spinloop':        (prints('done', 'threads finished'), None),
     'true':            (exits_zero, None),
@@ -245,6 +306,19 @@ def unavailable(reason):
             cfg = ''
         if re.search(r'^torch_home=""', cfg, re.M) or 'torch_home=' not in cfg:
             return 'no libtorch in %s (make TORCH=ON)' % build
+    if reason in ('pa', 'no-pa'):
+        sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
+        import run_sniper
+        if reason == 'pa' and not run_sniper.va2pa_valid():
+            return 'needs CAP_SYS_ADMIN to read physical frames (pa-refused checks the refusal)'
+        if reason == 'no-pa' and run_sniper.va2pa_valid():
+            return 'this host can read physical frames (pa covers it)'
+    if reason == 'qemu':
+        build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
+        if not os.path.isfile(os.path.join(build, 'lib', 'libsniper-qemu.so')):
+            return 'no QEMU frontend in %s (make QEMU=ON)' % build
+        if not os.path.isfile(os.path.join(SNIPER_ROOT, 'qemu', 'build', 'qemu-x86_64')):
+            return 'no QEMU (deps/sniper-deps --qemu fetch)'
     if reason == 'dynamorio':
         build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
         if not os.path.isfile(os.path.join(build, 'lib', 'libdr-frontend.so')):
