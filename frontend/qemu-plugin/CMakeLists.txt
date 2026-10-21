@@ -40,7 +40,9 @@ target_include_directories(qemu_frontend PRIVATE
   "${CMAKE_SOURCE_DIR}/sift"
   "${CMAKE_SOURCE_DIR}/common/misc"
   # for dl_isa: the ISA numbering RecOtherISAChange carries
-  "${CMAKE_SOURCE_DIR}/decoder_lib")
+  "${CMAKE_SOURCE_DIR}/decoder_lib"
+  # sim_api.h: the magic commands (SIM_CMD_ROI_START, ...)
+  "${CMAKE_SOURCE_DIR}/include")
 
 # sniper_base, not sniper_common: the language and ABI contract, without the
 # simulator's libraries.

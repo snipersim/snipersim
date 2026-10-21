@@ -49,10 +49,12 @@ extern "C" {
 #include "ame_backend.h"
 #include "acc_backend.h"
 #include "qemu_plugin_ext.h"
+#include <atomic>
 #include <mutex>
 #include <unordered_set>
 
 #include "sift_writer.h"
+#include "sim_api.h"         /* the SIM_CMD_ numbers */
 #include "sift_format.h"
 
 extern "C" {
@@ -67,7 +69,7 @@ namespace {
  * XED-based branch classification and the mode probing below; RISC-V has
  * fixed-format encodings and one ISA, so its classification is a few bit
  * tests and its ISAChange record is emitted once, when the stream opens. */
-enum Arch { ARCH_X86, ARCH_RISCV };
+enum Arch { ARCH_X86, ARCH_RISCV, ARCH_AARCH64 };
 Arch        g_arch       = ARCH_X86;
 uint64_t    g_nspans     = 0;        /* MemorySpans records written, all vCPUs */
 uint64_t    g_ndropped_lines = 0;  /* cache lines an instruction touched beyond the spans its record holds */
@@ -88,6 +90,12 @@ std::string opt_output   = "sniper";
 uint64_t    opt_flow     = 1000;   /* matches KnobFlowControl in sift/recorder */
 bool        opt_verbose  = false;
 bool        opt_response = false;  /* user mode: blocking flow control */
+/* roi: trace only between SimRoiStart() and SimRoiEnd(), as the SDE and
+ * DynamoRIO front ends do with -roi.  The magic instructions themselves are
+ * always sent, so the simulator sees the markers either way. */
+bool        opt_roi      = false;
+std::atomic<bool> g_tracing{true};
+unsigned    opt_app      = 0;      /* the app number in the file names (record-trace -s) */
 bool        opt_time     = false;  /* system mode: drive guest time */
 uint64_t    opt_ns_per_insn = 1;   /* until the timing model answers */
 
@@ -177,7 +185,35 @@ unsigned mode_mask_for(const uint8_t *bytes, size_t len, uint8_t qemu_len)
    return mask;
 }
 
-/* Filled once per translation, shared by every execution of that instruction. */
+/* AArch64: SIFT's is_branch is "could have fallen through", as for x86 and
+ * RISC-V above: B.cond (and BC.cond), CBZ/CBNZ and TBZ/TBNZ, both widths --
+ * the set decoder_lib's ARMDecodedInst::is_conditional_branch() and the
+ * DynamoRIO front end's instr_is_cbr() agree on.  Fixed 4-byte encodings, so
+ * no decoder is needed.  B.cond with AL or NV is architecturally
+ * unconditional, and the decoder says so too. */
+bool aarch64_is_conditional_branch(const uint8_t *bytes, size_t len)
+{
+   if (len < 4)
+      return false;
+   const uint32_t w = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+   if ((w & 0xff000000u) == 0x54000000u)          /* B.cond / BC.cond */
+      return (w & 0xeu) != 0xeu;                    /* cond 1110 (AL), 1111 (NV) */
+   if ((w & 0x7e000000u) == 0x34000000u)          /* CBZ / CBNZ */
+      return true;
+   if ((w & 0x7e000000u) == 0x36000000u)          /* TBZ / TBNZ */
+      return true;
+   return false;
+}
+
+/* The magic instruction of sim_api.h, by architecture:
+ *
+ *   x86      xchg %bx, %bx            66 87 db
+ *   AArch64  bfm x0, x0, #0, #0       b3400000
+ *   RISC-V   slti zero, zero, 0x5a    05a02013
+ *
+ * Each is a no-op on hardware, which is what lets a program carry them. */
+bool is_magic(const uint8_t *bytes, size_t len);
+
 /* RISC-V: the conditional branches are the BRANCH major opcode (0x63) and, in
  * the compressed quadrant 1, c.beqz / c.bnez (funct3 110 / 111).  Jumps
  * (jal, jalr, c.j, c.jal, c.jr, c.jalr) are excluded for the reason given
@@ -193,9 +229,25 @@ bool riscv_is_conditional_branch(const uint8_t *bytes, size_t len)
    return rvisa::has(rvisa::decode(rvisa::word_of(bytes, length), length), rvisa::FLAG_BRANCH);
 }
 
+bool is_magic(const uint8_t *bytes, size_t len)
+{
+   static const uint8_t x86[]   = { 0x66, 0x87, 0xdb };
+   static const uint8_t a64[]   = { 0x00, 0x00, 0x40, 0xb3 };
+   static const uint8_t riscv[] = { 0x13, 0x20, 0xa0, 0x05 };
+   const uint8_t *want = g_arch == ARCH_X86 ? x86 : g_arch == ARCH_AARCH64 ? a64 : riscv;
+   const size_t n      = g_arch == ARCH_X86 ? sizeof(x86) : 4;
+   return len >= n && memcmp(bytes, want, n) == 0;
+}
+
 struct InsnInfo
 {
    uint64_t vaddr;
+   /* System mode: the physical address of the instruction, and of the page
+    * after if it crosses into one (0: not known).  Fixed per translation:
+    * QEMU finds a translated block by its physical page, so the block that
+    * runs is always this code at this address. */
+   uint64_t paddr  = 0;
+   uint64_t paddr2 = 0;
    uint8_t  size;
    bool     is_branch;
    unsigned mode_mask;
@@ -209,6 +261,7 @@ struct InsnInfo
    uint32_t word = 0;
    bool     ame = false;
    bool     claimed = false;    /* claimed at translation: no exception follows, so no set_pc */
+   bool     magic = false;      /* sim_api.h's magic instruction (is_magic) */
 };
 
 /* ------------------------------------------------------------- per-vCPU */
@@ -229,11 +282,14 @@ struct VCPU
     * callbacks have reported so far. */
    bool     have_pending = false;
    uint64_t pend_addr    = 0;
+   uint64_t pend_paddr   = 0;
+   uint64_t pend_paddr2  = 0;
    uint8_t  pend_size    = 0;
    bool     pend_branch  = false;
    std::vector<uint64_t> pend_addrs;   /* the first MAX_DYNAMIC_ADDRESSES, for the Instruction record */
+   std::vector<uint64_t> pend_paddrs;  /* system mode: their physical addresses (0: not known) */
    /* Every access of a footprint instruction (InsnInfo::footprint). */
-   struct Access { uint64_t addr; uint32_t size; bool store; };
+   struct Access { uint64_t addr; uint32_t size; bool store; uint64_t paddr = 0; };
    bool     pend_footprint = false;
    std::vector<Access> pend_accs;
    /* The AME backend this hart owns (a functional model; see ame_backend.h)
@@ -242,6 +298,11 @@ struct VCPU
    acc::Backend  acc_backend;      /* the DMA-attached accelerator's functional model (Xsnacc) */
    struct qemu_plugin_register *xreg[32] = {nullptr};
    bool          xreg_found = false;
+   /* The magic instruction's registers: the answer, the command and its two
+    * arguments (x86 rax rax rbx rcx; AArch64 x0 x1 x2 x3; RISC-V a0 a0 a1 a2). */
+   struct qemu_plugin_register *mreg[4] = {nullptr};
+   bool          mreg_have[4] = {false};   /* a null handle is valid: register 0 (rax, x0) */
+   bool          mreg_found = false;
 };
 
 /* One slot per vCPU, sized once and never resized.
@@ -341,32 +402,67 @@ void getCode(uint8_t *dst, const uint8_t *src, uint32_t size)
    g_byte_array_free(buf, TRUE);
 }
 
+/* The simulator reading or writing guest memory while it answers a question
+ * -- a magic instruction's string argument (SimSetThreadName,
+ * SimNamedMarker), an emulated system call's buffers.  Without this the
+ * writer had no way to answer and the simulator waited forever: a guest that
+ * named a thread before its ROI hung run-sniper --frontend=qemu.  Called in
+ * the vCPU's own callback, where QEMU's memory API works on its addresses. */
+bool access_memory(void *, Sift::MemoryLockType, Sift::MemoryOpType op,
+                   uint64_t addr, uint8_t *data, uint32_t size)
+{
+   GByteArray *b = g_byte_array_new();
+   bool ok;
+   if (op == Sift::MemRead)
+   {
+      ok = qemu_plugin_read_memory_vaddr(addr, b, size) && b->len == size;
+      if (ok)
+         memcpy(data, b->data, size);
+      else
+         memset(data, 0, size);
+   }
+   else
+   {
+      g_byte_array_append(b, data, size);
+      ok = qemu_plugin_write_memory_vaddr(addr, b);
+   }
+   g_byte_array_free(b, TRUE);
+   if (!ok)
+      fprintf(stderr, "[SNIPER-QEMU] the simulator %s %u bytes at 0x%" PRIx64 ", which the guest cannot reach\n",
+              op == Sift::MemRead ? "read" : "wrote", size, addr);
+   return ok;
+}
+
 void writer_open(VCPU *v, unsigned int idx)
 {
    char filename[1024];
    char response[1024];
 
-   snprintf(filename, sizeof(filename), "%s.app0.th%u.sift", opt_output.c_str(), idx);
+   snprintf(filename, sizeof(filename), "%s.app%u.th%u.sift", opt_output.c_str(), opt_app, idx);
    response[0] = '\0';
    if (opt_response)
-      snprintf(response, sizeof(response), "%s_response.app0.th%u.sift",
-               opt_output.c_str(), idx);
+      snprintf(response, sizeof(response), "%s_response.app%u.th%u.sift",
+               opt_output.c_str(), opt_app, idx);
 
    /* Compression is off when response files are in use: the reader is reading
     * a pipe and has to see records as they are produced. */
    v->writer = new Sift::Writer(filename, getCode, !opt_response, response, idx,
                                 false /* arch32 */, false /* icache per insn */,
-                                false /* send va2pa */);
+                                false /* send va2pa */, NULL, NULL,
+                                in_system_mode /* code and data by physical address */);
    if (!v->writer->IsOpen())
    {
       fprintf(stderr, "[SNIPER-QEMU] cannot open %s\n", filename);
       exit(1);
    }
+   v->writer->setHandleAccessMemoryFunc(access_memory);
    /* The reader decodes as x86 until told otherwise; a RISC-V stream says so
     * before its first instruction.  (x86 streams get theirs from the mode
     * check, which knows 16/32/64.) */
    if (g_arch == ARCH_RISCV)
       v->writer->ISAChange(dl::DL_ISA_RISCV);
+   else if (g_arch == ARCH_AARCH64)
+      v->writer->ISAChange(dl::DL_ISA_AARCH64);
    if (opt_verbose)
       fprintf(stderr, "[SNIPER-QEMU] vcpu %u -> %s\n", idx, filename);
 }
@@ -448,6 +544,25 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
    const bool taken = v->pend_branch &&
                       (next_vaddr != v->pend_addr + v->pend_size);
 
+   /* System mode: where this instruction's code and data are in physical
+    * memory, which the writer passes on when it changed -- a context switch
+    * puts another process's pages at the same virtual addresses.  The
+    * simulator then caches by physical address, and code is told apart by
+    * its physical page. */
+   if (in_system_mode)
+   {
+      if (v->pend_paddr)
+         v->writer->Mapping(v->pend_addr, v->pend_paddr);
+      if (v->pend_paddr2)
+         v->writer->Mapping((v->pend_addr + v->pend_size - 1) & ~0xfffULL, v->pend_paddr2);
+      for (size_t i = 0; i < v->pend_addrs.size() && i < v->pend_paddrs.size(); i++)
+         if (v->pend_paddrs[i])
+            v->writer->Mapping(v->pend_addrs[i], v->pend_paddrs[i]);
+      for (const VCPU::Access &a : v->pend_accs)
+         if (a.paddr)
+            v->writer->Mapping(a.addr, a.paddr);
+   }
+
    if (v->pend_footprint && !v->pend_accs.empty())
       emit_spans(v);
 
@@ -459,6 +574,7 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
 
    v->have_pending = false;
    v->pend_addrs.clear();
+   v->pend_paddrs.clear();
    v->pend_accs.clear();
    v->icount++;
 }
@@ -669,6 +785,8 @@ namespace
 void insn_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
+   if (!g_tracing.load(std::memory_order_relaxed))
+      return;                      /* outside the ROI */
    VCPU *v = vcpu_get(cpu_index);
 
    /* The previous instruction's fate is now known. */
@@ -676,6 +794,8 @@ void insn_exec(unsigned int cpu_index, void *udata)
 
 
    v->pend_addr   = ii->vaddr;
+   v->pend_paddr  = ii->paddr;
+   v->pend_paddr2 = ii->paddr2;
    v->pend_size   = ii->size;
    v->pend_branch = ii->is_branch;
    v->pend_footprint = ii->footprint;
@@ -702,6 +822,105 @@ void insn_exec(unsigned int cpu_index, void *udata)
             qemu_plugin_update_ns(time_handle, (int64_t)want);
          }
       }
+   }
+}
+
+/* A magic instruction (is_magic): send it to the simulator, which acts on it
+ * and, when there is a response channel, answers -- the answer goes into the
+ * result register before the instruction runs, and the instruction itself
+ * leaves that register alone.  Registered after insn_exec, with RW_REGS, so
+ * the instruction is pending when this runs and goes out ahead of the magic
+ * record, as with the SDE recorder.
+ *
+ * With roi, ROI start turns tracing on and ROI end turns it off again; the
+ * markers are sent in both directions, so the simulator switches its models
+ * at the same instruction. */
+uint64_t read_reg(struct qemu_plugin_register *r, bool have)
+{
+   if (!have)
+      return 0;
+   GByteArray *b = g_byte_array_new();
+   uint64_t val = 0;
+   if (qemu_plugin_read_register(r, b) && b->len)
+      memcpy(&val, b->data, std::min<size_t>(b->len, sizeof(val)));
+   g_byte_array_free(b, TRUE);
+   return val;
+}
+
+void find_magic_registers(VCPU *v)
+{
+   static const char *const names[3][4][2] = {
+      /* answer        command        arg0           arg1 */
+      { {"rax","eax"}, {"rax","eax"}, {"rbx","ebx"}, {"rcx","ecx"} },   /* x86 */
+      { {"x0",nullptr}, {"x1",nullptr}, {"x2",nullptr}, {"x3",nullptr} }, /* AArch64 */
+      { {"a0","x10"}, {"a0","x10"}, {"a1","x11"}, {"a2","x12"} },       /* RISC-V */
+   };
+   const unsigned a = g_arch == ARCH_X86 ? 0 : g_arch == ARCH_AARCH64 ? 1 : 2;
+   GArray *regs = qemu_plugin_get_registers();
+   for (guint i = 0; regs && i < regs->len; i++)
+   {
+      qemu_plugin_reg_descriptor *d = &g_array_index(regs, qemu_plugin_reg_descriptor, i);
+      for (unsigned k = 0; k < 4; k++)
+         for (unsigned n = 0; n < 2; n++)
+            if (!v->mreg_have[k] && names[a][k][n] && strcmp(d->name, names[a][k][n]) == 0)
+            {
+               /* QEMU encodes a handle as (gdb register number << 1) | read
+                * only, so the first register's is null: found is kept apart */
+               v->mreg[k] = d->handle;
+               v->mreg_have[k] = true;
+            }
+   }
+   if (regs)
+      g_array_free(regs, TRUE);
+   for (unsigned k = 0; k < 4; k++)
+      if (!v->mreg_have[k])
+         fprintf(stderr, "[SNIPER-QEMU] no register handle for magic operand %u (%s): it reads as 0\n",
+                 k, names[a][k][0]);
+   v->mreg_found = true;
+}
+
+void magic_exec(unsigned int cpu_index, void *udata)
+{
+   const InsnInfo *ii = (const InsnInfo *)udata;
+   VCPU *v = vcpu_get(cpu_index);
+   if (!v->writer || v->closed)
+      return;
+   if (!v->mreg_found)
+      find_magic_registers(v);
+
+   const uint64_t cmd  = read_reg(v->mreg[1], v->mreg_have[1]);
+   const uint64_t arg0 = read_reg(v->mreg[2], v->mreg_have[2]);
+   const uint64_t arg1 = read_reg(v->mreg[3], v->mreg_have[3]);
+
+   if (opt_roi && cmd == SIM_CMD_ROI_START && !g_tracing.load())
+   {
+      g_tracing.store(true);
+      if (opt_verbose)
+         fprintf(stderr, "[SNIPER-QEMU] ROI begin\n");
+   }
+
+   /* The magic instruction goes out first (when traced), then the record. */
+   flush_pending(v, ii->vaddr + ii->size);
+   const uint64_t res = v->writer->Magic(cmd, arg0, arg1);
+
+   if (opt_roi && cmd == SIM_CMD_ROI_END && g_tracing.load())
+   {
+      g_tracing.store(false);
+      if (opt_verbose)
+         fprintf(stderr, "[SNIPER-QEMU] ROI end\n");
+   }
+
+   if (opt_response && res != cmd && v->mreg_have[0])
+   {
+      /* As wide as the register reads: 4 bytes on i386 */
+      GByteArray *b = g_byte_array_new();
+      size_t width = 8;
+      if (qemu_plugin_read_register(v->mreg[0], b) && b->len && b->len < width)
+         width = b->len;
+      g_byte_array_set_size(b, 0);
+      g_byte_array_append(b, (const guint8 *)&res, (guint)width);
+      qemu_plugin_write_register(v->mreg[0], b);
+      g_byte_array_free(b, TRUE);
    }
 }
 
@@ -772,6 +991,14 @@ void tb_mode_check(unsigned int cpu_index, void *udata)
                     : (cand & MODE_32) ? MODE_32 : MODE_16;
 
    v->mode = m;
+   /* The previous block's last instruction is still pending (emission waits
+    * for the successor, to know whether a branch was taken), and it ran in
+    * the old mode: emit it first, with this block's start as its successor.
+    * Otherwise it is recorded after the ISAChange and decoded in the new
+    * mode -- the far jump that enters long mode, 16-bit code, was decoded
+    * as 64-bit and the simulation aborted. */
+   if (v->writer)
+      flush_pending(v, ti->vaddr);
    if (v->writer)
       v->writer->ISAChange(m == MODE_64 ? dl::DL_ISA_X86_64
                          : m == MODE_32 ? dl::DL_ISA_IA32 : dl::DL_ISA_IA16);
@@ -787,12 +1014,26 @@ void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
    VCPU *v = vcpu_get(cpu_index);
    if (!v->have_pending)
       return;
+   /* System mode: the physical address QEMU just used.  Device (MMIO)
+    * accesses report an offset into the device, not an address; they get
+    * none, and the simulator keeps the virtual one for them. */
+   uint64_t paddr = 0;
+   if (in_system_mode)
+   {
+      struct qemu_plugin_hwaddr *hw = qemu_plugin_get_hwaddr(info, vaddr);
+      if (hw && !qemu_plugin_hwaddr_is_io(hw))
+         paddr = qemu_plugin_hwaddr_phys_addr(hw);
+   }
    if (v->pend_addrs.size() < Sift::MAX_DYNAMIC_ADDRESSES)
+   {
       v->pend_addrs.push_back(vaddr);
+      v->pend_paddrs.push_back(paddr);
+   }
    if (v->pend_footprint)
    {
       VCPU::Access acc;
       acc.addr  = vaddr;
+      acc.paddr = paddr;
       acc.size  = 1u << qemu_plugin_mem_size_shift(info);
       acc.store = qemu_plugin_mem_is_store(info);
       v->pend_accs.push_back(acc);
@@ -810,7 +1051,7 @@ void syscall_enter(SNP_SYSCALL_ARGS)
     * calls initResponse() unconditionally.  The Pin recorder gates the same
     * thing on KnobEmulateSyscalls.  Without a channel we are writing a trace
     * to a file and the syscall is simply not modelled. */
-   if (!opt_response)
+   if (!opt_response || !g_tracing.load(std::memory_order_relaxed))
       return;
 
    /* Close out the instruction that issued the syscall first. */
@@ -904,8 +1145,29 @@ void tb_trans(SNP_TB_TRANS_ARGS)
        * execution of the block. */
       uint8_t bytes[XED_MAX_INSTRUCTION_BYTES] = {0};
       size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(bytes));
-      if (got)
+      if (in_system_mode)
+      {
+         /* Where the code is in physical memory: what identifies it in a
+          * full-system trace (Writer::Mapping, CodePhysical) */
+         uint64_t pa = 0;
+         if (qemu_plugin_translate_vaddr(ii->vaddr, &pa))
+            ii->paddr = pa;
+         const uint64_t last = ii->vaddr + (got ? got : 1) - 1;
+         if ((last & ~0xfffULL) != (ii->vaddr & ~0xfffULL) && qemu_plugin_translate_vaddr(last & ~0xfffULL, &pa))
+            ii->paddr2 = pa;
+      }
+      if (got && !in_system_mode)
          Sift::CodeTracker::observe(ii->vaddr, bytes, (uint32_t)got);
+      else if (got && ii->paddr)
+      {
+         /* Code rewritten in place, by physical page, the writer's key; one
+          * piece per page an instruction spans, since the next virtual page
+          * need not be the next physical one */
+         const uint64_t first = std::min<uint64_t>(got, 0x1000 - (ii->vaddr & 0xfff));
+         Sift::CodeTracker::observe(ii->paddr | Sift::CODE_KEY_PHYSICAL, bytes, (uint32_t)first);
+         if (first < got && ii->paddr2)
+            Sift::CodeTracker::observe((ii->paddr2 & ~0xfffULL) | Sift::CODE_KEY_PHYSICAL, bytes + first, (uint32_t)(got - first));
+      }
       if (g_arch == ARCH_RISCV)
       {
          ii->is_branch = got ? riscv_is_conditional_branch(bytes, got) : false;
@@ -922,6 +1184,11 @@ void tb_trans(SNP_TB_TRANS_ARGS)
             }
          }
       }
+      else if (g_arch == ARCH_AARCH64)
+      {
+         ii->is_branch = got ? aarch64_is_conditional_branch(bytes, got) : false;
+         ii->mode_mask = 0;
+      }
       else
       {
          ii->is_branch = got ? xed_is_conditional_branch(bytes, got) : false;
@@ -929,6 +1196,7 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       }
       if (ii->mode_mask)
          ti->mode_mask &= ii->mode_mask;  /* one mode governs the whole block */
+      ii->magic = got && is_magic(bytes, got);
 
       if (ii->ame)
       {
@@ -943,6 +1211,9 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       }
       qemu_plugin_register_vcpu_insn_exec_cb(insn, insn_exec,
                                              QEMU_PLUGIN_CB_NO_REGS, ii);
+      if (ii->magic)   /* after the tracer's callback: the instruction is pending */
+         qemu_plugin_register_vcpu_insn_exec_cb(insn, magic_exec,
+                                                QEMU_PLUGIN_CB_RW_REGS, ii);
       if (ii->ame)     /* after the tracer's callback: the record is pending when the model runs */
          qemu_plugin_register_vcpu_insn_exec_cb(insn, ame_exec, ii->claimed ? QEMU_PLUGIN_CB_RW_REGS : QEMU_PLUGIN_CB_RW_REGS_PC, ii);
       qemu_plugin_register_vcpu_mem_cb(insn, mem_access,
@@ -999,9 +1270,11 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
       g_arch = ARCH_RISCV;
    else if (!strcmp(info->target_name, "x86_64") || !strcmp(info->target_name, "i386"))
       g_arch = ARCH_X86;
+   else if (!strcmp(info->target_name, "aarch64"))
+      g_arch = ARCH_AARCH64;
    else
    {
-      fprintf(stderr, "[SNIPER-QEMU] unsupported target %s (x86_64, i386, riscv32, riscv64)\n",
+      fprintf(stderr, "[SNIPER-QEMU] unsupported target %s (x86_64, i386, riscv32, riscv64, aarch64)\n",
               info->target_name);
       return -1;
    }
@@ -1030,8 +1303,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
       else if (key == "smc")      opt_smc = val != "0" && val != "off" && val != "false";     /* smc=0: send each code page once, as before */
       else if (key == "claim")    opt_claim = val != "0" && val != "off" && val != "false";   /* claim=0: emulate via the exception path even when the QEMU can claim */
       else if (key == "trace")    opt_trace = val != "0" && val != "off" && val != "false";   /* trace=0: a functional run, the models only */
-      else if (key == "verbose")  opt_verbose = true;
-      else if (key == "response") opt_response = true;
+      /* A bare key is on (the short form QEMU now warns about); key=on/off
+       * otherwise, so that response=off is not taken for response. */
+      else if (key == "verbose")  opt_verbose = !eq || (val != "0" && val != "off" && val != "false");
+      else if (key == "response") opt_response = !eq || (val != "0" && val != "off" && val != "false");
+      else if (key == "roi")      opt_roi = val != "0" && val != "off" && val != "false";
+      else if (key == "app")      opt_app = (unsigned)strtoul(val.c_str(), nullptr, 0);
       else if (key == "time")     opt_time = true;
       else if (key == "ns")       opt_ns_per_insn = strtoull(val.c_str(), nullptr, 0);
       else
@@ -1042,6 +1319,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    }
 
    Sift::CodeTracker::enable(opt_smc);
+   g_tracing.store(!opt_roi);
 
    if (opt_response && in_system_mode)
    {

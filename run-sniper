@@ -20,6 +20,7 @@ def usage():
         '  [--roi]' + \
         '  [--roi-script]' + \
         '  [--pacsim|--dynamic-sampling]' + \
+        '  [--pa]' + \
         '  [--smc|--no-smc]' + \
         '  [--viz]' + \
         '  [--viz-aso]' + \
@@ -49,7 +50,7 @@ def usage():
         '  |  --pinballs=<pinball-basename>,*' + \
         '  |  --pid=<process-pid>' + \
         '  |  [--sift]' + \
-        '  |  [--frontend=]' + \
+        '  |  [--frontend=<dr|qemu|qemu-system-x86_64|qemu-system-riscv64>]' + \
         '  -- <cmdline> }')
   print()
   print('Example: $ ./run-sniper -- /bin/ls')
@@ -113,7 +114,12 @@ use_pid = None
 tracegen = None
 trace_extra_args = []
 verbose = False
-use_pa = True
+# --pa: the recorder sends each page's physical address, so that processes
+# sharing memory share it in the caches too.  Opt-in: it needs CAP_SYS_ADMIN,
+# and this used to be on whenever the host allowed it -- results then depended
+# on who ran them (the check was broken and never allowed it, so in practice it
+# was never on).
+use_pa = False
 use_pinplay = False
 sde_arch = ''
 genstats = True
@@ -201,16 +207,6 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
   return newconfig
 
-def va2pa_valid():
-  # If the Linux version is 4.0 or greater, and we don't have the CAP_SYS_ADMIN capability (bit 21), report an error
-  process = subprocess.Popen("echo -n $(( $(uname -r | cut -d . -f 2) >= 4 && ((0x$(grep CapEff /proc/self/status | cut -f 2) >> 20) & 1) ))", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-  process.wait()
-  process.terminate()
-  if 0 == process.returncode:
-    return False
-  else:
-    return True
-
 record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=', 'maxthreads=' ]
 
 try:
@@ -222,6 +218,7 @@ try:
       "pacsim", "dynamic-sampling",
       "smc",
       "no-smc",
+      "pa",
       "viz", "viz-aso",
       "profile", "memory-profile", "cheetah",
       "perf", "valgrind", "wrap-sim=",
@@ -343,6 +340,12 @@ for o, a in opts:
     sniperoptions.append('-g --general/enable_smc_support=true')
   if o == '--no-smc':
     track_smc = False
+  if o == '--pa':
+    if not run_sniper.va2pa_valid():
+      print('[SNIPER] --pa needs physical frame numbers from /proc/self/pagemap, which since Linux 4.0\n'
+            '  needs CAP_SYS_ADMIN (root, or a container started with --cap-add SYS_ADMIN).', file=sys.stderr)
+      sys.exit(1)
+    use_pa = True
   if o in ('--pacsim', '--dynamic-sampling'):
     # Two spellings, one path.  --pacsim names the published methodology and
     # --dynamic-sampling says what it does; they must never drift apart, so
@@ -631,16 +634,20 @@ if scripts:
   scriptname = os.path.join(outputdir, 'sim.scripts.py')
   scriptfileobj = open(scriptname, 'w')
   # Generate a Python script that executes all user scripts with their arguments
+  # The tree's scripts/ goes on the path first: the sim package lives there,
+  # and a script anywhere else -- a user's own -s /path/to/x.py -- could not
+  # "import sim" (only the script's own directory was added).
   scriptfileobj.write("""
 import sys
 from importlib import util
+sys.path.insert(0, %r)
 def load_file_as_module(name, location):
     sys.path.insert(0,location.rsplit('/', 1)[0])
     spec = util.spec_from_file_location(name, location)
     module = util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-""")
+""" % os.path.join(HOME, 'scripts'))
   for i, script in enumerate(scripts):
     if ':' in script:
       filename, args = script.split(':', 1)
@@ -657,6 +664,36 @@ def load_file_as_module(name, location):
   sniperoptions.append('-g --hooks/numscripts=1')
   sniperoptions.append('-g --hooks/script0name=%s' % scriptname)
   sniperoptions.append('-g --hooks/script0args=')
+
+# A whole machine under QEMU: recorded first, then simulated from the stored
+# traces.  It cannot be live -- full-system QEMU has no response channel to
+# block a vCPU on (see frontend/qemu-plugin) -- so the command line, QEMU's
+# machine options, is run to completion by record-trace and each vCPU's trace
+# becomes one of the inputs below.
+if frontend and frontend.startswith('qemu-system') and cmdline:
+  import glob
+  qprefix = os.path.join(outputdir, 'qemu-system')
+  for f in glob.glob(qprefix + '.app0.th*.sift'):
+    os.unlink(f)
+  qcmd = [ os.path.join(HOME, 'record-trace'), '-o', qprefix, '--frontend=%s' % frontend ] \
+       + (['--roi'] if roi_only else []) \
+       + ([] if track_smc else ['--no-smc']) \
+       + (['-v'] if verbose else []) \
+       + [ a for a in trace_extra_args if not a.startswith('--frontend=') ] + [ '--' ] + cmdline
+  if verbose:
+    print('[SNIPER] Recording', ' '.join(qcmd))
+  sys.stdout.flush()
+  rc = subprocess.call(qcmd)
+  # A whole machine reports its own way out -- the RISC-V test finisher,
+  # x86's isa-debug-exit -- and many of those are a non-zero QEMU status, so
+  # the status is reported and the traces decide.
+  if rc != 0:
+    print('[SNIPER] QEMU exited with status %d' % rc)
+  traces = sorted(glob.glob(qprefix + '.app0.th*.sift'), key=lambda f: int(f.rsplit('.th', 1)[1].split('.')[0]))
+  if not traces:
+    print('[SNIPER] the full-system recording wrote no trace', file=sys.stderr)
+    sys.exit(1)
+  cmdline = []
 
 # If using traces via this front-end, support either multi-program workloads or a single multi-threaded application
 if traces:
@@ -711,9 +748,8 @@ elif use_mpi:
   # Set trace recorder options
   other_options = []
   if use_pa:
-    if va2pa_valid():
-      other_options += [ '--pa' ]
-    else:
+    other_options += [ '--pa' ]
+  else:
       # Only print a warning if we are attempting to use multiple ranks (apps) that could share memory.
       if tracegen['num_apps'] > 1:
         print('[SNIPER] Warning: Unable to use physical addresses for shared memory simulation.', file=sys.stderr)
@@ -747,8 +783,7 @@ elif use_sift:
   if use_pid:
     other_options += [ '--pid', use_pid ]
   if use_pa:
-    if va2pa_valid():
-      other_options += [ '--pa' ]
+    other_options += [ '--pa' ]
   applications = [
     ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
   ]

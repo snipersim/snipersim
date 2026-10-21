@@ -5,6 +5,66 @@
 #include "drreg.h"
 
 #include "dr_fe_options.h"
+
+/* The magic instruction (sim_api.h) and the registers it uses: x86
+ * "xchg %bx, %bx" with the command and answer in RAX and the arguments in RBX
+ * and RCX; AArch64 "bfm x0, x0, #0, #0" with the answer in X0, the command in
+ * X1 and the arguments in X2 and X3. */
+#ifdef AARCH64
+static const reg_id_t magic_regs[] = { DR_REG_X0, DR_REG_X1, DR_REG_X2, DR_REG_X3 };
+#else
+static const reg_id_t magic_regs[] = { DR_REG_RAX, DR_REG_RBX, DR_REG_RCX };
+#endif
+
+static bool is_magic_instr(instr_t *instr)
+{
+  IF_X86
+  (
+    return instr_get_opcode(instr) == OP_xchg &&
+           instr_num_srcs(instr) == 2 && instr_num_dsts(instr) == 2 &&
+           opnd_is_reg(instr_get_src(instr, 0)) &&
+           opnd_get_reg(instr_get_src(instr, 0)) == DR_REG_BX &&
+           opnd_is_reg(instr_get_dst(instr, 0)) &&
+           opnd_get_reg(instr_get_dst(instr, 0)) == DR_REG_BX;
+  )
+  IF_AARCH64
+  (
+    return instr_get_opcode(instr) == OP_bfm &&
+           instr_reg_in_src(instr, DR_REG_X0) &&
+           instr_reg_in_dst(instr, DR_REG_X0) &&
+           instr_num_srcs(instr) == 4 &&
+           opnd_get_immed_int(instr_get_src(instr, 2)) == 0 &&
+           opnd_get_immed_int(instr_get_src(instr, 3)) == 0;
+  )
+  return false;
+}
+
+/* The scratch registers the tracing instrumentation may borrow in a block
+ * holding a magic instruction: any but the magic registers.  drreg lends a
+ * register it finds dead without saving the application's value, and its
+ * liveness cannot see the magic instruction's implicit use -- in
+ * "mov $14, %rax; mov $name, %rbx; xchg %bx, %bx; mov $1, %rax" RAX is
+ * written next and never read, so drreg lent it to the tracer and the magic
+ * clean call read the tracer's buffer pointer (the simulator saw command
+ * 0x400000).  Under DynamoRIO every command with an argument or an effect was
+ * lost that way.  Other blocks keep the full choice. */
+static drvector_t magic_free_regs;
+
+static void init_magic_free_regs()
+{
+  drreg_init_and_fill_vector(&magic_free_regs, true);
+  for (reg_id_t r : magic_regs)
+    drreg_set_vector_entry(&magic_free_regs, r, false);
+}
+
+static drvector_t *scratch_allowed(instrlist_t *bb)
+{
+  for (instr_t *i = instrlist_first_app(bb); i != NULL; i = instr_get_next_app(i))
+    if (is_magic_instr(i))
+      return &magic_free_regs;
+  return NULL;
+}
+
 #include "dr_fe_copy.h"
 #include "dr_fe_syscall.h"
 #include "dr_fe_lock.h"
@@ -74,6 +134,7 @@ void DRFrontend::init()
 
   if(!drmgr_init() || drreg_init(&ops) != DRREG_SUCCESS)
     DR_ASSERT(false);
+  init_magic_free_regs();
     
   dr_set_client_name("Sniper's frontend based on DynamoRIO", "http://snipersim.org");
 
@@ -226,6 +287,7 @@ void DRFrontend::event_exit(void)
   if (!dr_raw_tls_cfree(tls_offs, FRONTEND_TLS_COUNT))
     DR_ASSERT(false);
         
+  drvector_delete(&magic_free_regs);
   if (!drmgr_unregister_tls_field(tls_idx) ||
       !drmgr_unregister_thread_init_event(event_thread_init) ||
       !drmgr_unregister_thread_exit_event(event_thread_exit)||
@@ -507,24 +569,38 @@ unsigned int DRFrontend::addMemoryModeling( threadid_t threadid, void *drcontext
 void DRFrontend::magic_clean_call()
 {
   void * drcontext = dr_get_current_drcontext();
+  /* The instructions before this one first: they wait in the trace buffer
+     until it fills, and a magic record sent ahead of them reached the
+     simulator early -- SimMagic1(SIM_CMD_GET_INS_NUM) read a count short of
+     the buffered instructions, an ROI began before code that precedes it,
+     a marker fell in the wrong place.  The SDE and QEMU front ends send
+     instructions as they go. */
+  process_instructions_buffer(drcontext);
   dr_mcontext_t mc = {sizeof(mc),DR_MC_ALL,};
   dr_get_mcontext(drcontext, &mc);
+  /* The simulator's answer goes into the result register before the magic
+     instruction runs (it leaves that register alone), as the SDE and QEMU
+     front ends do.  It was dropped here, so under DynamoRIO SimInSimulator()
+     said no and every query returned its own command number. */
   IF_X86
   (
-    // Invoke the handleMagic callback with command (RAX) and arguments (RBX, RCX)
-    m_callbacks->handleMagic(fe_tid(drcontext), 
-                           reg_get_value(DR_REG_RAX, &mc), 
-                           reg_get_value(DR_REG_RBX, &mc), 
+    // Invoke the handleMagic callback with command (RAX) and arguments (RBX, RCX); the answer in RAX
+    reg_t res = m_callbacks->handleMagic(fe_tid(drcontext),
+                           reg_get_value(DR_REG_RAX, &mc),
+                           reg_get_value(DR_REG_RBX, &mc),
                            reg_get_value(DR_REG_RCX, &mc) );
+    reg_set_value(DR_REG_RAX, &mc, res);
   )
   IF_AARCH64
   (
-    // Invoke the handleMagic callback with command (X1) and arguments (X2, X3)
-    m_callbacks->handleMagic(fe_tid(drcontext), 
-                           reg_get_value(DR_REG_X1, &mc), 
-                           reg_get_value(DR_REG_X2, &mc), 
+    // Invoke the handleMagic callback with command (X1) and arguments (X2, X3); the answer in X0
+    reg_t res = m_callbacks->handleMagic(fe_tid(drcontext),
+                           reg_get_value(DR_REG_X1, &mc),
+                           reg_get_value(DR_REG_X2, &mc),
                            reg_get_value(DR_REG_X3, &mc) );
+    reg_set_value(DR_REG_X0, &mc, res);
   )
+  dr_set_mcontext(drcontext, &mc);
 }
 
 void DRFrontend::invoke_endROI()
@@ -542,34 +618,9 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
       return DR_EMIT_DEFAULT;
       
     // Check Magic instructions
-    IF_X86
-    (
-      if( instr_get_opcode(instr) == OP_xchg &&
-          instr_num_srcs(instr) == 2 && instr_num_dsts(instr) == 2 &&
-          opnd_is_reg(instr_get_src(instr, 0)) && 
-          opnd_get_reg(instr_get_src(instr, 0)) == DR_REG_BX && 
-          opnd_is_reg(instr_get_dst(instr, 0)) && 
-          opnd_get_reg(instr_get_dst(instr, 0)) == DR_REG_BX )
-      {
-        // Insert clean call to handle magic instructions
-        dr_insert_clean_call( drcontext, bb, instr,
-                              (void *)magic_clean_call, false, 0);
-      }
-    )
-    IF_AARCH64
-    (
-      if(instr_get_opcode(instr) == OP_bfm && 
-         instr_reg_in_src(instr, DR_REG_X0) && 
-         instr_reg_in_dst(instr, DR_REG_X0) &&
-         instr_num_srcs(instr) == 4 &&
-         opnd_get_immed_int(instr_get_src(instr, 2)) == 0 &&
-         opnd_get_immed_int(instr_get_src(instr, 3)) == 0 )
-      {
-        // Insert clean call to handle magic instructions
-        dr_insert_clean_call( drcontext, bb, instr,
-                              (void *)magic_clean_call, false, 0);      }
-    )
-    
+    if (is_magic_instr(instr))
+      dr_insert_clean_call(drcontext, bb, instr, (void *)magic_clean_call, false, 0);
+
     // Check if the stop address has been reached and end simulation 
     if (m_control->get_stop_address() && ( (ptr_uint_t)instr_get_app_pc(instr) == m_control->get_stop_address()))
     {
@@ -607,8 +658,9 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
     {
       // Reserve two scratch registers
       reg_id_t reg_ptr, reg_tmp;
-      if (drreg_reserve_register(drcontext, bb, instr, NULL, &reg_ptr) != DRREG_SUCCESS ||
-          drreg_reserve_register(drcontext, bb, instr, NULL, &reg_tmp) != DRREG_SUCCESS) 
+      drvector_t *allowed = scratch_allowed(bb);
+      if (drreg_reserve_register(drcontext, bb, instr, allowed, &reg_ptr) != DRREG_SUCCESS ||
+          drreg_reserve_register(drcontext, bb, instr, allowed, &reg_tmp) != DRREG_SUCCESS) 
             DR_ASSERT(false); // cannot recover
       
       // Load the address to the buffer to save the collected information of current instruction

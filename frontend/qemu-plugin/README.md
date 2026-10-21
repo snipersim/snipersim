@@ -10,7 +10,33 @@ make QEMU=ON -j8          # builds QEMU with plugins, then lib/libsniper-qemu.so
 
 ## Running
 
-User mode, single-threaded guest:
+From run-sniper, like the other front ends:
+
+```
+./run-sniper -c gainestown --frontend=qemu -- ./app            # user mode, live
+./run-sniper -c cortex-a72 --frontend=qemu --roi -- ./app-arm64
+./run-sniper -c riscv      --frontend=qemu -- ./app-riscv64
+./run-sniper -c riscv      --frontend=qemu-system-riscv64 -- -M virt -bios none -nographic -kernel ./guest
+./run-sniper -c gainestown --frontend=qemu-system-x86_64 -- -drive file=disk.img,format=raw ...
+```
+
+`--frontend=qemu` is user mode: the program's ELF header picks the QEMU
+(x86-64, AArch64 or RISC-V), and it runs live -- Sniper paces it and answers
+its magic instructions and system calls -- so it takes single-threaded guests.
+`--frontend=qemu-system-<arch>` runs a whole machine from QEMU's own options,
+records each vCPU to a file in the output directory, then simulates the
+files; a machine reports its own way out (a test finisher, isa-debug-exit),
+so QEMU's exit status is printed rather than taken as failure.  `--roi`
+traces only between `SimRoiStart()` and `SimRoiEnd()`.  The QEMUs are the
+dependencies `deps/sniper-deps` builds (`qemu`, `qemu-aarch64-user`,
+`qemu-riscv-ime`, `qemu-riscv-system`); `$SNIPER_QEMU_X86_64`,
+`$SNIPER_QEMU_AARCH64`, `$SNIPER_QEMU_RISCV`, `$SNIPER_QEMU_SYSTEM_X86_64` and
+`$SNIPER_QEMU_RISCV_SYSTEM` point at others.  `--frontend-option` passes QEMU
+options (`--frontend-option='-cpu rv64,v=true'`).  What QEMU cannot do is
+refused rather than ignored: `--pid`, pinballs, `--pacsim`, MPI, `-f/-d/-b`
+instruction windows, `--vma`, and `--pa` in user mode.
+
+By hand, user mode, single-threaded guest:
 
 ```
 qemu-x86_64 -plugin build/default/lib/libsniper-qemu.so,output=trace -- ./app
@@ -24,9 +50,34 @@ qemu-system-x86_64 -accel tcg -plugin \
   build/default/lib/libsniper-qemu.so,output=trace,time,ns=1 ...
 ```
 
-Options: `output=` prefix, `flow=N` instructions per quantum, `response`
-(user-mode blocking flow control), `time` (system-mode time control), `ns=N`
-nanoseconds per instruction, `verbose`.
+Options: `output=` prefix, `app=N` the application number in the file names
+(`<prefix>.app<N>.th<vcpu>.sift`), `flow=N` instructions per quantum,
+`response=on` (user-mode blocking flow control), `roi=1` (trace only inside
+the region of interest), `smc=0` (send each code page once), `time`
+(system-mode time control), `ns=N` nanoseconds per instruction,
+`verbose=on`.
+
+### Magic instructions
+
+`include/sim_api.h`'s commands (`SimRoiStart()`, `SimMarker()`,
+`SimGetProcId()`, `SimUser()`, ...) work on every architecture the plugin
+traces.  Each marker is a no-op on hardware:
+
+| Architecture | Instruction | Command | Arguments | Answer |
+|---|---|---|---|---|
+| x86 | `xchg %bx, %bx` | rax | rbx, rcx | rax |
+| AArch64 | `bfm x0, x0, #0, #0` | x1 | x2, x3 | x0 |
+| RISC-V | `slti zero, zero, 0x5a` | a0 | a1, a2 | a0 |
+
+The RISC-V marker is an SLTI writing x0, a HINT the ISA designates for custom
+use.  The plugin sends each one to Sniper as a SIFT magic record; in user mode
+it writes Sniper's answer into the answer register before the instruction
+runs, and serves Sniper's reads of guest memory (a string argument, an
+emulated system call's buffers).  Full system has no response channel: the
+record is a notice (`RecOtherMagicInstructionNoResponse`), acted on -- an ROI
+marker switches the models -- but not answered, so a guest reads its command
+back, as on hardware.  `testing/test_magic.py` checks every command on every
+architecture and front end.
 
 ## RISC-V
 

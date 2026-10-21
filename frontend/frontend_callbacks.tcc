@@ -95,11 +95,14 @@ void FrontendCallbacks <T>::sendInstruction(threadid_t threadid, addr_t addr, ui
   }
   //std::cerr << "Threadid:" << threadid << std::endl;
 
-  ++m_thread_data[threadid].icount;
-  ++m_thread_data[threadid].icount_detailed;
-
+  // Before the count moves, as in the SDE recorder (sendInstruction): the
+  // first snapshot is at instruction 0, and each is taken at the same point
+  // whichever front end recorded the trace.
   if (m_options->get_track_vma())
     writeVMATrace(threadid);
+
+  ++m_thread_data[threadid].icount;
+  ++m_thread_data[threadid].icount_detailed;
 
   // Reconstruct basic blocks (we could ask Pin, but do it the same way as TraceThread will do it)
   if (m_thread_data[threadid].bbv_end || m_thread_data[threadid].bbv_last != addr)

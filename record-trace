@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, os, getopt, subprocess, tarfile
+import sys, os, getopt, subprocess, tarfile, shlex, shutil
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
 import debugpin, run_sniper
 
@@ -10,7 +10,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print('Collect SIFT instruction trace')
   print('Usage:')
-  print('  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<frontend>] [--frontend-option=<options>] [--smc|--no-smc] [--maxthreads] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0])
+  print('  %s  -o <output file (default=trace)> [--roi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [--gdb|--gdb-wait|--gdb-quit] [--follow] [--routine-tracing] [--outputdir <outputdir (.)>] [--stop-address <insn end address>] [--frontend=<dr|qemu|qemu-system-ARCH>] [--frontend-option=<options>] [--smc|--no-smc] [--maxthreads] { --pinball=<pinball-basename> | --pid <pid> | -- <cmdline> }' % sys.argv[0])
   sys.exit(2)
 
 # From http://stackoverflow.com/questions/6767649/how-to-get-process-status-using-pid
@@ -157,11 +157,11 @@ if not os.path.exists(outputdir):
     print('Failed to create output directory', outputdir, file=sys.stderr)
     sys.exit(-1)
 
-# Check for ability to use VA to PA translation
-if use_pa:
+# Check for ability to use VA to PA translation (a full-system QEMU trace has
+# the guest's own physical addresses, and needs nothing from the host)
+if use_pa and not (frontend or '').startswith('qemu-system'):
   # If the Linux version is 4.0 or greater, and we don't have the CAP_SYS_ADMIN capability (bit 21), report an error
-  output = subprocess.check_output("echo -n $(( $(uname -r | cut -d . -f 2) >= 4 && ((0x$(grep CapEff /proc/self/status | cut -f 2) >> 20) & 1) ))", shell=True)
-  if '0' in output:
+  if not run_sniper.va2pa_valid():
     print('[SIFT_RECORDER]', 'Unable to use physical address translation with this kernel and current user capabilities, aborting.', file=sys.stderr)
     sys.exit(1)
 
@@ -296,6 +296,99 @@ if not preloaded is None:
   elif "tracef.so" in preloaded:
     extrae="-sniper:extrae 2"
 
+# QEMU: the plugin front end (frontend/qemu-plugin), for guests of another
+# architecture or a whole machine.  --frontend=qemu is user mode: the guest
+# program's own ELF header says which QEMU runs it.  --frontend=qemu-system-<arch>
+# is full system: the command line is QEMU's machine options (-M, -kernel, ...),
+# and the trace is written to files, since a whole machine has no response
+# channel to block on.  Each QEMU is a dependency linked into the tree
+# (deps/manifest.json); the variable named with each points at another, the
+# same ones testing/test_qemu.py reads.
+QEMU_USER = { 62:  ('x86_64',  'qemu/build/qemu-x86_64',          'SNIPER_QEMU_X86_64'),  # EM_X86_64
+              183: ('aarch64', 'qemu-aarch64/build/qemu-aarch64',  'SNIPER_QEMU_AARCH64'), # EM_AARCH64
+              243: ('riscv64', 'qemu-riscv/build/qemu-riscv64',    'SNIPER_QEMU_RISCV') }  # EM_RISCV
+QEMU_SYSTEM = { 'x86_64':  ('qemu/build/qemu-system-x86_64',               'SNIPER_QEMU_SYSTEM_X86_64'),
+                'riscv64': ('qemu-riscv-system/build/qemu-system-riscv64', 'SNIPER_QEMU_RISCV_SYSTEM') }
+
+def elf_machine(path):
+  try:
+    with open(path, 'rb') as f:
+      h = f.read(20)
+  except IOError:
+    return None
+  if len(h) < 20 or h[:4] != b'\x7fELF':
+    return None
+  return int.from_bytes(h[18:20], 'little' if h[5] == 1 else 'big')
+
+def qemu_refuse(what):
+  print('[RECORD-TRACE] Error: %s is not available with the QEMU front end.' % what, file=sys.stderr)
+  sys.exit(1)
+
+def qemu_binary(arch, relpath, var):
+  path = os.environ.get(var) or os.path.join(HOME, relpath)
+  if not os.access(path, os.X_OK):
+    print('[RECORD-TRACE] Error: no QEMU for %s at %s.\n'
+          '  Build it with make QEMU=ON (and ARM=ON for aarch64, RISCV_IME=ON for riscv64),\n'
+          '  or point $%s at a QEMU built with --enable-plugins.' % (arch, path, var), file=sys.stderr)
+    sys.exit(1)
+  return path
+
+def qemu_command():
+  system = frontend.startswith('qemu-system')
+  # Refused rather than ignored: each would otherwise produce a trace that is
+  # not what was asked for, with nothing in it to say so.
+  if use_pid:        qemu_refuse('attaching to a running process (--pid)')
+  if pinball:        qemu_refuse('pinball replay')
+  if enable_pacsim:  qemu_refuse('Pac-Sim sampling (--pacsim)')
+  if roi_mpi:        qemu_refuse('MPI (--roi-mpi)')
+  if fastforward or detailed or blocksize:
+    qemu_refuse('instruction-count windows (-f/-d/-b); use --roi with SimRoiStart()/SimRoiEnd()')
+  if log_vma:        qemu_refuse('VMA logging (--vma)')
+  if use_pa and not system:
+    qemu_refuse('--pa in user mode (a full-system trace always carries physical addresses)')
+  # (and in full system it is already so: the guest's own physical addresses)
+  plugin = os.path.join(BUILD_DIR, 'lib', 'libsniper-qemu.so')
+  if not os.path.exists(plugin):
+    print('[RECORD-TRACE] Error: %s not built (make QEMU=ON)' % plugin, file=sys.stderr)
+    sys.exit(1)
+  popts = [ 'output=%s' % outputfile, 'app=%d' % siftcountoffset ]
+  if use_roi:
+    popts.append('roi=1')
+  if not track_smc:
+    popts.append('smc=0')
+  if verbose:
+    popts.append('verbose=on')
+  qopts = []
+  for o in frontend_options:
+    qopts += shlex.split(o)
+  if system:
+    arch = frontend[len('qemu-system-'):] or 'x86_64'
+    if arch not in QEMU_SYSTEM:
+      print('[RECORD-TRACE] Error: no full-system QEMU for %s (have: %s)' % (arch, ', '.join(sorted(QEMU_SYSTEM))), file=sys.stderr)
+      sys.exit(1)
+    if useresponsefiles:
+      qemu_refuse('a live full-system run (response files); record, then simulate the traces')
+    qemu = qemu_binary(arch, *QEMU_SYSTEM[arch])
+    argv = [ qemu ] + qopts + [ '-plugin', ','.join([ plugin ] + popts) ] + cmdline
+  else:
+    if not cmdline:
+      print('[RECORD-TRACE] Error: no guest program given', file=sys.stderr)
+      sys.exit(1)
+    prog = cmdline[0] if os.sep in cmdline[0] else (shutil.which(cmdline[0]) or cmdline[0])
+    machine = elf_machine(prog)
+    if machine not in QEMU_USER:
+      print('[RECORD-TRACE] Error: %s is not an x86-64, AArch64 or RISC-V executable' % prog, file=sys.stderr)
+      sys.exit(1)
+    arch, relpath, var = QEMU_USER[machine]
+    qemu = qemu_binary(arch, relpath, var)
+    if useresponsefiles:
+      popts.append('response=on')       # live: Sniper paces the guest and answers its magic
+    if arch == 'aarch64' and '-cpu' not in qopts:
+      qopts = [ '-cpu', 'max' ] + qopts  # every extension QEMU has, as the hardware it stands for would
+    argv = [ qemu ] + qopts + [ '-plugin', ','.join([ plugin ] + popts), '--', prog ] + cmdline[1:]
+  print('[RECORD-TRACE] Using the QEMU frontend (%s)' % os.path.basename(qemu))
+  return ' '.join(shlex.quote(a) for a in argv)
+
 value_roi = use_roi and 1 or 0
 value_roi_mpi = roi_mpi and 1 or 0
 value_pa = use_pa and 1 or 0
@@ -324,6 +417,12 @@ if frontend:
     else:
        dr_args += ' -loglevel 0 -stderr_mask 0'
     cmd = '%(DR_libpath)s %(DRRUN)s %(dr_args)s -c %(DR_frontendlib)s -roi %(value_roi)d -vma %(value_vma)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_tool_args)s  -- ' % locals() + ' '.join(cmdline)
+  elif frontend == 'qemu' or frontend.startswith('qemu-system'):
+    cmd = qemu_command()
+    # The caller's environment, not Pin's: setup_env puts the Pin kit's
+    # libraries first, and the plugin then loads the kit's libxed, which
+    # needs Pin's own C runtime (libpincrt.so) and fails to load.
+    env = dict(os.environ)
   else:
     print('[RECORD-TRACE] Error: frontend %s not recognized' % frontend)
     sys.exit(1)

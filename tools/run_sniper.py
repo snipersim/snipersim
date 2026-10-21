@@ -37,6 +37,26 @@ def resolve_build_dir(home, explicit = None):
   sys.exit(-1)
 
 
+def va2pa_valid():
+  """Can this process read physical frame numbers from /proc/self/pagemap?
+
+  Since Linux 4.0 only with CAP_SYS_ADMIN (bit 21 of CapEff); before, anyone
+  could.  run-sniper and record-trace each had a shell one-liner for this:
+  one tested the exit status of an echo, which is always 0, so it always said
+  no; the other compared bytes with a str, which raises in Python 3.  Both
+  also shifted by 20, CAP_SYS_RAWIO."""
+  try:
+    if int(os.uname().release.split('.')[0]) < 4:
+      return True
+    with open('/proc/self/status') as f:
+      for line in f:
+        if line.startswith('CapEff:'):
+          return bool((int(line.split()[1], 16) >> 21) & 1)
+  except (OSError, ValueError):
+    pass
+  return False
+
+
 def decode_wait_status(rc, tag = 'SNIPER'):
   """Turn a raw os.wait4() status into an exit code, explaining signals.
 
