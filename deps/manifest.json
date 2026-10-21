@@ -128,16 +128,17 @@
     },
     "capstone": {
       "kind": "git",
-      "url": "https://github.com/aquynh/capstone.git",
-      "rev": "f9c6a90489be7b3637ff1c7298e45efafe7cf1b9",
+      "url": "https://github.com/capstone-engine/capstone.git",
+      "rev": "022575848782a4801fd150fdbc927effcbca0864",
       "install_path": "capstone-src",
       "when": [
         "arm",
         "dynamorio"
       ],
       "when_any": true,
-      "marker": "arch/AArch64/ARMMappingInsnOp.inc",
-      "description": "Disassembly framework source; built into capstone/ by capstone-build"
+      "marker": "include/capstone/arm64.h",
+      "description": "Disassembly framework source (5.0.9, BSD-3-Clause); built into capstone/ by capstone-build.  The 2019 snapshot pinned before could not decode ARMv8.1 LSE atomics (ldadd, cas), which compilers emit for any ARMv8.1+ target, and the ARM decoder asserted on them",
+      "tag": "5.0.9"
     },
     "capstone-build": {
       "kind": "build",
@@ -250,6 +251,50 @@
         "mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
       "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on (vlen up to 65536, the RVV 1.0 maximum)"
+    },
+    "qemu-riscv-system": {
+      "kind": "build",
+      "from": [
+        "qemu"
+      ],
+      "copy_from": "qemu",
+      "patches": [
+        "tools/riscv/qemu-11.1.1-ime.patch"
+      ],
+      "install_path": "qemu-riscv-system",
+      "when": [
+        "riscv-ime"
+      ],
+      "marker": "build/qemu-system-riscv64",
+      "workdir": "{install}",
+      "env": {},
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-softmmu --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
+      ],
+      "description": "QEMU riscv64 full system (the virt board) with the IME patch and TCG plugin support: RISC-V full-system traces, physical addresses included"
+    },
+    "qemu-aarch64-user": {
+      "kind": "build",
+      "from": [
+        "qemu"
+      ],
+      "copy_from": "qemu",
+      "install_path": "qemu-aarch64",
+      "when": [
+        "arm",
+        "qemu"
+      ],
+      "marker": "build/qemu-aarch64",
+      "workdir": "{install}",
+      "env": {},
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=aarch64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
+      ],
+      "description": "QEMU AArch64 user mode with TCG plugin support: the ARM64 path that needs no ARM hardware -- record with the QEMU front end on any host, simulate with the ARM decoder (ARM=ON) and the Cortex configurations"
     },
     "sail-riscv": {
       "kind": "tarball",

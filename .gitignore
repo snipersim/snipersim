@@ -105,6 +105,19 @@ test/smc-rewrite/trace*
 test/smc-rewrite/record.log
 test/dr-smc-rewrite/smc_rewrite
 test/dr-smc-rewrite/smc_rewrite.c
+test/qemu-smc-rewrite/smc_rewrite.c
+test/pa-refused/pa.c
+test/qemu-smc-rewrite/smc_rewrite
+test/qemu-smc-rewrite/trace*
+test/qemu-smc-rewrite/record.log
+test/dr-vma/vma
+test/dr-vma/trace-*
+test/dr-vma/*.log
+test/pa/pa
+test/pa/trace*
+test/pa/record.log
+test/pa-refused/pa
+test/qemu-frontend/fft
 test/dr-smc-rewrite/trace*
 test/dr-smc-rewrite/record.log
 test/api/api
@@ -133,6 +146,8 @@ pinos.log.*
 mpich
 mpich-src
 qemu-riscv
+qemu-aarch64
+qemu-riscv-system
 sail-riscv
 
 # Workload sources copied by the test Makefiles, the fft-marker binary, the

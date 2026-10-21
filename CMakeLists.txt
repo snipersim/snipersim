@@ -20,6 +20,15 @@
 
 cmake_minimum_required(VERSION 3.18)   # Python3 Development.Embed
 
+# Track the headers of imported dependencies (Capstone, XED, ...) like our own.
+# CMake treats an imported target's include directories as system headers by
+# default, and compilers leave system headers out of the dependency files, so
+# moving a dependency to a new version (deps/manifest.json) relinked against
+# the new library without recompiling the code that includes its headers:
+# Capstone 4 structures read from a Capstone 5 library, and a crash on the
+# first ARM instruction decoded.
+set(CMAKE_NO_SYSTEM_FROM_IMPORTED ON)
+
 project(sniper
   VERSION 8.1
   DESCRIPTION "Sniper multi-core simulator"

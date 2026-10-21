@@ -91,6 +91,11 @@ def cache_key(name, dep, man=None):
         for patch in dep.get('patches', []):
             with open(os.path.join(SNIPER_ROOT, patch), 'rb') as f:
                 inputs += hashlib.sha256(f.read()).hexdigest()[:16]
+        # And by how it is built: a changed command (another --target-list,
+        # another option) or environment otherwise reused the old build,
+        # which still had the marker file and so looked present.
+        inputs += json.dumps({'command': dep.get('command'), 'env': dep.get('env', {}),
+                              'copy_from': dep.get('copy_from')}, sort_keys=True)
         return '%s-%s' % (name, hashlib.sha256(inputs.encode()).hexdigest()[:16])
     if dep['kind'] == 'git':
         return '%s-%s' % (name, dep['rev'][:16])
