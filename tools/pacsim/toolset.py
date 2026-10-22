@@ -8,8 +8,8 @@
 #     SMARTS, 200 time-based, 1004 fast-forward, 1005 analysis, 1006/1007 MTR).
 #     run-sniper has never accepted --mtng, in any revision of this repository;
 #     these target a separate driver.
-#   - it imports iqmtnglib, which is not in this tree, and defaults to remote
-#     paths on a particular cluster.
+#   - it imports iqmtnglib, which is not in this tree; the job system's
+#     result directory has to be given (--remote-home-dir).
 #
 # The --mtng spellings are left alone deliberately: they are a protocol with
 # something outside this repository, so renaming them here would only invent a
@@ -127,7 +127,7 @@ def get_args():
     parser.add_argument("--arch" ,type=str , default="gainestown",help=" target simulate architecture")
     parser.add_argument("--scheduler" ,type=str , default="static",help=" scheduler")
     parser.add_argument("--home-dir" ,type=str , default= os.path.join(os.getenv("HOME"), "data"),help=" base dir")
-    parser.add_argument("--remote-home-dir" ,type=str , default='/home/rsch/comparch/comparch/results/mtng/',help=" remote base dir")
+    parser.add_argument("--remote-home-dir" ,type=str , default=None,help=" remote base dir (required with --local remote)")
     args = parser.parse_args()
     return args
 def exec2( bench,cmd , args , datasize):
@@ -222,8 +222,9 @@ def check_result( bench,ci,cmd,args):
             if jobid != None:
 
 
-                #server_url = "comparch@xlog0"
                 remote_home_dir = args.remote_home_dir
+                if not remote_home_dir:
+                    sys.exit("toolset.py: --remote-home-dir is required to fetch results from the job system")
                 check_dir(full_program_path)
                 check_dir(datadir)
                 print(jobid)

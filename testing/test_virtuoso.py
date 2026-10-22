@@ -181,15 +181,17 @@ def mimicos_daemons_check(stats):
           and idle[0] < interval_fs / 10
           # the application ran to completion and the kernel reached its exit
           # reports, the daemons having changed nothing in its memory use:
-          # the fault count and the mapping check are those of
-          # reservethp_32GB.ini without daemons.  (67 until the ip_stride
-          # L1-D prefetcher came on in meteor_lake_pcore.cfg: the count is
-          # timing-dependent by one fault, and the no-daemons reference
-          # measured on that config is 68 with the same 28/28/0 mappings.)
+          # the fault count and the mapping check are those of the same
+          # trace under reservethp_32GB.ini, without daemons.  Both are
+          # properties of test/sniper-in-sniper/fft.sift, which its Makefile
+          # records with ASLR off so that it is the same bytes every time
+          # (a recording with ASLR on gave 68 faults and 28/28 mappings one
+          # time, 66 and 27/27 another, and this check failed on whichever
+          # it had not been measured against).
           and '[TRACE:0] -- DONE --' in out
           and 'shutdown event received' in out
-          and faults == 68
-          and ('Core 0 checked 28 unique VA->PA mappings, 28 unique PA->VA '
+          and faults == 66
+          and ('Core 0 checked 27 unique VA->PA mappings, 27 unique PA->VA '
                'mappings, 0 violations') in out)
     return ok, ('kcompactd/khugepaged/kswapd scans %d/%d/%d (expected %d +-1 '
                 'over %d us), parked per core %s us, core 0 idle %d ns, %d faults'
@@ -1971,6 +1973,16 @@ def main():
                     if not os.path.exists(app):
                         print('SKIP (%s not built)' % src)
                         continue
+                # The MimicOS cases hand the kernel a trace to run,
+                # test/sniper-in-sniper/fft.sift, which is made on demand (its
+                # Makefile records it with ASLR off, so it is the same bytes
+                # every time).  It used to exist only after test_apps.py's
+                # sniper-in-sniper case had run, and then as whatever that
+                # recording happened to be.
+                for a in app_args or []:
+                    if a.endswith('sniper-in-sniper/fft.sift') and not os.path.exists(os.path.join(SNIPER_ROOT, a)):
+                        subprocess.run(['make', '-s', '-C', os.path.dirname(os.path.join(SNIPER_ROOT, a)), 'fft.sift'],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=SNIPER_ROOT)
                 expect = re.compile(pattern)
             else:
                 cfgs, ncores, check = entry
