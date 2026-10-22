@@ -127,22 +127,20 @@ class PacSimDumpStats:
     else:
         total_time = 0
 
+    # The run's wall time, from the simulator's own statistics (time.walltime,
+    # microseconds): the time the sampled run took, which is what the
+    # estimate is traded against.  Unknown (0) when the statistics cannot be
+    # read; it used to be a hard-coded 4029.54 s placeholder then.
     import sniper_lib
-    import sniper_stats
-    jobid = 0
     resultsdir = "%(output_sniper_validate_dir)s/"%self.config
-    #if self.sniper_file_enable:
-        #stats = sniper_stats.SniperStats( resultsdir = resultsdir, jobid = jobid )
-#    stats = sniper_lib.get_results( resultsdir=resultsdir,jobid=jobid)
-############init marker:
-        #snapshots = stats.get_snapshots()
-        #markers = snapshots
-        #m1 = markers[0]
-        #m2 = markers[-1]
-        #stats = PerformStats(self.config,(m1,m2), dvfs=[],roi = False)
-        #self.walltime = max(stats.walltime_per_core)/1e6
-#    else:
     self.walltime = 0
+    try:
+        results = sniper_lib.get_results(resultsdir=resultsdir)['results']
+        walltime = results.get('time.walltime')
+        if walltime:
+            self.walltime = max(walltime) / 1e6
+    except Exception:
+        pass
     self.total_time = total_time/1e15
     return
   def getinsnum(self,feature):
@@ -390,17 +388,17 @@ class PacSimDumpStats:
    # print ( "distribution\t", print_info)
     #print("l2miss %s"%(total_l2_miss_count))
     #print("l2count",total_l2_count)
+    # A fraction of the L2 accesses, summed over the measured regions; it was
+    # reported per thousand under the name "miss rate".
     if total_l2_count == 0:
         l2missrate = 0
     else:
-        l2missrate = total_l2_miss_count * 1000.0 / total_l2_count
+        l2missrate = total_l2_miss_count * 1.0 / total_l2_count
     return total_time/1e15,l2missrate
 
 
     return self.total_time
   def print_wall_time(self,parallel=False):
-    if self.walltime == 0:
-        self.walltime=4029.54 ##imag we overwrite this file; use record data
     if parallel:
         allinsnum_details = 0
         maxinsnum_details = 0
