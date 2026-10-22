@@ -698,16 +698,24 @@ def build_workload(workdir):
     return {'workload': exe, 'threaded': threaded}
 
 
-def build_features():
-    """What the build behind lib/sniper was configured with, as a set.
+def build_dir():
+    """The build run-sniper will use: $SNIPER_BUILD_DIR, else build/default."""
+    sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
+    import run_sniper
+    return run_sniper.resolve_build_dir(SNIPER_ROOT)
 
-    lib/sniper is a symlink into the build directory (build/default by
-    default, BUILD_DIR otherwise); its CMakeCache.txt records every
-    SNIPER_ENABLE_* option.  Read from there rather than guessed from the
-    source tree, because the question is what this binary can do.
+
+def build_features():
+    """What the build was configured with, as a set.
+
+    The build directory's CMakeCache.txt records every SNIPER_ENABLE_*
+    option.  Read from there rather than guessed from the source tree,
+    because the question is what this binary can do -- and from the build
+    run-sniper will use, not from lib/sniper: with $SNIPER_BUILD_DIR set to
+    a libtorch build, the nn branch predictor was skipped as "build has no
+    torch" while run-sniper would have run it.
     """
-    exe = os.path.realpath(os.path.join(SNIPER_ROOT, 'lib', 'sniper'))
-    cache = os.path.join(os.path.dirname(os.path.dirname(exe)), 'CMakeCache.txt')
+    cache = os.path.join(build_dir(), 'CMakeCache.txt')
     feats = set()
     if os.path.exists(cache):
         for line in open(cache):
@@ -851,8 +859,8 @@ def main():
                     help='run only this mode (repeatable; default: both)')
     args = ap.parse_args()
 
-    if not os.path.exists(os.path.join(SNIPER_ROOT, 'lib', 'sniper')):
-        print('error: lib/sniper not built; run make first', file=sys.stderr)
+    if not os.path.exists(os.path.join(build_dir(), 'lib', 'sniper')):
+        print('error: %s/lib/sniper not built; run make first' % build_dir(), file=sys.stderr)
         return 2
 
     cores = [int(c) for c in args.cores.split(',')]
