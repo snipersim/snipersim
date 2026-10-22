@@ -14,7 +14,8 @@ run_$(TARGET):
 	../../record-trace --pa -o trace -- ./$(TARGET) > record.log 2>&1
 	@buf=$$(sed -n 's/.*buf=0x\([0-9a-f]*\).*/\1/p' record.log); \
 	  $(SNIPER_BUILD_DIR)/lib/siftdump trace.sift 2>/dev/null | grep -o ' [0-9a-f]*=[0-9a-f]*' | \
-	  awk -v b=$$buf 'BEGIN { lo = strtonum("0x" b); hi = lo + 64 * 4096 } \
-	    { split(substr($$1, 1), x, "="); va = strtonum("0x" x[1]); pa = strtonum("0x" x[2]); \
-	      if (va < lo || va >= hi) next; n++; if (pa == 0 || pa == va) bad++; seen[int(pa / 4096)] = 1 } \
-	    END { k = 0; for (p in seen) k++; printf "pa accesses=%d frames=%d unmapped=%d\n", n, k, bad + 0 }'
+	  python3 -c 'import sys; lo = int(sys.argv[1], 16); hi = lo + 64 * 4096; n = bad = 0; seen = set()\
+	for w in sys.stdin.read().split():\
+	    va, pa = (int(x, 16) for x in w.split("="))\
+	    if lo <= va < hi: n += 1; bad += pa == 0 or pa == va; seen.add(pa // 4096)\
+	print("pa accesses=%d frames=%d unmapped=%d" % (n, len(seen), bad))' $$buf

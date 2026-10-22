@@ -266,6 +266,10 @@ struct InsnInfo
 
 /* ------------------------------------------------------------- per-vCPU */
 
+/* A data access to a device (MMIO): the page maps no memory, and a mapping
+ * sent for it earlier -- the guest reused the virtual range -- is withdrawn */
+const uint64_t PADDR_IO = ~0ULL;
+
 struct VCPU
 {
    Sift::Writer *writer   = nullptr;
@@ -287,7 +291,11 @@ struct VCPU
    uint8_t  pend_size    = 0;
    bool     pend_branch  = false;
    std::vector<uint64_t> pend_addrs;   /* the first MAX_DYNAMIC_ADDRESSES, for the Instruction record */
-   std::vector<uint64_t> pend_paddrs;  /* system mode: their physical addresses (0: not known) */
+   std::vector<uint64_t> pend_paddrs;  /* system mode: their physical addresses (0: not known; PADDR_IO: a device) */
+   /* System mode: the pages after the first of accesses that cross a page,
+    * with their physical addresses, which the simulator cannot derive from
+    * the first page's */
+   std::vector<std::pair<uint64_t, uint64_t> > pend_more_pages;
    /* Every access of a footprint instruction (InsnInfo::footprint). */
    struct Access { uint64_t addr; uint32_t size; bool store; uint64_t paddr = 0; };
    bool     pend_footprint = false;
@@ -556,8 +564,12 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
       if (v->pend_paddr2)
          v->writer->Mapping((v->pend_addr + v->pend_size - 1) & ~0xfffULL, v->pend_paddr2);
       for (size_t i = 0; i < v->pend_addrs.size() && i < v->pend_paddrs.size(); i++)
-         if (v->pend_paddrs[i])
+         if (v->pend_paddrs[i] == PADDR_IO)
+            v->writer->Mapping(v->pend_addrs[i], Sift::Writer::NO_PHYSICAL_PAGE);
+         else if (v->pend_paddrs[i])
             v->writer->Mapping(v->pend_addrs[i], v->pend_paddrs[i]);
+      for (const std::pair<uint64_t, uint64_t> &m : v->pend_more_pages)
+         v->writer->Mapping(m.first, m.second);
       for (const VCPU::Access &a : v->pend_accs)
          if (a.paddr)
             v->writer->Mapping(a.addr, a.paddr);
@@ -575,6 +587,7 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
    v->have_pending = false;
    v->pend_addrs.clear();
    v->pend_paddrs.clear();
+   v->pend_more_pages.clear();
    v->pend_accs.clear();
    v->icount++;
 }
@@ -849,9 +862,10 @@ uint64_t read_reg(struct qemu_plugin_register *r, bool have)
 
 void find_magic_registers(VCPU *v)
 {
+   /* i386: arg0 is edx, not ebx -- sim_api.h keeps ebx for -fPIC code */
    static const char *const names[3][4][2] = {
       /* answer        command        arg0           arg1 */
-      { {"rax","eax"}, {"rax","eax"}, {"rbx","ebx"}, {"rcx","ecx"} },   /* x86 */
+      { {"rax","eax"}, {"rax","eax"}, {"rbx","edx"}, {"rcx","ecx"} },   /* x86 */
       { {"x0",nullptr}, {"x1",nullptr}, {"x2",nullptr}, {"x3",nullptr} }, /* AArch64 */
       { {"a0","x10"}, {"a0","x10"}, {"a1","x11"}, {"a2","x12"} },       /* RISC-V */
    };
@@ -919,7 +933,9 @@ void magic_exec(unsigned int cpu_index, void *udata)
          width = b->len;
       g_byte_array_set_size(b, 0);
       g_byte_array_append(b, (const guint8 *)&res, (guint)width);
-      qemu_plugin_write_register(v->mreg[0], b);
+      if (!qemu_plugin_write_register(v->mreg[0], b))
+         fprintf(stderr, "[SNIPER-QEMU] could not write the answer to magic command %" PRIu64
+                         ": the guest reads its command back (SimInSimulator() says no)\n", cmd);
       g_byte_array_free(b, TRUE);
    }
 }
@@ -1021,8 +1037,17 @@ void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
    if (in_system_mode)
    {
       struct qemu_plugin_hwaddr *hw = qemu_plugin_get_hwaddr(info, vaddr);
-      if (hw && !qemu_plugin_hwaddr_is_io(hw))
+      if (hw && qemu_plugin_hwaddr_is_io(hw))
+         paddr = PADDR_IO;
+      else if (hw)
          paddr = qemu_plugin_hwaddr_phys_addr(hw);
+      /* An access that crosses into the next page: that page's frame too,
+       * which need not be the next one */
+      const uint64_t size = 1u << qemu_plugin_mem_size_shift(info);
+      const uint64_t next = (vaddr + size - 1) & ~0xfffULL;
+      uint64_t pa2 = 0;
+      if (next != (vaddr & ~0xfffULL) && qemu_plugin_translate_vaddr(next, &pa2))
+         v->pend_more_pages.push_back(std::make_pair(next, pa2));
    }
    if (v->pend_addrs.size() < Sift::MAX_DYNAMIC_ADDRESSES)
    {

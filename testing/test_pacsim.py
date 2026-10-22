@@ -353,7 +353,7 @@ def case_same_program(r, args):
 
 
 def case_less_detail(r, args):
-    """The sampled run simulated a minority of the instructions in detail.
+    """The sampled run simulated at most MAX_DETAIL_SHARE of the instructions in detail.
 
     What sampling saves, and why it is faster: the regions it extrapolates are
     only warmed, not timed.  Counted from the recorder's region list, so the

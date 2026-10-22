@@ -395,7 +395,9 @@ static uint8_t sve_access(const cs_insn *csi, unsigned int idx)
     "mla", "mls", "mad", "msb", "fmla", "fmls", "fnmla", "fnmls", "fmad", "fmsb", "fnmad", "fnmsb",
     "sdot", "udot", "usdot", "sudot", "bfdot", "fcmla", "cmla", "smmla", "ummla", "usmmla", "fmmla",
     "bfmmla", "sqrdmlah", "sqrdmlsh", "sqdmlalb", "sqdmlalt", "smlalb", "smlalt", "umlalb", "umlalt",
-    "bfmlalb", "bfmlalt", "fmlalb", "fmlalt", "movprfx" };
+    "bfmlalb", "bfmlalt", "fmlalb", "fmlalt" };
+  /* Approximations left: a merging-predicated instruction (Zd, Pg/m) also
+     reads its destination, and movprfx's destination is only written. */
   for (const char *acc : accumulate)
     if (strcmp(m, acc) == 0)
       return CS_AC_READ | CS_AC_WRITE;

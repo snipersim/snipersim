@@ -177,6 +177,10 @@ Sift::Writer::Writer(const char *filename, GetCodeFunc getCodeFunc, bool useComp
 #endif
    if (arch32)
       options |= ArchIA32;
+   /* The per-instruction icache record (RecOtherIcacheVariable) is keyed by
+      virtual address on both sides and never by physical page: the reader
+      would look the instruction up under its physical key and not find it. */
+   sift_assert(!(requires_icache_per_insn && code_physical));
    if (requires_icache_per_insn)
       options |= IcacheVariable;
    if (m_send_va2pa_mapping)
@@ -1407,8 +1411,27 @@ void Sift::Writer::Mapping(uint64_t va, uint64_t pa)
 {
    if (!output || !m_external_mappings)
       return;
-   const uint64_t vp = va / PAGE_SIZE_SIFT, pp = pa / PAGE_SIZE_SIFT;
+   const uint64_t vp = va / PAGE_SIZE_SIFT;
    std::unordered_map<uint64_t, uint64_t>::iterator it = m_va2pa.find(vp);
+   if (pa == NO_PHYSICAL_PAGE)
+   {
+      /* The page no longer maps memory (a device, say): withdraw what was
+         sent, or nothing when nothing was.  Frame ~0, which no page has, so
+         that a real frame 0 stays a mapping. */
+      if (it == m_va2pa.end())
+         return;
+      m_va2pa.erase(it);
+      const uint64_t pp = ~0ULL;
+      Record rec;
+      rec.Other.zero = 0;
+      rec.Other.type = RecOtherLogical2Physical;
+      rec.Other.size = 2 * sizeof(uint64_t);
+      output->write(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+      output->write(reinterpret_cast<const char*>(&vp), sizeof(uint64_t));
+      output->write(reinterpret_cast<const char*>(&pp), sizeof(uint64_t));
+      return;
+   }
+   const uint64_t pp = pa / PAGE_SIZE_SIFT;
    if (it != m_va2pa.end() && it->second == pp)
       return;                                     // the common case: unchanged
    Record rec;

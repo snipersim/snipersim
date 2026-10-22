@@ -505,7 +505,13 @@ bool Reader::Read(Instruction &inst)
                uint64_t vp, pp;
                input->read(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
-               vcache[vp] = pp;
+               /* Frame ~0 (no such page) withdraws the mapping: the page now
+                  maps a device, or nothing, and its accesses go by their
+                  virtual address again (va2pa reports no mapping). */
+               if (pp == ~0ULL)
+                  vcache.erase(vp);
+               else
+                  vcache[vp] = pp;
                break;
             }
 

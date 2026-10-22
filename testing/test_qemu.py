@@ -1750,7 +1750,10 @@ def roi_guests(workdir):
     [(arch, qemu, guest, config)], and the reasons for any left out."""
     out, missing = [], []
     clang = os.environ.get('SNIPER_RISCV_CC')
-    builds = [('x86_64', os.path.join(SNIPER_ROOT, 'qemu', 'build', 'qemu-x86_64'), 'gainestown', [])]
+    qx = os.environ.get('SNIPER_QEMU_X86_64') or os.path.join(SNIPER_ROOT, 'qemu', 'build', 'qemu-x86_64')
+    builds = [('x86_64', qx, 'gainestown', [])] if os.path.isfile(qx) else []
+    if not builds:
+        missing.append('x86_64: no qemu-x86_64')
     qa, ca, why = aarch64_tools()
     if why:
         missing.append('aarch64: ' + why)

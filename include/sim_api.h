@@ -90,8 +90,8 @@
 #if defined(ARM_64) || defined(__aarch64__)
 
 #define SimMagic0(cmd) ({                            \
-   register unsigned long _res __asm__("x0") = (cmd); \
    unsigned long _cmd = (cmd);                       \
+   register unsigned long _res __asm__("x0") = _cmd; \
    __asm__ __volatile__(                             \
        "mov x1, %[x]\n"                              \
        "\tbfm x0, x0, 0, 0\n"                        \
@@ -102,8 +102,8 @@
 })
 
 #define SimMagic1(cmd, arg0) ({                      \
-   register unsigned long _res __asm__("x0") = (cmd); \
    unsigned long _cmd = (cmd), _arg0 = (arg0);       \
+   register unsigned long _res __asm__("x0") = _cmd; \
    __asm__ __volatile__(                             \
        "mov x1, %[x]\n"                              \
        "\tmov x2, %[y]\n"                            \
@@ -116,8 +116,8 @@
 })
 
 #define SimMagic2(cmd, arg0, arg1) ({                                \
-   register unsigned long _res __asm__("x0") = (cmd);                 \
    unsigned long _cmd = (cmd), _arg0 = (arg0), _arg1 = (arg1);       \
+   register unsigned long _res __asm__("x0") = _cmd;                 \
    __asm__ __volatile__(                                             \
        "mov x1, %[x]\n"                                              \
        "\tmov x2, %[y]\n"                                            \

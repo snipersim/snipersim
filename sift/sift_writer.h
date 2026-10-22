@@ -127,6 +127,9 @@ namespace Sift
             Instruction(), for every code and data page an instruction uses,
             before that Instruction().  Only for a writer constructed with
             code_physical. */
+         /* The page holding va is at physical address pa; NO_PHYSICAL_PAGE
+            withdraws a mapping sent before (the page maps a device now). */
+         static const uint64_t NO_PHYSICAL_PAGE = ~0ULL;
          void Mapping(uint64_t va, uint64_t pa);
 
          void setHandleAccessMemoryFunc(HandleAccessMemoryFunc func, void* arg = NULL) { assert(func); handleAccessMemoryFunc = func; handleAccessMemoryArg = arg; }

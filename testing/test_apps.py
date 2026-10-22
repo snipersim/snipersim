@@ -317,8 +317,9 @@ def unavailable(reason):
         build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
         if not os.path.isfile(os.path.join(build, 'lib', 'libsniper-qemu.so')):
             return 'no QEMU frontend in %s (make QEMU=ON)' % build
-        if not os.path.isfile(os.path.join(SNIPER_ROOT, 'qemu', 'build', 'qemu-x86_64')):
-            return 'no QEMU (deps/sniper-deps --qemu fetch)'
+        qemu = os.environ.get('SNIPER_QEMU_X86_64') or os.path.join(SNIPER_ROOT, 'qemu', 'build', 'qemu-x86_64')
+        if not os.path.isfile(qemu):
+            return 'no QEMU (deps/sniper-deps --qemu fetch, or set SNIPER_QEMU_X86_64)'
     if reason == 'dynamorio':
         build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
         if not os.path.isfile(os.path.join(build, 'lib', 'libdr-frontend.so')):

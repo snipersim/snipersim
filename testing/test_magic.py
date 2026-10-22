@@ -40,6 +40,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -76,12 +77,24 @@ CASES = {
 
 
 def run(cmd, timeout, **kw):
-    try:
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                           timeout=timeout, start_new_session=True, **kw)
-        return p.returncode, p.stdout
-    except subprocess.TimeoutExpired as e:
-        return None, (e.stdout or b'').decode(errors='replace') if isinstance(e.stdout, bytes) else (e.stdout or '')
+    """Run in its own process group so a timeout takes the whole tree with it:
+    the failure this suite is for -- a magic left unanswered -- leaves the
+    simulator and the front end blocked on their FIFOs, and killing only
+    run-sniper would leave them there."""
+    kw.setdefault('stdout', subprocess.PIPE)
+    kw.setdefault('stderr', subprocess.STDOUT)
+    kw.setdefault('text', True)
+    with subprocess.Popen(cmd, start_new_session=True, **kw) as proc:
+        try:
+            out, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+            out, _ = proc.communicate()
+            return None, out or ''
+        return proc.returncode, out or ''
 
 
 def build_dir():

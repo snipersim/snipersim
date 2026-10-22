@@ -34,7 +34,11 @@ dependencies `deps/sniper-deps` builds (`qemu`, `qemu-aarch64-user`,
 `$SNIPER_QEMU_RISCV_SYSTEM` point at others.  `--frontend-option` passes QEMU
 options (`--frontend-option='-cpu rv64,v=true'`).  What QEMU cannot do is
 refused rather than ignored: `--pid`, pinballs, `--pacsim`, MPI, `-f/-d/-b`
-instruction windows, `--vma`, and `--pa` in user mode.
+instruction windows, `--vma`, and `--pa` in user mode.  Three options the
+other front ends take are accepted and have no effect here, because run-sniper
+passes them on every live run: `-e` (system calls are emulated by QEMU itself;
+the simulator only times them), `--follow` (QEMU user mode runs one process)
+and `--routine-tracing`.
 
 By hand, user mode, single-threaded guest:
 
@@ -65,7 +69,8 @@ traces.  Each marker is a no-op on hardware:
 
 | Architecture | Instruction | Command | Arguments | Answer |
 |---|---|---|---|---|
-| x86 | `xchg %bx, %bx` | rax | rbx, rcx | rax |
+| x86-64 | `xchg %bx, %bx` | rax | rbx, rcx | rax |
+| i386 | `xchg %bx, %bx` | eax | edx, ecx | eax |
 | AArch64 | `bfm x0, x0, #0, #0` | x1 | x2, x3 | x0 |
 | RISC-V | `slti zero, zero, 0x5a` | a0 | a1, a2 | a0 |
 

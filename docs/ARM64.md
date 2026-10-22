@@ -62,6 +62,7 @@ on both cores (`aarch64-user-simulate`, `aarch64-sve-simulate`,
 checks the magic commands.  `testing/test_apps.py --only dr-frontend` records
 and simulates the FFT through the DynamoRIO client on x86-64 (the same client
 code the board runs).  An ARM64 trace recorded on a board can be checked on the host with
-`run-sniper --traces=<trace> -c cortex-a53` and `-c cortex-a72`; the
-configuration sweep (`testing/test_configs.py`) skips those two
-configurations when no ARM trace is available.
+`run-sniper --traces=<trace> -c cortex-a53` and `-c cortex-a72`.  The
+configuration sweep (`testing/test_configs.py`) runs its x86-64 workload on
+those two configurations and expects the refusal: a trace is simulated only on
+a core of its own architecture.

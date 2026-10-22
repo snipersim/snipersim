@@ -660,7 +660,7 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
       reg_id_t reg_ptr, reg_tmp;
       drvector_t *allowed = scratch_allowed(bb);
       if (drreg_reserve_register(drcontext, bb, instr, allowed, &reg_ptr) != DRREG_SUCCESS ||
-          drreg_reserve_register(drcontext, bb, instr, allowed, &reg_tmp) != DRREG_SUCCESS) 
+          drreg_reserve_register(drcontext, bb, instr, allowed, &reg_tmp) != DRREG_SUCCESS)
             DR_ASSERT(false); // cannot recover
       
       // Load the address to the buffer to save the collected information of current instruction
