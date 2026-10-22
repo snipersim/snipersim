@@ -1824,6 +1824,39 @@ def case_run_sniper_qemu_roi(p, g, workdir):
     return True, 'ROI simulated live: ' + ', '.join(summary) + ('' if not missing else ' (not run: %s)' % '; '.join(missing))
 
 
+def case_run_sniper_qemu_riscv_units(p, g, workdir):
+    """run-sniper --frontend=qemu on the RVV/IME and the AME GEMM guests, live,
+    with no CPU option: record-trace's RISC-V default enables the vector and
+    matrix units, and every class count and footprint byte matches the
+    specification exactly as it does from a trace (riscv-gemm-simulate,
+    riscv-ame-simulate)."""
+    r, why = riscv_gemm_prerequisites(workdir)
+    if r is None:
+        return None, why
+    ame = os.path.join(workdir, 'gemm3-ame')
+    if not os.path.isfile(ame):
+        rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], ame, ['-Wl,-e,_start', '-DUSE_AME'])
+        if rc != 0:
+            return None, 'could not build gemm3.c with AME (exit %s)' % rc
+    summary = []
+    for name, guest, flags in (('RVV/IME', r['gemm'], []), ('AME', ame, ['--ame'])):
+        outdir = os.path.join(workdir, 'live-' + name.replace('/', '-'))
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
+                       '--frontend=qemu', '--', guest], 900, cwd=SNIPER_ROOT,
+                      env=dict(os.environ, SNIPER_QEMU_RISCV=r['qemu']))
+        if rc != 0:
+            return False, '%s: run-sniper --frontend=qemu exited %s' % (name, rc)
+        if 'undecoded instruction' in out:
+            return False, '%s: %s' % (name, re.search(r'undecoded instruction[^\n]*', out).group(0))
+        rc, out = run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'riscv', 'expected_counts.py')] + flags
+                      + [os.path.join(outdir, 'simulation', 'sim.stats')], 60)
+        if rc != 0:
+            return False, '%s: counts off: %s' % (name, '; '.join(l for l in out.splitlines() if l.startswith('FAIL'))[:200])
+        summary.append('%s %d counts exact' % (name, sum(1 for l in out.splitlines() if l.startswith('ok'))))
+    return True, 'live through run-sniper, no CPU option: ' + ', '.join(summary)
+
+
 def case_run_sniper_qemu_system(p, g, workdir):
     """run-sniper drives full-system QEMU: --frontend=qemu-system-<arch> runs the
     machine, recording, then simulates the traces.  RISC-V: a bare-metal
@@ -1910,6 +1943,7 @@ CASES = {
     'aarch64-sve-simulate': case_aarch64_sve_simulate,
     'run-sniper-qemu-roi': case_run_sniper_qemu_roi,
     'run-sniper-qemu-system': case_run_sniper_qemu_system,
+    'run-sniper-qemu-riscv-units': case_run_sniper_qemu_riscv_units,
 }
 
 

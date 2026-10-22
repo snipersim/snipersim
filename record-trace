@@ -307,6 +307,7 @@ if not preloaded is None:
 QEMU_USER = { 62:  ('x86_64',  'qemu/build/qemu-x86_64',          'SNIPER_QEMU_X86_64'),  # EM_X86_64
               183: ('aarch64', 'qemu-aarch64/build/qemu-aarch64',  'SNIPER_QEMU_AARCH64'), # EM_AARCH64
               243: ('riscv64', 'qemu-riscv/build/qemu-riscv64',    'SNIPER_QEMU_RISCV') }  # EM_RISCV
+RISCV_CPU_DEFAULT = 'max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on'
 QEMU_SYSTEM = { 'x86_64':  ('qemu/build/qemu-system-x86_64',               'SNIPER_QEMU_SYSTEM_X86_64'),
                 'riscv64': ('qemu-riscv-system/build/qemu-system-riscv64', 'SNIPER_QEMU_RISCV_SYSTEM') }
 
@@ -385,6 +386,12 @@ def qemu_command():
       popts.append('response=on')       # live: Sniper paces the guest and answers its magic
     if arch == 'aarch64' and '-cpu' not in qopts:
       qopts = [ '-cpu', 'max' ] + qopts  # every extension QEMU has, as the hardware it stands for would
+    if arch == 'riscv64' and '-cpu' not in qopts:
+      # The vector and matrix units (RVV, the IME and AME extensions the
+      # qemu-riscv-ime dependency adds) with the vector length the riscv
+      # configuration models; $SNIPER_QEMU_RISCV_IME_CPU names another, and a
+      # QEMU without the x- properties takes --frontend-option='-cpu max'.
+      qopts = [ '-cpu', os.environ.get('SNIPER_QEMU_RISCV_IME_CPU', RISCV_CPU_DEFAULT) ] + qopts
     argv = [ qemu ] + qopts + [ '-plugin', ','.join([ plugin ] + popts), '--', prog ] + cmdline[1:]
   print('[RECORD-TRACE] Using the QEMU frontend (%s)' % os.path.basename(qemu))
   return ' '.join(shlex.quote(a) for a in argv)

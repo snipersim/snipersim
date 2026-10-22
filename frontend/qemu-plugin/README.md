@@ -32,7 +32,12 @@ dependencies `deps/sniper-deps` builds (`qemu`, `qemu-aarch64-user`,
 `qemu-riscv-ime`, `qemu-riscv-system`); `$SNIPER_QEMU_X86_64`,
 `$SNIPER_QEMU_AARCH64`, `$SNIPER_QEMU_RISCV`, `$SNIPER_QEMU_SYSTEM_X86_64` and
 `$SNIPER_QEMU_RISCV_SYSTEM` point at others.  `--frontend-option` passes QEMU
-options (`--frontend-option='-cpu rv64,v=true'`).  What QEMU cannot do is
+options.  The CPU model defaults to every extension QEMU has: `-cpu max` on
+AArch64, and on RISC-V `max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on` --
+RVV at the vector length the riscv configuration models, and the IME and AME
+matrix extensions the qemu-riscv-ime dependency adds ($SNIPER_QEMU_RISCV_IME_CPU
+names another; a QEMU without those properties takes
+`--frontend-option='-cpu max'`).  What QEMU cannot do is
 refused rather than ignored: `--pid`, pinballs, `--pacsim`, MPI, `-f/-d/-b`
 instruction windows, `--vma`, and `--pa` in user mode.  Three options the
 other front ends take are accepted and have no effect here, because run-sniper
