@@ -166,7 +166,7 @@ if env.on_linux():
 
 # Tools sources
 tool_sources = {}
-tool_sources['sde_sift_recorder'] =  ['bbv_count.cc', 'emulation.cc','globals.cc','pacsim.cc','papi.cc','pinboost_debug.cc','recorder_base.cc','recorder_control.cc','sift_recorder.cc','syscall_modeling.cc','threads.cc','trace_rtn.cc' ]
+tool_sources['sde_sift_recorder'] =  ['../bbv_count.cc', '../pacsim_sampler.cc', 'emulation.cc','globals.cc','pacsim.cc','papi.cc','pinboost_debug.cc','recorder_base.cc','recorder_control.cc','sift_recorder.cc','syscall_modeling.cc','threads.cc','trace_rtn.cc' ]
 
 # Programs sources
 programs_sources = {}
