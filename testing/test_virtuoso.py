@@ -538,7 +538,7 @@ FEATURES = {
                stats['__stdout__'].count('alloc_path=slow'))),
         ('startup_mimicos', r'alloc_path=', None,
          ['mimicos/configs/linux_buddy_anon_32GB.ini',
-          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_pcp_check.txt'])),
+          'test/sniper-in-sniper/fft.sift', '{workdir}/pcp_check.txt'])),
 
     # MimicOS's own scheduler, which is a separate scheduler from Sniper's and
     # configured separately: Sniper's scheduler/type decides which core a
@@ -564,7 +564,7 @@ FEATURES = {
             '%d quanta expired' % counter(stats, 'trace_thread.quanta_expired')),
         ('startup_mimicos', r'Scheduler\] Configured', None,
          ['mimicos/configs/linux_buddy_anon_sched_rr.ini',
-          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_sched_check.txt'])),
+          'test/sniper-in-sniper/fft.sift', '{workdir}/sched_check.txt'])),
 
     # Two applications on two cores, kernel-driven, end to end.  Each worker
     # injects and runs its own application; the one whose application exits
@@ -585,7 +585,7 @@ FEATURES = {
         live_feed_check,
         ('startup_mimicos', r'Scheduler stats: csw=', None,
          ['mimicos/configs/two_app_smp.ini',
-          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_live_check.txt'])),
+          'test/sniper-in-sniper/fft.sift', '{workdir}/live_check.txt'])),
 
     'mimicos_two_app_smp': (
         ['address_translation_schemes/userspace_baseline'], 4,
@@ -599,7 +599,7 @@ FEATURES = {
             '%d quanta expired' % counter(stats, 'trace_thread.quanta_expired')),
         ('startup_mimicos', r'Scheduler stats: csw=', None,
          ['mimicos/configs/two_app_smp.ini',
-          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_two_app_check.txt'])),
+          'test/sniper-in-sniper/fft.sift', '{workdir}/two_app_check.txt'])),
 
     # The userspace kernel's daemons: kswapd, kcompactd and khugepaged as
     # kernel pthreads, each sleeping for its scan interval between scans.
@@ -623,7 +623,7 @@ FEATURES = {
         mimicos_daemons_check,
         ('startup_mimicos', r'kswapd stopped\. Scans=', None,
          ['mimicos/configs/reservethp_daemons_32GB.ini',
-          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_daemons_check.txt'])),
+          'test/sniper-in-sniper/fft.sift', '{workdir}/daemons_check.txt'])),
 
     # More software threads than cores.  Eight threads with a barrier between
     # rounds on four cores (the shape of fft -p 8 on -n 4), which deadlocked
@@ -1106,7 +1106,7 @@ FEATURES = {
             % stats['__stdout__'].count('alloc_path=')),
         ('startup_mimicos', r'alloc_path=', None,
          ['mimicos/configs/baseline_32GB.ini',
-          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_baseline_alloc_check.txt'])),
+          'test/sniper-in-sniper/fft.sift', '{workdir}/baseline_alloc_check.txt'])),
 
     # one_app_sched.ini: the application comes from the [apps] section of
     # the kernel's configuration rather than from the command line, with
@@ -1129,7 +1129,7 @@ FEATURES = {
             '%d quanta expired' % counter(stats, 'trace_thread.quanta_expired')),
         ('startup_mimicos', r'Scheduler stats: csw=', None,
          ['mimicos/configs/one_app_sched.ini',
-          'test/sniper-in-sniper/fft.sift', '/tmp/sniper_one_app_check.txt'])),
+          'test/sniper-in-sniper/fft.sift', '{workdir}/one_app_check.txt'])),
 
     # The sniper-space HugeTLBfs service: a pre-reserved pool of 2 MB pages
     # that the page-fault handler maps the application's large VMAs from.
@@ -1852,7 +1852,13 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
         return None, 'timed out after %ds' % timeout
     if p.returncode != 0:
         err = re.search(r'\*ERROR\*\s*(.{0,60})', p.stdout)
-        return None, err.group(1).strip() if err else 'exit %d' % p.returncode
+        if err:
+            return None, err.group(1).strip()
+        # the end of the output: the simulator's backtrace on a crash, its
+        # assertion, or whatever it stopped on -- a bare exit code explains
+        # nothing once the run directory is gone
+        tail = [l.strip()[:160] for l in p.stdout.splitlines() if l.strip()][-8:]
+        return None, 'exit %d: %s' % (p.returncode, ' | '.join(tail))
     # run-sniper exits 0 even when the simulator refuses to start.
     if not expect.search(p.stdout):
         return None, 'exit 0 but the workload produced no output'
@@ -2015,6 +2021,8 @@ def main():
                     help='run only this feature check (repeatable)')
     ap.add_argument('--only', action='append',
                     help='run only this invariance config (repeatable); the feature checks are then skipped, as --feature skips these')
+    ap.add_argument('--keep', action='store_true',
+                    help='keep the run directory (printed at the end) instead of removing it')
     ap.add_argument('--timeout', type=int, default=600)
     ap.add_argument('--tol-abs', type=float, default=TOL_ABS,
                     help='counters may differ by this many counts (default %d)' % TOL_ABS)
@@ -2133,8 +2141,12 @@ def main():
                         continue
                 # The MimicOS cases hand the kernel a trace to run,
                 # test/sniper-in-sniper/fft.sift, recorded here on demand under
-                # the controlled environment (see sniper_in_sniper_trace).
-                for a in app_args or []:
+                # the controlled environment (see sniper_in_sniper_trace), and
+                # a path for its report files: in this run's directory, not a
+                # fixed name under /tmp that two suites running at once (or
+                # two users) would write over each other's.
+                app_args = [a.replace('{workdir}', workdir) for a in (app_args or [])]
+                for a in app_args:
                     if a.endswith('sniper-in-sniper/fft.sift'):
                         sniper_in_sniper_trace(os.path.join(SNIPER_ROOT, a))
                 expect = re.compile(pattern)
@@ -2186,7 +2198,10 @@ def main():
             print('\nstopped at the first failure; work directory kept at %s'
                   % workdir)
         else:
-            shutil.rmtree(workdir, ignore_errors=True)
+            if args.keep:
+                print('kept %s' % workdir)
+            else:
+                shutil.rmtree(workdir, ignore_errors=True)
         log.finish()
         try:
             os.unlink(lock)

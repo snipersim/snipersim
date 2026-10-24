@@ -2020,6 +2020,8 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument('--case', action='append', choices=sorted(CASES))
+    ap.add_argument('--keep', action='store_true',
+                    help='keep the work directory (guest binaries, traces, outputs; printed at the end) instead of removing it')
     add_failfast(ap)
     args = ap.parse_args()
 
@@ -2062,6 +2064,8 @@ def main():
             # re-run by hand exactly as it ran.
             print('\nstopped at the first failure; work directory kept at %s'
                   % workdir)
+        elif args.keep:
+            print('\nwork directory kept at %s' % workdir)
         else:
             shutil.rmtree(workdir, ignore_errors=True)
             run(['make', '-s', 'clean'], 60, cwd=PROBE_DIR)

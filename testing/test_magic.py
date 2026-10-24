@@ -216,6 +216,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--only', action='append', choices=sorted(CASES))
     ap.add_argument('--timeout', type=int, default=600)
+    ap.add_argument('--keep', action='store_true',
+                    help='keep the work directory (printed at the end) instead of removing it')
     add_failfast(ap)
     args = ap.parse_args()
 
@@ -253,7 +255,10 @@ def main():
         print('%d of %d checks FAILED (%d skipped)' % (failures, len(names), skipped))
         print('working directory kept: %s' % workdir)
         return 1
-    shutil.rmtree(workdir, ignore_errors=True)
+    if args.keep:
+        print('working directory kept: %s' % workdir)
+    else:
+        shutil.rmtree(workdir, ignore_errors=True)
     print('all %d checks passed (%d skipped)' % (len(names) - skipped, skipped))
     return 0
 

@@ -854,6 +854,8 @@ def main():
     # shorter limit matters because the configs that do deadlock spend the whole
     # timeout proving it.
     ap.add_argument('--timeout-detailed', type=int, default=120)
+    ap.add_argument('--keep', action='store_true',
+                    help='keep the work directory (printed at the end) instead of removing it')
     add_failfast(ap)
     ap.add_argument('--mode', action='append', choices=MODES,
                     help='run only this mode (repeatable; default: both)')
@@ -993,6 +995,8 @@ def main():
         if stopped_early:
             print('\nstopped at the first failure; work directory kept at %s'
                   % workdir)
+        elif args.keep:
+            print('work directory kept at %s' % workdir)
         else:
             shutil.rmtree(workdir, ignore_errors=True)
         log.finish()
