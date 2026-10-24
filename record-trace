@@ -459,7 +459,13 @@ else:
   print('[RECORD-TRACE] Using the SDE frontend (sift/recorder)')
   if enable_pacsim:
     require_pacsim('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals())
-  cmd = '%(sde_home)s/sde64 %(sde_arch)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals()) + smc_knob() + ' -- ' + ' '.join(cmdline)
+  # Pin's own log (written on a Pin-level failure) goes next to the trace,
+  # not into the working directory, where two recordings running at once
+  # from one tree would delete and copy each other's; run-sniper collects it
+  # from the trace's directory.  SDE sets Pin's logfile knob itself, so this
+  # is SDE's option for it, not Pin's.
+  pinlog = os.path.join(os.path.dirname(os.path.abspath(outputfile)), 'pin.log')
+  cmd = '%(sde_home)s/sde64 %(sde_arch)s -pin-log-file %(pinlog)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals()) + smc_knob() + ' -- ' + ' '.join(cmdline)
 
 if verbose:
   print('[SIFT_RECORDER]', 'Running', cmd)

@@ -996,9 +996,6 @@ for filetodelete in (backtracefile, 'sim.out', 'sim.cfg', 'sim.info', 'sim.stats
   filetodelete = os.path.join(outputdir, filetodelete)
   try: os.unlink(filetodelete)
   except OSError: pass
-# Pin creates a pin.log file in os.getcwd() when there is a crash. Delete the old version as to not copy it to the outputdir
-try: os.unlink('pin.log')
-except OSError: pass
 t_start = time.time()
 print('[SNIPER] Start')
 
@@ -1037,6 +1034,15 @@ if tracegen:
   left = sniper_lib.kill_stragglers(tracegen['tracetempdir'])
   if left:
     print('[SNIPER] Cleaned up %d stray recorder process group(s)' % left)
+  # Pin's log, written next to the trace on a crash (record-trace points Pin
+  # there rather than at the working directory, which runs from one tree
+  # would share), is kept with the run's output.
+  try:
+    pinlog = os.path.join(tracegen['tracetempdir'], 'pin.log')
+    if os.path.exists(pinlog):
+      shutil.move(pinlog, os.path.join(outputdir, 'pin.log'))
+  except OSError:
+    pass
   # Cleanup the pipes and temporary directory
   try:
     for f in tracegen['tracefiles_created']:
@@ -1139,9 +1145,6 @@ if 'BENCHMARKS_ROOT' in os.environ:
   stats['benchmarks_root'] = os.getenv('BENCHMARKS_ROOT'),
   stats['benchmarks_revision'] = subprocess.getoutput('cd $BENCHMARKS_ROOT && (if [ -e .git ]; then git rev-parse HEAD; else cat .gitid; fi)'),
 open(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats)+'\n')
-
-if os.path.exists('pin.log') and os.path.realpath(os.getcwd()) != os.path.realpath(outputdir):
-  os.system('cp pin.log %s' % outputdir)
 
 if live_dash:
   # Leave the final picture up until the dashboard is closed (q).  Then put
