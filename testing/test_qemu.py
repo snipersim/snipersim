@@ -1752,6 +1752,42 @@ def case_aarch64_sve_simulate(p, g, workdir):
     return True, '%s; %d instructions simulated on %s' % (answer.group(0), written, ' and '.join(summary))
 
 
+def pacsim_case(arch, workdir):
+    """testing/test_pacsim.py --frontend qemu: the sampler in the plugin, on a
+    live channel, against the full run (accuracy, detail share, checksum)."""
+    cmd = [sys.executable, os.path.join(SNIPER_ROOT, 'testing', 'test_pacsim.py'), '--frontend', 'qemu',
+           '--arch', arch, '--profile', 'quick', '--mode', 'single']
+    rc, out = run(cmd, 3600, cwd=SNIPER_ROOT)
+    if rc is None:
+        return False, 'timed out'
+    if out.startswith('SKIP:') or '\nSKIP:' in out:
+        return None, re.search(r'SKIP: (.*)', out).group(1)
+    verdicts = re.findall(r'^\s+(\S+)\s+(PASS|FAIL|XFAIL|XPASS|SKIP)\b(.*)$', out, re.M)
+    if rc != 0 or not verdicts:
+        return False, 'test_pacsim.py exited %s: %s' % (rc, out.strip().splitlines()[-1][:160] if out.strip() else '')
+    acc = [d for n, v, d in verdicts if n == 'accurate']
+    return True, ', '.join('%s %s' % (n, v) for n, v, d in verdicts) + (' (' + acc[0].strip()[:90] + ')' if acc else '')
+
+
+def case_user_pacsim(p, g, workdir):
+    """Pac-Sim through the plugin, x86-64 user mode, single-threaded."""
+    return pacsim_case('x86_64', workdir)
+
+
+def case_riscv_user_pacsim(p, g, workdir):
+    """Pac-Sim through the plugin, RISC-V user mode, single-threaded."""
+    if not os.environ.get('SNIPER_RISCV_CC'):
+        return None, 'SNIPER_RISCV_CC not set to a RISC-V compiler'
+    return pacsim_case('riscv64', workdir)
+
+
+def case_aarch64_user_pacsim(p, g, workdir):
+    """Pac-Sim through the plugin, AArch64 user mode, single-threaded, on cortex-a72."""
+    if not (os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')):
+        return None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
+    return pacsim_case('aarch64', workdir)
+
+
 ROI_SUM = 'sum=2152578694144'    # roi.c and rv-bare-roi.c: 5 + 10 + 5 rounds of work
 
 
@@ -1954,6 +1990,9 @@ CASES = {
     'run-sniper-qemu-roi': case_run_sniper_qemu_roi,
     'run-sniper-qemu-system': case_run_sniper_qemu_system,
     'run-sniper-qemu-riscv-units': case_run_sniper_qemu_riscv_units,
+    'user-pacsim':         case_user_pacsim,
+    'riscv-user-pacsim':   case_riscv_user_pacsim,
+    'aarch64-user-pacsim': case_aarch64_user_pacsim,
 }
 
 

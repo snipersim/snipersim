@@ -30,6 +30,7 @@
  * over the token block and the tiles fill: the class B shape. */
 
 #include <stdint.h>
+#include "sim_api.h"          /* the region of interest: the inference, not the model's set-up */
 #include "model_weights.h"
 #ifdef GPT_W_BLOB
 /* The weights as a binary blob embedded at link time (a 100 MiB model is not
@@ -911,10 +912,70 @@ static int generate(char *dst, int max)         /* greedy until '\n' (kept out o
    return n;
 }
 static long atol_(const char *s) { long v = 0; while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0'); return v; }
+/* Two knobs for studying sampled simulation (testing/test_pacsim.py's agent
+   sweep): PROMPT_REPEAT runs the prompt list that many times, so the run
+   gets longer with the same amount of distinct inference; TOOL_WORK gives
+   each tool call that many rounds of work of its own and shifts the run's
+   balance from the model towards the tools.  A sampler keys on the block
+   mix, so a tool that merely hashed different data would still read as one
+   repeating loop; instead the rounds are split between four kernels of
+   different character (a hash over a table, a byte scan with data-dependent
+   branches, insertion sorts, a polynomial in double precision) in
+   proportions drawn from the call's operands, so no two calls share a block
+   mix, as two different real tools would not.  Neither knob changes an
+   answer. */
+#ifndef PROMPT_REPEAT
+#define PROMPT_REPEAT 1
+#endif
+#ifndef TOOL_WORK
+#define TOOL_WORK 0
+#endif
+static volatile unsigned long tool_sink;
+static volatile double tool_fsink;
+static void tool_work(const char *call)
+{
+#if TOOL_WORK > 0
+   static unsigned long table[4096];
+   static unsigned char text[8192];
+   static int keys[256];
+   unsigned long h = 1469598103934665603ul;
+   for (const char *c = call; *c; c++) h = (h ^ (unsigned char)*c) * 1099511628211ul;
+   /* the split: four weights from the operands' hash, each 1..16 */
+   const long w0 = 1 + (long)(h & 15), w1 = 1 + (long)((h >> 4) & 15), w2 = 1 + (long)((h >> 8) & 15), w3 = 1 + (long)((h >> 12) & 15);
+   const long wsum = w0 + w1 + w2 + w3;
+   const long n0 = TOOL_WORK * w0 / wsum, n1 = TOOL_WORK * w1 / wsum, n2 = TOOL_WORK * w2 / wsum, n3 = TOOL_WORK - n0 - n1 - n2;
+   for (long i = 0; i < n0; i++)
+   {
+      h ^= table[h & 4095]; h *= 1099511628211ul; h = (h << 13) | (h >> 51);
+      table[(h >> 7) & 4095] += h;
+   }
+   unsigned long count = 0;
+   for (long i = 0; i < n1; i++)
+   {
+      unsigned char *t = text + ((h + (unsigned long)i * 131) & 8191);
+      if (*t == (unsigned char)h) count++; else if (*t > (unsigned char)(h >> 8)) *t -= 1; else *t += 3;
+      h += *t;
+   }
+   for (long i = 0; i < n2; i += 64)
+   {
+      for (int k = 0; k < 64; k++) keys[k] = (int)((h >> (k & 31)) ^ (unsigned long)k * 2654435761u);
+      for (int k = 1; k < 64; k++) { int v = keys[k], j = k - 1; while (j >= 0 && keys[j] > v) { keys[j + 1] = keys[j]; j--; } keys[j + 1] = v; }
+      h += (unsigned long)keys[0] * 31 + (unsigned long)keys[63];
+   }
+   double x = (double)(h & 0xffff) / 65536.0, acc = 0;
+   for (long i = 0; i < n3; i++) { acc = acc * x + 1.0 / (double)(i + 1); x = x * 0.999 + 0.0005; }
+   tool_fsink = acc;
+   tool_sink = h + count;
+#else
+   (void)call;
+#endif
+}
+
 static void run_tool(const char *call, char *res)   /* "add a b", "mul a b", "len w" */
 {
    const char *p = call + 4;
    long v = -1;
+   tool_work(call);
    if (call[0] == 'a') { long a = atol_(p); while (*p && *p != ' ') p++; v = a + atol_(p + 1); }
    else if (call[0] == 'm') { long a = atol_(p); while (*p && *p != ' ') p++; v = a * atol_(p + 1); }
    else if (call[0] == 'l') { v = 0; while (p[v] && p[v] != ' ') v++; }
@@ -940,6 +1001,12 @@ void _start(void)
        "\n");
    int bad = 0;
    char call[64], res[24], ans[64];
+   /* The region of interest is the agent loop -- every prompt, tool call and
+      answer -- so that run-sniper --roi, and Pac-Sim's sampling of it,
+      measure the inference and not the vocabulary table or the unit's
+      set-up.  Without --roi the markers change nothing. */
+   SimRoiStart();
+   for (int r = 0; r < PROMPT_REPEAT; r++)
    for (int i = 0; i < N_PROMPTS; i++)
    {
       pos = 0;
@@ -956,6 +1023,7 @@ void _start(void)
       if (!as_model) bad |= 1;
       if (!correct) bad |= 2;
    }
+   SimRoiEnd();
    out("tokens: "); outn(n_prefill); out(" prefilled, "); outn(n_generated); out(" generated\n");
    out("prefill batches:"); for (int i = 0; i < nbatches; i++) { out(" "); outn(batches[i]); } out("\n");
    out("attention: "); outn(n_att_dots); out(" dots, "); outn(n_att_strips); out(" softmax strips\n");
