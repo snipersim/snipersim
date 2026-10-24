@@ -352,7 +352,7 @@ void MimicOS::kernel_worker(int core_id)
 
     /* Dump per-core VMA tree (live apps only). */
     if (cs.child_pid > 0 && cs.vma_tree.size() > 0) {
-        std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+        std::string base = reportBase();
         char suffix[64];
         snprintf(suffix, sizeof(suffix), "_vma_tree_core%d.log", core_id);
         cs.vma_tree.dump(base + suffix);
@@ -365,7 +365,7 @@ MimicOS::~MimicOS()
 
     // Dump live-app VMA tree if it was populated
     if (m_child_pid > 0 && m_app_vma_tree.size() > 0) {
-        std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+        std::string base = reportBase();
         m_app_vma_tree.dump(base + "_vma_tree.log");
         LineOut() << "[MimicOS] Dumped VMA tree (" << m_app_vma_tree.size()
                   << " regions) to " << base << "_vma_tree.log" << std::endl;
@@ -373,7 +373,7 @@ MimicOS::~MimicOS()
 
     // Dump fault-phase metrics if instrumentation was enabled
     if (m_fault_calibration.phase_instrumentation_enabled && m_fault_metrics.fault_count() > 0) {
-        std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+        std::string base = reportBase();
         m_fault_metrics.dump_csv(base + "_fault_phases.csv");
         m_fault_metrics.dump_histograms(base + "_fault_histograms.csv");
         LineOut() << "[MimicOS] Dumped fault phase metrics (" << m_fault_metrics.fault_count()
@@ -382,7 +382,7 @@ MimicOS::~MimicOS()
 
     // Dump scheduler stats if enabled
     if (m_scheduler.is_enabled()) {
-        std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+        std::string base = reportBase();
         m_scheduler.dump_stats(base + "_scheduler_stats.csv");
         auto& ss = m_scheduler.stats();
         LineOut() << "[MimicOS] Scheduler stats: csw=" << ss.context_switches
@@ -392,7 +392,7 @@ MimicOS::~MimicOS()
 
     // Dump replay cache stats if enabled
     if (m_fault_replay.is_enabled()) {
-        std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+        std::string base = reportBase();
         m_fault_replay.dump_stats(base + "_replay_stats.csv");
         auto& cs = m_fault_replay.cache_stats();
         LineOut() << "[MimicOS] Replay cache stats: lookups=" << cs.total_lookups()
@@ -403,7 +403,7 @@ MimicOS::~MimicOS()
 
     // Dump fast-fault registry stats if enabled
     if (m_fast_fault_registry.is_enabled()) {
-        std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+        std::string base = reportBase();
         std::ofstream f(base + "_fast_fault_profiles.csv");
         if (f.is_open()) {
             f << "fp_id,mapping,access,page_size,pcp_class,pgt_level,vma_fresh,state,samples,"
@@ -456,10 +456,31 @@ MimicOS::~MimicOS()
     }
 }
 
+/* Where the kernel's report files go (<base>_scheduler_stats.csv and the
+   like): the output path given on its command line, else a directory of its
+   own made once per process under TMPDIR -- never a fixed name under /tmp,
+   which two kernels running at once (two suites, two users) wrote over each
+   other's. */
+std::string MimicOS::reportBase()
+{
+    if (!path_to_outputFile.empty())
+        return path_to_outputFile;
+    static std::string made;
+    if (made.empty())
+    {
+        const char *tmp = getenv("TMPDIR");
+        std::string tmpl = std::string(tmp && *tmp ? tmp : "/tmp") + "/mimicos-XXXXXX";
+        std::vector<char> buf(tmpl.begin(), tmpl.end()); buf.push_back(0);
+        made = mkdtemp(buf.data()) ? std::string(buf.data()) + "/mimicos" : std::string("mimicos");
+        LineOut() << "[MimicOS]: report files under " << made << "*" << std::endl;
+    }
+    return made;
+}
+
 void MimicOS::boot()
 {
     // Open a debug log file (stdout is piped to SDE and may not be visible)
-    std::ofstream boot_log("/tmp/mimicos_userspace_debug.log", std::ios::trunc);
+    std::ofstream boot_log(reportBase() + "_userspace_debug.log", std::ios::trunc);
     boot_log << "[MimicOS-userspace] boot() called" << std::endl;
 
     double target_fragmentation = reader->GetReal("pmem_alloc"    , "target_fragmentation", 1.0);
@@ -558,7 +579,7 @@ void MimicOS::boot()
         poll_for_signal(/*core_id=*/0, /*has_initial_app=*/true);
 
         if (m_child_pid > 0 && m_app_vma_tree.size() > 0) {
-            std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+            std::string base = reportBase();
             m_app_vma_tree.dump(base + "_vma_tree.log");
             fprintf(stderr, "[MimicOS] VMA tree dumped: %zu regions to %s_vma_tree.log\n",
                     m_app_vma_tree.size(), base.c_str());
@@ -1232,7 +1253,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
                 {
                     uint64_t lookups = m_fault_replay.cache_stats().total_lookups();
                     if (lookups > 0 && (lookups % 50) == 0) {
-                        std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+                        std::string base = reportBase();
                         m_fault_replay.dump_stats(base + "_replay_stats.csv");
                         if (instrumented && m_fault_metrics.fault_count() > 0) {
                             m_fault_metrics.dump_csv(base + "_fault_phases.csv");
@@ -1919,7 +1940,7 @@ void MimicOS::poll_for_signal(int core_id, bool has_initial_app)
         const uint64_t kDumpEvery = 256;
         uint64_t fc = m_fault_metrics.fault_count();
         if (fc > 0 && (fc % kDumpEvery) == 0) {
-            std::string base = path_to_outputFile.empty() ? "/tmp/mimicos" : path_to_outputFile;
+            std::string base = reportBase();
             if (instrumented) {
                 m_fault_metrics.dump_csv(base + "_fault_phases.csv");
                 m_fault_metrics.dump_histograms(base + "_fault_histograms.csv");

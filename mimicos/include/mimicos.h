@@ -245,6 +245,7 @@ class MimicOS {
 
         // Path to the output file to keep track of statistics
         std::string path_to_outputFile;
+        std::string reportBase();           /* path_to_outputFile, or a directory of this process's own */
         // Path to the application file
         std::string path_to_app;
         // Path to the configuration file
