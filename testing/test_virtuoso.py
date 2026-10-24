@@ -1854,7 +1854,7 @@ def main():
     ap.add_argument('--feature', action='append',
                     help='run only this feature check (repeatable)')
     ap.add_argument('--only', action='append',
-                    help='run only this invariance config (repeatable)')
+                    help='run only this invariance config (repeatable); the feature checks are then skipped, as --feature skips these')
     ap.add_argument('--timeout', type=int, default=600)
     ap.add_argument('--tol-abs', type=float, default=TOL_ABS,
                     help='counters may differ by this many counts (default %d)' % TOL_ABS)
@@ -1934,7 +1934,7 @@ def main():
                         raise FailFast()
             shutil.rmtree(outdir, ignore_errors=True)
 
-        names = args.feature if args.feature else sorted(FEATURES)
+        names = args.feature if args.feature else [] if args.only else sorted(FEATURES)
         for fname in names:
             if fname not in FEATURES:
                 print('%-22s SKIP (no such feature check)' % fname)
