@@ -87,9 +87,11 @@ ROI too.
 now raises the global time to the fast-forwarded core's when a core leaves
 fast-forward, and `MagicServer::enablePerformance` takes its ROI-begin
 snapshot after the models are enabled, so a reported ROI time no longer
-carries up to one fast-forward quantum of slack.  (Both move the Virtuoso
-invariance baselines by small amounts; they are re-blessed where the fixes
-land, after the drift is checked against these two causes.)
+carries up to one fast-forward quantum of slack.  (Neither moves the
+Virtuoso invariance baselines: checked by reverting both against the
+blessed counters.  The baselines did move with the sampler's move into
+the recorder's shared object, because the live guest's address layout
+follows the Pin tool's size; see testing/test_virtuoso.py.)
 
 **Not built.**  Multi-threaded guests: a vCPU that waits for Sniper inside a
 plugin callback blocks QEMU's exclusive sections, so the plugin still refuses
