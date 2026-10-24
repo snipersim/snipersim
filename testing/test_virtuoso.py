@@ -1764,10 +1764,13 @@ def record_trace(app, name, expect):
     cmd = []
     if have_setarch():
         cmd += ['setarch', '-R']
-    cmd += [os.path.join(SNIPER_ROOT, 'record-trace'), '--vma',
-            '-o', os.path.join(tracedir, 'trace'), '--', app]
+    # Through the canonical link, like run_sniper(): record-trace derives its
+    # root from its own path and puts it in the guest's environment.
+    root = canon_root()
+    cmd += [os.path.join(root, 'record-trace'), '--vma',
+            '-o', os.path.join(tracedir, 'trace'), '--', canon_path(app)]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                       text=True, cwd=SNIPER_ROOT, env=run_env(),
+                       text=True, cwd=root, env=run_env(),
                        start_new_session=True)
     if p.returncode != 0:
         return None, 'record-trace exit %d' % p.returncode
@@ -1785,6 +1788,39 @@ def canon_path(path):
     if real == tree or real.startswith(tree + os.sep):
         return canon_root() + real[len(tree):]
     return path
+
+
+def sniper_in_sniper_trace(sift):
+    """test/sniper-in-sniper/fft.sift, the trace the MimicOS checks hand the
+    kernel, recorded here with ASLR off under the controlled environment and
+    through CANON_ROOT, so that it is the same bytes for every checkout and
+    user and the checks can expect exact counts (66 page faults, 27 mappings).
+    A trace recorded any other way -- test/sniper-in-sniper/Makefile records
+    one under make's environment -- is a different guest layout and different
+    counts; a sidecar notes the environment digest the trace was recorded
+    under, and a trace without it, or with another, is recorded again."""
+    tracedir = os.path.dirname(sift)
+    sidecar = sift + '.env'
+    if (os.path.exists(sift) and os.path.exists(sidecar)
+            and open(sidecar).read().strip() == env_digest()):
+        return
+    fft = os.path.join(SNIPER_ROOT, 'test', 'fft', 'fft')
+    if not os.path.exists(fft):
+        subprocess.run(['make', '-s', '-C', os.path.dirname(fft), 'fft'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    for f in (sift, sidecar):
+        if os.path.exists(f):
+            os.unlink(f)
+    root = canon_root()
+    cmd = (['setarch', '-R'] if have_setarch() else []) + [
+        os.path.join(root, 'record-trace'), '--roi',
+        '-o', canon_path(os.path.join(tracedir, 'fft')), '--', canon_path(fft)]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                       cwd=root, env=run_env(), start_new_session=True)
+    if p.returncode != 0 or not os.path.exists(sift):
+        raise RuntimeError('recording %s failed (exit %s):\n%s' % (sift, p.returncode, p.stdout[-2000:]))
+    with open(sidecar, 'w') as f:
+        f.write(env_digest() + '\n')
 
 
 def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
@@ -2096,15 +2132,11 @@ def main():
                         print('SKIP (%s not built)' % src)
                         continue
                 # The MimicOS cases hand the kernel a trace to run,
-                # test/sniper-in-sniper/fft.sift, which is made on demand (its
-                # Makefile records it with ASLR off, so it is the same bytes
-                # every time).  It used to exist only after test_apps.py's
-                # sniper-in-sniper case had run, and then as whatever that
-                # recording happened to be.
+                # test/sniper-in-sniper/fft.sift, recorded here on demand under
+                # the controlled environment (see sniper_in_sniper_trace).
                 for a in app_args or []:
-                    if a.endswith('sniper-in-sniper/fft.sift') and not os.path.exists(os.path.join(SNIPER_ROOT, a)):
-                        subprocess.run(['make', '-s', '-C', os.path.dirname(os.path.join(SNIPER_ROOT, a)), 'fft.sift'],
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=SNIPER_ROOT)
+                    if a.endswith('sniper-in-sniper/fft.sift'):
+                        sniper_in_sniper_trace(os.path.join(SNIPER_ROOT, a))
                 expect = re.compile(pattern)
             else:
                 cfgs, ncores, check = entry

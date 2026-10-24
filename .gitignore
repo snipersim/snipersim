@@ -155,4 +155,5 @@ sail-riscv
 test/*/fft.c
 test/fft-marker/fft
 test/sniper-in-sniper/fft.sift
+test/sniper-in-sniper/fft.sift.env
 test/signal/
