@@ -416,6 +416,16 @@ BarrierSyncServer::setGroup(core_id_t core_id, core_id_t master_core_id)
 void
 BarrierSyncServer::setFastForward(bool fastforward, SubsecondTime next_barrier_time)
 {
+   /* Leaving fast-forward: the cores are at next_barrier_time (the caller
+      passes the furthest of them) and every one of them is released there,
+      so that is the global time now.  In fast-forward the global time only
+      moved at each quantum -- 100 us by default -- and lagged the cores by
+      up to one; a region of interest opened at that moment had the lag
+      inside it, since the run's elapsed time is the global time's delta
+      between the ROI's begin and end (sniper_lib), and a short ROI read up
+      to a quantum long (167 us of a 1.19 ms ROI on the RISC-V front end). */
+   if (!fastforward)
+      m_global_time = std::max(m_global_time, next_barrier_time);
    if (m_fastforward != fastforward)
       CLOG("barrier", "FastForward %d > %d", m_fastforward, fastforward);
    m_fastforward = fastforward;

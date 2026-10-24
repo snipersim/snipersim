@@ -538,12 +538,18 @@ __attribute__((weak)) void PinDetach(void) {}
 
 void MagicServer::enablePerformance()
 {
+   /* The models first, the snapshot after: leaving fast-forward brings the
+      barrier's global time up to the cores (it lagged them by up to a
+      fast-forward quantum, 100 us by default), and the run's reported
+      elapsed time is that global time's delta between the ROI's begin and
+      end.  Snapshotted before the transition, a short ROI read up to a
+      quantum long. */
+   Simulator::enablePerformanceModels();
+   Sim()->setInstrumentationMode(InstMode::inst_mode_roi, true /* update_barrier */);
+
    Sim()->getStatsManager()->recordStats("roi-begin");
    ninstrs_start = getGlobalInstructionCount();
    t_start.start();
-
-   Simulator::enablePerformanceModels();
-   Sim()->setInstrumentationMode(InstMode::inst_mode_roi, true /* update_barrier */);
 }
 
 void MagicServer::disablePerformance()
