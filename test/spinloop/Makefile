@@ -11,4 +11,4 @@ run_$(TARGET):
 	../../tools/dumpstats.py | grep spin
 	@# sim.out moved into simulation/ when run-sniper started sorting its
 	@# output into subdirectories; accept either layout.
-	head -n 4 simulation/sim.out 2>/dev/null || head -n 4 sim.out
+	head -n 4 $${SNIPER_OUTPUT_DIR:-.}/simulation/sim.out 2>/dev/null || head -n 4 $${SNIPER_OUTPUT_DIR:-.}/sim.out

@@ -35,6 +35,8 @@ Usage:
 
 import argparse
 import os
+import shutil
+import tempfile
 import re
 import signal
 import subprocess
@@ -329,8 +331,11 @@ def unavailable(reason):
     return None
 
 
-def run(name, timeout):
-    env = dict(os.environ, SNIPER_ROOT=SNIPER_ROOT)
+def run(name, timeout, outdir):
+    # Each test's run-sniper output goes to a directory of its own
+    # (SNIPER_OUTPUT_DIR, honoured by run-sniper and dumpstats without -d),
+    # not into test/<name>/ where the next run, or another suite, finds it.
+    env = dict(os.environ, SNIPER_ROOT=SNIPER_ROOT, SNIPER_OUTPUT_DIR=outdir)
     env.setdefault('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
     t0 = time.time()
     with subprocess.Popen(['make', 'run'], cwd=os.path.join(TEST_DIR, name),
@@ -358,6 +363,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--only', action='append', choices=sorted(CASES))
     ap.add_argument('--timeout', type=int, default=900)
+    ap.add_argument('--keep', action='store_true',
+                    help='keep the run directories (printed at the end) instead of removing them')
     add_failfast(ap)
     args = ap.parse_args()
 
@@ -369,6 +376,7 @@ def main():
     failures = skipped = 0
     log = RunLog('apps')
     stopped_early = None
+    kept = []
     for name in names:
         check, needs = CASES[name]
         why = unavailable(needs) if needs else None
@@ -379,7 +387,12 @@ def main():
 
         print('%-18s ' % name, end='')
         sys.stdout.flush()
-        rc, out, took = run(name, args.timeout)
+        outdir = tempfile.mkdtemp(prefix='sniper-apps-%s-' % name)
+        rc, out, took = run(name, args.timeout, outdir)
+        if args.keep:
+            kept.append(outdir)
+        else:
+            shutil.rmtree(outdir, ignore_errors=True)
         if rc is None:
             # A timeout is the most expensive check there is; record it, or the
             # suite total quietly omits the worst case.
@@ -421,6 +434,8 @@ def main():
     if failures:
         print('%d of %d checks FAILED (%d skipped)' % (failures, ran, skipped))
         return 1
+    for d in kept:
+        print('run directory kept: %s' % d)
     print('all %d checks passed (%d skipped)' % (ran, skipped))
     return 0
 

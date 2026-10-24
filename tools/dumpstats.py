@@ -8,7 +8,7 @@ def usage():
 
 
 jobid = 0
-resultsdir = '.'
+resultsdir = os.getenv('SNIPER_OUTPUT_DIR') or '.'   # where run-sniper wrote without -d
 partial = None
 through_time = None
 do_list = False

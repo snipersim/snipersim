@@ -63,7 +63,10 @@ def usage():
 standalone = False
 ncores = 1
 ncores_explicit = False   # was -n given?  A config may set total_cores; -n must win over it
-outputdir = '.'
+# Where a run's output goes without -d: SNIPER_OUTPUT_DIR if set (a test
+# harness points it at a directory of the run's own, so nothing lands in the
+# tree or in another run's directory), else the working directory.
+outputdir = os.getenv('SNIPER_OUTPUT_DIR') or '.'
 configfiles = []
 sniperoptions = []
 roi_only = False
