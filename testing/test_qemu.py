@@ -22,6 +22,7 @@ Usage:
 
 import argparse
 import collections
+import fcntl
 import os
 import re
 import shutil
@@ -95,11 +96,20 @@ def run(cmd, timeout, **kwargs):
             return None, out or ''
         return proc.returncode, out or ''
 
+def exit_text(rc):
+    """How run() ended, for a failure message: a timeout comes back as None."""
+    return 'timed out' if rc is None else 'exit %s' % rc
+
 
 def build_guests(workdir):
-    """Build the probe and its hand-written guests against the pinned QEMU."""
+    """Build the probe and its hand-written guests against the pinned QEMU.
+    The probe directory is shared by every run of this suite, so the build is
+    taken under a lock: two suites making it at once left a boot image
+    half-written for the one that read it first."""
     qemu_src = os.path.join(SNIPER_ROOT, 'qemu')
-    rc, out = run(['make', '-s', 'QEMU_SRC=' + qemu_src], 300, cwd=PROBE_DIR)
+    with open(os.path.join(PROBE_DIR, '.build.lock'), 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rc, out = run(['make', '-s', 'QEMU_SRC=' + qemu_src], 300, cwd=PROBE_DIR)
     if rc != 0:
         raise RuntimeError('cannot build the probe:\n' + out)
     return {n: os.path.join(PROBE_DIR, n)
@@ -129,7 +139,7 @@ def case_user_trace(p, g, workdir):
         return False, 'no usable trace at %s' % os.path.basename(trace)
     rc, _ = run([p['siftdump'], trace], 300)
     if rc != 0:
-        return False, 'siftdump could not read the trace (exit %s)' % rc
+        return False, 'siftdump could not read the trace (%s)' % exit_text(rc)
     return True, '%d instructions, trace readable' % n
 
 
@@ -139,7 +149,7 @@ def case_user_simulate(p, g, workdir):
     rc, out = run([p['user'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', os.path.join(PROBE_DIR, 'st')], 300, cwd=workdir)
     if rc != 0:
-        return False, 'recording failed (exit %s)' % rc
+        return False, 'recording failed (%s)' % exit_text(rc)
     outdir = os.path.join(workdir, 'simout')
     shutil.rmtree(outdir, ignore_errors=True)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'),
@@ -187,7 +197,7 @@ def case_user_mt_streams(p, g, workdir):
     for t in traces:
         rc, _ = run([p['siftdump'], os.path.join(workdir, t)], 300)
         if rc != 0:
-            return False, '%s unreadable (exit %s)' % (t, rc)
+            return False, '%s unreadable (%s)' % (t, exit_text(rc))
     return True, '%d per-thread traces, all readable' % len(traces)
 
 
@@ -202,7 +212,7 @@ def case_system_exact(p, g, workdir):
         return False, 'timed out'
     m = re.search(r'range_insns=(\d+)', out)
     if not m:
-        return False, 'probe reported no count (exit %s)' % rc
+        return False, 'probe reported no count (%s)' % exit_text(rc)
     n = int(m.group(1))
     if n != BOOT_LOOP_INSNS:
         return False, 'counted %d, expected exactly %d' % (n, BOOT_LOOP_INSNS)
@@ -250,11 +260,11 @@ def case_system_address_spaces(p, g, workdir):
     if rc is None:
         return False, 'timed out'
     if rc != 33:          # isa-debug-exit: (0x10 << 1) | 1, the guest's own checks passed
-        return False, 'the guest failed its own checks (exit %s)' % rc
+        return False, 'the guest failed its own checks (%s)' % exit_text(rc)
     trace = prefix + '.app0.th0.sift'
     rc, dump = run([p['siftdump'], trace], 300)
     if rc != 0:
-        return False, 'siftdump could not read the trace (exit %s)' % rc
+        return False, 'siftdump could not read the trace (%s)' % exit_text(rc)
     code = [l.split()[1] for l in dump.splitlines() if l.split() and l.split()[0].lstrip('0') == '40000000']
     if code != ['b8', '31'] * 4:
         return False, 'first bytes at 0x40000000: %s, expected b8 and 31 alternately, 4 times each' % ' '.join(code)
@@ -265,7 +275,7 @@ def case_system_address_spaces(p, g, workdir):
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'gainestown', '-d', outdir,
                    '--traces=' + trace], 900, cwd=SNIPER_ROOT)
     if rc != 0:
-        return False, 'simulating the full-system trace failed (exit %s)' % rc
+        return False, 'simulating the full-system trace failed (%s)' % exit_text(rc)
     m = re.search(r'Simulated ([\d.]+)M instructions', out)
     return True, 'code A/B alternate at one address, stores at two physical pages; simulated %sM instructions' % (
         m.group(1) if m else '?')
@@ -302,7 +312,7 @@ def case_system_modes(p, g, workdir):
 
     sw = re.findall(r'now in (\d+)-bit mode at 0x([0-9a-f]+)', out)
     if not sw:
-        return False, 'no mode switches reported (exit %s)' % rc
+        return False, 'no mode switches reported (%s)' % exit_text(rc)
 
     if sw[0] != ('16', 'fffffff0'):
         return False, 'first mode is %s-bit at 0x%s, expected 16-bit at the ' \
@@ -347,7 +357,7 @@ def riscv_prerequisites(workdir):
                        '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest,
                        os.path.join(PROBE_DIR, 'rv-loop.c')], 120)
         if rc != 0:
-            return None, 'could not build rv-loop.c (exit %s)' % rc
+            return None, 'could not build rv-loop.c (%s)' % exit_text(rc)
     return {'qemu': qemu, 'guest': guest}, None
 
 
@@ -367,7 +377,7 @@ def riscv_system_guest(workdir, name, sources, flags=()):
                    '-Wl,-Ttext=0x80001000', '-Wl,-e,_start', '-o', guest] + list(flags) +
                   [os.path.join(PROBE_DIR, s) for s in sources], 120)
     if rc != 0:
-        return None, 'could not build %s (exit %s)' % (name, rc)
+        return None, 'could not build %s (%s)' % (name, exit_text(rc))
     return {'qemu': qemu, 'guest': guest}, None
 
 
@@ -396,7 +406,7 @@ def case_riscv_system_simulate(p, g, workdir):
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
                    '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
     if rc != 0:
-        return False, 'simulating the trace failed (exit %s)' % rc
+        return False, 'simulating the trace failed (%s)' % exit_text(rc)
     stats = {}
     for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
         if ' = ' in line:
@@ -418,10 +428,10 @@ def case_riscv_system_address_spaces(p, g, workdir):
     prefix = os.path.join(workdir, 'rvas')
     rc, out = run_riscv_system(p, r, prefix, workdir)
     if rc != 0 or 'rv-as ok' not in out:
-        return False, 'the guest failed its own checks (exit %s)' % rc
+        return False, 'the guest failed its own checks (%s)' % exit_text(rc)
     rc, dump = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
     if rc != 0:
-        return False, 'siftdump could not read the trace (exit %s)' % rc
+        return False, 'siftdump could not read the trace (%s)' % exit_text(rc)
     code = [l.split()[1] for l in dump.splitlines() if l.split() and l.split()[0].lstrip('0') == '40000000']
     if code != ['37', '09'] * 4:
         return False, 'first bytes at 0x40000000: %s, expected 37 (lui) and 09 (c.li) alternately' % ' '.join(code)
@@ -432,7 +442,7 @@ def case_riscv_system_address_spaces(p, g, workdir):
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
                    '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
     if rc != 0:
-        return False, 'simulating the trace failed (exit %s)' % rc
+        return False, 'simulating the trace failed (%s)' % exit_text(rc)
     return True, 'code A/B alternate at one address, stores at two physical pages; simulated'
 
 
@@ -462,7 +472,7 @@ def case_aarch64_user_simulate(p, g, workdir):
         rc, out = run([cc, '--target=aarch64-linux-gnu'] + flags + ['-ffreestanding', '-nostdlib', '-static',
                        '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, os.path.join(PROBE_DIR, name + '.c')], 120)
         if rc != 0:
-            return None, 'could not build %s.c (exit %s)' % (name, rc)
+            return None, 'could not build %s.c (%s)' % (name, exit_text(rc))
         prefix = os.path.join(workdir, name)
         rc, out = run([qemu, '-cpu', 'max', '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest],
                       300, cwd=workdir)
@@ -515,7 +525,7 @@ def case_riscv_smc_rewrite(p, g, workdir):
                        '-mabi=lp64d', '-O1', '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start',
                        '-o', guest, os.path.join(PROBE_DIR, 'rv-smc-rewrite.c')], 120)
         if rc != 0:
-            return False, 'could not build rv-smc-rewrite.c (exit %s)' % rc
+            return False, 'could not build rv-smc-rewrite.c (%s)' % exit_text(rc)
     seen = {}
     for smc in ('1', '0'):
         prefix = os.path.join(workdir, 'smc%s' % smc)
@@ -529,7 +539,7 @@ def case_riscv_smc_rewrite(p, g, workdir):
         pc = m.group(1)
         rc, dump = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
         if rc != 0:
-            return False, 'siftdump could not read the trace (exit %s)' % rc
+            return False, 'siftdump could not read the trace (%s)' % exit_text(rc)
         seen[smc] = [l.split()[1:3] for l in dump.splitlines()
                      if l.split() and l.split()[0].lstrip('0') == pc.lstrip('0')]
     want = [['13', '05'], ['09', '45'], ['13', '05']]
@@ -542,7 +552,7 @@ def case_riscv_smc_rewrite(p, g, workdir):
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
                    '--traces=' + os.path.join(workdir, 'smc1') + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
     if rc != 0:
-        return False, 'simulating the trace failed (exit %s)' % rc
+        return False, 'simulating the trace failed (%s)' % exit_text(rc)
     return True, 'traced A, B, A at one address (%s); smc=0 gives the stale %s; simulated' % (
         ', '.join(' '.join(x) for x in seen['1']), ', '.join(' '.join(x) for x in seen['0']))
 
@@ -565,7 +575,7 @@ def case_riscv_user_trace(p, g, workdir):
         return False, '%d instructions, expected 100007' % n
     rc, _ = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
     if rc != 0:
-        return False, 'siftdump could not read the trace (exit %s)' % rc
+        return False, 'siftdump could not read the trace (%s)' % exit_text(rc)
     return True, '%d instructions, trace readable' % n
 
 
@@ -578,7 +588,7 @@ def case_riscv_user_simulate(p, g, workdir):
     rc, out = run([r['qemu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['guest']], 300, cwd=workdir)
     if rc != 100:
-        return False, 'recording failed (exit %s)' % rc
+        return False, 'recording failed (%s)' % exit_text(rc)
     outdir = os.path.join(workdir, 'rvsimout')
     shutil.rmtree(outdir, ignore_errors=True)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
@@ -630,7 +640,7 @@ def riscv_ime_prerequisites(workdir):
                        '-I', os.path.join(SNIPER_ROOT, 'include'), '-o', guest,
                        os.path.join(PROBE_DIR, 'rv-ime.c')], 120)
         if rc != 0:
-            return None, 'could not build rv-ime.c (exit %s)' % rc
+            return None, 'could not build rv-ime.c (%s)' % exit_text(rc)
     cpu = os.environ.get('SNIPER_QEMU_RISCV_IME_CPU', IME_CPU_DEFAULT)
     rc, out = run([r['qemu'], '-cpu', cpu, guest], 60, cwd=workdir)
     if rc != 100:
@@ -661,7 +671,7 @@ def case_riscv_ime_trace(p, g, workdir):
         return False, '%d memory footprints recorded, expected %d' % (f, IME_FOOTPRINTS)
     rc, out = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
     if rc != 0:
-        return False, 'siftdump could not read the trace (exit %s)' % rc
+        return False, 'siftdump could not read the trace (%s)' % exit_text(rc)
     spans = re.findall(r'[0-9a-f]{8}\+(\d+)([rw])', out)
     if len(spans) != IME_SPANS or any(int(b) != 8 for b, _ in spans):
         return False, 'siftdump shows %d spans %s, expected %d of 8 bytes' % (len(spans), spans, IME_SPANS)
@@ -678,7 +688,7 @@ def case_riscv_ime_simulate(p, g, workdir):
     rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['ime_guest']], 300, cwd=workdir)
     if rc != 100:
-        return False, 'recording failed (exit %s)' % rc
+        return False, 'recording failed (%s)' % exit_text(rc)
     outdir = os.path.join(workdir, 'rvimesimout')
     shutil.rmtree(outdir, ignore_errors=True)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
@@ -730,7 +740,7 @@ def riscv_gemm_prerequisites(workdir):
     if not os.path.isfile(guest):
         rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start'])
         if rc != 0:
-            return None, 'could not build gemm3.c (exit %s)' % rc
+            return None, 'could not build gemm3.c (%s)' % exit_text(rc)
     r['gemm'] = guest
     return r, None
 
@@ -754,7 +764,7 @@ def case_riscv_gemm_simulate(p, g, workdir):
     rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['gemm']], 300, cwd=workdir)
     if rc != 100:
-        return False, 'recording failed (exit %s)' % rc
+        return False, 'recording failed (%s)' % exit_text(rc)
     outdir = os.path.join(workdir, 'gemm3simout')
     shutil.rmtree(outdir, ignore_errors=True)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
@@ -785,7 +795,7 @@ def case_riscv_gemm_sail(p, g, workdir):
     rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest,
                          ['-DPLATFORM_HTIF', '-DNO_IME', '-Wl,-T,' + os.path.join(GEMM_DIR, 'sail.ld')])
     if rc != 0:
-        return False, 'could not build the HTIF variant (exit %s)' % rc
+        return False, 'could not build the HTIF variant (%s)' % exit_text(rc)
     override = os.path.join(workdir, 'sail-v128.json')
     with open(override, 'w') as f:
         f.write('{ "extensions": { "V": { "vlen_exp": 7 } } }\n')
@@ -964,9 +974,9 @@ def case_riscv_llm_simulate(p, g, workdir):
     for variant in ('rvv', 'ime', 'ame', 'w4'):
         prefix = os.path.join(workdir, 'llmsim-' + variant)
         rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
-                       '--', r['llm'][variant]], 900, cwd=workdir)
+                       '--', r['llm'][variant]], 1800, cwd=workdir)   # QEMU runs the IME/AME helpers for ~70M guest instructions
         if rc != 100:
-            return False, '%s: recording failed (exit %s)' % (variant, rc)
+            return False, '%s: recording failed (%s)' % (variant, exit_text(rc))
         m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
         if not m:
             return False, '%s: no token count in the guest output' % variant
@@ -1031,7 +1041,7 @@ def case_riscv_ame_verify(p, g, workdir):
     guest = os.path.join(workdir, 'gemm3-ame')
     rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start', '-DUSE_AME'])
     if rc != 0:
-        return False, 'could not build the AME variant (exit %s)' % rc
+        return False, 'could not build the AME variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3ame')
     rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     names = {5: 'RVV differs', 6: 'IME differs', 8: 'AME differs from scalar', 12: 'RVV and AME differ', 14: 'IME and AME differ'}
@@ -1053,11 +1063,11 @@ def case_riscv_ame_simulate(p, g, workdir):
     if not os.path.isfile(guest):
         rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start', '-DUSE_AME'])
         if rc != 0:
-            return False, 'could not build the AME variant (exit %s)' % rc
+            return False, 'could not build the AME variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3amesim')
     rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     if rc != 100:
-        return False, 'recording failed (exit %s)' % rc
+        return False, 'recording failed (%s)' % exit_text(rc)
     outdir = os.path.join(workdir, 'gemm3amesimout')
     shutil.rmtree(outdir, ignore_errors=True)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
@@ -1081,9 +1091,9 @@ def case_riscv_llm_couplings(p, g, workdir):
     for variant in ('ame', 'dma'):
         prefix = os.path.join(workdir, 'llmcpl-' + variant)
         rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
-                       '--', r['llm'][variant]], 900, cwd=workdir)
+                       '--', r['llm'][variant]], 1800, cwd=workdir)   # QEMU runs the IME/AME helpers for ~70M guest instructions
         if rc != 100:
-            return False, '%s: recording failed (exit %s)' % (variant, rc)
+            return False, '%s: recording failed (%s)' % (variant, exit_text(rc))
         m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
         mb = re.search(r'prefill batches:((?: \d+)+)', out)
         if not m or not mb:
@@ -1136,7 +1146,7 @@ def case_riscv_size32_verify(p, g, workdir):
     guest = os.path.join(workdir, 'gemm3-32')
     rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start'] + SIZE32_AME_FLAGS + SIZE32_IME_FLAGS + ['-DM=64', '-DN=64', '-DK=64'])
     if rc != 0:
-        return False, 'could not build the 32x32 variant (exit %s)' % rc
+        return False, 'could not build the 32x32 variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3-32')
     rc, out = run([r['qemu'], '-cpu', SIZE32_CPU, '-plugin', '%s,output=%s,ame_n=32' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     if rc != 100:
@@ -1236,7 +1246,7 @@ def case_riscv_vlen_probe(p, g, workdir):
                    '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest,
                    os.path.join(SNIPER_ROOT, 'test', 'riscv-vlen-probe', 'vlen_probe.c')], 300)
     if rc != 0:
-        return False, 'could not build the probe (exit %s)' % rc
+        return False, 'could not build the probe (%s)' % exit_text(rc)
     results, cap = {}, None
     vlen = 128
     while vlen <= 65536:
@@ -1287,7 +1297,7 @@ def case_riscv_footprint_lines(p, g, workdir):
                    '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-DNGATHER=8', '-o', guest,
                    os.path.join(SNIPER_ROOT, 'test', 'riscv-vlen-probe', 'gather.c')], 300)
     if rc != 0:
-        return False, 'could not build the gather guest (exit %s)' % rc
+        return False, 'could not build the gather guest (%s)' % exit_text(rc)
     report = []
     for vlen in (4096, 65536):
         lanes = vlen * 8 // 32
@@ -1329,7 +1339,7 @@ def case_riscv_vector_datapath(p, g, workdir):
     prefix = os.path.join(workdir, 'vdp')
     rc, out = run([r['qemu'], '-cpu', cpu, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', r['llm']['rvv']], 900, cwd=workdir)
     if rc != 100:
-        return False, 'recording failed (exit %s)' % rc
+        return False, 'recording failed (%s)' % exit_text(rc)
     cycles, counts = {}, {}
     for width in (0, 16):
         outdir = os.path.join(workdir, 'vdp-%d' % width)
@@ -1441,11 +1451,11 @@ def case_riscv_plugin_api(p, g, workdir):
         guests[mode] = os.path.join(workdir, 'rv-ame-api%d' % mode)
         rc, out = build('rv-ame-api.c', guests[mode], ['-DMODE=%d' % mode])
         if rc != 0:
-            return False, 'could not build rv-ame-api.c mode %d (exit %s)' % (mode, rc)
+            return False, 'could not build rv-ame-api.c mode %d (%s)' % (mode, exit_text(rc))
     loop = os.path.join(workdir, 'rv-ame-loop')
     rc, out = build('rv-ame-loop.c', loop, [])
     if rc != 0:
-        return False, 'could not build rv-ame-loop.c (exit %s)' % rc
+        return False, 'could not build rv-ame-loop.c (%s)' % exit_text(rc)
     def plug(opts):
         return [r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s%s' % (p['frontend'], os.path.join(workdir, 'api'), opts), '--']
     def emulated(out):
@@ -1467,7 +1477,7 @@ def case_riscv_plugin_api(p, g, workdir):
     # without the plugin QEMU does not know the CSRs
     rc, out = run([r['qemu'], '-cpu', r['cpu'], guests[0]], 60, cwd=workdir)
     if rc != -signal.SIGILL:
-        return False, 'without the plugin the CSR read should be an illegal instruction (exit %s)' % rc
+        return False, 'without the plugin the CSR read should be an illegal instruction (%s)' % exit_text(rc)
     # the model's exceptions reach the guest as the architecture's signals
     rc, out = run(plug('') + [guests[1]], 60, cwd=workdir)
     if rc != -signal.SIGILL or 'without owning' not in out:
@@ -1516,7 +1526,7 @@ def case_riscv_ame_couplings(p, g, workdir):
     REPEAT = 16
     rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], guest, ['-Wl,-e,_start', '-DUSE_AME', '-DM=32', '-DN=32', '-DK=32', '-DAME_REPEAT=%d' % REPEAT])
     if rc != 0:
-        return False, 'could not build the 32-cubed AME variant (exit %s)' % rc
+        return False, 'could not build the 32-cubed AME variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3ame32')
     rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     if rc != 100:
@@ -1675,7 +1685,7 @@ def case_aarch64_smc_rewrite(p, g, workdir):
     rc, out = run([cc, '--target=aarch64-linux-gnu', '-O1', '-ffreestanding', '-nostdlib', '-static',
                    '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, os.path.join(PROBE_DIR, 'a64-smc-rewrite.c')], 120)
     if rc != 0:
-        return None, 'could not build a64-smc-rewrite.c (exit %s)' % rc
+        return None, 'could not build a64-smc-rewrite.c (%s)' % exit_text(rc)
     seen = {}
     for smc in ('1', '0'):
         prefix = os.path.join(workdir, 'asmc%s' % smc)
@@ -1716,17 +1726,17 @@ def case_aarch64_sve_simulate(p, g, workdir):
         rc, o = run([cc, '--target=aarch64-linux-gnu', '-O3', '-march=' + march, '-ffreestanding', '-nostdlib',
                      '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', out, src], 120)
         if rc != 0:
-            return None, 'could not build %s (exit %s)' % (name, rc)
+            return None, 'could not build %s (%s)' % (name, exit_text(rc))
         builds[name] = out
     rc, plain = run([qemu, '-cpu', 'max', builds['a64-nosve']], 120)
     answer = re.search(r'sve sum=\d+ f=\d+', plain)
     if rc != 0 or not answer:
-        return False, 'the build without SVE failed (exit %s)' % rc
+        return False, 'the build without SVE failed (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'sve')
     rc, out = run([qemu, '-cpu', 'max', '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', builds['a64-sve']],
                   300, cwd=workdir)
     if rc != 0 or answer.group(0) not in out:
-        return False, 'the SVE build gave a different answer, or failed (exit %s)' % rc
+        return False, 'the SVE build gave a different answer, or failed (%s)' % exit_text(rc)
     m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
     written = int(m.group(1)) if m else 0
     summary = []
@@ -1837,7 +1847,7 @@ def case_run_sniper_qemu_riscv_units(p, g, workdir):
     if not os.path.isfile(ame):
         rc, out = gemm_build(os.environ['SNIPER_RISCV_CC'], ame, ['-Wl,-e,_start', '-DUSE_AME'])
         if rc != 0:
-            return None, 'could not build gemm3.c with AME (exit %s)' % rc
+            return None, 'could not build gemm3.c with AME (%s)' % exit_text(rc)
     summary = []
     for name, guest, flags in (('RVV/IME', r['gemm'], []), ('AME', ame, ['--ame'])):
         outdir = os.path.join(workdir, 'live-' + name.replace('/', '-'))
@@ -1873,7 +1883,7 @@ def case_run_sniper_qemu_system(p, g, workdir):
                        '-plugin', '%s,output=%s,roi=1' % (p['frontend'], prefix)], 300, cwd=workdir)
         m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
         if rc != 0 or not m:
-            return False, 'rv-bare-roi failed under QEMU (exit %s)' % rc
+            return False, 'rv-bare-roi failed under QEMU (%s)' % exit_text(rc)
         traced = int(m.group(1))
         outdir = os.path.join(workdir, 'rvroi-sim')
         shutil.rmtree(outdir, ignore_errors=True)
@@ -1881,7 +1891,7 @@ def case_run_sniper_qemu_system(p, g, workdir):
                        '--frontend=qemu-system-riscv64', '--roi', '--',
                        '-M', 'virt', '-bios', 'none', '-nographic', '-kernel', r['guest']], 900, cwd=SNIPER_ROOT)
         if rc != 0 or 'rv roi ' + ROI_SUM not in out:
-            return False, 'run-sniper --frontend=qemu-system-riscv64 failed (exit %s)' % rc
+            return False, 'run-sniper --frontend=qemu-system-riscv64 failed (%s)' % exit_text(rc)
         n = sim_instructions(outdir)
         if abs(n - traced) > traced // 1000:
             return False, 'RISC-V: simulated %d instructions, the ROI holds %d' % (n, traced)
