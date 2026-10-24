@@ -208,7 +208,14 @@ if do_stats:
           print_result('%-*s' % (prefixes_len, prefix), v)
 
   else:
-    results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
+    try:
+      results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
+    except (ValueError, sniper_lib.SniperResultsException) as e:
+      # a run that ended before its ROI did (a crash, a refused start) has no
+      # roi-end snapshot, or no results at all: say so, in place of the
+      # traceback that hid the real error
+      print('dumpstats: no statistics to report (%s): the run did not reach its end' % e, file=sys.stderr)
+      sys.exit(1)
 
     with sniper_lib.OutputToLess():
       for key, value in sorted(list(results['results'].items()), key = lambda key_value: key_value[0].lower()):
