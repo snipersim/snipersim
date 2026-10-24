@@ -31,8 +31,13 @@ With ASLR pinned, five identical runs moved 6 counters out of 2603.  Four are
 host wall-clock readings and are dropped outright (VOLATILE).  The other two are
 `L2.store-overlapping-misses{,-data}`, which moved by exactly 1 on a value of
 19 -- a genuine simulation counter that is simply not stable to the last count.
-(Re-measured 2026-10-24 over five runs: the same two counters and no other,
-moving between 24 and 28; TOL_ABS sits above that.)
+Re-measured 2026-10-24: the same two counters and no other, 25 to 28 between
+runs on an idle host and 19 to 13 when the host was loaded (the run took six
+times as long), so they follow the host's timing -- whether a store finds an
+earlier miss still outstanding depends on how the simulator's threads
+interleave at equal simulated times -- and they are dropped with the
+wall-clock readings rather than covered by a tolerance wide enough to hide a
+real change in another counter.
 
 So the comparison is numeric with a tolerance rather than exact: a counter
 passes when it is within TOL_ABS counts or TOL_REL of the baseline.  The
@@ -40,15 +45,28 @@ defaults sit just above the measured floor, which keeps the check able to notice
 a real change (an unintended behaviour change moves many counters, or moves one
 by far more than a count) without failing on the one that will not sit still.
 
-The child's environment is fixed too, and for the same reason.  The guest's
-stack sits above its environment block, so anything that changes that block
-moves every address below it: adding the three variables `make` exports
-(MAKELEVEL, MAKEFLAGS, MFLAGS) moves 108 counters here.  Baselines blessed from
-a shell would then never match a run under `make regress`, which is the way the
-regression actually invokes this.  So run_sniper() passes an explicit
-environment built from a fixed whitelist rather than inheriting one, and the
-baseline records a digest of it -- a mismatch is then reported as a mismatch
-rather than looking like a behaviour change.
+The guest's environment is controlled completely, and for the same reason.
+The guest's stack sits above its environment block, so anything that changes
+that block moves every address below it: adding the three variables `make`
+exports (MAKELEVEL, MAKEFLAGS, MFLAGS) moves 108 counters here, and 200 bytes
+more in any variable move mmu.tlb_latency_1 by 28%.  Inheriting a whitelist of
+variables was not enough: run-sniper itself puts the checkout's and the Pin
+kit's absolute paths into the guest's environment (SNIPER_ROOT, GRAPHITE_ROOT,
+SNIPER_BUILD_DIR, PYTHONPATH, LD_LIBRARY_PATH, PIN_VM_LD_LIBRARY_PATH, PWD), so
+the same baseline could never match from another checkout or another user's
+home.  (SDE adds SDE_COMMAND_LINE, the tool's command line, and SDE_GDB_XML,
+the real path of its own kit; the first follows the link, the second cannot
+and its length is part of the digest.)  So every run goes through a symlink of fixed length (CANON_ROOT, under
+/tmp, named by uid and a hash of the checkout) that points at this tree:
+run-sniper is invoked by that path with it as the working directory and as
+SNIPER_ROOT, the workload too, and the environment holds nothing else but a
+constant PATH and HOME=CANON_ROOT.  Every string on the guest's stack then has
+the same length everywhere, which is all the layout depends on.  The baseline
+records a digest of that environment with the link's name masked, so the
+digest is the same for everyone; a mismatch (a PATH that had to be extended to
+find python3, a build chosen with SNIPER_BUILD_DIR) is reported as a mismatch
+rather than looking like a behaviour change, and so is a changed recorder, whose
+shared object Pin loads into the guest.
 
 The workload is built at a fixed path, and that matters more than it looks.
 With ASLR off the guest's addresses are determined by its environment, and the
@@ -56,7 +74,7 @@ program path is part of that: the same binary run from two paths of different
 lengths differs in 303 of 2342 counters here.  Compiling it into a fresh
 temporary directory per run -- which this suite did at first -- therefore
 produced a different answer every invocation and made the comparison
-meaningless.
+meaningless.  Through CANON_ROOT its path has the same length everywhere.
 
 Baselines are local, not committed: they depend on the host toolchain (the
 workload is compiled here) so a checked-in copy would be noise on any other
@@ -100,11 +118,15 @@ GOLDEN_DIR = os.path.join(HERE, 'goldens', 'virtuoso')
 
 # Host measurements, not simulation results.  These differ run to run by
 # construction and say nothing about whether behaviour changed.
-VOLATILE = ('roi.ipscore', 'roi.ipstotal', 'roi.walltime', 'time.walltime')
+VOLATILE = ('roi.ipscore', 'roi.ipstotal', 'roi.walltime', 'time.walltime',
+            # host-timing dependent (see the module docstring): 25 -> 28 on an
+            # idle host, 19 -> 13 on a loaded one, every other counter still
+            'L2.store-overlapping-misses', 'L2.store-overlapping-misses-data')
 
-# Measured noise floor is 1 count on one counter; these sit just above it.
-TOL_ABS = 4          # counts; absorbs the L2.store-overlapping-misses jitter (up to 3 measured)
-TOL_REL = 0.001      # 0.1%; every other counter was stable to the last digit
+# With the volatile counters dropped, every remaining one was stable to the
+# last digit over the runs measured; the tolerances sit just above zero.
+TOL_ABS = 2          # counts
+TOL_REL = 0.001      # 0.1%
 
 # The configurations that must not move.  Deliberately the plain ones: none of
 # them exercises anything Virtuoso adds, which is exactly why they are the
@@ -1632,19 +1654,46 @@ def have_setarch():
     return shutil.which('setarch') is not None
 
 
-# Variables the child is allowed to see.  Everything else is dropped, so the
-# result does not depend on who invoked the suite.  See the module docstring.
-ENV_KEEP = ('PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'SHELL',
-            'CC', 'CXX', 'PYTHONPATH')
+# The guest's environment, built from constants rather than inherited; see the
+# module docstring.  CANON_ROOT is a symlink to SNIPER_ROOT whose name has the
+# same length for every checkout and every user; run-sniper is invoked through
+# it, and the paths it derives (and puts into the guest's environment) all
+# start with it.
+CANON_ROOT = '/tmp/sniper-vt-%08x-%s' % (os.getuid(), hashlib.sha1(
+    os.path.realpath(SNIPER_ROOT).encode()).hexdigest()[:8])
+CANON_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+
+def canon_root():
+    """Make CANON_ROOT point at this tree (it is ours alone: the name hashes
+    the tree's real path) and return it."""
+    target = os.path.realpath(SNIPER_ROOT)
+    try:
+        if os.readlink(CANON_ROOT) == target:
+            return CANON_ROOT
+        os.unlink(CANON_ROOT)
+    except FileNotFoundError:
+        pass
+    os.symlink(target, CANON_ROOT)
+    return CANON_ROOT
 
 
 def child_env():
-    env = {k: os.environ[k] for k in ENV_KEEP if k in os.environ}
-    # SNIPER_* selects the build and the dependency cache, so it has to survive.
-    env.update({k: v for k, v in os.environ.items() if k.startswith('SNIPER_')})
-    # Not this one: it points at the regression run's timing log, and its value
-    # changes per invocation.
-    env.pop('SNIPER_REGRESS_LOG', None)
+    root = canon_root()
+    path = CANON_PATH
+    for tool in ('python3', 'setarch'):
+        if shutil.which(tool, path=path) is None:
+            found = shutil.which(tool)
+            if found:
+                path = os.path.dirname(found) + ':' + path   # digest differs, and says so
+    # PWD too: run-sniper launches the tool through a shell, which keeps a
+    # PWD that names the working directory and would otherwise set it to the
+    # directory's real path.
+    env = {'PATH': path, 'HOME': root, 'SNIPER_ROOT': root, 'PWD': root}
+    # A build chosen by hand goes through to run-sniper (which also puts it in
+    # the guest's environment); the tree's default needs nothing.
+    if os.environ.get('SNIPER_BUILD_DIR'):
+        env['SNIPER_BUILD_DIR'] = os.environ['SNIPER_BUILD_DIR']
     return env
 
 
@@ -1663,7 +1712,14 @@ def run_env(extra=None):
 
 
 def env_digest():
-    e = child_env()
+    """The guest's environment with the canonical link's name masked, so the
+    digest is the same for every checkout and user.  One string on the guest's
+    stack escapes the link: SDE sets SDE_GDB_XML from the real path of its own
+    binary, which is the dependency cache's (under the user's home), so that
+    path's length goes into the digest -- a different length is a different
+    layout, and is reported as such."""
+    e = {k: v.replace(CANON_ROOT, '<root>') for k, v in child_env().items()}
+    e['<sde-path-length>'] = str(len(os.path.realpath(os.path.join(SNIPER_ROOT, 'sde_kit'))))
     return hashlib.sha1(
         '\n'.join('%s=%s' % kv for kv in sorted(e.items())).encode()
     ).hexdigest()[:12]
@@ -1673,16 +1729,17 @@ RECORDER_SO = os.path.join(SNIPER_ROOT, 'sift', 'recorder', 'obj-intel64', 'sde_
 
 
 def recorder_digest():
-    """The SIFT recorder's shared object, which Pin loads into the guest: its
-    size places the guest's own mappings, so a recorder built from different
-    sources moves the layout-sensitive counters (TLB latencies, page walks,
-    DRAM device time) by tens of percent with nothing in the model changed
-    -- 200 bytes more environment do the same.  Recorded with the baseline so
-    that a changed recorder reads as 're-bless', not as model drift."""
+    """The size of the SIFT recorder's shared object, which Pin loads into the
+    guest: it places the guest's own mappings, so a recorder built from
+    different sources moves the layout-sensitive counters (TLB latencies, page
+    walks, DRAM device time) by tens of percent with nothing in the model
+    changed -- 200 bytes more environment do the same.  Recorded with the
+    baseline so that a changed recorder reads as 're-bless', not as model
+    drift.  The size, not a hash: two builds of the same sources differ in
+    their bytes (paths, timestamps) and lay the guest out the same."""
     if not os.path.exists(RECORDER_SO):
         return None
-    with open(RECORDER_SO, 'rb') as f:
-        return hashlib.sha1(f.read()).hexdigest()[:12]
+    return 'size %d' % os.path.getsize(RECORDER_SO)
 
 
 def record_trace(app, name, expect):
@@ -1721,6 +1778,15 @@ def record_trace(app, name, expect):
     return sift, None
 
 
+def canon_path(path):
+    """A path under this tree, spelled through CANON_ROOT (its argv[0] is on
+    the guest's stack too); any other path as it is."""
+    real, tree = os.path.realpath(path), os.path.realpath(SNIPER_ROOT)
+    if real == tree or real.startswith(tree + os.sep):
+        return canon_root() + real[len(tree):]
+    return path
+
+
 def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
                extra_env=None, app_args=None, traces=None):
     """One simulation, with ASLR pinned so the statistics are reproducible.
@@ -1732,18 +1798,19 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
     cmd = []
     if have_setarch():
         cmd += ['setarch', '-R']
-    cmd += [os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', str(ncores)]
+    root = canon_root()
+    cmd += [os.path.join(root, 'run-sniper'), '-n', str(ncores)]
     # a name starting with '-' is passed to run-sniper as it is (e.g. '-slive:50000')
     cmd += [n if n.startswith('-') else '-c' + n for n in names]
     cmd += ['-d', outdir]
     if traces:
         cmd += ['--traces=' + ','.join(traces)]
     else:
-        cmd += ['--', workload]
+        cmd += ['--', canon_path(workload)]
         cmd += list(app_args or [])
     try:
         p = subprocess.run(cmd, timeout=timeout, stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, text=True, cwd=SNIPER_ROOT,
+                           stderr=subprocess.STDOUT, text=True, cwd=root,
                            env=run_env(extra_env), start_new_session=True)
     except subprocess.TimeoutExpired:
         return None, 'timed out after %ds' % timeout
