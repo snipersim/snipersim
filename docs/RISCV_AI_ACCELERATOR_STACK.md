@@ -221,7 +221,7 @@ the marker:
 |---|---|
 | `[perf_model/core/vector]` | `datapath_bytes` (0: a whole register group per cycle, the placeholder; 64: a vector instruction holds its port for the cycles its group takes through a 64-byte datapath), `lmul` (the group size assumed) |
 | `[perf_model/ame_tile]` | `coupling` (`ica`, `oca_l1`, `oca_l2`, `oca_llc`, `nca`), `dispatch_latency`, `result_latency`, `bytes_per_cycle`, `mma_issue_cycles`, `mma_macs_per_cycle`, `mma_latency`, `other_latency`, `macs_per_cycle` (the DMA accelerator's rate) |
-| `[perf_model/dram]` | `per_controller_bandwidth = 5` GB/s shipped; the LLM cases and sweeps override to 25.6 |
+| `[perf_model/dram]` | `per_controller_bandwidth = 25.6` GB/s: one DDR4-3200 channel, the edge system the studies assume (`base.cfg`'s 5 is a placeholder); `tools/llm/wide-sweep.sh` sweeps it |
 
 **The attached tile** (`rob_performance_model/ame_tile.{h,cc}`): with a
 coupling other than `ica`, the AME and Xsnacc micro-ops stay in the core's
@@ -426,7 +426,7 @@ Traced and simulated, with the per-token cost and the exact counts:
 ```bash
 # verify:agent-simulate
 $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-rvv -- $WORK/agent-rvv > $WORK/agent-rvv.out; grep -E '^tokens|^attention' $WORK/agent-rvv.out
-./run-sniper -n 1 -c riscv -d $WORK/agent-rvv-sim -g perf_model/dram/per_controller_bandwidth=25.6 --traces=$WORK/agent-rvv.app0.th0.sift > /dev/null
+./run-sniper -n 1 -c riscv -d $WORK/agent-rvv-sim --traces=$WORK/agent-rvv.app0.th0.sift > /dev/null
 python3 - <<'EOF'
 import re
 st = dict(l.split(' = ', 1) for l in open('/tmp/sniper-riscv-examples/agent-rvv-sim/simulation/sim.stats') if ' = ' in l)
@@ -445,11 +445,11 @@ two rates (the tile's statistics show the work moved off the core):
 $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-ame -- $WORK/agent-ame > /dev/null
 $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-dma -- $WORK/agent-dma > /dev/null
 for c in oca_l2 nca; do
-   ./run-sniper -n 1 -c riscv -d $WORK/ame-$c -g perf_model/ame_tile/coupling=$c -g perf_model/dram/per_controller_bandwidth=25.6 --traces=$WORK/agent-ame.app0.th0.sift > /dev/null
+   ./run-sniper -n 1 -c riscv -d $WORK/ame-$c -g perf_model/ame_tile/coupling=$c --traces=$WORK/agent-ame.app0.th0.sift > /dev/null
    echo "ame/$c: $(grep -E '^performance_model.cycle_count|^ame_tile.mma ' $WORK/ame-$c/simulation/sim.stats | tr '\n' ' ')"
 done
 for macs in 16 1024; do
-   ./run-sniper -n 1 -c riscv -d $WORK/dma-$macs -g perf_model/ame_tile/coupling=nca -g perf_model/ame_tile/macs_per_cycle=$macs -g perf_model/dram/per_controller_bandwidth=25.6 --traces=$WORK/agent-dma.app0.th0.sift > /dev/null
+   ./run-sniper -n 1 -c riscv -d $WORK/dma-$macs -g perf_model/ame_tile/coupling=nca -g perf_model/ame_tile/macs_per_cycle=$macs --traces=$WORK/agent-dma.app0.th0.sift > /dev/null
    echo "dma at $macs MACs/cycle: $(grep -E '^performance_model.cycle_count|^ame_tile.tasks |^ame_tile.task_macs ' $WORK/dma-$macs/simulation/sim.stats | tr '\n' ' ')"
 done
 ```
@@ -464,7 +464,7 @@ rvcc -I test/llm-agent -DUSE_IME -DIME_VLEN=4096 -DIME_LMUL=8 -DIME_LAMBDA=4 -o 
 CPU4K=${RVCPU/vlen=128/vlen=4096}
 $SNIPER_QEMU_RISCV -cpu $CPU4K $WORK/agent-ime32 > /dev/null; echo "ime32 exit $?"
 $SNIPER_QEMU_RISCV -cpu $CPU4K -plugin $PLUGIN,output=$WORK/agent-ame32,ame_n=32 -- $WORK/agent-ame32 > /dev/null; echo "ame32 exit $?"
-./run-sniper -n 1 -c riscv -d $WORK/ame32-sim -g perf_model/core/riscv/ame_mma_issue_cycles=32 -g perf_model/dram/per_controller_bandwidth=25.6 --traces=$WORK/agent-ame32.app0.th0.sift > /dev/null
+./run-sniper -n 1 -c riscv -d $WORK/ame32-sim -g perf_model/core/riscv/ame_mma_issue_cycles=32 --traces=$WORK/agent-ame32.app0.th0.sift > /dev/null
 grep -E '^performance_model.cycle_count|^riscv.ame_mma ' $WORK/ame32-sim/simulation/sim.stats
 ```
 

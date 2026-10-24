@@ -862,8 +862,8 @@ LLM_GEOMETRY = {'ime': (2, 16), 'ime32': (32, 2), 'ame': (4, 16), 'ame32': (32, 
 
 # The memory side of the agent runs: an edge LPDDR bandwidth (config/riscv.cfg
 # ships 5 GB/s), and the DRAM traffic per token in the summaries.
-LLM_DRAM_GBS = 25.6
-LLM_DRAM_ARGS = ['-g', 'perf_model/dram/per_controller_bandwidth=%s' % LLM_DRAM_GBS]
+LLM_DRAM_GBS = 25.6   # the riscv configuration's per_controller_bandwidth, for the report text
+LLM_DRAM_ARGS = []    # no override: the cases run on the configuration's default
 
 def dram_per_token(stats, tokens):
     """DRAM traffic per token; a read or write is one 64-byte line."""
