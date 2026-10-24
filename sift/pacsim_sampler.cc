@@ -34,7 +34,17 @@ void Region::measured(uint64_t fs_, uint64_t l2_, uint64_t l2miss_)
 
 void Region::absorb(const Region &r)
 {
+   prev_time_per_ins = time_per_ins;
    fs = r.fs; max_ins = r.max_ins; time_per_ins = r.time_per_ins; measurements++;
+}
+
+/* measured often enough, and the last two measurements agree (Options::converge) */
+bool Region::settled(unsigned min_measurements, double converge) const
+{
+   if (measurements < min_measurements) return false;
+   if (converge <= 0 || measurements < 2 || time_per_ins <= 0) return true;
+   const double d = time_per_ins > prev_time_per_ins ? time_per_ins - prev_time_per_ins : prev_time_per_ins - time_per_ins;
+   return d <= converge * time_per_ins;
 }
 
 /* An unmeasured region: its threads' time at the rate of its cluster, less
@@ -120,8 +130,10 @@ bool History::predict(const std::vector<uint64_t> &hist, uint64_t &out) const
 Sampler::Sampler(const Options &options, FrontEnd &front_end)
    : m_options(options), m_fe(front_end), m_nt(options.max_threads)
    , m_threshold(options.region_size), m_min(options.min_region_size)
+   , m_loop_min(options.loop_min == 0 ? (options.region_size / 100 > 0 ? options.region_size / 100 : 1) : options.loop_min)
    , m_clusterer(options.cluster_threshold)
    , m_ins(m_nt, 0), m_region_ins(m_nt, 0), m_bbv(m_nt, (Bbv *)NULL), m_region_bbv(m_nt, std::vector<uint64_t>(DIM, 0)), m_flush(m_nt, false)
+   , m_last_edge(m_nt)
 {
    for (unsigned t = 0; t < m_nt; t++) m_bbv[t] = new Bbv();
 }
@@ -168,8 +180,11 @@ void Sampler::gotoDetailed(unsigned tid)
 
 void Sampler::gotoFastForward(unsigned tid)
 {
-   const bool warmup = m_options.fast_forward == FastForwardKind::Warmup;
-   m_fe.setFastForward(m_options.fast_forward);
+   /* With a warm-up window the region starts as counting; block() turns the
+      warm-up on when the region is within the window of its budget. */
+   const bool warmup = m_options.fast_forward == FastForwardKind::Warmup && m_options.warmup_window == 0;
+   m_warming = false;
+   m_fe.setFastForward(warmup ? FastForwardKind::Warmup : FastForwardKind::Icount);
    magic(tid, SIM_CMD_INSTRUMENT_MODE, warmup ? SIM_OPT_INSTRUMENT_WARMUP : SIM_OPT_INSTRUMENT_FASTFORWARD);
    for (unsigned t = 0; t < m_nt; t++) m_flush[t] = true;
    flushIcount(tid);
@@ -263,6 +278,7 @@ void Sampler::endRegion(unsigned tid, uint64_t pc, RecordType type, bool can_mea
    Predictor &p = m_predictors[m_region_pc];
    m_cluster_history.push_back(r.cluster);
    p.history.learn(m_cluster_history);
+   m_global_history.learn(m_cluster_history);
    std::map<uint64_t, Region>::iterator k = p.known.find(r.cluster);
    if (measured)
    {
@@ -289,18 +305,36 @@ void Sampler::endRegion(unsigned tid, uint64_t pc, RecordType type, bool can_mea
 /* detail, unless the region about to start at pc is predicted to repeat a cluster measured often enough */
 Mode Sampler::decide(uint64_t pc)
 {
+   /* The cluster expected next: this cut point's history over the run's
+      cluster sequence, else what followed this cut point last time, else
+      what the run saw last -- a cut point seen for the first time is not a
+      reason to measure what the run already knows.  A loop with several
+      back-edges (a compiler's token loop: 23 cut points in the agent's
+      generate()) otherwise learned every cluster afresh at each of them,
+      two measurements a time, and measured 49 regions of 83 where the
+      clusters repeated after a dozen. */
    std::map<uint64_t, Predictor>::iterator it = m_predictors.find(pc);
-   if (it == m_predictors.end() || !it->second.any)
-      return Mode::Detailed;
-   Predictor &p = it->second;
-   uint64_t cluster = p.last_cluster;
-   p.history.predict(m_cluster_history, cluster);
-   std::map<uint64_t, Region>::iterator k = p.known.find(cluster);
-   if (k != p.known.end())
-      return k->second.measurements >= m_options.min_measurements ? Mode::FastForward : Mode::Detailed;
+   Predictor *p = (it != m_predictors.end() && it->second.any) ? &it->second : NULL;
+   uint64_t cluster = p ? p->last_cluster : (m_cluster_history.empty() ? 0 : m_cluster_history.back());
+   if (p)
+      p->history.predict(m_cluster_history, cluster);
+   else if (!m_cluster_history.empty())
+      m_global_history.predict(m_cluster_history, cluster);
+   /* How often the cluster was measured: here or anywhere; a representative
+      measured at another cut point is as good as one measured at this one */
+   const Region *rep = NULL;
+   if (p)
+   {
+      std::map<uint64_t, Region>::iterator k = p->known.find(cluster);
+      if (k != p->known.end()) rep = &k->second;
+   }
    std::map<uint64_t, Region>::iterator g = m_global.find(cluster);
-   if (g != m_global.end() && g->second.measurements >= m_options.min_measurements) { p.known[cluster] = g->second; return Mode::FastForward; }
-   return Mode::Detailed;
+   if (g != m_global.end() && (!rep || g->second.measurements > rep->measurements))
+   {
+      rep = &g->second;
+      if (p && rep->settled(m_options.min_measurements, m_options.converge)) p->known[cluster] = g->second;
+   }
+   return rep && rep->settled(m_options.min_measurements, m_options.converge) ? Mode::FastForward : Mode::Detailed;
 }
 
 void Sampler::cut(unsigned tid, uint64_t pc, RecordType type, bool can_measure)
@@ -370,7 +404,12 @@ void Sampler::write()
    for (size_t i = 0; i < m_regions.size(); i++) time_sum += m_regions[i].fs;
    const std::string path = m_options.output_dir + "/pacsim_regions.json";
    std::ofstream out(path.c_str());
-   out << "{ \"time_sum\": " << time_sum << ", \"time_cluster\": 0, \"time_prediction\": 0,\n\"feature_stack\": [\n";
+   /* "solved": every region's fs is final -- measured, or extrapolated by
+      repair() from the latest measurement of its cluster; the reader must
+      not redo the extrapolation from the regions measured before it (its
+      legacy, for regions the recorder left at fs 0), which would let a
+      run's cold first regions stand for their cluster */
+   out << "{ \"time_sum\": " << time_sum << ", \"solved\": true, \"time_cluster\": 0, \"time_prediction\": 0,\n\"feature_stack\": [\n";
    for (size_t i = 0; i < m_regions.size(); i++) out << (i ? ",\n" : "") << m_regions[i].json(m_nthreads);
    out << "\n] }\n";
    out.close();
@@ -381,11 +420,33 @@ void Sampler::write()
    m_fe.log(s.str());
 }
 
-void Sampler::block(unsigned tid, uint32_t n, uint64_t addr)
+bool Sampler::block(unsigned tid, uint32_t n, uint64_t addr, bool can_block)
 {
+   if (m_flush[tid] && !can_block) return true;   /* the flush asks the simulator for the mode */
    m_ins[tid] += n;
    m_bbv[tid]->count(addr, n);
    if (m_flush[tid]) flushIcount(tid);
+   /* The warm-up window: the fast-forwarded region has run to within the
+      window of its budget, so the caches are warmed from here to the cut. */
+   if (m_started && !m_finished && m_mode == Mode::FastForward && !m_warming
+       && m_options.fast_forward == FastForwardKind::Warmup && m_options.warmup_window > 0
+       && sinceCut() + m_options.warmup_window >= m_threshold)
+   {
+      if (!can_block) return true;
+      if (m_fe.tryLock())
+      {
+         if (m_mode == Mode::FastForward && !m_warming)
+         {
+            m_warming = true;
+            m_fe.setFastForward(FastForwardKind::Warmup);
+            magic(tid, SIM_CMD_INSTRUMENT_MODE, SIM_OPT_INSTRUMENT_WARMUP);
+            for (unsigned t = 0; t < m_nt; t++) m_flush[t] = true;
+            flushIcount(tid);
+         }
+         m_fe.unlock();
+      }
+   }
+   return false;
 }
 
 void Sampler::roiBegin(unsigned tid)
@@ -395,32 +456,65 @@ void Sampler::roiBegin(unsigned tid)
    m_fe.unlock();
 }
 
-void Sampler::backEdge(unsigned tid, uint64_t addr)
+bool Sampler::backEdge(unsigned tid, uint64_t addr, bool conditional, bool can_block)
 {
-   if (!m_started || m_finished || !m_fe.inRoi() || !m_fe.channelAlive(tid)) return;
-   if (sinceCut() < m_threshold) return;
-   if (!m_fe.tryLock()) return;
+   if (!m_started || m_finished || !m_fe.inRoi() || !m_fe.channelAlive(tid)) return false;
+   if (!conditional && m_options.conditional_only) return false;
+   /* The loop's iteration, from this back-edge's previous firing on this
+      thread (Options::loop_min).  A region boundary should be an iteration
+      boundary of a loop with iterations of some length -- the loop over a
+      phase, not the tight loop inside it: a cut at a tight loop's back-edge
+      falls wherever the budget runs out, at a point that depends on how far
+      each thread has got, and regions made that way cluster poorly (the
+      barrier shape's compute phase split that way took its estimate from
+      0.1% off to 5%, the loop shape's to 17%).  The front ends report every
+      backward direct branch, conditional or not; the choice is made here,
+      the same for both.  A back-edge qualifies when its loop's previous
+      iteration ran at least loop_min instructions, and any back-edge is
+      taken once twice the budget has passed without one, so a program
+      whose loops are all tight still gets its regions.  With loop_min = 1
+      every back-edge qualifies at once: the paper's rule. */
+   bool coarse = true;
+   if (m_loop_min > 1)
+   {
+      uint64_t &last = m_last_edge[tid][addr];
+      const uint64_t now = m_ins[tid];
+      coarse = last != 0 && now - last >= m_loop_min;
+      last = now;
+   }
+   if (sinceCut() < m_threshold) return false;
+   if (!coarse && sinceCut() < 2 * m_threshold) return false;
+   if (!can_block) return true;                  /* a cut: questions for the simulator */
+   if (!m_fe.tryLock()) return false;
    if (!m_finished && sinceCut() >= m_threshold)
       cut(tid, addr, RecordType::IntraBarrier);
    m_fe.unlock();
+   return false;
 }
 
 /* The region ends with the last active thread's arrival, so that the
    threads' phases line up inside it -- cutting at the first arrival would
    put the other threads' tails into the next region, and a tail run by one
    thread looks nothing like the phase it belongs to. */
-void Sampler::syncPoint(unsigned tid, uint64_t addr)
+bool Sampler::syncPoint(unsigned tid, uint64_t addr, bool can_block)
 {
-   if (!m_started || m_finished || !m_fe.inRoi() || !m_fe.channelAlive(tid)) return;
-   if (!m_fe.tryLock()) return;
+   if (!m_started || m_finished || !m_fe.inRoi() || !m_fe.channelAlive(tid)) return false;
+   if (!m_fe.tryLock()) return false;
+   bool deferred = false;
    if (!m_finished)
    {
       std::set<unsigned> &here = m_arrived[addr];
-      here.insert(tid);
+      here.insert(tid);            /* the arrival counts either way; a second call finds it there */
       if (here.size() >= activeThreads() && sinceCut() >= m_min)
-         cut(tid, addr, RecordType::MultiThread);
+      {
+         if (can_block)
+            cut(tid, addr, RecordType::MultiThread);
+         else
+            deferred = true;
+      }
    }
    m_fe.unlock();
+   return deferred;
 }
 
 void Sampler::threadStart(unsigned tid)

@@ -126,6 +126,11 @@ class PacSimDumpStats:
         total_time = records['time_sum']
     else:
         total_time = 0
+    # The sampler solves every region itself (the latest measurement of a
+    # cluster stands for it) and says so; a record without the flag comes
+    # from the legacy recorder, which left the unmeasured regions at fs 0 for
+    # extrapolate_feature_of_same_threads to fill from the regions before them.
+    self.solved = bool(records.get("solved", False))
 
     # The run's wall time, from the simulator's own statistics (time.walltime,
     # microseconds): the time the sampled run took, which is what the
@@ -356,7 +361,14 @@ class PacSimDumpStats:
         active_nums[activenum] += 1
         active_each_feature[activenum].append(feature)
     for ti,features in enumerate( active_each_feature ):
-        self.extrapolate_feature_of_same_threads(features)
+        if self.solved:
+            for feature in features:
+                feature["solved"] = True
+                lvl = 0 if feature["feature_level"] == 1 else 1
+                self.time_each_feature_level[lvl] += feature["fs"]
+                self.num_each_feature_level[lvl] += max(feature["insnums"])
+        else:
+            self.extrapolate_feature_of_same_threads(features)
 
     total_time = 0
     if "flush" in self.config:

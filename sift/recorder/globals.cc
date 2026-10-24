@@ -67,3 +67,7 @@ std::unordered_map<ADDRINT, bool> routines;
 std::ofstream *vma_output = NULL;
 
 extrae_image_t extrae_image;
+KNOB<std::string> KnobPacSimConverge(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-converge", "0.10", "fast-forward a cluster only once its last two measurements agree on the time per instruction to within this fraction (0: as soon as it has pacsim-min-measurements)");
+KNOB<UINT64> KnobPacSimWarmupWindow(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-warmup-window", "0", "with warm-up between measured regions: warm only the last K thousand instructions of a fast-forwarded region, counting through the rest (0: warm the whole region)");
+KNOB<UINT64> KnobPacSimLoopMin(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-loop-min", "1", "shortest loop iteration (instructions) whose back-edge may end a region: 1 = any back-edge (the paper's rule), 0 = 1% of the region size");
+KNOB<std::string> KnobPacSimMarkers(KNOB_MODE_WRITEONCE, "pintool", "sniper:pacsim-markers", "cond", "backward branches that may end a region: cond (conditional only, the paper's rule) or all (unconditional jumps too)");

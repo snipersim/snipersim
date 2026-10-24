@@ -27,6 +27,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace pacsim
@@ -46,8 +47,38 @@ struct Options
 {
    uint64_t region_size = 50000000;      /* instructions between the threads before a loop back-edge cuts */
    uint64_t min_region_size = 2000000;   /* a shorter region joins the next */
+   /* Which back-edges may cut.  The paper (Liu et al., TACO 2024, III-A)
+      takes conditional branches with negative offsets as loop markers and
+      cuts at the first one beyond the budget: the default, loop_min = 1 with
+      conditional_only.  Two variations are available, tried while looking
+      into small budgets (regions a fraction of a loop iteration, where which
+      loop the cut falls in matters), neither of which proved better than the
+      paper's rule on the suite's loop shape: loop_min > 1 admits a back-edge
+      only when its loop's previous iteration ran at least that many
+      instructions (0: 1% of the budget), with any back-edge accepted once
+      twice the budget has passed; conditional_only = false admits
+      unconditional backward jumps too (a compiler closes many loops with
+      one). */
+   uint64_t loop_min = 1;
+   bool conditional_only = true;
    double   cluster_threshold = 0.2;     /* L1 distance between block mixes below which regions share a cluster */
    unsigned min_measurements = 2;        /* measure a cluster this many times before fast-forwarding it */
+   /* With cache warm-up between measured regions (fast_forward == Warmup):
+      how much of a fast-forwarded region is warmed, counted back from its
+      expected end (the budget).  0 warms the whole region, which costs
+      about 0.6 of detailed simulation per instruction (the caches are
+      simulated functionally) and caps the speedup near 1.5x however much
+      repeats; a window counts through the rest of the region at almost no
+      cost and warms only the stretch before the next region, where the
+      caches it leaves behind matter. */
+   uint64_t warmup_window = 0;
+   /* A cluster is fast-forwarded only once its last two measurements agree
+      on the time per instruction to within this fraction (0: as soon as it
+      has min_measurements).  The first regions of a run carry its cold
+      start -- the agent's first prompt ran at 0.99 fs per instruction, its
+      later prompts at 0.55 -- and a representative taken then overstates
+      every region extrapolated from it. */
+   double converge = 0.10;
    FastForwardKind fast_forward = FastForwardKind::Warmup;
    unsigned max_threads = 128;
    std::string output_dir = ".";
@@ -91,11 +122,13 @@ struct Region
    Predict predict = Predict::D2D;
    bool solved = false;
    double time_per_ins = 0;
+   double prev_time_per_ins = 0;       /* the measurement before the latest, for Options::converge */
    unsigned measurements = 0;          /* of a cluster's representative: how many times it was measured */
    uint64_t lag = 0;                   /* at the region's start: how far the cutting thread's core was behind the furthest core */
 
    void measured(uint64_t fs_, uint64_t l2_, uint64_t l2miss_);
    void absorb(const Region &r);       /* the latest measurement stands for the cluster */
+   bool settled(unsigned min_measurements, double converge) const;
    void extrapolate(double tpi, Level from);
    std::string json(unsigned nthreads) const;
 };
@@ -134,14 +167,21 @@ public:
    Sampler(const Options &options, FrontEnd &front_end);
    ~Sampler();
 
+   /* The three events, each of which may end in a question to the simulator
+      (a cut, or a flush of the thread's count) that waits for the answer.  A
+      front end that cannot wait where the event fires -- the QEMU plugin,
+      whose vCPU must leave the run loop first -- calls with can_block false:
+      an event that would wait is then left undone and reported (true), and
+      the front end calls again, where it can wait, with can_block true.  An
+      event that needs no answer completes either way (false). */
    /* every basic block, every thread, every mode */
-   void block(unsigned tid, uint32_t n, uint64_t addr);
+   bool block(unsigned tid, uint32_t n, uint64_t addr, bool can_block = true);
    /* the ROI opened, on this thread, in detailed mode */
    void roiBegin(unsigned tid);
    /* a loop back-edge, on any thread: a cut point once the budget is spent */
-   void backEdge(unsigned tid, uint64_t addr);
+   bool backEdge(unsigned tid, uint64_t addr, bool conditional, bool can_block = true);
    /* a synchronisation point, keyed by its call site: a cut once every active thread has reached it */
-   void syncPoint(unsigned tid, uint64_t addr);
+   bool syncPoint(unsigned tid, uint64_t addr, bool can_block = true);
    void threadStart(unsigned tid);
    /* the end: at ROI end (the last region can still be measured), at exit,
       or at the front end's own end (the channels are closed by then) */
@@ -169,13 +209,16 @@ private:
    FrontEnd &m_fe;
    const unsigned m_nt;
    const uint64_t m_threshold, m_min;
+   const uint64_t m_loop_min;                         /* a loop iteration this long makes its back-edge a cut candidate (Options::loop_min) */
    Clusterer m_clusterer;
    Mode m_mode = Mode::Detailed;
    bool m_started = false, m_finished = false;
+   bool m_warming = false;                /* a windowed warm-up has begun in this fast-forwarded region */
    std::vector<uint64_t> m_ins, m_region_ins;        /* per thread: total, at the region's start */
    std::vector<Bbv *> m_bbv;
    std::vector<std::vector<uint64_t> > m_region_bbv;  /* per thread, at the region's start */
    std::vector<bool> m_flush;                         /* a count flush is owed before the next record */
+   std::vector<std::unordered_map<uint64_t, uint64_t> > m_last_edge;   /* per thread: the instruction count when a back-edge last fired */
    unsigned m_nthreads = 1;
    uint64_t m_prior_fs = 0, m_prior_l2 = 0, m_prior_l2miss = 0;
    uint64_t m_region_pc = 0;
@@ -183,6 +226,7 @@ private:
    std::vector<Region> m_regions;
    std::vector<uint64_t> m_cluster_history;
    std::map<uint64_t, Predictor> m_predictors;
+   History m_global_history;              /* the run's cluster sequence, for a cut point not seen before */
    std::map<uint64_t, std::set<unsigned> > m_arrived;  /* per synchronisation site: the threads that reached it since the region began */
    std::map<uint64_t, Region> m_global;                 /* cluster -> measured representative, any cut point */
 };

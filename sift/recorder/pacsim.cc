@@ -40,17 +40,32 @@ static PinFrontEnd *g_front_end = NULL;
 static Sampler *g_sampler = NULL;
 
 static VOID onBlock(THREADID tid, UINT32 n, ADDRINT addr) { g_sampler->block(tid, n, addr); }
-static VOID onBackEdge(THREADID tid, ADDRINT addr) { g_sampler->backEdge(tid, addr); }
+static VOID onBackEdge(THREADID tid, ADDRINT addr, BOOL conditional) { g_sampler->backEdge(tid, addr, conditional); }
 static VOID onSync(THREADID tid, ADDRINT addr) { g_sampler->syncPoint(tid, addr); }
 static VOID onExit(THREADID tid, ADDRINT addr) { g_sampler->finish(tid, addr, in_roi && thread_data[tid].output); }
 
 static VOID traceCallback(TRACE trace, VOID *)
 {
    for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl))
+   {
       BBL_InsertCall(bbl, IPOINT_ANYWHERE, (AFUNPTR)onBlock, IARG_THREAD_ID, IARG_UINT32, BBL_NumIns(bbl), IARG_ADDRINT, BBL_Address(bbl), IARG_END);
-   INS tail = BBL_InsTail(TRACE_BblTail(trace));
-   if (INS_IsDirectControlFlow(tail) && INS_HasFallThrough(tail) && INS_DirectControlFlowTargetAddress(tail) < INS_Address(tail))
-      INS_InsertPredicatedCall(tail, IPOINT_BEFORE, (AFUNPTR)onBackEdge, IARG_THREAD_ID, IARG_INST_PTR, IARG_END);
+      /* every backward conditional branch is a loop back-edge, wherever it
+         falls in the trace.  Only the trace's last block was examined before,
+         and a loop whose branch ends a block in the middle of a trace (the
+         compute loop of testing/apps/phased.c: its fall-through continues the
+         trace) was never seen; the QEMU front end sees every block's branch,
+         and cut where this did not.  The two front ends deliver the same
+         events for the same program. */
+      /* Conditional or not: a compiler closes most loops with an unconditional
+         jump back to a test at the top (the loop over the phases in
+         testing/apps/phased.c), and a program whose only conditional backward
+         branches are its tight inner loops would otherwise offer the sampler
+         no coarse boundary.  Not a call: a call to a function at a lower
+         address is not a loop. */
+      INS tail = BBL_InsTail(bbl);
+      if (INS_IsDirectControlFlow(tail) && !INS_IsCall(tail) && INS_DirectControlFlowTargetAddress(tail) < INS_Address(tail))
+         INS_InsertPredicatedCall(tail, IPOINT_BEFORE, (AFUNPTR)onBackEdge, IARG_THREAD_ID, IARG_INST_PTR, IARG_BOOL, INS_HasFallThrough(tail), IARG_END);
+   }
    RTN rtn = TRACE_Rtn(trace);
    if (RTN_Valid(rtn) && RTN_Address(rtn) == TRACE_Address(trace))
    {
@@ -100,9 +115,13 @@ void activate()
    Options o;
    o.region_size = KnobPacSimRegionSize.Value() * 1000;
    o.min_region_size = KnobPacSimMinRegionSize.Value() * 1000;
+   o.loop_min = KnobPacSimLoopMin.Value();
+   o.conditional_only = KnobPacSimMarkers.Value() != "all";
    o.cluster_threshold = KnobPacSimClusterThreshold.Value();
    o.min_measurements = KnobPacSimMinMeasurements.Value();
    o.fast_forward = KnobPacSimWarmup.Value() ? FastForwardKind::Warmup : FastForwardKind::Icount;
+   o.warmup_window = KnobPacSimWarmupWindow.Value() * 1000;
+   o.converge = atof(KnobPacSimConverge.Value().c_str());
    o.max_threads = MAX_NUM_THREADS_DEFAULT;
    o.output_dir = KnobPacSimDir.Value().c_str();
    o.verbose = KnobVerbose.Value();

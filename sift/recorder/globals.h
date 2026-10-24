@@ -106,3 +106,7 @@ typedef uint64_t syscall_args_t[6];
 */
 
 #endif // __GLOBALS_H
+extern KNOB<std::string> KnobPacSimConverge;
+extern KNOB<UINT64> KnobPacSimWarmupWindow;
+extern KNOB<UINT64> KnobPacSimLoopMin;
+extern KNOB<std::string> KnobPacSimMarkers;
