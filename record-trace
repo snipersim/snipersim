@@ -223,6 +223,7 @@ pinoptions += (' ' + ' '.join(extra_pin_args))
 # application unsampled, and produces results that look ordinary and are not
 # the methodology the user asked for.
 PACSIM_KNOB = b'sniper:pacsim'
+PACSIM_KNOB_QEMU = b'pacsim-region-size'   # the plugin spells its options without the prefix
 
 # Where the recorder writes its per-region data, the file the analysis scripts
 # read.  MTNG was Pac-Sim's earlier name; the knob is spelled both ways here so
@@ -235,7 +236,7 @@ PACSIM_KNOB = b'sniper:pacsim'
 DIR_KNOBS = (b'sniper:pacsim-dir', b'sniper:mtng-dir')
 
 def recorder_has_pacsim(tool_path):
-  return has_knob(tool_path, PACSIM_KNOB)
+  return has_knob(tool_path, PACSIM_KNOB_QEMU if tool_path.endswith('.so') else PACSIM_KNOB)
 
 def has_knob(tool_path, knob):
   try:
@@ -340,7 +341,6 @@ def qemu_command():
   # not what was asked for, with nothing in it to say so.
   if use_pid:        qemu_refuse('attaching to a running process (--pid)')
   if pinball:        qemu_refuse('pinball replay')
-  if enable_pacsim:  qemu_refuse('Pac-Sim sampling (--pacsim)')
   if roi_mpi:        qemu_refuse('MPI (--roi-mpi)')
   if fastforward or detailed or blocksize:
     qemu_refuse('instruction-count windows (-f/-d/-b); use --roi with SimRoiStart()/SimRoiEnd()')
@@ -355,6 +355,28 @@ def qemu_command():
   popts = [ 'output=%s' % outputfile, 'app=%d' % siftcountoffset ]
   if use_roi:
     popts.append('roi=1')
+  if enable_pacsim:
+    # The sampler lives in the plugin (frontend/qemu-plugin/pacsim_qemu.cc);
+    # it needs the live channel and the ROI, which run-sniper --pacsim gives.
+    if system or not useresponsefiles or not use_roi:
+      qemu_refuse('Pac-Sim sampling without a live channel and an ROI (run-sniper --pacsim --roi, user mode)')
+    require_pacsim(plugin)
+    popts += [ 'pacsim=1', 'pacsim-dir=%s' % outputdir ]
+    if cmdline and os.path.isfile(cmdline[0]):
+      popts.append('pacsim-syms=%s' % os.path.abspath(cmdline[0]))   # the synchronisation points, from the ELF
+  # Recorder knobs given as --trace-args (-sniper:name value) are the plugin's
+  # name=value options, so one run-sniper line serves both front ends.
+  toks = extra_tool_args.split()
+  i = 0
+  while i < len(toks):
+    if toks[i].startswith('-sniper:'):
+      name = toks[i][len('-sniper:'):]
+      if i + 1 < len(toks) and not toks[i + 1].startswith('-'):
+        popts.append('%s=%s' % (name, toks[i + 1])); i += 2
+      else:
+        popts.append(name); i += 1
+    else:
+      popts.append(toks[i]); i += 1
   if not track_smc:
     popts.append('smc=0')
   if verbose:
