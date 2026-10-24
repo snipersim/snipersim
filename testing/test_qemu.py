@@ -100,6 +100,14 @@ def exit_text(rc):
     """How run() ended, for a failure message: a timeout comes back as None."""
     return 'timed out' if rc is None else 'exit %s' % rc
 
+def sniper_failed(rc, out):
+    """A run-sniper failure with the end of its output, which is where the
+    simulator's backtrace (a crash), its assertion or the error it stopped on
+    is; a one-off failure under the whole suite is otherwise unexplained
+    once the temporary directory is gone."""
+    tail = [l.strip()[:160] for l in out.splitlines() if l.strip()][-10:]
+    return 'run-sniper %s%s' % (exit_text(rc), (': ' + ' | '.join(tail)) if tail else '')
+
 
 def build_guests(workdir):
     """Build the probe and its hand-written guests against the pinned QEMU.
@@ -158,7 +166,7 @@ def case_user_simulate(p, g, workdir):
     if rc is None:
         return False, 'simulation timed out'
     if rc != 0:
-        return False, 'run-sniper exited %d' % rc
+        return False, sniper_failed(rc, out)
     m = re.search(r'Simulated ([\d.]+)M instructions, ([\d.]+)M cycles, ([\d.]+) IPC', out)
     if not m:
         return False, 'no simulation summary'
@@ -493,7 +501,7 @@ def case_aarch64_user_simulate(p, g, workdir):
             if rc != 0:
                 if 'built without the armv8 decoder' in out:
                     return None, 'Sniper built without the ARM decoder (make ARM=ON)'
-                return False, '%s on %s: run-sniper exited %s' % (name, cfg, rc)
+                return False, '%s on %s: %s' % (name, cfg, sniper_failed(rc, out))
             stats = {}
             for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
                 if ' = ' in line:
@@ -598,7 +606,7 @@ def case_riscv_user_simulate(p, g, workdir):
     if rc != 0:
         if 'Unknown core model riscv' in out:
             return None, 'Sniper built without the RISC-V core model (make RISCV=ON)'
-        return False, 'run-sniper exited %d' % rc
+        return False, sniper_failed(rc, out)
     stats = {}
     for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
         if ' = ' in line:
@@ -698,7 +706,7 @@ def case_riscv_ime_simulate(p, g, workdir):
     if rc != 0:
         if 'Unknown core model riscv' in out:
             return None, 'Sniper built without the RISC-V core model (make RISCV=ON)'
-        return False, 'run-sniper exited %d' % rc
+        return False, sniper_failed(rc, out)
     if 'undecoded instruction' in out:
         return False, 'the decoder did not recognise an instruction: %s' % re.search(r'undecoded instruction[^\n]*', out).group(0)
     stats = {}
@@ -772,7 +780,7 @@ def case_riscv_gemm_simulate(p, g, workdir):
     if rc is None:
         return False, 'simulation timed out'
     if rc != 0:
-        return False, 'run-sniper exited %d' % rc
+        return False, sniper_failed(rc, out)
     if 'undecoded instruction' in out:
         return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
     rc, out = run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'riscv', 'expected_counts.py'),
@@ -1000,7 +1008,7 @@ def case_riscv_llm_simulate(p, g, workdir):
         if rc is None:
             return False, '%s: simulation timed out' % variant
         if rc != 0:
-            return False, '%s: run-sniper exited %d' % (variant, rc)
+            return False, '%s: %s' % (variant, sniper_failed(rc, out))
         if 'undecoded instruction' in out:
             return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
         stats = {}
@@ -1073,7 +1081,7 @@ def case_riscv_ame_simulate(p, g, workdir):
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
                    '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
     if rc is None or rc != 0:
-        return False, 'run-sniper exited %s' % rc
+        return False, sniper_failed(rc, out)
     if 'undecoded instruction' in out:
         return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
     rc, out = run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'riscv', 'expected_counts.py'), '--ame',
@@ -1108,7 +1116,7 @@ def case_riscv_llm_couplings(p, g, workdir):
                            '-g', 'perf_model/ame_tile/coupling=' + coupling] + LLM_DRAM_ARGS
                           + ['--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
             if rc is None or rc != 0:
-                return False, '%s/%s: run-sniper exited %s' % (variant, coupling, rc)
+                return False, '%s/%s: %s' % (variant, coupling, sniper_failed(rc, out))
             stats = {}
             for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
                 if ' = ' in line:
@@ -1159,7 +1167,7 @@ def case_riscv_size32_verify(p, g, workdir):
                    '-g', 'perf_model/core/riscv/vector_bytes=512', '-g', 'perf_model/core/riscv/ame_mma_issue_cycles=32',
                    '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
     if rc is None or rc != 0:
-        return False, 'run-sniper exited %s' % rc
+        return False, sniper_failed(rc, out)
     rc, out = run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'riscv', 'expected_counts.py'), '--ame', '--ame-n', '32',
                    '--vlen', '4096', '--lmul', '8', '--lam', '4', '--m', '64', '--n', '64', '--k', '64',
                    os.path.join(outdir, 'simulation', 'sim.stats')], 60)
@@ -1207,7 +1215,7 @@ def case_riscv_llm_size32(p, g, workdir):
         rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir] + gargs + LLM_DRAM_ARGS
                       + ['--traces=' + prefix + '.app0.th0.sift'], 5400, cwd=SNIPER_ROOT)
         if rc is None or rc != 0:
-            return False, '%s/%s: run-sniper exited %s' % (variant, coupling, rc)
+            return False, '%s/%s: %s' % (variant, coupling, sniper_failed(rc, out))
         stats = {}
         for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
             if ' = ' in line:
@@ -1312,7 +1320,7 @@ def case_riscv_footprint_lines(p, g, workdir):
         rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
                        '-g', 'perf_model/core/riscv/vector_bytes=%d' % (vlen // 8), '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
         if rc is None or rc != 0:
-            return False, 'run-sniper exited %s at %d bits' % (rc, vlen)
+            return False, '%s at %d bits' % (sniper_failed(rc, out), vlen)
         stats = {}
         for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
             if ' = ' in line:
@@ -1348,7 +1356,7 @@ def case_riscv_vector_datapath(p, g, workdir):
                        '-g', 'perf_model/core/riscv/vector_bytes=512', '-g', 'perf_model/core/vector/datapath_bytes=%d' % width,
                        '--traces=' + prefix + '.app0.th0.sift'], 3600, cwd=SNIPER_ROOT)
         if rc is None or rc != 0:
-            return False, 'run-sniper exited %s (datapath %d)' % (rc, width)
+            return False, '%s (datapath %d)' % (sniper_failed(rc, out), width)
         stats = {}
         for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
             if ' = ' in line:
@@ -1546,7 +1554,7 @@ def case_riscv_ame_couplings(p, g, workdir):
         rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir,
                        '-g', 'perf_model/ame_tile/coupling=' + coupling, '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
         if rc is None or rc != 0:
-            return False, '%s: run-sniper exited %s' % (coupling, rc)
+            return False, '%s: %s' % (coupling, sniper_failed(rc, out))
         stats = {}
         for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
             if ' = ' in line:
@@ -1927,7 +1935,7 @@ def case_run_sniper_qemu_system(p, g, workdir):
                        '--frontend=qemu-system-riscv64', '--roi', '--',
                        '-M', 'virt', '-bios', 'none', '-nographic', '-kernel', r['guest']], 900, cwd=SNIPER_ROOT)
         if rc != 0 or 'rv roi ' + ROI_SUM not in out:
-            return False, 'run-sniper --frontend=qemu-system-riscv64 failed (%s)' % exit_text(rc)
+            return False, '--frontend=qemu-system-riscv64: %s' % sniper_failed(rc, out)
         n = sim_instructions(outdir)
         if abs(n - traced) > traced // 1000:
             return False, 'RISC-V: simulated %d instructions, the ROI holds %d' % (n, traced)
