@@ -194,16 +194,26 @@ class Tee:
 def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None):
   tee = Tee(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), '[%s] ' % (tag or 'app%d' % app_id))
   tee.redirect()
+  rc = 0
   try:
-    program_func(program_arg)
+    rc = program_func(program_arg)
   finally:
     tee.close()
+  # The function's status is this process's exit code, so the parent learns
+  # it (run_program_redirect returns it).  subprocess reports a signal as a
+  # negative number; an exit code cannot be, so it goes as 128 + signal.
+  if isinstance(rc, int) and rc != 0:
+    sys.exit(rc if rc > 0 else 128 - rc)
 
 def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None):
+  """Run program_func(program_arg) in a child process with its output tagged
+  and logged; return what the function returned (0 when it returned nothing,
+  128 + signal when the program it ran was killed by one)."""
   import multiprocessing # module does not exist in Python <= 2.5, import only when needed
   proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id, tag))
   proc.start()
   proc.join()
+  return proc.exitcode
 
 def run_program_repeat(app_id, program_func, program_arg, outputdir):
   global running
@@ -313,7 +323,15 @@ def setup_env(sim_root, pin_home, arch, standalone = False, xed_home = None, tor
   if not standalone:
     ld_library_path.append('%s/%s/runtime/cpplibs' % (pin_home, arch))
     ld_library_path.append('%s/%s/runtime' % (pin_home, arch))
-    ld_library_path.append('%s/extras/xed-%s/lib' % (pin_home, arch))
+    # Not the kit's extras/xed-<arch>/lib.  Pin starts the application with
+    # LD_LIBRARY_PATH set to this path (PIN_VM_LD_LIBRARY_PATH; the
+    # application's own, PIN_APP_LD_LIBRARY_PATH, is restored only after
+    # injection), so a program that itself links libxed.so -- the simulator
+    # run as an application, test/sniper-in-sniper -- resolved it to the
+    # kit's copy, which is built on Pin's C runtime, and died at exec with
+    # "error while loading shared libraries: libpincrt.so".  The recorder tool
+    # finds its XED through SDE; the in-Pin simulator that needed this entry
+    # is gone.
   else:
     if xed_home:
       ld_library_path.append('%s/lib' % (xed_home,))

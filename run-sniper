@@ -2,6 +2,7 @@
 
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, queue, shlex
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
+import shutil
 import sniper_lib, sniper_config, gen_simout, debugpin, env_setup, run_sniper
 
 HOME = env_setup.sim_root()
@@ -45,6 +46,10 @@ def usage():
         '  [--pin-stats]' + \
         '  [--wrap-sim=]' + \
         '  [--sde-arch=]' + \
+        '  [--build-dir=<build directory>] [--curdir=<dir>]' + \
+        '  [--trace-args="<recorder options>"] [--trace-pin-args="<pin options>"] [--record-trace-option=<option>]' + \
+        '  [--frontend-option=<qemu option>] [--qemu-va-bits=<39|48>] [--maxthreads=<n>] [--stop-address=<address>]' + \
+        '  [--follow-execv=<0|1>] [--valgrind] [--response-traces=<trace0>,...]' + \
         '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec="<mpiexec -mpiarg...>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
@@ -54,6 +59,9 @@ def usage():
         '  -- <cmdline> }')
   print()
   print('Example: $ ./run-sniper -- /bin/ls')
+  print()
+  print('Environment: SNIPER_OUTPUT_DIR (the output directory when -d is absent), SNIPER_BUILD_DIR,')
+  print(' SNIPER_QEMU_X86_64 / SNIPER_QEMU_AARCH64 / SNIPER_QEMU_RISCV / SNIPER_QEMU_RISCV_IME_CPU (the QEMU front end).')
   print()
   print('Note: To get started quickly with our integrated benchmarks distribution (supports SPLASH-2 and PARSEC 2.1),')
   print(' see http://snipersim.org/w/Download_Benchmarks')
@@ -527,10 +535,9 @@ if standalone:
   if use_wrap_sim and use_gdb:
     print('Cannot use both --wrap-sim and --gdb at the same time [wrap-cmd="%(use_wrap_sim)s"]' % locals(), file=sys.stderr)
     sys.exit(-1)
-  if follow_execv:
-    print('--follow-execv required running the simulator inside Pin, which has been removed.',
+  if follow_execv and (traces or trace_manual or pinballs):
+    print('--follow-execv applies to a recorded run (it tells the SDE recorder to follow exec), not to traces or pinballs.',
           file=sys.stderr)
-    print('Use --sift (the default) and record child processes with record-trace.', file=sys.stderr)
     sys.exit(-1)
 
 if use_profile and use_memory_profile:
@@ -590,10 +597,39 @@ if heteroconfig:
   fp.close()
   configfiles.append(hcfgfile)
 
+def elf_machine(path):
+  """The e_machine of an ELF file (62 x86-64, 183 AArch64, 243 RISC-V), or None."""
+  try:
+    with open(path, 'rb') as f:
+      h = f.read(20)
+  except (IOError, TypeError):
+    return None
+  if len(h) < 20 or h[:4] != b'\x7fELF':
+    return None
+  return int.from_bytes(h[18:20], 'little' if h[5] == 1 else 'big')
+
 if not configfiles:
-  # No config file(s) specified: prepend default Xeon X5550 Gainestown
-  configfiles = add_config_file('gainestown')
-  configfiles.extend(add_config_file('rob'))
+  # No configuration given: the Xeon X5550 Gainestown, except under the QEMU
+  # front end with a RISC-V or AArch64 guest, which gets that architecture's
+  # own configuration (riscv, cortex-a72) -- the x86 core model would refuse
+  # the trace.  --traces= runs cannot tell and keep the default; the
+  # simulator refuses a mismatched trace with the configuration to use.
+  default = 'gainestown'
+  if frontend and frontend.startswith('qemu'):
+    arch_cfg = { 'riscv64': 'riscv', 'aarch64': 'cortex-a72' }
+    if frontend.startswith('qemu-system-'):
+      guest_arch = frontend[len('qemu-system-'):]
+    else:
+      prog = cmdline[0] if cmdline else None
+      if prog and os.sep not in prog:
+        prog = shutil.which(prog) or prog
+      guest_arch = { 243: 'riscv64', 183: 'aarch64' }.get(elf_machine(prog))
+    if guest_arch in arch_cfg:
+      default = arch_cfg[guest_arch]
+      print('[SNIPER] No -c given: the %s configuration, for a %s guest' % (default, guest_arch))
+  configfiles = add_config_file(default)
+  if default == 'gainestown':
+    configfiles.extend(add_config_file('rob'))
 # Prepend config files to options, so -g options are always later on the command line and override config files
 sniperoptions = [ '--config=%s' % cfgfile for cfgfile in configfiles ] + sniperoptions
 
@@ -757,7 +793,7 @@ elif use_mpi:
       if tracegen['num_apps'] > 1:
         print('[SNIPER] Warning: Unable to use physical addresses for shared memory simulation.', file=sys.stderr)
   applications = [
-    (mpiexec, other_options + [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
+    (mpiexec, other_options + [ roi_only and '--roi' or '--roi-mpi', '-e', '1', '-s', '-1', '-r', '1', '--routine-tracing', '--' ] + cmdline)
   ]
 elif pinballs:
   tracegen = {}
@@ -787,18 +823,22 @@ elif use_sift:
     other_options += [ '--pid', use_pid ]
   if use_pa:
     other_options += [ '--pa' ]
+  if follow_execv:
+    other_options += [ '--follow' ]        # SDE follows exec (-follow_subprocess); off unless asked, as it always was in effect
   applications = [
-    ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--follow', '--routine-tracing', '--' ] + cmdline)
+    ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--routine-tracing', '--' ] + cmdline)
   ]
 
 # Setup common generated trace files
 tracecmds = []
+stopping = False       # set once the simulator has exited; the recorder threads read it
 if tracegen:
   tracegen['enabled'] = 'true'
   sniperoptions.append('-g --traceinput/enabled=%s' % tracegen['enabled'])
   sniperoptions.append('-g --traceinput/emulate_syscalls=%s' % tracegen['emulate_syscalls'])
   sniperoptions.append('-g --traceinput/num_apps=%d' % tracegen['num_apps'])
   tracegen['tracefiles_created'] = [] # FIFOs to be cleaned up
+  tracegen['recorder_status'] = []     # (application, exit status), as each recorder exits
   basefname = 'run_benchmarks'
   tracegen['tracetempdir'] = tempfile.mkdtemp()
   traceprefix = os.path.join(tracegen['tracetempdir'], basefname)
@@ -835,7 +875,50 @@ if tracegen:
     # left alive to clean up, because run-sniper has been killed and never
     # reaches its own cleanup.  The reparenting problem is solved at cleanup
     # time instead, by finding these processes by name rather than by lineage.
-    subprocess.Popen(tracecmd).communicate()
+    return subprocess.Popen(tracecmd).wait()
+
+  def recorder_done(app_id, rc):
+    """In run-sniper's own process, once application app_id's recorder has
+    exited with status rc (negative: killed by that signal).  The redirected
+    recorder runs in a multiprocessing child, so this cannot be done where
+    the recorder is waited for."""
+    tracegen['recorder_status'].append((app_id, rc))
+    if rc == 0:
+      return
+    print('[SNIPER] The recorder for application %d exited with status %d' % (app_id, rc))
+    # The simulator opens each trace FIFO with a blocking open, which returns
+    # only when a writer appears; it gives up after 60 s ("Could not establish
+    # SIFT connection").  A recorder that refused its options, or whose Pin,
+    # QEMU or application failed before it opened its stream, left the
+    # simulator waiting out that minute.  Opening this application's FIFOs
+    # for writing and closing them lets the open return at once; the
+    # simulator reads an empty stream and ends.  A FIFO with no reader
+    # waiting (ENXIO) is one the simulator has read already, or has not
+    # reached yet: the probe is repeated until the simulator gets there or
+    # is gone.
+    deadline = time.time() + 30
+    fifos = [ f for f in tracegen['tracefiles_created'] if '.app%d.' % app_id in f and '_response' not in f ]
+    while fifos and not stopping and time.time() < deadline:
+      for f in list(fifos):
+        try:
+          fd = os.open(f, os.O_WRONLY | os.O_NONBLOCK)
+          os.close(fd)
+          fifos.remove(f)
+          print('[SNIPER] Application %d ended before the simulator had its stream; the simulation cannot continue' % app_id)
+        except OSError:
+          pass
+      time.sleep(0.2)
+
+  def run_recorder(app_id, tracecmd, tag):
+    if tracegen['redirect']:
+      rc = run_sniper.run_program_redirect(app_id, run_sift_recorder, tracecmd, outputdir, 0, tag)
+      if rc is None:
+        rc = 1
+      elif rc > 128:
+        rc = -(rc - 128)            # the child encodes a signal as 128 + signal
+    else:
+      rc = run_sift_recorder(tracecmd)
+    recorder_done(app_id, rc)
   if pinplay_addrtrans:
     trace_extra_args += [ '--pinplay-addr-trans' ]
   if frontend:
@@ -852,9 +935,9 @@ if tracegen:
     if tracegen['redirect']: # redirect output
       # The userspace MimicOS kernel is tagged for what it is, not as an app.
       tag = 'kernel' if any(os.path.basename(a) == 'startup_mimicos' for a in app_cmd) else None
-      threading.Thread(target = run_sniper.run_program_redirect, args = (app_id, run_sift_recorder, tracecmd, outputdir, 0, tag)).start()
+      threading.Thread(target = run_recorder, args = (app_id, tracecmd, tag)).start()
     else:                    # inline output
-      threading.Thread(target = run_sift_recorder, args = (tracecmd,)).start()
+      threading.Thread(target = run_recorder, args = (app_id, tracecmd, None)).start()
 
 sniperoptions = ' '.join(sniperoptions)
 
@@ -995,7 +1078,9 @@ if save_patch:
   os.system("git --work-tree='%(sniperrootdir)s' --git-dir='%(gitdir)s' diff >> '%(patchfile)s'" % locals())
 
 backtracefile = os.path.join(outputdir, 'debug_backtrace.out')
-for filetodelete in (backtracefile, 'sim.out', 'sim.cfg', 'sim.info', 'sim.stats.sqlite3', 'pin.log'):
+for filetodelete in (backtracefile, 'sim.out', 'sim.cfg', 'sim.info', 'sim.stats', 'sim.stats.sqlite3', 'pin.log',
+                     os.path.join('simulation', 'sim.out'), os.path.join('simulation', 'sim.stats'),
+                     os.path.join('simulation', 'sim.info'), os.path.join('simulation', 'sim.cfg')):
   filetodelete = os.path.join(outputdir, filetodelete)
   try: os.unlink(filetodelete)
   except OSError: pass
@@ -1019,6 +1104,21 @@ except KeyboardInterrupt:
 
 
 stopping = True
+# The recorder's exit status was collected and dropped: a recorder (Pin, QEMU
+# or the application under it) killed by a signal mid-run closed its stream,
+# the simulator finished on what it had, and run-sniper exited 0.  A signal
+# is now the run's status (128 + the signal, as a shell reports it) when the
+# simulator's own is 0; an application's ordinary non-zero exit is reported
+# and noted in sim.out, and the simulator's status stays the run's.
+recorder_signals = []
+if tracegen:
+  recorder_signals = [ (a, -st) for a, st in tracegen.get('recorder_status', []) if st < 0 ]
+  if rc == 0 and recorder_signals:
+    rc = 128 + recorder_signals[0][1]
+    print('[SNIPER] Exiting with status %d: the recorder for application %d was killed by signal %d'
+          % (rc, recorder_signals[0][0], recorder_signals[0][1]))
+if rc != 0 and not recorder_signals:
+  print('[SNIPER] The simulator exited with status %d' % rc)
 t_end = time.time()
 t_elapsed = t_end - t_start
 print('[SNIPER] End')
@@ -1099,12 +1199,41 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
     print('[SNIPER] Generating ASO visualization in viz/levels/functionbased/')
     os.system('%(sim_root)s/tools/viz/functionbased.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
-  gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'), silent = True)
+  # On a failed run the results are partial; sim.out gets what can be made of
+  # them and a note, and a traceback here must not replace the exit status.
+  try:
+    gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'), silent = True)
+  except Exception as e:
+    print('[SNIPER] Could not generate sim.out:', e, file=sys.stderr)
+  # A recorder that failed before it streamed anything (its options refused,
+  # Pin or QEMU failed to start) leaves the simulator to run an empty stream
+  # to a clean end: no instructions, exit 0.  That is the recorder's failure,
+  # and the run's status.
+  if rc == 0 and tracegen and any(st != 0 for a, st in tracegen.get('recorder_status', [])):
+    try:
+      insns = [ int(x) for x in open(os.path.join(outputdir, 'sim.out')).read().split('Instructions', 1)[1].split('\n', 1)[0].replace('|', ' ').split() ]
+    except (IOError, IndexError, ValueError):
+      insns = [ 0 ]
+    if sum(insns) == 0:
+      failed = [ st for a, st in tracegen['recorder_status'] if st != 0 ]
+      rc = failed[0] if failed[0] > 0 else 128 - failed[0]
+      print('[SNIPER] Exiting with status %d: the recorder failed and nothing was simulated' % rc)
+  notes = []
+  if rc != 0:
+    notes.append('the run ended with exit status %d; these results are partial' % rc)
+  for a, st in (tracegen.get('recorder_status', []) if tracegen else []):
+    if st != 0:
+      notes.append('the recorder for application %d exited with status %d' % (a, st))
+  if notes:
+    try:
+      with open(os.path.join(outputdir, 'sim.out'), 'a') as f:
+        f.write('\n' + ''.join('[SNIPER] %s\n' % n for n in notes))
+    except OSError:
+      pass
 
   # Organize output files into subdirectories
   print('[SNIPER] Organizing output files')
   import glob
-  import shutil
   
   # Create subdirectories
   logs_dir = os.path.join(outputdir, 'logs')
@@ -1115,19 +1244,28 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
     if not os.path.exists(subdir):
       os.makedirs(subdir)
   
-  # Move files containing "log" in their name to logs/
+  # Only files this run wrote: the output directory defaults to the current
+  # one, where the user's own logs, .csv files and sim.* would otherwise be
+  # moved too.  Written by this run means modified since it started.
+  def this_runs(path):
+    try:
+      return os.path.isfile(path) and os.path.getmtime(path) >= t_start - 1
+    except OSError:
+      return False
+
+  # Files containing "log" in their name to logs/
   for logfile in glob.glob(os.path.join(outputdir, '*log*')):
-    if os.path.isfile(logfile):
+    if this_runs(logfile):
       shutil.move(logfile, os.path.join(logs_dir, os.path.basename(logfile)))
-  
-  # Move *.csv files to telemetry/
+
+  # *.csv files to telemetry/
   for csvfile in glob.glob(os.path.join(outputdir, '*.csv')):
-    if os.path.isfile(csvfile):
+    if this_runs(csvfile):
       shutil.move(csvfile, os.path.join(telemetry_dir, os.path.basename(csvfile)))
-  
-  # Move sim.* files to simulation/
+
+  # sim.* files to simulation/
   for simfile in glob.glob(os.path.join(outputdir, 'sim.*')):
-    if os.path.isfile(simfile):
+    if this_runs(simfile):
       shutil.move(simfile, os.path.join(simulation_dir, os.path.basename(simfile)))
 
 

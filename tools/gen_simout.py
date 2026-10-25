@@ -30,7 +30,7 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
   if 'barrier.global_time' in results:
     time0 = results['barrier.global_time'][0]
   else:
-    time0 = time0_begin - time0_end
+    time0 = time0_end - time0_begin
 
   if sum(results['performance_model.instruction_count']) == 0:
     # core.instructions is less exact, but in cache-only mode it's all there is
