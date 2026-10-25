@@ -2092,7 +2092,7 @@ def main():
             else:
                 ok, detail = compare(name, stats, args.tol_abs, args.tol_rel)
                 log.record('invariance:' + name, took,
-                           'PASS' if ok is not False else 'FAIL')
+                           'SKIP' if ok is None else ('PASS' if ok else 'FAIL'))
                 if ok is None:
                     print('SKIP (%s) [%ds]' % (detail, round(took)))
                 elif ok:

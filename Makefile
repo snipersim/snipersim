@@ -16,6 +16,11 @@
 #                          directory, for debugging that one failure
 #     make deps            acquire dependencies only
 #     make configure       configure only
+#     make QEMU=ON ARM=ON DYNAMORIO=ON RISCV_IME=ON TORCH=ON MPI=ON MCPAT=OFF
+#                          the feature switches (defaults below); RISCV is on
+#     make regress_<suite> one suite: scripting riscv_isa configs qemu pacsim
+#                          apps virtuoso magic; validate_pacsim, doc-verify,
+#                          doxygen, riscv-ime-check are the other targets
 #
 # Anything more than that is better said directly:
 #
@@ -85,7 +90,7 @@ _cmake_flags += $(CMAKE_ARGS)
 _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
              $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-.PHONY: all deps configure build clean distclean regress regress_scripting regress_riscv_isa regress_configs regress_qemu regress_pacsim validate_pacsim regress_apps regress_virtuoso riscv-ime-check doc-verify doxygen help
+.PHONY: all deps configure build clean distclean regress regress_scripting regress_riscv_isa regress_configs regress_qemu regress_pacsim regress_magic validate_pacsim regress_apps regress_virtuoso riscv-ime-check doc-verify doxygen help
 
 all: build
 
@@ -140,7 +145,7 @@ distclean:
 # the moment you most want the rest of the picture and the moment the report
 # would not have printed.  SNIPER_REGRESS_LOG is where the suites append their
 # per-check timings; see testing/common/runlog.py.
-REGRESS_SUITES = scripting riscv_isa configs qemu pacsim apps virtuoso
+REGRESS_SUITES = scripting riscv_isa configs qemu pacsim apps virtuoso magic
 
 # FAILFAST=ON stops at the first failing check, keeps the work directory it ran
 # in, and skips the remaining suites.  For debugging one failure, not for a
@@ -218,6 +223,9 @@ regress_pacsim:
 
 validate_pacsim:
 	@$(SIM_ROOT)/testing/test_pacsim.py --profile full
+
+regress_magic:
+	@$(SIM_ROOT)/testing/test_magic.py $(_failfast)
 
 # The header comment is the help text: print it up to the first line that is not
 # a comment, so the two cannot drift apart.

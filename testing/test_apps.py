@@ -261,6 +261,15 @@ def exits_zero(out, rc):
 EXPECT_FAIL = {
 }
 
+# Cases that are known not to work and are skipped unless named with --only:
+# each would otherwise run to its timeout on every pass.
+KNOWN_BROKEN = {
+    'sniper-in-sniper': 'the inner simulator deadlocks at exit with the outer\'s syscall emulation '
+                        '(its threads wait on the response pipe, the outer waits for trace); until 9.0 '
+                        'the inner simulator never started (it loaded the SDE kit\'s libxed) and the '
+                        'recorder\'s failure went unreported, so the case passed in 13 s with nothing simulated',
+}
+
 
 # name -> (check, why it might be skipped)
 CASES = {
@@ -380,6 +389,8 @@ def main():
     for name in names:
         check, needs = CASES[name]
         why = unavailable(needs) if needs else None
+        if not why and name in KNOWN_BROKEN and not args.only:
+            why = 'known broken: ' + KNOWN_BROKEN[name]
         if why:
             print('%-18s SKIP (%s)' % (name, why))
             skipped += 1

@@ -355,13 +355,33 @@ def case_system_modes(p, g, workdir):
 # needs the RISC-V core model (make RISCV=ON, the default).  Skips,
 # with the reason, when any of those is missing.
 
-def riscv_prerequisites(workdir):
-    qemu = os.environ.get('SNIPER_QEMU_RISCV')
+def riscv_toolchain():
+    """The qemu-riscv64 and the clang the RISC-V cases use: SNIPER_QEMU_RISCV
+    and SNIPER_RISCV_CC when set, else the tree's own QEMU (make QEMU=ON) and a
+    clang on the PATH that has the riscv64 target, as test_magic and
+    test_pacsim default them.  Without the defaults the RISC-V cases skipped,
+    silently, on a tree that had everything they needed."""
+    qemu = os.environ.get('SNIPER_QEMU_RISCV') or os.path.join(SNIPER_ROOT, 'qemu-riscv', 'build', 'qemu-riscv64')
     cc = os.environ.get('SNIPER_RISCV_CC')
+    if not cc:
+        for name in ('clang-15', 'clang-16', 'clang-17', 'clang-18', 'clang-19', 'clang-20', 'clang'):
+            found = shutil.which(name)
+            if found:
+                cc = found
+                break
+    if cc and os.path.isfile(cc) and 'SNIPER_RISCV_CC' not in os.environ:
+        os.environ['SNIPER_RISCV_CC'] = cc      # the cases read it from the environment
+    return qemu, cc
+
+
+def riscv_prerequisites(workdir):
+    qemu, cc = riscv_toolchain()
     if not qemu or not os.path.isfile(qemu):
-        return None, 'SNIPER_QEMU_RISCV not set to a qemu-riscv64 built with --enable-plugins'
+        return None, 'no qemu-riscv64 built with --enable-plugins (make QEMU=ON, or set SNIPER_QEMU_RISCV)'
     if not cc or not os.path.isfile(cc):
-        return None, 'SNIPER_RISCV_CC not set to a RISC-V compiler'
+        return None, 'no clang with the riscv64 target (set SNIPER_RISCV_CC)'
+    if 'SNIPER_QEMU_RISCV' not in os.environ:
+        os.environ['SNIPER_QEMU_RISCV'] = qemu
     guest = os.path.join(workdir, 'rv-loop')
     if not os.path.isfile(guest):
         rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-O1',
@@ -625,7 +645,22 @@ def case_riscv_user_simulate(p, g, workdir):
         return False, '%d instructions simulated, expected exactly 100007' % n
     if correct + wrong != 20000:
         return False, '%d branches predicted, expected the loop\'s 20000' % (correct + wrong)
-    return True, '%d instructions, %d of %d branches predicted' % (n, correct, correct + wrong)
+    # The second BOOM configuration (MediumBoom) runs the same trace: the
+    # same instructions, a narrower core, so no fewer cycles.
+    outdir2 = os.path.join(workdir, 'rvsimout-mediumboom')
+    shutil.rmtree(outdir2, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv-mediumboom', '-d', outdir2,
+                   '--traces=' + prefix + '.app0.th0.sift'], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'riscv-mediumboom: %s' % sniper_failed(rc, out)
+    st2 = stats_of(outdir2)
+    n2 = int(st2.get('performance_model.instruction_count', 0))
+    if n2 != n:
+        return False, 'riscv-mediumboom simulated %d instructions, riscv %d' % (n2, n)
+    cyc, cyc2 = int(float(stats.get('performance_model.cycle_count', 0))), int(float(st2.get('performance_model.cycle_count', 0)))
+    if cyc2 < cyc:
+        return False, 'riscv-mediumboom took %d cycles, fewer than the wider riscv core\'s %d' % (cyc2, cyc)
+    return True, '%d instructions, %d of %d branches predicted; riscv %d cycles, riscv-mediumboom %d' % (n, correct, correct + wrong, cyc, cyc2)
 
 
 # The IME (Zvvm 0.9) cases need a qemu-riscv64 built with the extension's CPU
