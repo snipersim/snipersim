@@ -97,7 +97,13 @@ void Simulator::createDecoder()
       if (!m_decoder)
         LOG_PRINT_ERROR("This Sniper was built without the %s decoder (make %s=ON).", architecture.c_str(),
                         dla == dl::DL_ARCH_RISCV ? "RISCV" : "ARM");
-      m_decoder->set_vector_bytes(getCfg()->getIntDefault("perf_model/core/riscv/vector_bytes", 16));
+      // The static size of a vector memory access: RVV's from the riscv
+      // block, SVE's from the arm block (record-trace gives the AArch64
+      // guest the same vector length, sve-default-vector-length).
+      if (dla == dl::DL_ARCH_ARMv8)
+         m_decoder->set_vector_bytes(getCfg()->getIntDefault("perf_model/core/arm/sve_bytes", 16));
+      else
+         m_decoder->set_vector_bytes(getCfg()->getIntDefault("perf_model/core/riscv/vector_bytes", 16));
       m_decoder->set_ext_memory_uops(getCfg()->getIntDefault("perf_model/core/riscv/memory_uops", 16));
    }
 }

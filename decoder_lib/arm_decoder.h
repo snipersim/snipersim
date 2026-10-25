@@ -37,6 +37,8 @@ class ARMDecoder : public Decoder
     virtual bool op_is_reg (const DecodedInst * inst, unsigned int idx) override;    
     virtual decoder_reg get_op_reg (const DecodedInst * inst, unsigned int idx) override;
     virtual unsigned int size_mem_op (const DecodedInst * inst, unsigned int mem_idx) override;
+    /// SVE: the bytes one vector load or store moves (perf_model/core/arm/sve_bytes)
+    virtual void set_vector_bytes(unsigned int n) override { m_vector_bytes = n; }
     virtual unsigned int get_exec_microops(const DecodedInst *ins, int numLoads, int numStores) override;
     virtual uint32_t get_operand_size(const DecodedInst *ins) override;
     virtual bool is_cache_flush_opcode(decoder_opcode opcd) override;
@@ -56,9 +58,11 @@ class ARMDecoder : public Decoder
     const csh & get_handle() const;
     
   private:
+    unsigned int m_vector_bytes = 16;    /* SVE vector length in bytes, 128 bits unless configured */
     // Methods
     int index_mem_op(cs_insn * csi, unsigned int mem_idx);
     unsigned int size_mem_reg(const DecodedInst * inst);
+    unsigned int size_mem_fallback(const DecodedInst * inst);
     unsigned int get_bytes_vas(unsigned int vec_elem);
     unsigned int get_simd_mem_bytes(const DecodedInst * inst);
 

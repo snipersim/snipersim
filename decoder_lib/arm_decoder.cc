@@ -727,9 +727,73 @@ unsigned int ARMDecoder::size_mem_op (const DecodedInst * inst, unsigned int mem
       case ARM64_INS_LD4R:
         return this->get_simd_mem_bytes(inst) * 4;
 
-    } 
+    }
+    /* Not in the table: the LSE atomics (cas, swp, ld<op>, st<op> and
+       their forms), ldapr, ldapur and stlur, the SVE loads and stores, and
+       whatever else Capstone decodes with a memory operand.  A size of 0 was
+       a free cache hit to the core (core.cc treats it as nothing to access),
+       so glibc's LSE locks and SVE memcpy/strlen under -cpu max were
+       invisible to the memory hierarchy. */
+    return size_mem_fallback(inst);
   }
   return 0;
+}
+
+static bool mnem_is(const cs_insn *ci, const char *prefix)
+{
+  return strncmp(ci->mnemonic, prefix, strlen(prefix)) == 0;
+}
+
+unsigned int ARMDecoder::size_mem_fallback(const DecodedInst * inst)
+{
+  cs_insn *ci = ((ARMDecodedInst *)inst)->get_capstone_inst();
+  cs_arm64 *arm64 = &(ci->detail->arm64);
+  bool has_mem = false, has_z = false, has_p = false;
+  for (int i = 0; i < arm64->op_count; i++)
+  {
+    cs_arm64_op *op = &(arm64->operands[i]);
+    if (op->type == ARM64_OP_MEM)
+      has_mem = true;
+    else if (op->type == ARM64_OP_REG && op->reg >= ARM64_REG_Z0 && op->reg <= ARM64_REG_Z31)
+      has_z = true;
+    else if (op->type == ARM64_OP_REG && op->reg >= ARM64_REG_P0 && op->reg <= ARM64_REG_P15)
+      has_p = true;
+  }
+  if (!has_mem)
+    return 0;
+  const char *m = ci->mnemonic;
+  size_t n = strlen(m);
+  if (has_z || has_p)
+  {
+    /* SVE.  A predicate register alone (ldr/str p): VL/8 bytes.  A vector:
+       the vector length -- contiguous ld1b..ld1d/st1* move VL bytes (a
+       widening ld1sb moves fewer; VL stands as the bound), ld2/ld3/ld4
+       that many vectors, gathers and scatters touch VL bytes in all. */
+    if (has_p && !has_z)
+      return m_vector_bytes / 8;
+    unsigned int vectors = 1;
+    if ((m[0] == 'l' || m[0] == 's') && m[1] == 'd' + (m[0] == 's') && n > 3 && m[2] >= '2' && m[2] <= '4')
+      vectors = m[2] - '0';
+    else if (n > 3 && (mnem_is(ci, "ld") || mnem_is(ci, "st")) && m[2] >= '2' && m[2] <= '4')
+      vectors = m[2] - '0';
+    return m_vector_bytes * vectors;
+  }
+  /* The LSE atomics and the release-consistency loads/stores: the size is
+     the mnemonic's last letter (b, h, w for the signed ldapursw) or else
+     the register's width; the pair forms move two. */
+  unsigned int size;
+  char last = m[n - 1];
+  if (last == 'b')
+    size = 1;
+  else if (last == 'h')
+    size = 2;
+  else if (last == 'w' && mnem_is(ci, "ldapurs"))
+    size = 4;
+  else
+    size = size_mem_reg(inst);
+  if (mnem_is(ci, "casp") || (last == 'p' && (mnem_is(ci, "swp") || mnem_is(ci, "ldclr") || mnem_is(ci, "ldset"))))
+    size *= 2;
+  return size;
 }
 
 unsigned int ARMDecoder::get_exec_microops(const DecodedInst *ins, int numLoads, int numStores)
@@ -1312,12 +1376,20 @@ bool ARMDecodedInst::is_atomic() const
   } 
   else  
   {
-    // Get instruction Id
-    unsigned int ins_id = this->capstone_inst->id;
-    return ((ins_id >= ARM64_INS_LDXP && ins_id <= ARM64_INS_LDXR) ||
-            (ins_id >= ARM64_INS_LDXP && ins_id <= ARM64_INS_LDXR) ||
-            (ins_id >= ARM64_INS_STLXP && ins_id <= ARM64_INS_STLXR) ||
-            (ins_id >= ARM64_INS_STXP && ins_id <= ARM64_INS_STXR));
+    /* By mnemonic: the exclusives (ldxr/ldaxr/stxr/stlxr and their pair,
+       byte and halfword forms) and the LSE atomics (cas*, swp*, ld<op>*,
+       st<op>*), which glibc uses under -cpu max.  The id ranges this used
+       to test covered ldxp..ldxr, stlxp..stlxr and stxp..stxr only, so an
+       ldaxr-based lock or an LSE one was timed as plain loads and stores. */
+    static const char *const atomic_prefixes[] = {
+      "ldxr", "ldxp", "ldaxr", "ldaxp", "stxr", "stxp", "stlxr", "stlxp",
+      "cas", "swp", "ldadd", "ldclr", "ldeor", "ldset", "ldsmax", "ldsmin", "ldumax", "ldumin",
+      "stadd", "stclr", "steor", "stset", "stsmax", "stsmin", "stumax", "stumin",
+    };
+    for (size_t i = 0; i < sizeof(atomic_prefixes) / sizeof(atomic_prefixes[0]); i++)
+      if (mnem_is(this->capstone_inst, atomic_prefixes[i]))
+        return true;
+    return false;
   }
 }
 
@@ -1416,8 +1488,20 @@ bool ARMDecodedInst::is_serializing() const
       }
     }
   } 
-  // TODO for armv8 no information found!!
-  
+  else
+  {
+    /* AArch64: the instructions that drain the pipeline -- exceptions and
+       returns, the system-register writes, the instruction and data
+       synchronization barriers, the wait-for hints, the speculation barrier.
+       (dmb is a memory barrier, is_barrier(), not a drain.) */
+    static const char *const serializing[] = {
+      "svc", "hvc", "smc", "brk", "hlt", "eret", "msr", "isb", "dsb", "wfe", "wfi", "sb", "clrex", "dcps1", "dcps2", "dcps3", "drps",
+    };
+    for (size_t i = 0; i < sizeof(serializing) / sizeof(serializing[0]); i++)
+      if (strcmp(this->capstone_inst->mnemonic, serializing[i]) == 0)
+        is_serializing = true;
+  }
+
   return is_serializing;
 }
 
