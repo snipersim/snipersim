@@ -12,6 +12,9 @@ set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd); OUT=${1:?out dir}; BW=${2:-25.6}; shift 2 2>/dev/null || shift $#
 CONFIGS=${*:-"fp32-rvv fp32-rvv4k fp32-ame32 fp32-ame32-nca w4-rvv w4-rvv4k"}
 CC=${SNIPER_RISCV_CC:?}; Q=${SNIPER_QEMU_RISCV:?}; P=${SNIPER_BUILD_DIR:-$ROOT/build/default}/lib/libsniper-qemu.so
+# Guests are laid out as record-trace lays them out: within Sv39's 2^38, the
+# riscv configurations' page table (see pagetable_configs/3_level_radix_sv39.cfg).
+Q="$Q -R 0x4000000000"
 CPU128=max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on
 VEC4K=(-g perf_model/core/riscv/vector_bytes=512 -g perf_model/core/vector/datapath_bytes=64)
 mkdir -p "$OUT"; cd "$ROOT"

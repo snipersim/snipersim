@@ -59,13 +59,14 @@ if not sys.argv[1:]:
   usage()
 
 enable_pacsim = False
+qemu_va_bits = 39        # RISC-V: Sv39; see the QEMU front end below
 enable_smc = False
 # Code rewritten in place is tracked by default (Sift::CodeTracker); --no-smc
 # turns that off, --smc selects the strict per-instruction mode instead
 track_smc = True
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "frontend-option=", "maxthreads=", "sde-arch=", "pacsim", "smc", "no-smc" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "qemu-va-bits=", "frontend-option=", "maxthreads=", "sde-arch=", "pacsim", "smc", "no-smc" ])
 except getopt.GetoptError as e:
   # print help information and exit:
   print(e)
@@ -126,6 +127,11 @@ for o, a in opts:
     extra_pin_args.append(a)
   if o == '--frontend':
     frontend = a
+  if o == '--qemu-va-bits':
+    qemu_va_bits = int(a)
+    if qemu_va_bits not in (39, 48):
+      print('[RECORD-TRACE] --qemu-va-bits takes 39 (Sv39, the riscv configurations) or 48 (Sv48), not %d' % qemu_va_bits)
+      sys.exit(1)
   if o == '--frontend-option':
     frontend_options.append(a)
   if o == '--pid':
@@ -382,6 +388,13 @@ def qemu_command():
   if verbose:
     popts.append('verbose=on')
   qopts = []
+  # The guest's virtual address space, in bits, for QEMU user mode: QEMU lays a
+  # riscv64 guest out over 48 bits (Sv48's) by default, while the riscv
+  # configurations model Sv39, whose user half is 38 bits -- an address above
+  # it the simulator refuses rather than aliases.  So RISC-V guests are
+  # confined with -R to 2^(bits-1) unless --qemu-va-bits says otherwise (48
+  # for Sv48 with a 4-level table, --frontend-option='-R ...' to set it by
+  # hand); AArch64 and x86-64 fit their 48-bit tables as QEMU lays them out.
   for o in frontend_options:
     qopts += shlex.split(o)
   if system:
@@ -407,7 +420,16 @@ def qemu_command():
     if useresponsefiles:
       popts.append('response=on')       # live: Sniper paces the guest and answers its magic
     if arch == 'aarch64' and '-cpu' not in qopts:
-      qopts = [ '-cpu', 'max' ] + qopts  # every extension QEMU has, as the hardware it stands for would
+      # Every extension QEMU has, with SVE's vector length at 128 bits: the
+      # cortex configurations' perf_model/core/arm/sve_bytes = 16, the width
+      # the decoder gives an SVE load or store (QEMU's own default is 512).
+      qopts = [ '-cpu', 'max,sve-default-vector-length=%d' % SVE_BYTES_DEFAULT ] + qopts
+    if arch == 'x86_64' and '-cpu' not in qopts:
+      # QEMU's default x86-64 model (qemu64) has no AVX: a binary built with
+      # -march=native died with SIGILL.  max is what the other two get.
+      qopts = [ '-cpu', 'max' ] + qopts
+    if arch == 'riscv64' and '-R' not in qopts and qemu_va_bits != 48:
+      qopts = [ '-R', '0x%x' % (1 << (qemu_va_bits - 1)) ] + qopts
     if arch == 'riscv64' and '-cpu' not in qopts:
       # The vector and matrix units (RVV, the IME and AME extensions the
       # qemu-riscv-ime dependency adds) with the vector length the riscv
@@ -418,14 +440,18 @@ def qemu_command():
   print('[RECORD-TRACE] Using the QEMU frontend (%s)' % os.path.basename(qemu))
   return ' '.join(shlex.quote(a) for a in argv)
 
+SVE_BYTES_DEFAULT = 16   # bytes; matches perf_model/core/arm/sve_bytes in the cortex configurations
+
 value_roi = use_roi and 1 or 0
 value_roi_mpi = roi_mpi and 1 or 0
 value_pa = use_pa and 1 or 0
 value_routine_tracing = use_routine_tracing and 1 or 0
 value_verbose = verbose and 1 or 0
 value_vma = log_vma and 1 or 0
-print('Record value_vma:', value_vma)
 extra_tool_args = ' '.join(extra_tool_args)
+if frontend and (use_pid or extra_pin_args or use_gdb):
+  print('[RECORD-TRACE] --pid, --gdb and -x are the SDE recorder\'s; the %s front end cannot take them' % frontend, file=sys.stderr)
+  sys.exit(1)
 if frontend:
   if 'dr' in frontend:
     print('[RECORD-TRACE] Using DynamoRIO frontend')

@@ -210,7 +210,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
 
   return newconfig
 
-record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=', 'maxthreads=' ]
+record_trace_passthrough = [ 'pid-continue', 'stop-address=', 'frontend-option=', 'maxthreads=', 'qemu-va-bits=' ]
 
 try:
   opts, cmdline = getopt.getopt(

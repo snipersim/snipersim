@@ -156,6 +156,11 @@ EXPECT_FAIL_DETAILED = {
     # (fast-forward never faults).  test_virtuoso's eager_paging case runs
     # it trace-driven.
     'physical_memory_allocators/eager_paging': 'eager paging needs the trace\'s VMAs (none in a live run)',
+    # RISC-V's Sv39 page table over an x86-64 workload: the guest's stack sits
+    # near 2^47, above the 39-bit space, and the walk refuses it (the riscv
+    # configurations include this table; the sweep layers every fragment on
+    # gainestown).  Fast-forward walks no page table and runs.
+    'pagetable_configs/3_level_radix_sv39': 'RISC-V Sv39 (39-bit) page table; an x86-64 guest lives above 2^39 and is refused',
     # Step 20: the RMM scheme pages eagerly; test_virtuoso's rmm case runs
     # it trace-driven.
     'address_translation_schemes/rmm': 'eager paging needs the trace\'s VMAs (none in a live run)',

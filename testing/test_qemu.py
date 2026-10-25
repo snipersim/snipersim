@@ -22,7 +22,6 @@ Usage:
 
 import argparse
 import collections
-import fcntl
 import os
 import re
 import shutil
@@ -110,17 +109,21 @@ def sniper_failed(rc, out):
 
 
 def build_guests(workdir):
-    """Build the probe and its hand-written guests against the pinned QEMU.
-    The probe directory is shared by every run of this suite, so the build is
-    taken under a lock: two suites making it at once left a boot image
-    half-written for the one that read it first."""
+    """Build the probe and its hand-written guests against the pinned QEMU, in
+    a copy of test/qemu-plugin-probe under this run's directory: the probe
+    directory is shared by every run of this suite, and two suites at once --
+    or one suite's `make clean` at its end -- left the other without its boot
+    images and probe (every x86 system-mode case failed within a second)."""
     qemu_src = os.path.join(SNIPER_ROOT, 'qemu')
-    with open(os.path.join(PROBE_DIR, '.build.lock'), 'w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        rc, out = run(['make', '-s', 'QEMU_SRC=' + qemu_src], 300, cwd=PROBE_DIR)
+    probe = os.path.join(workdir, 'probe')
+    os.makedirs(probe, exist_ok=True)
+    for f in os.listdir(PROBE_DIR):
+        if f.endswith(('.c', '.S', '.h', '.py')) or f == 'Makefile':
+            shutil.copy(os.path.join(PROBE_DIR, f), probe)
+    rc, out = run(['make', '-s', 'QEMU_SRC=' + qemu_src], 300, cwd=probe)
     if rc != 0:
         raise RuntimeError('cannot build the probe:\n' + out)
-    return {n: os.path.join(PROBE_DIR, n)
+    return {n: os.path.join(probe, n)
             for n in ('probe.so', 'boot.img', 'boot64.img', 'bootas.img', 'bootsmc.img', 'st', 'mt')}
 
 
@@ -155,7 +158,7 @@ def case_user_simulate(p, g, workdir):
     """Sniper simulates a trace the frontend produced."""
     prefix = os.path.join(workdir, 'sim')
     rc, out = run([p['user'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
-                   '--', os.path.join(PROBE_DIR, 'st')], 300, cwd=workdir)
+                   '--', g['st']], 300, cwd=workdir)
     if rc != 0:
         return False, 'recording failed (%s)' % exit_text(rc)
     outdir = os.path.join(workdir, 'simout')
@@ -537,7 +540,7 @@ def case_riscv_smc_rewrite(p, g, workdir):
     seen = {}
     for smc in ('1', '0'):
         prefix = os.path.join(workdir, 'smc%s' % smc)
-        rc, out = run([r['qemu'], '-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc),
+        rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc),
                        '--', guest], 300, cwd=workdir)
         if rc != 0:
             return False, 'qemu-riscv64 exited %s (smc=%s)' % (rc, smc)
@@ -571,7 +574,7 @@ def case_riscv_user_trace(p, g, workdir):
     if r is None:
         return None, why
     prefix = os.path.join(workdir, 'rv')
-    rc, out = run([r['qemu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['guest']], 300, cwd=workdir)
     if rc != 100:        # the guest exits with work(20000) & 0x7f == 100
         return False, 'qemu-riscv64 exited %s' % rc
@@ -593,7 +596,7 @@ def case_riscv_user_simulate(p, g, workdir):
     if r is None:
         return None, why
     prefix = os.path.join(workdir, 'rvsim')
-    rc, out = run([r['qemu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['guest']], 300, cwd=workdir)
     if rc != 100:
         return False, 'recording failed (%s)' % exit_text(rc)
@@ -650,11 +653,13 @@ def riscv_ime_prerequisites(workdir):
         if rc != 0:
             return None, 'could not build rv-ime.c (%s)' % exit_text(rc)
     cpu = os.environ.get('SNIPER_QEMU_RISCV_IME_CPU', IME_CPU_DEFAULT)
-    rc, out = run([r['qemu'], '-cpu', cpu, guest], 60, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', cpu, guest], 60, cwd=workdir)
     if rc != 100:
         if 'zvvm' in out or 'Property' in out:
             return None, 'qemu-riscv64 has no IME (x-zvvmm) CPU properties'
-        return None, 'the IME guest exited %s under qemu-riscv64 (expected 100)' % rc
+        if rc in (-4, 132):      # SIGILL: this QEMU has no IME; that is a skip
+            return None, 'the IME guest took SIGILL under qemu-riscv64: no IME in this QEMU'
+        return False, 'the IME guest exited %s under qemu-riscv64 (expected 100)' % exit_text(rc)
     r['cpu'] = cpu
     r['ime_guest'] = guest
     return r, None
@@ -665,7 +670,7 @@ def case_riscv_ime_trace(p, g, workdir):
     if r is None:
         return None, why
     prefix = os.path.join(workdir, 'rvime')
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['ime_guest']], 300, cwd=workdir)
     if rc != 100:
         return False, 'qemu-riscv64 exited %s' % rc
@@ -693,7 +698,7 @@ def case_riscv_ime_simulate(p, g, workdir):
     if r is None:
         return None, why
     prefix = os.path.join(workdir, 'rvimesim')
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['ime_guest']], 300, cwd=workdir)
     if rc != 100:
         return False, 'recording failed (%s)' % exit_text(rc)
@@ -757,7 +762,7 @@ def case_riscv_gemm_verify(p, g, workdir):
     r, why = riscv_gemm_prerequisites(workdir)
     if r is None:
         return None, why
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], r['gemm']], 120, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], r['gemm']], 120, cwd=workdir)
     names = {100: 'all three agree', 5: 'RVV differs from scalar', 6: 'IME differs from scalar', 7: 'RVV and IME differ from scalar'}
     if rc != 100:
         return False, 'guest exited %s: %s' % (rc, names.get(rc, 'unexpected'))
@@ -769,7 +774,7 @@ def case_riscv_gemm_simulate(p, g, workdir):
     if r is None:
         return None, why
     prefix = os.path.join(workdir, 'gemm3sim')
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                    '--', r['gemm']], 300, cwd=workdir)
     if rc != 100:
         return False, 'recording failed (%s)' % exit_text(rc)
@@ -876,6 +881,11 @@ def llm_vector_counts(vlen, prefilled, generated, batches, att_dots, att_strips)
 # Unit geometry per kernel variant: the matrix side S (an IME tile or an AME
 # square is S x S) and the accumulators the GEMM blocks over (IME: 16/LMUL
 # register groups, AME: 16 accumulators).
+# Every riscv64 user-mode run here is laid out as record-trace lays it out: QEMU
+# gives the guest 48 bits by default, the riscv configurations model Sv39, and
+# a guest above 2^38 is refused by the simulator (see 3_level_radix_sv39.cfg).
+RISCV_VA_RESERVE = ['-R', '0x4000000000']
+
 LLM_GEOMETRY = {'ime': (2, 16), 'ime32': (32, 2), 'ame': (4, 16), 'ame32': (32, 16)}
 
 # The memory side of the agent runs: an edge LPDDR bandwidth (config/riscv.cfg
@@ -959,7 +969,7 @@ def case_riscv_llm_agent(p, g, workdir):
         return None, why
     summary = []
     for variant, guest in r['llm'].items():
-        cmd = [r['qemu'], '-cpu', r['cpu']]
+        cmd = [r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu']]
         if variant in ('ame', 'dma'):     # QEMU has neither AME nor the accelerator: the plugin executes them
             cmd += ['-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'llm' + variant)), '--']
         rc, out = run(cmd + [guest], 1800, cwd=workdir)     # the IME build under QEMU's tile helpers takes ~7 minutes alone, more on a loaded machine
@@ -981,7 +991,7 @@ def case_riscv_llm_simulate(p, g, workdir):
     report = []
     for variant in ('rvv', 'ime', 'ame', 'w4'):
         prefix = os.path.join(workdir, 'llmsim-' + variant)
-        rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+        rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                        '--', r['llm'][variant]], 1800, cwd=workdir)   # QEMU runs the IME/AME helpers for ~70M guest instructions
         if rc != 100:
             return False, '%s: recording failed (%s)' % (variant, exit_text(rc))
@@ -1051,7 +1061,7 @@ def case_riscv_ame_verify(p, g, workdir):
     if rc != 0:
         return False, 'could not build the AME variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3ame')
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     names = {5: 'RVV differs', 6: 'IME differs', 8: 'AME differs from scalar', 12: 'RVV and AME differ', 14: 'IME and AME differ'}
     if rc != 100:
         errs = [l for l in out.splitlines() if l.startswith('[AME] error')]
@@ -1073,7 +1083,7 @@ def case_riscv_ame_simulate(p, g, workdir):
         if rc != 0:
             return False, 'could not build the AME variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3amesim')
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     if rc != 100:
         return False, 'recording failed (%s)' % exit_text(rc)
     outdir = os.path.join(workdir, 'gemm3amesimout')
@@ -1098,7 +1108,7 @@ def case_riscv_llm_couplings(p, g, workdir):
     report = []
     for variant in ('ame', 'dma'):
         prefix = os.path.join(workdir, 'llmcpl-' + variant)
-        rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
+        rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
                        '--', r['llm'][variant]], 1800, cwd=workdir)   # QEMU runs the IME/AME helpers for ~70M guest instructions
         if rc != 100:
             return False, '%s: recording failed (%s)' % (variant, exit_text(rc))
@@ -1156,7 +1166,7 @@ def case_riscv_size32_verify(p, g, workdir):
     if rc != 0:
         return False, 'could not build the 32x32 variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3-32')
-    rc, out = run([r['qemu'], '-cpu', SIZE32_CPU, '-plugin', '%s,output=%s,ame_n=32' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', SIZE32_CPU, '-plugin', '%s,output=%s,ame_n=32' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     if rc != 100:
         if 'VLEN in the range' in out:
             return None, 'this qemu-riscv64 caps VLEN below 4096 (rebuild with the current IME patch)'
@@ -1197,7 +1207,7 @@ def case_riscv_llm_size32(p, g, workdir):
     for variant, coupling, cpu, popt, gargs in runs:
         prefix = os.path.join(workdir, 'llm32-' + variant)
         if variant not in traced:
-            rc, out = run([r['qemu'], '-cpu', cpu, '-plugin', '%s,output=%s%s' % (p['frontend'], prefix, (',' + popt) if popt else ''),
+            rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', cpu, '-plugin', '%s,output=%s%s' % (p['frontend'], prefix, (',' + popt) if popt else ''),
                            '--', guests[variant]], 900, cwd=workdir)
             if rc != 100:
                 if 'VLEN in the range' in out:
@@ -1258,7 +1268,7 @@ def case_riscv_vlen_probe(p, g, workdir):
     results, cap = {}, None
     vlen = 128
     while vlen <= 65536:
-        rc, out = run([r['qemu'], '-cpu', 'max,vlen=%d' % vlen, guest], 120, cwd=workdir)
+        rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', 'max,vlen=%d' % vlen, guest], 120, cwd=workdir)
         m = re.search(r'VLEN in the range \[\d+, (\d+)\]', out or '')
         if m:
             cap = int(m.group(1))
@@ -1284,7 +1294,7 @@ def case_riscv_llm_vlen(p, g, workdir):
     for vlen in (256, 4096, 65536):
         cpu = r['cpu'].replace('vlen=128', 'vlen=%d' % vlen)
         for variant in ('rvv', 'ame', 'dma'):
-            cmd = [r['qemu'], '-cpu', cpu]
+            cmd = [r['qemu']] + RISCV_VA_RESERVE + ['-cpu', cpu]
             if variant in ('ame', 'dma'):
                 cmd += ['-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'llmvlen-%s-%d' % (variant, vlen))), '--']
             rc, out = run(cmd + [r['llm'][variant]], 900, cwd=workdir)
@@ -1310,7 +1320,7 @@ def case_riscv_footprint_lines(p, g, workdir):
     for vlen in (4096, 65536):
         lanes = vlen * 8 // 32
         prefix = os.path.join(workdir, 'gather-%d' % vlen)
-        rc, out = run([r['qemu'], '-cpu', 'max,vlen=%d' % vlen, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+        rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', 'max,vlen=%d' % vlen, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
         if rc != 100:
             if 'VLEN in the range' in out:
                 return None, 'this qemu-riscv64 caps VLEN below %d' % vlen
@@ -1345,7 +1355,7 @@ def case_riscv_vector_datapath(p, g, workdir):
         return None, why
     cpu = r['cpu'].replace('vlen=128', 'vlen=4096')
     prefix = os.path.join(workdir, 'vdp')
-    rc, out = run([r['qemu'], '-cpu', cpu, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', r['llm']['rvv']], 900, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', cpu, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', r['llm']['rvv']], 900, cwd=workdir)
     if rc != 100:
         return False, 'recording failed (%s)' % exit_text(rc)
     cycles, counts = {}, {}
@@ -1465,7 +1475,7 @@ def case_riscv_plugin_api(p, g, workdir):
     if rc != 0:
         return False, 'could not build rv-ame-loop.c (%s)' % exit_text(rc)
     def plug(opts):
-        return [r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s%s' % (p['frontend'], os.path.join(workdir, 'api'), opts), '--']
+        return [r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s%s' % (p['frontend'], os.path.join(workdir, 'api'), opts), '--']
     def emulated(out):
         m = re.search(r'plugin-emulated instructions: (\d+) claimed at translation, (\d+) through the exception path', out)
         return (int(m.group(1)), int(m.group(2))) if m else None
@@ -1483,7 +1493,7 @@ def case_riscv_plugin_api(p, g, workdir):
     if rc != 100 or emulated(out) != (0, 11):
         return False, 'exception path: exit %s, %s' % (rc, emulated(out))
     # without the plugin QEMU does not know the CSRs
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], guests[0]], 60, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], guests[0]], 60, cwd=workdir)
     if rc != -signal.SIGILL:
         return False, 'without the plugin the CSR read should be an illegal instruction (%s)' % exit_text(rc)
     # the model's exceptions reach the guest as the architecture's signals
@@ -1498,7 +1508,7 @@ def case_riscv_plugin_api(p, g, workdir):
     sock.bind(('127.0.0.1', 0))
     port = sock.getsockname()[1]
     sock.close()
-    proc = subprocess.Popen([r['qemu'], '-cpu', r['cpu'], '-g', str(port), '-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'apigdb')), '--', guests[0]],
+    proc = subprocess.Popen([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-g', str(port), '-plugin', '%s,output=%s' % (p['frontend'], os.path.join(workdir, 'apigdb')), '--', guests[0]],
                             cwd=workdir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
     try:
         feats, regs, values = gdb_read_feature(port, 'org.riscv.ame', ('amenlen', 'ameudsz', 'm0'))
@@ -1536,7 +1546,7 @@ def case_riscv_ame_couplings(p, g, workdir):
     if rc != 0:
         return False, 'could not build the 32-cubed AME variant (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'gemm3ame32')
-    rc, out = run([r['qemu'], '-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     if rc != 100:
         return False, 'guest exited %s (100 = scalar, RVV, IME and AME agree)' % rc
     # 4x4 Int32 squares over 32x32x32: 64 output squares, 8 K slices each; a
@@ -1958,6 +1968,166 @@ def case_run_sniper_qemu_system(p, g, workdir):
     summary.append('x86 boot %d instructions' % n)
     return True, '; '.join(summary) + ('' if r is not None else ' (RISC-V not run: %s)' % why)
 
+
+def stats_of(outdir):
+    stats = {}
+    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        if ' = ' in line:
+            k, v = line.split(' = ', 1)
+            stats[k.strip()] = v.strip().split(',')[0]
+    return stats
+
+
+def translation_run(workdir, name, guest, config_args, extra_args=()):
+    """One live run of the page-touching guest (testing/apps/touch_pages.c)
+    through run-sniper --frontend=qemu; its statistics, or (None, why)."""
+    outdir = os.path.join(workdir, name)
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1'] + list(config_args)
+                  + ['-d', outdir, '--frontend=qemu'] + list(extra_args) + ['--', guest], 600, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return None, (rc, out)
+    return stats_of(outdir), None
+
+
+TOUCH_PAGES = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'touch_pages.c')
+TOUCH_FAULTS = 512 + 4 + 1      # 512 arena pages, 4 stack pages, the code page
+
+
+def case_riscv_user_translation(p, g, workdir):
+    """Address translation on RISC-V is Sv39: the riscv configuration builds a
+    3-level table, a guest touching 512 pages in 8 regions (plus 4 of stack and
+    1 of code) takes exactly that many faults, two walks each, into 12
+    page-table frames; the same guest under Sv48 (--qemu-va-bits=48 with
+    4_level_radix_sv48) faults the same and uses two frames more, the extra
+    level's; and a guest recorded in QEMU's 48-bit layout but simulated
+    against Sv39 is refused, not aliased."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    cc = os.environ['SNIPER_RISCV_CC']
+    guest = os.path.join(workdir, 'touch_rv')
+    rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-O1', '-ffreestanding',
+                   '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, TOUCH_PAGES], 120)
+    if rc != 0:
+        return None, 'could not build touch_pages.c (%s)' % exit_text(rc)
+    sv39, err = translation_run(workdir, 'sv39', guest, ['-c', 'riscv'])
+    if sv39 is None:
+        return False, 'Sv39: %s' % sniper_failed(*err)
+    if 'radix_sv39.allocated_frames' not in sv39:
+        return False, 'Sv39: the riscv configuration did not build the radix_sv39 page table'
+    faults, walks, frames = (int(sv39.get('mmu.page_faults', -1)), int(sv39.get('mmu.page_table_walks', -1)),
+                             int(sv39['radix_sv39.allocated_frames']))
+    if faults != TOUCH_FAULTS or walks != 2 * TOUCH_FAULTS or frames != 12:
+        return False, 'Sv39: %d faults, %d walks, %d frames (expected %d, %d, 12)' % (faults, walks, frames, TOUCH_FAULTS, 2 * TOUCH_FAULTS)
+    sv48, err = translation_run(workdir, 'sv48', guest, ['-c', 'riscv', '-c', 'pagetable_configs/4_level_radix_sv48'],
+                                ['--qemu-va-bits=48'])
+    if sv48 is None:
+        return False, 'Sv48: %s' % sniper_failed(*err)
+    f48, w48, fr48 = (int(sv48.get('mmu.page_faults', -1)), int(sv48.get('mmu.page_table_walks', -1)),
+                      int(sv48.get('radix_sv48.allocated_frames', -1)))
+    if f48 != faults or w48 != walks or fr48 != frames + 2:
+        return False, 'Sv48: %d faults, %d walks, %d frames (expected %d, %d, %d: one level more, two tables)' % (f48, w48, fr48, faults, walks, frames + 2)
+    bad, err = translation_run(workdir, 'mismatch', guest, ['-c', 'riscv'], ['--qemu-va-bits=48'])
+    if bad is not None:
+        return False, 'a guest in the 48-bit layout was simulated against Sv39 without complaint'
+    rc, out = err
+    if 'does not fit the 39-bit virtual address space of page table radix_sv39' not in out:
+        return False, 'the 48-bit layout against Sv39 failed without the explanation: %s' % sniper_failed(rc, out)
+    return True, ('Sv39: %d faults, %d walks, %d frames; Sv48: same faults, %d frames; the 48-bit layout against Sv39 refused'
+                  % (faults, walks, frames, fr48))
+
+
+SYSCALL_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'syscall_probe.c')
+
+
+def syscall_probe_run(workdir, guest, config_args):
+    """The system-call probe (testing/apps/syscall_probe.c) live through
+    run-sniper --frontend=qemu.  The simulator models a few system calls by
+    their x86-64 numbers; on RISC-V and AArch64 the same numbers mean other
+    calls (unlinkat is x86-64's nanosleep, mlock its clock_gettime, munlockall
+    its exit_group), so the plugin must translate and filter them.  The probe
+    sleeps 3 x 10 ms (the simulated time must advance by that), calls unlinkat
+    on a pathname and checks the bytes are intact (exit 101 if not), then
+    mlock, munlockall and dup3, which must leave the simulator running."""
+    outdir = os.path.join(workdir, 'probe')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1'] + list(config_args)
+                  + ['-d', outdir, '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+    if 'syscall_probe: done' not in out:
+        return False, 'the probe did not reach its end (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
+    if rc == 101:
+        return False, "the pathname given to unlinkat was overwritten: the simulator took it for nanosleep's timespec"
+    if rc not in (0, 100):
+        return False, 'the probe ended with %s: %s' % (exit_text(rc), sniper_failed(rc, out))
+    try:
+        st = stats_of(outdir)
+        t = int(st['barrier.global_time'])
+    except (IOError, KeyError, ValueError) as e:
+        return False, 'the run left no statistics (%s)' % e
+    if t < 30 * 10**12:
+        return False, 'simulated time %.1f ms after three 10 ms sleeps: nanosleep was not modelled' % (t / 1e12)
+    return True, 'nanosleep charged (%.1f ms simulated), unlinkat left its pathname alone, mlock/munlockall/dup3 passed through' % (t / 1e12)
+
+
+def case_riscv_user_syscalls(p, g, workdir):
+    """System calls of a RISC-V guest reach the simulator translated from the
+    asm-generic numbering, and only the modelled ones."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    cc = os.environ['SNIPER_RISCV_CC']
+    guest = os.path.join(workdir, 'probe_rv')
+    rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-O1', '-ffreestanding',
+                   '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, SYSCALL_PROBE], 120)
+    if rc != 0:
+        return None, 'could not build syscall_probe.c (%s)' % exit_text(rc)
+    return syscall_probe_run(workdir, guest, ['-c', 'riscv'])
+
+
+def case_aarch64_user_syscalls(p, g, workdir):
+    """The same for an AArch64 guest (the asm-generic numbering too)."""
+    qemu = os.environ.get('SNIPER_QEMU_AARCH64') or os.path.join(SNIPER_ROOT, 'qemu-aarch64', 'build', 'qemu-aarch64')
+    cc = os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-aarch64 (make ARM=ON QEMU=ON, or set SNIPER_QEMU_AARCH64)'
+    if not cc or not os.path.isfile(cc):
+        return None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
+    guest = os.path.join(workdir, 'probe_a64')
+    rc, out = run([cc, '--target=aarch64-linux-gnu', '-O1', '-ffreestanding', '-nostdlib', '-static',
+                   '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, SYSCALL_PROBE], 120)
+    if rc != 0:
+        return None, 'could not build syscall_probe.c (%s)' % exit_text(rc)
+    return syscall_probe_run(workdir, guest, ['-c', 'cortex-a72'])
+
+
+def case_aarch64_user_translation(p, g, workdir):
+    """Address translation on AArch64 is the 4 KiB-granule 4-level table (the
+    cortex configurations' radix_4level): the page-touching guest takes one
+    fault per page it touches, two walks each, into 14 page-table frames."""
+    qemu = os.environ.get('SNIPER_QEMU_AARCH64') or os.path.join(SNIPER_ROOT, 'qemu-aarch64', 'build', 'qemu-aarch64')
+    cc = os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-aarch64 (make ARM=ON QEMU=ON, or set SNIPER_QEMU_AARCH64)'
+    if not cc or not os.path.isfile(cc):
+        return None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
+    guest = os.path.join(workdir, 'touch_a64')
+    rc, out = run([cc, '--target=aarch64-linux-gnu', '-O1', '-ffreestanding', '-nostdlib', '-static',
+                   '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, TOUCH_PAGES], 120)
+    if rc != 0:
+        return None, 'could not build touch_pages.c (%s)' % exit_text(rc)
+    st, err = translation_run(workdir, 'a64', guest, ['-c', 'cortex-a72'])
+    if st is None:
+        return False, sniper_failed(*err)
+    if 'radix_4level.allocated_frames' not in st:
+        return False, 'the cortex-a72 configuration did not build the radix_4level page table'
+    faults, walks, frames = (int(st.get('mmu.page_faults', -1)), int(st.get('mmu.page_table_walks', -1)),
+                             int(st['radix_4level.allocated_frames']))
+    # one data fault more than on RISC-V: this build's start-up touches one more stack page
+    if faults != TOUCH_FAULTS + 1 or walks != 2 * faults or frames != 14:
+        return False, '%d faults, %d walks, %d frames (expected %d, %d, 14)' % (faults, walks, frames, TOUCH_FAULTS + 1, 2 * (TOUCH_FAULTS + 1))
+    return True, '4-level table: %d faults, %d walks, %d frames' % (faults, walks, frames)
+
 CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
@@ -1972,6 +2142,10 @@ CASES = {
     'riscv-system-simulate': case_riscv_system_simulate,
     'riscv-system-address-spaces': case_riscv_system_address_spaces,
     'riscv-user-simulate': case_riscv_user_simulate,
+    'riscv-user-translation': case_riscv_user_translation,
+    'aarch64-user-translation': case_aarch64_user_translation,
+    'riscv-user-syscalls': case_riscv_user_syscalls,
+    'aarch64-user-syscalls': case_aarch64_user_syscalls,
     'riscv-ime-trace':     case_riscv_ime_trace,
     'riscv-ime-simulate':  case_riscv_ime_simulate,
     'riscv-gemm-verify':   case_riscv_gemm_verify,
@@ -2068,7 +2242,6 @@ def main():
             print('\nwork directory kept at %s' % workdir)
         else:
             shutil.rmtree(workdir, ignore_errors=True)
-            run(['make', '-s', 'clean'], 60, cwd=PROBE_DIR)
         log.finish()
 
     print()

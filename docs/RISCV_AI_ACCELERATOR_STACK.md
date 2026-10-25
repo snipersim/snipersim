@@ -331,6 +331,9 @@ was run first in the same shell, from the repository root:
 export SNIPER_ROOT=$(pwd)
 export SNIPER_RISCV_CC=${SNIPER_RISCV_CC:-clang-15}             # any clang >= 15 with a riscv64 target and lld
 export SNIPER_QEMU_RISCV=$SNIPER_ROOT/qemu-riscv/build/qemu-riscv64
+# Recordings made by hand are laid out as record-trace lays them out, within
+# Sv39's 2^38 (-R 0x4000000000): the riscv configuration's page table refuses an
+# address above it.
 export PLUGIN=$SNIPER_ROOT/build/default/lib/libsniper-qemu.so
 export RVCPU=max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on   # the IME features on; vlen up to 65536
 WORK=${WORK:-/tmp/sniper-riscv-examples}; mkdir -p $WORK
@@ -376,7 +379,7 @@ rebuild, and run the drift check.
 ```bash
 # verify:gemm3
 rvcc -I test/riscv-gemm -DUSE_AME -o $WORK/gemm3 test/riscv-gemm/gemm3.c
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/gemm3 -- $WORK/gemm3; echo "exit $? (100 = scalar, RVV, IME and AME agree)"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/gemm3 -- $WORK/gemm3; echo "exit $? (100 = scalar, RVV, IME and AME agree)"
 build/default/lib/siftdump $WORK/gemm3.app0.th0.sift | grep -c -- '-- spans'      # footprint records in the trace
 ./run-sniper -n 1 -c riscv -d $WORK/gemm3-sim --traces=$WORK/gemm3.app0.th0.sift > /dev/null
 python3 tools/riscv/expected_counts.py $WORK/gemm3-sim/simulation/sim.stats --ame   # every class count and footprint byte exact
@@ -390,7 +393,7 @@ Sail golden model (scalar and RVV only, since Sail has no IME):
 # verify:gemm3-32-sail
 rvcc -I test/riscv-gemm -DUSE_AME -DM=64 -DN=64 -DK=64 -DAME_N=32 -DIME_VLEN=4096 -DIME_LMUL=8 -DIME_LAMBDA=4 \
      -o $WORK/gemm3-32 test/riscv-gemm/gemm3.c
-$SNIPER_QEMU_RISCV -cpu ${RVCPU/vlen=128/vlen=4096} -plugin $PLUGIN,output=$WORK/gemm3-32,ame_n=32 -- $WORK/gemm3-32; echo "exit $?"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu ${RVCPU/vlen=128/vlen=4096} -plugin $PLUGIN,output=$WORK/gemm3-32,ame_n=32 -- $WORK/gemm3-32; echo "exit $?"
 rvcc -I test/riscv-gemm -DPLATFORM_HTIF -DNO_IME -Wl,-T,test/riscv-gemm/sail.ld -o $WORK/gemm3-sail test/riscv-gemm/gemm3.c
 echo '{"extensions": {"V": {"vlen_exp": 7}}}' > $WORK/sail-v128.json      # the model's VLEN: 2^7 = 128 bits
 sail-riscv/bin/sail_riscv_sim --config-override $WORK/sail-v128.json $WORK/gemm3-sail 2>&1 | tail -2
@@ -409,8 +412,8 @@ done
 $SNIPER_QEMU_RISCV -cpu $RVCPU $WORK/agent-rvv | tail -4; echo "rvv exit ${PIPESTATUS[0]} (100 = every line as numpy, every answer right)"
 $SNIPER_QEMU_RISCV -cpu $RVCPU $WORK/agent-ime > /dev/null; echo "ime exit $?"
 $SNIPER_QEMU_RISCV -cpu $RVCPU $WORK/agent-w4 > /dev/null; echo "w4 exit $?"
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,trace=0 -- $WORK/agent-ame 2>&1 | tail -1; echo "ame (plugin model, functional run)"
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,trace=0 -- $WORK/agent-dma > /dev/null; echo "dma exit $?"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,trace=0 -- $WORK/agent-ame 2>&1 | tail -1; echo "ame (plugin model, functional run)"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,trace=0 -- $WORK/agent-dma > /dev/null; echo "dma exit $?"
 ```
 
 The vector kernels are vector-length agnostic; the RVV agent at the
@@ -425,7 +428,7 @@ Traced and simulated, with the per-token cost and the exact counts:
 
 ```bash
 # verify:agent-simulate
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-rvv -- $WORK/agent-rvv > $WORK/agent-rvv.out; grep -E '^tokens|^attention' $WORK/agent-rvv.out
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-rvv -- $WORK/agent-rvv > $WORK/agent-rvv.out; grep -E '^tokens|^attention' $WORK/agent-rvv.out
 ./run-sniper -n 1 -c riscv -d $WORK/agent-rvv-sim --traces=$WORK/agent-rvv.app0.th0.sift > /dev/null
 python3 - <<'EOF'
 import re
@@ -442,8 +445,8 @@ two rates (the tile's statistics show the work moved off the core):
 
 ```bash
 # verify:agent-tile
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-ame -- $WORK/agent-ame > /dev/null
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-dma -- $WORK/agent-dma > /dev/null
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-ame -- $WORK/agent-ame > /dev/null
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-dma -- $WORK/agent-dma > /dev/null
 for c in oca_l2 nca; do
    ./run-sniper -n 1 -c riscv -d $WORK/ame-$c -g perf_model/ame_tile/coupling=$c --traces=$WORK/agent-ame.app0.th0.sift > /dev/null
    echo "ame/$c: $(grep -E '^performance_model.cycle_count|^ame_tile.mma ' $WORK/ame-$c/simulation/sim.stats | tr '\n' ' ')"
@@ -516,14 +519,14 @@ $SNIPER_QEMU_RISCV -cpu ${RVCPU/vlen=128/vlen=65536} -plugin $PLUGIN,output=$WOR
 ```bash
 # verify:plugin-api
 for m in 0 1 2; do rvcc -DMODE=$m -o $WORK/rv-ame-api$m test/qemu-plugin-probe/rv-ame-api.c; done
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api -- $WORK/rv-ame-api0 2>&1 | grep -E 'AME registers|plugin-emulated'; echo "mode 0: exit ${PIPESTATUS[0]} (100: CSRs, ownership and a claimed product all check)"
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api,claim=0 -- $WORK/rv-ame-api0 2>&1 | grep plugin-emulated
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api -- $WORK/rv-ame-api0 2>&1 | grep -E 'AME registers|plugin-emulated'; echo "mode 0: exit ${PIPESTATUS[0]} (100: CSRs, ownership and a claimed product all check)"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api,claim=0 -- $WORK/rv-ame-api0 2>&1 | grep plugin-emulated
 $SNIPER_QEMU_RISCV -cpu $RVCPU $WORK/rv-ame-api0 > /dev/null 2>&1; echo "without the plugin: exit $? (132 = SIGILL, QEMU does not know the CSRs)"
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api -- $WORK/rv-ame-api1 2>&1 | grep 'AME\] error'; echo "mode 1: exit ${PIPESTATUS[0]} (132 = the model raised illegal-instruction)"
-$SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api -- $WORK/rv-ame-api2 2>&1 | grep 'AME\] error'; echo "mode 2: exit ${PIPESTATUS[0]} (139 = the model raised a load access fault)"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api -- $WORK/rv-ame-api1 2>&1 | grep 'AME\] error'; echo "mode 1: exit ${PIPESTATUS[0]} (132 = the model raised illegal-instruction)"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/api -- $WORK/rv-ame-api2 2>&1 | grep 'AME\] error'; echo "mode 2: exit ${PIPESTATUS[0]} (139 = the model raised a load access fault)"
 rvcc -o $WORK/rv-ame-loop test/qemu-plugin-probe/rv-ame-loop.c
-time $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,trace=0 -- $WORK/rv-ame-loop
-time $SNIPER_QEMU_RISCV -cpu $RVCPU -plugin $PLUGIN,trace=0,claim=0 -- $WORK/rv-ame-loop
+time $SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,trace=0 -- $WORK/rv-ame-loop
+time $SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,trace=0,claim=0 -- $WORK/rv-ame-loop
 [ $? -eq 100 ] && echo "rv-ame-loop: exit 100, the probe's success code"
 ```
 
@@ -568,8 +571,44 @@ python3 testing/test_qemu.py --case riscv-user-trace --case riscv-user-simulate 
 make riscv-ime-check      # steps 1-5: decoder drift, build, QEMU, compiler, every riscv-* case
 ```
 
-The full harness (`python3 testing/test_qemu.py`, 27 cases with the x86
-ones) is the gate every commit on this branch passed.
+The full harness (`python3 testing/test_qemu.py`, 46 cases: 27 RISC-V, 5
+AArch64, the x86-64 user and system cases, and the run-sniper front-end cases)
+is the gate every commit passed.
+
+### 4.10 Address translation: Sv39
+
+Every configuration models address translation (`general/translation_enabled`
+in `config/base.cfg`), and until now every one of them built the x86-64 page
+table: four levels over a 48-bit space.  The riscv configurations now include
+`config/pagetable_configs/3_level_radix_sv39.cfg`: Sv39, three levels of 512
+entries over a 39-bit space, 4 KiB pages and 2 MiB megapages, two page walk
+caches.  The radix table takes any level count (each level's index is the nine
+bits above the level below it; `radix_4level` is unchanged for x86-64 and is
+also AArch64's 4 KiB-granule geometry, which the cortex configurations note).
+
+A guest has to live inside the 39-bit space.  QEMU user mode lays a riscv64
+guest out over 48 bits (its stack near 2^47), so `record-trace` confines it
+with `-R 0x4000000000` by default; `run-sniper --qemu-va-bits=48` keeps QEMU's
+layout, for Sv48 with `pagetable_configs/4_level_radix_sv48.cfg`.  An address
+above the configured space is refused by the simulator -- "does not fit the
+39-bit virtual address space of page table radix_sv39" -- rather than indexing
+the root with the wrong bits.
+
+`testing/apps/touch_pages.c` touches 512 pages in 8 regions of 2 MiB, four
+pages of its stack and one of code, and witnesses the walk depth through the
+page-table frames the kernel allocates:
+
+| run | faults | walks | page-table frames |
+|---|---|---|---|
+| RISC-V, Sv39 (`-c riscv`) | 517 | 1034 | 12 |
+| RISC-V, Sv48 (`-c riscv -c pagetable_configs/4_level_radix_sv48 --qemu-va-bits=48`) | 517 | 1034 | 14: one level more, two tables |
+| RISC-V, 48-bit layout against Sv39 (`-c riscv --qemu-va-bits=48`) | refused | | |
+| AArch64, `-c cortex-a72` (4 levels) | 518 | 1036 | 14 |
+
+```bash
+# verify:translation
+python3 testing/test_qemu.py --case riscv-user-translation --case aarch64-user-translation
+```
 
 ---
 

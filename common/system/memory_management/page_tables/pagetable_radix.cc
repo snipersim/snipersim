@@ -48,6 +48,8 @@ namespace ParametricDramDirectoryMSI
                 registerStatsMetric(name, core_id, "pf_num_cache_accesses", &stats.pf_num_cache_accesses);
                 registerStatsMetric(name, core_id, "allocated_frames", &stats.allocated_frames);
 
+                m_log->log("Virtual address space: ", 12 + 9 * levels, " bits (", levels, " levels of 512 entries over 4 KiB pages)");
+
                 m_log->log("After registering stats");
 
                 stats.page_size_discovery = new UInt64[m_page_sizes];
@@ -110,6 +112,33 @@ namespace ParametricDramDirectoryMSI
          * @return PTWResult The result of the page table walk.
          */
 
+        /* The index into the table at a level: level 1 is the leaf table,
+           indexed by bits 12..20, level L by the nine bits above level L-1's;
+           the root is level `levels`.  Four levels give the 48-bit space of
+           x86-64 and of AArch64 with a 4 KiB granule, three the 39-bit space
+           of RISC-V Sv39.
+
+           Bits 48 and up are not part of the virtual address: the trace
+           thread puts the application's (or core's) id there to keep the
+           applications of one simulation apart (TraceThread::va2pa,
+           pa_core_shift), and the page table is the application's own, so
+           they are masked off.  Within the 48 bits, an address above the
+           configured space (a RISC-V guest recorded in QEMU's default 48-bit
+           layout and simulated against Sv39) would index the root with its
+           low bits and silently alias another region, so it is refused
+           instead, naming the fix. */
+        IntPtr PageTableRadix::levelIndex(IntPtr address, int level)
+        {
+                const IntPtr va = address & ((IntPtr(1) << 48) - 1);
+                const int va_bits = 12 + 9 * levels;
+                LOG_ASSERT_ERROR((va >> va_bits) == 0,
+                        "Address 0x%lx does not fit the %d-bit virtual address space of page table %s (%d levels). "
+                        "Record the guest within that space (run-sniper --frontend=qemu does this for RISC-V with -R, "
+                        "see --qemu-va-bits) or configure a %d-level table.",
+                        (unsigned long)va, va_bits, getName().c_str(), levels, levels + 1);
+                return (va >> (12 + 9 * (level - 1))) & 0x1FF;
+        }
+
         PTWResult PageTableRadix::initializeWalk(IntPtr address, bool count, bool is_prefetch, bool restart_walk_after_fault)
         {
 
@@ -129,7 +158,7 @@ namespace ParametricDramDirectoryMSI
 
         restart_walk: // Get the 9 MSB of the address
 
-                IntPtr offset = (address >> 39) & 0x1FF;
+                IntPtr offset = levelIndex(address, levels);
 
                 // Start the walk from the root
                 PTFrame *current_frame = root;
@@ -145,7 +174,7 @@ namespace ParametricDramDirectoryMSI
 
                 while (level > 0)
                 {
-                        offset = (address >> (48 - 9 * (levels - level + 1))) & 0x1FF;
+                        offset = levelIndex(address, level);
 
                         m_log->detailed("Accessing PT address: ", (void*)current_frame, " at level: ", level, " with offset: ", offset, "and emulated ppn: ", current_frame->emulated_ppn);
                         visited_pts.push_back(PTWAccess(i, counter, (IntPtr)(current_frame->emulated_ppn * 4096 + offset * 8), current_frame->entries[offset].is_pte && current_frame->entries[offset].data.translation.valid));
@@ -267,7 +296,7 @@ namespace ParametricDramDirectoryMSI
                 PTFrame *current_frame = root;
                 PTFrame *previous_frame = NULL;
 
-                IntPtr offset = (address >> 39) & 0x1FF;
+                IntPtr offset = levelIndex(address, levels);
                 IntPtr previous_offset = static_cast<IntPtr>(-1);
 
                 int level = levels;
@@ -285,7 +314,7 @@ namespace ParametricDramDirectoryMSI
 
                 while (level > 0)
                 {
-                        offset = (address >> (48 - 9 * (levels - level + 1))) & 0x1FF;
+                        offset = levelIndex(address, level);
 
                         // Move to the next level of the page table
 
@@ -370,14 +399,14 @@ namespace ParametricDramDirectoryMSI
 
                 m_log->detailed("Deleting page that corresponds to address: ", SimLog::hex(address));
                 PTFrame *current_frame = root;
-                IntPtr offset = (address >> 39) & 0x1FF;
+                IntPtr offset = levelIndex(address, levels);
 
                 int level = levels;
                 int counter = 0;
 
                 while (level > 0)
                 {
-                        offset = (address >> (48 - 9 * (levels - level + 1))) & 0x1FF;
+                        offset = levelIndex(address, level);
 
                         if (current_frame->entries[offset].is_pte)
                         {

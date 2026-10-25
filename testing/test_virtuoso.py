@@ -56,7 +56,11 @@ SNIPER_BUILD_DIR, PYTHONPATH, LD_LIBRARY_PATH, PIN_VM_LD_LIBRARY_PATH, PWD), so
 the same baseline could never match from another checkout or another user's
 home.  (SDE adds SDE_COMMAND_LINE, the tool's command line, and SDE_GDB_XML,
 the real path of its own kit; the first follows the link, the second cannot
-and its length is part of the digest.)  So every run goes through a symlink of fixed length (CANON_ROOT, under
+and its length is part of the digest.  SDE_COMMAND_LINE also means that any
+change to the options record-trace gives the recorder moves the guest's
+stack: adding -pin-log-file moved 197 counters by up to 0.3% with nothing in
+the model changed.  Such a change is a re-bless, and the commit that makes it
+should say so.)  So every run goes through a symlink of fixed length (CANON_ROOT, under
 /tmp, named by uid and a hash of the checkout) that points at this tree:
 run-sniper is invoked by that path with it as the working directory and as
 SNIPER_ROOT, the workload too, and the environment holds nothing else but a
@@ -1851,14 +1855,14 @@ def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
     except subprocess.TimeoutExpired:
         return None, 'timed out after %ds' % timeout
     if p.returncode != 0:
-        err = re.search(r'\*ERROR\*\s*(.{0,60})', p.stdout)
-        if err:
-            return None, err.group(1).strip()
-        # the end of the output: the simulator's backtrace on a crash, its
-        # assertion, or whatever it stopped on -- a bare exit code explains
-        # nothing once the run directory is gone
-        tail = [l.strip()[:160] for l in p.stdout.splitlines() if l.strip()][-8:]
-        return None, 'exit %d: %s' % (p.returncode, ' | '.join(tail))
+        # the end of the output: the simulator's backtrace on a crash or a
+        # failed assertion, or whatever it stopped on -- a bare exit code, or
+        # the assertion's first line alone, explains nothing once the run
+        # directory is gone
+        tail = [l.strip()[:160] for l in p.stdout.splitlines() if l.strip()][-10:]
+        err = re.search(r'\*ERROR\*\s*(.{0,120})', p.stdout)
+        head = err.group(1).strip() if err else 'exit %d' % p.returncode
+        return None, '%s: %s' % (head, ' | '.join(tail))
     # run-sniper exits 0 even when the simulator refuses to start.
     if not expect.search(p.stdout):
         return None, 'exit 0 but the workload produced no output'

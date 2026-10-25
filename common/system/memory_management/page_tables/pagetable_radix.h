@@ -44,6 +44,7 @@ namespace ParametricDramDirectoryMSI
 		// We use 3 page walk caches, one for the first three levels of the radix tree
 
 		SimLog* m_log;    // Logging instance for the page table
+		IntPtr levelIndex(IntPtr address, int level);   // the nine-bit index into the table at a level (root = levels)
 
 		struct Stats
 		{
