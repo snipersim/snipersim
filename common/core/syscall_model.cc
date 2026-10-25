@@ -96,7 +96,13 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          if (Sim()->getConfig()->getOSEmuClockReplace())
          {
             clockid_t clock = (clock_t)args.arg0;
-            struct timespec *ts = (struct timespec *)args.arg1;
+            /* args.arg1 is a guest address: written through the core, as
+               nanosleep reads its timespec.  Dereferencing it here was right
+               only in the in-process Pin mode, which never forwards
+               clock_gettime; a QEMU x86-64 guest does (228), and the write
+               landed in the simulator's own address space. */
+            struct timespec local_ts;
+            struct timespec *ts = &local_ts;
             UInt64 time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
                            + m_thread->getCore()->getPerformanceModel()->getElapsedTime().getNS();
 
@@ -107,6 +113,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
                case CLOCK_MONOTONIC_RAW:
                   ts->tv_sec = time_ns / 1000000000;
                   ts->tv_nsec = time_ns % 1000000000;
+                  core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) args.arg1, (char*) ts, sizeof(*ts));
                   m_ret_val = 0;
                   break;
                default:

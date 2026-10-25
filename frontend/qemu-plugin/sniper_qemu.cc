@@ -1334,6 +1334,33 @@ void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
    }
 }
 
+/* The guest's system-call number -> the simulator's (x86-64 Linux) number
+ * for the calls it models, or -1.  x86-64 guests: the same numbers;
+ * RISC-V and AArch64 guests: the asm-generic table. */
+static int modelled_syscall(int64_t num)
+{
+   struct Entry { int generic, x86; };
+   static const Entry table[] = {
+      { 63, 0 },     /* read */
+      { 64, 1 },     /* write */
+      { 260, 61 },   /* wait4 */
+      { 98, 202 },   /* futex */
+      { 124, 24 },   /* sched_yield */
+      { 122, 203 },  /* sched_setaffinity */
+      { 123, 204 },  /* sched_getaffinity */
+      { 101, 35 },   /* nanosleep */
+      { 115, 230 },  /* clock_nanosleep */
+      { 113, 228 },  /* clock_gettime */
+      { 94, 231 },   /* exit_group */
+   };
+   for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++)
+   {
+      if (g_arch == ARCH_X86 ? num == table[i].x86 : num == table[i].generic)
+         return table[i].x86;
+   }
+   return -1;
+}
+
 void syscall_enter(SNP_SYSCALL_ARGS)
 {
    VCPU *v = vcpu_get(vcpu_index);
@@ -1348,11 +1375,23 @@ void syscall_enter(SNP_SYSCALL_ARGS)
    if (!opt_response || g_mode.load() == MODE_OFF || v->closed)
       return;
 
+   /* Only the system calls the simulator models go out, by the numbers it
+    * knows them by -- the Pin recorder's whitelist.  The simulator switches
+    * on its host's (x86-64) SYS_ constants; a RISC-V or AArch64 guest uses
+    * the asm-generic table, where the same numbers mean other calls
+    * (unlinkat is x86-64's nanosleep, mlock its clock_gettime, munlockall
+    * its exit_group), so sending them raw had the simulator zero a guest
+    * pathname, abort, or end the run.  Everything else is QEMU's business
+    * and is not modelled. */
+   const int sys = modelled_syscall(num);
+   if (sys < 0)
+      return;
+
    /* Close out the instruction that issued the syscall first. */
    flush_pending(v, 0);
 
    const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
-   v->writer->Syscall((uint16_t)num, (const char *)args, sizeof(args));
+   v->writer->Syscall((uint16_t)sys, (const char *)args, sizeof(args));
 }
 
 void vcpu_init(SNP_VCPU_ARGS)
