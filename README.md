@@ -7,7 +7,7 @@ by the Performance Lab research group at Ghent University, Belgium.
 Please refer to the NOTICE file in the top-level directory for
 licensing and copyright information.
 
-Sniper is a next-generation parallel, high-speed, and accurate x86 simulator. This multi-core simulator 
+Sniper is a next-generation parallel, high-speed, and accurate multi-core simulator for x86-64, AArch64 and RISC-V. This multi-core simulator
 is based on the interval core model and the [Graphite](https://github.com/mit-carbon/Graphite) simulation 
 infrastructure, allowing for fast and accurate simulation and trading off simulation speed for accuracy to 
 allow a range of flexible simulation options when exploring different homogeneous and 
@@ -39,8 +39,17 @@ more information about building the simulator and usage, please see
 
 ```bash
 make -j$(nproc)          # fetch dependencies, configure, build
+make -C test/fft fft     # the example workload
 ./run-sniper -n 1 -c gainestown -- ./test/fft/fft
 ```
+
+The front ends and models beyond the x86-64 SDE recorder are switched on at
+build time: `make QEMU=ON` (the QEMU front ends, user and full system, for
+x86-64, AArch64 and RISC-V), `ARM=ON` (the AArch64 decoder and the Cortex
+configurations), `DYNAMORIO=ON`, `RISCV_IME=ON` (the patched QEMU with the
+RISC-V matrix extensions), `TORCH=ON` (the libtorch branch predictor), `MPI=ON`
+(MPICH for the MPI tests), `MCPAT=OFF` to leave McPAT out; RISC-V itself is on
+by default.  The variables are listed at the top of the Makefile.
 
 `make` is a forwarder: the build itself is CMake, and it puts its output in
 `build/default` rather than in the source tree.  Several build directories can
@@ -74,6 +83,8 @@ simulator was in fact broken.
 - `docs/RISCV_ISA_GENERATION.md`: how the RISC-V decoder, header and configuration block are generated.
 - `docs/ACCELERATOR_COMPONENTS.md`: every software and hardware component of the matrix-acceleration path, and the measurements.
 - `docs/ARM64.md`: recording ARM64 traces with the DynamoRIO front end and simulating them.
+- `docs/PACSIM_QEMU.md`: Pac-Sim sampling under the QEMU front end: running it, the knobs, what the port changed in the sampler and why, the agent's measured speedups.
+- `frontend/qemu-plugin/README.md` and `frontend/dr-frontend/README.md`: the QEMU and DynamoRIO front ends.
 - `docs/COMPILATION.md`: compiling an application to run under Sniper.
 - `docs/TEMPORAL_PTE_TUNING.md`: tuning the temporal PTE prefetcher.
 - `make doc-verify` runs every `# verify:` block of the two stack documents; `make doxygen` builds the API reference into `docs/doxygen/`.

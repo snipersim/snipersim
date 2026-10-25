@@ -34,8 +34,8 @@ marked as such.
 | MimicOS, userspace kernel | `mimicos/` (`build/default/bin/startup_mimicos`) | A kernel that runs as a guest program under simulation, drives applications from their traces, takes their page faults, schedules them, and talks to the simulator only through magic instructions |
 | Multicore and NUMA | `common/misc/ticket_lock.h`, `common/system/barrier_sync_server.cc`, `include/memory_management/numa/` | A fair ticket lock, barrier core parking, NUMA-aware allocation, the `none` clock-skew scheme |
 | Output | `tools/run_sniper.py`, `tools/lnav/`, `scripts/live.py`, `tools/sniper-live` | One stamped, tagged run stream from every process; an lnav format for it; a live feed in simulated time and a terminal dashboard |
-| Pac-Sim | `sift/recorder/pacsim.{h,cc}`, `tools/pacsim/`, `tools/pacsim.py`, `tools/dumpstats.py`, `run-sniper --pacsim` | Sampled simulation that chooses, while the application runs, what to simulate in detail and what to keep warm, and estimates the whole run's time; the recorder side was restored on this branch (section 3.7) |
-| Tests | `testing/test_{scripting,configs,qemu,pacsim,apps,virtuoso}.py`, `testing/run_tests.py`, `make regress` | Six suites behind one `make regress`; an invariance-and-activation suite for every Virtuoso feature; an MMU experiment runner |
+| Pac-Sim | `sift/pacsim_sampler.{h,cc}` (the sampler), `sift/recorder/pacsim.{h,cc}` and `frontend/qemu-plugin/pacsim_qemu.{h,cc}` (its Pin and QEMU adapters), `tools/pacsim/`, `tools/pacsim.py`, `tools/dumpstats.py`, `run-sniper --pacsim` | Sampled simulation that chooses, while the application runs, what to simulate in detail and what to keep warm, and estimates the whole run's time; the recorder side was restored on this branch (section 3.7) |
+| Tests | `testing/test_{scripting,riscv_isa,configs,qemu,pacsim,apps,virtuoso,magic}.py`, `make regress` | Eight suites behind one `make regress`; an invariance-and-activation suite for every Virtuoso feature; an MMU experiment runner |
 
 ---
 
@@ -320,7 +320,7 @@ output).  This is Pac-Sim (Liu, Sabu, Chaudhari, Kang, Carlson, TACO
 the recorder's region file into the estimate; `testing/test_pacsim.py`)
 was in the tree.  The recorder side was not (removed with the upstream
 recorder on 2026-03-22, commit `f472416`); it is now
-`sift/recorder/pacsim.{h,cc}`, a self-contained sampler written against
+`sift/pacsim_sampler.{h,cc}` (moved out of `sift/recorder/pacsim.{h,cc}`, now its Pin adapter), a self-contained sampler written against
 the current recorder rather than a port of the 7,400-line original, with
 the original's method:
 
@@ -458,15 +458,15 @@ before it.
 
 | suite | command | what it holds | size |
 |---|---|---|---|
-| scripting | `testing/test_scripting.py` | six Python-hook cases on a threaded workload (`statscb`, `periodic-stats`, `ipcthreadtrace`, `markers`, `no-script`, `static-scheduler`) | 2 minutes |
+| scripting | `testing/test_scripting.py` | 21 Python-hook cases on a threaded workload (`statscb`, `periodic-stats`, `ipcthreadtrace`, `markers`, `no-script`, `static-scheduler`) | 2 minutes |
 | configs | `testing/test_configs.py` | every shipped configuration and fragment at 1, 2 and 4 cores in fast-forward and detailed mode, each required to produce the workload's checksum; unclassified configurations are a failure | 318 checks, over an hour |
-| qemu | `testing/test_qemu.py` | the QEMU frontend: x86 user traces, multi-threaded streams, an exact full-system count, VA-to-PA, mode switches; and the 21 RISC-V cases | hours with the RISC-V cases |
+| qemu | `testing/test_qemu.py` | the QEMU frontend: x86 user traces, multi-threaded streams, an exact full-system count, VA-to-PA, mode switches; and the 27 RISC-V and 5 AArch64 cases | hours with the RISC-V cases |
 | pacsim | `testing/test_pacsim.py [--profile quick]` | three region shapes, each: same program, faster, agrees within tolerance; one core per thread, quick or full sizes (section 3.7) | minutes (quick) to an hour (full) |
 | apps | `testing/test_apps.py` | every `test/` workload's `make run` with a check on what came out (the FFT's own verdict, MPI's pi, DVFS read-back, SMC's rewritten code, fork, spin loops) | 10 minutes |
 | virtuoso | `testing/test_virtuoso.py` | four invariance configurations against host-local goldens (`--bless` once; ASLR pinned with `setarch -R`, a fixed environment and workload path) and 25 feature-activation cases, one per landed Virtuoso feature | 5 minutes |
 | MMU runner | `testing/run_tests.py --suite smoke_test` | trace-driven MMU experiments from `testing/test_config.yaml` (needs the trace directories it names) | |
 
-`make regress` runs the six suites in turn, keeps timings in one log and
+`make regress` runs the eight suites in turn, keeps timings in one log and
 prints where the wall clock went (`testing/regress_report.py`);
 `FAILFAST=ON` stops at the first failure.
 
@@ -718,7 +718,7 @@ make regress_pacsim
 make regress_qemu
 ```
 
-`make regress` runs all six and prints the timing report;
+`make regress` runs all eight and prints the timing report;
 `SNIPER_REGRESS_LOG=<file> make regress` keeps the timings for
 `testing/regress_report.py <file>`.
 

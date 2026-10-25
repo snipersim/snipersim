@@ -4,8 +4,12 @@ Version 9.0 (in preparation)
     digest and fetched into a shared cache by deps/sniper-deps
   * Front ends: the SIFT recorder as an SDE tool (Pac-Sim restored, pinball
     replay), the DynamoRIO client for x86-64 and ARM64 (fixed and tested),
-    the QEMU TCG-plugin front end (x86 user and full system, RISC-V user mode
-    with the IME, AME and accelerator extensions); the plain-Pin, PinPlay-kit,
+    the QEMU TCG-plugin front end (x86-64 and RISC-V user and full system,
+    AArch64 user mode, all launched from run-sniper --frontend=qemu and
+    --frontend=qemu-system-<arch>; RISC-V with the IME, AME and accelerator
+    extensions; the magic instructions of sim_api.h on all three ISAs, with
+    testing/test_magic.py checking every front end; Pac-Sim sampling under
+    QEMU; physical code addresses with --pa); the plain-Pin, PinPlay-kit,
     rv8 and Spike paths are gone
   * Virtuoso v2 and MimicOS: the MMU framework with the radix and range page
     tables, page-walk caches, a two-level TLB hierarchy with eight prefetchers,
@@ -30,6 +34,55 @@ Version 9.0 (in preparation)
   * One stamped output stream per run, an lnav format, a live feed and dashboard
   * make regress: seven suites (scripting, decoder tables, configurations,
     QEMU, Pac-Sim, workloads, Virtuoso); Python 3 throughout; C++20
+  * Address translation per architecture: the radix page table takes any
+    level count and refuses an address outside its space; the riscv
+    configurations model Sv39 (pagetable_configs/3_level_radix_sv39.cfg,
+    Sv48 as 4_level_radix_sv48.cfg), record-trace confines RISC-V user-mode
+    guests to the Sv39 layout (--qemu-va-bits), the cortex configurations'
+    4-level table is AArch64's 4 KiB-granule geometry; the ARM and RISC-V
+    configurations now set the TLBs the MMU builds (the former keys were read
+    by nothing), one memory controller, and an unlimited L2 fill bandwidth
+    (it was one bit per cycle)
+  * The ARM decoder on Capstone 5 with SVE operands; the Cortex-A53 and A72
+    configurations run AArch64 traces recorded under QEMU
+  * The ssh trace-streaming mode is removed
+  * The standalone simulator writes a symbolised backtrace on a crash,
+    including one at exit; every harness keeps it in the failure message
+  * Every test suite runs in a fresh temporary directory, removed unless
+    --keep; run-sniper and dumpstats honour SNIPER_OUTPUT_DIR; Pin's log goes
+    with the trace; MimicOS reports go to the run's directory; make regress
+    runs the magic suite too (eight suites)
+  * The Virtuoso invariance baselines are reproducible across checkouts and
+    users: the guest's environment is built from constants through a
+    fixed-length link, and the baseline records the recorder's size and the
+    environment's digest
+  * The QEMU plugin forwards only the system calls the simulator models,
+    translated from the guest's numbering; the clock_gettime emulation writes
+    through the core instead of a host pointer; a probe guest checks it on
+    RISC-V and AArch64 (nanosleep is timed, unlinkat's pathname survives)
+  * The AArch64 decoder classifies the exclusive and LSE atomics by mnemonic,
+    sizes the LSE, ldapr and SVE memory accesses (perf_model/core/arm/sve_bytes,
+    which record-trace gives the guest as its SVE vector length) instead of
+    passing them to the caches as size 0, and marks the serializing
+    instructions; a core model of one architecture on a configuration of
+    another is refused
+  * The RISC-V configurations carry BOOM's own parameters (riscv:
+    MegaBoomConfig, riscv-mediumboom: MediumBoomConfig, TAGE) instead of the
+    Cortex-A72's; the Cortex-A72 is 3-wide with TAGE
+  * run-sniper: the recorder's exit status is kept (a recorder killed by a
+    signal, or one that failed before streaming, fails the run; an
+    application's non-zero exit is reported and noted in sim.out), a recorder
+    that fails to start no longer leaves the simulator waiting, post-processing
+    cannot replace the exit status, the organise step moves only the run's own
+    files, a previous run's results are cleared, a RISC-V or AArch64 guest under
+    the QEMU front end gets its architecture's configuration when -c is absent,
+    --follow-execv reaches the SDE recorder; record-trace passes --pid and
+    --follow to SDE by SDE's names (they were assembled and dropped), validates
+    --qemu-va-bits, gives x86-64 guests -cpu max; both usage texts are complete
+  * make doc-verify fails when a block fails; the RISC-V QEMU cases default to
+    the tree's QEMU and a clang on the PATH; riscv-mediumboom is simulated by
+    the suite; a missing Virtuoso baseline is a skip, not a pass
+
 
 Version 8.1
   * Update from Python2 to Python3

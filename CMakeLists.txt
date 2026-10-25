@@ -30,7 +30,7 @@ cmake_minimum_required(VERSION 3.18)   # Python3 Development.Embed
 set(CMAKE_NO_SYSTEM_FROM_IMPORTED ON)
 
 project(sniper
-  VERSION 8.1
+  VERSION 9.0
   DESCRIPTION "Sniper multi-core simulator"
   LANGUAGES C CXX)
 

@@ -646,8 +646,9 @@ which is what the stream engine of the accelerator form would remove.
 
 Re-run on 2026-10-06 against commit `1dcf651` of `dev-mimicos-v2-update`
 (80-core Debian 12 host; clang 15 with lld for the guests; the RISC-V
-Unified Database at `b4e9fea`, the IME 0.9 pipeline's UDB overlay, and
-the AME draft at `8d27acd` as the specification roots), the same way as
+Unified Database at `b4e9fea` and the AME draft at `8d27acd` -- commits of
+those two specification repositories, not of this tree -- with the IME 0.9
+pipeline's UDB overlay, as the specification roots), the same way as
 the companion document (`make doc-verify`): every `# verify:` block
 extracted in order, the `env` block sourced, each other block in a
 traced subshell with its status recorded and its output read.  Every

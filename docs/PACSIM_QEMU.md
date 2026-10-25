@@ -128,8 +128,11 @@ limited the first row, in order of weight:
 3. **Cold first regions.**  The first prompt runs at 0.99 fs per
    instruction, the later ones at 0.55, and the first measurement stood for
    the cluster.  `pacsim-converge` keeps measuring until two agree.  On the
-   suite's task shape, whose clusters never agree, it measures every region
-   and the estimate is right (0.2%, from 36%); the run is then no shorter.
+   suite's task shape, whose clusters rarely agree, it then measures every
+   region and the estimate is right (0.2%, from 36%) with the run no shorter;
+   when two measurements of a cluster happen to agree, that cluster's later
+   regions are skipped and the error is 15-30%, so the shape's accuracy check
+   stays a known failure of the quick profile.
 4. **The reported estimate re-extrapolated in Python.**
    `tools/pacsim/pacsim_dumpjson.py` refilled every unmeasured region from
    the regions measured *before* it, so the cold regions stood for their

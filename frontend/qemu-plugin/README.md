@@ -1,8 +1,10 @@
 # QEMU frontend
 
-A Sniper frontend that loads into a **stock** QEMU as a TCG plugin. No QEMU
-fork, no QEMU patches. It writes SIFT, so to Sniper it is another trace
-producer.
+A Sniper frontend that loads into QEMU as a TCG plugin. It writes SIFT, so to
+Sniper it is another trace producer. A stock QEMU with plugins enabled runs
+x86-64, AArch64 and RISC-V guests; the RISC-V matrix extensions (IME, AME) need
+the patched QEMU the `qemu-riscv-ime` dependency builds
+(`tools/riscv/qemu-11.1.1-ime.patch`).
 
 ```
 make QEMU=ON -j8          # builds QEMU with plugins, then lib/libsniper-qemu.so
@@ -38,8 +40,10 @@ RVV at the vector length the riscv configuration models, and the IME and AME
 matrix extensions the qemu-riscv-ime dependency adds ($SNIPER_QEMU_RISCV_IME_CPU
 names another; a QEMU without those properties takes
 `--frontend-option='-cpu max'`).  What QEMU cannot do is
-refused rather than ignored: `--pid`, pinballs, `--pacsim`, MPI, `-f/-d/-b`
-instruction windows, `--vma`, and `--pa` in user mode.  Three options the
+refused rather than ignored: `--pid`, pinballs, MPI, `-f/-d/-b`
+instruction windows, `--vma`, and `--pa` in user mode.  `--pacsim` is
+supported in user mode with `--roi` (docs/PACSIM_QEMU.md) and refused for
+system mode.  Three options the
 other front ends take are accepted and have no effect here, because run-sniper
 passes them on every live run: `-e` (system calls are emulated by QEMU itself;
 the simulator only times them), `--follow` (QEMU user mode runs one process)
@@ -141,7 +145,7 @@ nothing moves again. This is reproduced in `test/qemu-plugin-probe`.
 
 Full system is not exposed to that, because Sniper tells QEMU what time it is
 instead of holding a vCPU. QEMU keeps choosing the interleaving; Sniper
-chooses time. That is the trade, and it is why full system is the default.
+chooses time. That is the trade. (`--frontend=qemu` is user mode; full system is `--frontend=qemu-system-<arch>`.)
 
 **MimicOS does not apply here.** MimicOS replaces the OS for user-space
 simulation; under full system there is a real guest kernel owning page tables

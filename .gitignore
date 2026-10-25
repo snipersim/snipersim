@@ -157,3 +157,13 @@ test/fft-marker/fft
 test/sniper-in-sniper/fft.sift
 test/sniper-in-sniper/fft.sift.env
 test/signal/
+
+# A run started from the tree's root (the README's own example) writes here;
+# nothing of a run belongs in the tree.
+/simulation/
+/telemetry/
+/logs/
+/sim.stdout
+*.sift
+*.vma
+__pycache__/

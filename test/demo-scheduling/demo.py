@@ -25,31 +25,28 @@ class DemoScheduler:
       self.last_reschedule = time
 
   def print_info(self):
-    print '[t=%3dus]' % (sim.stats.time() / 1e9),
-    print 'mapping:', ' '.join(str(self.core_mapping[core]) for core in range(sim.config.ncores)),
-    print '   ipc:', ' '.join('%3.1f' % self.ipc[core] for core in range(sim.config.ncores)),
-    print '   idle:',
+    print('[t=%3dus]' % (sim.stats.time() / 1e9), end=' ')
+    print('mapping:', ' '.join(str(self.core_mapping[core]) for core in range(sim.config.ncores)), end=' ')
+    print('   ipc:', ' '.join('%3.1f' % self.ipc[core] for core in range(sim.config.ncores)), end=' ')
+    print('   idle:', end=' ')
     for core in range(sim.config.ncores):
-      print '%2.0f%%' % (100 * sim.stats.get('performance_model', core, 'idle_elapsed_time') / float(sim.stats.time())),
-    print '   threads:',
+      print('%2.0f%%' % (100 * sim.stats.get('performance_model', core, 'idle_elapsed_time') / float(sim.stats.time())), end=' ')
+    print('   threads:', end=' ')
     for thread in range(sim.thread.get_nthreads()):
-      print '%5dkins' % (sim.stats.get('thread', thread, 'instruction_count') / 1e3),
-    print
-
+      print('%5dkins' % (sim.stats.get('thread', thread, 'instruction_count') / 1e3), end=' ')
+    print()
   def hook_roi_end(self):
-    print
-    print '[DEMO] Total runtime = %d us' % (sim.stats.time() / 1e9)
-    print
-
+    print()
+    print('[DEMO] Total runtime = %d us' % (sim.stats.time() / 1e9))
+    print()
   def reschedule(self):
     if False:
       threads = [ (thread, sim.stats.get('thread', thread, 'instruction_count')) for thread in range(sim.thread.get_nthreads()) ]
-      threads.sort(key = lambda (thread, icount): icount, reverse = False)
-      print '[DEMO] Reschedule:',
+      threads.sort(key = lambda thread_icount: thread_icount[1], reverse = False)
+      print('[DEMO] Reschedule:', end=' ')
       for i, (thread, _) in enumerate(threads):
         affinity = [ core == i for core in range(sim.config.ncores) ]
         sim.thread.set_thread_affinity(thread, affinity)
-        print '%d=>%d' % (thread, i),
-      print
-
+        print('%d=>%d' % (thread, i), end=' ')
+      print()
 sim.util.register(DemoScheduler())
