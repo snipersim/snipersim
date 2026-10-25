@@ -89,6 +89,23 @@ template <> class FrontendOptions<DRFrontend> : public OptionsBase<DRFrontend>
   /// Return a string with the available command line options
   std::string cmd_summary();
 
+  /// The ISA of the code this client records: the build's own target.  The
+  /// generic options take -isa; the DynamoRIO client records what it runs on,
+  /// and frontend_control.tcc puts this in the trace's ISA record so that an
+  /// AArch64 trace is recognised as one (the reader assumes x86-64 otherwise).
+  FrontendISA get_theISA()
+  {
+#if defined(AARCH64)
+    return ARM_AARCH64;
+#elif defined(ARM_32)
+    return ARM_AARCH32;
+#elif defined(TARGET_IA32)
+    return INTEL_IA32;
+#else
+    return INTEL_X86_64;
+#endif
+  }
+
 };
 
 } // end namespace frontend

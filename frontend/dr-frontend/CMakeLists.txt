@@ -76,7 +76,8 @@ add_library(dr_frontend SHARED
 target_include_directories(dr_frontend PRIVATE
   "${SNIPER_FRONTEND_DIR}"
   "${CMAKE_SOURCE_DIR}/sift"
-  "${CMAKE_SOURCE_DIR}/common/misc")
+  "${CMAKE_SOURCE_DIR}/common/misc"
+  "${CMAKE_SOURCE_DIR}/decoder_lib")    # decoder.h: the ISA record's values
 
 # Plain signature, not PRIVATE/PUBLIC: configure_DynamoRIO_client() below calls
 # target_link_libraries() the old way, and CMake refuses to mix the two forms on

@@ -167,7 +167,17 @@ FrontendOptions<T>::FrontendOptions(int argc, const char * argv [])
     else
       this->theISA = UNDEF_ISA;
   } else {
+    /* The build's own target: the DynamoRIO client built for AArch64 records
+       AArch64 code, whether or not -isa was given. */
+#if defined(AARCH64)
+    this->theISA = ARM_AARCH64;
+#elif defined(ARM_32)
+    this->theISA = ARM_AARCH32;
+#elif defined(TARGET_IA32)
+    this->theISA = INTEL_IA32;
+#else
     this->theISA = INTEL_X86_64;
+#endif
   }
   
   

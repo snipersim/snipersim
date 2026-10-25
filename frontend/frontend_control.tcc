@@ -1,4 +1,5 @@
 #include "sift_format.h"
+#include "decoder.h"       /* dl::DL_ISA_* for the trace's ISA record */
 
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -105,6 +106,24 @@ void FrontendControl <T>::openFile(threadid_t threadid)
   }
 
   m_thread_data[threadid].output->setHandleAccessMemoryFunc(m_sysmodel->handleAccessMemory, reinterpret_cast<void*>(threadid));
+
+  /* The trace's ISA.  The reader takes a trace without an ISA record for
+     x86-64, so an AArch64 recording (the DynamoRIO client built on a board,
+     docs/ARM64.md) was refused by the cortex configurations' ISA check, or
+     decoded as x86 by the others; the ISAChange record below says what it
+     is.  The build's target decides, and -isa overrides it. */
+  {
+    int isa = -1;
+    switch (m_options->get_theISA())
+    {
+      case ARM_AARCH64:  isa = dl::DL_ISA_AARCH64; break;
+      case ARM_AARCH32:  isa = dl::DL_ISA_ARM32;   break;
+      case INTEL_IA32:   isa = dl::DL_ISA_IA32;    break;
+      default: break;                              /* x86-64: the reader's default */
+    }
+    if (isa >= 0)
+      m_thread_data[threadid].output->ISAChange(isa);
+  }
 
 }
 
