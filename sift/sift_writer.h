@@ -85,6 +85,10 @@ namespace Sift
          uint32_t m_id;
          bool m_requires_icache_per_insn;
          bool m_send_va2pa_mapping;
+         /* The traced program's addresses are this process's (Pin, DynamoRIO)
+            -- false for the QEMU plugin, whose guest lives behind QEMU's own
+            mapping: Syscall() then neither touches nor translates them. */
+         bool m_in_process = true;
          bool m_external_mappings;   // the front end supplies mappings (Mapping()), not /proc/self/pagemap
          uint64_t m_code_changes_seen;   // CodeTracker::changes() when this writer last caught up
 
@@ -106,6 +110,9 @@ namespace Sift
          void CacheOnly(uint8_t icount, CacheOnlyType type, uint64_t eip, uint64_t address);
          void Output(uint8_t fd, const char *data, uint32_t size);
          uint64_t Syscall(uint16_t syscall_number, const char *data, uint32_t size);
+         /// The traced program does not share this process's address space
+         /// (the QEMU plugin): system-call arguments are not dereferenced.
+         void setOutOfProcess() { m_in_process = false; }
          int32_t NewThread();
          int32_t Join(int32_t);
          Mode Sync();

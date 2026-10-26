@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import glob
 import collections
 import os
 import re
@@ -2085,7 +2086,10 @@ def syscall_probe_run(workdir, guest, config_args):
     sleeps 3 x 10 ms (the simulated time must advance by that), calls unlinkat
     on a pathname and checks the bytes are intact (exit 101 if not), then
     mlock, munlockall and dup3, which must leave the simulator running."""
-    outdir = os.path.join(workdir, 'probe')
+    # Not workdir/probe: that is where build_guests puts the guests every
+    # other case boots, and removing it here made the x86 cases that ran
+    # after this one fail in 0 s with exit 1 (QEMU could not open its image).
+    outdir = os.path.join(workdir, 'syscall-probe-%s' % os.path.basename(guest))
     shutil.rmtree(outdir, ignore_errors=True)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1'] + list(config_args)
                   + ['-d', outdir, '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
@@ -2102,7 +2106,14 @@ def syscall_probe_run(workdir, guest, config_args):
         return False, 'the run left no statistics (%s)' % e
     if t < 30 * 10**12:
         return False, 'simulated time %.1f ms after three 10 ms sleeps: nanosleep was not modelled' % (t / 1e12)
-    return True, 'nanosleep charged (%.1f ms simulated), unlinkat left its pathname alone, mlock/munlockall/dup3 passed through' % (t / 1e12)
+    m = re.search(r'syscall_probe: cpus=(\d+)', out)
+    if not m:
+        return False, 'the probe printed no CPU count'
+    if int(m.group(1)) != 1:
+        return False, ('sched_getaffinity gave the guest %d CPUs on a 1-core simulation: the simulator\'s '
+                       'answer did not replace the call' % int(m.group(1)))
+    return True, ('nanosleep charged (%.1f ms simulated), sched_getaffinity answered by the simulator (1 CPU), '
+                  'unlinkat left its pathname alone, mlock/munlockall/dup3 passed through' % (t / 1e12))
 
 
 def case_riscv_user_syscalls(p, g, workdir):
@@ -2134,6 +2145,161 @@ def case_aarch64_user_syscalls(p, g, workdir):
     if rc != 0:
         return None, 'could not build syscall_probe.c (%s)' % exit_text(rc)
     return syscall_probe_run(workdir, guest, ['-c', 'cortex-a72'])
+
+
+RECORD_TRACE_REFUSALS = [
+    # (front end, extra options, words the refusal must contain)
+    ('dr', ['--pacsim'], '--pacsim is not available with the dr front end'),
+    ('dr', ['--maxthreads', '4'], '--maxthreads is not available with the dr front end'),
+    ('dr', ['--roi-mpi'], '--roi-mpi is not available with the dr front end'),
+    ('dr', ['--smc'], '--smc is not available with the dr front end'),
+    ('dr', ['--frontend-option=-d'], '--frontend-option is not available with the dr front end'),
+    ('qemu', ['--stop-address', '0x1000'], '--stop-address is not available with the qemu front end'),
+    ('qemu', ['--follow'], '--follow is not available with the qemu front end'),
+    ('qemu', ['--maxthreads', '4'], '--maxthreads is not available with the qemu front end'),
+    ('qemu', ['--sde-arch', 'skx'], '--sde-arch is not available with the qemu front end'),
+    ('qemu', ['--vma'], '--vma is not available with the qemu front end'),
+    ('qemu', ['-f', '1000'], '-f/-d/-b instruction windows is not available with the qemu front end'),
+    ('qemu-system-x86_64', ['--pacsim'], '--pacsim is not available with the qemu-system front end'),
+    (None, ['--frontend-option=-d'], '--frontend-option is not available with the sde front end'),
+    (None, ['--qemu-va-bits=48'], '--qemu-va-bits is not available with the sde front end'),
+    ('drx', [], "unknown front end 'drx'"),
+]
+
+
+def case_record_trace_options(p, g, workdir):
+    """Every front end refuses, with the reason, the options it cannot honour
+    (record-trace's option table), instead of ignoring them or aborting; and
+    the DynamoRIO client runs with -v, which it used to abort on."""
+    rt = os.path.join(SNIPER_ROOT, 'record-trace')
+    for fe, extra, want in RECORD_TRACE_REFUSALS:
+        cmd = [rt, '-o', os.path.join(workdir, 'refused')] + (['--frontend=%s' % fe] if fe else []) + extra + ['--', '/bin/true']
+        rc, out = run(cmd, 60, cwd=workdir)
+        if rc == 0 or want not in out:
+            return False, '%s %s: expected a refusal containing %r, got exit %s: %s' % (
+                fe or 'sde', ' '.join(extra), want, rc, out.strip()[-300:])
+    detail = '%d refusals, each with its reason' % len(RECORD_TRACE_REFUSALS)
+    if os.path.exists(os.path.join(p['build'], 'lib', 'libdr-frontend.so')):
+        prefix = os.path.join(workdir, 'drv')
+        rc, out = run([rt, '--frontend=dr', '-v', '-o', prefix, '--', '/bin/true'], 300, cwd=workdir)
+        if rc != 0 or not os.path.exists(prefix + '.app0.th0.sift') and not glob.glob(prefix + '*.sift'):
+            return False, 'the DynamoRIO client with -v: exit %s: %s' % (rc, out.strip()[-300:])
+        detail += '; the DynamoRIO client runs with -v'
+    return True, detail
+
+
+def case_riscv_virtuoso_portable(p, g, workdir):
+    """Virtuoso on RISC-V: the allocator and page-table fragments layer on the
+    riscv configuration (a THP allocator maps the page-touching guest with
+    2 MiB pages: 10 faults, not 517; a hashed page table replaces Sv39),
+    while an address_translation_schemes/ file -- a complete x86 system on
+    the Meteor Lake core -- is refused with the reason in either order."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    cc = os.environ['SNIPER_RISCV_CC']
+    guest = os.path.join(workdir, 'touch_rv_v')
+    rc, out = run([cc, '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-O1', '-ffreestanding',
+                   '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, TOUCH_PAGES], 120)
+    if rc != 0:
+        return None, 'could not build touch_pages.c (%s)' % exit_text(rc)
+    prefix = os.path.join(workdir, 'touchv')
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 120, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (%s)' % exit_text(rc)
+    trace = '--traces=' + prefix + '.app0.th0.sift'
+    def sim(name, configs, extra=()):
+        outdir = os.path.join(workdir, 'virt-' + name)
+        shutil.rmtree(outdir, ignore_errors=True)
+        args = []
+        for c in configs:
+            args += ['-c', c]
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1'] + args + list(extra) + ['-d', outdir, trace],
+                      600, cwd=SNIPER_ROOT)
+        return rc, out, outdir
+    # reserve_thp ships with every 2 MiB page fragmented (target_fragmentation
+    # 0.0); with them all free it maps each touched region with one.
+    rc, out, d = sim('thp', ['riscv', 'physical_memory_allocators/reserve_thp'],
+                     ['-g', 'perf_model/reserve_thp/target_fragmentation=1.0'])
+    if rc != 0:
+        return False, 'riscv + reserve_thp: %s' % sniper_failed(rc, out)
+    faults = int(stats_of(d).get('mmu.page_faults', -1))
+    if faults != 10:
+        return False, 'riscv + reserve_thp: %d page faults, expected 10 (8 regions, stack and code in 2 MiB pages)' % faults
+    rc, out, d = sim('hash', ['riscv', 'pagetable_configs/hash_table_chaining'])
+    if rc != 0:
+        return False, 'riscv + hash_table_chaining: %s' % sniper_failed(rc, out)
+    st = stats_of(d)
+    if not any(k.startswith('hash_table_chaining.') for k in st) or any(k.startswith('radix_sv39.') for k in st):
+        return False, 'riscv + hash_table_chaining did not replace the Sv39 table'
+    if int(st.get('mmu.page_faults', -1)) != TOUCH_FAULTS:
+        return False, 'riscv + hash_table_chaining: %s page faults, expected %d' % (st.get('mmu.page_faults'), TOUCH_FAULTS)
+    for order in (['address_translation_schemes/baseline', 'riscv'], ['riscv', 'address_translation_schemes/baseline']):
+        rc, out, d = sim('mixed', order)
+        if rc == 0 or 'mixes a core built for intel' not in out:
+            return False, '%s was not refused with the reason (exit %s)' % (' + '.join(order), rc)
+    return True, 'reserve_thp with free 2 MiB pages: 10 faults; hash_table_chaining replaces Sv39; a scheme with riscv refused in either order'
+
+
+PHASED_MT = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'phased_rv_mt.c')
+PHASED_MT_LINE = 'phased_rv_mt: threads=4 phases=12 checksum=12291709628096540252 visited=1440000'
+
+
+def mt_case(p, workdir, arch, qemu, cc, target_flags, config, qemu_opts):
+    """The four-worker phased guest under QEMU user mode: recorded to files it
+    gives one readable trace per thread (main and four workers) and the same
+    checksum as native; run live through run-sniper, the plugin refuses the
+    second thread with its reason and the run fails instead of passing on the
+    first thread's partial simulation."""
+    guest = os.path.join(workdir, 'phased_mt_' + arch)
+    rc, out = run([cc] + target_flags + ['-O1', '-ffreestanding', '-nostdlib', '-static', '-fuse-ld=lld',
+                   '-Wl,-e,_start', '-I', os.path.join(SNIPER_ROOT, 'include'), '-DNTHREADS=4', '-o', guest, PHASED_MT], 120)
+    if rc != 0:
+        return None, 'could not build phased_rv_mt.c (%s)' % exit_text(rc)
+    prefix = os.path.join(workdir, 'mt_' + arch)
+    rc, out = run([qemu] + qemu_opts + ['-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    if rc != 0 or PHASED_MT_LINE not in out:
+        return False, 'recording: exit %s, %s' % (exit_text(rc), 'checksum as native' if PHASED_MT_LINE in out else 'wrong or no checksum')
+    traces = sorted(f for f in os.listdir(workdir) if f.startswith('mt_%s.app0.th' % arch) and f.endswith('.sift'))
+    if len(traces) != 5:
+        return False, '%d per-thread traces, expected 5 (main and four workers)' % len(traces)
+    for t in traces:
+        rc, _ = run([p['siftdump'], os.path.join(workdir, t)], 300)
+        if rc != 0:
+            return False, '%s unreadable (%s)' % (t, exit_text(rc))
+    outdir = os.path.join(workdir, 'mt-live-' + arch)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '4', '-c', config, '-d', outdir,
+                   '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+    if rc == 0:
+        return False, 'the live run of a multi-threaded guest passed; the plugin must refuse the second thread'
+    if 'The front end refused the run: [SNIPER-QEMU] error: the guest started a second thread.' not in out:
+        return False, 'the live run failed without the refusal (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
+    # The refusal ends QEMU with _exit(1); a crash on the way out (QEMU
+    # died of SIGSEGV in one refusal in four while exit handlers ran under
+    # the other vCPU) reaches run-sniper as status 139.
+    if rc != 1:
+        return False, 'the refusal was given but the run ended with %s, not exit 1' % exit_text(rc)
+    return True, '5 per-thread traces, checksum as native; live: the second thread refused and the run failed (exit %s)' % rc
+
+
+def case_riscv_user_mt(p, g, workdir):
+    """Multi-threaded RISC-V guest: traces per thread, and the live refusal."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    return mt_case(p, workdir, 'rv', r['qemu'], os.environ['SNIPER_RISCV_CC'],
+                   ['--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d'], 'riscv', RISCV_VA_RESERVE)
+
+
+def case_aarch64_user_mt(p, g, workdir):
+    """The same for an AArch64 guest."""
+    qemu = os.environ.get('SNIPER_QEMU_AARCH64') or os.path.join(SNIPER_ROOT, 'qemu-aarch64', 'build', 'qemu-aarch64')
+    cc = os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-aarch64 (make ARM=ON QEMU=ON, or set SNIPER_QEMU_AARCH64)'
+    if not cc or not os.path.isfile(cc):
+        return None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
+    return mt_case(p, workdir, 'a64', qemu, cc, ['--target=aarch64-linux-gnu'], 'cortex-a72', [])
 
 
 def case_aarch64_user_translation(p, g, workdir):
@@ -2179,6 +2345,10 @@ CASES = {
     'riscv-user-simulate': case_riscv_user_simulate,
     'riscv-user-translation': case_riscv_user_translation,
     'aarch64-user-translation': case_aarch64_user_translation,
+    'record-trace-options': case_record_trace_options,
+    'riscv-virtuoso-portable': case_riscv_virtuoso_portable,
+    'riscv-user-mt': case_riscv_user_mt,
+    'aarch64-user-mt': case_aarch64_user_mt,
     'riscv-user-syscalls': case_riscv_user_syscalls,
     'aarch64-user-syscalls': case_aarch64_user_syscalls,
     'riscv-ime-trace':     case_riscv_ime_trace,

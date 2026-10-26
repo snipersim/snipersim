@@ -443,6 +443,15 @@ for o, a in opts:
 # assumed -- see record-trace.  A run that quietly fell back to unsampled
 # tracing would still produce a sim.out, and nothing in it would say the
 # sampling never happened.
+if enable_pacsim and (traces or trace_manual or pinballs):
+  # The sampler runs in the recorder, while the application runs; a trace or
+  # a pinball replay has no recorder to sample, and the run used to announce
+  # "sampling enabled" and then simulate everything.
+  print('[PacSim] Error: --pacsim samples a live run; it cannot apply to --traces or --pinballs.', file=sys.stderr)
+  sys.exit(1)
+if enable_pacsim and frontend and (frontend == 'dr' or frontend.startswith('qemu-system')):
+  print('[PacSim] Error: --pacsim needs the SDE recorder or the QEMU front end in user mode, not %s.' % frontend, file=sys.stderr)
+  sys.exit(1)
 if enable_pacsim:
   # The pre-ROI region keeps the default cache warm-up: the sampler's own
   # warm-up covers the stretches between its measured regions, not the run-up
@@ -913,9 +922,7 @@ if tracegen:
     if tracegen['redirect']:
       rc = run_sniper.run_program_redirect(app_id, run_sift_recorder, tracecmd, outputdir, 0, tag)
       if rc is None:
-        rc = 1
-      elif rc > 128:
-        rc = -(rc - 128)            # the child encodes a signal as 128 + signal
+        rc = 1                      # the redirecting child itself failed
     else:
       rc = run_sift_recorder(tracecmd)
     recorder_done(app_id, rc)
@@ -1112,11 +1119,30 @@ stopping = True
 # and noted in sim.out, and the simulator's status stays the run's.
 recorder_signals = []
 if tracegen:
-  recorder_signals = [ (a, -st) for a, st in tracegen.get('recorder_status', []) if st < 0 ]
+  # A signal shows as a negative status (the recorder itself killed), or as
+  # 128 + the signal (record-trace reports its child's signal as a shell
+  # does); 129..192 covers signals 1..64, so an exit status of 255 is not
+  # taken for one.
+  def as_signal(st):
+    return -st if st < 0 else (st - 128 if 129 <= st <= 192 else 0)
+  recorder_signals = [ (a, as_signal(st)) for a, st in tracegen.get('recorder_status', []) if as_signal(st) ]
   if rc == 0 and recorder_signals:
     rc = 128 + recorder_signals[0][1]
     print('[SNIPER] Exiting with status %d: the recorder for application %d was killed by signal %d'
           % (rc, recorder_signals[0][0], recorder_signals[0][1]))
+# A front end that refused to go on mid-run (the QEMU plugin: a second guest
+# thread in user mode, say) leaves its reason in <trace>.app<N>.refused; the
+# simulation of what came before it is not the run that was asked for.
+if tracegen and tracegen.get('tracetempdir'):
+  import glob as _glob
+  for f in sorted(_glob.glob(os.path.join(tracegen['tracetempdir'], '*.refused'))):
+    try:
+      why = open(f).read().strip().split('\n')[0]
+    except OSError:
+      why = '(no reason recorded)'
+    print('[SNIPER] The front end refused the run: %s' % why)
+    if rc == 0:
+      rc = 1
 if rc != 0 and not recorder_signals:
   print('[SNIPER] The simulator exited with status %d' % rc)
 t_end = time.time()

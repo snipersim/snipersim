@@ -13,7 +13,10 @@
  *   - unlinkat on a pathname that does not exist: the pathname's bytes must
  *     be intact afterwards (exit 101 if not);
  *   - mlock on a page of its own, munlockall, dup3: the simulator must still
- *     be running afterwards (it printed "syscall_probe: done" and exits 100).
+ *     be running afterwards (it printed "syscall_probe: done" and exits 100);
+ *   - sched_getaffinity: the simulator emulates it, and its answer -- the
+ *     simulated cores, not the host's -- must reach the guest; the probe
+ *     prints "syscall_probe: cpus=N".
  *
  * Freestanding:
  *   clang --target=riscv64-linux-gnu -march=rv64gc -mabi=lp64d -O1 \
@@ -42,6 +45,7 @@ static long sys4(long n, long a, long b, long c, long d)
 #define SYS_write       64
 #define SYS_exit_group  94
 #define SYS_nanosleep   101
+#define SYS_sched_getaffinity 123
 #define SYS_mlock       228
 #define SYS_munlockall  231
 
@@ -64,6 +68,18 @@ void _start(void)
    sys4(SYS_mlock, (long)page, 4096, 0, 0);
    sys4(SYS_munlockall, 0, 0, 0, 0);
    sys4(SYS_dup3, 1, 7, 0, 0);
+
+   /* The kernel (and the simulator) return the bytes of mask they filled:
+      one byte for up to eight CPUs. */
+   static unsigned char mask[128];
+   long got = sys4(SYS_sched_getaffinity, 0, sizeof(mask), (long)mask, 0);
+   int cpus = 0;
+   for (long i = 0; got > 0 && i < got && i < (long)sizeof(mask); i++)
+      for (unsigned m = mask[i]; m; m &= m - 1)
+         cpus++;
+   char line[] = "syscall_probe: cpus=000\n";
+   line[20] = '0' + cpus / 100 % 10; line[21] = '0' + cpus / 10 % 10; line[22] = '0' + cpus % 10;
+   sys4(SYS_write, 1, (long)line, sizeof(line) - 1, 0);
 
    static const char msg[] = "syscall_probe: done\n";
    sys4(SYS_write, 1, (long)msg, sizeof(msg) - 1, 0);

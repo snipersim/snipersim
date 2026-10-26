@@ -191,7 +191,7 @@ class Tee:
     self.thread.join(10)
     os.close(self.out_fd)
 
-def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None):
+def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None, status = None):
   tee = Tee(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), '[%s] ' % (tag or 'app%d' % app_id))
   tee.redirect()
   rc = 0
@@ -199,21 +199,25 @@ def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id 
     rc = program_func(program_arg)
   finally:
     tee.close()
-  # The function's status is this process's exit code, so the parent learns
-  # it (run_program_redirect returns it).  subprocess reports a signal as a
-  # negative number; an exit code cannot be, so it goes as 128 + signal.
-  if isinstance(rc, int) and rc != 0:
-    sys.exit(rc if rc > 0 else 128 - rc)
+  # The function's status goes back through shared memory, not this
+  # process's exit code: an exit code is 0..255, and a program that exited
+  # with 255 could not be told from one killed by a signal.
+  if status is not None and isinstance(rc, int):
+    status.value = rc
 
 def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None):
   """Run program_func(program_arg) in a child process with its output tagged
-  and logged; return what the function returned (0 when it returned nothing,
-  128 + signal when the program it ran was killed by one)."""
+  and logged; return what the function returned (0 when it returned nothing;
+  for a subprocess's status, negative when the program was killed by a
+  signal), or None when the child itself failed."""
   import multiprocessing # module does not exist in Python <= 2.5, import only when needed
-  proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id, tag))
+  status = multiprocessing.Value('l', 0)
+  proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id, tag, status))
   proc.start()
   proc.join()
-  return proc.exitcode
+  if proc.exitcode != 0:
+    return None
+  return status.value
 
 def run_program_repeat(app_id, program_func, program_arg, outputdir):
   global running

@@ -853,6 +853,18 @@ bool Reader::Read(Instruction &inst)
       for (int i = 0; i < inst.num_addresses; ++i)
          input->read(reinterpret_cast<char*>(&inst.addresses[i]), sizeof(uint64_t));
 
+      /* The writer died mid-record (a front end that _exits on refusal, or
+         one killed): what was read is a fragment, and its size and address
+         are garbage that the decoder then asserted on (aarch64-user-mt's
+         live refusal, one run in four).  End the stream here instead. */
+      if (input->fail())
+      {
+         std::cerr << "[SIFT:" << m_id << "] stream ended inside an instruction record, without its End"
+                   << " record: the recording process exited or crashed without closing it"
+                   << " (look for a [SIFT] or recorder message above)\n";
+         return false;
+      }
+
       inst.sinst = getStaticInstruction(addr, size);
 
 #if VERBOSE_HEX > 2

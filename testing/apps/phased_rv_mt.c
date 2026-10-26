@@ -1,4 +1,4 @@
-/* phased.c for a RISC-V guest without a C library: the barrier-synchronised
+/* phased.c for a RISC-V or AArch64 guest without a C library: the barrier-synchronised
  * phased workload, multi-threaded, freestanding.  Threads are cloned with
  * the raw system call onto static stacks, the barrier is a sense-reversing
  * one on a futex, the join waits on each child's tid word (the kernel
@@ -14,7 +14,10 @@
  * Build:
  *   $SNIPER_RISCV_CC --target=riscv64-linux-gnu -march=rv64gc -mabi=lp64d -O1 \
  *       -ffreestanding -nostdlib -static -fuse-ld=lld -Wl,-e,_start -I include \
- *       -DNTHREADS=4 -o phased_rv_mt testing/apps/phased_rv_mt.c */
+ *       -DNTHREADS=4 -o phased_rv_mt testing/apps/phased_rv_mt.c
+ * and for AArch64 the same with --target=aarch64-linux-gnu (no -march/-mabi):
+ * both use the asm-generic system-call numbers; only the trap and the clone
+ * stub differ. */
 #include <stdint.h>
 #include "sim_api.h"
 
@@ -42,10 +45,17 @@ enum { FUTEX_WAIT_ = 0, FUTEX_WAKE_ = 1 };
 
 static long sys6(long n, long a, long b, long c, long d, long e, long f)
 {
+#if defined(__aarch64__)
+   register long a0 __asm__("x0") = a; register long a1 __asm__("x1") = b; register long a2 __asm__("x2") = c;
+   register long a3 __asm__("x3") = d; register long a4 __asm__("x4") = e; register long a5 __asm__("x5") = f;
+   register long a7 __asm__("x8") = n;
+   __asm__ volatile("svc #0" : "+r"(a0) : "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(a7) : "memory");
+#else
    register long a0 __asm__("a0") = a; register long a1 __asm__("a1") = b; register long a2 __asm__("a2") = c;
    register long a3 __asm__("a3") = d; register long a4 __asm__("a4") = e; register long a5 __asm__("a5") = f;
    register long a7 __asm__("a7") = n;
    __asm__ volatile("ecall" : "+r"(a0) : "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(a7) : "memory");
+#endif
    return a0;
 }
 static void out(const char *s) { long n = 0; while (s[n]) n++; sys6(SYS_write_, 1, (long)s, n, 0, 0, 0); }
@@ -54,6 +64,27 @@ static void outnum(unsigned long v) { char b[24]; int i = 23; b[i] = 0; do { b[-
 /* clone(flags, stack, parent_tid, tls, child_tid): the child starts on its
  * stack with the function and argument stored there, calls, and exits. */
 long rv_clone(void (*fn)(long), void *stack_top, unsigned long flags, long arg, int *child_tid);
+#if defined(__aarch64__)
+__asm__(
+   ".text\n"
+   ".globl rv_clone\n"
+   ".type rv_clone, %function\n"
+   "rv_clone:\n"
+   "   sub  x1, x1, #16\n"        /* the child's frame: fn, arg */
+   "   stp  x0, x3, [x1]\n"
+   "   mov  x0, x2\n"             /* flags */
+   "   mov  x2, xzr\n"            /* parent_tid */
+   "   mov  x3, xzr\n"            /* tls; x4 = child_tid already */
+   "   mov  x8, #220\n"           /* clone */
+   "   svc  #0\n"
+   "   cbnz x0, 1f\n"             /* the parent (or an error): return the tid */
+   "   ldp  x1, x0, [sp]\n"       /* the child: call fn(arg), then exit */
+   "   blr  x1\n"
+   "   mov  x8, #93\n"
+   "   svc  #0\n"
+   "1: ret\n"
+   ".size rv_clone, .-rv_clone\n");
+#else
 __asm__(
    ".text\n"
    ".globl rv_clone\n"
@@ -75,6 +106,7 @@ __asm__(
    "   ecall\n"
    "1: ret\n"
    ".size rv_clone, .-rv_clone\n");
+#endif
 
 /* CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD | CLONE_SYSVSEM
  * | CLONE_CHILD_CLEARTID | CLONE_CHILD_SETTID: what pthread_create asks for, less TLS */

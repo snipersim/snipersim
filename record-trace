@@ -62,6 +62,7 @@ if not sys.argv[1:]:
 
 enable_pacsim = False
 qemu_va_bits = 39        # RISC-V: Sv39; see the QEMU front end below
+qemu_va_bits_given = False
 enable_smc = False
 # Code rewritten in place is tracked by default (Sift::CodeTracker); --no-smc
 # turns that off, --smc selects the strict per-instruction mode instead
@@ -130,6 +131,7 @@ for o, a in opts:
   if o == '--frontend':
     frontend = a
   if o == '--qemu-va-bits':
+    qemu_va_bits_given = True
     qemu_va_bits = int(a)
     if qemu_va_bits not in (39, 48):
       print('[RECORD-TRACE] --qemu-va-bits takes 39 (Sv39, the riscv configurations) or 48 (Sv48), not %d' % qemu_va_bits)
@@ -143,6 +145,7 @@ for o, a in opts:
   if o == '--pid-continue':
     pid_continue = True
   if o == '--maxthreads':
+    maxthreads = int(a)
     extra_tool_args.append('-sniper:maxthreads %s' % a)
   if o == '--sde-arch':
     sde_arch = a
@@ -156,6 +159,64 @@ for o, a in opts:
     track_smc = False
   if o == '--vma':
     log_vma = True
+
+# What each front end does with each option.  Every option is honoured, has
+# no effect (only those run-sniper passes on every live run, so that one
+# command line serves every front end), or is refused with the reason.  A
+# front end that ignored what it could not do produced a trace that was not
+# what was asked for, with nothing in it to say so: --pacsim under DynamoRIO
+# sampled nothing, --maxthreads aborted the DynamoRIO client and QEMU, -v
+# aborted the DynamoRIO client, --stop-address and --follow did nothing
+# under QEMU, and a mistyped --frontend fell through to whichever branch a
+# substring matched.
+if frontend in (None, '', 'sde', 'pin'):
+  fe = 'sde'
+elif frontend == 'dr':
+  fe = 'dr'
+elif frontend == 'qemu':
+  fe = 'qemu'
+elif frontend.startswith('qemu-system-'):
+  fe = 'qemu-system'
+else:
+  print('[RECORD-TRACE] Error: unknown front end %r (sde, dr, qemu, qemu-system-<arch>)' % frontend, file=sys.stderr)
+  sys.exit(1)
+frontend = None if fe == 'sde' else frontend
+
+ALL = ('sde', 'dr', 'qemu', 'qemu-system')
+SDE_ONLY = ('sde',)
+OPTION_TABLE = [
+  # (given?, option, honoured by, no effect under, why the others refuse)
+  (fastforward or detailed or blocksize, '-f/-d/-b instruction windows', ('sde', 'dr'), (),
+     'use --roi with SimRoiStart()/SimRoiEnd()'),
+  (roi_mpi, '--roi-mpi', SDE_ONLY, (), 'the implicit MPI region needs the SDE recorder\'s MPI_Init detection'),
+  (use_gdb, '--gdb', SDE_ONLY, (), 'debugging the tool goes through Pin'),
+  (use_follow, '--follow', SDE_ONLY, (), 'following exec and fork is the SDE recorder\'s (-follow_subprocess)'),
+  (use_pa, '--pa', ('sde', 'dr', 'qemu-system'), (),
+     'a QEMU user-mode guest has no host physical addresses (a full-system trace always carries its own)'),
+  (use_routine_tracing, '--routine-tracing', SDE_ONLY, ('dr', 'qemu', 'qemu-system'), ''),
+  (pinball, '--pinball', SDE_ONLY, (), 'pinballs are replayed by PinPlay'),
+  (extra_pin_args, '-x', SDE_ONLY, (), 'these are Pin\'s options'),
+  (use_pid, '--pid', SDE_ONLY, (), 'attaching to a running process is Pin\'s'),
+  (stop_address, '--stop-address', ('sde', 'dr'), (), 'not implemented in the QEMU plugin'),
+  (maxthreads, '--maxthreads', SDE_ONLY, (), 'not implemented in this front end'),
+  (sde_arch, '--sde-arch', SDE_ONLY, (), 'it selects the CPU SDE emulates'),
+  (enable_pacsim, '--pacsim', ('sde', 'qemu'), (),
+     'the sampler runs in the SDE recorder and in the QEMU plugin in user mode'),
+  (enable_smc, '--smc', SDE_ONLY, (),
+     'the strict per-instruction mode is the SDE recorder\'s; rewritten code is tracked here by default'),
+  (log_vma, '--vma', ('sde', 'dr'), (), 'VMA logging reads /proc of the traced process'),
+  (frontend_options, '--frontend-option', ('qemu', 'qemu-system'), (), 'it passes options to QEMU'),
+  (qemu_va_bits_given, '--qemu-va-bits', ('qemu',), (), 'it sets the address space of a QEMU user-mode guest'),
+]
+for given, name, honoured, no_effect, why in OPTION_TABLE:
+  if not given or fe in honoured:
+    continue
+  if fe in no_effect:
+    if verbose:
+      print('[RECORD-TRACE] %s has no effect with the %s front end' % (name, fe))
+    continue
+  print('[RECORD-TRACE] Error: %s is not available with the %s front end: %s.' % (name, fe, why), file=sys.stderr)
+  sys.exit(1)
 
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
@@ -349,17 +410,7 @@ def qemu_binary(arch, relpath, var):
 
 def qemu_command():
   system = frontend.startswith('qemu-system')
-  # Refused rather than ignored: each would otherwise produce a trace that is
-  # not what was asked for, with nothing in it to say so.
-  if use_pid:        qemu_refuse('attaching to a running process (--pid)')
-  if pinball:        qemu_refuse('pinball replay')
-  if roi_mpi:        qemu_refuse('MPI (--roi-mpi)')
-  if fastforward or detailed or blocksize:
-    qemu_refuse('instruction-count windows (-f/-d/-b); use --roi with SimRoiStart()/SimRoiEnd()')
-  if log_vma:        qemu_refuse('VMA logging (--vma)')
-  if use_pa and not system:
-    qemu_refuse('--pa in user mode (a full-system trace always carries physical addresses)')
-  # (and in full system it is already so: the guest's own physical addresses)
+  # The options this front end cannot take were refused by the table above.
   plugin = os.path.join(BUILD_DIR, 'lib', 'libsniper-qemu.so')
   if not os.path.exists(plugin):
     print('[RECORD-TRACE] Error: %s not built (make QEMU=ON)' % plugin, file=sys.stderr)
@@ -455,11 +506,8 @@ value_routine_tracing = use_routine_tracing and 1 or 0
 value_verbose = verbose and 1 or 0
 value_vma = log_vma and 1 or 0
 extra_tool_args = ' '.join(extra_tool_args)
-if frontend and (use_pid or extra_pin_args or use_gdb):
-  print('[RECORD-TRACE] --pid, --gdb and -x are the SDE recorder\'s; the %s front end cannot take them' % frontend, file=sys.stderr)
-  sys.exit(1)
 if frontend:
-  if 'dr' in frontend:
+  if frontend == 'dr':
     print('[RECORD-TRACE] Using DynamoRIO frontend')
     DRRUN = '%(dynamorio_home)s/bin64/drrun' % locals()
     DR_frontendlib = '%(BUILD_DIR)s/lib/libdr-frontend.so' % locals()
@@ -473,7 +521,7 @@ if frontend:
     if value_pa == 1:
        bool_args += '-pa '
     if verbose:
-       bool_args += '-verbose %(value_verbose)s' % locals()
+       bool_args += '-verbose '            # a flag: '-verbose 1' made the client abort on '1'
        dr_args += ' -loglevel 1'
     else:
        dr_args += ' -loglevel 0 -stderr_mask 0'

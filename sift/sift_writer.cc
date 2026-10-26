@@ -689,6 +689,11 @@ uint64_t Sift::Writer::Syscall(uint16_t syscall_number, const char *data, uint32
    // Also try to read from the address first, if the mapping wasn't set up yet (never accessed before, or swapped out),
    // then this will cause a page fault that brings in the data.
    intptr_t *args = (intptr_t*)data;
+   // Only where the arguments are this process's addresses: under the QEMU
+   // plugin they are the guest's, and reading one here read whatever the
+   // host had at that address -- the guest's data only when QEMU happened to
+   // map the guest at host address zero, a segfault otherwise.
+   if (m_in_process)
    switch(syscall_number)
    {
       case SYS_futex:

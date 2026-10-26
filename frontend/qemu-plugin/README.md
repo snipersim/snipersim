@@ -40,10 +40,22 @@ RVV at the vector length the riscv configuration models, and the IME and AME
 matrix extensions the qemu-riscv-ime dependency adds ($SNIPER_QEMU_RISCV_IME_CPU
 names another; a QEMU without those properties takes
 `--frontend-option='-cpu max'`).  What QEMU cannot do is
-refused rather than ignored: `--pid`, pinballs, MPI, `-f/-d/-b`
-instruction windows, `--vma`, and `--pa` in user mode.  `--pacsim` is
-supported in user mode with `--roi` (docs/PACSIM_QEMU.md) and refused for
-system mode.  Three options the
+refused rather than ignored, with the reason, by record-trace's table of
+what each front end honours: `--pid`, `--gdb`, `-x`, pinballs, MPI,
+`-f/-d/-b` instruction windows, `--stop-address`, `--follow`, `--maxthreads`,
+`--smc` (the strict mode is the SDE recorder's; rewritten code is tracked
+here by default), `--sde-arch`, `--vma`, and `--pa` in user mode.
+`--pacsim` is supported in user mode with `--roi` (docs/PACSIM_QEMU.md) and
+refused for system mode.  A multi-threaded guest records one trace per
+thread to files; run live, the plugin refuses its second thread (a vCPU
+waiting for Sniper inside a callback would block QEMU's exclusive
+sections), leaves the reason in `<output>.app<N>.refused`, and run-sniper
+fails the run with it.  A guest that forks is not supported in user mode.
+System calls: the ones the simulator models are sent with the simulator's
+numbers whatever the guest's architecture, and the emulated ones (futex,
+sched_yield, the affinity calls, nanosleep, clock_nanosleep) are answered
+by the simulator through QEMU's syscall filter, so the guest sees simulated
+time and the simulated cores.  Three options the
 other front ends take are accepted and have no effect here, because run-sniper
 passes them on every live run: `-e` (system calls are emulated by QEMU itself;
 the simulator only times them), `--follow` (QEMU user mode runs one process)

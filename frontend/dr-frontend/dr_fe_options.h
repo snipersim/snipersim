@@ -4,12 +4,16 @@
 #include "droption.h"
 #include "frontend_options.h"
 
+/* -f, -d, -b and -stop are 64-bit: an instruction count past 4 G or a code
+   address above 4 GB (any PIE executable) did not fit the unsigned int they
+   were declared as. */
+
 class DRFrontend;
 
 static droption_t<std::string> DROutputFile
 (DROPTION_SCOPE_CLIENT, "o", "trace", "output",
  "Name of the output file to save the trace.");
-static droption_t<unsigned int> DRBlocksize
+static droption_t<unsigned long long> DRBlocksize
 (DROPTION_SCOPE_CLIENT, "b", 0, "blocksize",
  "If >0, several traces are created, each with <blocksize> instructions.");
 static droption_t<unsigned int> DRUseROI
@@ -18,10 +22,10 @@ static droption_t<unsigned int> DRUseROI
 static droption_t<unsigned int> DRMPIImplicitROI
 (DROPTION_SCOPE_CLIENT, "roi-mpi", 0, "Use MPI ROI markers",
  "Implicit ROI between MPI_Init and MPI_Finalize.");
-static droption_t<unsigned int> DRFastForwardTarget
+static droption_t<unsigned long long> DRFastForwardTarget
 (DROPTION_SCOPE_CLIENT, "f", 0, "instructions to fast forward",
  "Number of instructions to fast forward at the beginning of the simulation.");
-static droption_t<unsigned int> DRDetailedTarget
+static droption_t<unsigned long long> DRDetailedTarget
 (DROPTION_SCOPE_CLIENT, "d", 0, "instructions to trace in detail",
  "Number of instructions to trace in detail (default = all).");
 static droption_t<unsigned int> DRUseResponseFiles
@@ -54,7 +58,7 @@ static droption_t<bool> DRDebug
 static droption_t<bool> DRVerbose
 (DROPTION_SCOPE_CLIENT, "verbose", false, "verbose output",
  "Activates verbose output.");
-static droption_t<unsigned int> DRStopAddress
+static droption_t<unsigned long long> DRStopAddress
 (DROPTION_SCOPE_CLIENT, "stop", 0, "stop address",
  "Stop address (0 = disabled).");
 static droption_t<unsigned int> DRSmcTrack

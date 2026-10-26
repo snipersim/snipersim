@@ -25,6 +25,8 @@
  * arrives.
  */
 
+#include <stdarg.h>
+#include <unistd.h>
 #include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
@@ -85,6 +87,13 @@ bool        opt_smc = true;
 bool        opt_trace = true;      /* trace=0: no SIFT output and no tracing callbacks, only the plugin models (a functional run) */
 uint64_t    g_exec_claimed = 0, g_exec_trapped = 0;
 std::mutex  g_claim_lock;
+/* Serialises closing the streams.  A worker thread's exit clears its tid
+ * word and wakes the joiner (linux-user's exit) before QEMU runs our
+ * vcpu_exit for it; the joiner can then reach exit_group, and at_exit, while
+ * the worker is still inside writer_close.  Both ended the same writer, and
+ * at_exit deleted it under the worker: a crash in deflate at exit, one
+ * recording in thirty (testing/test_qemu.py aarch64-user-mt). */
+std::mutex  g_close_lock;
 std::unordered_set<const struct qemu_plugin_insn *> g_claimed;   /* claimed in this translation, consumed by tb_trans */
 
 std::string opt_output   = "sniper";
@@ -345,6 +354,36 @@ struct VCPU
  * thread.  A fixed table of pointers avoids it without locking the hot path:
  * a slot is only ever written by the vCPU it belongs to, so nothing needs to
  * be shared. */
+/* The plugin cannot go on: say why, leave the reason beside the trace
+ * (<output>.app<N>.refused) and end QEMU.  QEMU's exit status is the guest's,
+ * so status 1 alone could not tell run-sniper a refusal from a guest that
+ * exits 1, and the partial simulation passed as a run; the file is what
+ * run-sniper looks for. */
+static void refuse(const char *fmt, ...) __attribute__((noreturn, format(printf, 1, 2)));
+static void refuse(const char *fmt, ...)
+{
+   char msg[2048];
+   va_list ap;
+   va_start(ap, fmt);
+   vsnprintf(msg, sizeof(msg), fmt, ap);
+   va_end(ap);
+   fputs(msg, stderr);
+   char path[4096];
+   snprintf(path, sizeof(path), "%s.app%u.refused", opt_output.c_str(), opt_app);
+   if (FILE *f = fopen(path, "w"))
+   {
+      fputs(msg, f);
+      fclose(f);
+   }
+   /* _exit, not exit: a refusal comes from one vCPU's callback while the
+      others run on, and exit() ran QEMU's and our exit handlers (at_exit
+      closing every stream) and the static destructors under them -- QEMU
+      then died of SIGSEGV in one refusal in four (riscv-user-mt's live run).
+      Nothing those handlers do is wanted for a run being refused. */
+   fflush(stderr);
+   _exit(1);
+}
+
 const unsigned int MAX_VCPUS = 4096;
 VCPU *vcpus[MAX_VCPUS];
 
@@ -352,9 +391,7 @@ VCPU *vcpu_get(unsigned int idx)
 {
    if (idx >= MAX_VCPUS)
    {
-      fprintf(stderr, "[SNIPER-QEMU] error: vcpu %u exceeds the %u this frontend tracks\n",
-              idx, MAX_VCPUS);
-      exit(1);
+      refuse("[SNIPER-QEMU] error: vcpu %u exceeds the %u this frontend tracks\n", idx, MAX_VCPUS);
    }
    if (!vcpus[idx])
       vcpus[idx] = new VCPU();
@@ -484,10 +521,10 @@ void writer_open(VCPU *v, unsigned int idx)
                                 in_system_mode /* code and data by physical address */);
    if (!v->writer->IsOpen())
    {
-      fprintf(stderr, "[SNIPER-QEMU] cannot open %s\n", filename);
-      exit(1);
+      refuse("[SNIPER-QEMU] cannot open %s\n", filename);
    }
    v->writer->setHandleAccessMemoryFunc(access_memory);
+   v->writer->setOutOfProcess();            /* syscall arguments are guest addresses */
    /* The reader decodes as x86 until told otherwise; a RISC-V stream says so
     * before its first instruction.  (x86 streams get theirs from the mode
     * check, which knows 16/32/64.) */
@@ -1335,37 +1372,51 @@ void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
 }
 
 /* The guest's system-call number -> the simulator's (x86-64 Linux) number
- * for the calls it models, or -1.  x86-64 guests: the same numbers;
- * RISC-V and AArch64 guests: the asm-generic table. */
-static int modelled_syscall(int64_t num)
+ * for the calls it models, or -1; *emulated says whether the simulator's
+ * answer replaces the call.  x86-64 guests: the same numbers; RISC-V and
+ * AArch64 guests: the asm-generic table.  The set and the split are the Pin
+ * recorder's (sift/recorder/syscall_modeling.cc): futex, sched_yield, the
+ * affinity calls, nanosleep and clock_nanosleep are emulated -- the kernel
+ * does not run them and the guest gets the simulator's return value -- while
+ * read, write, wait4 and exit_group are reported and run as usual.
+ * clock_gettime is not sent, as the recorder does not send it (its vDSO path
+ * never reaches a system call anyway). */
+static int modelled_syscall(int64_t num, bool *emulated)
 {
-   struct Entry { int generic, x86; };
+   struct Entry { int generic, x86; bool emulated; };
    static const Entry table[] = {
-      { 63, 0 },     /* read */
-      { 64, 1 },     /* write */
-      { 260, 61 },   /* wait4 */
-      { 98, 202 },   /* futex */
-      { 124, 24 },   /* sched_yield */
-      { 122, 203 },  /* sched_setaffinity */
-      { 123, 204 },  /* sched_getaffinity */
-      { 101, 35 },   /* nanosleep */
-      { 115, 230 },  /* clock_nanosleep */
-      { 113, 228 },  /* clock_gettime */
-      { 94, 231 },   /* exit_group */
+      { 63, 0, false },     /* read */
+      { 64, 1, false },     /* write */
+      { 260, 61, false },   /* wait4 */
+      { 94, 231, false },   /* exit_group */
+      { 98, 202, true },    /* futex */
+      { 124, 24, true },    /* sched_yield */
+      { 122, 203, true },   /* sched_setaffinity */
+      { 123, 204, true },   /* sched_getaffinity */
+      { 101, 35, true },    /* nanosleep */
+      { 115, 230, true },   /* clock_nanosleep */
    };
    for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++)
    {
       if (g_arch == ARCH_X86 ? num == table[i].x86 : num == table[i].generic)
+      {
+         *emulated = table[i].emulated;
          return table[i].x86;
+      }
    }
    return -1;
 }
 
-void syscall_enter(SNP_SYSCALL_ARGS)
+/* Send a modelled system call to the simulator.  Returns false when the call
+ * is not sent (not modelled, no response channel, outside the ROI); else the
+ * simulator's return value is in *ret and *emulated says whether it replaces
+ * the call. */
+static bool forward_syscall(unsigned int vcpu_index, int64_t num, const uint64_t args[6],
+                            uint64_t *ret, bool *emulated)
 {
    VCPU *v = vcpu_get(vcpu_index);
    if (!v->writer)
-      return;
+      return false;
 
    /* Emitting a syscall record asks Sniper a question, so it is only valid
     * when there is a response channel to answer on -- Sift::Writer::Syscall()
@@ -1373,26 +1424,53 @@ void syscall_enter(SNP_SYSCALL_ARGS)
     * thing on KnobEmulateSyscalls.  Without a channel we are writing a trace
     * to a file and the syscall is simply not modelled. */
    if (!opt_response || g_mode.load() == MODE_OFF || v->closed)
-      return;
+      return false;
 
    /* Only the system calls the simulator models go out, by the numbers it
-    * knows them by -- the Pin recorder's whitelist.  The simulator switches
-    * on its host's (x86-64) SYS_ constants; a RISC-V or AArch64 guest uses
-    * the asm-generic table, where the same numbers mean other calls
-    * (unlinkat is x86-64's nanosleep, mlock its clock_gettime, munlockall
-    * its exit_group), so sending them raw had the simulator zero a guest
-    * pathname, abort, or end the run.  Everything else is QEMU's business
-    * and is not modelled. */
-   const int sys = modelled_syscall(num);
+    * knows them by.  The simulator switches on its host's (x86-64) SYS_
+    * constants; a RISC-V or AArch64 guest uses the asm-generic table, where
+    * the same numbers mean other calls (unlinkat is x86-64's nanosleep, mlock
+    * its clock_gettime, munlockall its exit_group), so sending them raw had
+    * the simulator zero a guest pathname, abort, or end the run. */
+   const int sys = modelled_syscall(num, emulated);
    if (sys < 0)
-      return;
+      return false;
 
    /* Close out the instruction that issued the syscall first. */
    flush_pending(v, 0);
 
-   const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
-   v->writer->Syscall((uint16_t)sys, (const char *)args, sizeof(args));
+   *ret = v->writer->Syscall((uint16_t)sys, (const char *)args, 6 * sizeof(uint64_t));
+   return true;
 }
+
+#ifdef SNP_HAVE_SYSCALL_FILTER
+/* The emulated calls are skipped and answered with the simulator's value, as
+ * the Pin recorder does (it turns them into getpid and sets the result).
+ * Before this QEMU ran them too and the answer was dropped: a nanosleep slept
+ * in host time on top of the simulated time, sched_getaffinity reported the
+ * host's CPUs, sched_yield and futex took no account of the simulated
+ * scheduler. */
+bool syscall_filter(SNP_SYSCALL_FILTER_ARGS)
+{
+   const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
+   uint64_t ret = 0;
+   bool emulated = false;
+   if (!forward_syscall(vcpu_index, num, args, &ret, &emulated) || !emulated)
+      return false;
+   *sysret = (int64_t)ret;
+   return true;
+}
+#else
+/* Plugin API before v7: no filter, so the call is reported and QEMU runs it;
+ * the simulator's answer cannot reach the guest. */
+void syscall_enter(SNP_SYSCALL_ARGS)
+{
+   const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
+   uint64_t ret;
+   bool emulated;
+   forward_syscall(vcpu_index, num, args, &ret, &emulated);
+}
+#endif
 
 void vcpu_init(SNP_VCPU_ARGS)
 {
@@ -1411,14 +1489,12 @@ void vcpu_init(SNP_VCPU_ARGS)
     * exclusive section waits for it.  Refuse it rather than hang. */
    if (!in_system_mode && opt_response && cpu_index > 0)
    {
-      fprintf(stderr,
-              "[SNIPER-QEMU] error: the guest started a second thread.\n"
-              "  User-mode flow control can only be used with single-threaded\n"
-              "  guests -- a vCPU blocked in a plugin callback stalls any other\n"
-              "  vCPU that needs an exclusive section, and deadlocks when the\n"
-              "  timing model holds it.  Use full-system mode for multi-core,\n"
-              "  or the Pin/DynamoRIO frontends.\n");
-      exit(1);
+      refuse("[SNIPER-QEMU] error: the guest started a second thread.\n"
+             "  User-mode flow control can only be used with single-threaded\n"
+             "  guests -- a vCPU blocked in a plugin callback stalls any other\n"
+             "  vCPU that needs an exclusive section, and deadlocks when the\n"
+             "  timing model holds it.  Use full-system mode for multi-core,\n"
+             "  or the Pin/DynamoRIO frontends.\n");
    }
 
    if (!v->writer)
@@ -1445,13 +1521,19 @@ void vcpu_init(SNP_VCPU_ARGS)
 /* Close a vCPU's stream exactly once.  End() must be the last record: writing
  * anything after it produces a trace that siftdump crashes on and that Sniper
  * waits forever for the end of. */
-void writer_close(VCPU *v)
+void writer_close_locked(VCPU *v)
 {
    if (!v->writer || v->closed)
       return;
    flush_pending(v, 0);
    v->writer->End();
    v->closed = true;
+}
+
+void writer_close(VCPU *v)
+{
+   std::lock_guard<std::mutex> lock(g_close_lock);
+   writer_close_locked(v);
 }
 
 void vcpu_exit(SNP_VCPU_ARGS)
@@ -1594,9 +1676,10 @@ void at_exit(SNP_UDATA_ARGS)
    for (size_t i = 0; i < MAX_VCPUS; i++)
    {
       VCPU *v = vcpus[i];
+      std::lock_guard<std::mutex> lock(g_close_lock);
       if (!v || !v->writer)
          continue;
-      writer_close(v);
+      writer_close_locked(v);
       delete v->writer;
       v->writer = nullptr;
       total += v->icount;
@@ -1723,7 +1806,11 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    }
 
    SNP_REG_TB_TRANS(id, tb_trans);
+#ifdef SNP_HAVE_SYSCALL_FILTER
+   SNP_REG_SYSCALL_FILTER(id, syscall_filter);
+#else
    SNP_REG_SYSCALL(id, syscall_enter);
+#endif
    SNP_REG_VCPU_INIT(id, vcpu_init);
 #if QEMU_PLUGIN_VERSION >= 7
    if (SNP_HAVE_CLAIM)
