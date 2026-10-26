@@ -60,9 +60,18 @@ bool Thread::reschedule(SubsecondTime &time, Core *current_core)
       // Keep time updated with the time when we return.
       ScopedLock sl(Sim()->getThreadManager()->getLock());
 
-      // Do a definitive check for m_core, while holding the lock, unoptimized because another thread will be changing it
-      while((volatile Core*)m_core == NULL)
+      // Do a definitive check for m_core, while holding the lock, unoptimized because another thread will be changing it.
+      // A thread of an ended application stops waiting: it has one answer
+      // to give its recorder and nothing to run, and the core it would wait
+      // for can be held by a sibling that is itself waiting for the process
+      // to exit -- which cannot happen before this thread answers
+      // (test/sniper-in-sniper deadlocked exactly so).  The caller then has
+      // no core and charges no time.
+      while((volatile Core*)m_core == NULL && !m_aborted)
          time = Sim()->getThreadManager()->stallThread(getId(), ThreadManager::STALL_UNSCHEDULED, time);
+
+      if (m_core == NULL)
+         return true;
 
       m_core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
 

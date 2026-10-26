@@ -370,11 +370,36 @@ EXPECT_FAIL = {
 # Cases that are known not to work and are skipped unless named with --only:
 # each would otherwise run to its timeout on every pass.
 KNOWN_BROKEN = {
-    'sniper-in-sniper': 'the inner simulator deadlocks at exit with the outer\'s syscall emulation '
-                        '(its threads wait on the response pipe, the outer waits for trace); until 9.0 '
-                        'the inner simulator never started (it loaded the SDE kit\'s libxed) and the '
-                        'recorder\'s failure went unreported, so the case passed in 13 s with nothing simulated',
 }
+
+
+def sniper_in_sniper_check(out, rc, outdir):
+    """Both simulations end and both report.  Until 9.0 the inner simulator
+    never started (it loaded the SDE kit's libxed) and the case passed in 13 s
+    with nothing simulated; then the outer deadlocked at the inner's exit (a
+    thread waiting for a core its blocked sibling held, and a second
+    exit_group that aborted the first); and the outer recorded no region of
+    interest, the inner's SimRoiStart having been lost, so it wrote no
+    statistics."""
+    if rc != 0:
+        return False, 'exit %s' % rc
+    outer = os.path.join(outdir, 'simulation', 'sim.stats')
+    inner = os.path.join(outdir, 'sim-inside', 'simulation', 'sim.stats')
+    counts = []
+    for name, path in (('outer', outer), ('inner', inner)):
+        n = 0
+        if os.path.exists(path):
+            for line in open(path):
+                # core.instructions: the outer fast-forwards its region, and in
+                # fast-forward only the core counts (the timing model's count stays 0)
+                if line.startswith('core.instructions = '):
+                    n = sum(int(float(v)) for v in line.split('=', 1)[1].split(',') if v.strip())
+        if not n:
+            return False, 'the %s simulation reported no instructions (%s)' % (name, path)
+        counts.append(n)
+    return True, 'outer simulated %d instructions of the inner simulator, which simulated %d' % tuple(counts)
+sniper_in_sniper_check.needs_simulation = True
+sniper_in_sniper_check.needs_outdir = True
 
 
 # name -> (check, why it might be skipped)
@@ -405,7 +430,7 @@ CASES = {
     'fork':            (prints('Hello world', 'forked child ran'), None),
     'spinloop':        (prints('done', 'threads finished'), None),
     'true':            (exits_zero, None),
-    'sniper-in-sniper': (exits_zero, None),
+    'sniper-in-sniper': (sniper_in_sniper_check, None),
 }
 
 

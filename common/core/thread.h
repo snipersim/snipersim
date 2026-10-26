@@ -23,6 +23,7 @@ class Thread
       SubsecondTime m_wakeup_time;
       void *m_wakeup_msg;
       Core *m_core;
+      volatile bool m_aborted = false;
       SyscallMdl *m_syscall_model;
       SyncClient *m_sync_client;
       RoutineTracerThread *m_rtn_tracer;
@@ -76,6 +77,10 @@ class Thread
       void setCore(Core* core);
 
       bool reschedule(SubsecondTime &time, Core *current_core);
+      /// The thread's application has ended (a sibling ran exit_group): it
+      /// will run nothing more, so it no longer waits for a core.
+      void abort() { m_aborted = true; }
+      bool isAborted() const { return m_aborted; }
       bool updateCoreTLS(int threadIndex = -1);
 
       SyscallMdl *getSyscallMdl() { return m_syscall_model; }

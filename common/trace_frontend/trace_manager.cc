@@ -61,6 +61,7 @@ static void dumpAllStacks()
 #include "trace_thread.h"
 #include "simulator.h"
 #include "thread_manager.h"
+#include "scheduler.h"
 #include "syscall_server.h"
 #include "hooks_manager.h"
 #include "config.hpp"
@@ -461,6 +462,11 @@ void TraceManager::signalDone(TraceThread *thread, SubsecondTime time, bool abor
 
 void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
 {
+   /* Once per exit: a thread stopped by an earlier exit_group of its
+      application is not ending it again (TraceThread::handleSyscallFunc
+      answers such a call before it gets here). */
+   if (thread->isStopRequested())
+      return;
    for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
    {
      // Abort all threads in this application, except ourselves (we should end normally soon)
@@ -479,7 +485,13 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
           forever (test/mpi-omp). */
        {
          ScopedLock sl(Sim()->getThreadManager()->getLock());
+         (*it)->getThread()->abort();
          Sim()->getSyscallServer()->abortWaits((*it)->getThread()->getId(), time);
+         /* Woken from a futex or sleep, or past it, a sibling may be waiting
+            for a core instead (Thread::reschedule); the abort ends that wait
+            too, once it is woken to see it. */
+         if (Sim()->getThreadManager()->getThreadState((*it)->getThread()->getId()) == Core::STALLED)
+            Sim()->getThreadManager()->resumeThread((*it)->getThread()->getId(), INVALID_THREAD_ID, time, NULL);
        }
        // Threads are often blocked on a futex in this case, so call signalDone in their place
        signalDone(*it, time, true /* aborted */);
@@ -514,6 +526,12 @@ TraceManager::~TraceManager()
 
 void TraceManager::start()
 {
+   /* Begin of region-of-interest when running Sniper inside Sniper; stop()
+      ends it.  (Natively the magic instruction does nothing.)  Lost with the
+      MimicOS integration, which left an outer run with no ROI and so no
+      statistics (test/sniper-in-sniper). */
+   SimRoiStart();
+
    m_monitor->spawn();
    for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
      (*it)->spawn();
@@ -773,6 +791,9 @@ void TraceManager::reportHang(unsigned seconds)
    fprintf(stderr, "[SNIPER] HANG REPORT: no progress for %u s; global time %" PRIu64 " ns; %zu trace threads\n",
            seconds, css ? css->getGlobalTime().getNS() : 0, threads.size());
    ThreadManager *tm = Sim()->getThreadManager();
+   fflush(stdout);
+   tm->getScheduler()->printState();
+   fflush(stdout);
    static const char *state_names[] = { "RUNNING", "INITIALIZING", "STALLED", "SLEEPING", "WAKING_UP", "IDLE", "BROKEN" };
    for (TraceThread *t : threads)
    {

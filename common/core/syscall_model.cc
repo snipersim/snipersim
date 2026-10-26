@@ -192,9 +192,10 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          if (m_thread->reschedule(end_time, core))
             core = m_thread->getCore();
 
-         core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::SLEEP));
+         if (core)      // none when the application ended during the sleep (Thread::reschedule)
+            core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::SLEEP));
 
-         if (rem && !absolute)
+         if (rem && !absolute && core)
          {
             // Interruption not supported, always return 0 remaining time
             struct timespec local_rem;
@@ -395,8 +396,9 @@ IntPtr SyscallMdl::runExit(IntPtr old_return)
       m_thread->reschedule(time_wake, core);
       core = m_thread->getCore();
 
-      core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time_wake,
-         m_syscall_number == SYS_pause ? SyncInstruction::PAUSE : SyncInstruction::SYSCALL));
+      if (core)      // none when the application ended meanwhile (Thread::reschedule)
+         core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time_wake,
+            m_syscall_number == SYS_pause ? SyncInstruction::PAUSE : SyncInstruction::SYSCALL));
 
       m_stalled = false;
    }
@@ -407,6 +409,14 @@ IntPtr SyscallMdl::runExit(IntPtr old_return)
    }
 
    Core *core = m_thread->getCore();
+   if (!core)
+   {
+      // The application ended while this thread waited, and it gave up its
+      // wait for a core (Thread::reschedule): nothing to time or report.
+      m_emulated = false;
+      m_in_syscall = false;
+      return m_ret_val;
+   }
    HookSyscallExit hook_args;
    hook_args.thread_id = m_thread->getId();
    hook_args.core_id = core->getId();
@@ -456,6 +466,9 @@ IntPtr SyscallMdl::handleFutexCall(syscall_args_t &args)
 
    if (m_thread->reschedule(end_time, core))
       core = m_thread->getCore();
+
+   if (!core)      // the application ended while this thread waited (Thread::reschedule)
+      return ret_val;
 
    core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::FUTEX));
 

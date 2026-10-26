@@ -7,6 +7,7 @@
 class SchedulerPinnedBase : public SchedulerDynamic
 {
    public:
+      void printState() override;
       SchedulerPinnedBase(ThreadManager *thread_manager, SubsecondTime quantum);
 
       virtual core_id_t threadCreate(thread_id_t);
@@ -81,7 +82,6 @@ class SchedulerPinnedBase : public SchedulerDynamic
 
       core_id_t findFreeCoreForThread(thread_id_t thread_id);
       void reschedule(SubsecondTime time, core_id_t core_id, bool is_periodic);
-      void printState();
 };
 
 #endif // __SCHEDULER_PINNED_BASE_H

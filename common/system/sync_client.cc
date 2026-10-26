@@ -47,7 +47,8 @@ std::pair<SubsecondTime, bool> SyncClient::__mutexLock(carbon_mutex_t *mux, bool
    if (thread->reschedule(result.first, core))
       core = thread->getCore();
 
-   core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(result.first, SyncInstruction::PTHREAD_MUTEX));
+   if (core)      // none when the application ended meanwhile (Thread::reschedule)
+      core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(result.first, SyncInstruction::PTHREAD_MUTEX));
 
    return std::pair<SubsecondTime, bool>(result.first > start_time ? result.first - start_time : SubsecondTime::Zero(), result.second);
 }

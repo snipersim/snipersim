@@ -374,6 +374,16 @@ uint64_t TraceThread::handleSyscallFunc(uint16_t syscall_number, const uint8_t *
       unblock();
    }
 
+   /* Our application has ended (a sibling ran exit_group): answer at once,
+      before asking for a core, which an aborted thread no longer has.  This
+      holds for exit_group too: the process is already ending, and a second
+      endApplication from here would abort the thread that ran the first
+      one -- the one whose normal end tells the run that the application
+      finished.  Two threads of the inner simulator both call exit_group in
+      test/sniper-in-sniper, and the run then waited for ever. */
+   if (m_stop)
+      return 0;
+
    LOG_ASSERT_ERROR(m_thread->getCore(), "Cannot execute while not on a core");
    uint64_t ret = 0;
 
@@ -453,6 +463,8 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
       unblock();
    }
 
+   if (!m_thread->getCore() && m_thread->isAborted())
+      return false;      // our application has ended; nothing more is emulated
    LOG_ASSERT_ERROR(m_thread->getCore(), "Cannot execute while not on a core");
 
    switch(type)
@@ -557,6 +569,8 @@ void TraceThread::handleRoutineAnnounceFunc(uint64_t eip, const char *name, cons
 
 SubsecondTime TraceThread::getCurrentTime() const
 {
+   if (m_thread->getCore() == NULL && m_thread->isAborted())
+      return Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
    LOG_ASSERT_ERROR(m_thread->getCore() != NULL, "Cannot get time while not on a core");
    return m_thread->getCore()->getPerformanceModel()->getElapsedTime();
 }
@@ -735,6 +749,8 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
    }
 
    Core *core = m_thread->getCore();
+   if (!core && m_thread->isAborted())
+      return Sift::ModeIcount;      // our application has ended: count nothing more
    LOG_ASSERT_ERROR(core, "We cannot execute instructions while not on a core");
    SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
    core->countInstructions(0, icount);
@@ -1320,7 +1336,8 @@ void TraceThread::unblock()
    {
       // We were scheduled out during the system call
       m_thread->reschedule(end_time, NULL);
-      m_thread->getCore()->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::UNSCHEDULED));
+      if (m_thread->getCore())      // none when the application ended meanwhile (Thread::reschedule)
+         m_thread->getCore()->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::UNSCHEDULED));
    }
 
    m_blocked = false;
@@ -1898,12 +1915,15 @@ void TraceThread::m_run_func_default()
       m_thread->reschedule(time, NULL);
    }
 
+   /* No core here or below only for a thread whose application ended
+      while it waited for one (Thread::reschedule): it reads no further, its
+      front end sees the stream closed and runs on natively. */
    Core *core = m_thread->getCore();
-   PerformanceModel *prfmdl = core->getPerformanceModel();
+   PerformanceModel *prfmdl = core ? core->getPerformanceModel() : NULL;
 
    Sift::Instruction inst, next_inst;
 
-   bool have_first = m_trace.Read(inst);
+   bool have_first = core ? m_trace.Read(inst) : false;
 
    /* An instruction is handed to the timing model together with its
       successor (the branch target comes from there), so the last one used to
@@ -1937,6 +1957,8 @@ void TraceThread::m_run_func_default()
       }
 
       core = m_thread->getCore();
+      if (!core)
+         break;
       prfmdl = core->getPerformanceModel();
 
       bool do_icache_warmup = false;
@@ -2015,9 +2037,13 @@ void TraceThread::m_run_func_default()
          if (m_thread->reschedule(time, core))
          {
             core = m_thread->getCore();
+            if (!core)
+               break;
             prfmdl = core->getPerformanceModel();
          }
       }
+      if (!core)
+         break;
 
 
       if (m_stop || last_one)
@@ -2049,9 +2075,14 @@ void TraceThread::m_run_func_default()
       cleanupChampSimCache();
    }
 
-   prfmdl->drain();               // retire what the timing model still holds
-
-   SubsecondTime time_end = prfmdl->getElapsedTime();
+   SubsecondTime time_end;
+   if (m_thread->getCore() && prfmdl)
+   {
+      prfmdl->drain();               // retire what the timing model still holds
+      time_end = prfmdl->getElapsedTime();
+   }
+   else  // aborted without a core: the model it last ran on is another thread's now
+      time_end = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
 
    m_where.store("exiting", std::memory_order_relaxed);
    Sim()->getThreadManager()->onThreadExit(m_thread->getId());

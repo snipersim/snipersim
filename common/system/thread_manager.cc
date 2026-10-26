@@ -153,6 +153,21 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
 
    Thread *thread = getThreadFromID(thread_id);
    Core *core = thread->getCore();
+   if (core == NULL && thread->isAborted())
+   {
+      /* Its application ended while it waited for a core, and it stopped
+         waiting (Thread::reschedule): no core to leave, no memory to write
+         for CLONE_CHILD_CLEARTID (the process is gone), only the bookkeeping
+         that lets a joiner and the scheduler move on. */
+      SubsecondTime time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
+      m_thread_state[thread_id].status = Core::IDLE;
+      wakeUpWaiter(thread_id, time);
+      Sim()->getStatsManager()->logEvent(StatsManager::EVENT_THREAD_EXIT, SubsecondTime::MaxTime(), INVALID_CORE_ID, thread_id, 0, 0, "");
+      HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
+      Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);
+      CLOG("thread", "Exit %d (aborted, no core)", thread_id);
+      return;
+   }
    LOG_ASSERT_ERROR(core != NULL, "Thread ended while not running on a core?");
 
    SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
@@ -323,7 +338,8 @@ void ThreadManager::joinThread(thread_id_t thread_id, thread_id_t join_thread_id
    if (thread->reschedule(end_time, core))
       core = thread->getCore();
 
-   core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::JOIN));
+   if (core)      // none when the application ended meanwhile (Thread::reschedule)
+      core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(end_time, SyncInstruction::JOIN));
 
    LOG_PRINT("Exiting join thread.");
 }
