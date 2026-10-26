@@ -14,6 +14,8 @@
 #     make regress FAILFAST=ON
 #                          stop at the first failing check and keep its work
 #                          directory, for debugging that one failure
+#     make dist            sniper-<version>.tar.gz from the committed tree
+#                          (git archive: no build output, links or logs)
 #     make deps            acquire dependencies only
 #     make configure       configure only
 #     make QEMU=ON ARM=ON DYNAMORIO=ON RISCV_IME=ON TORCH=ON MPI=ON MCPAT=OFF
@@ -90,7 +92,7 @@ _cmake_flags += $(CMAKE_ARGS)
 _generator = $(if $(wildcard $(BUILD_DIR)/CMakeCache.txt),,\
              $(if $(shell command -v ninja 2>/dev/null),-G Ninja,))
 
-.PHONY: all deps configure build clean distclean regress regress_scripting regress_riscv_isa regress_configs regress_qemu regress_pacsim regress_magic validate_pacsim regress_apps regress_virtuoso riscv-ime-check doc-verify doxygen help
+.PHONY: all deps configure build clean distclean dist regress regress_scripting regress_riscv_isa regress_configs regress_qemu regress_pacsim regress_magic validate_pacsim regress_apps regress_virtuoso riscv-ime-check doc-verify doxygen help
 
 all: build
 
@@ -243,6 +245,17 @@ doc-verify:
 	done
 
 # The API reference, into docs/doxygen/
+# A release is the committed tree and nothing else: git archive leaves out the
+# build directories, the dependency links (lib/sniper and the rest, which point
+# at absolute paths on the machine that built them), stale objects and logs,
+# which a tarball of the working directory would carry.
+SNIPER_VERSION := $(shell sed -n 's/^  VERSION \([0-9.]*\)$$/\1/p' $(SIM_ROOT)/CMakeLists.txt)
+dist:
+	@test -n "$(SNIPER_VERSION)" || { echo "no version in CMakeLists.txt"; exit 1; }
+	@git -C $(SIM_ROOT) diff --quiet HEAD || echo "note: uncommitted changes are not in the archive"
+	@git -C $(SIM_ROOT) archive --format=tar.gz --prefix=sniper-$(SNIPER_VERSION)/ -o sniper-$(SNIPER_VERSION).tar.gz HEAD
+	@echo "sniper-$(SNIPER_VERSION).tar.gz: $$(tar tzf sniper-$(SNIPER_VERSION).tar.gz | wc -l) entries, from $$(git -C $(SIM_ROOT) rev-parse --short HEAD)"
+
 doxygen:
 	cd docs && doxygen Doxyfile
 

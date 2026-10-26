@@ -79,6 +79,37 @@ Version 9.0 (in preparation)
     --follow-execv reaches the SDE recorder; record-trace passes --pid and
     --follow to SDE by SDE's names (they were assembled and dropped), validates
     --qemu-va-bits, gives x86-64 guests -cpu max; both usage texts are complete
+  * Under the QEMU front end the emulated system calls (futex, sched_yield,
+    the affinity calls, nanosleep, clock_nanosleep) are answered by the
+    simulator through QEMU's syscall filter, as under the SDE recorder;
+    before, QEMU ran them too and the answer was dropped
+  * record-trace has one table of what each front end honours; every other
+    option is refused with the reason (--pacsim under DynamoRIO sampled
+    nothing, --maxthreads and -v aborted the DynamoRIO client, --stop-address
+    and --follow did nothing under QEMU, an unknown --frontend fell through);
+    the DynamoRIO client's -f, -d, -b and -stop are 64-bit; run-sniper
+    refuses --pacsim with --traces, --pinballs, DynamoRIO or full system
+  * A front end that refuses mid-run (the QEMU plugin's second thread in user
+    mode) fails the run with its reason instead of passing on a partial
+    simulation; the recorder's status survives exit codes above 128
+  * The QEMU plugin no longer crashes at exit when a guest's threads end
+    together (closing the streams raced), nor when it refuses a run (it now
+    ends with _exit); the SIFT reader ends a stream cut inside an
+    instruction record instead of decoding the fragment
+  * The ARM and RISC-V configurations share the L2 per cluster of four cores
+    with a directory slice at each L2 (one slice at the memory controller
+    overflowed past four cores) and give MimicOS 4 GiB of memory
+  * An address-translation scheme (an x86 system) layered with an ARM or
+    RISC-V configuration is refused with the reason; the allocator and
+    page-table fragments layer on them and are tested on RISC-V
+  * make dist builds the release archive from the committed tree
+  * Sniper runs inside Sniper again (test/sniper-in-sniper).  When an
+    application exits, a sibling thread waiting for a core stops waiting (a
+    blocked thread could hold the only core its affinity allowed, and the
+    exit waited on it); a second exit_group from an already stopped thread
+    no longer aborts the first; the inner simulator marks its region of
+    interest for the outer one again (lost in the MimicOS integration, the
+    outer wrote no statistics); the hang report shows the scheduler's state
   * make doc-verify fails when a block fails; the RISC-V QEMU cases default to
     the tree's QEMU and a clang on the PATH; riscv-mediumboom is simulated by
     the suite; a missing Virtuoso baseline is a skip, not a pass
