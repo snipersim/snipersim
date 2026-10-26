@@ -2202,7 +2202,7 @@ def main():
             print('\nstopped at the first failure; work directory kept at %s'
                   % workdir)
         else:
-            if args.keep:
+            if args.keep or failures:    # a failed check keeps the directory whatever --keep says: an intermittent failure leaves its evidence
                 print('kept %s' % workdir)
             else:
                 shutil.rmtree(workdir, ignore_errors=True)

@@ -358,7 +358,7 @@ def main():
     except FailFast:
         stopped_early = True
     finally:
-        if args.keep or stopped_early:
+        if args.keep or stopped_early or failures:   # a failed check keeps the directory whatever --keep says: an intermittent failure leaves its evidence
             if stopped_early:
                 print('\nstopped at the first failure;', end=' ')
             print('work directory kept at %s' % workdir)

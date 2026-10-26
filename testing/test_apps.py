@@ -245,14 +245,120 @@ def smc_rewrite_check(out, rc):
     return True, 'simulated; traced A, B, A at one address: %s' % ', '.join(' '.join(f) for f in firsts)
 
 
+def simulated_instructions(outdir):
+    """Instructions the run simulated, summed over every sim.stats under its
+    output directory (a case's Makefile may run the simulator more than once,
+    or in a subdirectory)."""
+    total = 0
+    for root, dirs, files in os.walk(outdir):
+        if 'sim.stats' in files:
+            for line in open(os.path.join(root, 'sim.stats')):
+                if line.startswith('performance_model.instruction_count = '):
+                    total += sum(int(float(v)) for v in line.split('=', 1)[1].split(',') if v.strip())
+    return total
+
+
+def run_stats(outdir):
+    """The run's sim.stats as {key: [per-core values]} (the first found)."""
+    for root, dirs, files in os.walk(outdir):
+        if 'sim.stats' in files:
+            st = {}
+            for line in open(os.path.join(root, 'sim.stats')):
+                if ' = ' in line:
+                    k, v = line.split(' = ', 1)
+                    st[k.strip()] = [x.strip() for x in v.split(',') if x.strip()]
+            return st, root
+    return {}, None
+
+
+def fft_and(feature):
+    """The FFT self-test, and evidence in the run's output that the variant's
+    own feature did its part: each of these variants used to pass on the FFT
+    self-test alone, which says nothing about hetero cores, DVFS, markers,
+    the scheduler or the visualisation."""
+    def check(out, rc, outdir):
+        ok, why = fft_self_check(out, rc)
+        if not ok:
+            return ok, why
+        ok2, why2 = feature(out, outdir)
+        return ok2, '%s; %s' % (why, why2)
+    check.needs_outdir = True
+    return check
+
+
+def corefreq_is(want_ghz):
+    def feature(out, outdir):
+        st, _ = run_stats(outdir)
+        got = [round(float(v) / 1e9, 2) for v in st.get('corefreq', [])]
+        if got != want_ghz:
+            return False, 'core frequencies %s GHz, expected %s' % (got, want_ghz)
+        return True, 'core frequencies %s GHz' % ', '.join('%g' % g for g in got)
+    return feature
+
+
+def dvfs_feature(out, outdir):
+    """Core 1 drops to 1 GHz 1 us into the ROI (scripts/dvfs.py).  corefreq and
+    cycle_count are computed from the configured frequency, so the change shows
+    in time: core 0 waits at the barriers for the slow core (60% of the run
+    measured, against 6% for both cores without the change)."""
+    if 'Setting frequency for core 1 in DVFS domain 1 to 1000 MHz' not in out:
+        return False, 'the frequency change of core 1 was not applied'
+    st, _ = run_stats(outdir)
+    idle = [float(v) for v in st.get('performance_model.idle_elapsed_time', [])]
+    total = [float(v) for v in st.get('performance_model.elapsed_time', [])]
+    if len(idle) != 2 or not total or idle[0] < 0.4 * total[0] or idle[1] > 0.2 * total[1]:
+        return False, 'idle time per core %s of %s: core 0 does not wait for the slowed core 1' % (idle, total[:1])
+    return True, 'core 1 at 1 GHz: core 0 idle %.0f%% of the run, core 1 %.0f%%' % (100 * idle[0] / total[0], 100 * idle[1] / total[1])
+
+
+def hetero_cfg_feature(out, outdir):
+    st, root = run_stats(outdir)
+    cfg = open(os.path.join(root, 'sim.cfg')).read() if root else ''
+    if 'dispatch_width[] = 1,2,4,1' not in cfg:
+        return False, 'the per-core configurations (tiny, small, big, tiny) did not reach sim.cfg as dispatch widths 1,2,4,1'
+    return True, 'per-core dispatch widths 1,2,4,1'
+
+
+def markers_feature(out, outdir):
+    n0, n1 = out.count('Magic marker from thread 0'), out.count('Magic marker from thread 1')
+    if not n0 or not n1 or 'str = begin' not in out:
+        return False, 'markers from thread 0: %d, thread 1: %d, the begin string %s' % (n0, n1, 'seen' if 'str = begin' in out else 'missing')
+    return True, '%d and %d markers from the two threads' % (n0, n1)
+
+
+def scheduler_feature(out, outdir):
+    st, _ = run_stats(outdir)
+    by_core = [[int(float(v)) for v in st.get('thread.instructions_by_core[%d]' % c, [])] for c in range(4)]
+    moved = sum(1 for t in range(len(by_core[0]) if by_core and by_core[0] else 0)
+                if sum(1 for c in range(4) if by_core[c][t] > 0) > 1)
+    if not moved:
+        return False, 'no thread ran on more than one core: the big/small scheduler did not move threads'
+    return True, '%d threads ran on more than one core' % moved
+
+
+def aso_feature(out, outdir):
+    for root, dirs, files in os.walk(outdir):
+        if root.endswith(os.path.join('levels', 'functionbased')):
+            need = ('functionbased.html', 'iptstats.json')
+            if all(f in files and os.path.getsize(os.path.join(root, f)) > 0 for f in need):
+                return True, 'the function-based visualisation written'
+    return False, 'no viz/levels/functionbased with functionbased.html and iptstats.json'
+
+
+# The checks below look at what the program printed or how it exited, which a
+# native run does too; so each also requires that instructions were simulated.
+# A run whose recorder failed before streaming (test/sniper-in-sniper until
+# 9.0) printed the same lines and passed.
 def prints(needle, note):
     def check(out, rc, needle=needle, note=note):
         return (True, note) if needle in out else (False, 'missing %r' % needle)
+    check.needs_simulation = True
     return check
 
 
 def exits_zero(out, rc):
     return (rc == 0, 'exit %s' % rc)
+exits_zero.needs_simulation = True
 
 
 # Checks that cannot pass yet, with the reason.  Recorded rather than dropped,
@@ -274,12 +380,12 @@ KNOWN_BROKEN = {
 # name -> (check, why it might be skipped)
 CASES = {
     'fft':             (fft_self_check, None),
-    'aso':             (fft_self_check, None),
-    'demo-scheduling': (fft_self_check, None),
-    'fft-dvfs':        (fft_self_check, None),
-    'fft-hetero':      (fft_self_check, None),
-    'fft-hetero-cfg':  (fft_self_check, None),
-    'fft-marker':      (fft_self_check, None),
+    'aso':             (fft_and(aso_feature), None),
+    'demo-scheduling': (fft_and(scheduler_feature), None),
+    'fft-dvfs':        (fft_and(dvfs_feature), None),
+    'fft-hetero':      (fft_and(corefreq_is([1.0, 2.66, 2.66, 2.0])), None),
+    'fft-hetero-cfg':  (fft_and(hetero_cfg_feature), None),
+    'fft-marker':      (fft_and(markers_feature), None),
     'fft-nn':          (fft_self_check, 'torch'),
     'pinplay':         (pinplay_check, None),
     'dr-frontend':     (dr_frontend_check, 'dynamorio'),
@@ -400,7 +506,17 @@ def main():
         sys.stdout.flush()
         outdir = tempfile.mkdtemp(prefix='sniper-apps-%s-' % name)
         rc, out, took = run(name, args.timeout, outdir)
-        if args.keep:
+        if rc is not None:
+            ok, detail = check(out, rc, outdir) if getattr(check, 'needs_outdir', False) else check(out, rc)
+            if ok and getattr(check, 'needs_simulation', False):
+                n = simulated_instructions(outdir)
+                if n == 0:
+                    ok, detail = False, detail + ', but no instructions were simulated'
+                else:
+                    detail += '; %d instructions simulated' % n
+        # A failed case keeps its directory, whatever --keep says: an
+        # intermittent failure leaves its evidence instead of a bare verdict.
+        if args.keep or rc is None or not ok:
             kept.append(outdir)
         else:
             shutil.rmtree(outdir, ignore_errors=True)
@@ -414,7 +530,6 @@ def main():
                 stopped_early = name
                 break
             continue
-        ok, detail = check(out, rc)
         known = EXPECT_FAIL.get(name)
         if known and not ok:
             log.record(name, took, 'PASS')

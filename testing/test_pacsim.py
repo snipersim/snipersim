@@ -660,7 +660,7 @@ def main():
         return 1
     finally:
         log.finish()
-        if args.keep or stopped_early:
+        if args.keep or stopped_early or failures:   # a failed check keeps the directory whatever --keep says: an intermittent failure leaves its evidence
             if stopped_early:
                 print('stopped at the first failure;', end=' ')
             print('working directory kept: %s' % workdir)

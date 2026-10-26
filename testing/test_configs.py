@@ -131,6 +131,33 @@ EXPECT_FAIL = {
     'sampling': 'sampling is only supported with the Pin frontend',
 }
 
+# EXPECT_FAIL entries that are fragments, tested layered on the base the way
+# they are used: run alone, sampling.cfg failed on the cache hierarchy it does
+# not carry, which says nothing about the reason listed for it.
+EXPECT_FAIL_LAYERED = {'sampling'}
+
+# The error each expected failure must fail with, matched against the
+# simulator's *ERROR* text (or the harness's own message).  An expected
+# failure used to accept any failure: a crash, or an error of another kind,
+# passed as "known".  Required for every entry of EXPECT_FAIL,
+# EXPECT_FAIL_DETAILED and FRAGMENT_EXPECT_FAIL.
+EXPECTED_ERROR = {
+    'beckton': r'Caches of non-power of 2 size',
+    'cortex-a53': r'The trace is x86-64 code, but this configuration',
+    'cortex-a72': r'The trace is x86-64 code, but this configuration',
+    'riscv': r'The trace is x86-64 code, but this configuration',
+    'riscv-mediumboom': r'The trace is x86-64 code, but this configuration',
+    'kingscross': r'Invalid mesh size 16:4',
+    'sampling': r'Sampling is only supported in Pin mode',
+    'physical_memory_allocators/eager_paging': r'no VMAs for application',
+    'address_translation_schemes/rmm': r'no VMAs for application',
+    'pagetable_configs/3_level_radix_sv39': r'does not fit the 39-bit virtual addre',
+    'dram_configs/m3d': r'missing config value perf_model/dram/ddr/address_mapping',
+    'dram_configs/readwrite_2ctrl_153gbps': r"Num Memory Controllers\(2\)|DRAM controllers may only be at 'master' node",
+    'mmu_configs/mmu_spec': r'missing config value perf_model/mmu/spec/type',
+    'mmu_configs/mmu_virt': r'The virt MMU needs a host MMU',
+}
+
 # Modes.  Until this suite grew the second one it ran everything with
 # --fast-forward, so detailed timing -- what Sniper is for -- had no coverage at
 # all, and configurations that deadlock or abort the moment a timing model is
@@ -902,7 +929,8 @@ def main():
             names = [base] + LAYERED_EXTRA_BASE.get(n, []) + [n]
             out.append(case(' + '.join(names), names, True, None))
         for n in sorted(EXPECT_FAIL):
-            out.append(case(n, [n], False, EXPECT_FAIL[n]))
+            names = [layer_base, n] if n in EXPECT_FAIL_LAYERED else [n]
+            out.append(case(' + '.join(names), names, False, EXPECT_FAIL[n]))
         for n in shipped_fragments():
             names = [layer_base] + FRAGMENT_EXTRA_BASE.get(n, []) + [n]
             out.append(case(' + '.join(names), names,
@@ -978,6 +1006,13 @@ def main():
                         print('PASS (known intermittent, %s this time: %s) [%ds]'
                               % ('ran' if ok else 'failed', flaky_note, round(took)))
                         continue
+                    if not ok and not want_ok:
+                        # An expected failure must be the expected one.
+                        key = next((n for n in reversed(names) if n in EXPECTED_ERROR), None)
+                        if key is None:
+                            ok, want_ok, detail = False, True, 'expected to fail, but no EXPECTED_ERROR recorded for it (failed with: %s)' % detail
+                        elif not re.search(EXPECTED_ERROR[key], detail):
+                            ok, want_ok, detail = False, True, 'failed for another reason than the known one (%s): %s' % (why, detail)
                     log.record('%s [%s]' % (full, mode), took,
                                'PASS' if ok == want_ok else 'FAIL')
                     if ok == want_ok:
@@ -1000,7 +1035,7 @@ def main():
         if stopped_early:
             print('\nstopped at the first failure; work directory kept at %s'
                   % workdir)
-        elif args.keep:
+        elif args.keep or failures:      # a failed check keeps the directory whatever --keep says: an intermittent failure leaves its evidence
             print('work directory kept at %s' % workdir)
         else:
             shutil.rmtree(workdir, ignore_errors=True)

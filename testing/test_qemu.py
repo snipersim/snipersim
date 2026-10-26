@@ -1004,6 +1004,7 @@ def case_riscv_llm_agent(p, g, workdir):
     if r is None:
         return None, why
     summary = []
+    matched = {}
     for variant, guest in r['llm'].items():
         cmd = [r['qemu']] + RISCV_VA_RESERVE + ['-cpu', r['cpu']]
         if variant in ('ame', 'dma'):     # QEMU has neither AME nor the accelerator: the plugin executes them
@@ -1016,8 +1017,15 @@ def case_riscv_llm_agent(p, g, workdir):
             return False, 'the AME backend model reported: ' + [l for l in out.splitlines() if l.startswith('[AME] error')][0]
         m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', out)
         summary.append('%s: %s/%s tokens' % (variant, m.group(1), m.group(2)) if m else variant)
-    n = len(re.findall(r'\[= numpy\] \[correct\]', out))
-    return True, '%d prompts, every line as numpy, every answer right (%s)' % (n, '; '.join(summary))
+        # Every variant's own lines, not the last variant's: each prompt is
+        # reported as matching numpy and answered correctly.
+        matched[variant] = len(re.findall(r'\[= numpy\] \[correct\]', out))
+    counts = set(matched.values())
+    if len(counts) != 1 or 0 in counts:
+        return False, 'prompts matching numpy and answered correctly differ by kernel: %s' % (
+            ', '.join('%s %d' % kv for kv in sorted(matched.items())))
+    return True, '%d prompts on each of %d kernels, every line as numpy, every answer right (%s)' % (
+        counts.pop(), len(matched), '; '.join(summary))
 
 def case_riscv_llm_simulate(p, g, workdir):
     """Sniper simulates the agent on RVV, IME, AME and int4 weights and reports the batch-of-1 cost per token; matrix-unit and int4 matvec counts must be exact."""
@@ -1594,6 +1602,7 @@ def case_riscv_ame_couplings(p, g, workdir):
     rows = (loads + stores) * 4
     ops = rows + (loads + stores) + mma + moves + cfg + own     # a memory instruction also has one execute micro-op
     cycles = {}
+    l1 = {}
     for coupling in ('ica', 'oca_l1', 'oca_l2', 'oca_llc', 'nca'):
         outdir = os.path.join(workdir, 'tile-' + coupling)
         shutil.rmtree(outdir, ignore_errors=True)
@@ -1607,6 +1616,7 @@ def case_riscv_ame_couplings(p, g, workdir):
                 k, v = line.split(' = ', 1)
                 stats[k.strip()] = v.strip().split(',')[0]
         cycles[coupling] = int(float(stats['performance_model.cycle_count']))
+        l1[coupling] = (int(stats.get('L1-D.loads', 0)), int(stats.get('L1-D.stores', 0)))
         if int(stats.get('riscv.ame_mma', 0)) != mma or int(stats.get('riscv.ame_load', 0)) != loads:
             return False, '%s: AME class counts off (%s mma, %s loads)' % (coupling, stats.get('riscv.ame_mma'), stats.get('riscv.ame_load'))
         if coupling == 'ica':
@@ -1618,8 +1628,15 @@ def case_riscv_ame_couplings(p, g, workdir):
         for k, v in want.items():
             if int(stats.get(k, -1)) != v:
                 return False, '%s: %s = %s, the square geometry implies %d' % (coupling, k, stats.get(k), v)
-        if coupling == 'oca_l2' and int(stats.get('L2.loads', 0)) <= int(stats.get('L1-D.loads', 0)) - rows:
-            pass
+        # Where the tile's port enters: at L1 its rows are L1 accesses, as in
+        # the core; at L2, the LLC or near-core they bypass the L1 data cache,
+        # every load row and every store row.  (This was an if-statement with
+        # an empty body.)
+        bypass = (0, 0) if coupling == 'oca_l1' else (loads * 4, stores * 4)
+        seen = (l1['ica'][0] - l1[coupling][0], l1['ica'][1] - l1[coupling][1])
+        if seen != bypass:
+            return False, ('%s: the L1 data cache saw %d load and %d store rows fewer than in the core, '
+                           'expected %d and %d' % ((coupling,) + seen + bypass))
     if len(set(cycles.values())) < 2:
         return False, 'the couplings all take %d cycles: the tile timing does not reach the core' % cycles['ica']
     return True, 'tile counts exact under every coupling (%d ops, %d rows, %d squares); cycles %s' % (
@@ -2443,7 +2460,7 @@ def main():
             # re-run by hand exactly as it ran.
             print('\nstopped at the first failure; work directory kept at %s'
                   % workdir)
-        elif args.keep:
+        elif args.keep or failures:      # a failed check keeps the directory whatever --keep says: an intermittent failure leaves its evidence
             print('\nwork directory kept at %s' % workdir)
         else:
             shutil.rmtree(workdir, ignore_errors=True)
