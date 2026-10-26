@@ -24,8 +24,10 @@ the recorder's, spelled `-sniper:pacsim-<name> <value>` in `--trace-args`;
 record-trace passes them to the plugin as `pacsim-<name>=<value>`.  At the
 end run-sniper prints the estimate:
 
-    [PacSim] 83 regions, 25 simulated in detail, 23 cut points
-    [PacSim] Estimated sim time 0.0135351s, wall time 253.1s, L2 miss rate 0.0021
+    [PacSim] 83 regions, 25 simulated in detail, 23 cut points; wrote out/pacsim_regions.json
+    [PacSim] Estimated sim time 0.0132486s, wall time 570.291s, L2 miss rate 0.0325
+
+(the wall time is the host's, under whatever else it is running)
 
 and `out/pacsim_regions.json` holds every region: its instruction count,
 block vector, cluster, cut address, whether it was measured, and its time.
@@ -102,21 +104,41 @@ needs the same, plus guest-side markers.
 ## 3. What the port changed in the sampler
 
 Measured on the agent (26M instructions a pass; 300K-instruction regions,
-`pacsim-loop-min 0`, ten clusters), against the full detailed run, by CPU
-time:
+`pacsim-loop-min 0`, ten clusters).  What the sampler simulates in detail,
+which does not depend on the host:
 
 | sampler | 1 pass | 2 passes | 4 passes |
 |---|---|---|---|
-| as it was (whole-region warm-up) | 1.31x, 59% detail | 1.62x, 40% | 1.91x, 21% |
-| counting fast-forward | 1.78x | 2.21x | 4.21x |
-| plus shared clusters and convergence | 4.31x, 30% | 6.23x, 21% | 10.27x, 11% |
+| as it was (whole-region warm-up) | 59% of the instructions, 49 of 83 regions | 40%, 67 of 166 | 21%, 72 of 332 |
+| counting fast-forward | the same regions, without the warm-up's cost | | |
+| plus shared clusters and convergence | 30%, 25 of 83 | 21%, 35 of 166 | 11%, 37 of 332 |
 
-The estimate is within 0.4% of the full run on every row.  Four things
+The speedup of the last row, by CPU time, with the full detailed run and the
+sampled run side by side on the same host at the same time (config/riscv.cfg,
+2026-10-25):
+
+| | 1 pass | 2 passes | 4 passes |
+|---|---|---|---|
+| full run, CPU seconds | 218 (200 on the configuration before 9.0's fixes) | 461 | 890 |
+| sampled run, CPU seconds | 75 (69) | 123 | 140 |
+| speedup | 2.9x (2.9x); 2.6x in a second pair under heavier load | 3.7x | 6.4x |
+| estimate against the full run | +0.34% (-0.07%) | +0.25% | +0.48% |
+
+An earlier version of this table gave 4.3x, 6.2x and 10.3x.  Each full run
+behind those was timed alone, under a much heavier host load than its sampled
+run (287 CPU seconds for the one-pass full run, against 200 when the pair runs
+together), which overstated every speedup by about 1.4x; CPU time on a shared
+host is only comparable between runs made together.  The core configuration
+does not move the speedup: on the configuration before 9.0's fixes and on the
+present one the pair gives 2.9x alike.
+
+The estimate is within 0.5% of the full run on every row.  Four things
 limited the first row, in order of weight:
 
 1. **Warm-up cost.**  Per simulated instruction the cache-only warm-up
    costs 0.57 of detailed simulation (counting 0.03), so warming every
-   fast-forwarded region caps the speedup near 1.6x however long the run.
+   fast-forwarded region caps the speedup near 1.6x however long the run
+   (cost ratios from runs made together).
    The agent's working set stays resident: without warm-up its estimate
    moved 0.03%.  `pacsim-warmup-window` is for workloads that do need it.
 2. **Learning per cut point.**  The predictor learned clusters per cut
@@ -145,7 +167,8 @@ Tools whose code never repeats are the case sampling cannot shorten.  With
 each tool call running its own split of four kernels (`TOOL_WORK` in
 `test/llm-agent/agent.c`, 33% to 66% of the run), the sampler extrapolates
 them from the nearest measured cluster: the error grows to about 1% and the
-speedup stays between 3.7x and 5.7x.
+speedup is 3.8x (tools a third of the run, +1.06%) to 5.8x (two thirds,
++1.12%), each pair measured together.
 
 ## 4. Tests
 
