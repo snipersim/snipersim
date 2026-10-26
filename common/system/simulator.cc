@@ -57,6 +57,24 @@ void Simulator::createDecoder()
       // Get architecture
       dl::dl_arch dla;
       String architecture = Sim()->getCfg()->getString("general/arch");
+      // A core configuration built for one architecture can say so
+      // (general/core_isa).  The address-translation schemes are complete x86
+      // systems on core_configs/meteor_lake_pcore: their MMU designs are
+      // Intel TLB hierarchies and their page tables x86-64's.  Layered with an
+      // ARM or RISC-V configuration, in either order, the run was half of
+      // each -- the RISC-V core and Sv39 table, the Meteor Lake caches and the
+      // scheme's TLBs -- and nothing said so.
+      if (Sim()->getCfg()->hasKey("general/core_isa"))
+      {
+         const String core_isa = Sim()->getCfg()->getString("general/core_isa");
+         if (core_isa != architecture)
+            LOG_PRINT_ERROR("This configuration mixes a core built for %s (general/core_isa, set by "
+                            "core_configs/meteor_lake_pcore.cfg, which every address_translation_schemes/ file "
+                            "includes) with general/arch = %s.  The schemes are x86 systems; on an ARM or "
+                            "RISC-V configuration layer the portable parts instead: "
+                            "physical_memory_allocators/* and pagetable_configs/* (docs/VIRTUOSO_MIMICOS_STACK.md, "
+                            "section 3.4).", core_isa.c_str(), architecture.c_str());
+      }
       if (architecture == "intel")
         dla = dl::DL_ARCH_INTEL;
       else if (architecture == "riscv")

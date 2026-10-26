@@ -213,7 +213,9 @@ splits it over lines) and counts `riscv.spans`, `riscv.span_bytes` and
 riscv` on the `rob` timer with the geometry of BOOM v3's MegaBoomConfig
 (4-wide, 128-entry ROB, 32-entry load and store queues, 32 KiB L1 caches,
 TAGE) and MediumBoomConfig (2-wide, 64-entry ROB, 16 KiB L1 caches, 1 GHz)
-respectively, a 1 MiB private L2, Sv39 translation
+respectively, a 1 MiB L2 shared by a cluster of up to four cores (a run of
+fewer has it to itself) with a directory slice at each L2, 4 GiB of MimicOS
+memory, Sv39 translation
 (`pagetable_configs/3_level_radix_sv39.cfg`) and a directory sized above the
 caches.  Before 9.0 both files carried the Cortex-A72's core parameters.  Everything below the `# BEGIN generated`
 marker is written by `gen_isa.py`: `[perf_model/core/riscv]` with

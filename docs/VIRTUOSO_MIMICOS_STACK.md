@@ -234,6 +234,31 @@ trace, and requires a two-page pool to hand out exactly two frames
 (`radix_4level.page_size_discovery_1`) and hit in the 2 MB DTLB
 (`mmu_TLB_L1_2.hits`) with `reserve_thp.two_mb_promoted = 0`.
 
+**On RISC-V and ARM.**  The schemes are complete x86 systems: each one
+includes `core_configs/meteor_lake_pcore.cfg`, and every MMU design
+(`mmu_configs/*`) is a TLB hierarchy at Intel's sizes with the design's
+changes in it.  Layered with `riscv` or a Cortex configuration, in either
+order, a scheme gave a run that was half of each -- the RISC-V core and its
+Sv39 table, the Meteor Lake caches and the scheme's TLBs -- so the core
+configuration now declares its architecture (`general/core_isa`) and the
+simulator refuses the mixture with this explanation.  What carries no core
+geometry layers on the ARM and RISC-V configurations as it is: the
+physical-memory allocators and the page-table organisations.
+
+```
+./run-sniper -c riscv -c physical_memory_allocators/reserve_thp -g perf_model/reserve_thp/target_fragmentation=1.0 ...
+./run-sniper -c riscv -c pagetable_configs/hash_table_chaining ...     # replaces Sv39
+./run-sniper -c cortex-a72 -c physical_memory_allocators/utopia ...
+```
+
+Every allocator in `physical_memory_allocators/` and every non-radix table in
+`pagetable_configs/` runs on `riscv` (eager paging, as on x86, needs a
+trace's VMAs); `testing/test_qemu.py`'s `riscv-virtuoso-portable` case
+checks a THP allocator (10 faults on the page-touching guest instead of
+517), a hashed table replacing Sv39, and the refusal.  Re-expressing the MMU
+designs as changes to a core's own TLBs is what running them on these cores
+would take.
+
 ### 3.5 MimicOS
 
 **Host side** (`common/system/memory_management/mimicos.cc`,
