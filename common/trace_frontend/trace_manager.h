@@ -181,6 +181,7 @@ class TraceManager
          by whatever has hung. */
       std::vector<TraceThread *> m_watch_threads;
       std::mutex m_watch_lock;
+      bool m_watch_closed = false;   // cleanup() ran: the monitor stops
       void reportHang(unsigned seconds);
       UInt32 m_num_threads_started;
       UInt32 m_num_threads_running;

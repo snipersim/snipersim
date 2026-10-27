@@ -501,6 +501,12 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
 
 void TraceManager::cleanup()
 {
+   {
+      // The monitor reads these threads; it must stop seeing them first
+      std::lock_guard<std::mutex> wl(m_watch_lock);
+      m_watch_threads.clear();
+      m_watch_closed = true;
+   }
    for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
      delete *it;
    m_threads.clear();
@@ -532,6 +538,10 @@ void TraceManager::start()
       statistics (test/sniper-in-sniper). */
    SimRoiStart();
 
+   {
+      std::lock_guard<std::mutex> wl(m_watch_lock);
+      m_watch_closed = false;      // a later run (traceinput/num_runs) watches its new threads
+   }
    m_monitor->spawn();
    for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
      (*it)->spawn();
@@ -739,22 +749,29 @@ void TraceManager::Monitor::run()
    while (true)
    {
      sleep(1);
-     std::vector<TraceThread *> threads;
-     {
-       std::lock_guard<std::mutex> wl(m_manager->m_watch_lock);
-       threads = m_manager->m_watch_threads;
-     }
-     bool all_finished = !threads.empty();
+     bool all_finished;
      UInt64 sig = Sim()->getClockSkewMinimizationServer()
                   ? Sim()->getClockSkewMinimizationServer()->getGlobalTime().getFS() : 0;
-     for (TraceThread *t : threads)
      {
-       // Each thread's simulated time: the trace position is not known for
-       // a pipe, and global time stands still while one thread runs ahead
-       Core *core = t->getThread()->getCore();
-       sig = sig * 1000003ULL + (core ? core->getPerformanceModel()->getElapsedTime().getFS() : 0);
-       if (!t->m_finished)
-         all_finished = false;
+       /* Scanned under the lock, not from a copy: TraceManager::cleanup()
+          deletes the threads at the end of the run, emptying this list under
+          the same lock first, and a thread that never finished (blocked in a
+          read) kept the monitor going past it -- a SIGSEGV here on the way
+          out, one run of dunnington16 -n 4 in the configs suite. */
+       std::lock_guard<std::mutex> wl(m_manager->m_watch_lock);
+       const std::vector<TraceThread *> &threads = m_manager->m_watch_threads;
+       all_finished = !threads.empty();
+       for (TraceThread *t : threads)
+       {
+         // Each thread's simulated time: the trace position is not known for
+         // a pipe, and global time stands still while one thread runs ahead
+         Core *core = t->getThread()->getCore();
+         sig = sig * 1000003ULL + (core ? core->getPerformanceModel()->getElapsedTime().getFS() : 0);
+         if (!t->m_finished)
+           all_finished = false;
+       }
+       if (m_manager->m_watch_closed)
+         return;
      }
      if (all_finished)
        return;
@@ -782,11 +799,9 @@ void TraceManager::Monitor::run()
 
 void TraceManager::reportHang(unsigned seconds)
 {
-   std::vector<TraceThread *> threads;
-   {
-      std::lock_guard<std::mutex> wl(m_watch_lock);
-      threads = m_watch_threads;
-   }
+   // Held throughout, so that cleanup() cannot delete a thread under the report
+   std::lock_guard<std::mutex> wl(m_watch_lock);
+   const std::vector<TraceThread *> &threads = m_watch_threads;
    ClockSkewMinimizationServer *css = Sim()->getClockSkewMinimizationServer();
    fprintf(stderr, "[SNIPER] HANG REPORT: no progress for %u s; global time %" PRIu64 " ns; %zu trace threads\n",
            seconds, css ? css->getGlobalTime().getNS() : 0, threads.size());
