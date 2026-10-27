@@ -156,6 +156,7 @@ namespace ParametricDramDirectoryMSI
          Mshr mshr;
          Mshr metadata_mshr;
          ContentionModel m_l1_mshr;
+         bool m_next_level_mshrs;   // an L2: its MSHRs (m_l1_mshr, sized by outstanding_misses) are charged by the L1s above it
          ContentionModel m_l1_metadata_mshr;
          ContentionModel m_next_level_read_bandwidth;
          CacheDirectoryWaiterMap m_directory_waiters;
@@ -232,6 +233,7 @@ namespace ParametricDramDirectoryMSI
             , m_dram_cntlr(NULL)
             , m_dram_outstanding_writebacks(NULL)
             , m_l1_mshr(name + ".mshr", core_id, outstanding_misses)
+            , m_next_level_mshrs(false)
             , m_l1_metadata_mshr(name + ".metadata-mshr", core_id, outstanding_misses)
             , m_next_level_read_bandwidth(name + ".next_read", core_id)
             , m_evicting_address(0)

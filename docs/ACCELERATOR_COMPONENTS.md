@@ -302,8 +302,8 @@ count checks; `make riscv-ime-check` runs them in sequence.
 
 All runs: Sniper with `config/riscv.cfg` (a single core with BOOM v3
 MegaBoomConfig's parameters at 2 GHz: 4-wide, 128-entry ROB, 32-entry load
-queue, an L1-D with 8 MSHRs, and a 1 MiB L2 that this one core has to
-itself; memory at 25.6 GB/s), every count checked against what the
+queue, an L1-D with 8 MSHRs, and a 1 MiB L2 with base.cfg's 32 MSHRs that
+this one core has to itself; memory at 25.6 GB/s), every count checked against what the
 workload's shape implies (the harness cases of section 2.5).
 
 **Re-measured for 9.0 (2026-10-26).**  The tables in sections 7 to 9 are

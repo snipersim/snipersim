@@ -72,6 +72,26 @@ void Simulator::createDecoder()
          LOG_PRINT_ERROR("perf_model/core/interval_timer/num_outstanding_loadstores is no longer used: "
                          "both core models take the L1-D's MSHR count from perf_model/l1_dcache/outstanding_misses "
                          "(0 = no limit).  Move the value there and remove the old key.");
+      /* Every configuration states its L1-D's and its L2's MSHR counts: no
+         limit (0, the L1-D's old default) let a core keep any number of line
+         misses in flight, which no hardware does, and moved results by up to
+         2.4x (docs/ACCELERATOR_COMPONENTS.md section 7).  base.cfg gives the
+         L2 32; the L1-D has no default. */
+      {
+         const int levels = Sim()->getCfg()->getInt("perf_model/cache/levels");
+         const char *keys[] = { "perf_model/l1_dcache/outstanding_misses", "perf_model/l2_cache/outstanding_misses" };
+         for (int k = 0; k < (levels >= 2 ? 2 : 1); k++)
+            for (UInt32 c = 0; c < (UInt32)Sim()->getCfg()->getInt("general/total_cores"); c++)
+            {
+               if (!Sim()->getCfg()->hasKey(keys[k], c))
+                  LOG_PRINT_ERROR("%s is not set (core %u): give the cache's MSHR count, the number of cache-line "
+                                  "misses it can have outstanding, from the core's documentation.", keys[k], c);
+               const SInt64 mshrs = Sim()->getCfg()->getIntArray(keys[k], c);
+               if (mshrs <= 0)
+                  LOG_PRINT_ERROR("%s is %lld (core %u): an unlimited cache is not modelled any more; give the "
+                                  "core's MSHR count from its documentation.", keys[k], (long long)mshrs, c);
+            }
+      }
       if (Sim()->getCfg()->hasKey("general/core_isa"))
       {
          const String core_isa = Sim()->getCfg()->getString("general/core_isa");

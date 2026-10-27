@@ -437,6 +437,7 @@ namespace ParametricDramDirectoryMSI
 		{
 			/* Master cache */
 			m_master = new CacheMasterCntlr(name, core_id, cache_params.outstanding_misses);
+			m_master->m_next_level_mshrs = mem_component == MemComponent::L2_CACHE && cache_params.outstanding_misses > 0;
 			m_master->m_cache = new Cache(name,
 										  "perf_model/" + cache_params.configName,
 										  m_core_id,
@@ -627,6 +628,24 @@ namespace ParametricDramDirectoryMSI
 	/*****************************************************************************
 	 * operations called by core on first-level cache
 	 *****************************************************************************/
+
+	/* Whether a request served at `where` went past cache level `level`. */
+	static bool beyondLevel(HitWhere::where_t where, MemComponent::component_t level)
+	{
+		if (where >= HitWhere::L1I && where <= HitWhere::L4_OWN)
+			return where > HitWhere::where_t(level);
+		if (where >= HitWhere::L1_SIBLING && where <= HitWhere::L4_SIBLING)
+			return where - HitWhere::SIBLING > int(level);
+		switch (where)
+		{
+		case HitWhere::MISS: case HitWhere::NUCA_CACHE: case HitWhere::DRAM_CACHE: case HitWhere::DRAM:
+		case HitWhere::DRAM_LOCAL: case HitWhere::DRAM_REMOTE: case HitWhere::CXL_NEAR: case HitWhere::CXL_FAR:
+		case HitWhere::CXL_POOLED: case HitWhere::CACHE_REMOTE:
+			return true;
+		default:
+			return false;
+		}
+	}
 
 	HitWhere::where_t
 	CacheCntlr::processMemOpFromCore(
@@ -985,6 +1004,9 @@ namespace ParametricDramDirectoryMSI
 
 			MYLOG("processMemOpFromCore l%d before next", m_mem_component);
 			hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, offset, data_length, modeled, count, block_type, Prefetch::NONE, t_start, false, mem_origin);
+			// Where the request was served, before a refill rewrites hit_where:
+			// MISS means it left through the directory, past every cache.
+			const HitWhere::where_t first_where = hit_where;
 			bool next_cache_hit = hit_where != HitWhere::MISS;
 			// if(hit_where != HitWhere::MISS && metadata_request &&  (metadata_passthrough_loc > 2))
 			//    std::cout << "Metadata hit in L2 on address:" <<  ca_address << std::endl;
@@ -1062,6 +1084,31 @@ namespace ParametricDramDirectoryMSI
 			if (!lock_all)
 				releaseStackLock(ca_address, true);
 #endif
+
+			/* The next level's MSHRs (the L2's, perf_model/l2_cache/outstanding_misses):
+			   a request that went past it held one of them from the moment it
+			   missed there until the line came back.  Charged here, where the
+			   whole round trip is known -- a miss that leaves through the
+			   directory returns from the L2 at once and completes only after
+			   waitForNetworkThread() -- with the same contention model as the
+			   L1-D's own MSHRs: wait for a free entry, then hold it for the
+			   service time.  The wait is added to this access. */
+			if (modeled && !m_passthrough && m_next_cache_cntlr && m_next_cache_cntlr->m_master->m_next_level_mshrs
+			    && beyondLevel(first_where, m_next_cache_cntlr->m_mem_component))
+			{
+				const SubsecondTime t_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+				const SubsecondTime t_service = t_now > t_mshr_avail ? t_now - t_mshr_avail : SubsecondTime::Zero();
+				SubsecondTime wait;
+				{
+					ScopedLock sl(m_next_cache_cntlr->getLock());
+					ContentionModel &mshrs = m_next_cache_cntlr->m_master->m_l1_mshr;
+					const SubsecondTime t_free = mshrs.getStartTime(t_mshr_avail);
+					wait = t_free > t_mshr_avail ? t_free - t_mshr_avail : SubsecondTime::Zero();
+					mshrs.getCompletionTime(t_mshr_avail, t_service, ca_address);
+					m_next_cache_cntlr->stats.mshr_latency += wait;
+				}
+				getShmemPerfModel()->incrElapsedTime(wait, ShmemPerfModel::_USER_THREAD);
+			}
 
 			if (!(metadata_request && (metadata_passthrough_loc != 1)))
 			{

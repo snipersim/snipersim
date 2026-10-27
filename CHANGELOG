@@ -103,6 +103,12 @@ Version 9.0 (in preparation)
     RISC-V configuration is refused with the reason; the allocator and
     page-table fragments layer on them and are tested on RISC-V
   * make dist builds the release archive from the committed tree
+  * MSHRs at the L1-D and the L2, and no configuration without a limit: the
+    L2's MSHRs are modelled (every line miss that goes past the L2, from a
+    core or from the attached tile, holds one), base.cfg gives the L2 32, and
+    a zero or missing count at either level is refused at start-up.  The
+    Cortex-A72's L1-D has 6 and its L2 27, the Cortex-A53's 3 and 44, each
+    from Arm's manuals (the A72's L1-D had no limit)
   * The ROB core model is the default (base.cfg, with rob.cfg's parameters);
     gainestown, nehalem, dunnington, silvermont and kingscross no longer select
     the interval model, which -c interval still gives.  Both models take the
