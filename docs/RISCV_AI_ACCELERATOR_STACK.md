@@ -626,25 +626,39 @@ exact; the full tables and their reading are in
 
 | kernel | unit | cycles / token |
 |---|---|---|
-| scalar | core | 683,660 |
-| RVV 1.0 | core, 128 bits | 82,322 |
-| int4 weights on RVV | core | 68,297 |
-| IME 0.9, 2x2 tiles | in core | 207,689 |
-| AME, 4x4 squares | in core | 70,910 |
-| AME | attached tile, near-core | 85,700 |
-| DMA-attached accelerator, 16 MACs/cycle | tile port at L2 | 26,240 |
-| RVV | 4,096 bits | 43,523 |
-| IME / AME | 32x32 | 33,401 / 36,605 |
-| DMA accelerator, 1,024 MACs/cycle | | 17,116 |
+| scalar | core | 693,165 |
+| RVV 1.0 | core, 128 bits | 109,682 |
+| int4 weights on RVV | core | 67,595 |
+| IME 0.9, 2x2 tiles | in core | 206,291 |
+| AME, 4x4 squares | in core | 69,697 |
+| AME | attached tile, near-core | 85,471 |
+| DMA-attached accelerator, 16 MACs/cycle | tile port at L2 | 25,551 |
+| RVV | 4,096 bits | 104,006 |
+| IME / AME | 32x32 | 34,235 / 36,075 |
+| DMA accelerator, 1,024 MACs/cycle | | 16,423 |
 
-The 100 MiB agent (51 tokens): fp32 on 32x32 squares 4.72 M cycles per
-token at 37.6 MB per token; int4 on the vector unit 11.3 M at 5.6 MB;
-both bound by DRAM latency with no prefetcher in the configuration,
-which is what the stream engine of the accelerator form would remove.
+The 100 MiB agent (51 tokens): fp32 on 32x32 squares 9.55 M cycles per
+token in the core and 4.73 M on the near-core tile, at 37.6 MB per
+token; int4 on the vector unit 11.0 M at 5.6 MB; all bound by DRAM
+latency with no prefetcher in the configuration, which is what the
+stream engine of the accelerator form would remove.
+
+Re-measured for 9.0 on 2026-10-26.  The configuration now carries BOOM
+v3's parameters, among them an L1-D with eight MSHRs where it had no
+limit, and that limit alone moved the rows whose loads span many lines:
+RVV at 128 bits from 82,322 (81,460 with the L1-D unlimited again), RVV
+at 4,096 bits from 43,523 (43,161), and the 100 MiB fp32 squares in the
+core from 4.72 M.  Every other row moved by under 2 percent.
+`ACCELERATOR_COMPONENTS.md` sections 7 to 9 give the attribution.
 
 ---
 
 ## 6. Verification record
+
+The record below is of the run on 2026-10-06, before 9.0's configuration
+changes; its cycle figures are that configuration's (section 5 has the
+current ones), and the blocks are to be re-run with `make doc-verify`
+against the release.
 
 Re-run on 2026-10-06 against commit `1dcf651` of `dev-mimicos-v2-update`
 (80-core Debian 12 host; clang 15 with lld for the guests; the RISC-V
