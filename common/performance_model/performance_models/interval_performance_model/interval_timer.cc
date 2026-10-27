@@ -20,6 +20,19 @@
 #include <iostream>
 #include <cstdio>
 
+/* The L1-D's MSHRs: the one parameter both core models use,
+   perf_model/l1_dcache/outstanding_misses (the ROB model's; the cache
+   controller models the same limit).  The interval model had its own,
+   interval_timer/num_outstanding_loadstores, which disagreed with the cache's
+   in half the configurations that set both; it is refused at start-up
+   (Simulator).  0 means no limit in the cache, which here is the window:
+   no more loads and stores can be in flight than it holds. */
+static UInt32 outstandingLoadStores(core_id_t core_id, int window_size)
+{
+   const int n = Sim()->getCfg()->getIntArray("perf_model/l1_dcache/outstanding_misses", core_id);
+   return n > 0 ? n : window_size;
+}
+
 IntervalTimer::IntervalTimer(
          Core *core, PerformanceModel *_perf, const CoreModel *core_model,
          int misprediction_penalty,
@@ -34,7 +47,7 @@ IntervalTimer::IntervalTimer(
       , m_max_store_completion_time(0)
       , m_max_load_completion_time(0)
       , m_loadstore_contention("interval_timer.loadstore_contention", core->getId(),
-           Sim()->getCfg()->getIntArray("perf_model/core/interval_timer/num_outstanding_loadstores", core->getId()))
+           outstandingLoadStores(core->getId(), window_size))
       , m_windows(new Windows(window_size, do_functional_unit_contention, core, core_model))
       , m_perf_model(_perf)
       , m_frequency_domain(core->getDvfsDomain())

@@ -64,6 +64,14 @@ void Simulator::createDecoder()
       // ARM or RISC-V configuration, in either order, the run was half of
       // each -- the RISC-V core and Sv39 table, the Meteor Lake caches and the
       // scheme's TLBs -- and nothing said so.
+      /* One MSHR count for both core models: perf_model/l1_dcache/
+         outstanding_misses.  The interval model's own key is refused rather
+         than ignored, so a configuration written for it does not silently
+         run with another limit. */
+      if (Sim()->getCfg()->hasKey("perf_model/core/interval_timer/num_outstanding_loadstores"))
+         LOG_PRINT_ERROR("perf_model/core/interval_timer/num_outstanding_loadstores is no longer used: "
+                         "both core models take the L1-D's MSHR count from perf_model/l1_dcache/outstanding_misses "
+                         "(0 = no limit).  Move the value there and remove the old key.");
       if (Sim()->getCfg()->hasKey("general/core_isa"))
       {
          const String core_isa = Sim()->getCfg()->getString("general/core_isa");

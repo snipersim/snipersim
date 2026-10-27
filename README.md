@@ -27,6 +27,10 @@ As an added benefit, the interval core model allows the generation of CPI stacks
 different characteristics of the system, like the cache hierarchy or branch predictor, and leads to a better understanding of each 
 component's effect on total system performance. This extends the use of Sniper to application characterization and hardware/software co-design.
 
+Since 9.0 the default core model is the ROB model, a reorder-buffer model that tracks each instruction's dispatch, issue
+and commit (and also produces CPI stacks); every configuration uses it unless it asks otherwise. The interval model remains
+available by adding `-c interval`. Both take the L1-D's MSHR count from `perf_model/l1_dcache/outstanding_misses`.
+
 For additional information, please see our website: <https://snipersim.org>
 
 ## Getting started

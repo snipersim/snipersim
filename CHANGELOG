@@ -103,6 +103,14 @@ Version 9.0 (in preparation)
     RISC-V configuration is refused with the reason; the allocator and
     page-table fragments layer on them and are tested on RISC-V
   * make dist builds the release archive from the committed tree
+  * The ROB core model is the default (base.cfg, with rob.cfg's parameters);
+    gainestown, nehalem, dunnington, silvermont and kingscross no longer select
+    the interval model, which -c interval still gives.  Both models take the
+    L1-D's MSHR count from perf_model/l1_dcache/outstanding_misses (0 = no
+    limit); interval_timer/num_outstanding_loadstores, the interval model's own
+    and different from the cache's in half the configurations that set both, is
+    refused with an error.  Each interval configuration's value moved to its
+    L1-D (nehalem 10, dunnington 8, silvermont 10, kingscross 8)
   * Sniper runs inside Sniper again (test/sniper-in-sniper).  When an
     application exits, a sibling thread waiting for a core stops waiting (a
     blocked thread could hold the only core its affinity allowed, and the
