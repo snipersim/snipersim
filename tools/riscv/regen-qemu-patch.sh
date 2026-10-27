@@ -1,13 +1,15 @@
 #!/bin/bash
 # Regenerate tools/riscv/qemu-11.1.1-ime.patch from a pristine QEMU 11.1.1 tree and
-# the patched one: tools/riscv/regen-qemu-patch.sh <pristine tree> <patched tree>
+# the patched one: tools/riscv/regen-qemu-patch.sh <pristine tree> <patched tree> [out]
+# (out defaults to the committed patch; give another path to compare without
+# touching the tree, as the RISC-V document's verify block does)
 # (the pristine tree is deps' unpatched checkout, qemu-src; the patched one qemu-riscv).
 # Keeps the patch's header text, rewrites every hunk, and checks the result applies.
 set -e
-PRISTINE=${1:?pristine tree}; PATCHED=${2:?patched tree}; ROOT=$(cd "$(dirname "$0")/../.." && pwd); OUT=$ROOT/tools/riscv/qemu-11.1.1-ime.patch
-HDR=$(mktemp); sed -n '1,/^--- /p' "$OUT" | sed '$d' > "$HDR"
+PRISTINE=${1:?pristine tree}; PATCHED=${2:?patched tree}; ROOT=$(cd "$(dirname "$0")/../.." && pwd); SRC=$ROOT/tools/riscv/qemu-11.1.1-ime.patch; OUT=${3:-$SRC}
+HDR=$(mktemp); sed -n '1,/^--- /p' "$SRC" | sed '$d' > "$HDR"
 # every file the patch already touches, plus any other file that differs between the trees
-FILES=$( { grep '^+++ b/' "$OUT" | sed 's|^+++ b/||'; diff -rq --exclude=build --exclude=.git "$PRISTINE" "$PATCHED" | grep '^Files ' | awk '{print $2}' | sed "s|^$PRISTINE/||"; } | sort -u)
+FILES=$( { grep '^+++ b/' "$SRC" | sed 's|^+++ b/||'; diff -rq --exclude=build --exclude=.git "$PRISTINE" "$PATCHED" | grep '^Files ' | awk '{print $2}' | sed "s|^$PRISTINE/||"; } | sort -u)
 NEW=$(mktemp); cat "$HDR" > "$NEW"
 for f in $FILES; do
    if [ -f "$PRISTINE/$f" ]; then diff -u --label "a/$f" --label "b/$f" "$PRISTINE/$f" "$PATCHED/$f" >> "$NEW" || true

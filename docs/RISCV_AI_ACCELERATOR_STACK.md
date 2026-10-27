@@ -558,7 +558,7 @@ and patched checkouts and checked to apply:
 
 ```bash
 # verify:patch
-tools/riscv/regen-qemu-patch.sh qemu-src qemu-riscv && git diff --stat tools/riscv/qemu-11.1.1-ime.patch | tail -1
+tools/riscv/regen-qemu-patch.sh qemu-src qemu-riscv $WORK/ime.patch && diff tools/riscv/qemu-11.1.1-ime.patch $WORK/ime.patch | grep -c '^>'   # lines the trees add; without the third argument it rewrites the committed patch
 ```
 
 ### 4.9 The harness
