@@ -351,8 +351,8 @@ rvcc() { $SNIPER_RISCV_CC --target=riscv64-linux-gnu -march=rv64gcv -mabi=lp64d 
 
 ```bash
 # verify:build
-make -j$(nproc) RISCV=ON QEMU=ON RISCV_IME=ON      # deps (QEMU x86 + patched riscv64, Sail), configure, build
-python3 deps/sniper-deps --qemu --riscv-ime status   # what the fetcher holds for this feature set
+make -j$(nproc) RISCV=ON QEMU=ON RISCV_IME=ON ARM=ON   # deps (QEMU x86 + patched riscv64 + aarch64, Sail), configure, build
+python3 deps/sniper-deps --qemu --riscv-ime --arm status   # what the fetcher holds for this feature set
 $SNIPER_QEMU_RISCV --version | head -1
 ls -l build/default/lib/libsniper-qemu.so lib/sniper
 ```
@@ -472,7 +472,7 @@ rvcc -I test/llm-agent -DUSE_AME -DAME_N=32 -o $WORK/agent-ame32 test/llm-agent/
 rvcc -I test/llm-agent -DUSE_IME -DIME_VLEN=4096 -DIME_LMUL=8 -DIME_LAMBDA=4 -o $WORK/agent-ime32 test/llm-agent/agent.c
 CPU4K=${RVCPU/vlen=128/vlen=4096}
 $SNIPER_QEMU_RISCV -cpu $CPU4K $WORK/agent-ime32 > /dev/null; echo "ime32 exit $?"
-$SNIPER_QEMU_RISCV -cpu $CPU4K -plugin $PLUGIN,output=$WORK/agent-ame32,ame_n=32 -- $WORK/agent-ame32 > /dev/null; echo "ame32 exit $?"
+$SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $CPU4K -plugin $PLUGIN,output=$WORK/agent-ame32,ame_n=32 -- $WORK/agent-ame32 > /dev/null; echo "ame32 exit $?"
 ./run-sniper -n 1 -c riscv -d $WORK/ame32-sim -g perf_model/core/riscv/ame_mma_issue_cycles=32 --traces=$WORK/agent-ame32.app0.th0.sift > /dev/null
 grep -E '^performance_model.cycle_count|^riscv.ame_mma ' $WORK/ame32-sim/simulation/sim.stats
 ```

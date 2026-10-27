@@ -18,6 +18,11 @@ for head, body in blocks:
     if name == 'env':
         out.append(body)
     else:
-        out.append('( set -x\n%s\n); st=$?; [ $st -eq 0 ] || fail=1; echo "=== END %s status=$st ==="' % (body, name))
+        # A build block stops at its first failing command: its last line is a
+        # listing that succeeds whether or not the build did, so a failed make
+        # (a dependency that could not be built) passed as a built tree.  The
+        # other blocks print the exit codes they expect (a guest's 100) and run on.
+        strict = 'set -e\n' if name == 'build' else ''
+        out.append('( set -x\n%s%s\n); st=$?; [ $st -eq 0 ] || fail=1; echo "=== END %s status=$st ==="' % (strict, body, name))
 out.append('exit $fail      # non-zero when any block failed, so make doc-verify fails with it')
 print('\n'.join(out))

@@ -103,6 +103,11 @@ Version 9.0 (in preparation)
     RISC-V configuration is refused with the reason; the allocator and
     page-table fragments layer on them and are tested on RISC-V
   * make dist builds the release archive from the committed tree
+  * The trace manager's monitor no longer reads trace threads that were
+    deleted at the end of a run (a SIGSEGV on the way out, rare)
+  * doc-verify fails a build block whose build failed (it reported only the
+    block's last command); RISC-V document: ARM=ON in its build, and the
+    32x32 AME recording laid out within Sv39
   * MSHRs at the L1-D and the L2, and no configuration without a limit: the
     L2's MSHRs are modelled (every line miss that goes past the L2, from a
     core or from the attached tile, holds one), base.cfg gives the L2 32, and
