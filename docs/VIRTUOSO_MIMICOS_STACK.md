@@ -751,6 +751,16 @@ make regress_qemu
 
 ## 5. Verification record
 
+**Re-run on 2026-10-27** against commit `709d3c0` of `dev-mimicos-v2-update`
+(9.0 as merged: the ROB core model the default, MSHRs at the L1-D and the
+L2), same host, each document in a fresh `WORK`: every block passed --
+`build`, `first`, `configs`, `traces`, `qemu`, `mmu`, `mimicos`, `live`,
+`pacsim`, `pacsim-virtuoso`.  `doc-verify` now stops a build block at its
+first failing command (a failed dependency build had passed as a built
+tree).  The `long:suites` block was not re-run; the suites themselves ran
+on the same tree (configs 1,474, Virtuoso 71, QEMU 49, apps 25, scripting
+20, Pac-Sim 12, magic 6).  The record below is the 2026-10-06 run's.
+
 Re-run on 2026-10-06 against commit `1dcf651` of `dev-mimicos-v2-update`
 (the release cleanup series) on the same 80-core Debian 12 host (gcc
 12.2, Python 3.11, SDE 10.13.1, MPICH 4.2.3 from the dependency cache),

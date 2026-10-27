@@ -655,10 +655,24 @@ core from 4.72 M.  Every other row moved by under 2 percent.
 
 ## 6. Verification record
 
+**Re-run on 2026-10-27** against commit `709d3c0` of `dev-mimicos-v2-update`
+(same host; clang 15 with lld; Ninja on the PATH for the QEMU
+dependencies; the UDB, IME overlay and AME specification checkouts as
+`UDB_UPSTREAM`, `UDB_IME`, `AME_SPEC`), in a fresh `WORK`: every block
+passed -- `build`, `decoder` (regeneration byte-identical), `gemm3`,
+`gemm3-32-sail`, `agent-kernels`, `agent-vlen`, `agent-simulate`,
+`agent-tile`, `agent-32`, `quantize`, `train`, `vlen`, `plugin-api`,
+`gdb`, `patch` (the regenerated patch identical to the committed one: the
+dependency cache's riscv64 tree was rebuilt from it), `harness`,
+`translation`.  Three blocks were corrected for it: the build line gained
+`ARM=ON` (the translation block checks AArch64), `agent-32` records the
+32x32 AME agent within Sv39 (`-R`), and `patch` writes its regeneration to
+`WORK` instead of over the committed patch.  The `long:` blocks were not
+re-run; the harness cases they run passed in the suite on the same tree.
+
 The record below is of the run on 2026-10-06, before 9.0's configuration
 changes; its cycle figures are that configuration's (section 5 has the
-current ones), and the blocks are to be re-run with `make doc-verify`
-against the release.
+current ones).
 
 Re-run on 2026-10-06 against commit `1dcf651` of `dev-mimicos-v2-update`
 (80-core Debian 12 host; clang 15 with lld for the guests; the RISC-V
