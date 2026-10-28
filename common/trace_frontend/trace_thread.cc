@@ -302,8 +302,11 @@ UInt64 TraceThread::va2pa(UInt64 va, bool *noMapping)
 
    if (m_address_randomization)
    {
-      // Set 16 bits to app_id | remap middle 36 bits using app_id-specific mapping | keep lower 12 bits (page offset)
-      return (haddr << pa_core_shift) | (remapAddress(va >> va_page_shift) << va_page_shift) | (va & va_page_mask);
+      // Set 16 bits to app_id | remap middle 36 bits using app_id-specific mapping | keep lower 12 bits (page offset).
+      // The address is cut to its 48 bits first, as below: bits 48-63 can
+      // carry a tag (AArch64 top-byte ignore, MTE) and went into the page
+      // number, and from there into the 16 bits that hold the app id.
+      return (haddr << pa_core_shift) | (remapAddress((va & pa_va_mask) >> va_page_shift) << va_page_shift) | (va & va_page_mask);
    }
    else
    {
