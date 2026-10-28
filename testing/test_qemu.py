@@ -636,6 +636,35 @@ def case_riscv_user_trace(p, g, workdir):
     return True, '%d instructions, trace readable' % n
 
 
+def case_riscv_power(p, g, workdir):
+    """run-sniper --power on a RISC-V guest: McPAT's estimate for the riscv
+    configuration, a non-x86 core at its own process node.  It used to die in
+    mcpat.py (no bus statistics: the configuration's network keeps none) and
+    the run passed with no power files; and every core was described to McPAT
+    as x86."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    outdir = os.path.join(workdir, 'rvpower')
+    shutil.rmtree(outdir, ignore_errors=True)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '--power', '-n', '1', '-c', 'riscv', '-d', outdir,
+                   '--frontend=qemu', '--', r['guest']], 900, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'the run failed: %s' % sniper_failed(rc, out)
+    txt, xml = os.path.join(outdir, 'power.txt'), os.path.join(outdir, 'power.xml')
+    if not os.path.isfile(txt) or not os.path.isfile(xml):
+        return False, 'no power.txt / power.xml'
+    t = open(txt).read()
+    m = re.search(r'^Processor:.*?Runtime Dynamic = ([0-9.]+) W', t, re.S | re.M)
+    if not m or float(m.group(1)) <= 0:
+        return False, 'power.txt has no processor runtime power'
+    if 'Technology 22 nm' not in t:
+        return False, 'McPAT did not use the configuration\'s 22 nm'
+    if 'name="x86" value="0"' not in open(xml).read():
+        return False, 'power.xml describes the RISC-V core as x86'
+    return True, 'McPAT: %s W runtime dynamic at 22 nm, a non-x86 core' % m.group(1)
+
+
 def case_riscv_user_simulate(p, g, workdir):
     """Sniper's RISC-V core model simulates the trace; branches agree with the decoder."""
     r, why = riscv_prerequisites(workdir)
@@ -2385,6 +2414,7 @@ CASES = {
     'aarch64-user-simulate': case_aarch64_user_simulate,
     'riscv-system-simulate': case_riscv_system_simulate,
     'riscv-system-address-spaces': case_riscv_system_address_spaces,
+    'riscv-power':      case_riscv_power,
     'riscv-user-simulate': case_riscv_user_simulate,
     'riscv-user-translation': case_riscv_user_translation,
     'aarch64-user-translation': case_aarch64_user_translation,

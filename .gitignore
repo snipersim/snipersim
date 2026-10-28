@@ -127,6 +127,7 @@ test/dr-frontend/fft
 test/dvfs/dvfs
 test/fft-dvfs/fft
 test/fft-hetero-cfg/fft
+test/fft-power/fft
 test/fft-hetero/fft
 test/fft-nn/fft
 test/fft/fft

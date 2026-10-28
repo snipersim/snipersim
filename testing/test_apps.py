@@ -319,6 +319,23 @@ def hetero_cfg_feature(out, outdir):
     return True, 'per-core dispatch widths 1,2,4,1'
 
 
+def power_feature(out, outdir):
+    """run-sniper --power: McPAT ran and wrote an estimate (power.txt with the
+    processor's runtime power, power.xml describing an x86 core for this x86
+    configuration); McPAT's failures used to leave no files and pass."""
+    txt, xml = os.path.join(outdir, 'power.txt'), os.path.join(outdir, 'power.xml')
+    if not os.path.isfile(txt) or not os.path.isfile(xml):
+        return False, 'no power.txt / power.xml: McPAT did not run or failed'
+    t = open(txt).read()
+    m = re.search(r'^Processor:.*?Runtime Dynamic = ([0-9.]+) W', t, re.S | re.M)
+    if not m or float(m.group(1)) <= 0:
+        return False, 'power.txt has no processor runtime power'
+    if 'name="x86" value="1"' not in open(xml).read():
+        return False, 'power.xml does not describe the x86 core as x86'
+    node = re.search(r'Technology (\d+) nm', t)
+    return True, 'McPAT: %s W runtime dynamic at %s nm' % (m.group(1), node.group(1) if node else '?')
+
+
 def markers_feature(out, outdir):
     n0, n1 = out.count('Magic marker from thread 0'), out.count('Magic marker from thread 1')
     if not n0 or not n1 or 'str = begin' not in out:
@@ -411,6 +428,7 @@ CASES = {
     'fft-hetero':      (fft_and(corefreq_is([1.0, 2.66, 2.66, 2.0])), None),
     'fft-hetero-cfg':  (fft_and(hetero_cfg_feature), None),
     'fft-marker':      (fft_and(markers_feature), None),
+    'fft-power':       (fft_and(power_feature), 'mcpat'),
     'fft-nn':          (fft_self_check, 'torch'),
     'pinplay':         (pinplay_check, None),
     'dr-frontend':     (dr_frontend_check, 'dynamorio'),
@@ -462,6 +480,10 @@ def unavailable(reason):
         qemu = os.environ.get('SNIPER_QEMU_X86_64') or os.path.join(SNIPER_ROOT, 'qemu', 'build', 'qemu-x86_64')
         if not os.path.isfile(qemu):
             return 'no QEMU (deps/sniper-deps --qemu fetch, or set SNIPER_QEMU_X86_64)'
+    if reason == 'mcpat':
+        mcpat = os.path.join(SNIPER_ROOT, 'mcpat')
+        if not any(os.path.isfile(os.path.join(mcpat, b)) for b in ('mcpat-1.0', 'mcpat-1.0.cache')):
+            return 'no McPAT (make MCPAT=ON, the default)'
     if reason == 'dynamorio':
         build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
         if not os.path.isfile(os.path.join(build, 'lib', 'libdr-frontend.so')):
