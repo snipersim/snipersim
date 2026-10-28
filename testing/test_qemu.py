@@ -217,11 +217,9 @@ def case_user_mt_streams(p, g, workdir):
     so the hazard that makes *blocking* multi-threaded user mode unsafe cannot
     arise, and Sniper gets one trace per thread.
 
-    The refusal path for blocking mode is not exercised here.  It needs a
-    Sniper on the other end of the response channel -- standalone, the writer
-    aborts opening the channel before a second thread ever appears -- so it
-    waits on run-sniper learning to drive QEMU.  The hazard it guards against
-    is reproduced in test/qemu-plugin-probe.
+    The live run (flow control, a response channel) is user-mt-live's; the
+    hazard it needs the plugin wait call for is reproduced in
+    test/qemu-plugin-probe.
     """
     prefix = os.path.join(workdir, 'mt')
     rc, out = run([p['user'], '-plugin', '%s,output=%s' % (p['frontend'], prefix),
@@ -1995,11 +1993,11 @@ def case_aarch64_sve_simulate(p, g, workdir):
     return True, '%s; %d instructions simulated on %s; a 64-byte recording refused' % (answer.group(0), written, ' and '.join(summary))
 
 
-def pacsim_case(arch, workdir):
+def pacsim_case(arch, workdir, mode='single'):
     """testing/test_pacsim.py --frontend qemu: the sampler in the plugin, on a
     live channel, against the full run (accuracy, detail share, checksum)."""
     cmd = [sys.executable, os.path.join(SNIPER_ROOT, 'testing', 'test_pacsim.py'), '--frontend', 'qemu',
-           '--arch', arch, '--profile', 'quick', '--mode', 'single']
+           '--arch', arch, '--profile', 'quick', '--mode', mode]
     rc, out = run(cmd, 3600, cwd=SNIPER_ROOT)
     if rc is None:
         return False, 'timed out'
@@ -2029,6 +2027,36 @@ def case_aarch64_user_pacsim(p, g, workdir):
     if not (os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')):
         return None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
     return pacsim_case('aarch64', workdir)
+
+
+# Threads: the plugin waits for Sniper outside QEMU's run loop, which needs
+# the wait call in the QEMU (tools/qemu-11.1.1-plugin-wait.patch); a QEMU
+# without it refuses the second thread (user-mt-live and the *-user-mt cases
+# check that), and the sampling cases are skipped, since it is the QEMU that
+# is missing something.
+def case_user_pacsim_mt(p, g, workdir):
+    """Pac-Sim on qemu-x86_64 with threads: the barrier shape, four workers on their own cores."""
+    if not qemu_can_wait(user_qemu('x86_64')):
+        return None, '%s lacks qemu_plugin_vcpu_wait_at (tools/qemu-11.1.1-plugin-wait.patch)' % user_qemu('x86_64')
+    return pacsim_case('x86_64', workdir, mode='barrier')
+
+
+def case_riscv_user_pacsim_mt(p, g, workdir):
+    """Pac-Sim on qemu-riscv64 with threads: the barrier shape, freestanding, its own futex barrier."""
+    if not os.environ.get('SNIPER_RISCV_CC'):
+        return None, 'SNIPER_RISCV_CC not set to a RISC-V compiler'
+    if not qemu_can_wait(user_qemu('riscv64')):
+        return None, '%s lacks qemu_plugin_vcpu_wait_at (tools/qemu-11.1.1-plugin-wait.patch)' % user_qemu('riscv64')
+    return pacsim_case('riscv64', workdir, mode='barrier')
+
+
+def case_aarch64_user_pacsim_mt(p, g, workdir):
+    """Pac-Sim on qemu-aarch64 with threads: the same freestanding barrier shape, on cortex-a72."""
+    if not (os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC')):
+        return None, 'no clang for aarch64 (set SNIPER_AARCH64_CC, or SNIPER_RISCV_CC to a clang)'
+    if not qemu_can_wait(user_qemu('aarch64')):
+        return None, '%s lacks qemu_plugin_vcpu_wait_at (tools/qemu-11.1.1-plugin-wait.patch)' % user_qemu('aarch64')
+    return pacsim_case('aarch64', workdir, mode='barrier')
 
 
 ROI_SUM = 'sum=2152578694144'    # roi.c and rv-bare-roi.c: 5 + 10 + 5 rounds of work
@@ -2451,14 +2479,55 @@ def case_riscv_virtuoso_portable(p, g, workdir):
 
 PHASED_MT = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'phased_rv_mt.c')
 PHASED_MT_LINE = 'phased_rv_mt: threads=4 phases=12 checksum=12291709628096540252 visited=1440000'
+MT_REFUSAL = 'The front end refused the run: [SNIPER-QEMU] error: the guest started a second thread.'
+
+
+def qemu_can_wait(qemu):
+    """Does this QEMU have the plugin wait call (tools/qemu-11.1.1-plugin-wait.patch)?
+    With it the plugin runs multi-threaded guests live; without it, it refuses
+    the second thread."""
+    try:
+        with open(qemu, 'rb') as f:
+            return b'qemu_plugin_vcpu_wait_at' in f.read()
+    except IOError:
+        return False
+
+
+def mt_live_check(rc, out, line, qemu):
+    """A multi-threaded guest run live through run-sniper: with the wait call
+    in the QEMU it runs to the end with the native checksum; without it the
+    plugin refuses the second thread with its reason and the run fails
+    instead of passing on the first thread's partial simulation.  Returns
+    (ok, what happened)."""
+    if qemu_can_wait(qemu):
+        if rc != 0:
+            return False, 'live: %s' % sniper_failed(rc, out)
+        if line not in out:
+            return False, 'live: the run passed with a wrong or no checksum'
+        return True, 'live: ran with the native checksum'
+    if rc == 0:
+        return False, 'live: a QEMU without the wait call ran a multi-threaded guest; the plugin must refuse the second thread'
+    if MT_REFUSAL not in out:
+        return False, 'live: the run failed without the refusal (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
+    # The refusal ends QEMU with _exit(1); a crash on the way out (QEMU
+    # died of SIGSEGV in one refusal in four while exit handlers ran under
+    # the other vCPU) reaches run-sniper as status 139.
+    if rc != 1:
+        return False, 'live: the refusal was given but the run ended with %s, not exit 1' % exit_text(rc)
+    return True, 'live: this QEMU has no wait call, the second thread refused and the run failed (exit %s)' % rc
+
+
+def user_qemu(arch):
+    var, path = {'x86_64': ('SNIPER_QEMU_X86_64', 'qemu/build/qemu-x86_64'),
+                 'riscv64': ('SNIPER_QEMU_RISCV', 'qemu-riscv/build/qemu-riscv64'),
+                 'aarch64': ('SNIPER_QEMU_AARCH64', 'qemu-aarch64/build/qemu-aarch64')}[arch]
+    return os.environ.get(var) or os.path.join(SNIPER_ROOT, path)
 
 
 def mt_case(p, workdir, arch, qemu, cc, target_flags, config, qemu_opts):
     """The four-worker phased guest under QEMU user mode: recorded to files it
     gives one readable trace per thread (main and four workers) and the same
-    checksum as native; run live through run-sniper, the plugin refuses the
-    second thread with its reason and the run fails instead of passing on the
-    first thread's partial simulation."""
+    checksum as native; run live through run-sniper, as mt_live_check says."""
     guest = os.path.join(workdir, 'phased_mt_' + arch)
     rc, out = run([cc] + target_flags + ['-O1', '-ffreestanding', '-nostdlib', '-static', '-fuse-ld=lld',
                    '-Wl,-e,_start', '-I', os.path.join(SNIPER_ROOT, 'include'), '-DNTHREADS=4', '-o', guest, PHASED_MT], 120)
@@ -2477,17 +2546,38 @@ def mt_case(p, workdir, arch, qemu, cc, target_flags, config, qemu_opts):
             return False, '%s unreadable (%s)' % (t, exit_text(rc))
     outdir = os.path.join(workdir, 'mt-live-' + arch)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '4', '-c', config, '-d', outdir,
-                   '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
-    if rc == 0:
-        return False, 'the live run of a multi-threaded guest passed; the plugin must refuse the second thread'
-    if 'The front end refused the run: [SNIPER-QEMU] error: the guest started a second thread.' not in out:
-        return False, 'the live run failed without the refusal (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
-    # The refusal ends QEMU with _exit(1); a crash on the way out (QEMU
-    # died of SIGSEGV in one refusal in four while exit handlers ran under
-    # the other vCPU) reaches run-sniper as status 139.
-    if rc != 1:
-        return False, 'the refusal was given but the run ended with %s, not exit 1' % exit_text(rc)
-    return True, '5 per-thread traces, checksum as native; live: the second thread refused and the run failed (exit %s)' % rc
+                   '--frontend=qemu', '--', guest], 1200, cwd=SNIPER_ROOT)
+    ok, live = mt_live_check(rc, out, PHASED_MT_LINE, user_qemu({'rv': 'riscv64', 'a64': 'aarch64'}[arch]))
+    if not ok:
+        return False, live
+    return True, '5 per-thread traces, checksum as native; ' + live
+
+
+# phased.c, small: four workers on pthread barriers, the ROI around the phases
+PHASED_X86_FLAGS = ['-DNTHREADS=4', '-DNPHASES=6', '-DCHASE_SLOTS=65536', '-DCHASE_STEPS=20000', '-DCOMPUTE_ITERS=40000']
+
+
+def case_user_mt_live(p, g, workdir):
+    """A multi-threaded x86-64 guest (pthreads, four workers meeting at
+    barriers) run live through run-sniper --roi: with the plugin wait call in
+    the QEMU it runs on five cores -- futex calls answered by the simulator,
+    threads announced at their clone's return, joined through the simulator's
+    model of their tid words -- and prints the native checksum; without the
+    call, the second thread is refused with the reason."""
+    guest = os.path.join(workdir, 'phased_x86')
+    rc, out = run(['gcc', '-O1', '-static', '-I', os.path.join(SNIPER_ROOT, 'include')] + PHASED_X86_FLAGS +
+                  ['-o', guest, os.path.join(SNIPER_ROOT, 'testing', 'apps', 'phased.c'), '-lpthread'], 120)
+    if rc != 0:
+        return None, 'could not build phased.c statically (%s)' % exit_text(rc)
+    rc, out = run([guest], 120)
+    m = re.search(r'phased: .*checksum=\S+ visited=\d+', out)
+    if rc != 0 or not m:
+        return None, 'the guest did not run natively (%s)' % exit_text(rc)
+    line = m.group(0)
+    outdir = os.path.join(workdir, 'mt-live-x86')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '5', '-c', 'gainestown', '--roi', '-d', outdir,
+                   '--frontend=qemu', '--', guest], 1200, cwd=SNIPER_ROOT)
+    return mt_live_check(rc, out, line, user_qemu('x86_64'))
 
 
 def case_riscv_user_mt(p, g, workdir):
@@ -2541,6 +2631,7 @@ CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
     'user-mt-streams':  case_user_mt_streams,
+    'user-mt-live':     case_user_mt_live,
     'user-fork-refused': case_user_fork_refused,
     'system-exact':     case_system_exact,
     'system-vapa':      case_system_vapa,
@@ -2592,6 +2683,9 @@ CASES = {
     'user-pacsim':         case_user_pacsim,
     'riscv-user-pacsim':   case_riscv_user_pacsim,
     'aarch64-user-pacsim': case_aarch64_user_pacsim,
+    'user-pacsim-mt':      case_user_pacsim_mt,
+    'riscv-user-pacsim-mt': case_riscv_user_pacsim_mt,
+    'aarch64-user-pacsim-mt': case_aarch64_user_pacsim_mt,
 }
 
 

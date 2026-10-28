@@ -164,9 +164,13 @@ PROFILE_TRACE_ARGS = {
 # arithmetic -- phased_st.c on x86-64 (built statically), phased_rv.c on
 # RISC-V (freestanding, with the clang named by SNIPER_RISCV_CC; the QEMU
 # runs it with the vector and matrix units, which this shape does not use).
-# The multi-threaded shapes need a QEMU that can wait for Sniper outside its
-# run loop; until that lands, the plugin refuses a second thread.  The
-# recorder's knobs are passed the same way (record-trace turns
+# The multi-threaded shapes run there too, on a QEMU that can wait for Sniper
+# outside its run loop (tools/qemu-11.1.1-plugin-wait.patch; without it the
+# plugin refuses a second thread, and they are skipped): on x86-64 the three
+# above, built statically (the guest's pthread_barrier_wait is then in its
+# own symbol table, where the sampler finds it); on RISC-V and AArch64
+# 'barrier', from phased_rv_mt.c (MT_FREESTANDING below).  The recorder's
+# knobs are passed the same way (record-trace turns
 # "-sniper:name value" into the plugin's name=value); the plugin's
 # fast-forward window is already 1000 instructions, so flowff is not one of
 # its options and is left out.
@@ -193,9 +197,49 @@ SINGLE = {
 }
 QEMU_CONFIG = {'x86_64': 'gainestown', 'riscv64': 'riscv', 'aarch64': 'cortex-a72'}
 
+# The multi-threaded shapes for a guest without a C library (RISC-V and
+# AArch64 here): phased_rv_mt.c is phased.c freestanding -- threads by raw
+# clone, a futex barrier of its own, which the sampler is told about by its
+# symbol (pacsim-sync).  Its budget is the x86 barrier shape's, above its
+# longest phase, for the reason given there; no region under 50K, as on
+# RISC-V's single-threaded shape.  On AArch64 (cortex-a72) the first two
+# chase phases run cold, 2.12 and 2.32 ms where the later ones take 1.61 to
+# 1.68 as the workers' shared L2 fills (every region measured), and the two
+# cold measurements agree to within the default convergence of 10%: the
+# cluster was then skipped at the cold time, 20.7% over the full run.  At 5%
+# the sampler measures on until two warm ones agree: 0.26%, 6 of 13 regions
+# measured (2026-10-28).
+MT_FREESTANDING = {
+    'barrier': {
+        'src': 'phased_rv_mt.c', 'sync': 'phased_barrier_wait',
+        'what': 'barrier between every phase: a global cut point always exists',
+        'quick': ['-DNPHASES=12', '-DCHASE_SLOTS=131072', '-DCHASE_STEPS=60000', '-DCOMPUTE_ITERS=120000'],
+        'full':  ['-DNPHASES=24'],
+        'quick_region_size': 3000,
+        'quick_min_region_size': 50,
+        'quick_knobs': {'aarch64': ['-sniper:pacsim-converge 0.05']},
+    },
+}
 
-def spec_for(mode):
-    return SINGLE if mode == 'single' else MODES[mode]
+
+def spec_for(mode, arch='x86_64'):
+    if mode == 'single':
+        return SINGLE
+    return MT_FREESTANDING[mode] if arch != 'x86_64' else MODES[mode]
+
+
+def qemu_modes(arch):
+    """The shapes the QEMU front end has for an architecture."""
+    return ['single'] + sorted(MODES if arch == 'x86_64' else MT_FREESTANDING)
+
+
+def qemu_can_wait(qemu):
+    """Does this QEMU have the plugin wait call (tools/qemu-11.1.1-plugin-wait.patch)?"""
+    try:
+        with open(qemu, 'rb') as f:
+            return b'qemu_plugin_vcpu_wait_at' in f.read()
+    except IOError:
+        return False
 
 # The knob record-trace looks for; kept in step with it deliberately.
 PACSIM_KNOB = b'sniper:pacsim'
@@ -241,7 +285,7 @@ def qemu_prerequisites(arch):
         cc = os.environ.get('SNIPER_AARCH64_CC' if arch == 'aarch64' else 'SNIPER_RISCV_CC') or os.environ.get('SNIPER_RISCV_CC')
         if not cc or not os.path.isfile(cc):
             return None, 'no clang for %s (set SNIPER_RISCV_CC, or SNIPER_AARCH64_CC)' % arch
-    return {'build': b, 'plugin': plugin}, None
+    return {'build': b, 'plugin': plugin, 'qemu': qemu, 'can_wait': qemu_can_wait(qemu)}, None
 
 
 def prerequisites():
@@ -297,8 +341,16 @@ MAX_DETAIL_SHARE = 0.75
 
 
 def build_workload(workdir, mode, threads, profile, frontend='pin', arch='x86_64'):
-    spec = spec_for(mode)
+    spec = spec_for(mode, arch)
     exe = os.path.join(workdir, mode)
+    if mode != 'single' and arch != 'x86_64':
+        # freestanding, like the single-threaded shape on these architectures
+        target = ['--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d'] if arch == 'riscv64' else ['--target=aarch64-linux-gnu']
+        cc = (os.environ.get('SNIPER_AARCH64_CC') if arch == 'aarch64' else None) or os.environ['SNIPER_RISCV_CC']
+        subprocess.run([cc] + target + ['-O1', '-ffreestanding', '-nostdlib', '-static', '-fuse-ld=lld', '-Wl,-e,_start',
+                        '-I', os.path.join(SNIPER_ROOT, 'include'), '-DNTHREADS=%d' % threads] + spec[profile] +
+                       ['-o', exe, os.path.join(APPS, spec['src'])], check=True)
+        return exe
     if mode == 'single':
         if arch == 'riscv64':
             cmd = [os.environ['SNIPER_RISCV_CC'], '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d',
@@ -328,7 +380,7 @@ def checksum_of(out):
     """The workload's self-report, whichever of the three produced it."""
     # Printed inside the ROI, so it arrives through the simulator's output
     # stream, stamped and tagged.
-    m = re.search(r'(?:phased|looped|tasked|phased_st|phased_rv): .*checksum=(\S+) visited=(\d+)', out)
+    m = re.search(r'(?:phased|looped|tasked|phased_st|phased_rv|phased_rv_mt): .*checksum=(\S+) visited=(\d+)', out)
     return m.groups() if m else None
 
 
@@ -364,8 +416,9 @@ def simulate(exe, outputdir, threads, extra, timeout, frontend='pin', arch='x86_
     cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'), '--roi',
            '-n', str(threads + 1), '-c', 'gainestown', '-d', outputdir] + extra + ['--', exe]
     if frontend == 'qemu':
-        # the plugin front end on a live channel; the single-threaded shape on
-        # one core, the architecture's configuration
+        # the plugin front end on a live channel, the architecture's
+        # configuration; the single-threaded shape on one core, the others
+        # on one per thread as above
         cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'), '--roi', '--frontend=qemu',
                '-n', str(1 if threads == 1 else threads + 1), '-c', QEMU_CONFIG[arch], '-d', outputdir] + extra + ['--', exe]
     # The host's load while it runs, for case_faster: wall time compares two
@@ -406,15 +459,18 @@ def measure(p, workdir, mode, args):
     if args.frontend == 'qemu':
         trace_args = [a for a in trace_args if 'flowff' not in a]     # the plugin's window is 1000 already
     for knob in ('region_size', 'min_region_size'):
-        value = spec_for(mode).get(args.profile + '_' + knob)
+        value = spec_for(mode, args.arch).get(args.profile + '_' + knob)
         if isinstance(value, dict):
             value = value[args.arch]
         if value:
             # Pin knobs are write-once: replace the profile's value, do not repeat it
             trace_args = [a for a in trace_args if 'pacsim-' + knob.replace('_', '-') not in a]
             trace_args.append('--trace-args=-sniper:pacsim-%s %d' % (knob.replace('_', '-'), value))
-    for knob in spec_for(mode).get(args.profile + '_knobs', {}).get(args.arch, []):
+    for knob in spec_for(mode, args.arch).get(args.profile + '_knobs', {}).get(args.arch, []):
         trace_args.append('--trace-args=' + knob)
+    if args.frontend == 'qemu' and spec_for(mode, args.arch).get('sync'):
+        # the program's own barrier routine, found in its ELF by name
+        trace_args.append('--trace-args=-sniper:pacsim-sync ' + spec_for(mode, args.arch)['sync'])
     rc, out, wall_samp = simulate(exe, samp_dir, threads,
                                   ['--pacsim'] + trace_args
                                   + ['--trace-args=' + a for a in args.trace_arg], args.timeout, args.frontend, args.arch)
@@ -593,7 +649,8 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument('--mode', action='append', choices=sorted(MODES) + ['single'],
-                    help='region shape to test (repeatable; default: all three on Pin, single on QEMU)')
+                    help='region shape to test (repeatable; default: all three on Pin; on QEMU single and '
+                         'the multi-threaded ones the architecture has, when the QEMU can wait)')
     ap.add_argument('--frontend', choices=('pin', 'qemu'), default='pin',
                     help='the front end that records: the SDE recorder (default) or the QEMU plugin in user mode')
     ap.add_argument('--arch', choices=('x86_64', 'riscv64', 'aarch64'), default='x86_64',
@@ -623,11 +680,29 @@ def main():
         log.finish()
         return 0
 
-    modes = args.mode or (sorted(MODES) if args.frontend == 'pin' else ['single'])
+    modes = args.mode or (sorted(MODES) if args.frontend == 'pin' else qemu_modes(args.arch))
     if args.frontend == 'pin' and 'single' in modes:
         print('SKIP: the single-threaded shape is the QEMU front end\'s (--frontend qemu)')
         log.finish()
         return 0
+    if args.frontend == 'qemu':
+        missing = [m for m in modes if m not in qemu_modes(args.arch)]
+        if missing:
+            print('SKIP: no %s shape for %s under QEMU (%s has %s)' % (', '.join(missing), args.arch, args.arch,
+                                                                      ', '.join(qemu_modes(args.arch))))
+            log.finish()
+            return 0
+        # Threads under a live channel need the wait call; without it the
+        # plugin refuses the second thread, which says nothing about sampling
+        threaded = [m for m in modes if m != 'single']
+        if threaded and not p['can_wait']:
+            reason = '%s lacks qemu_plugin_vcpu_wait_at (tools/qemu-11.1.1-plugin-wait.patch)' % p['qemu']
+            if args.mode:
+                print('SKIP: %s: %s' % (', '.join(threaded), reason))
+                log.finish()
+                return 0
+            print('(skipping %s: %s)' % (', '.join(threaded), reason))
+            modes = [m for m in modes if m == 'single']
     names = args.case or sorted(CASES)
     workdir = tempfile.mkdtemp(prefix='sniper-pacsim-')
     failures = 0
@@ -637,7 +712,7 @@ def main():
             # Announced before the work, flushed, so the log always names what
             # is in flight: measure() simulates the workload twice and is where
             # all the time goes.
-            print('=== %s: %s ===' % (mode, spec_for(mode)['what']))
+            print('=== %s: %s ===' % (mode, spec_for(mode, args.arch)['what']))
             print('  simulating (full detailed baseline, then sampled) ... ', end='')
             sys.stdout.flush()
             started = time.time()

@@ -104,11 +104,54 @@ blessed counters.  The baselines did move with the sampler's move into
 the recorder's shared object, because the live guest's address layout
 follows the Pin tool's size; see testing/test_virtuoso.py.)
 
-**Not built.**  Multi-threaded guests: a vCPU that waits for Sniper inside a
-plugin callback blocks QEMU's exclusive sections, so the plugin still refuses
-a second thread in user mode; the plugin-API wait the proposal describes
-(section 3.3) remains the route, and is deferred.  System-mode sampling:
-needs the same, plus guest-side markers.
+**Threads.**  A vCPU that waits for Sniper inside a plugin callback still
+counts as running, so any exclusive section another thread needs waits for
+it, and Sniper waits for that thread: a deadlock with two threads, which is
+why the plugin refused a second one.  The wait the proposal asks for
+(section 3.3, option 2) is `qemu_plugin_vcpu_wait_at()` in
+`tools/qemu-11.1.1-plugin-wait.patch`, applied by `deps/sniper-deps` to the
+x86-64, RISC-V (after the IME patch) and AArch64 user-mode QEMUs.  It is not
+the proposal's begin/end pair: a callback cannot stop being "running" in
+place, in the middle of a translated block a flush may reuse.  Instead it
+leaves the run loop the way a system call does -- the state at the
+instruction restored from the block's unwind data (x86's pending flags
+operation included), the PC set to it, `EXCP_PLUGIN_WAIT` unwinding to the
+linux-user cpu loop, where the plugin's callback runs after
+`cpu_exec_end()` with register access -- and execution resumes at the
+instruction.  The plugin (`sniper_qemu.cc`, "waiting"):
+
+- flow control reports from the block-start callback, where leaving the
+  loop re-executes nothing; a magic instruction, and a sampler event that
+  would ask Sniper something (a cut at a back-edge or a synchronisation
+  point, a pending count's flush), leave the loop and finish outside it.
+  The sampler's events take `can_block` and report an event left undone;
+- resuming re-runs the instruction's callbacks, in a fresh block starting
+  there: every callback is a stage in a per-vCPU done-mask keyed by
+  address, so none repeats, and a block begun by a resume is not counted
+  twice;
+- threads follow the recorder: the child-tid word queued at the clone's
+  entry, `NewThread` at its successful return (glibc's `clone3` attempt
+  gets ENOSYS first), the child waiting in its init hook until it has been
+  announced, the tid word cleared and the joiner's futex wake sent to
+  Sniper at the thread's exit call (QEMU's vCPU-exit hook runs under its
+  clone lock); system calls are outside the run loop already, and the
+  emulated ones are answered through the syscall filter as before;
+- two orderings kept: the pending count goes out before `NewThread`, and an
+  instruction whose own callback caused a request keeps its record pending
+  until it has run, so the record carries its addresses and outcome.
+
+The call is bound weakly: on a QEMU without it the plugin waits in the
+callback as before and refuses a second thread on a live channel.  Two
+faults of the sampler that only a deferred event could reach were fixed on
+the way: the back-edge rule of `pacsim-loop-min` recorded the loop's
+iteration on the first call, so the second call saw an iteration of no
+instructions and never cut at a coarse loop (the x86 single shape went from
+2 of 6 regions measured to 4 of 5, 2.3% off); and a warm-up window's start
+counted its block twice.
+
+**Not built.**  System-mode sampling: the wait is user mode only (the hook
+is in the linux-user cpu loops), and sampling there needs guest-side
+markers too.
 
 ## 3. What the port changed in the sampler
 
@@ -182,12 +225,28 @@ speedup is 3.8x (tools a third of the run, +1.06%) to 5.8x (two thirds,
 ## 4. Tests
 
 - `testing/test_pacsim.py --frontend qemu --arch x86_64|riscv64|aarch64
-  --profile quick`: the single-threaded phased shape under the plugin;
-  accurate (0.13%, 0.05%, 0.02%) and less detail (33%, 33%, 17%).
+  --profile quick`: the single-threaded phased shape under the plugin, and
+  with the wait call the multi-threaded ones (four workers, one core per
+  thread): on x86-64 `barrier`, `loop` and `task` built statically, on
+  RISC-V and AArch64 `barrier` from `phased_rv_mt.c`.  Measured 2026-10-28
+  (error against the full run; wall-clock speedup, runs pinned to eight
+  cores that other runs shared):
+
+  | shape | x86-64 | RISC-V | AArch64 |
+  |---|---|---|---|
+  | single | 0.20%, 1.69x | 0.05%, 1.63x | 0.03%, 2.11x |
+  | barrier | 0.09%, 1.60x | 0.44%, 1.59x | 0.50%, 1.98x (with `pacsim-converge 0.05`; at the default 0.10, 20.7%: two cold measurements agreed, see the suite) |
+  | loop | 0.03%, 2.35x | | |
+  | task | 24.6% (the known exception), 1.39x | | |
+
   `--frontend pin` (the default) is the recorder suite as before.
 - `testing/test_qemu.py`: `user-pacsim`, `riscv-user-pacsim`,
-  `aarch64-user-pacsim` run the same through run-sniper, and
-  `run-sniper-qemu-roi` checks the ROI and the magic answers on the three
-  architectures.
+  `aarch64-user-pacsim` run the single shape through run-sniper, and
+  `user-pacsim-mt`, `riscv-user-pacsim-mt`, `aarch64-user-pacsim-mt` the
+  barrier shape (skipped on a QEMU without the wait call);
+  `user-mt-live`, `riscv-user-mt` and `aarch64-user-mt` run a
+  multi-threaded guest live and check its checksum (or, without the call,
+  the refusal); `run-sniper-qemu-roi` checks the ROI and the magic answers
+  on the three architectures.
 - `testing/apps/phased_st.c`, `phased_rv.c`, `phased_rv_mt.c`: the shapes,
   freestanding so they build for every architecture with the pinned clang.
