@@ -472,6 +472,13 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
      // Abort all threads in this application, except ourselves (we should end normally soon)
      if ((*it)->getThread()->getAppId() == thread->getThread()->getAppId() && *it != thread)
      {
+       /* Marked aborted before it is asked to stop, so that the thread, seeing
+          the stop, knows it was aborted (TraceThread closes its channel
+          rather than stopping the front end) */
+       {
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         (*it)->getThread()->abort();
+       }
        // Ask thread to stop
        (*it)->stop();
        /* A sibling parked in an emulated futex or sleep has its recorder
@@ -578,6 +585,16 @@ void TraceManager::stop()
       readers directly instead, outside the pool, fixed the crash but hung one
       run in ten -- a thread still reading its own stream does not take kindly
       to having its front end stopped from under it. */
+   /* Not to the readers of aborted threads: their application already ended
+      for the simulator, while its process may still be running (an --roi
+      recording runs on natively after the region), and a Shutdown makes the
+      recorder exit that process.  fft-hetero-cfg lost its results so, one run
+      in twenty: a worker's recorder thread, still in Pin's thread-exit
+      callback when the main thread's stream ended at the end of the ROI,
+      read the Shutdown and exited the program before it printed them. */
+   for (std::vector<TraceThread *>::iterator it = m_threads.begin(); it != m_threads.end(); ++it)
+     if ((*it)->getThread()->isAborted())
+       (*it)->suppressShutdown();
    m_app_reader_pool.stopAll();
 
    // Give threads some time to end.

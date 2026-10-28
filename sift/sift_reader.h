@@ -210,6 +210,8 @@ namespace Sift
 
 
 	 void frontEndStop();
+	 void closeChannel();   // end this thread's channel without stopping the front end
+	 void suppressShutdown() { m_shutdown_sent.store(true); }   // frontEndStop() will not send Shutdown
       private:
          std::atomic<bool> m_shutdown_sent{false};   // frontEndStop() has sent its answer
    };

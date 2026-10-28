@@ -103,6 +103,11 @@ Version 9.0 (in preparation)
     RISC-V configuration is refused with the reason; the allocator and
     page-table fragments layer on them and are tested on RISC-V
   * make dist builds the release archive from the committed tree
+  * A program recorded with --roi no longer dies after its region of
+    interest, one run in twenty (its results unprinted): the threads the
+    simulator aborts at the end of the ROI get their channels closed instead
+    of a Shutdown, which made the recorder exit the still-running process
+    (and Pin then printed "ptrace_attach_pid ... Operation not permitted")
   * The trace manager's monitor no longer reads trace threads that were
     deleted at the end of a run (a SIGSEGV on the way out, rare)
   * doc-verify fails a build block whose build failed (it reported only the

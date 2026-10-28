@@ -1858,7 +1858,18 @@ void TraceThread::m_run_func_with_userpace_mimicos()
       loaded host).  A sibling parked in an emulated wait at that moment was
       already released (SyscallServer::abortWaits); this covers the rest. */
    if (m_stop)
-      (m_current_sift_reader ? m_current_sift_reader : &m_trace)->frontEndStop();
+   {
+      /* Our application ended for the simulator (a sibling's exit_group, or
+         the front end ending the main thread's stream at the end of an --roi
+         recording): close this channel, which releases a waiting recorder
+         thread without ending the process -- that may still be running.  At
+         the end of the run, the front end is told to stop. */
+      Sift::Reader *reader = m_current_sift_reader ? m_current_sift_reader : &m_trace;
+      if (m_thread->isAborted())
+         reader->closeChannel();
+      else
+         reader->frontEndStop();
+   }
    
    // Clean up ChampSim instruction cache to avoid leaks (destructor is never called)
    if (m_champsim_trace) {
@@ -2068,7 +2079,18 @@ void TraceThread::m_run_func_default()
       loaded host).  A sibling parked in an emulated wait at that moment was
       already released (SyscallServer::abortWaits); this covers the rest. */
    if (m_stop)
-      (m_current_sift_reader ? m_current_sift_reader : &m_trace)->frontEndStop();
+   {
+      /* Our application ended for the simulator (a sibling's exit_group, or
+         the front end ending the main thread's stream at the end of an --roi
+         recording): close this channel, which releases a waiting recorder
+         thread without ending the process -- that may still be running.  At
+         the end of the run, the front end is told to stop. */
+      Sift::Reader *reader = m_current_sift_reader ? m_current_sift_reader : &m_trace;
+      if (m_thread->isAborted())
+         reader->closeChannel();
+      else
+         reader->frontEndStop();
+   }
    
    // Clean up ChampSim instruction cache to avoid leaks (destructor is never called)
    if (m_champsim_trace) {
@@ -2108,6 +2130,19 @@ UInt64 TraceThread::getProgressValue()
 {
    Sift::Reader *reader = m_current_sift_reader ? m_current_sift_reader : &m_trace;
    return reader->getPosition();
+}
+
+/* An aborted thread's application ended for the simulator, not necessarily
+   its process (the front end ends the main thread's stream at the end of an
+   --roi recording and the program runs on).  The end of the run must not
+   send its recorder Shutdown, which exits the process: the trace thread
+   answers its recorder until the stream ends and then closes the channel
+   (m_run_func_default). */
+void TraceThread::suppressShutdown()
+{
+   m_trace.suppressShutdown();
+   if (m_current_sift_reader && m_current_sift_reader != &m_trace)
+      m_current_sift_reader->suppressShutdown();
 }
 
 void TraceThread::frontEndStop(){

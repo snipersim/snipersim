@@ -1290,6 +1290,38 @@ uint64_t Reader::va2pa(uint64_t va)
    }
 }
 
+/* End this thread's channel without telling the front end to stop: the
+   simulator will read no more of this thread and answer nothing more.  A
+   recorder thread waiting for an answer reads end of file, and one still
+   writing gets a broken pipe; either way the writer drops the channel and
+   the thread runs on natively (Sift::Writer::channelLost).  This is what an
+   aborted sibling needs -- its application ended for the simulator, which is
+   not to say that its process did: at the end of an --roi recording the
+   front end ends the main thread's stream while the program runs on to
+   print its results, and a Shutdown sent to a sibling there made the
+   recorder exit the process under it. */
+void Reader::closeChannel()
+{
+   /* Claimed through the same flag as frontEndStop(), which the reader pool
+      can call at the end of the run on this reader: whichever comes first
+      owns the response pipe, and the other leaves it alone. */
+   if (response && !m_shutdown_sent.exchange(true))
+   {
+      delete response;
+      response = NULL;
+   }
+#if !defined(PINPLAY) && !defined(PIN_CRT)
+   if (m_format == TraceFormat::ChampSim)
+      return;                  // a file, borrowed; nothing is waiting on it
+#endif
+   if (input)
+   {
+      delete input;           // takes inputstream with it (see ~Reader)
+      input = NULL;
+      inputstream = NULL;
+   }
+}
+
 void Reader::frontEndStop()
 {
    /* Once: the stopped thread itself and the end of the run (the reader pool)
