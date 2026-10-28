@@ -103,34 +103,23 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
             instead (sift/recorder/emulation.cc) and never forwards them.
 
             Once sent, the call is answered here whatever the clock: the
-            front end skips it and takes this answer.  Without clock_replace
-            the answer is the host's clock, as the guest would have read it;
-            a clock this does not simulate (a CPU-time clock, a boot clock)
-            is read on the host rather than aborting the run, as it did for
-            every clock but the real-time and monotonic ones.  args.arg1
-            (args.arg0 for gettimeofday) is a guest address: written through
-            the core, as nanosleep reads its timespec. */
+            front end skips it and takes this answer.  Every clock is
+            simulated time: the CPU-time clocks (the process's, the thread's,
+            and the dynamic ones, negative ids) count from zero, as CPU time
+            does, every other clock from osemu/time_start.  Only with
+            clock_replace off is the answer the host's clock, as the guest
+            would have read it.  args.arg1 (args.arg0 for gettimeofday) is a
+            guest address: written through the core, as nanosleep reads its
+            timespec. */
          const bool is_tod = syscall_number == SYS_gettimeofday;
          const clockid_t clock = is_tod ? CLOCK_REALTIME : (clockid_t)args.arg0;
          const IntPtr out = is_tod ? (IntPtr)args.arg0 : (IntPtr)args.arg1;
-         bool simulated = false;
-         switch (clock)
-         {
-            case CLOCK_REALTIME:
-            case CLOCK_REALTIME_COARSE:
-            case CLOCK_MONOTONIC:
-            case CLOCK_MONOTONIC_COARSE:
-            case CLOCK_MONOTONIC_RAW:
-            case CLOCK_BOOTTIME:
-               simulated = Sim()->getConfig()->getOSEmuClockReplace();
-               break;
-            default:
-               break;
-         }
+         const bool simulated = Sim()->getConfig()->getOSEmuClockReplace();
+         const bool cputime = clock == CLOCK_PROCESS_CPUTIME_ID || clock == CLOCK_THREAD_CPUTIME_ID || clock < 0;
          struct timespec ts;
          if (simulated)
          {
-            const UInt64 time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
+            const UInt64 time_ns = (cputime ? 0 : Sim()->getConfig()->getOSEmuTimeStart() * 1000000000)
                                  + m_thread->getCore()->getPerformanceModel()->getElapsedTime().getNS();
             ts.tv_sec = time_ns / 1000000000;
             ts.tv_nsec = time_ns % 1000000000;

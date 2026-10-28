@@ -22,6 +22,21 @@ namespace Sift
 {
 
    const uint32_t MagicNumber = 0x54464953; // "SIFT"
+
+   /* The guest's time, the same in every front end.
+      Its origin: TIME_START_DEFAULT seconds since the epoch, Sniper's
+      osemu/time_start default (config/base.cfg), so that a guest reads the
+      same clock under Sniper, the SIFT recorder and the QEMU plugin.
+      Where the simulator does not answer -- a trace written to a file, a
+      read no live channel carries -- the front end answers with a one-IPC
+      model: one instruction per cycle on a core of ONE_IPC_HZ, an assumed
+      1 GHz, counted from the thread's start.  Never the host's clock: its
+      time has nothing to do with the program's.  The model's time is the
+      thread's instruction count in nanoseconds, its cycles the instruction
+      count, its instret the instruction count. */
+   const uint64_t TIME_START_DEFAULT = 1337000000;  // seconds since the epoch
+   const uint64_t ONE_IPC_HZ = 1000000000;          // the one-IPC model's core: 1 GHz, assumed
+   inline uint64_t one_ipc_ns(uint64_t instructions) { return instructions * (1000000000 / ONE_IPC_HZ); }
    const uint64_t PAGE_SIZE_SIFT = 4096;
    const uint32_t ICACHE_SIZE = 0x1000;
    const uint64_t ICACHE_OFFSET_MASK = ICACHE_SIZE - 1;
