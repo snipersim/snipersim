@@ -10,14 +10,16 @@ PRISTINE=${1:?pristine tree}; PATCHED=${2:?patched tree}; ROOT=$(cd "$(dirname "
 HDR=$(mktemp); sed -n '1,/^--- /p' "$SRC" | sed '$d' > "$HDR"
 # every file the patch already touches, plus any other file that differs between the trees
 FILES=$( { grep '^+++ b/' "$SRC" | sed 's|^+++ b/||'; diff -rq --exclude=build --exclude=.git "$PRISTINE" "$PATCHED" | grep '^Files ' | awk '{print $2}' | sed "s|^$PRISTINE/||"; } | sort -u)
-# The patched tree also carries tools/qemu-11.1.1-plugin-wait.patch (the plugin
-# wait call, a patch of its own that deps/sniper-deps applies after this one,
-# and to the x86-64 and AArch64 builds too): it is taken back out of a copy of
-# the patched files, so that this patch stays the IME one.  A tree without it
-# is used as it is.
+# The patched tree also carries tools/qemu-11.1.1-plugin-wait.patch and
+# tools/qemu-11.1.1-plugin-counters.patch (the plugin wait call and counter
+# callback, patches of their own that deps/sniper-deps applies after this one,
+# and to the x86-64 and AArch64 builds too): they are taken back out of a copy
+# of the patched files, the last applied first, so that this patch stays the
+# IME one.  A tree without them is used as it is.
 WORK=$(mktemp -d); for f in $FILES; do [ -f "$PATCHED/$f" ] && mkdir -p "$WORK/$(dirname $f)" && cp "$PATCHED/$f" "$WORK/$f"; done
-WAIT=$ROOT/tools/qemu-11.1.1-plugin-wait.patch
-if [ -f "$WAIT" ] && ( cd "$WORK" && git apply -R --check "$WAIT" 2>/dev/null ); then ( cd "$WORK" && git apply -R "$WAIT" ); echo "took out $WAIT"; fi
+for P in $ROOT/tools/qemu-11.1.1-plugin-counters.patch $ROOT/tools/qemu-11.1.1-plugin-wait.patch; do
+   if [ -f "$P" ] && ( cd "$WORK" && git apply -R --check "$P" 2>/dev/null ); then ( cd "$WORK" && git apply -R "$P" ); echo "took out $P"; fi
+done
 NEW=$(mktemp); cat "$HDR" > "$NEW"
 for f in $FILES; do
    if [ -f "$PRISTINE/$f" ]; then diff -u --label "a/$f" --label "b/$f" "$PRISTINE/$f" "$WORK/$f" >> "$NEW" || true

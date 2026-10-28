@@ -1,0 +1,217 @@
+The plugin counter callback for QEMU 11.1.1: qemu_plugin_register_counter_cb()
+lets a plugin answer the guest's direct reads of its clocks and counters,
+which Linux user mode answers from the host -- RISC-V's time, cycle and
+instret CSRs (cpu_get_host_ticks(), in no defined unit), AArch64's
+CNTVCT_EL0 (the host's clock at CNTFRQ) and PMCCNTR_EL0, x86's TSC.  A
+simulator the guest runs on answers them with the time of its model, so a
+guest timing itself sees simulated time; without a plugin's answer the
+host's values are returned as before.  The callback is called within the
+instruction and must not block: the plugin asks its question before the
+instruction runs (outside the run loop with
+tools/qemu-11.1.1-plugin-wait.patch, which this applies on top of).
+Applied by deps/sniper-deps to the x86-64, RISC-V and AArch64 user-mode
+builds; one line of context, so that it applies on the stock tree with the
+wait patch and on the IME one alike.  Used by
+frontend/qemu-plugin/sniper_qemu.cc ("counter").
+
+diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
+index 66bd45c..1dcb3fa 100644
+--- a/include/plugins/qemu-plugin.h
++++ b/include/plugins/qemu-plugin.h
+@@ -1207,2 +1207,50 @@ void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, voi
+ 
++/**
++ * enum qemu_plugin_counter - a clock or counter the guest reads directly
++ * @QEMU_PLUGIN_COUNTER_TIME: a timer's count: RISC-V's time CSR, AArch64's
++ *   CNTVCT_EL0
++ * @QEMU_PLUGIN_COUNTER_CYCLES: a cycle count: RISC-V's cycle CSR, AArch64's
++ *   PMCCNTR_EL0, x86's time-stamp counter
++ * @QEMU_PLUGIN_COUNTER_INSTRET: instructions retired: RISC-V's instret CSR
++ */
++#define QEMU_PLUGIN_HAS_COUNTER_CB 1   /* tools/qemu-11.1.1-plugin-counters.patch */
++enum qemu_plugin_counter {
++    QEMU_PLUGIN_COUNTER_TIME,
++    QEMU_PLUGIN_COUNTER_CYCLES,
++    QEMU_PLUGIN_COUNTER_INSTRET,
++};
++
++/**
++ * typedef qemu_plugin_counter_cb_t - answer a guest's counter read
++ * @vcpu_index: the vcpu reading
++ * @counter: which counter
++ * @freq_hz: the counter's rate as the guest is told it (AArch64's CNTFRQ),
++ *   or 0 where QEMU gives none (RISC-V's timebase in user mode)
++ * @host_value: the value QEMU would return (from the host's clock)
++ * @udata: as registered
++ *
++ * Returns the value the guest reads, in the counter's units and of its
++ * full width (QEMU takes the high half itself where the guest asks for it).
++ * Called from within the instruction, in the run loop: it must not block.
++ */
++typedef uint64_t (*qemu_plugin_counter_cb_t)(unsigned int vcpu_index,
++                                             enum qemu_plugin_counter counter,
++                                             uint64_t freq_hz, uint64_t host_value,
++                                             void *udata);
++
++/**
++ * qemu_plugin_register_counter_cb() - let the plugin answer counter reads
++ * @id: plugin id
++ * @cb: the callback (NULL: the host's values again)
++ * @udata: passed to @cb
++ *
++ * In user mode the guest's clocks and counters read the host's: its time,
++ * its cycle counter.  A plugin that models time -- a simulator the guest
++ * runs on -- answers them instead, so that a guest timing itself sees the
++ * time of the model.  Linux user mode on x86-64, RISC-V and AArch64.
++ */
++QEMU_PLUGIN_API
++void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb_t cb,
++                                     void *udata);
++
+ /**
+diff --git a/include/qemu/plugin.h b/include/qemu/plugin.h
+index ccc25de..153efe8 100644
+--- a/include/qemu/plugin.h
++++ b/include/qemu/plugin.h
+@@ -169,2 +169,8 @@ void qemu_plugin_vcpu_exit_hook(CPUState *cpu);
+ void qemu_plugin_vcpu_wait_run(CPUState *cpu);
++/*
++ * A guest counter read in user mode: the plugin's value if one registered
++ * qemu_plugin_register_counter_cb(), otherwise @host_value.
++ */
++uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counter,
++                                  uint64_t freq_hz, uint64_t host_value);
+ void qemu_plugin_tb_trans_cb(CPUState *cpu, struct qemu_plugin_tb *tb);
+@@ -264,2 +270,8 @@ static inline void qemu_plugin_vcpu_wait_run(CPUState *cpu)
+ 
++static inline uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counter,
++                                                uint64_t freq_hz, uint64_t host_value)
++{
++    return host_value;
++}
++
+ static inline void qemu_plugin_vcpu_init_hook(CPUState *cpu)
+diff --git a/linux-user/i386/cpu_loop.c b/linux-user/i386/cpu_loop.c
+index cea58cb..db3883b 100644
+--- a/linux-user/i386/cpu_loop.c
++++ b/linux-user/i386/cpu_loop.c
+@@ -33,3 +33,5 @@ uint64_t cpu_get_tsc(CPUX86State *env)
+ {
+-    return cpu_get_host_ticks();
++    /* or a plugin's answer (qemu_plugin_register_counter_cb) */
++    return qemu_plugin_counter_read(env_cpu(env), QEMU_PLUGIN_COUNTER_CYCLES, 0,
++                                    cpu_get_host_ticks());
+ }
+diff --git a/plugins/api.c b/plugins/api.c
+index 7454ce2..3acf002 100644
+--- a/plugins/api.c
++++ b/plugins/api.c
+@@ -526,2 +526,21 @@ void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, voi
+ 
++static qemu_plugin_counter_cb_t counter_cb;
++static void *counter_udata;
++
++void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb_t cb,
++                                     void *udata)
++{
++    qatomic_set(&counter_udata, udata);
++    qatomic_set(&counter_cb, cb);
++}
++
++uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counter,
++                                  uint64_t freq_hz, uint64_t host_value)
++{
++    qemu_plugin_counter_cb_t cb = qatomic_read(&counter_cb);
++
++    return cb ? cb(cpu->cpu_index, counter, freq_hz, host_value,
++                   qatomic_read(&counter_udata)) : host_value;
++}
++
+ void qemu_plugin_set_pc(uint64_t vaddr)
+diff --git a/target/arm/cpregs-pmu.c b/target/arm/cpregs-pmu.c
+index 46df659..89e912a 100644
+--- a/target/arm/cpregs-pmu.c
++++ b/target/arm/cpregs-pmu.c
+@@ -13,2 +13,3 @@
+ #include "internals.h"
++#include "qemu/plugin.h"
+ 
+@@ -83,3 +84,5 @@ static uint64_t cycles_get_count(CPUARMState *env)
+ #else
+-    return cpu_get_host_ticks();
++    /* or a plugin's answer (qemu_plugin_register_counter_cb) */
++    return qemu_plugin_counter_read(env_cpu(env), QEMU_PLUGIN_COUNTER_CYCLES, 0,
++                                    cpu_get_host_ticks());
+ #endif
+diff --git a/target/arm/helper.c b/target/arm/helper.c
+index af45234..dbd9cd3 100644
+--- a/target/arm/helper.c
++++ b/target/arm/helper.c
+@@ -2334,5 +2334,8 @@ static uint64_t gt_virt_cnt_read(CPUARMState *env, const ARMCPRegInfo *ri)
+      * can't call gt_get_countervalue(env), instead we directly
+-     * call the lower level functions.
++     * call the lower level functions.  A plugin may answer instead
++     * (qemu_plugin_register_counter_cb), at the rate CNTFRQ gives.
+      */
+-    return cpu_get_clock() / gt_cntfrq_period_ns(cpu);
++    return qemu_plugin_counter_read(env_cpu(env), QEMU_PLUGIN_COUNTER_TIME,
++                                    NANOSECONDS_PER_SECOND / gt_cntfrq_period_ns(cpu),
++                                    cpu_get_clock() / gt_cntfrq_period_ns(cpu));
+ }
+diff --git a/target/riscv/tcg/csr.c b/target/riscv/tcg/csr.c
+index 23fc77e..477e520 100644
+--- a/target/riscv/tcg/csr.c
++++ b/target/riscv/tcg/csr.c
+@@ -1061,6 +1061,29 @@ static RISCVException write_vcsr(CPURISCVState *env, int csrno,
+ #if defined(CONFIG_USER_ONLY)
+-/* User Timers and Counters */
+-static target_ulong get_ticks(bool shift)
++#include "qemu/plugin.h"
++/*
++ * User Timers and Counters: the host's ticks, or a plugin's answer
++ * (qemu_plugin_register_counter_cb) for time, cycle and instret.
++ */
++static uint64_t user_counter(CPURISCVState *env, int csrno)
++{
++    uint64_t host = cpu_get_host_ticks();
++
++    switch (csrno) {
++    case CSR_TIME:
++    case CSR_TIMEH:
++        return qemu_plugin_counter_read(env_cpu(env), QEMU_PLUGIN_COUNTER_TIME, 0, host);
++    case CSR_CYCLE:
++    case CSR_CYCLEH:
++        return qemu_plugin_counter_read(env_cpu(env), QEMU_PLUGIN_COUNTER_CYCLES, 0, host);
++    case CSR_INSTRET:
++    case CSR_INSTRETH:
++        return qemu_plugin_counter_read(env_cpu(env), QEMU_PLUGIN_COUNTER_INSTRET, 0, host);
++    default:
++        return host;
++    }
++}
++
++static target_ulong get_ticks(CPURISCVState *env, int csrno, bool shift)
+ {
+-    int64_t val = cpu_get_host_ticks();
++    int64_t val = user_counter(env, csrno);
+     target_ulong result = shift ? val >> 32 : val;
+@@ -1073,3 +1096,3 @@ static RISCVException read_time(CPURISCVState *env, int csrno,
+ {
+-    *val = cpu_get_host_ticks();
++    *val = user_counter(env, csrno);
+     return RISCV_EXCP_NONE;
+@@ -1080,3 +1103,3 @@ static RISCVException read_timeh(CPURISCVState *env, int csrno,
+ {
+-    *val = cpu_get_host_ticks() >> 32;
++    *val = user_counter(env, csrno) >> 32;
+     return RISCV_EXCP_NONE;
+@@ -1087,3 +1110,3 @@ static RISCVException read_hpmcounter(CPURISCVState *env, int csrno,
+ {
+-    *val = get_ticks(false);
++    *val = get_ticks(env, csrno, false);
+     return RISCV_EXCP_NONE;
+@@ -1094,3 +1117,3 @@ static RISCVException read_hpmcounterh(CPURISCVState *env, int csrno,
+ {
+-    *val = get_ticks(true);
++    *val = get_ticks(env, csrno, true);
+     return RISCV_EXCP_NONE;
