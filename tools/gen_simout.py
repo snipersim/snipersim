@@ -52,8 +52,11 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     results['performance_model.elapsed_time'][c] - results['performance_model.idle_elapsed_time'][c]
     for c in range(ncores)
   ]
+  # A core runs up to a quantum past the last global barrier, so its non-idle
+  # time can exceed the run's time by that much; sim.out showed it as a
+  # negative idle time (-155 ns on a one-core run).  It was not idle at all.
   results['performance_model.idle_elapsed_time'] = [
-    time0 - results['performance_model.nonidle_elapsed_time'][c]
+    max(0, time0 - results['performance_model.nonidle_elapsed_time'][c])
     for c in range(ncores)
   ]
   results['performance_model.idle_elapsed_percent'] = [
