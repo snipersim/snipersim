@@ -242,9 +242,12 @@ void initEmulation()
       RTN_AddInstrumentFunction(rtnCallback, 0);
       initPapiInterceptors();
    }
-   else
+   else if (!replayingPinball())
    {
-      /* A trace written to a file has no simulator to answer, but the
+      /* (Not when replaying a pinball: the replay must run the recorded
+         execution, whose time values the pinball already carries; changing
+         a routine or skipping a call made it diverge from the log.)
+         A trace written to a file has no simulator to answer, but the
          guest's time is still not the host's: rdtsc, clock_gettime and
          gettimeofday get the one-IPC model's, from the simulator's time
          zero, so a recording reads the same clock as a live run would

@@ -30,6 +30,8 @@ KNOB<BOOL> KnobTrackVMAs(KNOB_MODE_WRITEONCE, "pintool", "sniper:vma", "0", "tra
 KNOB<UINT64> KnobStopAddress(KNOB_MODE_WRITEONCE, "pintool", "sniper:stop", "0", "stop address (0 = disabled)");
 KNOB<UINT64> KnobMaxThreads(KNOB_MODE_WRITEONCE, "pintool", "sniper:maxthreads", "0", "maximum number of threads (0 = default)");
 
+KNOB<BOOL> KnobPinballReplay(KNOB_MODE_WRITEONCE, "pintool", "sniper:pinball-replay", "0", "a pinball is being replayed (SDE's -replay; record-trace sets it): leave the guest's time to the pinball");
+
 KNOB_COMMENT pinplay_driver_knob_family(KNOB_FAMILY, "PinPlay SIFT Recorder Knobs");
 #if defined(SDE_INIT)
 KNOB<BOOL>KnobReplayer(KNOB_MODE_WRITEONCE, KNOB_FAMILY,

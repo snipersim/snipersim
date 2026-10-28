@@ -319,10 +319,12 @@ int main(int argc, char **argv)
       std::cerr << "Error, Response files are required when using syscall emulation." << std::endl;
       exit(1);
    }
-   /* In every mode: a trace written to a file still answers the guest's raw
+   /* Also for a trace written to a file: it still answers the guest's raw
       time calls itself (syscall_modeling.cc), skipping them as emulated
-      ones are skipped; the hooks do nothing for a call that is not */
-   initSyscallModeling();
+      ones are skipped; the hooks do nothing for a call that is not.  Not
+      when replaying a pinball, whose execution must be the recorded one. */
+   if (KnobEmulateSyscalls.Value() || !replayingPinball())
+      initSyscallModeling();
 
    initThreads();
    initRecorderControl();

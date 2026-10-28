@@ -56,6 +56,10 @@ extern KNOB<BOOL> KnobTrackVMAs;
 # define KNOB_FAMILY "pintool:sift-recorder"
 extern KNOB_COMMENT pinplay_driver_knob_family;
 extern KNOB<BOOL>KnobReplayer;
+extern KNOB<BOOL>KnobPinballReplay;
+/* A pinball being replayed (PinPlay's knob, or SDE's -replay as record-trace
+   says): its execution must be the recorded one */
+inline bool replayingPinball() { return KnobReplayer.Value() || KnobPinballReplay.Value(); }
 #ifdef PINPLAY
 extern PINPLAY_ENGINE *p_pinplay_engine;
 extern PINPLAY_ENGINE pp_pinplay_engine;

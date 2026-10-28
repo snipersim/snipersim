@@ -91,7 +91,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       trace written to a file): the one-IPC model's time from the
       simulator's time zero, as the libc routines get (emulation.cc), never
       the host's.  The call is skipped as an emulated one is. */
-   if (!(KnobEmulateSyscalls.Value() && thread_data[threadid].output && !emulation_ended)
+   if (!(KnobEmulateSyscalls.Value() && thread_data[threadid].output && !emulation_ended) && !replayingPinball()
        && (syscall_number == SYS_clock_gettime || syscall_number == SYS_gettimeofday))
    {
       const bool tod = syscall_number == SYS_gettimeofday;

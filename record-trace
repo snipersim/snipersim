@@ -280,6 +280,9 @@ if use_follow:
 pinballoptions = ''
 if pinball:
   pinballoptions += '-replay -replay:basename "%s" -pinplay:msgfile "%s" -replay:resultfile "%s"' % (pinball, os.path.join(outputdir,'pinball_replay.app%d' % siftcountoffset), os.path.join(outputdir,'pinball_result.app%d' % siftcountoffset))
+  # the recorder leaves the guest's time to the pinball (its time model would
+  # make the replay diverge from the recording)
+  pinballoptions += ' -sniper:pinball-replay 1'
   if pinplay_addrtrans:
     pinballoptions += " -replay:addr_trans"
   else:
