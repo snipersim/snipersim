@@ -215,7 +215,11 @@ def mimicos_daemons_check(stats):
           # records with ASLR off so that it is the same bytes every time
           # (a recording with ASLR on gave 68 faults and 28/28 mappings one
           # time, 66 and 27/27 another, and this check failed on whichever
-          # it had not been measured against).
+          # it had not been measured against).  They are also properties of
+          # the binary and its recorder: measured with test/fft built by the
+          # host's gcc 12.2 against glibc 2.36 and recorded by SDE 10.13.1
+          # (deps/manifest.json); another compiler, C library or recorder can
+          # move them, which the failure's fault count shows.
           and '[TRACE:0] -- DONE --' in out
           and 'shutdown event received' in out
           and faults == 66

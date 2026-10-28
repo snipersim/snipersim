@@ -634,7 +634,7 @@ def case_riscv_user_trace(p, g, workdir):
         return False, 'frontend reported no instruction count'
     n = int(m.group(1))
     if n != 100007:
-        return False, '%d instructions, expected 100007' % n
+        return False, '%d instructions, expected 100007' % n + versions_note(r['qemu'])
     rc, _ = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
     if rc != 0:
         return False, 'siftdump could not read the trace (%s)' % exit_text(rc)
@@ -729,7 +729,7 @@ def case_riscv_user_simulate(p, g, workdir):
     # stream ends, and the last instruction is handed over with a synthesized
     # fall-through successor.
     if n != 100007:
-        return False, '%d instructions simulated, expected exactly 100007' % n
+        return False, '%d instructions simulated, expected exactly 100007' % n + versions_note()
     if correct + wrong != 20000:
         return False, '%d branches predicted, expected the loop\'s 20000' % (correct + wrong)
     # The second BOOM configuration (MediumBoom) runs the same trace: the
@@ -754,6 +754,33 @@ def case_riscv_user_simulate(p, g, workdir):
 # properties; SNIPER_QEMU_RISCV_IME_CPU overrides the -cpu string.  The guest
 # is built like rv-loop.c.  Skips when the QEMU lacks the properties.
 IME_CPU_DEFAULT = 'max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on'
+# Exact counts below -- rv-loop's 100,007 instructions, rv-ime's 33, the
+# translation guest's 517 faults and 12 or 14 table frames, the gdbstub's 103
+# registers -- are properties of the guest binary and the QEMU that runs it:
+# measured with these, and another compiler or QEMU can move them.  A check
+# that misses one says which it ran with (versions_note), so a toolchain
+# change reads as one, not as a regression.
+MEASURED_WITH = {'clang': '15.0.6', 'qemu': '11.1.1'}
+_versions = {}
+
+def versions_note(qemu=None):
+    """' (measured with clang A and QEMU B; this run: clang C, QEMU D)'."""
+    cc = os.environ.get('SNIPER_RISCV_CC') or os.environ.get('SNIPER_AARCH64_CC') or ''
+    qemu = qemu or os.environ.get('SNIPER_QEMU_RISCV') or os.path.join(SNIPER_ROOT, 'qemu-riscv', 'build', 'qemu-riscv64')
+    for key, exe in (('clang', cc), ('qemu', qemu)):
+        if (key, exe) not in _versions:
+            try:
+                out = subprocess.run([exe, '--version'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     text=True, timeout=30).stdout
+                m = re.search(r'version (\d+\.\d+\.\d+)', out)
+                _versions[(key, exe)] = m.group(1) if m else 'unknown'
+            except (OSError, subprocess.SubprocessError):
+                _versions[(key, exe)] = 'unknown'
+    now = {'clang': _versions[('clang', cc)], 'qemu': _versions[('qemu', qemu)]}
+    return ' (measured with clang %s and QEMU %s; this run: clang %s, QEMU %s%s)' % (
+        MEASURED_WITH['clang'], MEASURED_WITH['qemu'], now['clang'], now['qemu'],
+        '' if now == MEASURED_WITH else ' -- another toolchain, which can move the count')
+
 IME_INSNS = 33            # rv-ime.c: exact instruction count of the guest (built on include/riscv_insn.h)
 IME_FOOTPRINTS = 4        # three tile loads and one tile store
 IME_SPANS = 8             # each tile has two rows in different cache lines
@@ -799,7 +826,7 @@ def case_riscv_ime_trace(p, g, workdir):
     m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
     n = int(m.group(1)) if m else -1
     if n != IME_INSNS:
-        return False, '%d instructions, expected %d' % (n, IME_INSNS)
+        return False, '%d instructions, expected %d' % (n, IME_INSNS) + versions_note()
     m = re.search(r'\[SNIPER-QEMU\] (\d+) memory footprints recorded', out)
     f = int(m.group(1)) if m else 0
     if f != IME_FOOTPRINTS:
@@ -1653,7 +1680,7 @@ def case_riscv_plugin_api(p, g, workdir):
     if 'org.riscv.ame.xml' not in feats:
         return False, 'gdb target description lacks the plugin feature: %s' % feats
     if len(regs) != 103 or values.get('amenlen') != '0400000000000000' or values.get('ameudsz') != '2000000000000000' or len(values.get('m0', '')) != 128:
-        return False, 'gdb: %d registers, amenlen %s, ameudsz %s, m0 %d hex digits' % (len(regs), values.get('amenlen'), values.get('ameudsz'), len(values.get('m0', '')))
+        return False, 'gdb: %d registers, amenlen %s, ameudsz %s, m0 %d hex digits' % (len(regs), values.get('amenlen'), values.get('ameudsz'), len(values.get('m0', ''))) + versions_note(r['qemu'])
     # the mechanism's cost: 4 M emulated instructions, no tracing, claimed and trapped
     times = {}
     for opt, want in ((',trace=0,claim=1', (4000000, 0)), (',trace=0,claim=0', (0, 4000000))):
@@ -2217,7 +2244,7 @@ def case_riscv_user_translation(p, g, workdir):
     faults, walks, frames = (int(sv39.get('mmu.page_faults', -1)), int(sv39.get('mmu.page_table_walks', -1)),
                              int(sv39['radix_sv39.allocated_frames']))
     if faults != TOUCH_FAULTS or walks != 2 * TOUCH_FAULTS or frames != 12:
-        return False, 'Sv39: %d faults, %d walks, %d frames (expected %d, %d, 12)' % (faults, walks, frames, TOUCH_FAULTS, 2 * TOUCH_FAULTS)
+        return False, 'Sv39: %d faults, %d walks, %d frames (expected %d, %d, 12)' % (faults, walks, frames, TOUCH_FAULTS, 2 * TOUCH_FAULTS) + versions_note()
     sv48, err = translation_run(workdir, 'sv48', guest, ['-c', 'riscv', '-c', 'pagetable_configs/4_level_radix_sv48'],
                                 ['--qemu-va-bits=48'])
     if sv48 is None:
@@ -2395,7 +2422,7 @@ def case_riscv_virtuoso_portable(p, g, workdir):
     if not any(k.startswith('hash_table_chaining.') for k in st) or any(k.startswith('radix_sv39.') for k in st):
         return False, 'riscv + hash_table_chaining did not replace the Sv39 table'
     if int(st.get('mmu.page_faults', -1)) != TOUCH_FAULTS:
-        return False, 'riscv + hash_table_chaining: %s page faults, expected %d' % (st.get('mmu.page_faults'), TOUCH_FAULTS)
+        return False, 'riscv + hash_table_chaining: %s page faults, expected %d' % (st.get('mmu.page_faults'), TOUCH_FAULTS) + versions_note()
     for order in (['address_translation_schemes/baseline', 'riscv'], ['riscv', 'address_translation_schemes/baseline']):
         rc, out, d = sim('mixed', order)
         if rc == 0 or 'mixes a core built for intel' not in out:
@@ -2488,7 +2515,7 @@ def case_aarch64_user_translation(p, g, workdir):
                              int(st['radix_4level.allocated_frames']))
     # one data fault more than on RISC-V: this build's start-up touches one more stack page
     if faults != TOUCH_FAULTS + 1 or walks != 2 * faults or frames != 14:
-        return False, '%d faults, %d walks, %d frames (expected %d, %d, 14)' % (faults, walks, frames, TOUCH_FAULTS + 1, 2 * (TOUCH_FAULTS + 1))
+        return False, '%d faults, %d walks, %d frames (expected %d, %d, 14)' % (faults, walks, frames, TOUCH_FAULTS + 1, 2 * (TOUCH_FAULTS + 1)) + versions_note(qemu)
     return True, '4-level table: %d faults, %d walks, %d frames' % (faults, walks, frames)
 
 CASES = {
