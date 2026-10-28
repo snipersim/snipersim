@@ -451,7 +451,11 @@ def qemu_command():
   # it the simulator refuses rather than aliases.  So RISC-V guests are
   # confined with -R to 2^(bits-1) unless --qemu-va-bits says otherwise (48
   # for Sv48 with a 4-level table, --frontend-option='-R ...' to set it by
-  # hand); AArch64 and x86-64 fit their 48-bit tables as QEMU lays them out.
+  # hand).  An AArch64 guest is confined to 2^46 bytes: its 4-level table
+  # covers 48 bits, but QEMU gives the guest 52, and only the host's own limit
+  # (47 bits on x86-64) kept it inside -- by accident of the host, not by
+  # design.  2^46, because QEMU cannot reserve 2^47 on an x86-64 host.  x86-64
+  # guests fit their 48-bit table as QEMU lays them out.
   for o in frontend_options:
     qopts += shlex.split(o)
   if system:
@@ -487,6 +491,8 @@ def qemu_command():
       qopts = [ '-cpu', 'max' ] + qopts
     if arch == 'riscv64' and '-R' not in qopts and qemu_va_bits != 48:
       qopts = [ '-R', '0x%x' % (1 << (qemu_va_bits - 1)) ] + qopts
+    if arch == 'aarch64' and '-R' not in qopts:
+      qopts = [ '-R', '0x%x' % (1 << 46) ] + qopts
     if arch == 'riscv64' and '-cpu' not in qopts:
       # The vector and matrix units (RVV, the IME and AME extensions the
       # qemu-riscv-ime dependency adds) with the vector length the riscv
