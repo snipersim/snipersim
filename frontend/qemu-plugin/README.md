@@ -50,7 +50,10 @@ refused for system mode.  A multi-threaded guest records one trace per
 thread to files; run live, the plugin refuses its second thread (a vCPU
 waiting for Sniper inside a callback would block QEMU's exclusive
 sections), leaves the reason in `<output>.app<N>.refused`, and run-sniper
-fails the run with it.  A guest that forks is not supported in user mode.
+fails the run with it.  A guest that creates a process (fork, vfork,
+posix_spawn) is refused the same way in user mode, live or recorded to
+files: the child stops at once with the reason (it would write into the
+parent's streams) and the parent runs on.
 System calls: the ones the simulator models are sent with the simulator's
 numbers whatever the guest's architecture, and the emulated ones (futex,
 sched_yield, the affinity calls, nanosleep, clock_nanosleep) are answered

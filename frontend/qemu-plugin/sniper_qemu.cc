@@ -27,6 +27,7 @@
 
 #include <stdarg.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
@@ -382,6 +383,21 @@ static void refuse(const char *fmt, ...)
       Nothing those handlers do is wanted for a run being refused. */
    fflush(stderr);
    _exit(1);
+}
+
+/* A guest process created by fork (QEMU user mode runs a guest's fork,
+   vfork or posix_spawn as a host fork, which runs this handler in the child).
+   The plugin records one process: the child would inherit the parent's
+   writers and write its instructions into the parent's streams, or into the
+   parent's channel to Sniper, corrupting both.  Until children are given
+   streams of their own, the child is refused with the reason, which fails the
+   run (run-sniper reads the .refused marker); the parent runs on. */
+static void refuse_forked_child(void)
+{
+   refuse("[SNIPER-QEMU] error: the guest created a process (fork, vfork or posix_spawn).\n"
+          "  The QEMU front end records one process; a child would write into the\n"
+          "  parent's streams.  Record each program on its own, or use the SDE\n"
+          "  front end (--follow) for programs that create processes.\n");
 }
 
 const unsigned int MAX_VCPUS = 4096;
@@ -1818,5 +1834,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
 #endif
    SNP_REG_VCPU_EXIT(id, vcpu_exit);
    SNP_REG_ATEXIT(id, at_exit);
+   if (!in_system_mode)
+      pthread_atfork(NULL, NULL, refuse_forked_child);
    return 0;
 }

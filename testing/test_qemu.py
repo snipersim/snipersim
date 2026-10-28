@@ -180,6 +180,31 @@ def case_user_simulate(p, g, workdir):
     return True, '%sM instructions, IPC %s' % (m.group(1), ipc)
 
 
+def case_user_fork_refused(p, g, workdir):
+    """A guest that forks is refused with the reason (the plugin records one
+    process; a child would write into the parent's streams): recorded to
+    files, the child stops at its first step with the .refused marker and the
+    parent runs on; live, run-sniper fails the run and names the reason."""
+    guest = os.path.join(workdir, 'fork_child')
+    rc, out = run(['gcc', '-O1', '-static', '-o', guest, os.path.join(SNIPER_ROOT, 'testing', 'apps', 'fork_child.c')], 120)
+    if rc != 0:
+        return None, 'could not build fork_child.c statically (%s)' % exit_text(rc)
+    reason = '[SNIPER-QEMU] error: the guest created a process'
+    prefix = os.path.join(workdir, 'fork')
+    rc, out = run([p['user'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
+    marker = prefix + '.app0.refused'
+    if not os.path.isfile(marker) or reason not in open(marker).read():
+        return False, 'recorded to files: no refusal marker for the child (qemu exit %s): %s' % (exit_text(rc), out[-300:])
+    if 'fork_child parent sum=' not in out or 'fork_child child sum=' in out:
+        return False, 'recorded to files: the parent should run on and the child stop: %s' % out[-300:]
+    outdir = os.path.join(workdir, 'fork-live')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-d', outdir,
+                   '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+    if rc != 1 or ('The front end refused the run: ' + reason) not in out:
+        return False, 'live: expected the run to fail with the refusal, got %s: %s' % (exit_text(rc), sniper_failed(rc, out))
+    return True, 'the forked child refused with the reason, recorded and live (run exit 1)'
+
+
 def case_user_mt_streams(p, g, workdir):
     """A multi-threaded guest gets one SIFT stream per thread.
 
@@ -2350,6 +2375,7 @@ CASES = {
     'user-trace':       case_user_trace,
     'user-simulate':    case_user_simulate,
     'user-mt-streams':  case_user_mt_streams,
+    'user-fork-refused': case_user_fork_refused,
     'system-exact':     case_system_exact,
     'system-vapa':      case_system_vapa,
     'system-modes':     case_system_modes,
