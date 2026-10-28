@@ -1830,6 +1830,53 @@ def aarch64_tools():
     return qemu, cc, None
 
 
+def case_aarch64_core_configs(p, g, workdir):
+    """The ARM cores of the core-aggressiveness sweep (config/core_configs/
+    cortex_a53, cortex_a55, cortex_a720, cortex_x4, oryon_xelite) on an
+    AArch64 trace.  They used the Nehalem core model and the Pentium M
+    predictor -- x86 cores with ARM sizes, which could not run an ARM trace.
+    Built on the cortex-a53 and cortex-a72 models, each simulates a64-loop
+    (to 0.1%, as the other AArch64 cases) with its L1-D prefetcher at work, and the
+    wide cores' issue pipelines (perf_model/core/cortex_a72_ports) show: the
+    X4 is faster than the A720, which is faster than the A72, whose result
+    the configurable ports leave as it was; the in-order cores are slower
+    than all of them."""
+    qemu, cc, why = aarch64_tools()
+    if why:
+        return None, why
+    guest = os.path.join(workdir, 'a64-loop')
+    rc, out = run([cc, '--target=aarch64-linux-gnu', '-O1', '-ffreestanding', '-nostdlib', '-static',
+                   '-fuse-ld=lld', '-Wl,-e,_start', '-o', guest, os.path.join(PROBE_DIR, 'a64-loop.c')], 120)
+    if rc != 0:
+        return None, 'could not build a64-loop.c (%s)' % exit_text(rc)
+    prefix = os.path.join(workdir, 'a64-loop')
+    rc, out = run([qemu, '-cpu', A64_CPU, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest],
+                  300, cwd=workdir)
+    m = re.search(r'\[SNIPER-QEMU\] (\d+) instructions written', out)
+    if rc != 0 or not m:
+        return False, 'recording a64-loop failed (%s)' % exit_text(rc)
+    written = int(m.group(1))
+    ipc = {}
+    for cfg in ('cortex-a72', 'core_configs/cortex_a53', 'core_configs/cortex_a55', 'core_configs/cortex_a720',
+                'core_configs/cortex_x4', 'core_configs/oryon_xelite'):
+        name = cfg.split('/')[-1]
+        outdir = os.path.join(workdir, 'cc-' + name)
+        n, why = simulate_trace(prefix + '.app0.th0.sift', cfg, outdir)
+        if n is None:
+            return False, why
+        if abs(n - written) > written // 1000:
+            return False, '%s simulated %d instructions of the %d traced' % (name, n, written)
+        st = stats_of(outdir)
+        if cfg != 'cortex-a72' and not int(float(st.get('ip_stride.gen_prefetch', 0))):
+            return False, '%s: the L1-D ip_stride prefetcher generated nothing' % name
+        ipc[name] = n / float(st['performance_model.cycle_count'])
+    order = ['cortex_x4', 'cortex_a720', 'cortex-a72', 'cortex_a55']
+    if not all(ipc[a] > ipc[b] for a, b in zip(order, order[1:])) or not ipc['cortex-a72'] > ipc['cortex_a53']:
+        return False, 'IPCs out of order: %s' % ', '.join('%s %.2f' % kv for kv in sorted(ipc.items()))
+    return True, '%d instructions traced; IPC %s' % (written, ', '.join('%s %.2f' % (k, ipc[k]) for k in
+                  ('cortex_x4', 'oryon_xelite', 'cortex_a720', 'cortex-a72', 'cortex_a55', 'cortex_a53')))
+
+
 def case_aarch64_smc_rewrite(p, g, workdir):
     """Code rewritten in place on AArch64 (a64-smc-rewrite.c): A, then B at
     the same address, then A, with the architecture's cache maintenance
@@ -2456,6 +2503,7 @@ CASES = {
     'riscv-user-trace':    case_riscv_user_trace,
     'riscv-smc-rewrite':   case_riscv_smc_rewrite,
     'aarch64-user-simulate': case_aarch64_user_simulate,
+    'aarch64-core-configs': case_aarch64_core_configs,
     'riscv-system-simulate': case_riscv_system_simulate,
     'riscv-system-address-spaces': case_riscv_system_address_spaces,
     'riscv-vector-width': case_riscv_vector_width,

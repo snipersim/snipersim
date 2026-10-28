@@ -147,6 +147,11 @@ EXPECTED_ERROR = {
     'cortex-a72': r'The trace is x86-64 code, but this configuration',
     'riscv': r'The trace is x86-64 code, but this configuration',
     'riscv-mediumboom': r'The trace is x86-64 code, but this configuration',
+    'core_configs/cortex_a53': r'The trace is x86-64 code, but this configuration',
+    'core_configs/cortex_a55': r'The trace is x86-64 code, but this configuration',
+    'core_configs/cortex_a720': r'The trace is x86-64 code, but this configuration',
+    'core_configs/cortex_x4': r'The trace is x86-64 code, but this configuration',
+    'core_configs/oryon_xelite': r'The trace is x86-64 code, but this configuration',
     'kingscross': r'Invalid mesh size 16:4',
     'sampling': r'Sampling is only supported in Pin mode',
     'physical_memory_allocators/eager_paging': r'no VMAs for application',
@@ -507,11 +512,6 @@ FRAGMENT_REQUIRE_NONZERO = {
                            'L1-D.prefetches', 'L2.prefetches'),
     'core_configs/revelator_core': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
     'core_configs/cascade_lake_xeon': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
-    'core_configs/cortex_a53': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
-    'core_configs/cortex_a55': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
-    'core_configs/cortex_a720': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
-    'core_configs/cortex_x4': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
-    'core_configs/oryon_xelite': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
     'core_configs/biglittle': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
     'prefetcher_configs/ip_stride_l1': ('ip_stride.gen_prefetch', 'L1-D.prefetches'),
     'prefetcher_configs/streamer_l2': ('streamer.gen_prefetch', 'L2.prefetches'),
@@ -689,6 +689,15 @@ FRAGMENT_EXPECT_OUTPUT = {
 # Fragments that cannot work, with the reason.  Listed rather than skipped, so
 # that one starting to work is reported too.
 FRAGMENT_EXPECT_FAIL = {
+    # The ARM cores of the core-aggressiveness sweep, built on the cortex-a53
+    # and cortex-a72 core models: an x86-64 workload is refused like the
+    # cortex configurations'.  testing/test_qemu.py (aarch64-core-configs)
+    # simulates them with AArch64 traces.
+    'core_configs/cortex_a53': 'ARM core, x86-64 workload: refused (the trace ISA check)',
+    'core_configs/cortex_a55': 'ARM core, x86-64 workload: refused (the trace ISA check)',
+    'core_configs/cortex_a720': 'ARM core, x86-64 workload: refused (the trace ISA check)',
+    'core_configs/cortex_x4': 'ARM core, x86-64 workload: refused (the trace ISA check)',
+    'core_configs/oryon_xelite': 'ARM core, x86-64 workload: refused (the trace ISA check)',
     'dram_configs/m3d':
         'needs perf_model/dram/ddr/address_mapping, which no shipped config sets',
     'dram_configs/readwrite_2ctrl_153gbps':
