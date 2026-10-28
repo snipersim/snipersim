@@ -125,14 +125,28 @@ def periodicins_snapshots(outdir, out):
     return True, '%d snapshots' % len(snaps)
 
 
-def case(script, expect=(), args=(), app_output=True, check=None):
+def crash_reported(outdir, out):
+    """The crash fixture: the simulator's handler wrote its backtrace, and
+    run-sniper decoded it and named the signal."""
+    found = [os.path.join(r, 'debug_backtrace.out') for r, _, fs in os.walk(outdir) if 'debug_backtrace.out' in fs]
+    if not found or not os.path.getsize(found[0]):
+        return False, 'no debug_backtrace.out under the output directory'
+    frames = re.findall(r'^.*\[sniper\]\s+(\S+\.(?:cc|h):\S+:\d+)', out, re.M)
+    if 'Backtrace:' not in out or not frames:
+        return False, 'run-sniper printed no decoded backtrace'
+    if 'Process killed by SIGSEGV' not in out:
+        return False, 'run-sniper did not name the signal'
+    return True, 'backtrace decoded (%d frames with sources, e.g. %s)' % (len(frames), frames[0])
+
+
+def case(script, expect=(), args=(), app_output=True, check=None, exit=0):
     """A case: the -s argument (None for no script), the regexes the output
     must match, extra run-sniper arguments, whether the application is
     expected to run to completion, and a check(outdir, out) on the results."""
     if isinstance(expect, str):
         expect = (expect,)
     return {'script': script, 'expect': tuple(expect), 'args': list(args),
-            'app_output': app_output, 'check': check}
+            'app_output': app_output, 'check': check, 'exit': exit}
 
 
 CASES = {
@@ -219,6 +233,8 @@ CASES = {
     # core (baseline's is a ROB core); and the smoke workload never queries
     # it, so the periodic accounting running to a clean exit is the check.
     'tcp':            case('tcp', args=['-g', '--perf_model/core/type=interval']),
+    # The simulator crashes on purpose: the run fails (139) with its backtrace
+    'crash-backtrace': case('crash', app_output=False, check=crash_reported, exit=139),
 }
 
 
@@ -281,6 +297,10 @@ def run_case(name, exe, workdir, timeout):
         return False, 'timed out after %ds (deadlock?)' % timeout
 
     out = p.stdout
+    if c['exit'] and p.returncode == c['exit']:
+        return c['check'](outdir, out)
+    if c['exit']:
+        return False, 'exit %d, expected %d' % (p.returncode, c['exit'])
     if p.returncode != 0:
         detail = 'exit %d' % p.returncode
         if p.returncode == -11 or p.returncode == 139:
