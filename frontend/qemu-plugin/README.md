@@ -6,7 +6,10 @@ x86-64, AArch64 and RISC-V guests; the RISC-V matrix extensions (IME, AME) need
 the patched QEMU the `qemu-riscv-ime` dependency builds
 (`tools/riscv/qemu-11.1.1-ime.patch`), and multi-threaded guests run live need
 the plugin wait call that every user-mode QEMU `deps/sniper-deps` builds
-carries (`tools/qemu-11.1.1-plugin-wait.patch`; see "Which mode" below).
+carries (`tools/qemu-11.1.1-plugin-wait.patch`; see "Which mode" below), and
+the guest's clocks and counters read simulated time through the counter
+callback those builds also carry (`tools/qemu-11.1.1-plugin-counters.patch`;
+see "Time" below).
 
 ```
 make QEMU=ON -j8          # builds QEMU with plugins, then lib/libsniper-qemu.so
@@ -67,9 +70,26 @@ files: the child stops at once with the reason (it would write into the
 parent's streams) and the parent runs on.
 System calls: the ones the simulator models are sent with the simulator's
 numbers whatever the guest's architecture, and the emulated ones (futex,
-sched_yield, the affinity calls, nanosleep, clock_nanosleep) are answered
-by the simulator through QEMU's syscall filter, so the guest sees simulated
-time and the simulated cores.  Three options the
+sched_yield, the affinity calls, nanosleep, clock_nanosleep, clock_gettime,
+gettimeofday) are answered by the simulator through QEMU's syscall filter,
+so the guest sees simulated time and the simulated cores.
+
+Time: a guest under a live run sees simulated time however it reads it.
+The calls above answer clock_gettime and gettimeofday (QEMU's vDSO makes
+the system call); the counter instructions, which QEMU's user mode answers
+from the host's clock, are answered by the plugin through
+`tools/qemu-11.1.1-plugin-counters.patch`: RISC-V's time, cycle and instret
+CSRs (`rdtime`, `rdcycle`, `rdinstret`), AArch64's CNTVCT_EL0, x86's TSC
+(`rdtsc`, `rdtscp`).  (AArch64's PMCCNTR_EL0 is hooked too, but user mode
+traps it at EL0, as Linux does by default.)  The plugin recognises them at
+translation, asks the simulator before the instruction runs (outside the
+run loop), and QEMU's counter callback returns the answer within it: the
+timer at its rate (AArch64's CNTFRQ as QEMU reports it; RISC-V's timebase,
+which user mode does not define, from the `timebase=` option, 10 MHz by
+default, QEMU's virt board's), cycles in the core's clock (the TSC in the
+global clock, as the SIFT recorder's rdtsc), instret the core's instruction
+count.  It holds after the ROI too, for as long as the channel is open.  A
+trace written to a file has no one to answer, and reads the host's.  Three options the
 other front ends take are accepted and have no effect here, because run-sniper
 passes them on every live run: `-e` (system calls are emulated by QEMU itself;
 the simulator only times them), `--follow` (QEMU user mode runs one process)

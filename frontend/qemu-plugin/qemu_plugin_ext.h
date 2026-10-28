@@ -56,4 +56,23 @@ __attribute__((weak)) void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_
 #define SNP_HAVE_WAIT       false
 #endif
 
+/* The guest's counters (tools/qemu-11.1.1-plugin-counters.patch): user mode
+ * answers RISC-V's time, cycle and instret, AArch64's CNTVCT and PMCCNTR
+ * and x86's TSC from the host's clock; with the call the plugin answers
+ * them with Sniper's.  The counter kinds are QEMU's enum, passed as an int. */
+enum { SNP_COUNTER_TIME = 0, SNP_COUNTER_CYCLES = 1, SNP_COUNTER_INSTRET = 2 };
+#if QEMU_PLUGIN_VERSION >= 7 && !defined(QEMU_PLUGIN_HAS_COUNTER_CB)
+typedef uint64_t (*snp_counter_cb_t)(unsigned int vcpu_index, int counter, uint64_t freq_hz, uint64_t host_value, void *udata);
+extern "C" {
+__attribute__((weak)) void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, snp_counter_cb_t cb, void *udata);
+}
+#define SNP_HAVE_COUNTERS   (qemu_plugin_register_counter_cb != nullptr)
+#define SNP_COUNTER_CB(f)   (f)
+#elif defined(QEMU_PLUGIN_HAS_COUNTER_CB)
+#define SNP_HAVE_COUNTERS   true
+#define SNP_COUNTER_CB(f)   ((qemu_plugin_counter_cb_t)(f))
+#else
+#define SNP_HAVE_COUNTERS   false
+#endif
+
 #endif

@@ -113,6 +113,9 @@ std::string opt_output   = "sniper";
 uint64_t    opt_flow     = 1000;   /* matches KnobFlowControl in sift/recorder */
 bool        opt_verbose  = false;
 bool        opt_response = false;  /* user mode: blocking flow control */
+/* The rate of RISC-V's time CSR, which Linux learns from the device tree
+ * and QEMU's user mode does not define: QEMU's virt board's 10 MHz */
+uint64_t    opt_timebase = 10000000;
 /* roi: trace only between SimRoiStart() and SimRoiEnd(), as the SDE and
  * DynamoRIO front ends do with -roi.  The magic instructions themselves are
  * always sent, so the simulator sees the markers either way. */
@@ -158,8 +161,9 @@ const void *time_handle = nullptr;
  * so its block-level stages are marked done as well (unless the wait was
  * theirs: then the mask already says which ran). */
 bool        g_wait = false;
-enum { S_TB_COUNT = 1, S_TB_FLOW = 2, S_INSN = 4, S_MAGIC = 8, S_SYNC = 16, S_BACKEDGE = 32, S_AME = 64 };
-enum { W_NONE = 0, W_TB_COUNT, W_FLOW, W_MAGIC, W_SYNC, W_BACKEDGE };
+bool        g_counters = false;   /* the guest's counter reads are answered with Sniper's clocks */
+enum { S_TB_COUNT = 1, S_TB_FLOW = 2, S_INSN = 4, S_MAGIC = 8, S_SYNC = 16, S_BACKEDGE = 32, S_AME = 64, S_COUNTER = 128 };
+enum { W_NONE = 0, W_TB_COUNT, W_FLOW, W_MAGIC, W_SYNC, W_BACKEDGE, W_COUNTER };
 
 /* Threads.  Numbered in the order they start, like the recorder's, and that
  * is the number in the stream's file name: Sniper opens app0.th<N> when it
@@ -291,6 +295,7 @@ bool aarch64_is_conditional_branch(const uint8_t *bytes, size_t len)
  *
  * Each is a no-op on hardware, which is what lets a program carry them. */
 bool is_magic(const uint8_t *bytes, size_t len);
+bool is_counter_read(const uint8_t *bytes, size_t len);
 
 /* RISC-V: the conditional branches are the BRANCH major opcode (0x63) and, in
  * the compressed quadrant 1, c.beqz / c.bnez (funct3 110 / 111).  Jumps
@@ -305,6 +310,39 @@ bool riscv_is_conditional_branch(const uint8_t *bytes, size_t len)
    if (length == 0 || length > len)
       return false;
    return rvisa::has(rvisa::decode(rvisa::word_of(bytes, length), length), rvisa::FLAG_BRANCH);
+}
+
+/* An instruction that reads a clock or counter QEMU's user mode answers from
+ * the host, and the plugin from Sniper (qemu_plugin_register_counter_cb):
+ * RISC-V CSR instructions on time, cycle and instret (and their high
+ * halves); AArch64 MRS of CNTVCT_EL0, CNTVCTSS_EL0 and PMCCNTR_EL0; x86
+ * rdtsc and rdtscp. */
+bool is_counter_read(const uint8_t *bytes, size_t len)
+{
+   if (g_arch == ARCH_RISCV)
+   {
+      if (len < 4 || (bytes[0] & 0x7f) != 0x73)
+         return false;
+      const uint32_t w = bytes[0] | bytes[1] << 8 | bytes[2] << 16 | (uint32_t)bytes[3] << 24;
+      const unsigned funct3 = (w >> 12) & 7, csr = w >> 20;
+      return funct3 != 0 && funct3 != 4 &&
+             (csr == 0xc00 || csr == 0xc01 || csr == 0xc02 || csr == 0xc80 || csr == 0xc81 || csr == 0xc82);
+   }
+   if (g_arch == ARCH_AARCH64)
+   {
+      if (len < 4)
+         return false;
+      const uint32_t w = bytes[0] | bytes[1] << 8 | bytes[2] << 16 | (uint32_t)bytes[3] << 24;
+      if ((w & 0xfff00000) != 0xd5300000)   /* MRS of an op0=3 system register */
+         return false;
+      const unsigned sysreg = (w >> 5) & 0x7fff;   /* o0:op1:CRn:CRm:op2 */
+      return sysreg == 0x5f02 || sysreg == 0x5f06 || sysreg == 0x5ce8;
+   }
+   size_t k = 0;   /* x86: past the legacy and REX prefixes */
+   while (k < len && (bytes[k] == 0x66 || bytes[k] == 0xf2 || bytes[k] == 0xf3 || (bytes[k] & 0xf0) == 0x40))
+      k++;
+   return (k + 1 < len && bytes[k] == 0x0f && bytes[k + 1] == 0x31) ||
+          (k + 2 < len && bytes[k] == 0x0f && bytes[k + 1] == 0x01 && bytes[k + 2] == 0xf9);
 }
 
 bool is_magic(const uint8_t *bytes, size_t len)
@@ -340,6 +378,7 @@ struct InsnInfo
    bool     ame = false;
    bool     claimed = false;    /* claimed at translation: no exception follows, so no set_pc */
    bool     magic = false;      /* sim_api.h's magic instruction (is_magic) */
+   bool     counter = false;    /* reads a clock or counter the simulator answers (is_counter_read) */
    bool     is_jump = false;    /* an unconditional direct jump (x86 jmp rel, RISC-V jal x0 / c.j, AArch64 b): a loop's closing jump when backward, not a SIFT branch */
 };
 
@@ -423,6 +462,10 @@ struct VCPU
    uint64_t      wait_site  = 0;        /* W_SYNC: the call site */
    uint64_t      wait_a[3]  = {0, 0, 0};/* W_MAGIC: the command and its arguments */
    const InsnInfo *wait_ii  = nullptr;  /* W_MAGIC: the instruction */
+   /* The simulator's clocks for the counter read in flight (counter_exec),
+    * taken by the counter callback QEMU calls within the instruction */
+   bool          ctr_valid  = false;
+   uint64_t      ctr_time_ns = 0, ctr_core_cycles = 0, ctr_global_cycles = 0, ctr_instructions = 0;
 };
 
 /* One slot per vCPU, sized once and never resized.
@@ -1373,6 +1416,76 @@ void backedge_exec(unsigned int cpu_index, void *udata)
 
 /* Outside the run loop, on the vCPU's own host thread: what the callback
  * could not wait for.  Registers and memory are accessible here. */
+/* A counter read's question to Sniper: the instruction itself goes out first
+ * (as for a magic instruction), so the simulator answers at the time it has
+ * reached having run it, and the answer waits for QEMU's counter callback
+ * within the instruction.  In the callback, or outside the run loop. */
+void counter_body(VCPU *v, const InsnInfo *ii)
+{
+   if (!v->writer || v->closed)
+      return;
+   flush_pending(v, ii->vaddr + ii->size);
+   if (g_mode.load() != MODE_DETAILED)
+      ff_report(v);
+   Sift::EmuRequest req;
+   Sift::EmuReply res;
+   if (v->writer->Emulate(Sift::EmuTypeCounters, req, res))
+   {
+      v->ctr_time_ns = res.counters.time_ns;
+      v->ctr_core_cycles = res.counters.core_cycles;
+      v->ctr_global_cycles = res.counters.global_cycles;
+      v->ctr_instructions = res.counters.instructions;
+      v->ctr_valid = true;
+   }
+}
+
+/* Before a counter read executes: ask Sniper, on a live channel, for as long
+ * as it is open (as for futex calls: the guest's time stays the simulated
+ * time after the ROI too). */
+void counter_exec(unsigned int cpu_index, void *udata)
+{
+   const InsnInfo *ii = (const InsnInfo *)udata;
+   VCPU *v = vcpu_get(cpu_index);
+   if (!stage_begin(v, ii->vaddr, S_COUNTER))
+      return;
+   v->ctr_valid = false;
+   if (!v->writer || !opt_response || v->closed)
+      return;
+   if (g_wait)
+   {
+      v->wait_ii = ii;
+      SNP_DEFER(v, ii->vaddr, W_COUNTER, false);
+   }
+   counter_body(v, ii);
+}
+
+/* QEMU's counter read, within the instruction: Sniper's clocks, in the
+ * counter's units -- a timer at its rate (AArch64's CNTFRQ as QEMU gives it,
+ * RISC-V's timebase= option), cycles in the core's clock (the TSC in the
+ * global clock, as the Pin recorder's rdtsc), instructions the core ran.
+ * Without an answer (no live channel, a read the translation did not
+ * recognise) the host's value, as before. */
+uint64_t counter_read(unsigned int vcpu_index, int counter, uint64_t freq_hz, uint64_t host_value, void *)
+{
+   VCPU *v = vcpu_get(vcpu_index);
+   if (!v->ctr_valid)
+      return host_value;
+   switch (counter)
+   {
+      case SNP_COUNTER_TIME:
+      {
+         const uint64_t hz = freq_hz ? freq_hz : opt_timebase;
+         return (uint64_t)((unsigned __int128)v->ctr_time_ns * hz / 1000000000u);
+      }
+      case SNP_COUNTER_CYCLES:
+         return g_arch == ARCH_X86 ? v->ctr_global_cycles : v->ctr_core_cycles;
+      case SNP_COUNTER_INSTRET:
+         return v->ctr_instructions;
+      default:
+         return host_value;
+   }
+}
+
 void wait_body(unsigned int cpu_index, void *udata)
 {
    VCPU *v = (VCPU *)udata;
@@ -1389,6 +1502,9 @@ void wait_body(unsigned int cpu_index, void *udata)
          break;
       case W_MAGIC:
          magic_body(v, v->wait_ii, v->wait_a[0], v->wait_a[1], v->wait_a[2], cpu_index);
+         break;
+      case W_COUNTER:
+         counter_body(v, v->wait_ii);
          break;
       case W_SYNC:
          v->hold_pending = true;    /* the instruction runs after this, on resume */
@@ -2160,6 +2276,7 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       if (ii->mode_mask)
          ti->mode_mask &= ii->mode_mask;  /* one mode governs the whole block */
       ii->magic = got && is_magic(bytes, got);
+      ii->counter = got && is_counter_read(bytes, got);
       ii->is_jump = got ? is_direct_jump(bytes, got) : false;
 
       if (ii->ame)
@@ -2183,6 +2300,9 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       if (ii->magic)   /* after the tracer's callback: the instruction is pending */
          qemu_plugin_register_vcpu_insn_exec_cb(insn, magic_exec,
                                                 g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_RW_REGS, ii);
+      if (ii->counter && g_counters)   /* after the tracer's callback: the instruction is pending */
+         qemu_plugin_register_vcpu_insn_exec_cb(insn, counter_exec,
+                                                g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_NO_REGS, ii);
       if (pacsim_qemu::enabled())
       {
          if (i == 0 && pacsim_qemu::is_sync_entry(ii->vaddr))
@@ -2298,6 +2418,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
        * otherwise, so that response=off is not taken for response. */
       else if (key == "verbose")  opt_verbose = !eq || (val != "0" && val != "off" && val != "false");
       else if (key == "response") opt_response = !eq || (val != "0" && val != "off" && val != "false");
+      else if (key == "timebase") opt_timebase = strtoull(val.c_str(), nullptr, 0);   /* RISC-V time CSR rate, Hz */
       else if (key == "roi")      opt_roi = val != "0" && val != "off" && val != "false";
       else if (pacsim_qemu::option(key, val)) {}                 /* pacsim, pacsim-* */
       else if (key == "app")      opt_app = (unsigned)strtoul(val.c_str(), nullptr, 0);
@@ -2369,6 +2490,13 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    }
 
    SNP_REG_TB_TRANS(id, tb_trans);
+   /* The guest's counters answered with Sniper's clocks: live (they need
+    * Sniper's answer) and in user mode, with the QEMU call */
+   if (SNP_HAVE_COUNTERS && opt_response && !in_system_mode)
+   {
+      qemu_plugin_register_counter_cb(id, SNP_COUNTER_CB(counter_read), nullptr);
+      g_counters = true;
+   }
 #ifdef SNP_HAVE_SYSCALL_FILTER
    SNP_REG_SYSCALL_FILTER(id, syscall_filter);
 #else
