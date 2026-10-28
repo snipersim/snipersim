@@ -2091,6 +2091,13 @@ def case_run_sniper_qemu_roi(p, g, workdir):
             counts[roi] = int(m.group(1)) if m else 0
             rc, dump = run([p['siftdump'], prefix + '.app0.th0.sift'], 300)
             magic = [l.split()[1] for l in dump.splitlines() if l.startswith('magic ')]
+            # A guest with vector registers opens its trace with the plugin's
+            # report of their width (29, SIM_CMD_VECTOR_BYTES); within a region
+            # of interest it may come before the region, outside the trace
+            if arch != 'x86_64' and magic[:1] == ['29']:
+                magic = magic[1:]
+            elif arch != 'x86_64' and roi == '0':
+                return False, '%s: no vector width record (29) opens the trace: %s' % (arch, magic)
             if magic != ['1', '2', '8']:
                 return False, '%s: magic records %s in the trace, expected 1 2 8 (roi=%s)' % (arch, magic, roi)
         share = counts['1'] / float(counts['0'] or 1)
