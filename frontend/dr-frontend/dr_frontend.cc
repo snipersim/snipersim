@@ -410,7 +410,6 @@ void DRFrontend::process_instructions_buffer(void *drcontext)
       }
     )
     
-    //TODO: NEETHUM
     m_callbacks->sendInstruction((threadid_t)instruction->threadid, (addr_t)instruction->pc, instruction->isize,
                                                 instruction->num_addresses, instruction->is_branch, 
                                                 taken, instruction->is_predicate, 

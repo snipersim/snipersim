@@ -12,6 +12,15 @@ except where noted.
 
 ## 1. Running it
 
+The AME build of the agent (`test/llm-agent/README.md`), with any clang
+that has the riscv64 target and lld:
+
+    clang --target=riscv64-linux-gnu -march=rv64gcv -mabi=lp64d -O2 -ffreestanding \
+          -nostdlib -static -fuse-ld=lld -Wl,-e,_start -DUSE_AME \
+          -I test/llm-agent -I include -o test/llm-agent/agent-ame test/llm-agent/agent.c
+
+then
+
     run-sniper --roi --pacsim --frontend=qemu -n 1 -c riscv \
         --trace-args="-sniper:pacsim-region-size 300" \
         --trace-args="-sniper:pacsim-warmup 0" \

@@ -12,10 +12,13 @@ specification edit that was not regenerated, or a regeneration that was not
 checked in, fails here.  Skips without the roots.  `tables`: the generated
 tables are self-consistent and decode known encodings as expected, through a
 small program built against decoder_lib alone."""
-import os, subprocess, sys, tempfile, filecmp, shutil
+import argparse, os, subprocess, sys, tempfile, filecmp, shutil, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+from common.failfast import add_argument as add_failfast
+from common.runlog import RunLog
 
 KNOWN = [   # word, length, expected name, expected class
     ('0x00000013', 4, 'addi', 'int_alu'), ('0x0001', 2, 'c.nop', 'int_alu'),
@@ -100,12 +103,26 @@ def check_tables():
         shutil.rmtree(tmp, ignore_errors=True)
 
 def main():
+    # The same --failfast and per-check timing as the other suites (make
+    # regress reads the timings through SNIPER_REGRESS_LOG)
+    ap = argparse.ArgumentParser()
+    add_failfast(ap)
+    args = ap.parse_args()
+    log = RunLog('riscv_isa')
     rc = 0
-    for name, fn in (('regen', check_regen), ('tables', check_tables)):
-        ok, msg = fn()
-        print('%-8s %s %s' % (name, 'SKIP' if ok is None else 'PASS' if ok else 'FAIL', msg))
-        if ok is False:
-            rc = 1
+    try:
+        for name, fn in (('regen', check_regen), ('tables', check_tables)):
+            t0 = time.time()
+            ok, msg = fn()
+            status = 'SKIP' if ok is None else 'PASS' if ok else 'FAIL'
+            print('%-8s %s %s [%ds]' % (name, status, msg, round(log.record(name, time.time() - t0, status))))
+            if ok is False:
+                rc = 1
+                if args.failfast:
+                    print('--failfast: stopping at the first failing check')
+                    break
+    finally:
+        log.finish()
     return rc
 
 if __name__ == '__main__':

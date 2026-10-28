@@ -14,7 +14,11 @@ Training happens on the host, not here: `tools/llm/train_agent_gpt.py`
 corpus of add/mul/len questions and writes `model_weights.h` (float32,
 matmul weights transposed so every output is one contiguous dot product)
 and `prompts.h` (questions with the numpy model's own greedy outputs and
-the true answers).  Only inference runs on the edge.
+the true answers).  Only inference runs on the edge.  The generated
+`model_weights.h`, `prompts.h` and their int4 counterparts are committed on
+purpose: building and testing the agent then needs no training run, and the
+harness's exact counts are of these weights.  Regenerate them with the
+trainer (and `quantize_w4.py`) only to change the model.
 
 `agent.c` is that inference: freestanding (no libc, own exp/tanh, write(2)
 for output), a KV-cached decoder with greedy sampling, the agent loop, and
@@ -63,7 +67,7 @@ Build by hand:
     qemu-riscv/build/qemu-riscv64 -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on ./agent
     # the AME build needs the plugin:
     qemu-riscv/build/qemu-riscv64 -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on \
-          -plugin build/release/lib/libsniper-qemu.so,output=trace -- ./agent
+          -plugin build/default/lib/libsniper-qemu.so,output=trace -- ./agent
 
 The trainer's `--blob` writes the weights as `model_weights.bin`, a raw
 float32 file the agent embeds at link time with `.incbin` (the header then

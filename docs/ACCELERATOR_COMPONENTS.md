@@ -273,7 +273,7 @@ python3 testing/test_riscv_isa.py                                # drift and kno
 ```
 
 Building and running the examples by hand (`CC` is the clang above,
-`Q` the QEMU, `P` `build/release/lib/libsniper-qemu.so`,
+`Q` the QEMU, `P` `build/default/lib/libsniper-qemu.so`,
 `CPU=max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on`):
 
 ```

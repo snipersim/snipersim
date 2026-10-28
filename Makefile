@@ -234,17 +234,16 @@ regress_magic:
 help:
 	@sed -n '/^#/!q; s/^#\{1\} \{0,1\}//p' $(lastword $(MAKEFILE_LIST))
 
-# The RISC-V / IME 0.9 chain, end to end: specification -> generated decoder,
-# QEMU with the IME patch, a workload built with a stock clang, the harness.
 # Every `# verify:` block of the two stack documents, in order; --long adds the
-# blocks marked long (hours).  DOC_VERIFY_FLAGS=--long make doc-verify
+# blocks marked long (hours).  DOC_VERIFY_FLAGS=--long make doc-verify.  Run
+# from the tree's root whatever the caller's directory: the documents' env
+# blocks take SNIPER_ROOT from $(pwd).
 DOC_VERIFY_FLAGS ?=
 doc-verify:
-	@for d in docs/VIRTUOSO_MIMICOS_STACK.md docs/RISCV_AI_ACCELERATOR_STACK.md; do \
+	@cd $(SIM_ROOT) && for d in docs/VIRTUOSO_MIMICOS_STACK.md docs/RISCV_AI_ACCELERATOR_STACK.md; do \
 	  echo "== $$d"; python3 tools/doc-verify.py $$d $(DOC_VERIFY_FLAGS) > build/doc-verify-$$(basename $$d .md).sh && bash build/doc-verify-$$(basename $$d .md).sh || exit $$?; \
 	done
 
-# The API reference, into docs/doxygen/
 # A release is the committed tree and nothing else: git archive leaves out the
 # build directories, the dependency links (lib/sniper and the rest, which point
 # at absolute paths on the machine that built them), stale objects and logs,
@@ -256,9 +255,12 @@ dist:
 	@git -C $(SIM_ROOT) archive --format=tar.gz --prefix=sniper-$(SNIPER_VERSION)/ -o sniper-$(SNIPER_VERSION).tar.gz HEAD
 	@echo "sniper-$(SNIPER_VERSION).tar.gz: $$(tar tzf sniper-$(SNIPER_VERSION).tar.gz | wc -l) entries, from $$(git -C $(SIM_ROOT) rev-parse --short HEAD)"
 
+# The API reference, into docs/doxygen/
 doxygen:
-	cd docs && doxygen Doxyfile
+	cd $(SIM_ROOT)/docs && doxygen Doxyfile
 
+# The RISC-V / IME 0.9 chain, end to end: specification -> generated decoder,
+# QEMU with the IME patch, a workload built with a stock clang, the harness.
 riscv-ime-check:
-	@tools/riscv/ime-check.sh
+	@$(SIM_ROOT)/tools/riscv/ime-check.sh
 .PHONY: riscv-ime-check
