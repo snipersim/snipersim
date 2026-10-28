@@ -227,8 +227,11 @@ def stats_process(config, results):
       stats['performance_model.elapsed_time'][c] - stats['performance_model.idle_elapsed_time'][c]
       for c in range(ncores)
     ]
+    # A core runs up to a quantum past the last global barrier, so its
+    # non-idle time can exceed the run's time; it was then reported idle for a
+    # negative time (-155 ns on a one-core run).  It was not idle at all.
     stats['performance_model.idle_elapsed_time'] = [
-      time0_end - time0_begin - stats['performance_model.nonidle_elapsed_time'][c]
+      max(0, time0_end - time0_begin - stats['performance_model.nonidle_elapsed_time'][c])
       for c in range(ncores)
     ]
     stats['performance_model.elapsed_time'] = [ time0_end - time0_begin for c in range(ncores) ]
