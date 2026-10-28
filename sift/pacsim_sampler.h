@@ -196,6 +196,7 @@ private:
    void gotoDetailed(unsigned tid);
    void gotoFastForward(unsigned tid);
    uint64_t sinceCut() const;
+   bool warmupDue(uint64_t extra) const;
    unsigned activeThreads() const;
    void markRegionStart(uint64_t pc);
    void start(unsigned tid, uint64_t pc);

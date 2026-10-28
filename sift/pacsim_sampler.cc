@@ -420,19 +420,29 @@ void Sampler::write()
    m_fe.log(s.str());
 }
 
+/* The warm-up window: the fast-forwarded region has run to within the
+   window of its budget (with `extra` more instructions counted), so the
+   caches are warmed from here to the cut. */
+bool Sampler::warmupDue(uint64_t extra) const
+{
+   return m_started && !m_finished && m_mode == Mode::FastForward && !m_warming
+       && m_options.fast_forward == FastForwardKind::Warmup && m_options.warmup_window > 0
+       && sinceCut() + extra + m_options.warmup_window >= m_threshold;
+}
+
 bool Sampler::block(unsigned tid, uint32_t n, uint64_t addr, bool can_block)
 {
-   if (m_flush[tid] && !can_block) return true;   /* the flush asks the simulator for the mode */
+   /* An event that would ask the simulator is left undone before anything
+      is counted: the second call, where the front end can wait, counts the
+      block, and must not count it twice.  The flush asks for the mode. */
+   if (!can_block && (m_flush[tid] || warmupDue(tid < m_nthreads ? n : 0)))
+      return true;
    m_ins[tid] += n;
    m_bbv[tid]->count(addr, n);
    if (m_flush[tid]) flushIcount(tid);
-   /* The warm-up window: the fast-forwarded region has run to within the
-      window of its budget, so the caches are warmed from here to the cut. */
-   if (m_started && !m_finished && m_mode == Mode::FastForward && !m_warming
-       && m_options.fast_forward == FastForwardKind::Warmup && m_options.warmup_window > 0
-       && sinceCut() + m_options.warmup_window >= m_threshold)
+   if (warmupDue(0))
    {
-      if (!can_block) return true;
+      if (!can_block) return false;   /* another thread's count tipped it: the next block's call starts it */
       if (m_fe.tryLock())
       {
          if (m_mode == Mode::FastForward && !m_warming)
@@ -475,16 +485,24 @@ bool Sampler::backEdge(unsigned tid, uint64_t addr, bool conditional, bool can_b
       whose loops are all tight still gets its regions.  With loop_min = 1
       every back-edge qualifies at once: the paper's rule. */
    bool coarse = true;
+   uint64_t *last = nullptr;
+   const uint64_t now = m_ins[tid];
    if (m_loop_min > 1)
    {
-      uint64_t &last = m_last_edge[tid][addr];
-      const uint64_t now = m_ins[tid];
-      coarse = last != 0 && now - last >= m_loop_min;
-      last = now;
+      last = &m_last_edge[tid][addr];
+      coarse = *last != 0 && now - *last >= m_loop_min;
    }
-   if (sinceCut() < m_threshold) return false;
-   if (!coarse && sinceCut() < 2 * m_threshold) return false;
-   if (!can_block) return true;                  /* a cut: questions for the simulator */
+   if (sinceCut() < m_threshold || (!coarse && sinceCut() < 2 * m_threshold))
+   {
+      if (last) *last = now;
+      return false;
+   }
+   /* A cut: questions for the simulator.  Left undone with the iteration
+      unrecorded, so that the second call, where the front end can wait,
+      judges the same iteration -- recorded here, the second call saw an
+      iteration of no instructions and never cut at a coarse loop. */
+   if (!can_block) return true;
+   if (last) *last = now;
    if (!m_fe.tryLock()) return false;
    if (!m_finished && sinceCut() >= m_threshold)
       cut(tid, addr, RecordType::IntraBarrier);
