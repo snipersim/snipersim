@@ -636,6 +636,33 @@ def case_riscv_user_trace(p, g, workdir):
     return True, '%d instructions, trace readable' % n
 
 
+def case_riscv_vector_width(p, g, workdir):
+    """The guest's vector width against the configuration's: the plugin reports
+    vlenb (SIM_CMD_VECTOR_BYTES) and the simulator refuses a run that times
+    the vector unit at another width -- they used to match only by
+    convention.  A guest recorded at 256 bits is refused by the riscv
+    configuration (16 bytes) with the reason, and runs with vector_bytes=32."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    prefix = os.path.join(workdir, 'vw256')
+    rc, out = run([r['qemu']] + RISCV_VA_RESERVE + ['-cpu', IME_CPU_DEFAULT.replace('vlen=128', 'vlen=256'),
+                   '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', r['guest']], 300, cwd=workdir)
+    if rc != 100:
+        return False, 'recording failed (%s)' % exit_text(rc)
+    trace = '--traces=' + prefix + '.app0.th0.sift'
+    outdir = os.path.join(workdir, 'vw-wrong')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-d', outdir, trace], 600, cwd=SNIPER_ROOT)
+    if rc == 0 or "The guest's vector registers are 32 bytes" not in out:
+        return False, 'a 256-bit recording on a 128-bit configuration was not refused (%s)' % exit_text(rc)
+    outdir = os.path.join(workdir, 'vw-right')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'riscv', '-g', 'perf_model/core/riscv/vector_bytes=32',
+                   '-d', outdir, trace], 600, cwd=SNIPER_ROOT)
+    if rc != 0:
+        return False, 'with vector_bytes=32 the run failed: %s' % sniper_failed(rc, out)
+    return True, 'a 256-bit guest refused at 16 bytes with the reason, simulated at 32'
+
+
 def case_riscv_power(p, g, workdir):
     """run-sniper --power on a RISC-V guest: McPAT's estimate for the riscv
     configuration, a non-x86 core at its own process node.  It used to die in
@@ -2414,6 +2441,7 @@ CASES = {
     'aarch64-user-simulate': case_aarch64_user_simulate,
     'riscv-system-simulate': case_riscv_system_simulate,
     'riscv-system-address-spaces': case_riscv_system_address_spaces,
+    'riscv-vector-width': case_riscv_vector_width,
     'riscv-power':      case_riscv_power,
     'riscv-user-simulate': case_riscv_user_simulate,
     'riscv-user-translation': case_riscv_user_translation,

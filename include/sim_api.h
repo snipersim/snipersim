@@ -72,6 +72,10 @@
    barrier.global_time by this amount at fault time, freeing the
    kernel pthread to skip detailed LinuxPhase and fast-replay. */
 #define SIM_CMD_SET_FAST_FAULT_CHARGE 28
+// The front end reports the guest's vector register width in bytes (RISC-V
+// vlenb, AArch64 SVE vg * 8): the simulator refuses a run whose
+// configuration models another width (the QEMU plugin sends it)
+#define SIM_CMD_VECTOR_BYTES 29
 
 #define SIM_OPT_INSTRUMENT_DETAILED 0
 #define SIM_OPT_INSTRUMENT_WARMUP 1

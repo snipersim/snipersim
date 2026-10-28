@@ -1036,6 +1036,48 @@ void find_magic_registers(VCPU *v)
    v->mreg_found = true;
 }
 
+/* The guest's vector register width, reported once to the simulator
+   (SIM_CMD_VECTOR_BYTES), which refuses a configuration that models another:
+   the RISC-V vector unit's vector_bytes and the SVE width matched the
+   recording's VLEN only by convention, and a recording made with another
+   -cpu vlen= was simulated at the wrong width without a word.  Read from the
+   gdbstub's vlenb (RISC-V) or vg (AArch64, in 8-byte granules); a CPU without
+   them reports nothing. */
+std::atomic<bool> g_vector_width_reported(false);
+
+void vector_width_exec(unsigned int cpu_index, void *udata)
+{
+   if (g_vector_width_reported.exchange(true))
+      return;
+   VCPU *v = vcpu_get(cpu_index);
+   if (!v->writer || v->closed)
+      return;
+   const char *want = g_arch == ARCH_RISCV ? "vlenb" : "vg";
+   uint64_t val = 0;
+   bool found = false;
+   GArray *regs = qemu_plugin_get_registers();
+   for (guint i = 0; regs && i < regs->len && !found; i++)
+   {
+      qemu_plugin_reg_descriptor *d = &g_array_index(regs, qemu_plugin_reg_descriptor, i);
+      if (strcmp(d->name, want) == 0)
+      {
+         GByteArray *b = g_byte_array_new();
+         if (qemu_plugin_read_register(d->handle, b) && b->len)
+         {
+            memcpy(&val, b->data, std::min<guint>(b->len, sizeof(val)));
+            found = true;
+         }
+         g_byte_array_free(b, TRUE);
+      }
+   }
+   if (regs)
+      g_array_free(regs, TRUE);
+   if (!found || val == 0)
+      return;
+   const uint64_t bytes = g_arch == ARCH_RISCV ? val : val * 8;
+   v->writer->Magic(SIM_CMD_VECTOR_BYTES, bytes, 0);
+}
+
 void magic_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
@@ -1645,6 +1687,8 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       }
       qemu_plugin_register_vcpu_insn_exec_cb(insn, insn_exec,
                                              QEMU_PLUGIN_CB_NO_REGS, ii);
+      if (i == 0 && (g_arch == ARCH_RISCV || g_arch == ARCH_AARCH64) && !g_vector_width_reported.load())
+         qemu_plugin_register_vcpu_insn_exec_cb(insn, vector_width_exec, QEMU_PLUGIN_CB_R_REGS, ii);
       if (ii->magic)   /* after the tracer's callback: the instruction is pending */
          qemu_plugin_register_vcpu_insn_exec_cb(insn, magic_exec,
                                                 QEMU_PLUGIN_CB_RW_REGS, ii);

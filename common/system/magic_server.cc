@@ -492,6 +492,25 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          return 0;
       }
 
+      case SIM_CMD_VECTOR_BYTES:
+      {
+         /* The width the guest's vector registers have (the QEMU plugin
+            reads vlenb or SVE's vg) against the width this configuration
+            times them at; they used to match only by convention */
+         const String arch = Sim()->getCfg()->getString("general/arch");
+         const char *key = arch == "riscv" ? "perf_model/core/riscv/vector_bytes"
+                         : (arch == "armv8" || arch == "arm") ? "perf_model/core/arm/sve_bytes" : NULL;
+         if (key && Sim()->getCfg()->hasKey(key))
+         {
+            const UInt64 modelled = Sim()->getCfg()->getIntArray(key, core_id == INVALID_CORE_ID ? 0 : core_id);
+            if (modelled != arg0)
+               LOG_PRINT_ERROR("The guest's vector registers are %" PRIu64 " bytes (%" PRIu64 " bits) and the configuration "
+                               "models %" PRIu64 " (%s): record with that width (QEMU -cpu ...,vlen=%" PRIu64 " for RISC-V, "
+                               "sve-default-vector-length=%" PRIu64 " for AArch64), or set %s=%" PRIu64 ".",
+                               arg0, arg0 * 8, modelled, key, modelled * 8, modelled, key, arg0);
+         }
+         return 0;
+      }
       case SIM_CMD_ROI_EXPECT:
          return roiExpect(arg0);
       case SIM_CMD_THREAD_ROI_START:
