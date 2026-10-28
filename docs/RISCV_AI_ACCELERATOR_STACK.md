@@ -148,6 +148,16 @@ power of two up to 65536.  `tools/riscv/regen-qemu-patch.sh <pristine>
 <patched>` regenerates the patch from the two trees (`qemu-src/` is the
 pristine checkout the fetcher keeps) and checks that it applies.
 
+A second, smaller patch, `tools/qemu-11.1.1-plugin-wait.patch`, is applied
+after this one, and to the x86-64 and AArch64 user-mode builds on otherwise
+stock trees.  It adds `qemu_plugin_vcpu_wait_at()`: a plugin callback that
+must wait for Sniper leaves the run loop first, the way a system call does,
+which is what lets multi-threaded guests run live with flow control and
+sampling (`frontend/qemu-plugin/README.md`, "Which mode";
+`PACSIM_QEMU.md`).  `regen-qemu-patch.sh` takes it back out of the patched
+tree before rewriting the IME patch, so the regenerated file is the IME
+patch alone.
+
 ### 3.3 The frontend plugin
 
 `frontend/qemu-plugin/sniper_qemu.cc` is a TCG plugin loaded into QEMU
@@ -702,7 +712,7 @@ block passed.
 | `vlen` | the probe agrees at 128, 1,024, 4,096 and 65,536 bits; the gather at 65,536 bits records its footprints and counts the dropped lines |
 | `plugin-api` | mode 0 exit 100 with the CSRs, ownership and a claimed product checked; `claim=0` trapped; without the plugin SIGILL; mode 1 SIGILL and mode 2 SIGSEGV with the model's report; 4 M instructions claimed at translation against 4 M through the exception path, timed; the loop probe exits 100 |
 | `gdb` | the target description carries `org.riscv.ame` with 103 registers; `amenlen` reads 4, `ameudsz` 32 |
-| `patch` | the patch regenerates from the two trees; on this host the riscv64 tree also carries the plugin-wait patch of the Pac-Sim-on-QEMU work, so the regenerated file adds those hunks and is otherwise identical to the committed one |
+| `patch` | the patch regenerates from the two trees; on this host the riscv64 tree also carries the plugin-wait patch of the Pac-Sim-on-QEMU work, so the regenerated file adds those hunks and is otherwise identical to the committed one (since the script takes `tools/qemu-11.1.1-plugin-wait.patch` back out, the regenerated file is identical: 0 lines, 2026-10-28) |
 | `harness` | the listed cases pass |
 | `long:wide`, `long:ime-check` | see below |
 

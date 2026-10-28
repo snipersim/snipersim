@@ -215,6 +215,9 @@
         "qemu"
       ],
       "copy_from": "qemu",
+      "patches": [
+        "tools/qemu-11.1.1-plugin-wait.patch"
+      ],
       "install_path": "qemu",
       "when": [
         "qemu"
@@ -227,7 +230,7 @@
         "-c",
         "mkdir -p build && cd build && ../configure --enable-plugins --target-list=x86_64-softmmu,x86_64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
-      "description": "QEMU built with TCG plugin support; the frontend is loaded with -plugin"
+      "description": "QEMU built with TCG plugin support and the plugin wait call from tools/qemu-11.1.1-plugin-wait.patch (a vCPU waits for Sniper outside the run loop: multi-threaded guests in user mode, live); the frontend is loaded with -plugin"
     },
     "qemu-riscv-ime": {
       "kind": "build",
@@ -236,7 +239,8 @@
       ],
       "copy_from": "qemu",
       "patches": [
-        "tools/riscv/qemu-11.1.1-ime.patch"
+        "tools/riscv/qemu-11.1.1-ime.patch",
+        "tools/qemu-11.1.1-plugin-wait.patch"
       ],
       "install_path": "qemu-riscv",
       "when": [
@@ -250,7 +254,7 @@
         "-c",
         "mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
-      "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on (vlen up to 65536, the RVV 1.0 maximum)"
+      "description": "QEMU 11.1.1 riscv64 user mode with the IME 0.9 (Zvvm) patch from tools/riscv/qemu-11.1.1-ime.patch, the plugin wait call from tools/qemu-11.1.1-plugin-wait.patch and TCG plugin support; run with -cpu max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on (vlen up to 65536, the RVV 1.0 maximum)"
     },
     "qemu-riscv-system": {
       "kind": "build",
@@ -281,6 +285,9 @@
         "qemu"
       ],
       "copy_from": "qemu",
+      "patches": [
+        "tools/qemu-11.1.1-plugin-wait.patch"
+      ],
       "install_path": "qemu-aarch64",
       "when": [
         "arm",
@@ -294,7 +301,7 @@
         "-c",
         "mkdir -p build && cd build && ../configure --enable-plugins --target-list=aarch64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
-      "description": "QEMU AArch64 user mode with TCG plugin support: the ARM64 path that needs no ARM hardware -- record with the QEMU front end on any host, simulate with the ARM decoder (ARM=ON) and the Cortex configurations"
+      "description": "QEMU AArch64 user mode with TCG plugin support and the plugin wait call from tools/qemu-11.1.1-plugin-wait.patch: the ARM64 path that needs no ARM hardware -- record with the QEMU front end on any host, simulate with the ARM decoder (ARM=ON) and the Cortex configurations"
     },
     "sail-riscv": {
       "kind": "tarball",

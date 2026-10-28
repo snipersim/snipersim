@@ -1,0 +1,203 @@
+The plugin wait call for QEMU 11.1.1: qemu_plugin_vcpu_wait_at() lets a
+plugin callback leave the run loop the way a system call does, so that a
+vCPU waiting for something outside QEMU (Sniper's answer) holds up no
+exclusive section.  The state at the instruction is restored from the
+block's unwind data, the PC set to it, EXCP_PLUGIN_WAIT unwinds to the
+linux-user cpu loop (x86-64, RISC-V, AArch64), the plugin's callback runs
+there after cpu_exec_end() with register access, and execution resumes at
+the instruction.  Applied by deps/sniper-deps to the x86-64, RISC-V (on top
+of tools/riscv/qemu-11.1.1-ime.patch) and AArch64 user-mode builds; one line
+of context, so that it applies on the stock tree and on the IME one alike.
+Used by frontend/qemu-plugin/sniper_qemu.cc ("waiting").
+
+diff --git a/include/exec/cpu-common.h b/include/exec/cpu-common.h
+index 6594f7f..1ce7a3b 100644
+--- a/include/exec/cpu-common.h
++++ b/include/exec/cpu-common.h
+@@ -19,2 +19,3 @@
+ #define EXCP_ATOMIC     0x10005 /* stop-the-world and emulate atomic */
++#define EXCP_PLUGIN_WAIT 0x10006 /* a plugin asked to wait outside the run loop (qemu_plugin_vcpu_wait) */
+ 
+diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
+index 3e913cd..66bd45c 100644
+--- a/include/plugins/qemu-plugin.h
++++ b/include/plugins/qemu-plugin.h
+@@ -1158,2 +1158,51 @@ void qemu_plugin_set_pc(uint64_t vaddr);
+ 
++/**
++ * typedef qemu_plugin_vcpu_wait_cb_t - callback run outside the run loop
++ * @vcpu_index: the vcpu
++ * @udata: the argument given to qemu_plugin_vcpu_wait()
++ */
++typedef void (*qemu_plugin_vcpu_wait_cb_t)(unsigned int vcpu_index, void *udata);
++
++/**
++ * qemu_plugin_vcpu_wait_at() - leave the run loop, call back, resume
++ * @vaddr: the virtual address of the instruction to resume at
++ * @cb: the callback to run outside the run loop
++ * @udata: passed to @cb
++ * @host_pc: the exec callback's return address into the translated code
++ *
++ * A plugin callback that has to wait for something outside QEMU -- an
++ * answer from another process, say -- cannot block where it is: the vcpu
++ * counts as running, an exclusive section elsewhere waits for it, and a
++ * translation-block flush in that section may reuse the code the parked
++ * vcpu would return to.  This leaves the run loop instead, the way a
++ * system call does: the vcpu stops at @vaddr, @cb runs once the vcpu is no
++ * longer running (in the cpu loop, after cpu_exec_end()), with register
++ * and memory access as in a QEMU_PLUGIN_CB_RW_REGS callback, and execution
++ * resumes at @vaddr -- whose callbacks therefore fire again, which the
++ * plugin must expect.  Does not return.
++ *
++ * Leaving in the middle of a block is what a faulting instruction does,
++ * and needs the same care: state the translator tracks lazily (the PC, and
++ * on x86 the pending flags operation) is restored from the block's unwind
++ * data at @host_pc before the exit, as cpu_loop_exit_restore() does for a
++ * helper.  Use qemu_plugin_vcpu_wait(), which supplies @host_pc, directly
++ * in the exec callback registered with QEMU -- from a function it calls,
++ * the return address is not in translated code and nothing is restored.
++ * Only from an exec callback registered with QEMU_PLUGIN_CB_RW_REGS or
++ * QEMU_PLUGIN_CB_RW_REGS_PC.
++ */
++QEMU_PLUGIN_API
++void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, void *udata,
++                              uintptr_t host_pc);
++
++/**
++ * qemu_plugin_vcpu_wait() - qemu_plugin_vcpu_wait_at() from the exec callback
++ *
++ * Expands in the exec callback itself, so that the return address it passes
++ * is the callback's own -- into the translated code.
++ */
++#define qemu_plugin_vcpu_wait(vaddr, cb, udata) \
++    qemu_plugin_vcpu_wait_at((vaddr), (cb), (udata), \
++                             (uintptr_t)__builtin_return_address(0))
++
+ /**
+diff --git a/include/qemu/plugin.h b/include/qemu/plugin.h
+index 9c2ec8c..ccc25de 100644
+--- a/include/qemu/plugin.h
++++ b/include/qemu/plugin.h
+@@ -146,2 +146,5 @@ struct qemu_plugin_tb {
+ struct CPUPluginState {
++    /* qemu_plugin_vcpu_wait_at: the callback to run outside the run loop */
++    void (*wait_cb)(unsigned int vcpu_index, void *udata);
++    void *wait_udata;
+     DECLARE_BITMAP(event_mask, QEMU_PLUGIN_EV_MAX);
+@@ -159,2 +162,9 @@ void qemu_plugin_vcpu_init_hook(CPUState *cpu);
+ void qemu_plugin_vcpu_exit_hook(CPUState *cpu);
++/*
++ * The vcpu left its run loop with EXCP_PLUGIN_WAIT: run the callback the
++ * plugin registered with qemu_plugin_vcpu_wait(), from outside the loop --
++ * the vcpu is not running as far as exclusive sections are concerned, so
++ * the callback may block.
++ */
++void qemu_plugin_vcpu_wait_run(CPUState *cpu);
+ void qemu_plugin_tb_trans_cb(CPUState *cpu, struct qemu_plugin_tb *tb);
+@@ -251,2 +261,5 @@ static inline int qemu_plugin_load_list(QemuPluginList *head, Error **errp)
+ 
++static inline void qemu_plugin_vcpu_wait_run(CPUState *cpu)
++{ }
++
+ static inline void qemu_plugin_vcpu_init_hook(CPUState *cpu)
+diff --git a/linux-user/aarch64/cpu_loop.c b/linux-user/aarch64/cpu_loop.c
+index e7f643d..b9ce9a9 100644
+--- a/linux-user/aarch64/cpu_loop.c
++++ b/linux-user/aarch64/cpu_loop.c
+@@ -20,2 +20,3 @@
+ #include "qemu/osdep.h"
++#include "qemu/plugin.h"
+ #include "qemu.h"
+@@ -211,2 +212,6 @@ void cpu_loop(CPUARMState *env)
+             break;
++        case EXCP_PLUGIN_WAIT:
++            /* the plugin's wait, here where a syscall would block */
++            qemu_plugin_vcpu_wait_run(cs);
++            break;
+         default:
+diff --git a/linux-user/i386/cpu_loop.c b/linux-user/i386/cpu_loop.c
+index fe922fc..cea58cb 100644
+--- a/linux-user/i386/cpu_loop.c
++++ b/linux-user/i386/cpu_loop.c
+@@ -20,2 +20,3 @@
+ #include "qemu/osdep.h"
++#include "qemu/plugin.h"
+ #include "qemu.h"
+@@ -319,2 +320,6 @@ void cpu_loop(CPUX86State *env)
+             break;
++        case EXCP_PLUGIN_WAIT:
++            /* the plugin's wait, here where a syscall would block */
++            qemu_plugin_vcpu_wait_run(cs);
++            break;
+         default:
+diff --git a/linux-user/riscv/cpu_loop.c b/linux-user/riscv/cpu_loop.c
+index 6f27a06..7f6a46d 100644
+--- a/linux-user/riscv/cpu_loop.c
++++ b/linux-user/riscv/cpu_loop.c
+@@ -20,2 +20,3 @@
+ #include "qemu/osdep.h"
++#include "qemu/plugin.h"
+ #include "qemu/error-report.h"
+@@ -47,2 +48,6 @@ void cpu_loop(CPURISCVState *env)
+             break;
++        case EXCP_PLUGIN_WAIT:
++            /* the plugin's wait, here where a syscall would block */
++            qemu_plugin_vcpu_wait_run(cs);
++            break;
+         case RISCV_EXCP_U_ECALL:
+diff --git a/plugins/api.c b/plugins/api.c
+index eb982f9..7454ce2 100644
+--- a/plugins/api.c
++++ b/plugins/api.c
+@@ -500,2 +500,28 @@ bool qemu_plugin_write_register(struct qemu_plugin_register *reg,
+ 
++void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, void *udata,
++                              uintptr_t host_pc)
++{
++    g_assert(current_cpu);
++    g_assert(qemu_plugin_get_cb_flags() == QEMU_PLUGIN_CB_RW_REGS ||
++             qemu_plugin_get_cb_flags() == QEMU_PLUGIN_CB_RW_REGS_PC);
++
++    current_cpu->plugin_state->wait_cb = cb;
++    current_cpu->plugin_state->wait_udata = udata;
++    /*
++     * The translator writes some state only when it has to -- the PC at
++     * the end of a block, x86's cc_op before a helper that reads the flags.
++     * A callback in the middle of a block sees the values as of the last
++     * such write; leaving from here with them would resume with the
++     * flags of an earlier instruction.  The block's unwind data has the
++     * state at this instruction's start, which is where execution resumes.
++     * A block-level callback's return address precedes the first
++     * instruction's code and restores nothing, nor needs to: a block
++     * begins with everything written.
++     */
++    cpu_restore_state(current_cpu, host_pc);
++    cpu_set_pc(current_cpu, vaddr);
++    current_cpu->exception_index = EXCP_PLUGIN_WAIT;
++    cpu_loop_exit(current_cpu);
++}
++
+ void qemu_plugin_set_pc(uint64_t vaddr)
+diff --git a/plugins/core.c b/plugins/core.c
+index 1113bfe..bc3bae9 100644
+--- a/plugins/core.c
++++ b/plugins/core.c
+@@ -208,2 +208,18 @@ CPUPluginState *qemu_plugin_create_vcpu_state(void)
+ 
++void qemu_plugin_vcpu_wait_run(CPUState *cpu)
++{
++    CPUPluginState *st = cpu->plugin_state;
++    void (*cb)(unsigned int, void *) = st ? st->wait_cb : NULL;
++
++    if (!cb) {
++        return;
++    }
++    st->wait_cb = NULL;
++    /* outside the run loop the registers are all in memory: a full access */
++    qemu_plugin_set_cb_flags(cpu, QEMU_PLUGIN_CB_RW_REGS);
++    cb(cpu->cpu_index, st->wait_udata);
++    qemu_plugin_set_cb_flags(cpu, QEMU_PLUGIN_CB_NO_REGS);
++    st->wait_udata = NULL;
++}
++
+ static void plugin_grow_scoreboards__locked(CPUState *cpu)
