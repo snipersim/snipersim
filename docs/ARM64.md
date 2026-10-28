@@ -15,9 +15,12 @@ make ARM=ON QEMU=ON -j$(nproc)                          # the decoder, the QEMU 
 ```
 
 QEMU runs the program with every extension it implements (`-cpu max`): LSE
-atomics, NEON, FP16 and SVE.  SVE is decoded and its Z and P registers carry
-dependencies; a vector memory access is modelled at the address the trace
-gives, without its runtime vector length.  Magic instructions
+atomics, NEON, FP16 and SVE, with SVE registers of 16 bytes
+(`sve-default-vector-length=16`), the width the cortex configurations model
+(`perf_model/core/arm/sve_bytes`).  The trace carries the guest's width and
+the simulator refuses one that differs.  SVE is decoded and its Z and P
+registers carry dependencies; a vector memory access is modelled at the
+address the trace gives, without its runtime vector length.  Magic instructions
 (`include/sim_api.h`, compiled for AArch64) take the command in x1, the
 arguments in x2 and x3, and answer in x0.  Single-threaded programs run live;
 see `frontend/qemu-plugin/README.md` for more.

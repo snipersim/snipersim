@@ -473,7 +473,8 @@ rvcc -I test/llm-agent -DUSE_IME -DIME_VLEN=4096 -DIME_LMUL=8 -DIME_LAMBDA=4 -o 
 CPU4K=${RVCPU/vlen=128/vlen=4096}
 $SNIPER_QEMU_RISCV -cpu $CPU4K $WORK/agent-ime32 > /dev/null; echo "ime32 exit $?"
 $SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $CPU4K -plugin $PLUGIN,output=$WORK/agent-ame32,ame_n=32 -- $WORK/agent-ame32 > /dev/null; echo "ame32 exit $?"
-./run-sniper -n 1 -c riscv -d $WORK/ame32-sim -g perf_model/core/riscv/ame_mma_issue_cycles=32 --traces=$WORK/agent-ame32.app0.th0.sift > /dev/null
+# recorded at 4,096 bits, so the vector unit is 512 bytes wide (the simulator refuses another width)
+./run-sniper -n 1 -c riscv -d $WORK/ame32-sim -g perf_model/core/riscv/vector_bytes=512 -g perf_model/core/riscv/ame_mma_issue_cycles=32 --traces=$WORK/agent-ame32.app0.th0.sift > /dev/null
 grep -E '^performance_model.cycle_count|^riscv.ame_mma ' $WORK/ame32-sim/simulation/sim.stats
 ```
 

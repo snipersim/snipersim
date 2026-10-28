@@ -39,6 +39,11 @@ from common.runlog import RunLog
 HERE = os.path.dirname(os.path.abspath(__file__))
 SNIPER_ROOT = os.path.dirname(HERE)
 PROBE_DIR = os.path.join(SNIPER_ROOT, 'test', 'qemu-plugin-probe')
+# The AArch64 guest's CPU: every extension QEMU has, with SVE registers of the
+# 16 bytes the cortex configurations model (perf_model/core/arm/sve_bytes), as
+# record-trace gives it.  QEMU's own default is 64; the simulator refuses a
+# recording whose width differs from the configuration's.
+A64_CPU = 'max,sve-default-vector-length=16'
 
 # The loop in boot.S, counted over [0x7c00, 0x7c1f): a 7-instruction prologue
 # then 1000 iterations of (1 + 3*1000 + 2).  The window deliberately stops
@@ -531,7 +536,7 @@ def case_aarch64_user_simulate(p, g, workdir):
         if rc != 0:
             return None, 'could not build %s.c (%s)' % (name, exit_text(rc))
         prefix = os.path.join(workdir, name)
-        rc, out = run([qemu, '-cpu', 'max', '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest],
+        rc, out = run([qemu, '-cpu', A64_CPU, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest],
                       300, cwd=workdir)
         if rc != 0:
             return False, '%s: qemu-aarch64 exited %s' % (name, rc)
@@ -1841,7 +1846,7 @@ def case_aarch64_smc_rewrite(p, g, workdir):
     seen = {}
     for smc in ('1', '0'):
         prefix = os.path.join(workdir, 'asmc%s' % smc)
-        rc, out = run([qemu, '-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc), '--', guest],
+        rc, out = run([qemu, '-cpu', A64_CPU, '-plugin', '%s,output=%s,smc=%s' % (p['frontend'], prefix, smc), '--', guest],
                       300, cwd=workdir)
         if rc != 0:
             return False, 'qemu-aarch64 exited %s (smc=%s)' % (rc, smc)
@@ -1880,12 +1885,12 @@ def case_aarch64_sve_simulate(p, g, workdir):
         if rc != 0:
             return None, 'could not build %s (%s)' % (name, exit_text(rc))
         builds[name] = out
-    rc, plain = run([qemu, '-cpu', 'max', builds['a64-nosve']], 120)
+    rc, plain = run([qemu, '-cpu', A64_CPU, builds['a64-nosve']], 120)
     answer = re.search(r'sve sum=\d+ f=\d+', plain)
     if rc != 0 or not answer:
         return False, 'the build without SVE failed (%s)' % exit_text(rc)
     prefix = os.path.join(workdir, 'sve')
-    rc, out = run([qemu, '-cpu', 'max', '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', builds['a64-sve']],
+    rc, out = run([qemu, '-cpu', A64_CPU, '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', builds['a64-sve']],
                   300, cwd=workdir)
     if rc != 0 or answer.group(0) not in out:
         return False, 'the SVE build gave a different answer, or failed (%s)' % exit_text(rc)
@@ -1901,7 +1906,19 @@ def case_aarch64_sve_simulate(p, g, workdir):
         if not written or abs(n - written) > written // 1000:
             return False, '%s simulated %d instructions of the %d traced' % (cfg, n, written)
         summary.append(cfg)
-    return True, '%s; %d instructions simulated on %s' % (answer.group(0), written, ' and '.join(summary))
+    # Recorded at QEMU's default SVE width, 64 bytes, the trace is refused by
+    # a configuration that models 16, with the reason; it used to be timed at
+    # the wrong width without a word
+    prefix64 = os.path.join(workdir, 'sve64')
+    rc, out = run([qemu, '-cpu', 'max', '-plugin', '%s,output=%s' % (p['frontend'], prefix64), '--', builds['a64-sve']],
+                  300, cwd=workdir)
+    if rc != 0:
+        return False, 'the SVE build failed at QEMU\'s default vector length (%s)' % exit_text(rc)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'cortex-a72', '-d', os.path.join(workdir, 'sve64-a72'),
+                   '--traces=' + prefix64 + '.app0.th0.sift'], 600, cwd=SNIPER_ROOT)
+    if rc == 0 or "The guest's vector registers are 64 bytes" not in out:
+        return False, 'a 64-byte SVE recording on a 16-byte configuration was not refused (%s)' % exit_text(rc)
+    return True, '%s; %d instructions simulated on %s; a 64-byte recording refused' % (answer.group(0), written, ' and '.join(summary))
 
 
 def pacsim_case(arch, workdir):
