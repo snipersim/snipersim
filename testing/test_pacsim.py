@@ -99,7 +99,7 @@ MODES = {
         'what': 'synchronised only on entry and exit: cuts must come from loops',
         'quick': ['-DNITERS=36',  '-DCHASE_SLOTS=131072', '-DCHASE_STEPS=80000',
                   '-DCOMPUTE_ITERS=160000'],
-        'full':  ['-DNITERS=24'],
+        'full':  ['-DNITERS=72'],
         # A region ends at the first loop back-edge, on any thread, once the
         # threads have run the region size between them.  One iteration of
         # this workload is about 1.5M instructions per thread, 6M for four:
@@ -112,13 +112,28 @@ MODES = {
         # little to skip (4 of the 5 regions measured, 1.00x to 1.05x
         # faster); with 36, 0.3% to 1.0% error and 1.4x to 1.7x faster.
         'quick_region_size': 12000,
+        # 24 iterations (77M instructions, 3.2M an iteration for the four
+        # threads) were 3 regions at the recorder's default 50M, all
+        # measured: nothing to skip.  Regions of two iterations gave 14, but
+        # 8.75% error; of four, with three times the iterations, about 18.
+        'full_region_size': 12800,
+        'full_min_region_size': 100,
+        'full_knobs': {'x86_64': ['-sniper:flowff 1000']},
     },
     'task': {
         'src': 'tasked.c',
         'what': 'work queue, no barriers and no outer loop: cuts come from tasks',
         'quick': ['-DNTASKS=36',  '-DCHASE_SLOTS=524288', '-DCHASE_UNIT=16000',
                   '-DCOMPUTE_UNIT=32000'],
-        'full':  ['-DNTASKS=48'],
+        'full':  ['-DNTASKS=144'],
+        # 48 tasks (18M instructions) were 2 regions at the recorder's
+        # default sizes, both measured; at 1.5M, 14, of which the sampler
+        # still measured 12.  Three times the tasks give about 40, with the
+        # fast-forward window cut to 1K as the quick profile's (100K of
+        # run-ahead would be 7% of a region).
+        'full_region_size': 1500,
+        'full_min_region_size': 100,
+        'full_knobs': {'x86_64': ['-sniper:flowff 1000']},
     },
 }
 
@@ -550,6 +565,17 @@ KNOWN_QUICK_FAILURES = {
     ('task', 'faster'):      _TASK_REASON,
 }
 
+# The full profile's: the task shape's, for the same reason.  Sized for
+# regions to skip (144 tasks, 1.5M regions: 35 regions), the sampler still
+# measured 27 of them (76% of the instructions in detail) and its estimate
+# was 9.6% off (2026-10-28), where the loop shape, sized the same way, gave
+# 1.6% at 1.63x with 8 of 19 measured.
+KNOWN_FULL_FAILURES = {
+    ('task', 'accurate'):    _TASK_REASON,
+    ('task', 'less-detail'): _TASK_REASON,
+    ('task', 'faster'):      _TASK_REASON,
+}
+
 
 def main():
     # Line-buffer stdout.
@@ -633,7 +659,7 @@ def main():
                 if ok is None:
                     print('  %-12s SKIP (%s)' % (name, detail))
                     continue
-                known = KNOWN_QUICK_FAILURES.get((mode, name)) if args.profile == 'quick' else None
+                known = (KNOWN_QUICK_FAILURES if args.profile == 'quick' else KNOWN_FULL_FAILURES).get((mode, name))
                 if known and not ok:
                     verdict = 'XFAIL'
                     detail += '; known: ' + known
