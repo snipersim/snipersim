@@ -88,8 +88,31 @@ timer at its rate (AArch64's CNTFRQ as QEMU reports it; RISC-V's timebase,
 which user mode does not define, from the `timebase=` option, 10 MHz by
 default, QEMU's virt board's), cycles in the core's clock (the TSC in the
 global clock, as the SIFT recorder's rdtsc), instret the core's instruction
-count.  It holds after the ROI too, for as long as the channel is open.  A
-trace written to a file has no one to answer, and reads the host's.  Three options the
+count.  It holds after the ROI too, for as long as the channel is open.
+
+Where the simulator does not answer -- a trace written to a file, a read
+outside a live channel -- the guest still never reads the host's clock,
+whose time has nothing to do with the program's.  Every front end (this
+plugin, the SIFT recorder under SDE) then answers with the same one-IPC
+model, from the same time zero as the simulator's:
+
+* time zero: 1337000000 seconds since the epoch, Sniper's `osemu/time_start`
+  default (`Sift::TIME_START_DEFAULT` in `sift/sift_format.h`; the plugin's
+  `time_start=` option overrides it);
+* **assumed: one instruction per cycle on a 1 GHz core**
+  (`Sift::ONE_IPC_HZ`): a thread's time is its instruction count in
+  nanoseconds, its cycle counter and the TSC the instruction count, its
+  instret the instruction count;
+* the real-time and monotonic clocks are time zero plus that time, the
+  CPU-time clocks that time alone; the timer counters count it at their
+  rate.
+
+So a recording reads the same clock every time it is made, and the same
+under every front end.  A thread that sleeps runs no instructions, and its
+clock does not move while it sleeps; a live run, where the simulator charges
+the sleep, is what times sleeps.  Both answer the libc routines and the raw
+clock_gettime and gettimeofday system calls (the plugin through the syscall
+filter, the recorder by skipping the call), and the counter instructions.  Three options the
 other front ends take are accepted and have no effect here, because run-sniper
 passes them on every live run: `-e` (system calls are emulated by QEMU itself;
 the simulator only times them), `--follow` (QEMU user mode runs one process)

@@ -9,7 +9,10 @@
  * charges to the simulated clock while the host barely sleeps, and prints
  * the differences:
  *
- *   counter_probe: ns=N time=T freq=F cycles=C instret=I loop_instret=L
+ *   counter_probe: start=S ns=N time=T freq=F cycles=C instret=I loop_instret=L
+ *
+ * start is CLOCK_REALTIME's first reading, in seconds: the guest's time zero
+ * (Sniper's osemu/time_start, 1337000000 by default) plus what it ran.
  *
  * ns is clock_gettime(CLOCK_MONOTONIC)'s difference; time the timer's
  * (rdtime, CNTVCT; 0 on x86) at the rate freq (CNTFRQ; 0 where the guest is
@@ -54,6 +57,13 @@ static long sys3(long n, long a, long b, long c)
    __asm__ volatile("ecall" : "+r"(a0) : "r"(a1), "r"(a2), "r"(a7) : "memory");
    return a0;
 #endif
+}
+
+static uint64_t realtime_s(void)
+{
+   struct { long sec, nsec; } ts;
+   sys3(SYS_clock_gettime, 0 /* CLOCK_REALTIME */, (long)&ts, 0);
+   return (uint64_t)ts.sec;
 }
 
 static uint64_t now_ns(void)
@@ -111,6 +121,7 @@ static void outnum(uint64_t v) { char b[24]; int i = 23; b[i] = 0; do { b[--i] =
 void _start(void)
 {
    struct { long sec, nsec; } req = { 0, 10 * 1000 * 1000 }, rem = { 0, 0 };
+   const uint64_t start = realtime_s();
    const uint64_t n0 = now_ns(), t0 = rd_time(), c0 = rd_cycles(), i0 = rd_instret();
    for (int i = 0; i < 3; i++)
       sys3(SYS_nanosleep, (long)&req, (long)&rem, 0);
@@ -120,7 +131,8 @@ void _start(void)
    for (int i = 0; i < 100000; i++)
       x += i;
    const uint64_t l1 = rd_instret();
-   out("counter_probe: ns="); outnum(n1 - n0);
+   out("counter_probe: start="); outnum(start);
+   out(" ns="); outnum(n1 - n0);
    out(" time="); outnum(t1 - t0);
    out(" freq="); outnum(rd_freq());
    out(" cycles="); outnum(c1 - c0);

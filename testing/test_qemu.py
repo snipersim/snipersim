@@ -2494,6 +2494,10 @@ def qemu_can_wait(qemu):
 
 
 COUNTER_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'counter_probe.c')
+TIME_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'time_probe.c')
+# Sniper's osemu/time_start default, which the front ends share
+# (Sift::TIME_START_DEFAULT, sift/sift_format.h)
+TIME_START_DEFAULT = 1337000000
 
 
 def qemu_has_counters(qemu):
@@ -2528,10 +2532,12 @@ def counters_case(workdir, arch, cc_cmd, config):
     outdir = os.path.join(workdir, 'counters-' + arch)
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', config, '-d', outdir,
                    '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
-    m = re.search(r'counter_probe: ns=(\d+) time=(\d+) freq=(\d+) cycles=(\d+) instret=(\d+) loop_instret=(\d+)', out)
+    m = re.search(r'counter_probe: start=(\d+) ns=(\d+) time=(\d+) freq=(\d+) cycles=(\d+) instret=(\d+) loop_instret=(\d+)', out)
     if rc != 0 or not m:
         return False, 'the probe did not run (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
-    ns, time_, freq, cycles, instret, loop = (int(x) for x in m.groups())
+    start, ns, time_, freq, cycles, instret, loop = (int(x) for x in m.groups())
+    if start != TIME_START_DEFAULT:
+        return False, 'CLOCK_REALTIME started at %d s, not at the simulator\'s time zero %d' % (start, TIME_START_DEFAULT)
     if not 30000000 <= ns <= 31000000:
         return False, 'clock_gettime saw %d ns over 30 ms of simulated sleep' % ns
     try:
@@ -2560,6 +2566,105 @@ def counters_case(workdir, arch, cc_cmd, config):
             return False, 'instret: %d over a 100,000-iteration loop, %d over the sleeps' % (loop, instret)
         seen.append('instret %d over the loop' % loop)
     return True, '30 ms of simulated sleep (%d ns): %s' % (ns, ', '.join(seen))
+
+
+def case_time_start_default(p, g, workdir):
+    """The guest's time recorded to a file, with no simulator to answer it:
+    every front end gives the one-IPC model (one instruction per cycle at an
+    assumed 1 GHz, from the thread's start) from Sniper's time zero
+    (osemu/time_start's default, 1337000000 s), never the host's clock --
+    the same for the SIFT recorder (SDE) and the QEMU plugin, and the same
+    every time.  The libc probe (testing/apps/time_probe.c: clock_gettime,
+    gettimeofday, the TSC around a 100,000-iteration loop) under SDE and
+    QEMU x86-64; the counter probe (raw system calls, the timer, cycle and
+    instret counters) under QEMU on RISC-V and AArch64, where the plugin
+    answers the system calls itself."""
+    rt = os.path.join(SNIPER_ROOT, 'record-trace')
+    seen = []
+    # x86-64 through libc, under the SIFT recorder and under QEMU
+    guest = os.path.join(workdir, 'time_probe')
+    rc, out = run(['gcc', '-O1', '-static', '-o', guest, TIME_PROBE], 120)
+    if rc != 0:
+        return None, 'could not build time_probe.c statically (%s)' % exit_text(rc)
+    rx = r'time_probe: realtime=(\d+)\.(\d+) mono=(\d+)\.(\d+) tod=(\d+)\.(\d+) dreal=(-?\d+) dtsc=(\d+)'
+    fes = [('sde', [])]
+    if os.path.isfile(user_qemu('x86_64')) and qemu_has_counters(user_qemu('x86_64')):
+        fes.append(('qemu', ['--frontend=qemu']))
+    readings = {}
+    for fe, opt in fes:
+        lines = []
+        for k in (1, 2):
+            rc, out = run([rt] + opt + ['-o', os.path.join(workdir, 'tp-%s-%d' % (fe, k)), '--', guest], 300, cwd=workdir)
+            m = re.search(rx, out)
+            if rc != 0 or not m:
+                return False, '%s: the libc probe did not run (%s): %s' % (fe, exit_text(rc), out.strip()[-300:])
+            lines.append(m.group(0))
+        # The model is deterministic given the instructions run, but a program's
+        # start-up runs a few more or fewer from one run to the next (its
+        # address layout, its environment): the first readings agree to a
+        # microsecond, the intervals exactly
+        v, w = ([int(x) for x in re.search(rx, l).groups()] for l in lines)
+        first_v, first_w = v[0] * 10**9 + v[1], w[0] * 10**9 + w[1]
+        if abs(first_v - first_w) > 1000 or v[6:] != w[6:]:
+            return False, '%s: two recordings read different times: %s / %s' % (fe, lines[0], lines[1])
+        if v[0] != TIME_START_DEFAULT or v[2] != TIME_START_DEFAULT or v[4] != TIME_START_DEFAULT:
+            return False, '%s: the clocks start at %d, %d and %d s, not at the time zero %d' % (fe, v[0], v[2], v[4], TIME_START_DEFAULT)
+        dreal, dtsc = v[6], v[7]
+        if not 100000 <= dreal <= 2000000 or not abs(dtsc - dreal) <= 0.05 * dreal:
+            return False, '%s: %d ns and %d TSC cycles over a 100,000-iteration loop: not one instruction a nanosecond and a cycle' % (fe, dreal, dtsc)
+        readings[fe] = v
+        seen.append('%s %d.%09d s, %d ns and %d cycles over the loop' % (fe, v[0], v[1], dreal, dtsc))
+    # x86-64 raw system calls and rdtsc under the SIFT recorder; RISC-V and
+    # AArch64 through the counter probe under QEMU
+    g_ = os.path.join(workdir, 'counter_probe_off_sde')
+    rc, out = run(['gcc', '-O1', '-ffreestanding', '-nostdlib', '-static', '-Wl,-e,_start', '-o', g_, COUNTER_PROBE], 120)
+    if rc != 0:
+        return None, 'could not build counter_probe.c for x86-64 (%s)' % exit_text(rc)
+    lines = []
+    for k in (1, 2):
+        rc, out = run([rt, '-o', os.path.join(workdir, 'cp-sde-%d' % k), '--', g_], 300, cwd=workdir)
+        m = re.search(r'counter_probe: start=(\d+) ns=(\d+) time=(\d+) freq=(\d+) cycles=(\d+) instret=(\d+) loop_instret=(\d+)', out)
+        if not m:
+            return False, 'sde: the counter probe did not run (%s): %s' % (exit_text(rc), out.strip()[-300:])
+        lines.append(m.group(0))
+    if lines[0].split(' ns=')[1] != lines[1].split(' ns=')[1] or lines[0].split(' ns=')[0] != lines[1].split(' ns=')[0]:
+        return False, 'sde: two recordings read different counters: %s / %s' % (lines[0], lines[1])
+    start, ns, cycles = (int(x) for x in re.search(r'start=(\d+) ns=(\d+) time=\d+ freq=\d+ cycles=(\d+)', lines[0]).groups())
+    if start != TIME_START_DEFAULT or not 0 < ns < 10000 or abs(cycles - ns) > 0.05 * ns + 2:
+        return False, 'sde, raw system calls: start %d s, %d ns and %d TSC cycles over the sleeps' % (start, ns, cycles)
+    seen.append('sde raw calls from %d s, %d ns and %d cycles over the sleeps' % (start, ns, cycles))
+    for arch, cc_cmd in (('riscv64', [os.environ.get('SNIPER_RISCV_CC', ''), '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-fuse-ld=lld']),
+                         ('aarch64', [os.environ.get('SNIPER_AARCH64_CC') or os.environ.get('SNIPER_RISCV_CC', ''), '--target=aarch64-linux-gnu', '-fuse-ld=lld'])):
+        qemu = user_qemu(arch)
+        if not cc_cmd[0] or not os.path.isfile(cc_cmd[0]) or not os.path.isfile(qemu) or not qemu_has_counters(qemu):
+            seen.append('%s skipped (no compiler or no QEMU with the counter callback)' % arch)
+            continue
+        g_ = os.path.join(workdir, 'counter_probe_off_' + arch)
+        rc, out = run(cc_cmd + ['-O1', '-ffreestanding', '-nostdlib', '-static', '-Wl,-e,_start', '-o', g_, COUNTER_PROBE], 120)
+        if rc != 0:
+            return None, 'could not build counter_probe.c for %s (%s)' % (arch, exit_text(rc))
+        lines = []
+        for k in (1, 2):
+            rc, out = run([rt, '--frontend=qemu', '-o', os.path.join(workdir, 'cp-%s-%d' % (arch, k)), '--', g_], 300, cwd=workdir)
+            m = re.search(r'counter_probe: start=(\d+) ns=(\d+) time=(\d+) freq=(\d+) cycles=(\d+) instret=(\d+) loop_instret=(\d+)', out)
+            if not m:
+                return False, '%s: the counter probe did not run (%s): %s' % (arch, exit_text(rc), out.strip()[-300:])
+            lines.append(m.group(0))
+        if lines[0] != lines[1]:   # intervals and the start second: exact
+            return False, '%s: two recordings read different counters: %s / %s' % (arch, lines[0], lines[1])
+        start, ns, time_, freq, cycles, instret, loop = (int(x) for x in re.search(r'start=(\d+) ns=(\d+) time=(\d+) freq=(\d+) cycles=(\d+) instret=(\d+) loop_instret=(\d+)', lines[0]).groups())
+        if start != TIME_START_DEFAULT:
+            return False, '%s: CLOCK_REALTIME started at %d s, not at the time zero %d' % (arch, start, TIME_START_DEFAULT)
+        # the sleeps run no instructions: the one-IPC clock moves by the few between the reads
+        if not 0 < ns < 10000:
+            return False, '%s: %d ns over the sleeps; the one-IPC clock moves by the instructions run' % (arch, ns)
+        rate = freq or 10000000
+        if abs(time_ - ns * rate / 1e9) > 0.05 * ns * rate / 1e9 + 2:
+            return False, '%s: the timer moved %d at %d Hz for %d ns' % (arch, time_, rate, ns)
+        if arch == 'riscv64' and (abs(cycles - instret) > 2 or not 100000 * 2 <= loop <= 100000 * 12):
+            return False, '%s: cycles %d, instret %d over the sleeps, %d over the loop' % (arch, cycles, instret, loop)
+        seen.append('%s from %d s, %d ns and timer %d over the sleeps' % (arch, start, ns, time_))
+    return True, '; '.join(seen)
 
 
 def case_user_counters(p, g, workdir):
@@ -2746,6 +2851,7 @@ CASES = {
     'user-mt-live':     case_user_mt_live,
     'user-roi-wait':    case_user_roi_wait,
     'user-counters':    case_user_counters,
+    'time-start-default': case_time_start_default,
     'riscv-user-counters': case_riscv_user_counters,
     'aarch64-user-counters': case_aarch64_user_counters,
     'user-fork-refused': case_user_fork_refused,
