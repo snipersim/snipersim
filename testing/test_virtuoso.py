@@ -1699,9 +1699,12 @@ def child_env():
     # directory's real path.
     env = {'PATH': path, 'HOME': root, 'SNIPER_ROOT': root, 'PWD': root}
     # A build chosen by hand goes through to run-sniper (which also puts it in
-    # the guest's environment); the tree's default needs nothing.
-    if os.environ.get('SNIPER_BUILD_DIR'):
-        env['SNIPER_BUILD_DIR'] = os.environ['SNIPER_BUILD_DIR']
+    # the guest's environment); the tree's default needs nothing, and naming
+    # it changed the guest's layout and its counts (71 faults where the trace
+    # under the default gives 66) for the same build.
+    chosen = os.environ.get('SNIPER_BUILD_DIR')
+    if chosen and os.path.realpath(chosen) != os.path.realpath(os.path.join(SNIPER_ROOT, 'build', 'default')):
+        env['SNIPER_BUILD_DIR'] = chosen
     return env
 
 
