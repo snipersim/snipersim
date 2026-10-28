@@ -805,6 +805,20 @@ def check_nonzero(outdir, names, zeros=(), registered=()):
 
 
 
+def load_factor():
+    """How much slower than on an idle host a case runs now: the run queue
+    per CPU, when there is more than one runnable thread for each.  The
+    limits below are for a healthy run on a quiet host; under another
+    account's jobs (load 80 to 150 on 80 CPUs) fourteen detailed cases ran
+    out of their two minutes, the same on every build, and passed with
+    longer limits.  A deadlock still ends at a bounded multiple."""
+    try:
+        per_cpu = os.getloadavg()[0] / (os.cpu_count() or 1)
+    except OSError:
+        return 1.0
+    return min(max(per_cpu, 1.0), 8.0)
+
+
 def run_in_own_group(cmd, timeout, **kwargs):
     """subprocess.run(), but kill the whole process group on timeout.
 
@@ -895,6 +909,8 @@ def main():
     # shorter limit matters because the configs that do deadlock spend the whole
     # timeout proving it.
     ap.add_argument('--timeout-detailed', type=int, default=120)
+    ap.add_argument('--no-load-scaling', action='store_true',
+                    help='do not lengthen the limits by the host\'s run queue per CPU (see load_factor)')
     ap.add_argument('--keep', action='store_true',
                     help='keep the work directory (printed at the end) instead of removing it')
     add_failfast(ap)
@@ -985,6 +1001,8 @@ def main():
                     limit = args.timeout
                     if mode == 'detailed':
                         limit = c['timeout_detailed'] or args.timeout_detailed
+                    scale = load_factor() if not args.no_load_scaling else 1.0
+                    limit = int(limit * scale)
                     core_note = (c['fail_cores'].get(ncores)
                                  if mode == 'detailed' else None)
                     flaky_note = (c['flaky_cores'].get(ncores)
@@ -1010,6 +1028,8 @@ def main():
                                             c['counters'], c['app'], c['zeros'],
                                             c['registered'])
                     took = time.time() - started
+                    if scale > 1.0 and not ok and 'timed out' in detail:
+                        detail += ' (the limit scaled %.1fx for the host\'s load)' % scale
                     if flaky_note and want_ok:
                         log.record('%s [%s]' % (full, mode), took, 'PASS')
                         print('PASS (known intermittent, %s this time: %s) [%ds]'
