@@ -366,6 +366,35 @@ def aso_feature(out, outdir):
 # native run does too; so each also requires that instructions were simulated.
 # A run whose recorder failed before streaming (test/sniper-in-sniper until
 # 9.0) printed the same lines and passed.
+def page_colour_check(out, rc, outdir):
+    """Two copies of a chase that fits the private L2 miss no more than one:
+    each application's frames cover the L2's colours evenly (D10).  With the
+    old fault-order allocation two runs in four missed 17 to 37 times as often."""
+    def misses(d):
+        try:
+            for line in open(os.path.join(outdir, d, 'simulation', 'sim.stats')):
+                if line.startswith('L2.load-misses-data = '):
+                    return [int(v) for v in line.split('=', 1)[1].split(',')]
+        except OSError:
+            pass
+        return None
+    if rc != 0:
+        return False, 'make run exited %s' % rc
+    one = misses('one')
+    if not one:
+        return False, 'no statistics for the chase alone'
+    got = []
+    for i in (1, 2, 3):
+        two = misses('two-%d' % i)
+        if not two or len(two) != 2:
+            return False, 'no statistics for two copies, run %d' % i
+        if max(two) > one[0] * 1.05:
+            return False, 'two copies missed %s times in the L2 against %d alone (run %d)' % (two, one[0], i)
+        got.append(max(two))
+    return True, 'L2 misses per core: %d alone, %s as two applications' % (one[0], ', '.join(map(str, got)))
+page_colour_check.needs_outdir = True
+
+
 def prints(needle, note):
     def check(out, rc, needle=needle, note=note):
         return (True, note) if needle in out else (False, 'missing %r' % needle)
@@ -445,6 +474,7 @@ CASES = {
     'pa':              (pa_check, 'pa'),
     'pa-refused':      (pa_refused_check, 'no-pa'),
     'qemu-smc-rewrite': (smc_rewrite_check, 'qemu'),
+    'page-colour':     (page_colour_check, None),
     'fork':            (prints('Hello world', 'forked child ran'), None),
     'spinloop':        (prints('done', 'threads finished'), None),
     'true':            (exits_zero, None),

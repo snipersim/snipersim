@@ -95,6 +95,8 @@ test/*/viz/
 test/*/power.*
 test/*/topo.*
 test/pinplay/fft-pinball*
+test/page-colour/chase
+test/page-colour/chase.sift
 test/pinplay/pinball_replay.*
 test/pinplay/fft.c
 test/dr-frontend/fft.c

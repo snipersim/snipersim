@@ -7,6 +7,8 @@
 #include "debug_config.h"
 #include "memory_management/physical_memory_allocators/physical_memory_allocator.h"
 #include <map>
+#include <deque>
+#include <unordered_map>
 #include <vector>
 #include <tuple>
 #include <utility>
@@ -82,6 +84,10 @@ public:
         {
             return this->allocateInstruction(bytes);
         }
+        else if (bytes == 4096)
+        {
+            return {take_from_run(address, core_id), 12};
+        }
         else
         {
             UInt64 phys = buddy_allocator->allocate(bytes, address, core_id);		// Simply allocate the memory block using the buddy allocator
@@ -119,6 +125,42 @@ public:
 
 private:
     BuddyType* buddy_allocator {nullptr};
+
+    /* Per-core runs of frames, as Linux's per-CPU page lists (the pcp lists,
+       refilled from the buddy allocator in batches of about 63 pages).
+
+       The buddy allocator hands out adjacent frames one after another, so
+       applications faulting in turn on two cores shared out the frames in
+       whatever order their faults happened to arrive, and each could end up
+       with several pages of one cache colour and none of another.  Two copies
+       of a 192 KiB pointer chase, which fits gainestown's private 256 KiB L2,
+       took 3,074 L2 misses per core in some runs and 53,000 or 113,000 in
+       others -- an artifact of the allocator, varying from run to run, not of
+       the caches.  (The Virtuoso paper, ASPLOS 2025, describes MimicOS's
+       allocator as a buddy allocator and says nothing of frame order across
+       applications.)  Each core now takes its 4 KiB pages from a run of 64
+       contiguous frames of its own, refilled from the buddy allocator, so an
+       application's pages cover the colours evenly whatever the other cores
+       do; every run then gives 3,074.  A fragmented memory with no 64-page
+       block left falls back to single pages. */
+    static const unsigned RUN_ORDER = 6;          // 64 pages, 256 KiB
+    std::unordered_map<UInt64, std::deque<UInt64>> m_runs;
+
+    UInt64 take_from_run(UInt64 address, UInt64 core_id)
+    {
+        std::deque<UInt64> &run = m_runs[core_id];
+        if (run.empty())
+        {
+            const UInt64 base = buddy_allocator->allocate(4096ULL << RUN_ORDER, address, core_id);
+            if (base == static_cast<UInt64>(-1))
+                return buddy_allocator->allocate(4096, address, core_id);
+            for (UInt64 i = 0; i < (1ULL << RUN_ORDER); i++)
+                run.push_back(base + i);
+        }
+        const UInt64 frame = run.front();
+        run.pop_front();
+        return frame;
+    }
 
     /* original helper for page‑table pages */
     UInt64 handle_page_table_allocations(UInt64 bytes)
