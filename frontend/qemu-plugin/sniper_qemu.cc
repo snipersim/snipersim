@@ -116,6 +116,15 @@ bool        opt_response = false;  /* user mode: blocking flow control */
 /* The rate of RISC-V's time CSR, which Linux learns from the device tree
  * and QEMU's user mode does not define: QEMU's virt board's 10 MHz */
 uint64_t    opt_timebase = 10000000;
+/* The guest's time zero, seconds since the epoch: Sniper's osemu/time_start
+ * default, so that a clock the plugin answers itself (no simulator to ask)
+ * starts where the simulator's does (sift/sift_format.h) */
+uint64_t    opt_time_start = Sift::TIME_START_DEFAULT;
+/* Instructions each vCPU has executed, in every mode, counted inline at each
+ * block's entry: the one-IPC model's clock where the simulator does not
+ * answer a time read (Sift::one_ipc_ns) */
+struct qemu_plugin_scoreboard *g_icount_sb = nullptr;
+qemu_plugin_u64 g_icount;
 /* roi: trace only between SimRoiStart() and SimRoiEnd(), as the SDE and
  * DynamoRIO front ends do with -roi.  The magic instructions themselves are
  * always sent, so the simulator sees the markers either way. */
@@ -379,6 +388,7 @@ struct InsnInfo
    bool     claimed = false;    /* claimed at translation: no exception follows, so no set_pc */
    bool     magic = false;      /* sim_api.h's magic instruction (is_magic) */
    bool     counter = false;    /* reads a clock or counter the simulator answers (is_counter_read) */
+   uint32_t tb_left = 0;        /* instructions from this one to its block's end: the block's count is added at its entry */
    bool     is_jump = false;    /* an unconditional direct jump (x86 jmp rel, RISC-V jal x0 / c.j, AArch64 b): a loop's closing jump when backward, not a SIFT branch */
 };
 
@@ -465,6 +475,7 @@ struct VCPU
    /* The simulator's clocks for the counter read in flight (counter_exec),
     * taken by the counter callback QEMU calls within the instruction */
    bool          ctr_valid  = false;
+   uint64_t      icount_base = 0;   /* g_icount at the thread's start: its instructions are counted from there */
    uint64_t      ctr_time_ns = 0, ctr_core_cycles = 0, ctr_global_cycles = 0, ctr_instructions = 0;
 };
 
@@ -1416,32 +1427,55 @@ void backedge_exec(unsigned int cpu_index, void *udata)
 
 /* Outside the run loop, on the vCPU's own host thread: what the callback
  * could not wait for.  Registers and memory are accessible here. */
+/* The instructions a vCPU's thread has executed before an instruction
+ * (tb_left: the block's count is added at its entry), or, without one, up
+ * to its current block's end */
+uint64_t thread_instructions(VCPU *v, unsigned int vcpu_index, uint32_t tb_left)
+{
+   if (!g_icount_sb)
+      return 0;
+   const uint64_t now = qemu_plugin_u64_get(g_icount, vcpu_index) - tb_left;
+   return now > v->icount_base ? now - v->icount_base : 0;
+}
+
+/* The one-IPC model's counters, where the simulator does not answer: one
+ * instruction per cycle at Sift::ONE_IPC_HZ (1 GHz, assumed) */
+void counter_one_ipc(VCPU *v, uint64_t instructions)
+{
+   v->ctr_time_ns = Sift::one_ipc_ns(instructions);
+   v->ctr_core_cycles = v->ctr_global_cycles = v->ctr_instructions = instructions;
+   v->ctr_valid = true;
+}
+
 /* A counter read's question to Sniper: the instruction itself goes out first
  * (as for a magic instruction), so the simulator answers at the time it has
  * reached having run it, and the answer waits for QEMU's counter callback
  * within the instruction.  In the callback, or outside the run loop. */
-void counter_body(VCPU *v, const InsnInfo *ii)
+void counter_body(VCPU *v, const InsnInfo *ii, unsigned int cpu_index)
 {
-   if (!v->writer || v->closed)
-      return;
-   flush_pending(v, ii->vaddr + ii->size);
-   if (g_mode.load() != MODE_DETAILED)
-      ff_report(v);
-   Sift::EmuRequest req;
-   Sift::EmuReply res;
-   if (v->writer->Emulate(Sift::EmuTypeCounters, req, res))
+   if (v->writer && !v->closed)
    {
-      v->ctr_time_ns = res.counters.time_ns;
-      v->ctr_core_cycles = res.counters.core_cycles;
-      v->ctr_global_cycles = res.counters.global_cycles;
-      v->ctr_instructions = res.counters.instructions;
-      v->ctr_valid = true;
+      flush_pending(v, ii->vaddr + ii->size);
+      if (g_mode.load() != MODE_DETAILED)
+         ff_report(v);
+      Sift::EmuRequest req;
+      Sift::EmuReply res;
+      if (v->writer->Emulate(Sift::EmuTypeCounters, req, res))
+      {
+         v->ctr_time_ns = res.counters.time_ns;
+         v->ctr_core_cycles = res.counters.core_cycles;
+         v->ctr_global_cycles = res.counters.global_cycles;
+         v->ctr_instructions = res.counters.instructions;
+         v->ctr_valid = true;
+         return;
+      }
    }
+   counter_one_ipc(v, thread_instructions(v, cpu_index, ii->tb_left));
 }
 
-/* Before a counter read executes: ask Sniper, on a live channel, for as long
- * as it is open (as for futex calls: the guest's time stays the simulated
- * time after the ROI too). */
+/* Before a counter read executes: on a live channel, for as long as it is
+ * open (as for futex calls: the guest's time stays the simulated time after
+ * the ROI too), the simulator's answer; otherwise the one-IPC model's. */
 void counter_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
@@ -1450,26 +1484,31 @@ void counter_exec(unsigned int cpu_index, void *udata)
       return;
    v->ctr_valid = false;
    if (!v->writer || !opt_response || v->closed)
+   {
+      counter_one_ipc(v, thread_instructions(v, cpu_index, ii->tb_left));
       return;
+   }
    if (g_wait)
    {
       v->wait_ii = ii;
       SNP_DEFER(v, ii->vaddr, W_COUNTER, false);
    }
-   counter_body(v, ii);
+   counter_body(v, ii, cpu_index);
 }
 
-/* QEMU's counter read, within the instruction: Sniper's clocks, in the
- * counter's units -- a timer at its rate (AArch64's CNTFRQ as QEMU gives it,
- * RISC-V's timebase= option), cycles in the core's clock (the TSC in the
- * global clock, as the Pin recorder's rdtsc), instructions the core ran.
- * Without an answer (no live channel, a read the translation did not
- * recognise) the host's value, as before. */
+/* QEMU's counter read, within the instruction: the answer counter_exec got
+ * (the simulator's clocks, or the one-IPC model's), in the counter's units
+ * -- a timer at its rate (AArch64's CNTFRQ as QEMU gives it, RISC-V's
+ * timebase= option), cycles in the core's clock (the TSC in the global
+ * clock, as the SIFT recorder's rdtsc), instructions the core ran.  A read
+ * the translation did not recognise gets the one-IPC model up to its
+ * block's end.  Never the host's clock. */
 uint64_t counter_read(unsigned int vcpu_index, int counter, uint64_t freq_hz, uint64_t host_value, void *)
 {
    VCPU *v = vcpu_get(vcpu_index);
    if (!v->ctr_valid)
-      return host_value;
+      counter_one_ipc(v, thread_instructions(v, vcpu_index, 0));
+   v->ctr_valid = false;
    switch (counter)
    {
       case SNP_COUNTER_TIME:
@@ -1482,7 +1521,7 @@ uint64_t counter_read(unsigned int vcpu_index, int counter, uint64_t freq_hz, ui
       case SNP_COUNTER_INSTRET:
          return v->ctr_instructions;
       default:
-         return host_value;
+         return host_value;   /* a counter this plugin does not know */
    }
 }
 
@@ -1504,7 +1543,7 @@ void wait_body(unsigned int cpu_index, void *udata)
          magic_body(v, v->wait_ii, v->wait_a[0], v->wait_a[1], v->wait_a[2], cpu_index);
          break;
       case W_COUNTER:
-         counter_body(v, v->wait_ii);
+         counter_body(v, v->wait_ii, cpu_index);
          break;
       case W_SYNC:
          v->hold_pending = true;    /* the instruction runs after this, on resume */
@@ -1890,7 +1929,8 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
     * time.  All of the program's futex calls stay in the one model, waits
     * as well as wakes: a wake sent to the simulator does not run natively,
     * so a thread waiting natively would miss it. */
-   const bool futex_after_roi = sys == 202 && g_mode.load() == MODE_OFF && futex_channel(v);
+   /* and so do the time calls: the guest's clock stays the simulator's */
+   const bool futex_after_roi = (sys == 202 || sys == 228 || sys == 96) && g_mode.load() == MODE_OFF && futex_channel(v);
    if (!channel_open(v) && !futex_after_roi)
       return false;
 
@@ -2032,13 +2072,45 @@ static bool syscall_entry(unsigned int vcpu_index, int64_t num, const uint64_t a
  * host's CPUs, sched_yield and futex took no account of the simulated
  * scheduler -- and with threads, a futex wait slept in the host kernel while
  * the simulator held the thread that would wake it. */
+/* clock_gettime and gettimeofday the simulator does not answer (a trace
+ * written to a file): the one-IPC model's time, from the same time zero as
+ * the simulator's, never the host's.  The CPU-time clocks (the process's, the
+ * thread's, the dynamic ones: negative ids) count from zero, as the
+ * simulator's do. */
+static bool time_one_ipc(unsigned int vcpu_index, int64_t num, const uint64_t args[6], int64_t *sysret)
+{
+   const bool tod = num == (g_arch == ARCH_X86 ? 96 : 169);
+   if (!tod && num != (g_arch == ARCH_X86 ? 228 : 113))
+      return false;
+   VCPU *v = vcpu_get(vcpu_index);
+   const int32_t clock = tod ? 0 : (int32_t)args[0];
+   const uint64_t out = tod ? args[0] : args[1];
+   const bool cputime = clock == 2 || clock == 3 || clock < 0;
+   const uint64_t ns = (cputime ? 0 : opt_time_start * 1000000000ull) + Sift::one_ipc_ns(thread_instructions(v, vcpu_index, 0));
+   if (out)
+   {
+      const uint64_t words[2] = { ns / 1000000000ull, tod ? ns / 1000 % 1000000 : ns % 1000000000ull };
+      GByteArray *b = g_byte_array_new();
+      g_byte_array_append(b, (const guint8 *)words, sizeof(words));
+      const bool ok = qemu_plugin_write_memory_vaddr(out, b);
+      g_byte_array_free(b, TRUE);
+      if (!ok)
+      {
+         *sysret = -14;   /* EFAULT, as the kernel answers an unmapped pointer */
+         return true;
+      }
+   }
+   *sysret = 0;
+   return true;
+}
+
 bool syscall_filter(SNP_SYSCALL_FILTER_ARGS)
 {
    const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
    uint64_t ret = 0;
    bool emulated = false;
    if (!syscall_entry(vcpu_index, num, args, &ret, &emulated) || !emulated)
-      return false;
+      return !in_system_mode && time_one_ipc(vcpu_index, num, args, sysret);
    *sysret = (int64_t)ret;
    return true;
 }
@@ -2108,6 +2180,8 @@ void vcpu_init(SNP_VCPU_ARGS)
       delete old;
    }
    VCPU *v = vcpu_get(cpu_index);
+   if (g_icount_sb)   /* the thread's instructions count from here (an index is reused) */
+      v->icount_base = qemu_plugin_u64_get(g_icount, cpu_index);
    if (g_arch == ARCH_RISCV)
       ame_register_state(v, cpu_index);
    if (pacsim_qemu::enabled())
@@ -2208,6 +2282,8 @@ void tb_trans(SNP_TB_TRANS_ARGS)
    const size_t n = qemu_plugin_tb_n_insns(tb);
    TBInfo *ti = new TBInfo();
    ti->mode_mask = MODE_16 | MODE_32 | MODE_64;
+   if (g_icount_sb)   /* every mode, traced or not: the one-IPC model's clock */
+      qemu_plugin_register_vcpu_tb_exec_inline_per_vcpu(tb, QEMU_PLUGIN_INLINE_ADD_U64, g_icount, n);
 
    for (size_t i = 0; i < n; i++)
    {
@@ -2216,6 +2292,7 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       /* One record per static instruction, reused by every execution. */
       InsnInfo *ii = new InsnInfo();
       ii->vaddr = qemu_plugin_insn_vaddr(insn);
+      ii->tb_left = (uint32_t)(n - i);
       if (i == 0)
          ti->vaddr = ii->vaddr;
       ii->size  = (uint8_t)qemu_plugin_insn_size(insn);
@@ -2419,6 +2496,7 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
       else if (key == "verbose")  opt_verbose = !eq || (val != "0" && val != "off" && val != "false");
       else if (key == "response") opt_response = !eq || (val != "0" && val != "off" && val != "false");
       else if (key == "timebase") opt_timebase = strtoull(val.c_str(), nullptr, 0);   /* RISC-V time CSR rate, Hz */
+      else if (key == "time_start") opt_time_start = strtoull(val.c_str(), nullptr, 0);   /* the guest's time zero, seconds since the epoch */
       else if (key == "roi")      opt_roi = val != "0" && val != "off" && val != "false";
       else if (pacsim_qemu::option(key, val)) {}                 /* pacsim, pacsim-* */
       else if (key == "app")      opt_app = (unsigned)strtoul(val.c_str(), nullptr, 0);
@@ -2490,9 +2568,13 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    }
 
    SNP_REG_TB_TRANS(id, tb_trans);
-   /* The guest's counters answered with Sniper's clocks: live (they need
-    * Sniper's answer) and in user mode, with the QEMU call */
-   if (SNP_HAVE_COUNTERS && opt_response && !in_system_mode)
+   /* Instructions per vCPU, for the one-IPC model */
+   g_icount_sb = qemu_plugin_scoreboard_new(sizeof(uint64_t));
+   g_icount = qemu_plugin_scoreboard_u64(g_icount_sb);
+   /* The guest's counters answered with Sniper's clocks, or where Sniper is
+    * not asked (a trace written to a file) the one-IPC model's: in user
+    * mode, with the QEMU call */
+   if (SNP_HAVE_COUNTERS && !in_system_mode)
    {
       qemu_plugin_register_counter_cb(id, SNP_COUNTER_CB(counter_read), nullptr);
       g_counters = true;
