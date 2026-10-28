@@ -92,6 +92,13 @@ Version 9.0 (in preparation)
   * A front end that refuses mid-run (the QEMU plugin's second thread in user
     mode) fails the run with its reason instead of passing on a partial
     simulation; the recorder's status survives exit codes above 128
+  * QEMU user mode runs multi-threaded guests live -- flow control, the
+    simulator's answers to futex and the other emulated calls, Pac-Sim
+    sampling -- on x86-64, RISC-V and AArch64: tools/qemu-11.1.1-plugin-wait.patch,
+    which deps/sniper-deps applies to every user-mode QEMU it builds, lets the
+    plugin wait for the simulator outside QEMU's run loop, and threads are
+    announced, joined and ended as under the SIFT recorder; a QEMU without
+    the call still runs single-threaded guests and refuses a second thread
   * The QEMU plugin no longer crashes at exit when a guest's threads end
     together (closing the streams raced), nor when it refuses a run (it now
     ends with _exit); the SIFT reader ends a stream cut inside an

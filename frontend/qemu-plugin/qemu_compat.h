@@ -22,6 +22,8 @@
   #define SNP_REG_FLUSH(id, fn)     qemu_plugin_register_flush_cb((id), (fn), NULL)
   #define SNP_SYSCALL_ARGS    unsigned int vcpu_index, int64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7, uint64_t a8, void *snp_ud
   #define SNP_REG_SYSCALL(id, fn)   qemu_plugin_register_vcpu_syscall_cb((id), (fn), NULL)
+  #define SNP_SYSCALL_RET_ARGS  unsigned int vcpu_index, int64_t num, int64_t ret, void *snp_ud
+  #define SNP_REG_SYSCALL_RET(id, fn)  qemu_plugin_register_vcpu_syscall_ret_cb((id), (fn), NULL)
   /* v7 also lets a plugin skip a system call and supply its return value. */
   #define SNP_HAVE_SYSCALL_FILTER 1
   #define SNP_SYSCALL_FILTER_ARGS unsigned int vcpu_index, int64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7, uint64_t a8, int64_t *sysret, void *snp_ud
@@ -39,6 +41,8 @@
   #define SNP_REG_FLUSH(id, fn)     qemu_plugin_register_flush_cb((id), (fn))
   #define SNP_SYSCALL_ARGS    qemu_plugin_id_t snp_id, unsigned int vcpu_index, int64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7, uint64_t a8
   #define SNP_REG_SYSCALL(id, fn)   qemu_plugin_register_vcpu_syscall_cb((id), (fn))
+  #define SNP_SYSCALL_RET_ARGS  qemu_plugin_id_t snp_id, unsigned int vcpu_index, int64_t num, int64_t ret
+  #define SNP_REG_SYSCALL_RET(id, fn)  qemu_plugin_register_vcpu_syscall_ret_cb((id), (fn))
   #define SNP_VCPU_ARGS       qemu_plugin_id_t snp_id, unsigned int cpu_index
   #define SNP_REG_VCPU_INIT(id, fn) qemu_plugin_register_vcpu_init_cb((id), (fn))
   #define SNP_REG_VCPU_EXIT(id, fn) qemu_plugin_register_vcpu_exit_cb((id), (fn))

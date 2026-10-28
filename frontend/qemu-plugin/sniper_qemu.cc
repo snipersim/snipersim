@@ -1,18 +1,27 @@
 /*
  * Sniper frontend as a QEMU TCG plugin.
  *
- * Loaded into a stock QEMU with -plugin; no QEMU fork and no QEMU patches.
- * Writes SIFT, so to Sniper it is just another trace producer.
+ * Loaded into QEMU with -plugin.  Writes SIFT, so to Sniper it is just another
+ * trace producer.  A stock QEMU 11 runs it; the patches in tools/ add calls
+ * it uses when present (bound weakly, see qemu_plugin_ext.h).
  *
  * Two modes, because QEMU offers two and they have different rules:
  *
- *   user mode    qemu-x86_64.  One guest thread per host thread, one SIFT
- *                stream each.  Flow control may block the producing thread --
- *                but only safely when the guest is single-threaded, because a
- *                vCPU blocked inside a callback still counts as running and
- *                stalls anything that needs an exclusive section (fork, code
- *                cache flush).  Multi-threaded guests are refused rather than
- *                deadlocked; see test/qemu-plugin-probe.
+ *   user mode    qemu-x86_64, qemu-riscv64, qemu-aarch64.  One guest thread
+ *                per host thread, one SIFT stream each.  Flow control waits
+ *                for Sniper's answer, and a vCPU cannot wait inside a
+ *                callback: it still counts as running there, and anything
+ *                that needs an exclusive section (a code-cache flush, an
+ *                atomic another thread is emulating) waits for it -- a
+ *                deadlock as soon as the guest has two threads.  With a QEMU
+ *                that has qemu_plugin_vcpu_wait_at()
+ *                (tools/qemu-11.1.1-plugin-wait.patch), every wait leaves the
+ *                run loop first, the way a system call does, and
+ *                multi-threaded guests run; see "waiting" below.  Without it,
+ *                the wait happens in the callback and a second guest thread
+ *                is refused on a live channel rather than deadlocked (to
+ *                files, without flow control, threads are recorded either
+ *                way; see test/qemu-plugin-probe).
  *
  *   system mode  qemu-system-x86_64.  Sniper owns guest *time* through
  *                qemu_plugin_update_ns() instead of holding vCPUs, so no vCPU
@@ -53,8 +62,11 @@ extern "C" {
 #include "acc_backend.h"
 #include "qemu_plugin_ext.h"
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <unordered_set>
+#include <sys/syscall.h>
+#include <linux/futex.h>
 
 #include "sift_writer.h"
 #include "sim_api.h"         /* the SIM_CMD_ numbers */
@@ -124,6 +136,50 @@ uint64_t    opt_ns_per_insn = 1;   /* until the timing model answers */
 bool in_system_mode = false;
 uint64_t getcode_calls = 0, getcode_fail = 0;
 const void *time_handle = nullptr;
+
+/* ---------------------------------------------------------------- waiting
+ *
+ * User mode with a response channel, on a QEMU that can wait: no callback
+ * waits for Sniper where it fires.  A callback that would (flow control, a
+ * magic instruction, a sampler event that ends a region) records what it
+ * needs, marks its stage done and leaves the run loop with
+ * qemu_plugin_vcpu_wait_at(); wait_body() then runs on the same host thread
+ * with the vCPU no longer running, does the waiting, and execution resumes
+ * at the instruction the callback belonged to.  (System calls need none of
+ * this: QEMU calls the plugin for them from its cpu loop, outside the run
+ * loop already.)
+ *
+ * Resuming re-runs that instruction's callbacks, and in a fresh block
+ * starting there, whose block-level callbacks run too.  The stage mask says
+ * what already happened at this address: every callback is a stage, a
+ * stage that ran is not run again, and the mask is dropped when the next
+ * instruction (or, on a fresh visit, the next block) begins.  A block
+ * begun by a resume was counted as part of the block the wait interrupted,
+ * so its block-level stages are marked done as well (unless the wait was
+ * theirs: then the mask already says which ran). */
+bool        g_wait = false;
+enum { S_TB_COUNT = 1, S_TB_FLOW = 2, S_INSN = 4, S_MAGIC = 8, S_SYNC = 16, S_BACKEDGE = 32, S_AME = 64 };
+enum { W_NONE = 0, W_TB_COUNT, W_FLOW, W_MAGIC, W_SYNC, W_BACKEDGE };
+
+/* Threads.  Numbered in the order they start, like the recorder's, and that
+ * is the number in the stream's file name: Sniper opens app0.th<N> when it
+ * has seen N NewThread records.  (A vCPU index is not that number: QEMU
+ * gives a thread started after another ended the ended one's index.)  A
+ * clone's child tid pointer is queued by the parent's clone and taken by the
+ * next thread to start, for the futex wake that lets the joiner go at its
+ * exit (the kernel's own wake goes to the kernel, not to Sniper's model of
+ * the futex). */
+std::atomic<unsigned> g_num_threads(0);
+std::mutex            g_tid_lock;
+std::vector<uint64_t> g_tid_ptrs;
+/* Sniper creates a thread's channels when it hears NewThread, which the
+ * parent sends when its clone returns -- and the child may be running by
+ * then.  It waits, in its init hook (outside the run loop), until as many
+ * threads have been announced as have started before it, then opens what
+ * Sniper has created -- or nothing, when its parent's clone returned after
+ * the ROI (no NewThread was sent; g_announce_sent says which). */
+std::condition_variable g_announce_cv;
+std::vector<bool>     g_announce_sent;        /* under g_tid_lock: announcement N-1 sent NewThread */
 
 /* --------------------------------------------------------- per-instruction */
 
@@ -345,6 +401,28 @@ struct VCPU
     * return address is on the stack) or the return-address register */
    struct qemu_plugin_register *reg_ret = nullptr;
    bool          reg_ret_have = false;
+
+   int           insn_mode = MODE_OFF;   /* the recording mode of the instruction in flight */
+   bool          hold_pending = false;   /* the pending instruction has not executed yet: a request must not flush it */
+
+   /* threads (user mode) */
+   unsigned      thread_num = 0;        /* the stream's number: app0.th<thread_num> */
+   uint64_t      tid_ptr    = 0;        /* CLONE_CHILD_CLEARTID's word, woken for the joiner at exit */
+   bool          threadinfo_pending = false;   /* the tid goes with the first system call on the channel */
+   bool          clone_pending = false; /* a thread clone in flight: announced at its return */
+   uint64_t      clone_tidptr = 0;
+
+   /* waiting (see "waiting" above) */
+   uint64_t      done_vaddr = 0;
+   unsigned      done_mask  = 0;
+   bool          resuming   = false;    /* the next block begins at a wait's instruction */
+   bool          wait_tb_level = false; /* the wait was a block-level stage's */
+   int           wait_kind  = W_NONE;
+   uint64_t      wait_vaddr = 0;
+   uint32_t      wait_n     = 0;        /* W_TB_COUNT: the block's instruction count */
+   uint64_t      wait_site  = 0;        /* W_SYNC: the call site */
+   uint64_t      wait_a[3]  = {0, 0, 0};/* W_MAGIC: the command and its arguments */
+   const InsnInfo *wait_ii  = nullptr;  /* W_MAGIC: the instruction */
 };
 
 /* One slot per vCPU, sized once and never resized.
@@ -413,6 +491,64 @@ VCPU *vcpu_get(unsigned int idx)
       vcpus[idx] = new VCPU();
    return vcpus[idx];
 }
+
+/* A callback's stage at an address: true to run it, false when it ran
+ * before the wait this execution resumes from. */
+inline bool stage_begin(VCPU *v, uint64_t vaddr, unsigned bit)
+{
+   if (!g_wait)
+      return true;
+   if (v->done_vaddr != vaddr)
+   {
+      v->done_vaddr = vaddr;
+      v->done_mask = 0;
+   }
+   if (v->done_mask & bit)
+      return false;
+   v->done_mask |= bit;
+   return true;
+}
+
+/* A block begins: after a wait, at the wait's instruction, with the stages
+ * that ran still marked; otherwise a fresh visit. */
+inline void block_begin(VCPU *v, uint64_t vaddr)
+{
+   if (!g_wait)
+      return;
+   if (v->resuming)
+   {
+      v->resuming = false;
+      if (v->done_vaddr != vaddr)
+      {
+         v->done_vaddr = vaddr;
+         v->done_mask = 0;
+      }
+      if (!v->wait_tb_level)
+         v->done_mask |= S_TB_COUNT | S_TB_FLOW;   /* counted with the interrupted block */
+   }
+   else
+   {
+      v->done_vaddr = vaddr;
+      v->done_mask = 0;
+   }
+}
+
+void wait_body(unsigned int cpu_index, void *udata);
+
+/* Leave the run loop to wait; the callback's own return address is what
+ * lets QEMU restore the state at this instruction, so this is a macro used
+ * in the callback itself (registered with QEMU_PLUGIN_CB_RW_REGS_PC).  Does
+ * not return. */
+#if QEMU_PLUGIN_VERSION >= 7
+#define SNP_DEFER(v_, vaddr_, kind_, tb_level_) do {                                  \
+      (v_)->wait_kind = (kind_); (v_)->wait_vaddr = (vaddr_);                            \
+      (v_)->wait_tb_level = (tb_level_); (v_)->resuming = true;                          \
+      qemu_plugin_vcpu_wait_at((vaddr_), wait_body, (v_), (uintptr_t)__builtin_return_address(0)); \
+      __builtin_unreachable();                                                           \
+   } while (0)
+#else
+#define SNP_DEFER(v_, vaddr_, kind_, tb_level_) abort()   /* g_wait is never set */
+#endif
 
 /* Ask the machine what mode it is in.
  *
@@ -685,6 +821,8 @@ void ame_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
    VCPU *v = vcpu_get(cpu_index);
+   if (!stage_begin(v, ii->vaddr, S_AME))
+      return;                      /* executed before a wait this execution resumes from */
    if (!v->xreg_found)
    {
       /* QEMU's gdb register list names X registers by ABI name, with x8 as
@@ -900,9 +1038,15 @@ void insn_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
    const int mode = g_mode.load(std::memory_order_relaxed);
+   VCPU *v = vcpu_get(cpu_index);
+   if (!stage_begin(v, ii->vaddr, S_INSN))
+      return;                      /* resumed after a wait: this instruction was recorded */
+   /* The mode this instruction is recorded under, for its memory callbacks:
+    * another thread's sampler may switch the mode between here and them,
+    * and a record must be whole. */
+   v->insn_mode = mode;
    if (mode == MODE_OFF)
       return;                      /* outside the ROI: nothing recorded, magic instructions excepted */
-   VCPU *v = vcpu_get(cpu_index);
    if (!v->writer || v->closed)
       return;
    if (mode != MODE_DETAILED)
@@ -931,8 +1075,8 @@ void insn_exec(unsigned int cpu_index, void *udata)
       v->ff_prev_branch = mode == MODE_MEMORY && ii->is_branch;
       v->ff_prev_addr = ii->vaddr;
       v->ff_prev_size = ii->size;
-      if (v->ff_pending >= (mode == MODE_MEMORY ? 200 : opt_flow))
-         ff_report(v);
+      if (!g_wait && v->ff_pending >= (mode == MODE_MEMORY ? 200 : opt_flow))
+         ff_report(v);              /* waiting: tb_begin's flow stage reports, outside the run loop */
       return;
    }
 
@@ -949,9 +1093,10 @@ void insn_exec(unsigned int cpu_index, void *udata)
    v->have_pending = true;
 
    /* Pacing.  In system mode this hands Sniper's notion of time to QEMU and
-    * never blocks.  In user mode it is the blocking Sync(), which is why
-    * multi-threaded guests are refused at startup. */
-   if (v->icount >= v->flow_next)
+    * never blocks.  In user mode it is the blocking Sync() -- here, in the
+    * callback, only when the QEMU cannot wait outside the run loop (then the
+    * guest is single-threaded); otherwise from tb_begin's flow stage. */
+   if (!g_wait && v->icount >= v->flow_next)
    {
       v->flow_next = v->icount + opt_flow;
 
@@ -1078,11 +1223,15 @@ void vector_width_exec(unsigned int cpu_index, void *udata)
    v->writer->Magic(SIM_CMD_VECTOR_BYTES, bytes, 0);
 }
 
+void magic_body(VCPU *v, const InsnInfo *ii, uint64_t cmd, uint64_t arg0, uint64_t arg1, unsigned int cpu_index);
+
 void magic_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
    VCPU *v = vcpu_get(cpu_index);
    if (!v->writer || v->closed)
+      return;
+   if (!stage_begin(v, ii->vaddr, S_MAGIC))
       return;
    if (!v->mreg_found)
       find_magic_registers(v);
@@ -1091,6 +1240,20 @@ void magic_exec(unsigned int cpu_index, void *udata)
    const uint64_t arg0 = read_reg(v->mreg[2], v->mreg_have[2]);
    const uint64_t arg1 = read_reg(v->mreg[3], v->mreg_have[3]);
 
+   if (g_wait)
+   {
+      /* the question is asked outside the run loop, the answer written there */
+      v->wait_a[0] = cmd; v->wait_a[1] = arg0; v->wait_a[2] = arg1; v->wait_ii = ii;
+      SNP_DEFER(v, ii->vaddr, W_MAGIC, false);
+   }
+   magic_body(v, ii, cmd, arg0, arg1, cpu_index);
+}
+
+/* The magic instruction's work, in the callback or outside the run loop. */
+void magic_body(VCPU *v, const InsnInfo *ii, uint64_t cmd, uint64_t arg0, uint64_t arg1, unsigned int cpu_index)
+{
+   if (!v->writer || v->closed)
+      return;
    if (opt_roi && cmd == SIM_CMD_ROI_START && !g_in_roi)
    {
       g_in_roi = true;
@@ -1145,16 +1308,101 @@ void magic_exec(unsigned int cpu_index, void *udata)
 
 struct TBCount { uint32_t n; uint64_t vaddr; };
 
-void tb_count_exec(unsigned int cpu_index, void *udata)
+/* Would flow control report now?  Detailed: a Sync every opt_flow
+ * instructions; otherwise the pending count, at the window the mode uses. */
+inline bool flow_due(const VCPU *v, int mode)
+{
+   if (mode == MODE_DETAILED)
+      return v->icount >= v->flow_next;
+   if (mode == MODE_OFF)
+      return false;
+   return v->ff_pending >= (mode == MODE_MEMORY ? 200u : opt_flow);
+}
+
+void flow_report(VCPU *v)
+{
+   const int mode = g_mode.load();
+   if (mode == MODE_DETAILED)
+   {
+      v->flow_next = v->icount + opt_flow;
+      apply_mode(v->writer->Sync());   /* the answer says which mode comes next */
+   }
+   else if (mode != MODE_OFF)
+      ff_report(v);
+}
+
+/* Every block's start: the sampler counts it (the block is a basic block
+ * to it), and, when waiting, flow control reports from here -- a block
+ * boundary, where leaving the run loop re-executes nothing. */
+void tb_begin(unsigned int cpu_index, void *udata)
 {
    const TBCount *tc = (const TBCount *)udata;
-   pacsim_qemu::block(cpu_index, tc->n, tc->vaddr);
+   VCPU *v = vcpu_get(cpu_index);
+   block_begin(v, tc->vaddr);
+   if (pacsim_qemu::enabled() && stage_begin(v, tc->vaddr, S_TB_COUNT))
+   {
+      if (pacsim_qemu::block(cpu_index, tc->n, tc->vaddr, !g_wait))
+      {
+         v->wait_n = tc->n;
+         SNP_DEFER(v, tc->vaddr, W_TB_COUNT, true);
+      }
+   }
+   if (g_wait && stage_begin(v, tc->vaddr, S_TB_FLOW))
+   {
+      const int mode = g_mode.load(std::memory_order_relaxed);
+      if (v->writer && !v->closed && flow_due(v, mode))
+         SNP_DEFER(v, tc->vaddr, W_FLOW, true);
+   }
 }
 
 void backedge_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
-   pacsim_qemu::back_edge(cpu_index, ii->vaddr, ii->is_branch);
+   VCPU *v = vcpu_get(cpu_index);
+   if (!stage_begin(v, ii->vaddr, S_BACKEDGE))
+      return;
+   v->hold_pending = true;          /* the branch has not run: its record waits for its outcome */
+   const bool deferred = pacsim_qemu::back_edge(cpu_index, ii->vaddr, ii->is_branch, !g_wait);
+   v->hold_pending = false;
+   if (deferred)
+   {
+      v->wait_ii = ii;
+      SNP_DEFER(v, ii->vaddr, W_BACKEDGE, false);
+   }
+}
+
+/* Outside the run loop, on the vCPU's own host thread: what the callback
+ * could not wait for.  Registers and memory are accessible here. */
+void wait_body(unsigned int cpu_index, void *udata)
+{
+   VCPU *v = (VCPU *)udata;
+   const int kind = v->wait_kind;
+   v->wait_kind = W_NONE;
+   switch (kind)
+   {
+      case W_TB_COUNT:
+         pacsim_qemu::block(cpu_index, v->wait_n, v->wait_vaddr, true);
+         break;
+      case W_FLOW:
+         if (v->writer && !v->closed)
+            flow_report(v);
+         break;
+      case W_MAGIC:
+         magic_body(v, v->wait_ii, v->wait_a[0], v->wait_a[1], v->wait_a[2], cpu_index);
+         break;
+      case W_SYNC:
+         v->hold_pending = true;    /* the instruction runs after this, on resume */
+         pacsim_qemu::sync_point(cpu_index, v->wait_site, true);
+         v->hold_pending = false;
+         break;
+      case W_BACKEDGE:
+         v->hold_pending = true;
+         pacsim_qemu::back_edge(cpu_index, v->wait_vaddr, v->wait_ii->is_branch, true);
+         v->hold_pending = false;
+         break;
+      default:
+         break;
+   }
 }
 
 /* a synchronisation point's entry: keyed by its call site, the return
@@ -1163,6 +1411,8 @@ void sync_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
    VCPU *v = vcpu_get(cpu_index);
+   if (!stage_begin(v, ii->vaddr, S_SYNC))
+      return;
    if (!v->mreg_found)
       find_magic_registers(v);
    uint64_t site = ii->vaddr;
@@ -1176,7 +1426,14 @@ void sync_exec(unsigned int cpu_index, void *udata)
    }
    else
       site = read_reg(v->reg_ret, v->reg_ret_have);
-   pacsim_qemu::sync_point(cpu_index, site);
+   v->hold_pending = true;          /* the entry instruction has not run: its record waits for its addresses */
+   const bool deferred = pacsim_qemu::sync_point(cpu_index, site, !g_wait);
+   v->hold_pending = false;
+   if (deferred)
+   {
+      v->wait_site = site;
+      SNP_DEFER(v, ii->vaddr, W_SYNC, false);
+   }
 }
 
 /* An unconditional direct jump: x86 jmp with a relative displacement (an
@@ -1375,7 +1632,7 @@ void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
                 uint64_t vaddr, void *udata)
 {
    VCPU *v = vcpu_get(cpu_index);
-   const int mode = g_mode.load(std::memory_order_relaxed);
+   const int mode = v->insn_mode;      /* the instruction's, not the moment's: another thread's sampler may have switched it since */
    /* An instruction still pending is a detailed record in the making,
     * whatever the mode now: the switch out of detailed comes in the
     * instruction's own Sync(), before its memory callbacks, and its
@@ -1472,23 +1729,27 @@ static int modelled_syscall(int64_t num, bool *emulated)
    return -1;
 }
 
+/* Does this thread's channel take requests now?  Before a live ROI the
+ * channel is counting (and syscalls are modelled, as under the recorder);
+ * after it (MODE_OFF) the guest runs natively and nothing is sent. */
+inline bool channel_open(const VCPU *v)
+{
+   return v->writer && opt_response && !v->closed && g_mode.load() != MODE_OFF;
+}
+
 /* Send a modelled system call to the simulator.  Returns false when the call
  * is not sent (not modelled, no response channel, outside the ROI); else the
  * simulator's return value is in *ret and *emulated says whether it replaces
  * the call. */
-static bool forward_syscall(unsigned int vcpu_index, int64_t num, const uint64_t args[6],
+static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
                             uint64_t *ret, bool *emulated)
 {
-   VCPU *v = vcpu_get(vcpu_index);
-   if (!v->writer)
-      return false;
-
    /* Emitting a syscall record asks Sniper a question, so it is only valid
     * when there is a response channel to answer on -- Sift::Writer::Syscall()
     * calls initResponse() unconditionally.  The Pin recorder gates the same
     * thing on KnobEmulateSyscalls.  Without a channel we are writing a trace
     * to a file and the syscall is simply not modelled. */
-   if (!opt_response || g_mode.load() == MODE_OFF || v->closed)
+   if (!channel_open(v))
       return false;
 
    /* Only the system calls the simulator models go out, by the numbers it
@@ -1501,11 +1762,129 @@ static bool forward_syscall(unsigned int vcpu_index, int64_t num, const uint64_t
    if (sys < 0)
       return false;
 
-   /* Close out the instruction that issued the syscall first. */
+   /* A thread's tid goes with the first system call on its channel, as the
+    * recorder sends it (the simulator's model of the thread needs it, and
+    * the channel is opened by the first request). */
+   if (v->threadinfo_pending)
+   {
+      v->threadinfo_pending = false;
+      Sift::EmuRequest req;
+      Sift::EmuReply res;
+      req.setthreadinfo.tid = (uint64_t)syscall(SYS_gettid);   /* the guest's gettid is the host thread's */
+      v->writer->Emulate(Sift::EmuTypeSetThreadInfo, req, res);
+   }
+
+   /* Close out the instruction that issued the syscall first, and the count
+    * pending between measured regions, so the call is placed after the
+    * instructions that led to it -- with threads, the simulator orders the
+    * calls of all of them by their cores' time. */
    flush_pending(v, 0);
+   ff_report(v);
 
    *ret = v->writer->Syscall((uint16_t)sys, (const char *)args, 6 * sizeof(uint64_t));
    return true;
+}
+
+/* Threads, at the system calls that make and end them; the numbers are the
+ * guest's (x86-64, or asm-generic for RISC-V and AArch64). */
+const int64_t X86_SYS_CLONE = 56, X86_SYS_EXIT = 60, GENERIC_SYS_CLONE = 220, GENERIC_SYS_EXIT = 93;
+const int64_t SYS_CLONE3_ANY = 435;           /* the same on both tables */
+const uint64_t CLONE_THREAD_FLAG = 0x10000;
+
+bool read_guest(uint64_t addr, void *dst, size_t size)
+{
+   GByteArray *buf = g_byte_array_new();
+   const bool ok = qemu_plugin_read_memory_vaddr(addr, buf, size) && buf->len == size;
+   if (ok)
+      memcpy(dst, buf->data, size);
+   g_byte_array_free(buf, TRUE);
+   return ok;
+}
+
+void writer_close(VCPU *v);
+
+/* The thread is ending (its exit call, the last thing it does).  A joiner
+ * waits on its tid word, in Sniper's model of the futex as in the kernel's:
+ * the word is cleared and the wake sent, as the recorder does at a thread's
+ * end, and the stream ends.  Here, at the call's entry, rather than in the
+ * vCPU's exit hook: QEMU runs that hook holding the lock its clone and exit
+ * paths share, and a wait for Sniper under it stops every sibling that
+ * reaches either -- one of which Sniper may be waiting for. */
+void thread_exit(VCPU *v)
+{
+   if (channel_open(v))
+   {
+      flush_pending(v, 0);
+      ff_report(v);
+      if (v->tid_ptr)
+      {
+         const uint32_t zero = 0;
+         GByteArray *buf = g_byte_array_new();
+         g_byte_array_append(buf, (const guint8 *)&zero, sizeof(zero));
+         qemu_plugin_write_memory_vaddr(v->tid_ptr, buf);
+         g_byte_array_free(buf, TRUE);
+         const uint64_t args[6] = { v->tid_ptr, FUTEX_WAKE, 1, 0, 0, 0 };
+         v->writer->Syscall((uint16_t)SYS_futex, (const char *)args, sizeof(args));
+      }
+   }
+   writer_close(v);
+}
+
+/* A clone that makes a thread: its child-tid word is queued now, since the
+ * child may start before this call's return is seen; Sniper is told at the
+ * return (syscall_ret), when the clone is known to have happened -- glibc's
+ * clone3 attempt gets ENOSYS from QEMU before it falls back to clone, and a
+ * thread announced for each attempt would leave Sniper waiting for one that
+ * never starts.  clone(flags, stack, parent_tid, child_tid, tls) on x86-64;
+ * clone(flags, stack, parent_tid, tls, child_tid) on RISC-V and AArch64
+ * (CLONE_BACKWARDS); clone3(struct clone_args *, size): flags at 0,
+ * child_tid at 16.  A clone without CLONE_THREAD makes a process, which the
+ * fork handler refuses (refuse_forked_child). */
+void clone_entry(VCPU *v, bool clone3, const uint64_t args[6])
+{
+   uint64_t flags = args[0], child_tidptr = g_arch == ARCH_X86 ? args[3] : args[4];
+   if (clone3)
+   {
+      uint64_t words[3] = {0, 0, 0};
+      if (!read_guest(args[0], words, sizeof(words)))
+         return;
+      flags = words[0];
+      child_tidptr = words[2];
+   }
+   if (!(flags & CLONE_THREAD_FLAG))
+      return;
+   std::lock_guard<std::mutex> lock(g_tid_lock);
+   g_tid_ptrs.push_back(child_tidptr);
+   v->clone_tidptr = child_tidptr;
+   v->clone_pending = true;
+}
+
+/* Every system call's entry, on the calling thread, in QEMU's cpu loop --
+ * outside the run loop, so a wait for Sniper's answer here holds up no
+ * exclusive section, threads or not.  The thread calls first, then the
+ * modelled ones.  A clone is followed on a live channel whose QEMU can wait
+ * (g_wait), even after the ROI, when a thread started must still be counted
+ * for the child waiting in vcpu_init; without the wait call the child is
+ * refused there, and Sniper must not have been told of it (it would wait
+ * for a stream that never opens). */
+static bool syscall_entry(unsigned int vcpu_index, int64_t num, const uint64_t args[6],
+                          uint64_t *ret, bool *emulated)
+{
+   VCPU *v = vcpu_get(vcpu_index);
+   if (!v->writer)
+      return false;
+   if (!in_system_mode && num == (g_arch == ARCH_X86 ? X86_SYS_EXIT : GENERIC_SYS_EXIT))
+   {
+      thread_exit(v);
+      return false;
+   }
+   if (g_wait && !v->closed &&
+       (num == (g_arch == ARCH_X86 ? X86_SYS_CLONE : GENERIC_SYS_CLONE) || num == SYS_CLONE3_ANY))
+   {
+      clone_entry(v, num == SYS_CLONE3_ANY, args);
+      return false;
+   }
+   return forward_syscall(v, num, args, ret, emulated);
 }
 
 #ifdef SNP_HAVE_SYSCALL_FILTER
@@ -1514,13 +1893,14 @@ static bool forward_syscall(unsigned int vcpu_index, int64_t num, const uint64_t
  * Before this QEMU ran them too and the answer was dropped: a nanosleep slept
  * in host time on top of the simulated time, sched_getaffinity reported the
  * host's CPUs, sched_yield and futex took no account of the simulated
- * scheduler. */
+ * scheduler -- and with threads, a futex wait slept in the host kernel while
+ * the simulator held the thread that would wake it. */
 bool syscall_filter(SNP_SYSCALL_FILTER_ARGS)
 {
    const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
    uint64_t ret = 0;
    bool emulated = false;
-   if (!forward_syscall(vcpu_index, num, args, &ret, &emulated) || !emulated)
+   if (!syscall_entry(vcpu_index, num, args, &ret, &emulated) || !emulated)
       return false;
    *sysret = (int64_t)ret;
    return true;
@@ -1533,12 +1913,63 @@ void syscall_enter(SNP_SYSCALL_ARGS)
    const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
    uint64_t ret;
    bool emulated;
-   forward_syscall(vcpu_index, num, args, &ret, &emulated);
+   syscall_entry(vcpu_index, num, args, &ret, &emulated);
 }
 #endif
 
+/* A clone returned: a child tid means a thread started, and Sniper is told
+ * so (NewThread: it opens the next stream); an error means the queued tid
+ * word was never taken.  The announcement is counted either way, for the
+ * child waiting in vcpu_init. */
+void syscall_ret(SNP_SYSCALL_RET_ARGS)
+{
+   VCPU *v = vcpu_get(vcpu_index);
+   if (!v->clone_pending)
+      return;
+   v->clone_pending = false;
+   if (ret > 0)
+   {
+      bool sent = false;
+      if (channel_open(v))
+      {
+         /* The count first, as the recorder sends it before any call: a
+          * thread parked by a blocking call (read, wait4) is on no core in
+          * Sniper's model until its next instructions arrive, and the
+          * creation is stamped with its core's time. */
+         flush_pending(v, 0);
+         ff_report(v);
+         v->writer->NewThread();
+         sent = true;
+      }
+      {
+         std::lock_guard<std::mutex> lock(g_tid_lock);
+         g_announce_sent.push_back(sent);
+      }
+      g_announce_cv.notify_all();
+      return;
+   }
+   std::lock_guard<std::mutex> lock(g_tid_lock);
+   for (size_t i = g_tid_ptrs.size(); i-- > 0; )
+      if (g_tid_ptrs[i] == v->clone_tidptr)
+      {
+         g_tid_ptrs.erase(g_tid_ptrs.begin() + i);
+         break;
+      }
+}
+
 void vcpu_init(SNP_VCPU_ARGS)
 {
+   /* In user mode a vCPU index is reused by a thread started after another
+    * ended; its slot is then a fresh one.  Under the close lock: at_exit
+    * walks the slots under it. */
+   if (!in_system_mode && cpu_index < MAX_VCPUS && vcpus[cpu_index] && vcpus[cpu_index]->closed)
+   {
+      std::lock_guard<std::mutex> lock(g_close_lock);
+      VCPU *old = vcpus[cpu_index];
+      vcpus[cpu_index] = nullptr;
+      delete old->writer;
+      delete old;
+   }
    VCPU *v = vcpu_get(cpu_index);
    if (g_arch == ARCH_RISCV)
       ame_register_state(v, cpu_index);
@@ -1549,23 +1980,50 @@ void vcpu_init(SNP_VCPU_ARGS)
     * explanation rather than whatever the SIFT writer says about its response
     * channel.
     *
-    * A second guest thread in user mode is the configuration that deadlocks:
-    * a vCPU blocked in Sync() still counts as running, so anything needing an
-    * exclusive section waits for it.  Refuse it rather than hang. */
-   if (!in_system_mode && opt_response && cpu_index > 0)
+    * A second guest thread in user mode deadlocks a QEMU that cannot wait
+    * outside its run loop: a vCPU blocked in Sync() still counts as running,
+    * so anything needing an exclusive section waits for it.  Refuse it
+    * rather than hang. */
+   if (!in_system_mode && opt_response && !g_wait && cpu_index > 0)
    {
       refuse("[SNIPER-QEMU] error: the guest started a second thread.\n"
-             "  User-mode flow control can only be used with single-threaded\n"
+             "  This QEMU has no qemu_plugin_vcpu_wait_at() (tools/qemu-11.1.1-plugin-wait.patch),\n"
+             "  so user-mode flow control can only be used with single-threaded\n"
              "  guests -- a vCPU blocked in a plugin callback stalls any other\n"
              "  vCPU that needs an exclusive section, and deadlocks when the\n"
-             "  timing model holds it.  Use full-system mode for multi-core,\n"
-             "  or the Pin/DynamoRIO frontends.\n");
+             "  timing model holds it.  Build the patched QEMU (deps/sniper-deps\n"
+             "  applies it), use full-system mode for multi-core, or the\n"
+             "  Pin/DynamoRIO frontends.\n");
    }
 
    if (!v->writer)
       if (!opt_trace)
       return;                      /* a functional run: no trace file */
-   writer_open(v, cpu_index);
+   if (!in_system_mode)
+   {
+      v->thread_num = g_num_threads.fetch_add(1);
+      std::unique_lock<std::mutex> lock(g_tid_lock);
+      if (v->thread_num > 0 && !g_tid_ptrs.empty())
+      {
+         v->tid_ptr = g_tid_ptrs.front();
+         g_tid_ptrs.erase(g_tid_ptrs.begin());
+      }
+      if (v->thread_num > 0 && opt_response)
+      {
+         /* This hook runs in the cpu loop, outside cpu_exec(): waiting here
+          * holds up no exclusive section.  A thread whose parent's clone
+          * returned after the ROI was not announced: nothing to record, no
+          * channel to open. */
+         const unsigned n = v->thread_num;
+         g_announce_cv.wait(lock, [n] { return g_announce_sent.size() >= n; });
+         if (!g_announce_sent[n - 1])
+            return;
+         v->threadinfo_pending = true;
+      }
+   }
+   else
+      v->thread_num = cpu_index;
+   writer_open(v, v->thread_num);
 
    /* Register handles are per-vCPU and only obtainable in vCPU context.  Absent
     * in user mode, where the mode never changes anyway. */
@@ -1601,6 +2059,8 @@ void writer_close(VCPU *v)
    writer_close_locked(v);
 }
 
+/* In user mode normally closed already, by thread_exit(); this runs under
+ * QEMU's clone lock (see there) and must not wait for Sniper. */
 void vcpu_exit(SNP_VCPU_ARGS)
 {
    writer_close(vcpu_get(cpu_index));
@@ -1696,18 +2156,21 @@ void tb_trans(SNP_TB_TRANS_ARGS)
                                              QEMU_PLUGIN_CB_NO_REGS, ii);
       if (i == 0 && (g_arch == ARCH_RISCV || g_arch == ARCH_AARCH64) && !g_vector_width_reported.load())
          qemu_plugin_register_vcpu_insn_exec_cb(insn, vector_width_exec, QEMU_PLUGIN_CB_R_REGS, ii);
+      /* A callback that may leave the run loop to wait (g_wait) needs the
+       * registers written back and the PC settable (RW_REGS_PC); the
+       * tracer's never waits. */
       if (ii->magic)   /* after the tracer's callback: the instruction is pending */
          qemu_plugin_register_vcpu_insn_exec_cb(insn, magic_exec,
-                                                QEMU_PLUGIN_CB_RW_REGS, ii);
+                                                g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_RW_REGS, ii);
       if (pacsim_qemu::enabled())
       {
          if (i == 0 && pacsim_qemu::is_sync_entry(ii->vaddr))
-            qemu_plugin_register_vcpu_insn_exec_cb(insn, sync_exec, QEMU_PLUGIN_CB_R_REGS, ii);
+            qemu_plugin_register_vcpu_insn_exec_cb(insn, sync_exec, g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_R_REGS, ii);
          if (i + 1 == n && (ii->is_branch || ii->is_jump))   /* a backward branch or jump: a loop's back-edge, for the sampler to judge */
          {
             uint64_t target = 0;
             if (got && branch_target(bytes, got, ii->vaddr, ii->size, target) && target < ii->vaddr)
-               qemu_plugin_register_vcpu_insn_exec_cb(insn, backedge_exec, QEMU_PLUGIN_CB_NO_REGS, ii);
+               qemu_plugin_register_vcpu_insn_exec_cb(insn, backedge_exec, g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_NO_REGS, ii);
          }
       }
       if (ii->ame)     /* after the tracer's callback: the record is pending when the model runs */
@@ -1717,12 +2180,12 @@ void tb_trans(SNP_TB_TRANS_ARGS)
                                        QEMU_PLUGIN_MEM_RW, nullptr);
    }
 
-   if (pacsim_qemu::enabled() && opt_trace)
+   if ((pacsim_qemu::enabled() || g_wait) && opt_trace)
    {
-      TBCount *tc = new TBCount();  /* the sampler counts every block, in every mode */
+      TBCount *tc = new TBCount();  /* the sampler counts every block, in every mode; waiting: flow control from here */
       tc->n = (uint32_t)n;
       tc->vaddr = qemu_plugin_insn_vaddr(qemu_plugin_tb_get_insn(tb, 0));
-      qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_count_exec, QEMU_PLUGIN_CB_NO_REGS, tc);
+      qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_begin, g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_NO_REGS, tc);
    }
 
    /* R_REGS so mode_from_registers() has something to read; it runs before the
@@ -1827,6 +2290,12 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    }
 
    Sift::CodeTracker::enable(opt_smc);
+   /* Waiting outside the run loop: user mode on a live channel, when the
+    * QEMU has the call (see "waiting"). */
+   g_wait = SNP_HAVE_WAIT && opt_response && !in_system_mode && opt_trace;
+   if (opt_verbose && opt_response && !in_system_mode)
+      fprintf(stderr, "[SNIPER-QEMU] %s\n", g_wait ? "waits for Sniper outside the run loop: multi-threaded guests run"
+                                                    : "this QEMU cannot wait outside the run loop: single-threaded guests only");
    /* Before the ROI: counting on a live channel (the simulator fast-forwards
     * on the counts, as under the Pin recorder), nothing to a file. */
    g_mode.store(!opt_roi ? MODE_DETAILED : opt_response ? MODE_ICOUNT : MODE_OFF);
@@ -1842,15 +2311,21 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
       pacsim_qemu::Hooks h;
       h.in_roi = []() { return g_in_roi; };
       h.channel_alive = [](unsigned cpu) { VCPU *v = vcpus[cpu]; return v && v->writer && !v->closed; };
+      /* A request from a sampler event at an instruction that has not run
+       * yet (a synchronisation entry, a back-edge: their callbacks precede
+       * the instruction) leaves that instruction's record pending -- it
+       * goes out after the next instruction begins, whole, with its
+       * addresses and its branch's outcome.  The request precedes it in
+       * the stream by that one instruction. */
       h.magic = [](unsigned cpu, uint64_t cmd, uint64_t arg) -> uint64_t {
          VCPU *v = vcpus[cpu];
          if (!v || !v->writer || v->closed) return 0;
-         flush_pending(v, 0);
+         if (!v->hold_pending) flush_pending(v, 0);
          if (g_mode.load() != MODE_DETAILED) ff_report(v);
          return v->writer->Magic(cmd, arg, 0);
       };
       h.set_mode = [](int mode) { g_mode.store(mode); };
-      h.flush_counts = [](unsigned cpu) { VCPU *v = vcpus[cpu]; if (v) { flush_pending(v, 0); ff_report(v); } };
+      h.flush_counts = [](unsigned cpu) { VCPU *v = vcpus[cpu]; if (v) { if (!v->hold_pending) flush_pending(v, 0); ff_report(v); } };
       pacsim_qemu::activate(h, MAX_VCPUS, opt_verbose);
       pacsim_qemu::announce();
    }
@@ -1878,6 +2353,8 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
 #else
    SNP_REG_SYSCALL(id, syscall_enter);
 #endif
+   if (!in_system_mode)
+      SNP_REG_SYSCALL_RET(id, syscall_ret);
    SNP_REG_VCPU_INIT(id, vcpu_init);
 #if QEMU_PLUGIN_VERSION >= 7
    if (SNP_HAVE_CLAIM)

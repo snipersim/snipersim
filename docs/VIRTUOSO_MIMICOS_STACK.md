@@ -113,7 +113,7 @@ Frontends, all producing SIFT:
 | SDE (default) or Pin | `FRONTEND=` at build; `record-trace` | live: the recorder streams to the simulator through FIFOs with flow control; the recorder follows forks and threads |
 | PinPlay pinballs | `--pinballs=<basename>` | recorded with SDE's `-log`, replayed with address translation (`test/pinplay`) |
 | DynamoRIO | `DYNAMORIO=ON`; `record-trace --frontend=dr` | x86 and the ARM64 preset |
-| QEMU, x86 user mode | `QEMU=ON`; `qemu-x86_64 -plugin lib/libsniper-qemu.so,output=...` | single-threaded guests with flow control; multi-threaded guests get one stream per thread |
+| QEMU, x86 user mode | `QEMU=ON`; `qemu-x86_64 -plugin lib/libsniper-qemu.so,output=...` | flow control (live) for single- and multi-threaded guests, the latter on a QEMU with `tools/qemu-11.1.1-plugin-wait.patch` (the deps-built ones); one stream per thread |
 | QEMU, full system | `qemu-system-x86_64 -plugin ...,time,ns=1` | Sniper owns guest time; simulating such a trace waits on the decoder following the CPU mode |
 | ChampSim | `--traces=x.champsim.gz` | detected by extension or by a missing SIFT magic |
 | Stored SIFT | `--traces=a.sift,b.sift` | one application per trace, or one per thread with `--response-traces` |

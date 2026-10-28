@@ -38,4 +38,22 @@ __attribute__((weak)) bool qemu_plugin_register_sysreg_cb(unsigned int index, qe
 #define SNP_HAVE_SYSREGS false
 #endif
 
+/* Waiting outside the run loop (tools/qemu-11.1.1-plugin-wait.patch): a vCPU
+ * that must wait for Sniper leaves the run loop first, so that its wait holds
+ * up no exclusive section -- what makes a multi-threaded guest possible in
+ * user mode.  Bound weakly for the same reason as the above: a QEMU without
+ * it runs single-threaded guests, waiting in the callback, and refuses a
+ * second thread on a live channel. */
+#if QEMU_PLUGIN_VERSION >= 7 && !defined(QEMU_PLUGIN_HAS_VCPU_WAIT)
+typedef void (*qemu_plugin_vcpu_wait_cb_t)(unsigned int vcpu_index, void *udata);
+extern "C" {
+__attribute__((weak)) void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, void *udata, uintptr_t host_pc);
+}
+#define SNP_HAVE_WAIT       (qemu_plugin_vcpu_wait_at != nullptr)
+#elif defined(QEMU_PLUGIN_HAS_VCPU_WAIT)
+#define SNP_HAVE_WAIT       true
+#else
+#define SNP_HAVE_WAIT       false
+#endif
+
 #endif

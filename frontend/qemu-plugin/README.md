@@ -4,7 +4,9 @@ A Sniper frontend that loads into QEMU as a TCG plugin. It writes SIFT, so to
 Sniper it is another trace producer. A stock QEMU with plugins enabled runs
 x86-64, AArch64 and RISC-V guests; the RISC-V matrix extensions (IME, AME) need
 the patched QEMU the `qemu-riscv-ime` dependency builds
-(`tools/riscv/qemu-11.1.1-ime.patch`).
+(`tools/riscv/qemu-11.1.1-ime.patch`), and multi-threaded guests run live need
+the plugin wait call that every user-mode QEMU `deps/sniper-deps` builds
+carries (`tools/qemu-11.1.1-plugin-wait.patch`; see "Which mode" below).
 
 ```
 make QEMU=ON -j8          # builds QEMU with plugins, then lib/libsniper-qemu.so
@@ -24,7 +26,8 @@ From run-sniper, like the other front ends:
 
 `--frontend=qemu` is user mode: the program's ELF header picks the QEMU
 (x86-64, AArch64 or RISC-V), and it runs live -- Sniper paces it and answers
-its magic instructions and system calls -- so it takes single-threaded guests.
+its magic instructions and system calls, single- or multi-threaded (threads
+need the plugin wait call in the QEMU; see "Which mode" below).
 `--frontend=qemu-system-<arch>` runs a whole machine from QEMU's own options,
 records each vCPU to a file in the output directory, then simulates the
 files; a machine reports its own way out (a test finisher, isa-debug-exit),
@@ -52,10 +55,13 @@ what each front end honours: `--pid`, `--gdb`, `-x`, pinballs, MPI,
 here by default), `--sde-arch`, `--vma`, and `--pa` in user mode.
 `--pacsim` is supported in user mode with `--roi` (docs/PACSIM_QEMU.md) and
 refused for system mode.  A multi-threaded guest records one trace per
-thread to files; run live, the plugin refuses its second thread (a vCPU
-waiting for Sniper inside a callback would block QEMU's exclusive
-sections), leaves the reason in `<output>.app<N>.refused`, and run-sniper
-fails the run with it.  A guest that creates a process (fork, vfork,
+thread to files, and runs live on a QEMU with the plugin wait call: each
+thread is announced to Sniper at its clone's return, its futex calls are
+answered by Sniper's model, and its exit wakes the joiner in that model.
+On a QEMU without the call the plugin refuses the second thread of a live
+run (a vCPU waiting for Sniper inside a callback would block QEMU's
+exclusive sections), leaves the reason in `<output>.app<N>.refused`, and
+run-sniper fails the run with it.  A guest that creates a process (fork, vfork,
 posix_spawn) is refused the same way in user mode, live or recorded to
 files: the child stops at once with the reason (it would write into the
 parent's streams) and the parent runs on.
@@ -155,13 +161,28 @@ SNIPER_QEMU_RISCV=/path/to/qemu-riscv64 SNIPER_RISCV_CC=/path/to/clang \
 |---|---|---|
 | pacing | `Sift::Writer::Sync()`, blocking | `qemu_plugin_update_ns()` |
 | Sniper controls | thread order | time |
-| guests | **single-threaded only** | multi-core |
+| guests | multi-threaded with the plugin wait call, else single-threaded | multi-core |
 
-Multi-threaded user mode is refused at startup rather than allowed to
-deadlock. A vCPU blocked inside a plugin callback still counts as running, so
-`start_exclusive()` -- used by `fork()` and by code-cache flushes -- waits for
-it; if the timing model will not release that vCPU until another one advances,
-nothing moves again. This is reproduced in `test/qemu-plugin-probe`.
+A vCPU blocked inside a plugin callback still counts as running, so
+`start_exclusive()` -- used by `fork()`, by code-cache flushes and by an
+atomic another thread emulates -- waits for it; if the timing model will not
+release that vCPU until another one advances, nothing moves again. This is
+reproduced in `test/qemu-plugin-probe`.
+
+`tools/qemu-11.1.1-plugin-wait.patch` adds `qemu_plugin_vcpu_wait_at()`: a
+callback that must wait leaves the run loop the way a system call does (the
+state at the instruction restored from the block's unwind data, the PC set
+to it, `EXCP_PLUGIN_WAIT` unwinding to the linux-user cpu loop), the plugin's
+wait runs there, outside `cpu_exec()`, and execution resumes at the
+instruction. With it the plugin waits nowhere inside the run loop: flow
+control reports from the block-start callback, and a magic instruction, a
+sampler cut at a back-edge or synchronisation point, leave the loop first and
+finish outside it; a per-vCPU done-mask keeps the callbacks that run again on
+resume from repeating what they did. System calls, thread start (the child
+waits in its init hook to be announced) and thread exit are already outside
+the run loop. Multi-threaded guests then run live. The call is bound weakly:
+on a QEMU without it the plugin waits in the callback as before and refuses a
+second thread on a live channel rather than deadlock.
 
 Full system is not exposed to that, because Sniper tells QEMU what time it is
 instead of holding a vCPU. QEMU keeps choosing the interleaving; Sniper
