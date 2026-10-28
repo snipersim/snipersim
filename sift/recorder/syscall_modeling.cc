@@ -6,6 +6,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <syscall.h>
+#include <time.h>
 
 bool handleAccessMemory(void *arg, Sift::MemoryLockType lock_signal, Sift::MemoryOpType mem_op, uint64_t d_addr, uint8_t* data_buffer, uint32_t data_size)
 {
@@ -85,6 +86,27 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
 
    // Default: not emulated, override later when needed
    thread_data[threadid].last_syscall_emulated = false;
+
+   /* A raw clock_gettime or gettimeofday with no simulator to answer it (a
+      trace written to a file): the one-IPC model's time from the
+      simulator's time zero, as the libc routines get (emulation.cc), never
+      the host's.  The call is skipped as an emulated one is. */
+   if (!(KnobEmulateSyscalls.Value() && thread_data[threadid].output && !emulation_ended)
+       && (syscall_number == SYS_clock_gettime || syscall_number == SYS_gettimeofday))
+   {
+      const bool tod = syscall_number == SYS_gettimeofday;
+      const int clk = tod ? 0 : (int)args[0];
+      const bool cputime = clk == CLOCK_PROCESS_CPUTIME_ID || clk == CLOCK_THREAD_CPUTIME_ID || clk < 0;
+      const uint64_t ns = (cputime ? 0 : Sift::TIME_START_DEFAULT * 1000000000ull)
+                        + Sift::one_ipc_ns(thread_data[threadid].icount_total);
+      const uint64_t words[2] = { ns / 1000000000ull, tod ? ns / 1000 % 1000000 : ns % 1000000000ull };
+      const ADDRINT out = tod ? args[0] : args[1];
+      if (out)
+         PIN_SafeCopy((void*)out, words, sizeof(words));
+      thread_data[threadid].last_syscall_returnval = 0;
+      thread_data[threadid].last_syscall_emulated = true;
+      return;
+   }
 
    if (syscall_number == SYS_write && thread_data[threadid].output)
    {

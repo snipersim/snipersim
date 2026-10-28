@@ -24,6 +24,7 @@ typedef struct {
    UINT64 icount_cacheonly_pending;
    UINT64 icount_detailed;
    UINT64 icount_reported;
+   UINT64 icount_total;   // every instruction the thread ran, in every mode: the one-IPC time model's clock (emulation.cc)
    ADDRINT last_syscall_number;
    ADDRINT last_syscall_returnval;
    UINT64 flowcontrol_target;

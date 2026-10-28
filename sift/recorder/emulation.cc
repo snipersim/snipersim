@@ -9,21 +9,31 @@
 
 static AFUNPTR ptr_exit = NULL;
 
+/* The guest's time where the simulator does not answer it (a trace written
+   to a file: no response channel): the one-IPC model's, from the same time
+   zero as the simulator's (sift/sift_format.h), never the host's.  With
+   time_ns the thread's instructions in nanoseconds; the CPU-time clocks
+   count from zero. */
+static bool live(THREADID threadid)
+{
+   return thread_data[threadid].output && KnobEmulateSyscalls.Value();
+}
+
+static uint64_t one_ipc_ns(THREADID threadid)
+{
+   return Sift::one_ipc_ns(thread_data[threadid].icount_total);
+}
+
 static void handleRdtsc(THREADID threadid, ADDRINT * gax, ADDRINT * gdx)
 {
-   if (!thread_data[threadid].output)
-      return;
-
+   uint64_t cycles = thread_data[threadid].icount_total;   // the one-IPC model: a cycle an instruction
    Sift::EmuRequest req;
    Sift::EmuReply res;
-   bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeRdtsc, req, res);
-
-   if (emulated)
-   {
-      // Return in eax and edx
-      *gdx = res.rdtsc.cycles >> 32;
-      *gax = res.rdtsc.cycles & 0xffffffff;
-   }
+   if (live(threadid) && thread_data[threadid].output->Emulate(Sift::EmuTypeRdtsc, req, res))
+      cycles = res.rdtsc.cycles;
+   // Return in eax and edx
+   *gdx = cycles >> 32;
+   *gax = cycles & 0xffffffff;
 }
 
 static void handleCpuid(THREADID threadid, ADDRINT * gax, ADDRINT * gbx, ADDRINT * gcx, ADDRINT * gdx)
@@ -88,54 +98,49 @@ static ADDRINT emuGetCPU(THREADID threadid)
 
 ADDRINT emuClockGettime(THREADID threadid, clockid_t clk_id, struct timespec *tp)
 {
-   if (!thread_data[threadid].output)
-      return 0;
-
-   switch(clk_id)
+   /* Every clock is simulated time: the simulator's (GetTime, from its
+      osemu/time_start; Counters for the CPU-time clocks, from zero), or the
+      one-IPC model's.  The CPU-time clocks -- the process's, the thread's,
+      the dynamic ones (negative ids) -- returned failure before. */
+   const bool cputime = clk_id == CLOCK_PROCESS_CPUTIME_ID || clk_id == CLOCK_THREAD_CPUTIME_ID || clk_id < 0;
+   uint64_t ns = (cputime ? 0 : Sift::TIME_START_DEFAULT * 1000000000ull) + one_ipc_ns(threadid);
+   if (live(threadid))
    {
-      case CLOCK_REALTIME:
-      case CLOCK_MONOTONIC:
-         // Return simulated time
-         if (tp)
-         {
-            Sift::EmuRequest req;
-            Sift::EmuReply res;
-            bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res);
-
-            sift_assert(emulated);
-            tp->tv_sec = res.gettime.time_ns / 1000000000;
-            tp->tv_nsec = res.gettime.time_ns % 1000000000;
-         }
-         return 0;
-      default:
-         // Unknown/non-emulated clock types (such as CLOCK_PROCESS_CPUTIME_ID/CLOCK_THREAD_CPUTIME_ID)
-         // clock_gettime is not supported in Pin 3.0
-         // return clock_gettime(clk_id, tp);
-         return 1;
+      Sift::EmuRequest req;
+      Sift::EmuReply res;
+      if (cputime && thread_data[threadid].output->Emulate(Sift::EmuTypeCounters, req, res))
+         ns = res.counters.time_ns;
+      else if (!cputime && thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res))
+         ns = res.gettime.time_ns;
    }
+   if (tp)
+   {
+      tp->tv_sec = ns / 1000000000;
+      tp->tv_nsec = ns % 1000000000;
+   }
+   return 0;
 }
 
 ADDRINT emuGettimeofday(THREADID threadid, struct timeval *tv, struct timezone *tz)
 {
-   if (!thread_data[threadid].output)
+   //sift_assert(tz == NULL); // gettimeofday() with non-NULL timezone not supported
+   if (tv == NULL)
       return 0;
 
-   //sift_assert(tz == NULL); // gettimeofday() with non-NULL timezone not supported
-   sift_assert(tv != NULL); // gettimeofday() called with NULL timeval not supported
-
+   uint64_t ns = Sift::TIME_START_DEFAULT * 1000000000ull + one_ipc_ns(threadid);
    Sift::EmuRequest req;
    Sift::EmuReply res;
-   bool emulated = thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res);
-   sift_assert(emulated);
+   if (live(threadid) && thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res))
+      ns = res.gettime.time_ns;
 
    // Make sure time seems to always increase (even in fast-forward mode when there is no timing model)
    static uint64_t t_last = 0;
-   if (t_last >= res.gettime.time_ns)
-      res.gettime.time_ns = t_last + 1000;
-   t_last = res.gettime.time_ns;
+   if (t_last >= ns)
+      ns = t_last + 1000;
+   t_last = ns;
 
-   tv->tv_sec = res.gettime.time_ns / 1000000000;
-   tv->tv_usec = (res.gettime.time_ns / 1000) % 1000000;
+   tv->tv_sec = ns / 1000000000;
+   tv->tv_usec = (ns / 1000) % 1000000;
 
    return 0;
 }
@@ -211,6 +216,23 @@ static void rtnCallback(RTN rtn, VOID *v)
    if (rtn_name == "exit")                   ptr_exit = RTN_Funptr(rtn);
 }
 
+static void timeInsCallback(INS ins, VOID *v)
+{
+   if (INS_IsRDTSC(ins))
+      INS_InsertPredicatedCall(ins, IPOINT_AFTER, (AFUNPTR)handleRdtsc, IARG_THREAD_ID, IARG_REG_REFERENCE, REG_GAX, IARG_REG_REFERENCE, REG_GDX, IARG_END);
+}
+
+static void timeRtnCallback(RTN rtn, VOID *v)
+{
+   std::string rtn_name = RTN_Name(rtn);
+   if (rtn_name == "clock_gettime" || rtn_name == "__clock_gettime")
+      RTN_ReplaceSignature(rtn, AFUNPTR(emuClockGettime), IARG_THREAD_ID,
+                           IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
+   else if (rtn_name.find("gettimeofday") != std::string::npos)
+      RTN_ReplaceSignature(rtn, AFUNPTR(emuGettimeofday), IARG_THREAD_ID,
+                           IARG_FUNCARG_ENTRYPOINT_VALUE, 0, IARG_FUNCARG_ENTRYPOINT_VALUE, 1, IARG_END);
+}
+
 void initEmulation()
 {
    if (KnobEmulateSyscalls.Value())
@@ -219,5 +241,15 @@ void initEmulation()
       TRACE_AddInstrumentFunction(traceCallback, 0);
       RTN_AddInstrumentFunction(rtnCallback, 0);
       initPapiInterceptors();
+   }
+   else
+   {
+      /* A trace written to a file has no simulator to answer, but the
+         guest's time is still not the host's: rdtsc, clock_gettime and
+         gettimeofday get the one-IPC model's, from the simulator's time
+         zero, so a recording reads the same clock as a live run would
+         under the one-IPC model, run after run. */
+      INS_AddInstrumentFunction(timeInsCallback, 0);
+      RTN_AddInstrumentFunction(timeRtnCallback, 0);
    }
 }

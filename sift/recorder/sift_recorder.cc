@@ -314,16 +314,15 @@ int main(int argc, char **argv)
       control_manager->RegisterHandler(Handler, 0, FALSE);
 
    icount.Activate();
-   if (KnobEmulateSyscalls.Value())
+   if (KnobEmulateSyscalls.Value() && !KnobUseResponseFiles.Value())
    {
-      if (!KnobUseResponseFiles.Value())
-      {
-         std::cerr << "Error, Response files are required when using syscall emulation." << std::endl;
-         exit(1);
-      }
-
-      initSyscallModeling();
+      std::cerr << "Error, Response files are required when using syscall emulation." << std::endl;
+      exit(1);
    }
+   /* In every mode: a trace written to a file still answers the guest's raw
+      time calls itself (syscall_modeling.cc), skipping them as emulated
+      ones are skipped; the hooks do nothing for a call that is not */
+   initSyscallModeling();
 
    initThreads();
    initRecorderControl();

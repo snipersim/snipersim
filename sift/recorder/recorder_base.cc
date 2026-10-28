@@ -54,6 +54,7 @@ VOID writeToVMATrace(THREADID threadid)
 VOID countInsns(THREADID threadid, INT32 count)
 {
    thread_data[threadid].icount += count;
+   thread_data[threadid].icount_total += count;
 
    if (!any_thread_in_detail && thread_data[threadid].output)
    {
@@ -82,6 +83,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 {
    // We're still called for instructions in the same basic block as ROI end, ignore these
    writeToVMATrace(threadid);
+   ++thread_data[threadid].icount_total;
 
    if (!thread_data[threadid].output)
    {
@@ -143,6 +145,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 VOID cacheOnlyUpdateInsCount(THREADID threadid, UINT32 icount)
 {
    thread_data[threadid].icount_cacheonly_pending += icount;
+   thread_data[threadid].icount_total += icount;
 
    /* The pending count normally rides along with the next memory access.
       A stretch without one -- a compute loop -- sends nothing, so the

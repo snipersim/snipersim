@@ -56,6 +56,7 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    PIN_ReleaseLock(&new_threadid_lock);
 
    thread_data[threadid].thread_num = num_threads++;
+   thread_data[threadid].icount_total = 0;
    thread_data[threadid].bbv = new Bbv();
 
    if (threadid > 0 && (any_thread_in_detail || KnobEmulateSyscalls.Value()))
