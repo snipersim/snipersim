@@ -286,6 +286,40 @@ def fft_and(feature):
     return check
 
 
+def simout_feature(out, outdir):
+    """The summary and the CPI stack (E9: nothing checked their contents).
+    sim.out must give each core the instruction count sim.stats has and no
+    negative idle time (a core runs up to a quantum past the last barrier,
+    which sim.out showed as -155 ns); tools/cpistack.py must place every
+    component the run reported (it dropped the CXL, shadow-cache, page-fault
+    and fast-fault ones with a warning) and its total must be the run's CPI."""
+    st, simdir = run_stats(outdir)
+    if not simdir:
+        return False, 'no sim.stats'
+    try:
+        simout = open(os.path.join(simdir, 'sim.out')).read()
+    except OSError:
+        return False, 'no sim.out'
+    insns = [int(float(v)) for v in st.get('performance_model.instruction_count', [])]
+    m = re.search(r'^\s*Instructions\s*\|(.*)$', simout, re.M)
+    got = [int(v) for v in m.group(1).replace('|', ' ').split()] if m else []
+    if not insns or got != insns:
+        return False, 'sim.out gives %s instructions, sim.stats %s' % (got, insns)
+    m = re.search(r'^\s*Idle time \(ns\)\s*\|(.*)$', simout, re.M)
+    if not m or any(int(v) < 0 for v in m.group(1).replace('|', ' ').split()):
+        return False, 'sim.out has a negative idle time: %s' % (m.group(0).strip() if m else 'no idle row')
+    p = subprocess.run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'cpistack.py'), '--cpi', '-d', simdir,
+                        '-o', os.path.join(outdir, 'cpi-stack')], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if 'not in all_items' in p.stdout:
+        return False, 'cpistack left components out: %s' % re.search(r'Also found.*', p.stdout).group(0)[:200]
+    m = re.search(r'^\s*total\s+([0-9.]+)', p.stdout, re.M)
+    cycles = sum(float(v) for v in st.get('performance_model.cycle_count', [])) / max(len(insns), 1)
+    cpi = cycles / (sum(insns) / float(len(insns)))
+    if not m or abs(float(m.group(1)) - cpi) > 0.05 * cpi:
+        return False, 'cpistack total %s, the run\'s CPI %.2f' % (m.group(1) if m else 'missing', cpi)
+    return True, 'sim.out and the CPI stack agree with sim.stats (CPI %s)' % m.group(1)
+
+
 def corefreq_is(want_ghz):
     def feature(out, outdir):
         st, _ = run_stats(outdir)
@@ -450,7 +484,7 @@ sniper_in_sniper_check.needs_outdir = True
 
 # name -> (check, why it might be skipped)
 CASES = {
-    'fft':             (fft_self_check, None),
+    'fft':             (fft_and(simout_feature), None),
     'aso':             (fft_and(aso_feature), None),
     'demo-scheduling': (fft_and(scheduler_feature), None),
     'fft-dvfs':        (fft_and(dvfs_feature), None),
