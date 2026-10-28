@@ -415,6 +415,11 @@ def qemu_command():
   if not os.path.exists(plugin):
     print('[RECORD-TRACE] Error: %s not built (make QEMU=ON)' % plugin, file=sys.stderr)
     sys.exit(1)
+  def plugin_arg(plugin, popts):
+    # QEMU parses -plugin as QemuOpts, which split at commas and read a
+    # doubled comma as one: a value with commas (pacsim-sync=a,b, a path)
+    # was cut at the first, and the rest taken for options of its own
+    return ','.join(o.replace(',', ',,') for o in [ plugin ] + popts)
   popts = [ 'output=%s' % outputfile, 'app=%d' % siftcountoffset ]
   if use_roi:
     popts.append('roi=1')
@@ -466,7 +471,7 @@ def qemu_command():
     if useresponsefiles:
       qemu_refuse('a live full-system run (response files); record, then simulate the traces')
     qemu = qemu_binary(arch, *QEMU_SYSTEM[arch])
-    argv = [ qemu ] + qopts + [ '-plugin', ','.join([ plugin ] + popts) ] + cmdline
+    argv = [ qemu ] + qopts + [ '-plugin', plugin_arg(plugin, popts) ] + cmdline
   else:
     if not cmdline:
       print('[RECORD-TRACE] Error: no guest program given', file=sys.stderr)
@@ -499,7 +504,7 @@ def qemu_command():
       # configuration models; $SNIPER_QEMU_RISCV_IME_CPU names another, and a
       # QEMU without the x- properties takes --frontend-option='-cpu max'.
       qopts = [ '-cpu', os.environ.get('SNIPER_QEMU_RISCV_IME_CPU', RISCV_CPU_DEFAULT) ] + qopts
-    argv = [ qemu ] + qopts + [ '-plugin', ','.join([ plugin ] + popts), '--', prog ] + cmdline[1:]
+    argv = [ qemu ] + qopts + [ '-plugin', plugin_arg(plugin, popts), '--', prog ] + cmdline[1:]
   print('[RECORD-TRACE] Using the QEMU frontend (%s)' % os.path.basename(qemu))
   return ' '.join(shlex.quote(a) for a in argv)
 
