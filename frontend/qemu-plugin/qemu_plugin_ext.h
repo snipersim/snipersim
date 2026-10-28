@@ -69,7 +69,13 @@ __attribute__((weak)) void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, 
 #define SNP_HAVE_COUNTERS   (qemu_plugin_register_counter_cb != nullptr)
 #define SNP_COUNTER_CB(f)   (f)
 #elif defined(QEMU_PLUGIN_HAS_COUNTER_CB)
-#define SNP_HAVE_COUNTERS   true
+/* Compiled against the patched header, but loaded into whichever QEMU runs
+ * it -- the system-mode builds do not carry the patch -- so still bound
+ * weakly: a strong reference left the plugin unloadable there */
+extern "C" {
+__attribute__((weak)) void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb_t cb, void *udata);
+}
+#define SNP_HAVE_COUNTERS   (qemu_plugin_register_counter_cb != nullptr)
 #define SNP_COUNTER_CB(f)   ((qemu_plugin_counter_cb_t)(f))
 #else
 #define SNP_HAVE_COUNTERS   false
