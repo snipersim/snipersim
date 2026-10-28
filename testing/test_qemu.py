@@ -2493,6 +2493,97 @@ def qemu_can_wait(qemu):
         return False
 
 
+COUNTER_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'counter_probe.c')
+
+
+def qemu_has_counters(qemu):
+    """Does this QEMU let the plugin answer the guest's counter reads
+    (tools/qemu-11.1.1-plugin-counters.patch)?"""
+    try:
+        with open(qemu, 'rb') as f:
+            return b'qemu_plugin_register_counter_cb' in f.read()
+    except IOError:
+        return False
+
+
+def counters_case(workdir, arch, cc_cmd, config):
+    """The counter probe (testing/apps/counter_probe.c) live through run-sniper
+    --frontend=qemu: the guest's direct reads of its clocks and counters --
+    RISC-V time, cycle and instret, AArch64 CNTVCT, x86's TSC -- see the
+    simulated time, as clock_gettime() does.  Around three 10 ms sleeps the
+    simulator charges 30 ms while the host barely sleeps; each counter must
+    show the same 30 ms at its rate: the timer at its frequency (CNTFRQ, or
+    the RISC-V timebase the plugin uses, 10 MHz), the cycle counters at the
+    configuration's core frequency.  They read the host's clock before
+    (tools/qemu-11.1.1-plugin-counters.patch)."""
+    qemu = user_qemu(arch)
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-%s' % arch
+    if not qemu_has_counters(qemu):
+        return None, 'this QEMU has no counter callback (tools/qemu-11.1.1-plugin-counters.patch): the guest reads the host\'s counters'
+    guest = os.path.join(workdir, 'counter_probe_' + arch)
+    rc, out = run(cc_cmd + ['-O1', '-ffreestanding', '-nostdlib', '-static', '-Wl,-e,_start', '-o', guest, COUNTER_PROBE], 120)
+    if rc != 0:
+        return None, 'could not build counter_probe.c (%s)' % exit_text(rc)
+    outdir = os.path.join(workdir, 'counters-' + arch)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', config, '-d', outdir,
+                   '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+    m = re.search(r'counter_probe: ns=(\d+) time=(\d+) freq=(\d+) cycles=(\d+) instret=(\d+) loop_instret=(\d+)', out)
+    if rc != 0 or not m:
+        return False, 'the probe did not run (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
+    ns, time_, freq, cycles, instret, loop = (int(x) for x in m.groups())
+    if not 30000000 <= ns <= 31000000:
+        return False, 'clock_gettime saw %d ns over 30 ms of simulated sleep' % ns
+    try:
+        cfg = open(os.path.join(outdir, 'simulation', 'sim.cfg')).read()
+        ghz = float(re.search(r'\[perf_model/core\][^\[]*?\nfrequency\s*=\s*"?([0-9.]+)', cfg).group(1))
+    except (IOError, AttributeError) as e:
+        return False, 'no core frequency in the run\'s sim.cfg (%s)' % e
+    def near(value, want, what):
+        if not abs(value - want) <= 0.01 * want + 2:
+            return '%s %d, expected %.0f (the %d ns the clock saw)' % (what, value, want, ns)
+        return None
+    seen = []
+    if arch != 'x86_64':
+        rate = freq or 10000000                       # CNTFRQ, or the plugin's RISC-V timebase
+        why = near(time_, ns * rate / 1e9, 'the timer moved')
+        if why:
+            return False, why + '; it reads the host\'s clock' if time_ < ns * rate / 1e9 / 2 else why
+        seen.append('timer %d at %d Hz' % (time_, rate))
+    if arch != 'aarch64':
+        why = near(cycles, ns * ghz, 'the cycle counter moved')
+        if why:
+            return False, why
+        seen.append('cycles %d at %g GHz' % (cycles, ghz))
+    if arch == 'riscv64':
+        if not 100000 * 2 <= loop <= 100000 * 12 or instret > loop:
+            return False, 'instret: %d over a 100,000-iteration loop, %d over the sleeps' % (loop, instret)
+        seen.append('instret %d over the loop' % loop)
+    return True, '30 ms of simulated sleep (%d ns): %s' % (ns, ', '.join(seen))
+
+
+def case_user_counters(p, g, workdir):
+    """The guest's TSC (rdtsc) under x86-64 user mode reads simulated time."""
+    return counters_case(workdir, 'x86_64', ['gcc'], 'gainestown')
+
+
+def case_riscv_user_counters(p, g, workdir):
+    """RISC-V time, cycle and instret under user mode read simulated time."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    return counters_case(workdir, 'riscv64', [os.environ['SNIPER_RISCV_CC'], '--target=riscv64-linux-gnu',
+                         '-march=rv64gc', '-mabi=lp64d', '-fuse-ld=lld'], 'riscv')
+
+
+def case_aarch64_user_counters(p, g, workdir):
+    """AArch64 CNTVCT_EL0 under user mode reads simulated time."""
+    qemu, cc, why = aarch64_tools()
+    if why:
+        return None, why
+    return counters_case(workdir, 'aarch64', [cc, '--target=aarch64-linux-gnu', '-fuse-ld=lld'], 'cortex-a72')
+
+
 def mt_live_check(rc, out, line, qemu):
     """A multi-threaded guest run live through run-sniper: with the wait call
     in the QEMU it runs to the end with the native checksum; without it the
@@ -2654,6 +2745,9 @@ CASES = {
     'user-mt-streams':  case_user_mt_streams,
     'user-mt-live':     case_user_mt_live,
     'user-roi-wait':    case_user_roi_wait,
+    'user-counters':    case_user_counters,
+    'riscv-user-counters': case_riscv_user_counters,
+    'aarch64-user-counters': case_aarch64_user_counters,
     'user-fork-refused': case_user_fork_refused,
     'system-exact':     case_system_exact,
     'system-vapa':      case_system_vapa,

@@ -99,6 +99,12 @@ Version 9.0 (in preparation)
     plugin wait for the simulator outside QEMU's run loop, and threads are
     announced, joined and ended as under the SIFT recorder; a QEMU without
     the call still runs single-threaded guests and refuses a second thread
+  * Guests under a live QEMU run see simulated time however they read it:
+    clock_gettime and gettimeofday are answered by the simulator, and the
+    counter instructions QEMU's user mode answered from the host's clock --
+    RISC-V time, cycle and instret, AArch64 CNTVCT, x86 rdtsc --
+    by the plugin, through tools/qemu-11.1.1-plugin-counters.patch (applied to
+    every user-mode QEMU deps/sniper-deps builds)
   * The QEMU plugin no longer crashes at exit when a guest's threads end
     together (closing the streams raced), nor when it refuses a run (it now
     ends with _exit); the SIFT reader ends a stream cut inside an

@@ -156,7 +156,11 @@ which is what lets multi-threaded guests run live with flow control and
 sampling (`frontend/qemu-plugin/README.md`, "Which mode";
 `PACSIM_QEMU.md`).  `regen-qemu-patch.sh` takes it back out of the patched
 tree before rewriting the IME patch, so the regenerated file is the IME
-patch alone.
+patch alone.  A third, `tools/qemu-11.1.1-plugin-counters.patch`, follows it
+on every user-mode build: the guest's time, cycle and instret CSRs, which
+user mode answers from the host's clock, are answered by the plugin with
+the simulator's (`frontend/qemu-plugin/README.md`, "Time"); the
+regeneration takes it out too.
 
 ### 3.3 The frontend plugin
 
