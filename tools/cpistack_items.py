@@ -119,14 +119,14 @@ def build_grouplist(legacy = False):
     return [
       ('compute',     (0xff,0,0), ('dispatch_width', 'rs_full', 'base', 'issue', 'depend',
                                    'branch', 'serial', 'smt')),
-      ('communicate', (0,0xff,0), ('itlb','dtlb','ifetch','mem',)),
+      ('communicate', (0,0xff,0), ('itlb','dtlb','ifetch','mem','fast-fault',)),
       ('synchronize', (0,0,0xff), ('sync', 'recv', 'dvfs-transition', 'imbalance')),
     ]
   else:
     return [
       ('compute',     (0xff,0,0),    ('dispatch_width', 'rs_full', 'base', 'issue', 'depend', 'serial', 'smt')),
       ('branch',      (0xff,0xff,0), ('branch',)),
-      ('memory',      (0,0xff,0),    ('itlb','dtlb','ifetch','mem',)),
+      ('memory',      (0,0xff,0),    ('itlb','dtlb','ifetch','mem','fast-fault',)),   # every top-level item needs a group (viz maps them)
       ('synchronize', (0,0,0xff),    ('sync', 'recv', 'dvfs-transition', 'imbalance')),
     ]
 
