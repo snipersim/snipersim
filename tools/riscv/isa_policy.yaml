@@ -48,7 +48,12 @@ classes:
      name: '^(jalr|c\.jr|c\.jalr)$'}
   # memory (scalar)
   - {class: atomic,        latency: 1,  cpi: generic, flags: [load, store, atomic],
-     name: '^(amo.*|sc\.[wdq]|amocas.*)$'}
+     name: '^(amo.*|amocas.*)$'}
+  # A store-conditional writes memory (when its reservation holds) and reads
+  # none: it checks the reservation, not the line.  In the atomic class it got
+  # a load micro-op it does not perform.
+  - {class: store_conditional, latency: 1, cpi: generic, flags: [store, atomic],
+     name: '^sc\.[wdq]$'}
   - {class: load,          latency: 1,  cpi: generic, flags: [load],
      name: '^(c\.)?(f?l[bhwdq]u?(sp)?|lr\.[wdq]|lbu|lhu|lwu)$'}
   - {class: store,         latency: 1,  cpi: generic, flags: [store],

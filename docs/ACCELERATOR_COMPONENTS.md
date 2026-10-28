@@ -13,7 +13,7 @@ of the two workloads on every unit.  The decoder generation is described in
 ```
  specification                 software                                  hardware model (Sniper)
  -------------                 --------                                  -----------------------
- riscv-unified-db (ratified)   tools/riscv/gen_isa.py + isa_policy.yaml  decoder_lib/riscv_isa_gen.*  (1436 insns, 38 classes)
+ riscv-unified-db (ratified)   tools/riscv/gen_isa.py + isa_policy.yaml  decoder_lib/riscv_isa_gen.*  (1436 insns, 39 classes)
  IME 0.9 UDB (Zvvmm, Zvvfmm)   -> include/riscv_insn.h  (typed .insn     config/riscv.cfg [perf_model/core/riscv]  (class costs)
  AME draft -> gen_ame_udb.py      macros for any clang)                  core_model_boom_v1  (BOOM-class OoO core)
  Xsnacc overlay (task hints)                                             ame_tile.cc  (attached tile, DMA accelerator, couplings)

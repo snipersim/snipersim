@@ -23,7 +23,7 @@ blocks).
 
 | piece | where | what it does |
 |---|---|---|
-| Specification to decoder | `tools/riscv/gen_isa.py`, `tools/riscv/isa_policy.yaml`, `tools/riscv/overlay/` | Generates Sniper's RISC-V decoder, core-model class table, config block and an inline-assembly header from the RISC-V Unified Database (UDB) plus overlays: 1,436 instructions in 38 classes |
+| Specification to decoder | `tools/riscv/gen_isa.py`, `tools/riscv/isa_policy.yaml`, `tools/riscv/overlay/` | Generates Sniper's RISC-V decoder, core-model class table, config block and an inline-assembly header from the RISC-V Unified Database (UDB) plus overlays: 1,436 instructions in 39 classes |
 | AME overlay generator | `tools/riscv/gen_ame_udb.py` | Turns the Attached Matrix Extension draft (AsciiDoc source) into UDB YAML: 138 instructions under `Ztt` |
 | Task-interface extension | `tools/riscv/overlay/.../Xsnacc` | Two instructions, `acc.task` and `acc.wait`, that hand a matrix product to a DMA-attached accelerator |
 | Patched QEMU | `tools/riscv/qemu-11.1.1-ime.patch`, built into `qemu-riscv/` by `deps/sniper-deps --riscv-ime` | QEMU 11.1.1 riscv64 user mode with the IME 0.9 matrix instructions, the vector unit at the RVV 1.0 maximum of 65,536 bits, and four plugin-API additions for extensions emulated in a plugin |
@@ -98,7 +98,7 @@ commit they came from in their first comment.
 | `decoder` | `vector_bytes: 16` (the static size of one vector memory micro-op), `memory_uops: 32` (how many micro-ops a footprint instruction may spread over) |
 | `header` | which extensions get `.insn` macros: `^Zvv` (IME), `^Ztt` (AME), `^Xsnacc`; prefix `RISCV_` |
 | `extensions` | regexes selecting what to include from the UDB (base, compressed, atomic, bit manipulation, FP, vector, privileged, plus the three overlays) |
-| `classes` | ordered rules mapping instructions to the 38 classes with a placeholder latency, issue interval and CPI group each; vector loads and stores are told apart by their assembly template, not their mnemonic |
+| `classes` | ordered rules mapping instructions to the 39 classes with a placeholder latency, issue interval and CPI group each; vector loads and stores are told apart by their assembly template, not their mnemonic |
 | `accumulates` | forms whose destination is also a source (multiply-accumulates, reductions) |
 | `mem_size` | bytes per scalar memory instruction |
 
