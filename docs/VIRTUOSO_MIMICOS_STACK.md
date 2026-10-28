@@ -536,7 +536,7 @@ application taken from the kernel's `[apps]` list on one kernel core).
 ```bash
 # verify:env
 export SNIPER_ROOT=$(pwd)
-WORK=${WORK:-/tmp/sniper-stack-examples}; mkdir -p $WORK
+WORK=${WORK:-$(mktemp -d -t sniper-stack-examples.XXXXXX)}; mkdir -p $WORK; echo "work directory: $WORK"   # a fresh one per run
 gcc -O1 -pthread -I include -o $WORK/workload testing/apps/workload.c    # the configs and Virtuoso suites' workload: prints a checksum
 ```
 
@@ -599,11 +599,12 @@ trace.)
 ```bash
 # verify:qemu
 make -j$(nproc) QEMU=ON > /dev/null                        # QEMU 11.1.1 with plugins and lib/libsniper-qemu.so
-make -s -C test/qemu-plugin-probe QEMU_SRC=$SNIPER_ROOT/qemu st boot.img probe.so
-qemu/build/qemu-x86_64 -plugin build/default/lib/libsniper-qemu.so,output=$WORK/st -- test/qemu-plugin-probe/st 2>&1 | tail -1
+cp -r test/qemu-plugin-probe $WORK/probe                 # built in a copy: nothing is written into the tree
+make -s -C $WORK/probe QEMU_SRC=$SNIPER_ROOT/qemu st boot.img probe.so
+qemu/build/qemu-x86_64 -plugin build/default/lib/libsniper-qemu.so,output=$WORK/st -- $WORK/probe/st 2>&1 | tail -1
 ./run-sniper -n 1 -c nehalem-lite -d $WORK/st-sim --traces=$WORK/st.app0.th0.sift | grep -E 'Simulated'
-qemu/build/qemu-system-x86_64 -nographic -accel tcg -m 64 -drive file=test/qemu-plugin-probe/boot.img,format=raw,if=floppy \
-   -device isa-debug-exit,iobase=0xf4,iosize=0x04 -plugin test/qemu-plugin-probe/probe.so,quantum=100000,lo=0x7c00,hi=0x7c1f \
+qemu/build/qemu-system-x86_64 -nographic -accel tcg -m 64 -drive file=$WORK/probe/boot.img,format=raw,if=floppy \
+   -device isa-debug-exit,iobase=0xf4,iosize=0x04 -plugin $WORK/probe/probe.so,quantum=100000,lo=0x7c00,hi=0x7c1f \
    -no-reboot 2>&1 | grep range_insns      # the boot sector exits QEMU through the debug port; exactly 3,003,007 in [0x7c00,0x7c1f)
 ```
 

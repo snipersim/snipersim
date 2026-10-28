@@ -342,7 +342,7 @@ export SNIPER_QEMU_RISCV=$SNIPER_ROOT/qemu-riscv/build/qemu-riscv64
 # address above it.
 export PLUGIN=$SNIPER_ROOT/build/default/lib/libsniper-qemu.so
 export RVCPU=max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on   # the IME features on; vlen up to 65536
-WORK=${WORK:-/tmp/sniper-riscv-examples}; mkdir -p $WORK
+WORK=${WORK:-$(mktemp -d -t sniper-riscv-examples.XXXXXX)}; mkdir -p $WORK; echo "work directory: $WORK"   # a fresh one per run
 rvcc() { $SNIPER_RISCV_CC --target=riscv64-linux-gnu -march=rv64gcv -mabi=lp64d -O2 -ffreestanding \
          -nostdlib -static -fuse-ld=lld -Wl,-e,_start -I include "$@"; }
 ```
@@ -436,10 +436,11 @@ Traced and simulated, with the per-token cost and the exact counts:
 # verify:agent-simulate
 $SNIPER_QEMU_RISCV -R 0x4000000000 -cpu $RVCPU -plugin $PLUGIN,output=$WORK/agent-rvv -- $WORK/agent-rvv > $WORK/agent-rvv.out; grep -E '^tokens|^attention' $WORK/agent-rvv.out
 ./run-sniper -n 1 -c riscv -d $WORK/agent-rvv-sim --traces=$WORK/agent-rvv.app0.th0.sift > /dev/null
-python3 - <<'EOF'
-import re
-st = dict(l.split(' = ', 1) for l in open('/tmp/sniper-riscv-examples/agent-rvv-sim/simulation/sim.stats') if ' = ' in l)
-m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', open('/tmp/sniper-riscv-examples/agent-rvv.out').read())
+WORK=$WORK python3 - <<'EOF'
+import os, re
+work = os.environ['WORK']
+st = dict(l.split(' = ', 1) for l in open(work + '/agent-rvv-sim/simulation/sim.stats') if ' = ' in l)
+m = re.search(r'tokens: (\d+) prefilled, (\d+) generated', open(work + '/agent-rvv.out').read())
 tokens = int(m.group(1)) + int(m.group(2))
 print('cycles/token %.0f  insn/token %.0f  v_fp_muladd %s' % (float(st['performance_model.cycle_count']) / tokens,
       int(st['performance_model.instruction_count']) / tokens, st['riscv.v_fp_muladd'].split(',')[0]))
