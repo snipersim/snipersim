@@ -16,18 +16,33 @@ RobContentionCortexA72::RobContentionCortexA72(const Core *core, const CoreModel
    , m_now(core->getDvfsDomain())
    , alu_used_until(DynamicMicroOpCortexA72::UOP_ALU_SIZE, SubsecondTime::Zero())
 {
+   /* The issue pipelines, by kind.  The defaults are the A72's (Cortex-A72
+      Software Optimization Guide, UAN0016A, section 2.1): one branch, two
+      integer, one integer multi-cycle, two FP/ASIMD, one load and one store
+      pipeline.  A wider core built on this model (config/core_configs/
+      cortex_a720, cortex_x4, oryon_xelite) gives its own counts;
+      load_store bounds loads and stores together, for cores whose
+      load/store pipelines take either. */
+   const String k = "perf_model/core/cortex_a72_ports/";
+   m_branch = Sim()->getCfg()->getIntDefault(k + "branch", 1);
+   m_integer = Sim()->getCfg()->getIntDefault(k + "integer", 2);
+   m_multi = Sim()->getCfg()->getIntDefault(k + "integer_multi", 1);
+   m_fp = Sim()->getCfg()->getIntDefault(k + "fp_asimd", 2);
+   m_load = Sim()->getCfg()->getIntDefault(k + "load", 1);
+   m_store = Sim()->getCfg()->getIntDefault(k + "store", 1);
+   m_memory = Sim()->getCfg()->getIntDefault(k + "load_store", m_load + m_store);
+   /* On the A72 the multi-cycle pipeline takes only multi-cycle µOPs; on
+      later cores (the A720's and X4's "Integer Single/Multi-cycle" pipelines)
+      it also takes single-cycle ALU µOPs */
+   m_alu_on_multi = Sim()->getCfg()->getBoolDefault(k + "alu_on_multi", false);
+   LOG_ASSERT_ERROR(m_branch && m_integer && m_multi && m_fp && m_load && m_store && m_memory,
+                    "perf_model/core/cortex_a72_ports: every kind of pipeline needs at least one");
 }
 
 void RobContentionCortexA72::initCycle(SubsecondTime now)
 {
    m_now.setElapsedTime(now);
-   port_branch = false;
-   port_simd0 = false;
-   port_simd1 = false;
-   port_int_multi = false;
-   port_ld = false; 
-   port_st = false; 
-   ports_integer = 0;
+   n_branch = n_integer = n_multi = n_fp = n_load = n_store = 0;
 }
 
 bool RobContentionCortexA72::tryIssue(const DynamicMicroOp &uop)
@@ -40,100 +55,34 @@ bool RobContentionCortexA72::tryIssue(const DynamicMicroOp &uop)
 
    const DynamicMicroOpCortexA72 *core_uop_info = uop.getCoreSpecificInfo<DynamicMicroOpCortexA72>();
    DynamicMicroOpCortexA72::uop_port_t uop_port = core_uop_info->getPort();
-   
-   if (uop_port == DynamicMicroOpCortexA72::UOP_PORT0)
+
+   // What the µOP needs this cycle: a pipeline of one kind, and for the
+   // paired kinds an integer pipeline as well
+   bool branch = false, integer = false, multi = false, fp = false, load = false, store = false;
+   switch (uop_port)
    {
-      if (port_branch)
-         return false;
-      else
-         port_branch = true;
+      case DynamicMicroOpCortexA72::UOP_PORT0:    branch = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT0_12: branch = integer = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT12:   integer = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT3:    multi = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT12_3: multi = integer = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT4:
+      case DynamicMicroOpCortexA72::UOP_PORT5:    fp = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT6:    load = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT6_12: load = integer = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT7:    store = true; break;
+      case DynamicMicroOpCortexA72::UOP_PORT7_12: store = integer = true; break;
+      default: break;
    }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT0_12)
+   if (integer && !multi && n_integer >= m_integer && m_alu_on_multi && n_multi < m_multi)
    {
-      if (port_branch || ports_integer >= 2)
-         return false;
-      else
-      {
-         port_branch = true;
-         ports_integer++;
-      }
+      integer = false;     // the ALU µOP takes a free single/multi-cycle pipeline
+      multi = true;
    }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT12)
-   {
-      if (ports_integer >= 2)
-         return false;
-      else
-         ports_integer++;
-   }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT3)
-   {
-      if (port_int_multi)
-         return false;
-      else
-         port_int_multi = true;
-   }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT12_3)
-   {
-      if (port_int_multi || ports_integer >= 2)
-         return false;
-      else
-      {
-         port_int_multi = true;
-         ports_integer++;
-      }
-   }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT4)
-   {
-      if (port_simd0 && port_simd1)
-         return false;
-      else if (port_simd0)
-         port_simd1 = true;
-      else
-         port_simd0 = true;
-   }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT5)
-   {
-      if (port_simd1 && port_simd0)
-         return false;
-      else if (port_simd1)
-         port_simd0 = true;      
-      else
-         port_simd1 = true;
-   }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT6)
-   {
-      if (port_ld)
-         return false;
-      else
-         port_ld = true;
-   }
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT6_12)
-   {
-      if (port_ld || ports_integer >= 2)
-         return false;
-      else
-      {
-         port_ld = true;
-         ports_integer++;
-      }
-   }     
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT7)
-   {
-      if (port_st)
-         return false;
-      else
-         port_st = true;
-   }   
-   else if (uop_port == DynamicMicroOpCortexA72::UOP_PORT7_12)
-   {
-      if (port_st || ports_integer >= 2)
-         return false;
-      else
-      {
-         port_st = true;
-         ports_integer++;
-      }
-   } 
+   if ((branch && n_branch >= m_branch) || (integer && n_integer >= m_integer) || (multi && n_multi >= m_multi)
+       || (fp && n_fp >= m_fp) || (load && n_load >= m_load) || (store && n_store >= m_store)
+       || ((load || store) && n_load + n_store >= m_memory))
+      return false;
 
    // ALU contention
    if (DynamicMicroOpCortexA72::uop_alu_t alu = core_uop_info->getAlu())
@@ -142,6 +91,8 @@ bool RobContentionCortexA72::tryIssue(const DynamicMicroOp &uop)
          return false;
    }
 
+   n_branch += branch; n_integer += integer; n_multi += multi;
+   n_fp += fp; n_load += load; n_store += store;
    return true;
 }
 
@@ -155,6 +106,6 @@ void RobContentionCortexA72::doIssue(DynamicMicroOp &uop)
 
 bool RobContentionCortexA72::noMore()
 {
-   // With an issue width of 3 instructions and 6 ports, the ports won't be clogged
+   // The dispatch width bounds issue before the ports clog
    return false;
 }

@@ -18,16 +18,11 @@ class RobContentionCortexA72 : public RobContention {
       uint64_t m_cache_block_mask;
       ComponentTime m_now;
 
-      // Port contention
-      // maximum 1 instruction through these ports
-      bool port_branch;
-      bool port_simd0;
-      bool port_simd1;
-      bool port_int_multi;  // Integer multi-cycle
-      bool port_ld;       // Load port
-      bool port_st;       // Store port
-      // maximum 2 instruction through these ports
-      int ports_integer;    // Integer 0/1
+      // Port contention: how many µOPs of each kind issue per cycle, and the
+      // limits (perf_model/core/cortex_a72_ports, the A72's by default)
+      unsigned int m_branch, m_integer, m_multi, m_fp, m_load, m_store, m_memory;
+      unsigned int n_branch, n_integer, n_multi, n_fp, n_load, n_store;
+      bool m_alu_on_multi;   // single-cycle µOPs also issue to a free multi-cycle pipeline
 
       std::vector<SubsecondTime> alu_used_until;
 
