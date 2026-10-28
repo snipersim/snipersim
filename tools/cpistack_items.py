@@ -35,7 +35,9 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
           'InstructionCacheL4',  'InstructionCacheL4_S', 'InstructionCachemiss', 'InstructionCache????',
           'InstructionCachenuca-cache', 'InstructionCachedram-cache', 'InstructionCachedram',
           'InstructionCachedram-remote', 'InstructionCachecache-remote', 'InstructionCachedram-local',
-          'InstructionCachepredicate-false', 'InstructionCacheprefetch-no-mapping', 'InstructionCacheunknown') ],
+          'InstructionCachepredicate-false', 'InstructionCacheprefetch-no-mapping', 'InstructionCacheunknown',
+          'InstructionCachecxl-near', 'InstructionCachecxl-far', 'InstructionCachecxl-pooled',
+          'InstructionCacheshadow-cache', 'InstructionCachepage-fault') ],
   ]
   if use_simple_mem:
     items += [
@@ -47,6 +49,9 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'remote',   .01, 'DataCachecache-remote' ],
       [ 'nuca',     .01, 'DataCachenuca-cache' ],
       [ 'dram-cache', .01, 'DataCachedram-cache' ],
+      [ 'cxl',      .01, ('DataCachecxl-near', 'DataCachecxl-far', 'DataCachecxl-pooled') ],
+      [ 'shadow-cache', .01, 'DataCacheshadow-cache' ],
+      [ 'page-fault', .01, 'DataCachepage-fault' ],
       [ 'dram',     .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote',
                           'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheprefetch-no-mapping', 'DataCacheunknown') ],
     ] ],
@@ -65,6 +70,9 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'off_socket',   .01, 'DataCachecache-remote' ],
       [ 'nuca',         .01, 'DataCachenuca-cache' ],
       [ 'dram-cache', .01, 'DataCachedram-cache' ],
+      [ 'cxl',      .01, ('DataCachecxl-near', 'DataCachecxl-far', 'DataCachecxl-pooled') ],
+      [ 'shadow-cache', .01, 'DataCacheshadow-cache' ],
+      [ 'page-fault', .01, 'DataCachepage-fault' ],
       [ 'dram',         .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote',
                               'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
     ] ],
@@ -92,6 +100,9 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
 
   items += [
     [ 'dvfs-transition', 0.01, 'SyncDvfsTransition' ],
+    # Virtuoso's SimFastFault: the cost charged for a page fault taken on the
+    # fast path (performance_model's cpiFastFault)
+    [ 'fast-fault', 0.01, 'FastFault' ],
     [ 'imbalance', 0.01, [
       [ 'start', 0.01, ('StartTime', 'Unknown') ],
       [ 'end',   0.01, 'Imbalance' ],
