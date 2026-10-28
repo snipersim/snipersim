@@ -523,6 +523,54 @@ def unavailable(reason):
     return None
 
 
+def tracked_files(d):
+    """The files of directory d that belong to the tree: git's list when the
+    tree is a checkout, otherwise everything in it."""
+    try:
+        out = subprocess.run(['git', 'ls-files', '-z', '--', '.'], cwd=d, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, check=True).stdout
+        files = [f for f in out.decode().split('\0') if f]
+        if files:
+            return files
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return [os.path.relpath(os.path.join(r, f), d) for r, _, fs in os.walk(d) for f in fs]
+
+
+def private_tree(name, root):
+    """A copy of test/<name> to run make in, so that a case writes nothing into
+    the source tree.  make run used to build, record and simulate in
+    test/<name>/: binaries, pinballs, traces and logs were left in the tree,
+    and sniper-in-sniper's fft.sift was recorded there while test_virtuoso
+    read it (E10).  The copy sits in a root of its own whose other entries
+    are links to the real one, so a Makefile's ../../run-sniper and
+    ../shared still resolve; the test directories it reaches into (../fft,
+    ../smc-rewrite, ../pa) are copied too, since it builds in them.  Only
+    files of the tree are copied, not what an earlier run in place left.
+    It is beside the case's output directory, not in it: the checks search
+    that for the run's statistics."""
+    shutil.rmtree(root, ignore_errors=True)
+    os.makedirs(os.path.join(root, 'test'))
+    for e in os.listdir(SNIPER_ROOT):
+        if e != 'test':
+            os.symlink(os.path.join(SNIPER_ROOT, e), os.path.join(root, e))
+    makefile = open(os.path.join(TEST_DIR, name, 'Makefile')).read()
+    dirs = {name, 'shared'} | set(re.findall(r'\.\./([A-Za-z0-9_.-]+)', makefile)) - {'..'}
+    for d in sorted(dirs):
+        src = os.path.join(TEST_DIR, d)
+        if not os.path.isdir(src):
+            continue
+        for f in tracked_files(src):
+            dst = os.path.join(root, 'test', d, f)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            s = os.path.join(src, f)
+            if os.path.islink(s):
+                os.symlink(os.readlink(s), dst)
+            else:
+                shutil.copy2(s, dst)
+    return os.path.join(root, 'test', name)
+
+
 def run(name, timeout, outdir):
     # Each test's run-sniper output goes to a directory of its own
     # (SNIPER_OUTPUT_DIR, honoured by run-sniper and dumpstats without -d),
@@ -530,7 +578,8 @@ def run(name, timeout, outdir):
     env = dict(os.environ, SNIPER_ROOT=SNIPER_ROOT, SNIPER_OUTPUT_DIR=outdir)
     env.setdefault('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
     t0 = time.time()
-    with subprocess.Popen(['make', 'run'], cwd=os.path.join(TEST_DIR, name),
+    cwd = private_tree(name, outdir + '.tree')
+    with subprocess.Popen(['make', 'run'], cwd=cwd,
                           env=env, start_new_session=True,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           text=True) as p:
@@ -569,6 +618,7 @@ def main():
     log = RunLog('apps')
     stopped_early = None
     kept = []
+    last_tree = None
     for name in names:
         check, needs = CASES[name]
         why = unavailable(needs) if needs else None
@@ -595,8 +645,11 @@ def main():
         # intermittent failure leaves its evidence instead of a bare verdict.
         if args.keep or rc is None or not ok:
             kept.append(outdir)
+            kept.append(outdir + '.tree')
+            last_tree = os.path.join(outdir + '.tree', 'test', name)
         else:
             shutil.rmtree(outdir, ignore_errors=True)
+            shutil.rmtree(outdir + '.tree', ignore_errors=True)
         if rc is None:
             # A timeout is the most expensive check there is; record it, or the
             # suite total quietly omits the worst case.
@@ -625,10 +678,10 @@ def main():
             break
 
     if stopped_early:
-        # Each case runs in its own test/<name>, which is where the output and
-        # the logs already are; nothing to keep, only somewhere to point.
+        # Each case runs in a private copy of test/<name>, kept with its
+        # output when it fails; point at it.
         print('\nstopped at the first failure; %s ran in %s'
-              % (stopped_early, os.path.join(SNIPER_ROOT, 'test', stopped_early)))
+              % (stopped_early, last_tree))
     log.finish()
     print()
     # len(names) would be wrong after --failfast: the checks it never reached
