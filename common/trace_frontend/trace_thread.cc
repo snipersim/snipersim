@@ -495,6 +495,22 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
                              + getCurrentTime().getNS();
          return true;
       }
+      case Sift::EmuTypeCounters:
+      {
+         /* A guest's direct reads of its clocks and counters (RISC-V time,
+            cycle and instret, AArch64 CNTVCT and PMCCNTR, x86's TSC), for a
+            front end that answers them (the QEMU plugin): the simulated
+            time, without the wall-clock start that clock_gettime adds, in
+            nanoseconds and in the core's and the global clock's cycles,
+            and the core's instruction count. */
+         const SubsecondTime now = getCurrentTime();
+         Core *core = m_thread->getCore();
+         res.counters.time_ns = now.getNS();
+         res.counters.global_cycles = SubsecondTime::divideRounded(now, *Sim()->getDvfsManager()->getGlobalDomain());
+         res.counters.core_cycles = core ? SubsecondTime::divideRounded(now, *core->getDvfsDomain()) : res.counters.global_cycles;
+         res.counters.instructions = core ? core->getPerformanceModel()->getInstructionCount() : 0;
+         return true;
+      }
       case Sift::EmuTypeCpuid:
       {
          cpuid_result_t result;

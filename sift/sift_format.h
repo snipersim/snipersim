@@ -141,6 +141,7 @@ namespace Sift
       EmuTypeSetThreadInfo,
       EmuTypePAPIstart,
       EmuTypePAPIread,
+      EmuTypeCounters,     // the guest's clocks and counters, for a front end that answers its reads of them
    } EmuType;
 
    typedef union {
@@ -171,6 +172,12 @@ namespace Sift
       struct {
          uint64_t time_ns;
       } gettime;
+      struct {
+         uint64_t time_ns;        // simulated time since the start of the run
+         uint64_t core_cycles;    // that time in the core's clock
+         uint64_t global_cycles;  // that time in the global clock (as rdtsc's)
+         uint64_t instructions;   // instructions the core has run for the thread's application
+      } counters;
       struct {
          uint32_t eax, ebx, ecx, edx;
       } cpuid;
