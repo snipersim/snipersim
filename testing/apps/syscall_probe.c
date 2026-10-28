@@ -17,6 +17,12 @@
  *   - sched_getaffinity: the simulator emulates it, and its answer -- the
  *     simulated cores, not the host's -- must reach the guest; the probe
  *     prints "syscall_probe: cpus=N".
+ *   - clock_gettime (CLOCK_MONOTONIC) and gettimeofday around the sleeps:
+ *     the simulator answers them with simulated time, so they see the 30 ms
+ *     the sleeps were charged, where the host clock sees the moment the
+ *     emulated sleeps took; and clock_gettime on CLOCK_PROCESS_CPUTIME_ID
+ *     succeeds (it used to abort the simulator).  The probe prints
+ *     "syscall_probe: slept_us=N tod_us=N cputime=R".
  *
  * Freestanding:
  *   clang --target=riscv64-linux-gnu -march=rv64gc -mabi=lp64d -O1 \
@@ -46,6 +52,8 @@ static long sys4(long n, long a, long b, long c, long d)
 #define SYS_exit_group  94
 #define SYS_nanosleep   101
 #define SYS_sched_getaffinity 123
+#define SYS_clock_gettime 113
+#define SYS_gettimeofday 169
 #define SYS_mlock       228
 #define SYS_munlockall  231
 
@@ -54,8 +62,21 @@ static volatile unsigned char page[8192] __attribute__((aligned(4096)));
 void _start(void)
 {
    struct { long sec, nsec; } req = { 0, 10 * 1000 * 1000 }, rem = { 0, 0 };
+   struct { long sec, nsec; } t0, t1, cpu;
+   struct { long sec, usec; } tv0, tv1;
+   sys4(SYS_clock_gettime, 1 /* CLOCK_MONOTONIC */, (long)&t0, 0, 0);
+   sys4(SYS_gettimeofday, (long)&tv0, 0, 0, 0);
    for (int i = 0; i < 3; i++)
       sys4(SYS_nanosleep, (long)&req, (long)&rem, 0, 0);
+   sys4(SYS_clock_gettime, 1 /* CLOCK_MONOTONIC */, (long)&t1, 0, 0);
+   sys4(SYS_gettimeofday, (long)&tv1, 0, 0, 0);
+   long cpu_rc = sys4(SYS_clock_gettime, 2 /* CLOCK_PROCESS_CPUTIME_ID */, (long)&cpu, 0, 0);
+   long slept = (t1.sec - t0.sec) * 1000000 + (t1.nsec - t0.nsec) / 1000;
+   long tod = (tv1.sec - tv0.sec) * 1000000 + (tv1.usec - tv0.usec);
+   char tline[] = "syscall_probe: slept_us=0000000 tod_us=0000000 cputime=0\n";
+   for (int k = 0; k < 7; k++) { long d = 1; for (int e = 0; e < 6 - k; e++) d *= 10; tline[24 + k] = '0' + (slept < 0 ? 0 : slept / d % 10); tline[39 + k] = '0' + (tod < 0 ? 0 : tod / d % 10); }
+   tline[55] = cpu_rc == 0 ? '0' : '1';
+   sys4(SYS_write, 1, (long)tline, sizeof(tline) - 1, 0);
 
    static volatile char path[] = "/nonexistent-sniper-syscall-probe";
    static const char expect[] = "/nonexistent-sniper-syscall-probe";

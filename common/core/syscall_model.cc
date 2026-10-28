@@ -17,6 +17,7 @@
 
 #include <errno.h>
 #include <time.h>
+#include <sys/time.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>
 
@@ -92,36 +93,66 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          break;
 
       case SYS_clock_gettime:
+      case SYS_gettimeofday:
       {
-         if (Sim()->getConfig()->getOSEmuClockReplace())
-         {
-            clockid_t clock = (clock_t)args.arg0;
-            /* args.arg1 is a guest address: written through the core, as
-               nanosleep reads its timespec.  Dereferencing it here was right
-               only in the in-process Pin mode, which never forwards
-               clock_gettime; a QEMU x86-64 guest does (228), and the write
-               landed in the simulator's own address space. */
-            struct timespec local_ts;
-            struct timespec *ts = &local_ts;
-            UInt64 time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
-                           + m_thread->getCore()->getPerformanceModel()->getElapsedTime().getNS();
+         /* The time in simulated seconds: emulation start plus the core's
+            elapsed time (osemu/clock_replace).  Only a front end without
+            routine replacement sends these -- the QEMU plugin, whose
+            guest's libc reaches them through QEMU's vDSO, which makes the
+            system call; the Pin recorder replaces the libc routines
+            instead (sift/recorder/emulation.cc) and never forwards them.
 
-            switch(clock) {
-               case CLOCK_REALTIME:
-               case CLOCK_MONOTONIC:
-               case CLOCK_MONOTONIC_COARSE:
-               case CLOCK_MONOTONIC_RAW:
-                  ts->tv_sec = time_ns / 1000000000;
-                  ts->tv_nsec = time_ns % 1000000000;
-                  core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) args.arg1, (char*) ts, sizeof(*ts));
-                  m_ret_val = 0;
-                  break;
-               default:
-                  LOG_ASSERT_ERROR(false, "SYS_clock_gettime does not currently support clock(%u)", clock);
-            }
-            m_emulated = true;
+            Once sent, the call is answered here whatever the clock: the
+            front end skips it and takes this answer.  Without clock_replace
+            the answer is the host's clock, as the guest would have read it;
+            a clock this does not simulate (a CPU-time clock, a boot clock)
+            is read on the host rather than aborting the run, as it did for
+            every clock but the real-time and monotonic ones.  args.arg1
+            (args.arg0 for gettimeofday) is a guest address: written through
+            the core, as nanosleep reads its timespec. */
+         const bool is_tod = syscall_number == SYS_gettimeofday;
+         const clockid_t clock = is_tod ? CLOCK_REALTIME : (clockid_t)args.arg0;
+         const IntPtr out = is_tod ? (IntPtr)args.arg0 : (IntPtr)args.arg1;
+         bool simulated = false;
+         switch (clock)
+         {
+            case CLOCK_REALTIME:
+            case CLOCK_REALTIME_COARSE:
+            case CLOCK_MONOTONIC:
+            case CLOCK_MONOTONIC_COARSE:
+            case CLOCK_MONOTONIC_RAW:
+            case CLOCK_BOOTTIME:
+               simulated = Sim()->getConfig()->getOSEmuClockReplace();
+               break;
+            default:
+               break;
          }
-         // else: don't set m_emulated and the system call will be executed natively
+         struct timespec ts;
+         if (simulated)
+         {
+            const UInt64 time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
+                                 + m_thread->getCore()->getPerformanceModel()->getElapsedTime().getNS();
+            ts.tv_sec = time_ns / 1000000000;
+            ts.tv_nsec = time_ns % 1000000000;
+            m_ret_val = 0;
+         }
+         else
+         {
+            m_ret_val = clock_gettime(clock, &ts) == 0 ? 0 : (IntPtr)-errno;
+         }
+         if (m_ret_val == 0 && out)
+         {
+            if (is_tod)
+            {
+               struct timeval tv;
+               tv.tv_sec = ts.tv_sec;
+               tv.tv_usec = ts.tv_nsec / 1000;
+               core->accessMemory(Core::NONE, Core::WRITE, out, (char*) &tv, sizeof(tv));
+            }
+            else
+               core->accessMemory(Core::NONE, Core::WRITE, out, (char*) &ts, sizeof(ts));
+         }
+         m_emulated = true;
          break;
       }
 

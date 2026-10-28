@@ -2301,8 +2301,20 @@ def syscall_probe_run(workdir, guest, config_args):
     if int(m.group(1)) != 1:
         return False, ('sched_getaffinity gave the guest %d CPUs on a 1-core simulation: the simulator\'s '
                        'answer did not replace the call' % int(m.group(1)))
+    # Time read through the system calls is simulated time (G8): the 30 ms
+    # the sleeps were charged, where the host clock saw the moment they took
+    m = re.search(r'syscall_probe: slept_us=(\d+) tod_us=(\d+) cputime=(\d)', out)
+    if not m:
+        return False, 'the probe printed no clock readings'
+    slept, tod, cpu_rc = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if not (30000 <= slept <= 31000 and 30000 <= tod <= 31000):
+        return False, ('clock_gettime saw %d us and gettimeofday %d us around 30 ms of simulated sleep: '
+                       'the guest read the host clock' % (slept, tod))
+    if cpu_rc != 0:
+        return False, 'clock_gettime(CLOCK_PROCESS_CPUTIME_ID) failed'
     return True, ('nanosleep charged (%.1f ms simulated), sched_getaffinity answered by the simulator (1 CPU), '
-                  'unlinkat left its pathname alone, mlock/munlockall/dup3 passed through' % (t / 1e12))
+                  'unlinkat left its pathname alone, mlock/munlockall/dup3 passed through; clock_gettime and '
+                  'gettimeofday read simulated time (%d and %d us over the sleeps)' % (t / 1e12, slept, tod))
 
 
 def case_riscv_user_syscalls(p, g, workdir):
