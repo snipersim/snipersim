@@ -2580,6 +2580,27 @@ def case_user_mt_live(p, g, workdir):
     return mt_live_check(rc, out, line, user_qemu('x86_64'))
 
 
+def case_user_roi_wait(p, g, workdir):
+    """A worker waiting on a condition variable when the ROI ends, woken after
+    it (testing/apps/roi_wait.c), run live on x86-64: the futex calls stay in
+    the simulator's model after the ROI -- the wake, and the exiting worker's
+    wake of its joiner -- or the waiter is never woken (it hung every time).
+    Without the wait call in QEMU the second thread is refused."""
+    guest = os.path.join(workdir, 'roi_wait')
+    rc, out = run(['gcc', '-O1', '-static', '-pthread', '-I', os.path.join(SNIPER_ROOT, 'include'),
+                   '-o', guest, os.path.join(SNIPER_ROOT, 'testing', 'apps', 'roi_wait.c')], 120)
+    if rc != 0:
+        return None, 'could not build roi_wait.c statically (%s)' % exit_text(rc)
+    rc, out = run([guest], 120)
+    m = re.search(r'roi_wait: done$', out, re.M)
+    if rc != 0 or not m:
+        return None, 'the guest did not run natively (%s)' % exit_text(rc)
+    outdir = os.path.join(workdir, 'roi-wait-x86')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '3', '-c', 'gainestown', '--roi', '-d', outdir,
+                   '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+    return mt_live_check(rc, out, m.group(0), user_qemu('x86_64'))
+
+
 def case_riscv_user_mt(p, g, workdir):
     """Multi-threaded RISC-V guest: traces per thread, and the live refusal."""
     r, why = riscv_prerequisites(workdir)
@@ -2632,6 +2653,7 @@ CASES = {
     'user-simulate':    case_user_simulate,
     'user-mt-streams':  case_user_mt_streams,
     'user-mt-live':     case_user_mt_live,
+    'user-roi-wait':    case_user_roi_wait,
     'user-fork-refused': case_user_fork_refused,
     'system-exact':     case_system_exact,
     'system-vapa':      case_system_vapa,

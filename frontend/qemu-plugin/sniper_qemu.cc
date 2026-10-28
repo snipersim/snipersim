@@ -1737,6 +1737,13 @@ inline bool channel_open(const VCPU *v)
    return v->writer && opt_response && !v->closed && g_mode.load() != MODE_OFF;
 }
 
+/* Does this thread's futex calls go to Sniper?  As long as there is a
+ * channel, inside the ROI and after it (see forward_syscall). */
+inline bool futex_channel(const VCPU *v)
+{
+   return v->writer && opt_response && !v->closed;
+}
+
 /* Send a modelled system call to the simulator.  Returns false when the call
  * is not sent (not modelled, no response channel, outside the ROI); else the
  * simulator's return value is in *ret and *emulated says whether it replaces
@@ -1749,9 +1756,6 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
     * calls initResponse() unconditionally.  The Pin recorder gates the same
     * thing on KnobEmulateSyscalls.  Without a channel we are writing a trace
     * to a file and the syscall is simply not modelled. */
-   if (!channel_open(v))
-      return false;
-
    /* Only the system calls the simulator models go out, by the numbers it
     * knows them by.  The simulator switches on its host's (x86-64) SYS_
     * constants; a RISC-V or AArch64 guest uses the asm-generic table, where
@@ -1760,6 +1764,18 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
     * the simulator zero a guest pathname, abort, or end the run. */
    const int sys = modelled_syscall(num, emulated);
    if (sys < 0)
+      return false;
+
+   /* After the ROI (MODE_OFF) the guest runs natively, except for futex,
+    * which goes on to the simulator for as long as the channel is open.  A
+    * thread that waited in the simulator's futex model during the ROI is
+    * still parked there; a wake run natively never reached it, and a guest
+    * whose worker was waiting at SimRoiEnd() and woken after it hung every
+    * time.  All of the program's futex calls stay in the one model, waits
+    * as well as wakes: a wake sent to the simulator does not run natively,
+    * so a thread waiting natively would miss it. */
+   const bool futex_after_roi = sys == 202 && g_mode.load() == MODE_OFF && futex_channel(v);
+   if (!channel_open(v) && !futex_after_roi)
       return false;
 
    /* A thread's tid goes with the first system call on its channel, as the
@@ -1816,6 +1832,11 @@ void thread_exit(VCPU *v)
    {
       flush_pending(v, 0);
       ff_report(v);
+   }
+   /* After the ROI too: the futex calls stay in Sniper's model for as long
+    * as the channel is open (forward_syscall), so a joiner waits there. */
+   if (futex_channel(v))
+   {
       if (v->tid_ptr)
       {
          const uint32_t zero = 0;
