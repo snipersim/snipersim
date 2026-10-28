@@ -412,7 +412,8 @@ def kill_stragglers(marker, sig = signal.SIGKILL):
 
   Two things make this reliable where the parent-pid walk is not.  The marker
   is the run's own temporary directory, which is unique per run and appears in
-  every recorder command line, so nothing belonging to another run is matched.
+  every recorder command line (or, for the application under SDE, in its
+  environment), so nothing belonging to another run is matched.
   Each match is killed along with everything below it, so the Pin tool and the
   application under the recorder go too.
 
@@ -432,6 +433,18 @@ def kill_stragglers(marker, sig = signal.SIGKILL):
       continue                      # exited while we looked
     if marker in cmdline:
       matched.append(pid)
+      continue
+    # The application under SDE: Pin runs inside it, so its command line is
+    # the application's own and does not name the run.  Its environment does
+    # (SDE_COMMAND_LINE, with the Pin log in the run's directory), and an
+    # application whose recorder had died -- killed by a SIGTERM to the run's
+    # group -- was left behind, waiting on a lock the recorder held.
+    try:
+      with open('/proc/%u/environ' % pid, 'rb') as f:
+        if marker.encode() in f.read():
+          matched.append(pid)
+    except (IOError, OSError):
+      pass                          # exited, or another user's
 
   # Each match and everything below it, killed individually rather than by
   # process group: the recorder deliberately stays in our own group so that a
