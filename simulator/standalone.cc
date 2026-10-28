@@ -44,9 +44,12 @@ int main(int argc, char* argv[])
    Simulator::setConfig(cfg, Config::STANDALONE);
 
    Simulator::allocate();
-   Sim()->start();
-   
+   /* Before start(), not after: start() brings up the memory system,
+      MimicOS, the scripts and, without --roi, the region of interest, and a
+      crash in any of them ended the process with no backtrace at all.  The
+      handler needs only the configuration's output directory. */
    registerExceptionHandler();
+   Sim()->start();
 
    // config::Config shouldn't be called outside of init/fini
    // With Sim()->hideCfg(), we let Simulator know to complain when someone does call Sim()->getCfg()
