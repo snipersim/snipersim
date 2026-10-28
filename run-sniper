@@ -353,10 +353,6 @@ for o, a in opts:
   if o == '--no-smc':
     track_smc = False
   if o == '--pa':
-    if not run_sniper.va2pa_valid():
-      print('[SNIPER] --pa needs physical frame numbers from /proc/self/pagemap, which since Linux 4.0\n'
-            '  needs CAP_SYS_ADMIN (root, or a container started with --cap-add SYS_ADMIN).', file=sys.stderr)
-      sys.exit(1)
     use_pa = True
   if o in ('--pacsim', '--dynamic-sampling'):
     # Two spellings, one path.  --pacsim names the published methodology and
@@ -423,6 +419,15 @@ for o, a in opts:
   if o.startswith('--') and o[2:]+'=' in record_trace_passthrough:
     trace_extra_args += [o, a]
 
+
+# --pa, checked once the front end is known.  Only SDE and DynamoRIO read the
+# host's frames; a full-system QEMU trace carries the guest's own physical
+# addresses, and QEMU user mode has none to give (record-trace refuses it with
+# that reason).  Both were refused here for the host's capability.
+if use_pa and not (frontend or '').startswith('qemu') and not run_sniper.va2pa_valid():
+  print('[SNIPER] --pa needs physical frame numbers from /proc/self/pagemap, which since Linux 4.0\n'
+        '  needs CAP_SYS_ADMIN (root, or a container started with --cap-add SYS_ADMIN).', file=sys.stderr)
+  sys.exit(1)
 
 # Pac-Sim / dynamic sampling.
 #
