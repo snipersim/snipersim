@@ -216,16 +216,21 @@ namespace ParametricDramDirectoryMSI
                                 }
                                 // We found the entry, we can return the result
 
-                                if (count)
+                                /* A leaf at level L maps 2^(12 + 9(L-1)) bytes: 4 KiB at
+                                   level 1, 2 MiB at 2, 1 GiB at 3.  Both arrays below were
+                                   indexed by level - 1 but hold one entry per configured page
+                                   size (two: 4 KiB and 2 MiB), so a leaf above level 2 read
+                                   past them. */
+                                if (count && level - 1 < m_page_sizes)
                                         stats.page_size_discovery[level - 1]++;
-                                m_log->detailed("Found translation for address: ", SimLog::hex(address), " with ppn: ", current_frame->entries[offset].data.translation.ppn, " at level: ", level, " with page size: ", m_page_size_list[level - 1]);
+                                m_log->detailed("Found translation for address: ", SimLog::hex(address), " with ppn: ", current_frame->entries[offset].data.translation.ppn, " at level: ", level, " with page size: ", 12 + 9 * (level - 1));
                                 // Be careful with the return values -> always return PPN_RESULT at page size granularity
                                 ppn_result = current_frame->entries[offset].data.translation.ppn;
                                 LOG_ASSERT_ERROR(ppn_result != static_cast<IntPtr>(-1), "PPN is invalid");
                                
                                 accesses_per_vpn[address >> 12]++; // Increment the access count for the VPN
 
-                                page_size_result = m_page_size_list[level - 1]; // If we hit at level 1 (last one), we return the page_size[1-1] = page_size[0] = 4KB
+                                page_size_result = 12 + 9 * (level - 1);   // 4 KiB at level 1, 2 MiB at level 2
                                 break;
                         }
                         else
@@ -288,6 +293,14 @@ namespace ParametricDramDirectoryMSI
 
         int PageTableRadix::updatePageTableFrames(IntPtr address, IntPtr core_id, IntPtr ppn, int page_size, std::vector<UInt64> frames)
         {
+                /* Leaves are written for 4 KiB pages (level 1) and 2 MiB pages
+                   (level 2) only.  A 1 GiB page (Sv39's or AArch64's 1 GiB
+                   blocks, x86's) matched neither and the walk below went on down
+                   past the levels; nothing allocates one today, and a run that
+                   does is refused rather than mapped wrong. */
+                LOG_ASSERT_ERROR(page_size == 12 || page_size == 21,
+                                 "%s: a %d-bit page cannot be mapped: the radix table models 4 KiB (12) and 2 MiB (21) pages; "
+                                 "1 GiB pages (30) are not supported", name.c_str(), page_size);
              m_log->detailed("I was provided with the following frames: ");
              for (size_t i = 0; i < frames.size(); i++)
              {

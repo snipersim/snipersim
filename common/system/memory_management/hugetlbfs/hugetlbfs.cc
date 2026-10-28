@@ -45,6 +45,13 @@ HugeTLBfs::HugeTLBfs()
     }
     if (Sim()->getCfg()->hasKey("perf_model/hugetlbfs/nr_hugepages_1gb")) {
         m_nr_hugepages_1gb = Sim()->getCfg()->getInt("perf_model/hugetlbfs/nr_hugepages_1gb");
+        /* A pool nothing could use: faults take 2 MiB pages from the service,
+           and the page tables, TLBs and walk caches model 4 KiB and 2 MiB
+           pages, not 1 GiB ones */
+        if (m_nr_hugepages_1gb > 0)
+            LOG_PRINT_ERROR("perf_model/hugetlbfs/nr_hugepages_1gb = %lu: 1 GiB huge pages are not modelled (the page "
+                            "tables map 4 KiB and 2 MiB pages); set it to 0 and use nr_hugepages_2mb.",
+                            (unsigned long)m_nr_hugepages_1gb);
     }
     m_overcommit = Sim()->getCfg()->getBoolDefault("perf_model/hugetlbfs/overcommit", false);
 
