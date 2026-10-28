@@ -219,11 +219,16 @@ def mimicos_daemons_check(stats):
           # the binary and its recorder: measured with test/fft built by the
           # host's gcc 12.2 against glibc 2.36 and recorded by SDE 10.13.1
           # (deps/manifest.json); another compiler, C library or recorder can
-          # move them, which the failure's fault count shows.
+          # move them, which the failure's fault count shows.  And of the
+          # recorder's time model: since the recording answers fft's
+          # gettimeofday itself (the guest's time is never the host's), the
+          # guest no longer runs the host's vDSO, whose code page and time
+          # data page were two of its mappings -- 66 faults and 27 mappings
+          # before, 57 and 25 now.
           and '[TRACE:0] -- DONE --' in out
           and 'shutdown event received' in out
-          and faults == 66
-          and ('Core 0 checked 27 unique VA->PA mappings, 27 unique PA->VA '
+          and faults == 57
+          and ('Core 0 checked 25 unique VA->PA mappings, 25 unique PA->VA '
                'mappings, 0 violations') in out)
     return ok, ('kcompactd/khugepaged/kswapd scans %d/%d/%d (expected %d +-1 '
                 'over %d us), parked per core %s us, core 0 idle %d ns, %d faults'
@@ -1805,7 +1810,7 @@ def sniper_in_sniper_trace(sift):
     """test/sniper-in-sniper/fft.sift, the trace the MimicOS checks hand the
     kernel, recorded here with ASLR off under the controlled environment and
     through CANON_ROOT, so that it is the same bytes for every checkout and
-    user and the checks can expect exact counts (66 page faults, 27 mappings).
+    user and the checks can expect exact counts (57 page faults, 25 mappings).
     A trace recorded any other way -- test/sniper-in-sniper/Makefile records
     one under make's environment -- is a different guest layout and different
     counts; a sidecar notes the environment digest the trace was recorded
