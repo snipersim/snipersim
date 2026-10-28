@@ -59,9 +59,13 @@ void Fxsupport::fxsave()
       if (m_ref_count[core_index] == 0)
       {
          char *buf = m_fx_buf[core_index];
+#if defined(__x86_64__) || defined(__i386__)
          asm volatile ("fxsave %0\n\t"
                        "emms"
                        :"=m"(*buf));
+#else
+         (void)buf;                  // no x87/SSE state to save on another host
+#endif
       }
 
       m_ref_count[core_index]++;
@@ -82,7 +86,11 @@ void Fxsupport::fxrstor()
       if (m_ref_count[core_index] == 0)
       {
          char *buf = m_fx_buf[core_index];
+#if defined(__x86_64__) || defined(__i386__)
          asm volatile ("fxrstor %0"::"m"(*buf));
+#else
+         (void)buf;
+#endif
       }
 
       LOG_PRINT("fxrstor() end");

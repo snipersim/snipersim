@@ -13,6 +13,7 @@
 
 Timer::RdtscSpeed Timer::rdtsc_speed = 0;
 
+#if defined(__x86_64__) || defined(__i386__)
 UInt64 rdtsc(void)
 {
     UInt32 lo, hi;
@@ -37,6 +38,22 @@ inline UInt64 rdtsc_and_cpuid(UInt32 *id)
       : "%ebx", "%ecx" );
     return (UInt64)hi << 32 | lo;
 }
+#else
+/* Not an x86 host (an ARM or RISC-V machine): no time-stamp counter to read
+   with rdtsc, so the counter is clock_gettime's nanoseconds; the constructor's
+   calibration then finds a rate of 1.  The x86 instructions here kept the
+   simulator from building on such a host. */
+UInt64 rdtsc(void)
+{
+    return Timer::now();
+}
+
+inline UInt64 rdtsc_and_cpuid(UInt32 *id)
+{
+    *id = 0;
+    return Timer::now();
+}
+#endif
 
 Timer::Timer()
 {
