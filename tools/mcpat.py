@@ -93,7 +93,7 @@ def mcpat_bin():
     # Fancy McPAT versions haven't been downloaded yet, use the plain old one
     return bin
   else:
-    os.path.join(mcpatdir, 'mcpat-1.0')
+    return os.path.join(mcpatdir, 'mcpat-1.0')   # (the path was computed and not returned: None)
 
 def mcpat_run(inputfile, outputfile):
   os.system("LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%s %s -print_level 5 -opt_for_clk 1 -infile %s > %s" % \
@@ -332,6 +332,10 @@ def edit_XML(statsobj, stats, cfg):
 
   ncores = int(cfg['general/total_cores'])
   technology_node = int(sniper_config.get_config_default(cfg, 'power/technology_node', 45))
+  # McPAT's x86 flag models a CISC front end (micro-op decoding, its tables
+  # and energy); the ARM and RISC-V cores are not x86, and every core used to
+  # be described as one
+  x86 = 1 if sniper_config.get_config_default(cfg, 'general/arch', 'intel') == 'intel' else 0
 
   l3_cacheSharedCores = int(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/shared_cores', 0))
   l2_cacheSharedCores = int(sniper_config.get_config_default(cfg, 'perf_model/l2_cache/shared_cores', 0))
@@ -415,7 +419,7 @@ def edit_XML(statsobj, stats, cfg):
   DRAM_writes = int(stats['dram.writes'][0])
   #branch_misprediction = stats['branch_predictor.num-incorrect'][1]
 
-  template=readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node)
+  template=readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node, x86)
   #for j in range(ncores):
   for i in range(len(template)-1):
     #for j in range(ncores):
@@ -581,8 +585,13 @@ def edit_XML(statsobj, stats, cfg):
               template[i][0] = template[i][0] % int(stats['network.shmem-1.bus.num-requests'][0])  #assumption
             elif 'network.shmem-1.bus.num-packets' in stats:
               template[i][0] = template[i][0] % int(stats['network.shmem-1.bus.num-packets'][0])  #assumption
-            else:
+            elif 'bus.num-requests' in stats:
               template[i][0] = template[i][0] % int(stats['bus.num-requests'][0])  #assumption
+            else:
+              # A network model that keeps no statistics (emesh_hop_counter, the
+              # default, which the ARM and RISC-V configurations use): no NoC
+              # traffic is known, and the run used to end here in a KeyError
+              template[i][0] = template[i][0] % 0
           elif template[i][1][0]=="NoC.duty_cycle":
             if 'network.shmem-1.mesh.link-left.total-time-used' in stats:
               DIRECTIONS = ('up', 'down', 'left', 'right')
@@ -598,8 +607,10 @@ def edit_XML(statsobj, stats, cfg):
               template[i][0] = template[i][0] % .5
             elif 'network.shmem-1.bus.time-used' in stats:
               template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['network.shmem-1.bus.time-used'][0])/max_system_cycles)
-            else:
+            elif 'bus.time-used' in stats:
               template[i][0] = template[i][0] % min(1, cycles_scale[core]*float(stats['bus.time-used'][0])/max_system_cycles)
+            else:
+              template[i][0] = template[i][0] % 0     # no network statistics, as above
           elif template[i][1][0]=="loads":
             template[i][0] = template[i][0] % int(stats['L1-D.loads'][core])
           elif template[i][1][0]=="stores":
@@ -786,7 +797,7 @@ def edit_XML(statsobj, stats, cfg):
             template[i][0] = template[i][0] % tuple(l3conf)
   return template, nuca_at_level
 #----------
-def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
+def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node, x86 = 1):
   Count = 0
   template=[]
   template.append(["<?xml version=\"1.0\" ?>",""])
@@ -853,7 +864,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t<!-- decode_width determins the number of ports of the ",""])
     template.append(["\t\t\trenaming table (both RAM and CAM) scheme -->",""])
 #---------------------------------------------------------------------------
-    template.append(["\t\t\t<param name=\"x86\" value=\"1\"/> ",""])
+    template.append(["\t\t\t<param name=\"x86\" value=\"%u\"/> " % x86,""])
     template.append(["\t\t\t<param name=\"micro_opcode_width\" value=\"8\"/> ",""])
 
 #---------------------------------------------------------------------------

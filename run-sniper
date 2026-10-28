@@ -99,6 +99,7 @@ appdebug_nowait = False
 follow_execv = False
 build_dir = None
 run_power = False
+power_failed = False
 enable_pacsim = False
 enable_smc = False
 track_smc = True      # --no-smc: send each code page once (no Sift::CodeTracker)
@@ -1211,7 +1212,14 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
   if run_power:
     print('[SNIPER] Running McPAT')
-    os.system('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals())
+    # Its status was ignored: a McPAT run that died (a statistic it expected
+    # and the run did not have) left no power files and the run passed
+    if os.system('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals()) != 0:
+      print('[SNIPER] ERROR: McPAT failed (see above); no power estimate was written')
+      power_failed = True
+      # --power was asked for and no estimate came of it: the run fails
+      if rc == 0:
+        rc = 1
 
   if use_viz:
     print('[SNIPER] Generating visualization in viz/')
@@ -1328,5 +1336,6 @@ if live_dash:
                       % (rc, os.path.join(outputdir, 'simulation', 'sim.stdout'))).encode())
   os.close(live_tty)
   shutil.rmtree(live_dir, ignore_errors = True)
+
 
 sys.exit(rc)
