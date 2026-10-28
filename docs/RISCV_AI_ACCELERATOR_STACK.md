@@ -667,6 +667,16 @@ core from 4.72 M.  Every other row moved by under 2 percent.
 
 ## 6. Verification record
 
+**Re-run on 2026-10-28** against commit `01ba4ed` of `dev-mimicos-v2-update`
+(same host and environment as below), in a fresh `WORK`: every block
+passed -- `build`, `decoder`, `gemm3`, `gemm3-32-sail`, `agent-kernels`,
+`agent-vlen`, `agent-simulate`, `agent-tile`, `agent-32` (now with the
+512-byte vector unit its 4,096-bit recording needs: the simulator checks
+the guest's width), `quantize`, `train`, `vlen`, `plugin-api`, `gdb`,
+`patch` (the riscv64 QEMU now also carries the plugin-wait patch; the
+regeneration takes it out first and the IME patch is identical),
+`harness`, `translation`.  The `long:` blocks were not re-run.
+
 **Re-run on 2026-10-27** against commit `709d3c0` of `dev-mimicos-v2-update`
 (same host; clang 15 with lld; Ninja on the PATH for the QEMU
 dependencies; the UDB, IME overlay and AME specification checkouts as

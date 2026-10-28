@@ -752,6 +752,18 @@ make regress_qemu
 
 ## 5. Verification record
 
+**Re-run on 2026-10-28** against commit `01ba4ed` of `dev-mimicos-v2-update`
+(this round merged: per-core frame runs, the ARM cores of the sweep, the
+walk caches, the threaded QEMU plugin with its QEMU patch -- the
+dependency build rebuilt all three QEMUs with it), same host, in a fresh
+`WORK` (now a `mktemp` directory by default): every block passed --
+`build`, `first`, `configs`, `traces`, `qemu` (the probe built in a copy
+under `WORK`), `mmu`, `mimicos`, `live`, `pacsim`, `pacsim-virtuoso`.  The
+`long:suites` block was not re-run; the suites ran on the merged branches
+(configs 737 detailed, Virtuoso 71 with the baselines re-blessed on this
+tree, QEMU 58, apps 27, scripting 21, Pac-Sim 12 and the QEMU front end's
+on three architectures, magic 6).
+
 **Re-run on 2026-10-27** against commit `709d3c0` of `dev-mimicos-v2-update`
 (9.0 as merged: the ROB core model the default, MSHRs at the L1-D and the
 L2), same host, each document in a fresh `WORK`: every block passed --
