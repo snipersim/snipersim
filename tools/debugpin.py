@@ -31,8 +31,10 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
       print(line, end=' ')
   threading.Thread(target = output_graphite).start()
 
-  fh, fn = tempfile.mkstemp()
-  f = open(fn, 'w')
+  # gdb's command file, removed once gdb is done with it (it was left in /tmp
+  # by every --gdb run, and its descriptor left open)
+  fh, fn = tempfile.mkstemp(prefix = 'sniper-gdb-', suffix = '.gdb')
+  f = os.fdopen(fh, 'w')
   f.write('attach %s\n%s\n' % (g_pid, '\n'.join(g_symbols)))
   if not wait:
     f.write('continue\n')
@@ -44,7 +46,13 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
     f.write('end\n')
   f.close()
 
-  rc = os.system('gdb -quiet -command=%s %s' % (fn, '%(pin_home)s/%(arch)s/bin/pinbin' % locals()))
+  try:
+    rc = os.system('gdb -quiet -command=%s %s' % (fn, '%(pin_home)s/%(arch)s/bin/pinbin' % locals()))
+  finally:
+    try:
+      os.unlink(fn)
+    except OSError:
+      pass
   rc >>= 8
 
   return rc
