@@ -101,7 +101,9 @@ in place is tracked by default on every front end and its pages are sent
 again; `--smc` is the strict per-instruction mode of the SDE recorder,
 `--no-smc` turns tracking off), `--live`,
 `--mpi`, `--power`, `--viz`, `--profile`, `--gdb`, `--build-dir=`,
-`--frontend=`, `--sim-end=`.  An explicit `-n` beats a configuration's
+`--frontend=`, `--sim-end=`, `--app-exit-wait=` (how long a program may
+run on natively once the simulation has ended, 60 s by default).  An
+explicit `-n` beats a configuration's
 `total_cores`.  Output lands in `<dir>/simulation/` (`sim.cfg`,
 `sim.out`, `sim.stats`, `sim.stdout`, `sim.info`), `logs/` and
 `telemetry/`; `tools/dumpstats.py` and `tools/cpistack.py` read it.
@@ -465,19 +467,40 @@ they run and are reported, and a pass is reported as such, but they do
 not fail the suite.  The barrier and loop shapes, whose schedules do not
 depend on timing, are within 2%.
 
-**Known issue.**  A workload whose worker threads exit while the main
-thread goes on running (`testing/apps/phased.c` and its siblings: the
-workers leave at ROI end while main sums and prints) dies inside SDE in
-about half of its runs, shortly after ROI end, with an invalid access in
-SDE's per-thread emulation state or in Pin's instrumentation playback
-(`/tmp/debug_backtrace_*.out` now carries the process map, which is how
-this was attributed; handing `xsave` to the host, dropping the
-instrumentation removal at ROI end and the recorder fixes above do not
-change it).  The simulation's results are complete by then; what is lost
-is the application's output after the ROI.  The three Pac-Sim workloads
-therefore print their checksum inside the ROI, and a workload whose
-output matters should join its workers before `SimRoiEnd()` or print
-before it.
+**Fixed: a program's work after its ROI.**  A workload whose worker
+threads exit while the main thread goes on running
+(`testing/apps/phased.c` and its siblings: the workers leave at ROI end
+while main joins them) lost what it did after the ROI, and its recorder
+was reported as exiting with status 1.  This was listed as a crash inside
+SDE; it was run-sniper.  At the end of an `--roi` run the simulation ends
+while the program runs on natively, and run-sniper went from the
+simulator's exit straight to its cleanup, which kills every front-end
+process, so the program was cut off at a point that depended on how
+quickly the simulator wound down.  With `phased.c` printing a line after
+its joins, the line was lost in 0 of 12 runs at `-n 5` (10 of them with
+`--pacsim`) and 0 of 5 at `-n 3`, but in 5 of 5 at `-n 2`: there a worker
+is still parked in the simulated barrier when the ROI ends and is released
+only when the simulator closes its channel, a second later, and main's
+join waits for it.  A program with a second of native work after its
+joins lost its output in 9 of 10 runs.  run-sniper now waits for the
+recorders first, at most `--app-exit-wait` seconds (60 by default, so a
+program that never ends cannot hold the run; several applications under
+`--sim-end=first` are not waited for).  After the fix the line came out in
+8 of 8 runs at `-n 5`, 8 of 8 with `--pacsim`, 5 of 5 at `-n 3` and
+5 of 5 at `-n 2`, with no recorder status.  The recorder's thread-exit
+helper and the exiting thread's `Fini` also both closed a thread's writer
+(deleted twice, or under the helper's last request); each now takes the
+writer first, and only the one that gets it closes it.  `test/roi-exit`
+(the `roi-exit` case of `testing/test_apps.py`) runs both shapes, main
+joining and working on and main returning while its workers leave, three
+times each.  The Pac-Sim workloads still print their checksum inside the
+ROI.
+
+**Known issue.**  With fewer cores than threads (`-n 2` or `-n 3` for
+`phased.c`'s five), a `--pacsim` run aborts in the simulator when the
+sampler first switches to warm-up, "We cannot execute instructions while
+not on a core" (`trace_thread.cc`), in 10 of 10 runs; `testing/test_pacsim.py`
+gives every thread a core of its own.
 
 ### 3.8 Tests
 
@@ -487,7 +510,7 @@ before it.
 | configs | `testing/test_configs.py` | every shipped configuration and fragment at 1, 2 and 4 cores in fast-forward and detailed mode, each required to produce the workload's checksum; unclassified configurations are a failure | 318 checks, over an hour |
 | qemu | `testing/test_qemu.py` | the QEMU frontend: x86 user traces, multi-threaded streams, an exact full-system count, VA-to-PA, mode switches; and the 27 RISC-V and 5 AArch64 cases | hours with the RISC-V cases |
 | pacsim | `testing/test_pacsim.py [--profile quick]` | three region shapes, each: same program, faster, agrees within tolerance; one core per thread, quick or full sizes (section 3.7) | minutes (quick) to an hour (full) |
-| apps | `testing/test_apps.py` | every `test/` workload's `make run` with a check on what came out (the FFT's own verdict, MPI's pi, DVFS read-back, SMC's rewritten code, fork, spin loops) | 10 minutes |
+| apps | `testing/test_apps.py` | every `test/` workload's `make run` with a check on what came out (the FFT's own verdict, MPI's pi, DVFS read-back, SMC's rewritten code, fork, spin loops, a program running on after its ROI) | 10 minutes |
 | virtuoso | `testing/test_virtuoso.py` | four invariance configurations against host-local goldens (`--bless` once; ASLR pinned with `setarch -R`, a fixed environment and workload path) and 25 feature-activation cases, one per landed Virtuoso feature | 5 minutes |
 | MMU runner | `testing/run_tests.py --suite smoke_test` | trace-driven MMU experiments from `testing/test_config.yaml` (needs the trace directories it names) | |
 

@@ -196,8 +196,9 @@ int main(void)
    }
    /* The results are stored before the last gate, and main sums and prints
     * them after it, still inside the ROI: whatever happens to the process
-    * once the region is closed and the workers exit -- the recorder has died
-    * there, inside SDE, with the workers leaving while main went on -- the
+    * once the region is closed and the workers exit -- run-sniper used to
+    * stop the program there, taken for a crash inside SDE, until it waited
+    * for the front end -- the
     * checksum is already out, and the sampled run can be compared with the
     * full one. */
    printf("tasked: threads=%d tasks=%d checksum=%.6f visited=%llu\n",
