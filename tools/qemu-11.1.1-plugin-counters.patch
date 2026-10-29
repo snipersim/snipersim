@@ -15,10 +15,10 @@ wait patch and on the IME one alike.  Used by
 frontend/qemu-plugin/sniper_qemu.cc ("counter").
 
 diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
-index f186aed..353f6e0 100644
+index f186aed..033dbdd 100644
 --- a/include/plugins/qemu-plugin.h
 +++ b/include/plugins/qemu-plugin.h
-@@ -1209,2 +1209,50 @@ void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, voi
+@@ -1209,2 +1209,53 @@ void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, voi
  
 +/**
 + * enum qemu_plugin_counter - a clock or counter the guest reads directly
@@ -41,7 +41,8 @@ index f186aed..353f6e0 100644
 + * @counter: which counter
 + * @freq_hz: the counter's rate as the guest is told it (AArch64's CNTFRQ),
 + *   or 0 where QEMU gives none (RISC-V's timebase in user mode)
-+ * @host_value: the value QEMU would return (from the host's clock)
++ * @host_value: the value QEMU would return (from the host's clock), or
++ *   another plugin's answer where several registered one
 + * @udata: as registered
 + *
 + * Returns the value the guest reads, in the counter's units and of its
@@ -62,27 +63,41 @@ index f186aed..353f6e0 100644
 + * In user mode the guest's clocks and counters read the host's: its time,
 + * its cycle counter.  A plugin that models time -- a simulator the guest
 + * runs on -- answers them instead, so that a guest timing itself sees the
-+ * time of the model.  Linux user mode on x86-64, RISC-V and AArch64.
++ * time of the model.  Linux user mode on x86-64, RISC-V and AArch64.  The
++ * callback is one of the plugin's: registering again replaces it, and it
++ * goes when the plugin is uninstalled or reset.
 + */
 +QEMU_PLUGIN_API
 +void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb_t cb,
 +                                     void *udata);
 +
  /**
+diff --git a/include/qemu/plugin-event.h b/include/qemu/plugin-event.h
+index 7f3c592..e9eafd0 100644
+--- a/include/qemu/plugin-event.h
++++ b/include/qemu/plugin-event.h
+@@ -25,2 +25,3 @@ enum qemu_plugin_event {
+     QEMU_PLUGIN_EV_VCPU_HOSTCALL,
++    QEMU_PLUGIN_EV_COUNTER,   /* qemu_plugin_register_counter_cb() */
+     QEMU_PLUGIN_EV_VCPU_SYSCALL_FILTER,
 diff --git a/include/qemu/plugin.h b/include/qemu/plugin.h
-index ccc25de..153efe8 100644
+index ccc25de..800f313 100644
 --- a/include/qemu/plugin.h
 +++ b/include/qemu/plugin.h
-@@ -169,2 +169,8 @@ void qemu_plugin_vcpu_exit_hook(CPUState *cpu);
+@@ -64,2 +64,3 @@ union qemu_plugin_cb_sig {
+     qemu_plugin_vcpu_syscall_ret_cb_t    vcpu_syscall_ret;
++    qemu_plugin_counter_cb_t             counter;
+     qemu_plugin_vcpu_syscall_filter_cb_t vcpu_syscall_filter;
+@@ -169,2 +170,8 @@ void qemu_plugin_vcpu_exit_hook(CPUState *cpu);
  void qemu_plugin_vcpu_wait_run(CPUState *cpu);
 +/*
-+ * A guest counter read in user mode: the plugin's value if one registered
++ * A guest counter read in user mode: the plugins' value if one registered
 + * qemu_plugin_register_counter_cb(), otherwise @host_value.
 + */
 +uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counter,
 +                                  uint64_t freq_hz, uint64_t host_value);
  void qemu_plugin_tb_trans_cb(CPUState *cpu, struct qemu_plugin_tb *tb);
-@@ -264,2 +270,8 @@ static inline void qemu_plugin_vcpu_wait_run(CPUState *cpu)
+@@ -264,2 +271,8 @@ static inline void qemu_plugin_vcpu_wait_run(CPUState *cpu)
  
 +static inline uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counter,
 +                                                uint64_t freq_hz, uint64_t host_value)
@@ -103,31 +118,53 @@ index cea58cb..db3883b 100644
 +                                    cpu_get_host_ticks());
  }
 diff --git a/plugins/api.c b/plugins/api.c
-index eb982f9..4367236 100644
+index eb982f9..30e95d7 100644
 --- a/plugins/api.c
 +++ b/plugins/api.c
-@@ -500,2 +500,21 @@ bool qemu_plugin_write_register(struct qemu_plugin_register *reg,
+@@ -500,2 +500,12 @@ bool qemu_plugin_write_register(struct qemu_plugin_register *reg,
  
-+static qemu_plugin_counter_cb_t counter_cb;
-+static void *counter_udata;
-+
++/*
++ * Kept with the plugin's other callbacks (QEMU_PLUGIN_EV_COUNTER): removed
++ * when it is uninstalled or reset, as they are.
++ */
 +void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb_t cb,
 +                                     void *udata)
 +{
-+    qatomic_set(&counter_udata, udata);
-+    qatomic_set(&counter_cb, cb);
-+}
-+
-+uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counter,
-+                                  uint64_t freq_hz, uint64_t host_value)
-+{
-+    qemu_plugin_counter_cb_t cb = qatomic_read(&counter_cb);
-+
-+    return cb ? cb(cpu->cpu_index, counter, freq_hz, host_value,
-+                   qatomic_read(&counter_udata)) : host_value;
++    plugin_register_cb_udata(id, QEMU_PLUGIN_EV_COUNTER, cb, udata);
 +}
 +
  void qemu_plugin_set_pc(uint64_t vaddr)
+diff --git a/plugins/core.c b/plugins/core.c
+index a1a7f11..387b9ac 100644
+--- a/plugins/core.c
++++ b/plugins/core.c
+@@ -622,2 +622,26 @@ qemu_plugin_vcpu_syscall_filter(CPUState *cpu, int64_t num, uint64_t a1,
+ 
++/*
++ * The plugins' answer to a guest counter read: each registered callback in
++ * turn, given the answer so far (the host's value for the first).  Called
++ * within the instruction, in the run loop (under its RCU read lock).
++ */
++QEMU_DISABLE_CFI
++uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counter,
++                                  uint64_t freq_hz, uint64_t host_value)
++{
++    struct qemu_plugin_cb *cb, *next;
++    enum qemu_plugin_event ev = QEMU_PLUGIN_EV_COUNTER;
++    uint64_t value = host_value;
++
++    if (!cpu->plugin_state || !test_bit(ev, cpu->plugin_state->event_mask)) {
++        return host_value;
++    }
++    QLIST_FOREACH_SAFE_RCU(cb, &plugin.cb_lists[ev], entry, next) {
++        qemu_plugin_counter_cb_t func = cb->f.counter;
++
++        value = func(cpu->cpu_index, counter, freq_hz, value, cb->udata);
++    }
++    return value;
++}
++
+ void qemu_plugin_vcpu_idle_cb(CPUState *cpu)
 diff --git a/target/arm/cpregs-pmu.c b/target/arm/cpregs-pmu.c
 index 46df659..89e912a 100644
 --- a/target/arm/cpregs-pmu.c

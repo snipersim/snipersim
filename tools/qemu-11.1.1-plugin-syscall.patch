@@ -15,10 +15,10 @@ tools/qemu-11.1.1-plugin-counters.patch; one line of context.  Used by
 frontend/qemu-plugin/sniper_qemu.cc ("timed").
 
 diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
-index 353f6e0..910eaf5 100644
+index 033dbdd..91b235a 100644
 --- a/include/plugins/qemu-plugin.h
 +++ b/include/plugins/qemu-plugin.h
-@@ -1257,2 +1257,38 @@ void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb
+@@ -1260,2 +1260,38 @@ void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb
  
 +/**
 + * qemu_plugin_run_syscall() - run a guest system call from a syscall filter
@@ -58,10 +58,10 @@ index 353f6e0..910eaf5 100644
 +
  /**
 diff --git a/include/qemu/plugin.h b/include/qemu/plugin.h
-index 153efe8..e17b9a4 100644
+index 800f313..9478523 100644
 --- a/include/qemu/plugin.h
 +++ b/include/qemu/plugin.h
-@@ -175,2 +175,12 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
+@@ -176,2 +176,12 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
                                    uint64_t freq_hz, uint64_t host_value);
 +/*
 + * Linux user mode's system call, without the filters, for
@@ -123,10 +123,10 @@ index cfa68df..7ee6451 100644
 +
  abi_long do_syscall(CPUArchState *cpu_env, int num, abi_long arg1,
 diff --git a/plugins/api.c b/plugins/api.c
-index 4367236..c79d4d1 100644
+index 30e95d7..0e69016 100644
 --- a/plugins/api.c
 +++ b/plugins/api.c
-@@ -519,2 +519,27 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
+@@ -510,2 +510,27 @@ void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb
  
 +int (*qemu_plugin_user_host_signal)(int sig);
 +
@@ -155,19 +155,20 @@ index 4367236..c79d4d1 100644
 +
  void qemu_plugin_set_pc(uint64_t vaddr)
 diff --git a/plugins/core.c b/plugins/core.c
-index bc3bae9..182af8e 100644
+index 387b9ac..0cc290b 100644
 --- a/plugins/core.c
 +++ b/plugins/core.c
-@@ -587,2 +587,4 @@ void qemu_plugin_vcpu_syscall_ret(CPUState *cpu, int64_t num, int64_t ret)
- QEMU_DISABLE_CFI
+@@ -583,2 +583,5 @@ void qemu_plugin_vcpu_syscall_ret(CPUState *cpu, int64_t num, int64_t ret)
+ 
++/* set while the syscall filters run, for qemu_plugin_run_syscall() */
 +__thread bool qemu_plugin_in_syscall_filter;
 +
- bool
-@@ -604,2 +606,3 @@ qemu_plugin_vcpu_syscall_filter(CPUState *cpu, int64_t num, uint64_t a1,
+ /*
+@@ -606,2 +609,3 @@ qemu_plugin_vcpu_syscall_filter(CPUState *cpu, int64_t num, uint64_t a1,
      qemu_plugin_set_cb_flags(cpu, QEMU_PLUGIN_CB_RW_REGS_PC);
 +    qemu_plugin_in_syscall_filter = true;   /* qemu_plugin_run_syscall() */
  
-@@ -615,2 +618,3 @@ qemu_plugin_vcpu_syscall_filter(CPUState *cpu, int64_t num, uint64_t a1,
+@@ -617,2 +621,3 @@ qemu_plugin_vcpu_syscall_filter(CPUState *cpu, int64_t num, uint64_t a1,
  
 +    qemu_plugin_in_syscall_filter = false;
      qemu_plugin_set_cb_flags(cpu, QEMU_PLUGIN_CB_NO_REGS);

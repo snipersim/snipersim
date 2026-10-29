@@ -217,11 +217,13 @@ index 28704a8..9f87942 100644
 +    cpu_loop_exit(current_cpu);
 +}
 diff --git a/plugins/core.c b/plugins/core.c
-index 1113bfe..bc3bae9 100644
+index 1113bfe..a1a7f11 100644
 --- a/plugins/core.c
 +++ b/plugins/core.c
-@@ -208,2 +208,18 @@ CPUPluginState *qemu_plugin_create_vcpu_state(void)
+@@ -208,2 +208,20 @@ CPUPluginState *qemu_plugin_create_vcpu_state(void)
  
++/* calls the plugin's function: no CFI checks, as for the callbacks above */
++QEMU_DISABLE_CFI
 +void qemu_plugin_vcpu_wait_run(CPUState *cpu)
 +{
 +    CPUPluginState *st = cpu->plugin_state;
