@@ -164,6 +164,7 @@ namespace Sift
          void sendEmuResponse(bool handled, EmuReply res);
          void sendSimpleResponse(RecOtherType type, void *data = NULL, uint32_t size = 0);
          bool readChampSim(Instruction &inst);
+         bool streamCut(const char *kind);
          void resetStream();
 
       public:

@@ -336,6 +336,19 @@ bool Reader::initResponse()
    return true;
 }
 
+/* The writer died mid-record (a front end that _exits on refusal, or one
+   killed): what was read is a fragment, and acting on it -- a size field
+   asserted on, a handler called with garbage -- turns the recorder's failure
+   into the simulator's.  The stream ends there instead, as at a missing End
+   record. */
+bool Reader::streamCut(const char *kind)
+{
+   std::cerr << "[SIFT:" << m_id << "] stream ended inside " << kind << " record, without its End"
+             << " record: the recording process exited or crashed without closing it"
+             << " (look for a [SIFT] or recorder message above)\n";
+   return false;
+}
+
 bool Reader::Read(Instruction &inst)
 {
    // Initialise stream once (for either SIFT or ChampSim)
@@ -392,6 +405,8 @@ bool Reader::Read(Instruction &inst)
       {
          // "Other" record
          input->read(reinterpret_cast<char*>(&rec), sizeof(rec.Other));
+         if (input->fail())
+            return streamCut("an Other");
          switch(rec.Other.type)
          {
             case RecOtherEnd:
@@ -406,6 +421,8 @@ bool Reader::Read(Instruction &inst)
                assert(rec.Other.size == sizeof(uint64_t) + ICACHE_SIZE);
                uint64_t address;
                input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
+               if (input->fail())
+                  return streamCut("an Other (code page)");
                /* address is the page's virtual address; it is held under its
                   key -- itself, or its physical page, whose mapping the
                   writer sent first */
@@ -415,6 +432,11 @@ bool Reader::Read(Instruction &inst)
                {
                   uint8_t *bytes = new uint8_t[ICACHE_SIZE];
                   input->read(reinterpret_cast<char*>(bytes), ICACHE_SIZE);
+                  if (input->fail())
+                  {
+                     delete [] bytes;
+                     return streamCut("an Other (code page)");
+                  }
                   icache[key] = bytes;
                }
                else
@@ -425,6 +447,8 @@ bool Reader::Read(Instruction &inst)
                   // starting in the page, and any from the previous page that
                   // runs into it.
                   input->read(reinterpret_cast<char*>(const_cast<uint8_t*>(known->second)), ICACHE_SIZE);
+                  if (input->fail())
+                     return streamCut("an Other (code page)");
                   // (15: the longest an instruction from the previous page can
                   // reach in; that page's key is not this one's minus a page
                   // when code is keyed physically)
@@ -462,6 +486,8 @@ bool Reader::Read(Instruction &inst)
                uint64_t address;
                size_t size = rec.Other.size - sizeof(uint64_t);
                input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
+               if (input->fail())
+                  return streamCut("an Other (code bytes)");
 
                // New bytes for this address: anything already decoded from the
                // old ones describes an instruction that no longer exists.
@@ -487,6 +513,8 @@ bool Reader::Read(Instruction &inst)
                   uint64_t offset = address & ICACHE_OFFSET_MASK;
                   size_t read_amount = std::min(size_left, size_t(ICACHE_SIZE - offset));
                   input->read(const_cast<char*>(reinterpret_cast<const char*>(&(icache[base_addr][offset]))), read_amount);
+                  if (input->fail())
+                     return streamCut("an Other (code bytes)");
 
 #if VERBOSE_ICACHE
                   std::cerr << __FUNCTION__ << ": Wrote " << read_amount << " bytes to 0x" << std::hex << (void*)&(icache[base_addr][offset]) << std::dec << std::endl;
@@ -505,6 +533,8 @@ bool Reader::Read(Instruction &inst)
                uint64_t vp, pp;
                input->read(reinterpret_cast<char*>(&vp), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&pp), sizeof(uint64_t));
+               if (input->fail())
+                  return streamCut("an Other (address mapping)");
                /* Frame ~0 (no such page) withdraws the mapping: the page now
                   maps a device, or nothing, and its accesses go by their
                   virtual address again (va2pa reports no mapping). */
@@ -523,6 +553,8 @@ bool Reader::Read(Instruction &inst)
                assert(rec.Other.size == sizeof(uint32_t));
                uint32_t icount;
                input->read(reinterpret_cast<char*>(&icount), sizeof(icount));
+               if (input->fail())
+                  return streamCut("an Other (instruction count)");
                Mode mode = ModeUnknown;
                if (handleInstructionCountFunc)
                   mode = handleInstructionCountFunc(handleInstructionCountArg, icount);
@@ -542,6 +574,8 @@ bool Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&type), sizeof(uint8_t));
                input->read(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&address), sizeof(uint64_t));
+               if (input->fail())
+                  return streamCut("an Other (cache-only access)");
                if (handleCacheOnlyFunc)
                   handleCacheOnlyFunc(handleCacheOnlyArg, icount, (Sift::CacheOnlyType)type, eip, address);
                break;
@@ -558,6 +592,11 @@ bool Reader::Read(Instruction &inst)
                uint8_t *bytes = new uint8_t[size];
                input->read(reinterpret_cast<char*>(&fd), sizeof(uint8_t));
                input->read(reinterpret_cast<char*>(bytes), size);
+               if (input->fail())
+               {
+                  delete [] bytes;
+                  return streamCut("an Other (output)");
+               }
                if (handleOutputFunc)
                   handleOutputFunc(handleOutputArg, fd, bytes, size);
                delete [] bytes;
@@ -575,6 +614,11 @@ bool Reader::Read(Instruction &inst)
                uint8_t *bytes = new uint8_t[size];
                input->read(reinterpret_cast<char*>(&syscall_number), sizeof(uint16_t));
                input->read(reinterpret_cast<char*>(bytes), size);
+               if (input->fail())
+               {
+                  delete [] bytes;
+                  return streamCut("an Other (system call)");
+               }
 #if VERBOSE_HEX > 0
                hexdump((char*)&rec, sizeof(rec.Other));
                hexdump((char*)&syscall_number, sizeof(syscall_number));
@@ -623,6 +667,8 @@ bool Reader::Read(Instruction &inst)
                int32_t thread;
                assert(rec.Other.size == sizeof(thread));
                input->read(reinterpret_cast<char*>(&thread), sizeof(thread));
+               if (input->fail())
+                  return streamCut("an Other (join)");
                assert(handleJoinFunc);
                if (handleJoinFunc)
                {
@@ -673,6 +719,8 @@ bool Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&a), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&b), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&c), sizeof(uint64_t));
+               if (input->fail())
+                  return streamCut("an Other (magic instruction)");
                uint64_t result;
                /* Whether to answer is the handler's to say, apart from the
                   answer itself.  It used to be read off the answer -- 42 meant
@@ -699,6 +747,8 @@ bool Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&a), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&b), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&c), sizeof(uint64_t));
+               if (input->fail())
+                  return streamCut("an Other (magic instruction)");
                if (handleMagicFunc)
                {
                   bool respond = true;     // nothing to answer on, either way
@@ -713,6 +763,8 @@ bool Reader::Read(Instruction &inst)
                uint16_t type; EmuRequest req;
                input->read(reinterpret_cast<char*>(&type), sizeof(uint16_t));
                input->read(reinterpret_cast<char*>(&req), rec.Other.size - sizeof(uint16_t));
+               if (input->fail())
+                  return streamCut("an Other (emulation request)");
                bool result = false; EmuReply res = {};
                if (handleEmuFunc)
                {
@@ -731,6 +783,8 @@ bool Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&eip), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&esp), sizeof(uint64_t));
                input->read(reinterpret_cast<char*>(&callEip), sizeof(uint64_t));
+               if (input->fail())
+                  return streamCut("an Other (routine change)");
                if (handleRoutineChangeFunc)
                   handleRoutineChangeFunc(handleRoutineArg, Sift::RoutineOpType(event), eip, esp, callEip);
                break;
@@ -755,6 +809,13 @@ bool Reader::Read(Instruction &inst)
                input->read(reinterpret_cast<char*>(&len_filename), sizeof(uint16_t));
                filename = (char*)malloc(len_filename);
                input->read(filename, len_filename);
+               if (input->fail())
+               {
+                  free(name);
+                  free(imgname);
+                  free(filename);
+                  return streamCut("an Other (routine announcement)");
+               }
                if (handleRoutineAnnounceFunc)
                   handleRoutineAnnounceFunc(handleRoutineArg, eip, name, imgname, offset, line, column, filename);
                free(name);
@@ -768,6 +829,8 @@ bool Reader::Read(Instruction &inst)
                assert(rec.Other.size == sizeof(uint32_t));
                uint32_t new_isa;
                input->read(reinterpret_cast<char*>(&new_isa), sizeof(new_isa));
+               if (input->fail())
+                  return streamCut("an Other (ISA change)");
                m_isa = new_isa;
                break;
             }
@@ -777,12 +840,16 @@ bool Reader::Read(Instruction &inst)
                uint8_t n;
                uint32_t dropped = 0;
                input->read(reinterpret_cast<char*>(&n), sizeof(n));
+               if (input->fail())
+                  return streamCut("an Other (memory spans)");
                assert(n <= MAX_MEMORY_SPANS);
                const size_t base = sizeof(uint8_t) + n * sizeof(MemorySpan);
                assert(rec.Other.size == base || rec.Other.size == base + sizeof(dropped));
                input->read(reinterpret_cast<char*>(m_pending_spans), n * sizeof(MemorySpan));
                if (rec.Other.size == base + sizeof(dropped))
                   input->read(reinterpret_cast<char*>(&dropped), sizeof(dropped));
+               if (input->fail())
+                  return streamCut("an Other (memory spans)");
                m_pending_spans_n = n;
                m_pending_spans_dropped = dropped;
                break;
@@ -793,6 +860,8 @@ bool Reader::Read(Instruction &inst)
                uint8_t *bytes = new uint8_t[rec.Other.size];
                input->read(reinterpret_cast<char*>(bytes), rec.Other.size);
                delete [] bytes;
+               if (input->fail())
+                  return streamCut("an Other");
                break;
             }
          }
@@ -853,17 +922,10 @@ bool Reader::Read(Instruction &inst)
       for (int i = 0; i < inst.num_addresses; ++i)
          input->read(reinterpret_cast<char*>(&inst.addresses[i]), sizeof(uint64_t));
 
-      /* The writer died mid-record (a front end that _exits on refusal, or
-         one killed): what was read is a fragment, and its size and address
-         are garbage that the decoder then asserted on (aarch64-user-mt's
-         live refusal, one run in four).  End the stream here instead. */
+      /* A fragment's size and address are garbage that the decoder then
+         asserted on (aarch64-user-mt's live refusal, one run in four). */
       if (input->fail())
-      {
-         std::cerr << "[SIFT:" << m_id << "] stream ended inside an instruction record, without its End"
-                   << " record: the recording process exited or crashed without closing it"
-                   << " (look for a [SIFT] or recorder message above)\n";
-         return false;
-      }
+         return streamCut("an instruction");
 
       inst.sinst = getStaticInstruction(addr, size);
 
