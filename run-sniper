@@ -982,14 +982,34 @@ if tracegen:
     # waiting (ENXIO) is one the simulator has read already, or has not
     # reached yet: the probe is repeated until the simulator gets there or
     # is gone.
+    # Every FIFO of the application, the threads' too: the simulator makes a
+    # thread's when the thread is announced, and a recorder that ended after
+    # announcing one (the QEMU plugin refusing a second thread) left the
+    # simulator in that open for ever -- they are looked for again in each
+    # round, since the simulator may make one later.
+    import glob as _glob, stat as _stat
+    def app_fifos():
+      names = set(f for f in tracegen['tracefiles_created'] if '.app%d.' % app_id in f)
+      names.update(_glob.glob(os.path.join(tracegen['tracetempdir'], '*.app%d.*' % app_id)))
+      out = []
+      for f in sorted(names):
+        try:
+          if '_response' not in f and _stat.S_ISFIFO(os.stat(f).st_mode):
+            out.append(f)
+        except OSError:
+          pass
+      return out
     deadline = time.time() + 30
-    fifos = [ f for f in tracegen['tracefiles_created'] if '.app%d.' % app_id in f and '_response' not in f ]
+    done = set()
+    fifos = app_fifos()
     while fifos and not stopping and time.time() < deadline:
+      fifos = [ f for f in app_fifos() if f not in done ]
       for f in list(fifos):
         try:
           fd = os.open(f, os.O_WRONLY | os.O_NONBLOCK)
           os.close(fd)
           fifos.remove(f)
+          done.add(f)
           # (the simulator may also be reading the stream still: the
           # application crashed mid-run, which the simulator reports)
           print('[SNIPER] Application %d\'s stream is closed for the simulator: its recorder ended' % app_id)
