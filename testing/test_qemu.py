@@ -2640,7 +2640,8 @@ def case_user_timed_libc(p, g, workdir):
     poll, select, epoll, sigtimedwait, a condition variable's and a
     semaphore's timed waits, a 2 s poll) at their deadlines in the guest's
     time, to a file and live; a poll and a semaphore wait that another thread
-    ends before their 1 s timeouts end then."""
+    ends before their 1 s timeouts end then (live: in simulated time, the
+    worker's exit no longer leaving the sleeping poller parked)."""
     qemu = user_qemu('x86_64')
     if not os.path.isfile(qemu):
         return None, 'no qemu-x86_64'
@@ -2657,13 +2658,10 @@ def case_user_timed_libc(p, g, workdir):
     why = timed_check('to a file', timed_lines(out, 'timed_waits'), TIMED_WAITS_ALL)
     if why:
         return False, why
-    # Live, the waits another thread ends are left out for now: a thread that
-    # sleeps in the simulator while another runs is not woken (the sleep fix)
-    live = [w for w in TIMED_WAITS_ALL if w not in ('poll-ready', 'sem_timedwait-posted')]
+    live = TIMED_WAITS_ALL
     outdir = os.path.join(workdir, 'timed-libc-live')
     rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '2', '-c', 'gainestown', '-d', outdir,
-                   '--frontend=qemu', '--', guest], 900, cwd=SNIPER_ROOT,
-                  env=dict(os.environ, TIMED_WAITS_ONLY=','.join(live)))
+                   '--frontend=qemu', '--', guest], 900, cwd=SNIPER_ROOT)
     if rc != 0 or 'timed_waits: done' not in out:
         return False, 'live: the guest failed (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
     why = timed_check('live', timed_lines(out, 'timed_waits'), live)
