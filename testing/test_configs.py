@@ -812,11 +812,47 @@ def load_factor():
     account's jobs (load 80 to 150 on 80 CPUs) fourteen detailed cases ran
     out of their two minutes, the same on every build, and passed with
     longer limits.  A deadlock still ends at a bounded multiple."""
+    # Per CPU this run may use (taskset), not per CPU of the host: a run
+    # pinned to 16 of 80 CPUs whose 16 are full sees a host-wide load of 16,
+    # 0.2 per CPU, and got no allowance at all.  The host-wide average is
+    # spread over the CPUs we have in proportion (an even spread is all it
+    # can tell); the threads runnable on our CPUs right now say whether ours
+    # carry more than their share.
     try:
-        per_cpu = os.getloadavg()[0] / (os.cpu_count() or 1)
+        allowed = os.sched_getaffinity(0)
+    except (AttributeError, OSError):
+        allowed = set(range(os.cpu_count() or 1))
+    ncpu = os.cpu_count() or len(allowed) or 1
+    try:
+        spread = os.getloadavg()[0] * len(allowed) / float(ncpu)
     except OSError:
-        return 1.0
+        spread = 0.0
+    per_cpu = max(spread, runnable_on(allowed)) / float(len(allowed) or 1)
     return min(max(per_cpu, 1.0), 8.0)
+
+
+def runnable_on(cpus):
+    """Threads runnable now (state R) whose last CPU is one of cpus, this
+    process apart."""
+    n = 0
+    me = os.getpid()
+    for pid in os.listdir('/proc'):
+        if not pid.isdigit() or int(pid) == me:
+            continue
+        try:
+            tids = os.listdir('/proc/%s/task' % pid)
+        except OSError:
+            continue
+        for tid in tids:
+            try:
+                with open('/proc/%s/task/%s/stat' % (pid, tid)) as f:
+                    fields = f.read().rsplit(')', 1)[1].split()
+            except (OSError, IndexError):
+                continue
+            # after the command: state is field 3, the last CPU field 39
+            if len(fields) > 36 and fields[0] == 'R' and int(fields[36]) in cpus:
+                n += 1
+    return n
 
 
 def run_in_own_group(cmd, timeout, **kwargs):
