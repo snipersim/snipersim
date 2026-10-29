@@ -125,11 +125,21 @@ struct Region
    double prev_time_per_ins = 0;       /* the measurement before the latest, for Options::converge */
    unsigned measurements = 0;          /* of a cluster's representative: how many times it was measured */
    uint64_t lag = 0;                   /* at the region's start: how far the cutting thread's core was behind the furthest core */
+   uint64_t region_fs = 0;             /* the region's own time, measured or from its cluster, before Sampler::account() made fs its share of the run's (written as region_fs) */
+   /* the measurement an unmeasured region's time came from (repair()), for
+      the per-thread account (Sampler::account()) */
+   bool has_rep = false;
+   uint64_t rep_fs = 0;
+   std::vector<uint64_t> rep_ins;
+   std::vector<double> rep_bbv;
 
    void measured(uint64_t fs_, uint64_t l2_, uint64_t l2miss_);
    void absorb(const Region &r);       /* the latest measurement stands for the cluster */
    bool settled(unsigned min_measurements, double converge) const;
    void extrapolate(double tpi, Level from);
+   void extrapolate(const Region &rep, Level from);
+   /* a thread's time in this region at the rate of the representative's thread most like it */
+   double threadTime(unsigned t, unsigned nthreads) const;
    std::string json(unsigned nthreads) const;
 };
 
@@ -204,6 +214,7 @@ private:
    Mode decide(uint64_t pc);
    void cut(unsigned tid, uint64_t pc, RecordType type, bool can_measure = true);
    void repair();
+   void account();
    void write();
 
    const Options m_options;

@@ -405,7 +405,13 @@ the original's method:
   An unmeasured region is
   extrapolated at the end of the run from the latest measurement of its
   cluster at its own cut point, else at any cut point, else the nearest
-  measured region by vector, else the average.  At ROI end the sampler
+  measured region by vector, else the average.  Where regions are cut at
+  loop back-edges the threads are not held together between cuts, so the
+  run's time is accounted thread by thread over such stretches: a measured
+  region's time for each thread that ran through it, each other thread's
+  instructions at the rate of the representative's thread most like it,
+  and the run's time is the slowest thread's (a region's `fs` is its
+  increase of that, its own time is kept as `region_fs`).  At ROI end the sampler
   measures the last region and writes `<output dir>/pacsim_regions.json`
   (`feature_stack[]` with `insnums`, `bbv`, `fs`, `l2count`, `l2misscount`,
   `clusterid`, `pc`, `recordtype`, `feature_level` 1 = measured);
@@ -511,6 +517,35 @@ after a detailed instruction or an instruction count: 10 of 10 runs at
 `testing/test_pacsim.py` still gives every thread a core of its own for
 its accuracy figures, and checks a sampled run on two cores separately
 (the `fewer-cores` case, barrier shape).
+
+**Fixed: the loop shape's estimate at full size.**  `testing/test_pacsim.py
+--profile full --mode loop` failed on the QEMU front end, 18.64% over the
+full run against a 10% tolerance; further sampled runs gave +16.0%, +7.1%
+and -7.6% under QEMU, -1.6% and +1.1% under SDE.  The front ends measured
+the same thing (their first, detailed regions agree to 0.1%); the
+difference was how far the threads drifted apart between measured
+regions.  Two causes.  The fast-forward barrier gave each core the
+instructions to reach the next sync time at one IPC and did not count
+memory latency against them, so a core in a DRAM-bound pointer chase ran
+far past it, the next round started from that core, and a second chasing
+core was given that span's instructions at one IPC and ran further still:
+fast-forwarded regions held one thread's 9.8M instructions and none of
+another's.  The fast-forward manager now takes the count again after each
+memory latency.  And the estimate, the sum of each region's busiest
+thread's time, is the sampled run's own schedule: right where a barrier
+holds the threads together at every cut, not between loop cuts, where the
+fast-forward model (one IPC plus memory latency) moves the threads at
+other relative rates than the detailed model, and one sampled run ended
+with two threads running on alone for 64 ms of 150.  Over loop-cut
+stretches the sampler now accounts each thread's time and takes the
+slowest thread's.  With both, the QEMU front end's full-profile loop
+estimate was 0.96% off in `test_pacsim.py` (8 of 19 regions measured,
+1.85x) and +1.2% and +0.2% in two more sampled runs; the SDE front end's
+-7.1% (`test_pacsim.py`, 2.20x), +1.7% and -6.5%.  The remaining spread is
+the per-thread rates: a thread's instructions in an unmeasured region are
+timed at the rate of one representative thread, and the threads' block
+mixes are too alike here to tell a thread that chases through DRAM from
+one whose chase fits its socket's L3.
 
 ### 3.8 Tests
 

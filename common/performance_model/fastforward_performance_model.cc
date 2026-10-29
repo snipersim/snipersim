@@ -66,7 +66,29 @@ void
 FastforwardPerformanceModel::handleMemoryLatency(SubsecondTime latency, HitWhere::where_t hit_where)
 {
    if (m_include_memory_latency)
+   {
       incrementElapsedTime(latency, m_cpiDataCache[hit_where]);
+      /* The core is due at the fast-forward barrier after the instructions
+         that take it to the manager's next sync time at one IPC
+         (FastForwardPerformanceManager::recalibrateInstructionsCallback);
+         its memory latency counts towards that time too, so the count is
+         taken again from where the latency left the core.  It was counted
+         once per round: a core in a DRAM-bound pointer chase ran its
+         round's instructions at memory latency instead (a 100 ns round,
+         --pacsim's quantum, is 266 instructions at 2.66 GHz, some 90 loads,
+         9 us), and the next round starts from the furthest core
+         (BarrierSyncServer::barrierRelease), so every other core was given
+         9 us worth of instructions at one IPC -- and a second chasing core
+         spent those at memory latency too, 90 times further again.  The
+         rounds ran away until a chase ended, and the threads advanced in
+         turns of milliseconds instead of side by side: fast-forwarded
+         regions of testing/apps/looped.c held one thread's 9.8M
+         instructions and none of another's (Pac-Sim cuts its regions by
+         the instructions the threads run between them). */
+      FastForwardPerformanceManager *manager = Sim()->getFastForwardPerformanceManager();
+      if (manager && manager->isEnabled())
+         manager->recalibrateInstructionsCallback(m_core->getId());
+   }
 }
 
 void

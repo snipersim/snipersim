@@ -36,6 +36,7 @@ void Region::absorb(const Region &r)
 {
    prev_time_per_ins = time_per_ins;
    fs = r.fs; max_ins = r.max_ins; time_per_ins = r.time_per_ins; measurements++;
+   ins = r.ins; bbv = r.bbv; nactive = r.nactive;   /* the threads of the measurement that stands for the cluster */
 }
 
 /* measured often enough, and the last two measurements agree (Options::converge) */
@@ -58,10 +59,47 @@ void Region::extrapolate(double tpi, Level from)
    level = from; solved = true;
 }
 
+void Region::extrapolate(const Region &rep, Level from)
+{
+   extrapolate(rep.time_per_ins, from);
+   has_rep = true; rep_fs = rep.fs; rep_ins = rep.ins; rep_bbv = rep.bbv;
+}
+
+/* Thread t's time in this region: its instructions at the rate of the
+   representative's thread whose block mix is nearest its own, among those
+   that ran a fair share of the representative (a thread that ran little of
+   it was waiting, and its rate says nothing).  Without a representative,
+   the region's own rate per instruction. */
+double Region::threadTime(unsigned t, unsigned nthreads) const
+{
+   const uint64_t n = t < ins.size() ? ins[t] : 0;
+   if (!n) return 0;
+   if (has_rep)
+   {
+      uint64_t rep_max = 0;
+      for (size_t u = 0; u < rep_ins.size(); u++) if (rep_ins[u] > rep_max) rep_max = rep_ins[u];
+      int best = -1; double bd = 0;
+      for (unsigned u = 0; u < nthreads && u < rep_ins.size(); u++)
+      {
+         if (!rep_ins[u] || 10 * rep_ins[u] < 3 * rep_max) continue;
+         double d = 0;
+         for (unsigned k = 0; k < DIM; k++)
+         {
+            const double a = (t * DIM + k) < bbv.size() ? bbv[t * DIM + k] : 0, b = (u * DIM + k) < rep_bbv.size() ? rep_bbv[u * DIM + k] : 0;
+            d += std::fabs(a - b);
+         }
+         if (best < 0 || d < bd) { best = (int)u; bd = d; }
+      }
+      if (best >= 0)
+         return (double)n * (double)rep_fs / (double)rep_ins[best];
+   }
+   return (double)n * time_per_ins;
+}
+
 std::string Region::json(unsigned nthreads) const
 {
    std::stringstream out;
-   out << "  { \"max_ins_num\": " << max_ins << ", \"fs\": " << fs << ", \"l2count\": " << l2 << ", \"l2misscount\": " << l2miss
+   out << "  { \"max_ins_num\": " << max_ins << ", \"fs\": " << fs << ", \"region_fs\": " << region_fs << ", \"l2count\": " << l2 << ", \"l2misscount\": " << l2miss
        << ", \"clusterid\": " << cluster << ", \"pc\": " << pc << ", \"freq\": 0"
        << ", \"predict_result_type\": " << (int)predict << ", \"recordtype\": " << (int)type
        << ", \"feature_level\": " << (int)level << ",\n    \"insnums\": [";
@@ -372,10 +410,10 @@ void Sampler::repair()
       if (p != m_predictors.end())
       {
          std::map<uint64_t, Region>::iterator k = p->second.known.find(r.cluster);
-         if (k != p->second.known.end() && k->second.level == Level::FromSelf) { r.extrapolate(k->second.time_per_ins, Level::FromLocal); continue; }
+         if (k != p->second.known.end() && k->second.level == Level::FromSelf) { r.extrapolate(k->second, Level::FromLocal); continue; }
       }
       std::map<uint64_t, Region>::iterator g = m_global.find(r.cluster);
-      if (g != m_global.end()) { r.extrapolate(g->second.time_per_ins, Level::FromGlobal); continue; }
+      if (g != m_global.end()) { r.extrapolate(g->second, Level::FromGlobal); continue; }
    }
    for (size_t i = 0; i < m_regions.size(); i++)
    {
@@ -390,12 +428,95 @@ void Sampler::repair()
          if (!best || d < bd) { best = &m_regions[j]; bd = d; }
       }
       if (best)
-         r.extrapolate(best->time_per_ins, Level::FromOtherCluster);
+         r.extrapolate(*best, Level::FromOtherCluster);
    }
    uint64_t sum_fs = 0, sum_ins = 0;
    for (size_t i = 0; i < m_regions.size(); i++) if (m_regions[i].solved) { sum_fs += m_regions[i].fs; sum_ins += m_regions[i].max_ins; }
    const double avg = sum_ins ? (double)sum_fs / (double)sum_ins : 0;
    for (size_t i = 0; i < m_regions.size(); i++) if (!m_regions[i].solved) m_regions[i].extrapolate(avg, Level::FromGlobalAvg);
+}
+
+/* The run's time, thread by thread, where the threads do not synchronise.
+
+   repair() gives each region the time of its busiest thread at its
+   cluster's rate, and the run is the sum: right when the threads run side
+   by side in every region as they do in the full run -- a barrier between
+   regions makes them.  Between loop cuts nothing does, and the sampled run
+   does not keep them side by side: in the regions it fast-forwards, the
+   threads advance at the fast-forward model's rates (one instruction per
+   cycle plus memory latency), not the detailed model's, and they drift.
+   The loop shape's threads, synchronised only on entry and exit, ended
+   one sampled run with two of them running on alone for the last four
+   regions, 64 ms of a 150 ms run, measured in detail and summed; and a
+   fast-forwarded region held 9.8M instructions of one thread and none of
+   another's, charged as if that thread had run alone (that one was the
+   fast-forward barrier's doing, FastforwardPerformanceModel::handleMemoryLatency).
+   Summed so, the estimate was the drifted schedule's time: 18.6%, 16.0%
+   and 7.1% over the full run under QEMU, whose threads drifted further
+   (-7.6% once), -1.6% and +1.1% under SDE (2026-10-29).  With the barrier
+   fixed and nothing else, the threads keep in step in simulated time but
+   at the fast-forward model's relative rates, and the sum was 15% to 37%
+   over (three runs).
+
+   So within a stretch of loop-cut (IntraBarrier) regions each thread's own
+   time is accumulated: a measured region's time for a thread that ran
+   through it, its instructions at its representative's rate (the
+   representative's thread most like it, Region::threadTime) otherwise; the
+   run's time is the slowest thread's.  A region cut at a synchronisation
+   point, and the end, keep repair()'s time and bring every thread level
+   with the slowest.  Each region's fs is then its increase of the slowest
+   thread's time, so that the file's sum is still the estimate. */
+void Sampler::account()
+{
+   const unsigned nt = m_nthreads;
+   std::vector<size_t> last(nt, 0);                  /* the last region in which a thread ran a share of it (its exit path in the end region does not count) */
+   for (size_t i = 0; i < m_regions.size(); i++)
+   {
+      const Region &r = m_regions[i];
+      if (r.type == RecordType::EndPgm) continue;
+      const uint64_t share = r.max_ins / 100 > 1000 ? r.max_ins / 100 : 1000;
+      for (unsigned t = 0; t < nt && t < r.ins.size(); t++)
+         if (r.ins[t] >= share) last[t] = i;
+   }
+   std::vector<double> clock(nt, 0.0);
+   for (size_t i = 0; i < m_regions.size(); i++)
+   {
+      Region &r = m_regions[i];
+      r.region_fs = r.fs;
+      double before = 0;
+      for (unsigned t = 0; t < nt; t++) if (clock[t] > before) before = clock[t];
+      if (r.type != RecordType::IntraBarrier)
+      {
+         for (unsigned t = 0; t < nt; t++) clock[t] = before + (double)r.fs;
+         continue;
+      }
+      const uint64_t share = r.max_ins / 100 > 1000 ? r.max_ins / 100 : 1000;
+      for (unsigned t = 0; t < nt && t < r.ins.size(); t++)
+      {
+         if (!r.ins[t]) continue;
+         /* measured, and running from its start to its end: the region's time */
+         if (r.level == Level::FromSelf && r.ins[t] >= share && i != last[t])
+            clock[t] += (double)r.fs;
+         else
+         {
+            /* a thread that ends in a measured region ran part of it: its share
+               at the region's own rates, at most all of it */
+            Region self;
+            const Region *rate = &r;
+            if (r.level == Level::FromSelf)
+            {
+               self = r; self.has_rep = true; self.rep_fs = r.fs; self.rep_ins = r.ins; self.rep_bbv = r.bbv;
+               rate = &self;
+            }
+            double tt = rate->threadTime(t, nt);
+            if (r.level == Level::FromSelf && tt > (double)r.fs) tt = (double)r.fs;
+            clock[t] += tt;
+         }
+      }
+      double after = before;
+      for (unsigned t = 0; t < nt; t++) if (clock[t] > after) after = clock[t];
+      r.fs = (uint64_t)(after - before);
+   }
 }
 
 void Sampler::write()
@@ -553,6 +674,7 @@ void Sampler::finish(unsigned tid, uint64_t pc, bool can_measure)
       m_finished = true;
       cut(tid, pc, RecordType::EndPgm, can_measure);
       repair();
+      account();
       write();
    }
    if (locked) m_fe.unlock();
