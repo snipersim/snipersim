@@ -213,11 +213,20 @@ void FrontendSyscallModelBase <T>::doSyscall
          case SYS_sched_getaffinity:
          case SYS_nanosleep:
          case SYS_clock_nanosleep:   // what glibc's usleep/sleep/nanosleep issue
+         // The clocks, read with a system call: the simulator's time, as
+         // the SIFT recorder forwards them
+         case SYS_clock_gettime:
+         case SYS_gettimeofday:
             m_thread_data[threadid].last_syscall_number = syscall_number;
             m_thread_data[threadid].last_syscall_emulated = true;
             //std::cerr << "[SNIPER_FRONTEND] Invoking Syscall " << syscall_number << " in emulated option" << std::endl;
             m_thread_data[threadid].last_syscall_returnval = 
             m_thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            /* the channel went (the simulator ended the application): no
+               answer -- the writer's 1 would be returned with the call's
+               buffer unwritten -- so the call runs */
+            if (!m_thread_data[threadid].output->IsOpen())
+               m_thread_data[threadid].last_syscall_emulated = false;
             break;
 
          // System calls sent to Sniper, but also passed through to OS
