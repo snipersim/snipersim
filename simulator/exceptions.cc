@@ -97,7 +97,13 @@ static void exceptionHandler(int sig, siginfo_t *scp, void *ctxt)
 
 static void handleSigUsr1(int sig, siginfo_t *scp, void *ctxt)
 {
-   Sim()->getHooksManager()->callHooks(HookType::HOOK_SIGUSR1, 0);
+   /* The handler is installed before Sim()->start() (standalone.cc), and the
+      hooks manager is created inside start() and deleted at the end: a
+      SIGUSR1 outside its lifetime has no hooks to run. */
+   Simulator *sim = Simulator::getSingleton();
+   HooksManager *hooks = sim ? sim->getHooksManager() : NULL;
+   if (hooks)
+      hooks->callHooks(HookType::HOOK_SIGUSR1, 0);
 }
 
 void registerExceptionHandler()
