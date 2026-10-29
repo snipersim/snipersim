@@ -743,6 +743,24 @@ Instruction* TraceThread::decodeChampsim(Sift::Instruction &inst)
    return instruction;
 }
 
+/* The core this thread runs on.  A thread taken off its core waits for one
+   where it was taken off (the run loop, an instruction count, a warm-up
+   count: Thread::reschedule after each), and one that blocked in a system
+   call is resumed by the record that follows it (unblock(), which the
+   caller does first); one that receives a record without a core all the
+   same waits here, at the run's time, rather than simulate on no core.
+   None only once its application has ended (Thread::reschedule then stops
+   waiting). */
+Core *TraceThread::coreOrWait()
+{
+   if (!m_thread->getCore() && !m_thread->isAborted())
+   {
+      SubsecondTime time = Sim()->getClockSkewMinimizationServer()->getGlobalTime(true /*upper_bound*/);
+      m_thread->reschedule(time, NULL);
+   }
+   return m_thread->getCore();
+}
+
 Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
 {
    if (!m_started)
@@ -758,10 +776,9 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
       unblock();
    }
 
-   Core *core = m_thread->getCore();
-   if (!core && m_thread->isAborted())
+   Core *core = coreOrWait();
+   if (!core)
       return Sift::ModeIcount;      // our application has ended: count nothing more
-   LOG_ASSERT_ERROR(core, "We cannot execute instructions while not on a core");
    SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
    core->countInstructions(0, icount);
    m_instructions_retired += icount;
@@ -778,7 +795,8 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
    if (m_thread->reschedule(time, core))
    {
       core = m_thread->getCore();
-      core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
+      if (core)      // none when the application ended meanwhile (Thread::reschedule)
+         core->getPerformanceModel()->queuePseudoInstruction(new SyncInstruction(time, SyncInstruction::UNSCHEDULED));
    }
 
    switch(Sim()->getInstrumentationMode())
@@ -797,18 +815,36 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
 
 void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, uint64_t eip, uint64_t address)
 {
-   Core *core = m_thread->getCore();
-   if (!core)
+   // We may have been blocked in a system call, if we start executing instructions again that means we're continuing
+   if (m_blocked)
    {
-      //LOG_PRINT_WARNING("Ignoring warmup while not on a core");
-      return;
+      unblock();
    }
-   //LOG_ASSERT_ERROR(core, "We cannot perform warmup while not on a core");
 
+   Core *core = coreOrWait();
+   if (!core)
+      return;      // our application has ended: nothing more is warmed
+
+   /* Counting instructions can take this thread off its core: with a
+      fast-forward performance model the count enters the barrier, whose
+      release runs the scheduler, which time-slices a thread out there when
+      there are fewer cores than threads.  The thread then waits here for a
+      core, as it does after an instruction count or a detailed instruction.
+      It did not: it read on with no core, dropped its warm-up records, and
+      the next instruction count it received ended the simulation ("We
+      cannot execute instructions while not on a core") -- every Pac-Sim run
+      with fewer cores than threads, at its first switch to warm-up. */
    if (icount)
    {
+      SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
       core->countInstructions(0, icount);
       m_instructions_retired += icount;
+      if (m_thread->reschedule(time, core))
+      {
+         core = m_thread->getCore();
+         if (!core)
+            return;
+      }
    }
 
    switch(type)

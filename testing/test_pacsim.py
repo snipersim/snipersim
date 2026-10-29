@@ -410,7 +410,7 @@ def elapsed_seconds(resultsdir):
     return max(per_core) / 1e15
 
 
-def simulate(exe, outputdir, threads, extra, timeout, frontend='pin', arch='x86_64'):
+def simulate(exe, outputdir, threads, extra, timeout, frontend='pin', arch='x86_64', cores=None):
     """Both runs are ROI-scoped, and both the same way.
 
     Without --roi the measurement is swamped by setup: building the chase
@@ -422,18 +422,17 @@ def simulate(exe, outputdir, threads, extra, timeout, frontend='pin', arch='x86_
     # One core per thread, the main thread included: it opens and closes the
     # ROI and otherwise waits, but with `threads` cores it shares one with a
     # worker, and the simulator's time-slicing of that pair is what the two
-    # runs then measure.  It also made the recorder die at ROI end in most
-    # runs (a fault inside Pin while the descheduled worker was still in its
-    # barrier), and a run that dies before printing its checksum fails the
-    # same-program check.
+    # runs then measure.  (Fewer cores than threads is checked on its own,
+    # case_fewer_cores: a sampled run used to end at its first switch to
+    # warm-up, the simulator's, not Pin's -- see there.)  `cores` overrides.
     cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'), '--roi',
-           '-n', str(threads + 1), '-c', 'gainestown', '-d', outputdir] + extra + ['--', exe]
+           '-n', str(cores or threads + 1), '-c', 'gainestown', '-d', outputdir] + extra + ['--', exe]
     if frontend == 'qemu':
         # the plugin front end on a live channel, the architecture's
         # configuration; the single-threaded shape on one core, the others
         # on one per thread as above
         cmd = [os.path.join(SNIPER_ROOT, 'run-sniper'), '--roi', '--frontend=qemu',
-               '-n', str(1 if threads == 1 else threads + 1), '-c', QEMU_CONFIG[arch], '-d', outputdir] + extra + ['--', exe]
+               '-n', str(cores or (1 if threads == 1 else threads + 1)), '-c', QEMU_CONFIG[arch], '-d', outputdir] + extra + ['--', exe]
     # The host's load while it runs, for case_faster: wall time compares two
     # runs only when nothing else is competing for the cores
     loads = []
@@ -513,6 +512,19 @@ def measure(p, workdir, mode, args):
     total = sum(sum(rg['insnums']) for rg in regions)
     detailed = sum(sum(rg['insnums']) for rg in regions if rg['feature_level'] == 1)
 
+    # The same sampled run on fewer cores than threads (case_fewer_cores):
+    # once, on the barrier shape, whose phases switch between detailed and
+    # warm-up early and often
+    fewer = None
+    if mode == FEWER_CORES_MODE and threads > FEWER_CORES:
+        fewer_dir = os.path.join(workdir, mode + '-sampled-%dcores' % FEWER_CORES)
+        frc, fout, _ = simulate(exe, fewer_dir, threads,
+                                ['--pacsim'] + trace_args + ['--trace-args=' + a for a in args.trace_arg],
+                                args.timeout, args.frontend, args.arch, cores=FEWER_CORES)
+        fm = re.search(r'\[PacSim\] Estimated sim time ([0-9.]+)s', fout)
+        fewer = {'rc': frc, 'checksum': checksum_of(fout), 'estimate': float(fm.group(1)) if fm else None,
+                 'error': next((l.strip() for l in fout.splitlines() if '*ERROR*' in l), None)}
+
     return {
         'truth': truth, 'estimate': estimate,
         'detail_share': (detailed / total) if total else 1.0, 'ins_total': total,
@@ -521,6 +533,7 @@ def measure(p, workdir, mode, args):
         'wall_full': wall_full, 'wall_sampled': wall_samp,
         'checksum_full': truth_sum, 'checksum_sampled': samp_sum,
         'dumpstats_estimate': dumpstats_estimate, 'dumpstats_output': dumpstats_output,
+        'fewer_cores': fewer,
     }
 
 
@@ -595,7 +608,40 @@ def case_dumpstats(r, args):
     return True, 'dumpstats reports the same %g s' % r['estimate']
 
 
+# The shape, and the core count, of the run on fewer cores than threads.
+FEWER_CORES_MODE = 'barrier'
+FEWER_CORES = 2
+
+
+def case_fewer_cores(r, args):
+    """A sampled run on fewer cores than threads runs to its end, the same program.
+
+    The scheduler then time-slices threads, and takes one off its core
+    wherever it enters the barrier -- in warm-up too, where the count of a
+    warm-up record enters the fast-forward barrier.  The trace thread used to
+    read on there with no core, and the next instruction count it was sent
+    ended the simulation ("We cannot execute instructions while not on a
+    core", common/trace_frontend/trace_thread.cc) at the first switch to
+    warm-up: 10 of 10 runs at 2 and 3 cores (2026-10-29).  Only the run's
+    completion is checked: its estimate measures the time-slicing, which the
+    full run on one core per thread does not have."""
+    f = r.get('fewer_cores')
+    if f is None:
+        return None, 'run on the %s shape only' % FEWER_CORES_MODE
+    what = '%d cores for %d threads' % (FEWER_CORES, args.threads + 1)
+    if f['rc'] is None:
+        return False, '%s: timed out after %ds' % (what, args.timeout)
+    if f['rc'] != 0:
+        return False, '%s: exit %s%s' % (what, f['rc'], (' (%s)' % f['error']) if f['error'] else '')
+    if f['checksum'] != r['checksum_full']:
+        return False, '%s: checksum %s, full run %s' % (what, f['checksum'], r['checksum_full'])
+    if f['estimate'] is None:
+        return False, '%s: no estimate reported' % what
+    return True, '%s: ran to its end, checksum %s, estimate %.6gs' % (what, f['checksum'][0], f['estimate'])
+
+
 CASES = {
+    'fewer-cores': case_fewer_cores,
     'same-program': case_same_program,
     'dumpstats': case_dumpstats,
     'faster':       case_faster,

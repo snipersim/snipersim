@@ -496,11 +496,21 @@ joining and working on and main returning while its workers leave, three
 times each.  The Pac-Sim workloads still print their checksum inside the
 ROI.
 
-**Known issue.**  With fewer cores than threads (`-n 2` or `-n 3` for
-`phased.c`'s five), a `--pacsim` run aborts in the simulator when the
-sampler first switches to warm-up, "We cannot execute instructions while
-not on a core" (`trace_thread.cc`), in 10 of 10 runs; `testing/test_pacsim.py`
-gives every thread a core of its own.
+**Fixed: fewer cores than threads.**  With fewer cores than threads
+(`-n 2` or `-n 3` for `phased.c`'s five), a `--pacsim` run aborted in the
+simulator when the sampler first switched to warm-up, "We cannot execute
+instructions while not on a core" (`trace_thread.cc`), in 10 of 10 runs;
+the recorder's exit status 1 that followed was only its channel closing.
+The scheduler time-slices threads at the barrier, and in warm-up a
+thread enters the (fast-forward) barrier from the instruction count of a
+warm-up record.  Taken off its core there, its trace thread read on with
+no core, dropped its warm-up records, and the next instruction count it
+received hit the assertion.  It now waits for a core there, as it does
+after a detailed instruction or an instruction count: 10 of 10 runs at
+`-n 2` and `-n 3` ran to their end with the checksum.
+`testing/test_pacsim.py` still gives every thread a core of its own for
+its accuracy figures, and checks a sampled run on two cores separately
+(the `fewer-cores` case, barrier shape).
 
 ### 3.8 Tests
 
@@ -509,7 +519,7 @@ gives every thread a core of its own.
 | scripting | `testing/test_scripting.py` | 21 Python-hook cases on a threaded workload (`statscb`, `periodic-stats`, `ipcthreadtrace`, `markers`, `no-script`, `static-scheduler`) | 2 minutes |
 | configs | `testing/test_configs.py` | every shipped configuration and fragment at 1, 2 and 4 cores in fast-forward and detailed mode, each required to produce the workload's checksum; unclassified configurations are a failure | 318 checks, over an hour |
 | qemu | `testing/test_qemu.py` | the QEMU frontend: x86 user traces, multi-threaded streams, an exact full-system count, VA-to-PA, mode switches; and the 27 RISC-V and 5 AArch64 cases | hours with the RISC-V cases |
-| pacsim | `testing/test_pacsim.py [--profile quick]` | three region shapes, each: same program, faster, agrees within tolerance; one core per thread, quick or full sizes (section 3.7) | minutes (quick) to an hour (full) |
+| pacsim | `testing/test_pacsim.py [--profile quick]` | three region shapes, each: same program, faster, agrees within tolerance; one core per thread, and the barrier shape once more on two cores; quick or full sizes (section 3.7) | minutes (quick) to an hour (full) |
 | apps | `testing/test_apps.py` | every `test/` workload's `make run` with a check on what came out (the FFT's own verdict, MPI's pi, DVFS read-back, SMC's rewritten code, fork, spin loops, a program running on after its ROI) | 10 minutes |
 | virtuoso | `testing/test_virtuoso.py` | four invariance configurations against host-local goldens (`--bless` once; ASLR pinned with `setarch -R`, a fixed environment and workload path) and 25 feature-activation cases, one per landed Virtuoso feature | 5 minutes |
 | MMU runner | `testing/run_tests.py --suite smoke_test` | trace-driven MMU experiments from `testing/test_config.yaml` (needs the trace directories it names) | |
