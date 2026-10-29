@@ -761,22 +761,39 @@ IME_CPU_DEFAULT = 'max,vlen=128,x-zvvmm=on,x-zvvfmm=on,x-zvvmtls=on'
 MEASURED_WITH = {'clang': '15.0.6', 'qemu': '11.1.1'}
 _versions = {}
 
-def versions_note(qemu=None):
-    """' (measured with clang A and QEMU B; this run: clang C, QEMU D)'."""
-    cc = os.environ.get('SNIPER_RISCV_CC') or os.environ.get('SNIPER_AARCH64_CC') or ''
+def compiler_version(out):
+    """('clang', '15.0.6') or ('gcc', '12.2.0') from a compiler's --version
+    output; ('cc', 'unknown') when it says neither.  gcc's has no "version"
+    word ("gcc (Debian 12.2.0-14) 12.2.0"), and was reported unknown."""
+    first = out.strip().split('\n')[0] if out.strip() else ''
+    name = 'clang' if 'clang' in first else 'gcc' if ('gcc' in first or 'GCC' in first or 'Free Software Foundation' in out) else 'cc'
+    m = re.search(r'version (\d+\.\d+\.\d+)', first) or re.search(r'(\d+\.\d+\.\d+)\s*$', first)
+    return name, (m.group(1) if m else 'unknown')
+
+
+def versions_note(qemu=None, cc=None):
+    """' (measured with clang A and QEMU B; this run: clang C, QEMU D)'.
+    cc: the compiler the case built its guest with (default SNIPER_RISCV_CC:
+    the RISC-V cases'; an AArch64 case passes its own, where this took the
+    RISC-V one whenever it was set)."""
+    cc = cc or os.environ.get('SNIPER_RISCV_CC') or ''
     qemu = qemu or os.environ.get('SNIPER_QEMU_RISCV') or os.path.join(SNIPER_ROOT, 'qemu-riscv', 'build', 'qemu-riscv64')
-    for key, exe in (('clang', cc), ('qemu', qemu)):
+    for key, exe in (('cc', cc), ('qemu', qemu)):
         if (key, exe) not in _versions:
             try:
                 out = subprocess.run([exe, '--version'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                      text=True, timeout=30).stdout
-                m = re.search(r'version (\d+\.\d+\.\d+)', out)
-                _versions[(key, exe)] = m.group(1) if m else 'unknown'
+                if key == 'cc':
+                    _versions[(key, exe)] = compiler_version(out)
+                else:
+                    m = re.search(r'version (\d+\.\d+\.\d+)', out)
+                    _versions[(key, exe)] = m.group(1) if m else 'unknown'
             except (OSError, subprocess.SubprocessError):
-                _versions[(key, exe)] = 'unknown'
-    now = {'clang': _versions[('clang', cc)], 'qemu': _versions[('qemu', qemu)]}
-    return ' (measured with clang %s and QEMU %s; this run: clang %s, QEMU %s%s)' % (
-        MEASURED_WITH['clang'], MEASURED_WITH['qemu'], now['clang'], now['qemu'],
+                _versions[(key, exe)] = ('cc', 'unknown') if key == 'cc' else 'unknown'
+    cc_name, cc_version = _versions[('cc', cc)]
+    now = {'clang': cc_version if cc_name == 'clang' else None, 'qemu': _versions[('qemu', qemu)]}
+    return ' (measured with clang %s and QEMU %s; this run: %s %s, QEMU %s%s)' % (
+        MEASURED_WITH['clang'], MEASURED_WITH['qemu'], cc_name, cc_version, now['qemu'],
         '' if now == MEASURED_WITH else ' -- another toolchain, which can move the count')
 
 IME_INSNS = 33            # rv-ime.c: exact instruction count of the guest (built on include/riscv_insn.h)
@@ -3032,7 +3049,7 @@ def case_aarch64_user_translation(p, g, workdir):
                              int(st['radix_4level.allocated_frames']))
     # one data fault more than on RISC-V: this build's start-up touches one more stack page
     if faults != TOUCH_FAULTS + 1 or walks != 2 * faults or frames != 14:
-        return False, '%d faults, %d walks, %d frames (expected %d, %d, 14)' % (faults, walks, frames, TOUCH_FAULTS + 1, 2 * (TOUCH_FAULTS + 1)) + versions_note(qemu)
+        return False, '%d faults, %d walks, %d frames (expected %d, %d, 14)' % (faults, walks, frames, TOUCH_FAULTS + 1, 2 * (TOUCH_FAULTS + 1)) + versions_note(qemu, cc)
     return True, '4-level table: %d faults, %d walks, %d frames' % (faults, walks, frames)
 
 CASES = {
