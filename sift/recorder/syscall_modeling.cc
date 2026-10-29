@@ -213,6 +213,11 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
             thread_data[threadid].last_syscall_number = syscall_number;
             thread_data[threadid].last_syscall_emulated = true;
             thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
+            /* the channel went (the simulator ended the application): no
+               answer -- the writer's 1 would be returned with the call's
+               buffer unwritten -- so the call runs */
+            if (!thread_data[threadid].output->IsOpen())
+               thread_data[threadid].last_syscall_emulated = false;
             break;
 
          // System calls sent to Sniper, but also passed through to OS

@@ -2015,6 +2015,16 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
    ff_report(v);
 
    *ret = v->writer->Syscall((uint16_t)sys, (const char *)args, 6 * sizeof(uint64_t));
+   if (!v->writer->IsOpen())
+   {
+      /* The channel went (the simulator ended the application): the
+       * writer's 1 is no answer, and an emulated call would return it with
+       * its buffer unwritten -- a clock_gettime with no time.  The thread
+       * goes on without the simulator: the call is not answered, the
+       * one-IPC model or the kernel takes it. */
+      v->closed = true;
+      return false;
+   }
    return true;
 }
 
