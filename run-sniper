@@ -972,7 +972,7 @@ if tracegen:
     trace_extra_args += [ '--sde-arch=%(sde_arch)s' % locals() ]
   for app_id, (pre_cmd, app_cmd) in enumerate(applications):
     tracecmd = pre_cmd + [ os.path.join(HOME, 'record-trace'), '-o', traceprefix ] \
-             + (['--pacsim', '--outputdir', outputdir] if enable_pacsim else []) \
+             + ['--outputdir', outputdir] + (['--pacsim'] if enable_pacsim else []) \
              + (['--smc'] if enable_smc else []) \
              + ([] if track_smc else ['--no-smc']) \
              + (['-v'] if verbose else []) + trace_extra_args + app_cmd

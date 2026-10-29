@@ -10,7 +10,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print('Collect SIFT instruction trace')
   print('Usage:')
-  print('  %s  -o <output file (default=$SNIPER_OUTPUT_DIR/trace, or trace)> [--roi|--roi-mpi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [-s <sift count offset>] [-x <pin option>] [-X <tool option>] [--gdb|--gdb-wait|--gdb-quit|--gdb-screen] [--follow] [--routine-tracing] [--vma] [--pa] [--pacsim] [--outputdir <outputdir ($SNIPER_OUTPUT_DIR, or .)>] [--stop-address <insn end address>] [--sde-arch=<-arch>] [--frontend=<dr|qemu|qemu-system-ARCH>] [--frontend-option=<options>] [--qemu-va-bits=<39|48>] [--smc|--no-smc] [--maxthreads <n>] { --pinball=<pinball-basename> [--pinplay-addr-trans] | --pid <pid> [--pid-continue] | -- <cmdline> }' % sys.argv[0])
+  print('  %s  -o <output file (default=<outputdir>/trace)> [--roi|--roi-mpi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [-s <sift count offset>] [-x <pin option>] [-X <tool option>] [--gdb|--gdb-wait|--gdb-quit|--gdb-screen] [--follow] [--routine-tracing] [--vma] [--pa] [--pacsim] [--outputdir <outputdir (default: the directory of -o; without -o, $SNIPER_OUTPUT_DIR, or .)>] [--stop-address <insn end address>] [--sde-arch=<-arch>] [--frontend=<dr|qemu|qemu-system-ARCH>] [--frontend-option=<options>] [--qemu-va-bits=<39|48>] [--smc|--no-smc] [--maxthreads <n>] { --pinball=<pinball-basename> [--pinplay-addr-trans] | --pid <pid> [--pid-continue] | -- <cmdline> }' % sys.argv[0])
   print('  SNIPER_OUTPUT_DIR, SNIPER_QEMU_X86_64 / SNIPER_QEMU_AARCH64 / SNIPER_QEMU_RISCV (the QEMU binaries),')
   print('  SNIPER_QEMU_RISCV_IME_CPU (the -cpu string for riscv64) are read from the environment.')
   sys.exit(2)
@@ -26,9 +26,7 @@ def procStatus(pid):
 import time
 usleep = lambda x: time.sleep(x/1000000.0)
 
-# Without -o or --outputdir, SNIPER_OUTPUT_DIR if set, as run-sniper and
-# dumpstats take it; the trace went to the working directory regardless
-outputfile = os.path.join(os.getenv('SNIPER_OUTPUT_DIR') or '.', 'trace')
+outputfile = None        # -o; the default is set after the options (see there)
 use_roi = False
 roi_mpi = False
 fastforward = 0
@@ -46,7 +44,7 @@ use_pa = False
 use_routine_tracing = False
 pinball = None
 pinplay_addrtrans = False
-outputdir = os.getenv('SNIPER_OUTPUT_DIR') or '.'
+outputdir = None         # --outputdir; likewise
 verbose = False
 extra_tool_args = []
 extra_pin_args = []
@@ -221,6 +219,16 @@ for given, name, honoured, no_effect, why in OPTION_TABLE:
   print('[RECORD-TRACE] Error: %s is not available with the %s front end: %s.' % (name, fe, why), file=sys.stderr)
   sys.exit(1)
 
+# The defaults.  The trace's data files (Pac-Sim's, a pinball replay's) go
+# next to the trace given with -o; SNIPER_OUTPUT_DIR, as run-sniper and
+# dumpstats take it, only when neither -o nor --outputdir says where.  Since
+# 090d95b it applied even with -o, so a user's exported SNIPER_OUTPUT_DIR
+# moved the data files of every run-sniper (which passed --outputdir only
+# with --pacsim) -- and record-trace created it, or exited if it could not.
+if outputdir is None:
+  outputdir = os.path.dirname(os.path.abspath(outputfile)) if outputfile else (os.getenv('SNIPER_OUTPUT_DIR') or '.')
+if outputfile is None:
+  outputfile = os.path.join(outputdir, 'trace')
 outputdir = os.path.realpath(outputdir)
 if not os.path.exists(outputdir):
   try:
