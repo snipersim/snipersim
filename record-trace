@@ -564,7 +564,7 @@ if frontend:
        dr_args += ' -loglevel 1'
     else:
        dr_args += ' -loglevel 0 -stderr_mask 0'
-    cmd = '%(DR_libpath)s %(DRRUN)s %(dr_args)s -c %(DR_frontendlib)s -roi %(value_roi)d -vma %(value_vma)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_tool_args)s  -- ' % locals() + ' '.join(cmdline)
+    cmd = '%(DR_libpath)s %(DRRUN)s %(dr_args)s -c %(DR_frontendlib)s -roi %(value_roi)d -vma %(value_vma)d -f %(fastforward)d -d %(detailed)d -b %(blocksize)d -o %(outputfile)s -e %(syscallemulation)d -s %(siftcountoffset)d -r %(useresponsefiles)d -stop %(stop_address)d %(bool_args)s %(extra_tool_args)s' % locals() + (' -time_start %d' % time_start if time_start is not None else '') + '  -- ' + ' '.join(cmdline)
   elif frontend == 'qemu' or frontend.startswith('qemu-system'):
     cmd = qemu_command()
     # The caller's environment, not Pin's: setup_env puts the Pin kit's

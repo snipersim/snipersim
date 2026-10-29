@@ -99,8 +99,8 @@ Version 9.0 (in preparation)
     plugin wait for the simulator outside QEMU's run loop, and threads are
     announced, joined and ended as under the SIFT recorder; a QEMU without
     the call still runs single-threaded guests and refuses a second thread
-  * The guest's time is simulated time, under every front end that models
-    it (SDE and QEMU; the DynamoRIO client does not yet):
+  * The guest's time is simulated time, under every front end (SDE, QEMU,
+    and the DynamoRIO client on x86-64):
     - its clocks: clock_gettime, gettimeofday and time(2), through libc or
       raw system calls, and the counter instructions QEMU's user mode
       answered from the host's clock -- RISC-V time, cycle and instret,
