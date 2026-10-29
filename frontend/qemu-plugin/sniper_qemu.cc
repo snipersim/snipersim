@@ -2771,7 +2771,21 @@ bool timed_call(VCPU *v, int64_t num, const uint64_t args[6], int64_t *sysret)
 
 typedef Sift::GuestTimers<ClockLock> Timers;
 Timers *g_timers = nullptr;
-const uint64_t TIMER_CHECK = 65536;
+const uint64_t TIMER_CHECK = 65536, TIMER_CHECK_MIN = 256;
+std::atomic<uint64_t> g_timer_sim_ns(0);   /* live: the simulator's time at the last look */
+
+/* Live, the instructions until the next look: an eighth of the time to the
+ * next expiry, at one instruction a nanosecond, within [256, 65536] -- at a
+ * fixed 65,536 an expiry was seen up to some 65 us late, longer than a
+ * short timer's period */
+uint64_t timer_check_interval()
+{
+   const uint64_t next = g_timers->next_time(), now = g_timer_sim_ns.load();
+   if (next == Sift::NO_DEADLINE)
+      return TIMER_CHECK;
+   const uint64_t left = next > now ? (next - now) / 8 : 0;
+   return std::max(TIMER_CHECK_MIN, std::min(TIMER_CHECK, left));
+}
 
 uint64_t timer_thread_cpu(unsigned slot, void *)
 {
@@ -2850,7 +2864,10 @@ void timers_check(VCPU *v, bool flushed)
    {
       uint64_t t;
       if (flushed ? sim_time(v, &t) : sim_time_reported(v, &t))
+      {
          time = t;
+         g_timer_sim_ns.store(t);
+      }
    }
    else
    {
@@ -2883,7 +2900,7 @@ void timers_flow(VCPU *v)
    if (!g_timers || !g_timers->armed())
       return;
    const uint64_t n = thread_instructions(v, v->vcpu_index, 0);
-   if (n - v->timer_check_at < TIMER_CHECK)
+   if (n - v->timer_check_at < timer_check_interval())
       return;
    v->timer_check_at = n;
    timers_check(v, false);

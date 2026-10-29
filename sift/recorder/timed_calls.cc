@@ -535,7 +535,19 @@ typedef Sift::GuestTimers<PinLock> Timers;
 Timers *timers = NULL;
 UINT64 *timer_check_at = NULL;
 volatile UINT64 timers_fired = 0;   /* how many fired: a waiter sees one came */
-const UINT64 TIMER_CHECK = 65536;
+const UINT64 TIMER_CHECK = 65536, TIMER_CHECK_MIN = 256;
+volatile UINT64 timer_sim_ns = 0;   /* live: the simulator's time at the last look */
+
+/* Live, the instructions until the next look (see the QEMU plugin's
+   timer_check_interval) */
+UINT64 timer_check_interval()
+{
+   const UINT64 next = timers->next_time(), now = timer_sim_ns;
+   if (next == Sift::NO_DEADLINE)
+      return TIMER_CHECK;
+   const UINT64 left = next > now ? (next - now) / 8 : 0;
+   return left < TIMER_CHECK_MIN ? TIMER_CHECK_MIN : left > TIMER_CHECK ? TIMER_CHECK : left;
+}
 
 UINT64 timer_thread_cpu(unsigned slot, void *)
 {
@@ -612,7 +624,10 @@ unsigned timers_check(INT32 threadid)
    {
       UINT64 t;
       if (sim_time(threadid, &t))
+      {
          time = t;
+         timer_sim_ns = t;
+      }
    }
    else
    {
@@ -1088,7 +1103,7 @@ void timedFlow(THREADID threadid)
    if (!TIMED_CALLS || !timers || !timers->armed() || !live(threadid))
       return;
    const UINT64 n = thread_data[threadid].icount_total;
-   if (n - timer_check_at[threadid] < TIMER_CHECK)
+   if (n - timer_check_at[threadid] < timer_check_interval())
       return;
    timer_check_at[threadid] = n;
    timers_check(threadid);
