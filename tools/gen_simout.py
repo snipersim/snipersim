@@ -52,12 +52,13 @@ def generate_simout(jobid = None, resultsdir = None, partial = None, output = sy
     results['performance_model.elapsed_time'][c] - results['performance_model.idle_elapsed_time'][c]
     for c in range(ncores)
   ]
-  # A core runs up to a quantum past the last global barrier, so its non-idle
-  # time can exceed the run's time by that much; sim.out showed it as a
-  # negative idle time (-155 ns on a one-core run).  sniper_lib.idle_times
-  # clamps that overshoot, and warns about anything larger.
+  # A core runs past the last global barrier (a quantum, and its last
+  # instruction's completion), so its non-idle time can exceed the run's time
+  # by its own elapsed time less the run's; sim.out showed it as a negative
+  # idle time (-155 ns on a one-core run).  sniper_lib.idle_times clamps that
+  # overshoot, and warns about anything larger.
   results['performance_model.idle_elapsed_time'] = sniper_lib.idle_times(
-    config, time0, results['performance_model.nonidle_elapsed_time'])
+    config, time0, results['performance_model.nonidle_elapsed_time'], results['performance_model.elapsed_time'])
   results['performance_model.idle_elapsed_percent'] = [
     results['performance_model.idle_elapsed_time'][c] / float(time0) if time0 else 0.
     for c in range(ncores)

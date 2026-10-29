@@ -177,13 +177,16 @@ def add_block_type_totals(stats):
   return stats
 
 
-def idle_times(config, elapsed, nonidle):
+def idle_times(config, elapsed, nonidle, core_elapsed = None):
   """Each core's idle time (fs): the run's elapsed time less the core's
-  non-idle time.  A core runs up to one barrier quantum past the last global
-  barrier, so its non-idle time can exceed the run's by that much; that
-  overshoot was reported as a negative idle time (-155 ns on a one-core run)
-  and is clamped to zero.  A larger negative is not that, and is kept and
-  warned about: clamping any negative to zero hid it."""
+  non-idle time.  The run's time is the last global barrier's, and a core
+  runs past it -- up to a quantum, and then its last instruction completes,
+  a memory miss taking longer than the quantum itself -- so its non-idle
+  time can exceed the run's by that overshoot: its own elapsed time
+  (core_elapsed) less the run's.  That was reported as a negative idle time
+  (-155 ns on a one-core run, -161 ns on fft) and is clamped to zero, and
+  only that: a larger negative is kept and warned about.  Without the
+  cores' own times, one barrier quantum is the bound."""
   try:
     quantum = float(sniper_config.get_config_default(config, 'clock_skew_minimization/barrier/quantum', 0)) * 1e6
   except (TypeError, ValueError):
@@ -192,11 +195,14 @@ def idle_times(config, elapsed, nonidle):
   for c, n in enumerate(nonidle):
     t = elapsed - n
     if t < 0:
-      if -t <= quantum:
+      bound = quantum
+      if core_elapsed is not None and c < len(core_elapsed):
+        bound = max(bound, core_elapsed[c] - elapsed)
+      if -t <= bound:
         t = 0
       else:
-        print('Warning: core %d was busy %.1f ns longer than the run lasted, more than the barrier quantum (%.1f ns); '
-              'its idle time is negative' % (c, -t / 1e6, quantum / 1e6), file = sys.stderr)
+        print('Warning: core %d was busy %.1f ns longer than the run lasted, more than it ran past it (%.1f ns); '
+              'its idle time is negative' % (c, -t / 1e6, bound / 1e6), file = sys.stderr)
     idle.append(t)
   return idle
 
@@ -251,10 +257,11 @@ def stats_process(config, results):
       stats['performance_model.elapsed_time'][c] - stats['performance_model.idle_elapsed_time'][c]
       for c in range(ncores)
     ]
-    # A core runs up to a quantum past the last global barrier: idle_times
-    # clamps that overshoot, and only that
+    # A core runs past the last global barrier: idle_times clamps that
+    # overshoot, and only that
     stats['performance_model.idle_elapsed_time'] = idle_times(
-      config, time0_end - time0_begin, stats['performance_model.nonidle_elapsed_time'])
+      config, time0_end - time0_begin, stats['performance_model.nonidle_elapsed_time'],
+      stats['performance_model.elapsed_time'])
     stats['performance_model.elapsed_time'] = [ time0_end - time0_begin for c in range(ncores) ]
   # DVFS-enabled runs: emulate cycle_count asuming constant (initial) frequency
   if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
