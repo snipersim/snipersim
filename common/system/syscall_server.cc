@@ -59,17 +59,20 @@ IntPtr SyscallServer::handleFutexCall(thread_id_t thread_id, futex_args_t &args,
       {
          struct timespec timeout_buf;
          core->accessMemory(Core::NONE, Core::READ, (IntPtr) args.timeout, (char*) &timeout_buf, sizeof(timeout_buf));
-         SubsecondTime timeout_val = SubsecondTime::SEC(timeout_buf.tv_sec - Sim()->getConfig()->getOSEmuTimeStart())
-                                   + SubsecondTime::NS(timeout_buf.tv_nsec);
+         const SubsecondTime timeout_val = SubsecondTime::SEC(timeout_buf.tv_sec) + SubsecondTime::NS(timeout_buf.tv_nsec);
          if (cmd == FUTEX_WAIT_BITSET)
          {
-            timeout_time = timeout_val;               // FUTEX_WAIT_BITSET uses absolute timeout
-            LOG_ASSERT_WARNING_ONCE(timeout_val < curr_time + SubsecondTime::SEC(10), "FUTEX_WAIT_BITSET timeout value is more than 10 seconds in the future");
-            LOG_ASSERT_WARNING_ONCE(timeout_val > curr_time, "FUTEX_WAIT_BITSET timeout value is in the past");
+            /* An absolute deadline on the guest's clock, which reads
+               osemu/time_start plus the simulated time (CLOCK_MONOTONIC and
+               CLOCK_REALTIME alike); one before the clock's zero has passed */
+            const SubsecondTime zero = SubsecondTime::SEC(Sim()->getConfig()->getOSEmuTimeStart());
+            timeout_time = timeout_val > zero ? timeout_val - zero : SubsecondTime::Zero();
          }
          else
          {
-            timeout_time = curr_time + timeout_val;   // FUTEX_WAIT uses relative timeout
+            /* FUTEX_WAIT: a duration.  The clock's zero was subtracted from it
+               too, which made a 5 ms timeout 42 years in the past */
+            timeout_time = curr_time + timeout_val;
          }
       }
    }
