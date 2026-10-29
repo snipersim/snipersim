@@ -24,6 +24,9 @@ something the workload already reports rather than a number invented here:
   - test/dr-frontend runs the FFT through the DynamoRIO front end instead of
     the SDE recorder, and requires both its verdict and the front-end's banner;
     test/qemu-frontend does the same through QEMU (run-sniper --frontend=qemu).
+  - test/dr-timed-waits and test/dr-timers run test/timed-waits' and
+    test/timers' guests through the DynamoRIO front end, to a file and live,
+    and check the clocks start at the time zero.
 
 Skips cleanly, with a reason, when a workload needs something absent -- an MPI
 that has not been fetched, a Pin kit for pinball replay.
@@ -48,6 +51,7 @@ from common.runlog import RunLog
 
 SNIPER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_DIR = os.path.join(SNIPER_ROOT, 'test')
+TIME_START_DEFAULT = 1337000000   # Sift::TIME_START_DEFAULT, osemu/time_start's default
 
 
 def fft_self_check(out, rc):
@@ -578,6 +582,43 @@ def timers_check(out, rc):
 timers_check.needs_simulation = True
 
 
+def dr_timed_waits_check(out, rc):
+    """test/dr-timed-waits: test/timed-waits under the DynamoRIO front end
+    (timed_waits_check), to a file and live"""
+    if out.count('[RECORD-TRACE] Using DynamoRIO frontend') < 4:
+        return False, 'not every run used the DynamoRIO front end'
+    ok, why = timed_waits_check(out, rc)
+    return ok, why + ', under DynamoRIO'
+dr_timed_waits_check.needs_simulation = True
+
+
+def dr_timers_check(out, rc):
+    """test/dr-timers: test/timers under the DynamoRIO front end
+    (timers_check), and the clocks: time_probe's clock_gettime and
+    gettimeofday (the vDSO's) start at the time zero, osemu/time_start --
+    the one-IPC model's to a file, the simulator's live -- and its TSC
+    moves with them (one cycle a nanosecond to a file, the global clock's
+    2.66 GHz live, as under the SIFT recorder), never the host's"""
+    if out.count('[RECORD-TRACE] Using DynamoRIO frontend') < 6:
+        return False, 'not every run used the DynamoRIO front end'
+    ok, why = timers_check(out, rc)
+    if not ok:
+        return ok, why
+    probes = re.findall(r'(file: )?(?:\S+ )?(?:\[app\d+\] )?time_probe: realtime=(\d+)\.\d+ mono=(\d+)\.\d+ tod=(\d+)\.\d+ dreal=(-?\d+) dtsc=(\d+)', out)
+    if len(probes) != 2:
+        return False, '%d time_probe lines, not 2 (to a file and live)' % len(probes)
+    for file_, real, mono, tod, dreal, dtsc in probes:
+        what = 'file' if file_ else 'live'
+        if not int(real) == int(mono) == int(tod) == TIME_START_DEFAULT:
+            return False, '%s: the clocks start at %s, %s and %s s, not at the time zero %d' % (what, real, mono, tod, TIME_START_DEFAULT)
+        dreal, dtsc = int(dreal), int(dtsc)
+        ghz = 1.0 if file_ else 2.66
+        if not 100000 <= dreal <= 2000000 or not abs(dtsc - dreal * ghz) <= 0.05 * dreal * ghz:
+            return False, '%s: %d ns and %d TSC cycles over a 100,000-iteration loop' % (what, dreal, dtsc)
+    return True, why + ', under DynamoRIO; the clocks from the time zero, to a file and live'
+dr_timers_check.needs_simulation = True
+
+
 def exits_zero(out, rc):
     return (rc == 0, 'exit %s' % rc)
 exits_zero.needs_simulation = True
@@ -669,6 +710,8 @@ CASES = {
     'post-roi':        (post_roi_check, None),
     'timed-waits':     (timed_waits_check, None),
     'timers':          (timers_check, None),
+    'dr-timed-waits':  (dr_timed_waits_check, 'dynamorio'),
+    'dr-timers':       (dr_timers_check, 'dynamorio'),
     'roi-exit':        (roi_exit_check, None),
     'sleepexit':       (sleepexit_check, None),
     'exitalive':       (exitalive_check, None),

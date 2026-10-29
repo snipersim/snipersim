@@ -31,7 +31,8 @@ file they end at their deadlines in the one-IPC model's time.  alarm,
 setitimer, the POSIX timers and timerfd are kept by the client and fired at
 their expiry in the guest's time.  A clone's child starts at its parent's
 time.  On AArch64 the client says at start that it does not do this (the
-guest then reads the host's clocks).
+guest then reads the host's clocks).  `testing/test_apps.py --only
+dr-timed-waits --only dr-timers` checks it, to a file and live.
 
 Sources: `dr_frontend.{cc,h}` specialise the generic front-end layer in
 `frontend/` (`frontend.h`, `frontend_control`, `frontend_syscall`,
