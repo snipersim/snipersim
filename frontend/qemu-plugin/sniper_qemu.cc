@@ -638,16 +638,20 @@ void wait_body(unsigned int cpu_index, void *udata);
 /* Leave the run loop to wait; the callback's own return address is what
  * lets QEMU restore the state at this instruction, so this is a macro used
  * in the callback itself (registered with QEMU_PLUGIN_CB_RW_REGS_PC).  Does
- * not return. */
+ * not return.  recount_: the instructions the block executed again from
+ * here counts a second time (the block's count was added at its entry):
+ * the instruction's tb_left, or the whole block's for a wait at its start;
+ * taken off the thread's count (the one-IPC model's clock). */
 #if QEMU_PLUGIN_VERSION >= 7
-#define SNP_DEFER(v_, vaddr_, kind_, tb_level_) do {                                  \
+#define SNP_DEFER(v_, vaddr_, kind_, tb_level_, recount_) do {                        \
       (v_)->wait_kind = (kind_); (v_)->wait_vaddr = (vaddr_);                            \
       (v_)->wait_tb_level = (tb_level_); (v_)->resuming = true;                          \
+      (v_)->icount_base += (recount_);                                                   \
       qemu_plugin_vcpu_wait_at((vaddr_), wait_body, (v_), (uintptr_t)__builtin_return_address(0)); \
       __builtin_unreachable();                                                           \
    } while (0)
 #else
-#define SNP_DEFER(v_, vaddr_, kind_, tb_level_) abort()   /* g_wait is never set */
+#define SNP_DEFER(v_, vaddr_, kind_, tb_level_, recount_) abort()   /* g_wait is never set */
 #endif
 
 /* Ask the machine what mode it is in.
@@ -1349,7 +1353,7 @@ void magic_exec(unsigned int cpu_index, void *udata)
    {
       /* the question is asked outside the run loop, the answer written there */
       v->wait_a[0] = cmd; v->wait_a[1] = arg0; v->wait_a[2] = arg1; v->wait_ii = ii;
-      SNP_DEFER(v, ii->vaddr, W_MAGIC, false);
+      SNP_DEFER(v, ii->vaddr, W_MAGIC, false, ii->tb_left);
    }
    magic_body(v, ii, cmd, arg0, arg1, cpu_index);
 }
@@ -1455,14 +1459,14 @@ void tb_begin(unsigned int cpu_index, void *udata)
       if (pacsim_qemu::block(cpu_index, tc->n, tc->vaddr, !g_wait))
       {
          v->wait_n = tc->n;
-         SNP_DEFER(v, tc->vaddr, W_TB_COUNT, true);
+         SNP_DEFER(v, tc->vaddr, W_TB_COUNT, true, tc->n);
       }
    }
    if (g_wait && stage_begin(v, tc->vaddr, S_TB_FLOW))
    {
       const int mode = g_mode.load(std::memory_order_relaxed);
       if (v->writer && !v->closed && flow_due(v, mode))
-         SNP_DEFER(v, tc->vaddr, W_FLOW, true);
+         SNP_DEFER(v, tc->vaddr, W_FLOW, true, tc->n);
    }
 }
 
@@ -1478,7 +1482,7 @@ void backedge_exec(unsigned int cpu_index, void *udata)
    if (deferred)
    {
       v->wait_ii = ii;
-      SNP_DEFER(v, ii->vaddr, W_BACKEDGE, false);
+      SNP_DEFER(v, ii->vaddr, W_BACKEDGE, false, ii->tb_left);
    }
 }
 
@@ -1587,7 +1591,7 @@ void counter_exec(unsigned int cpu_index, void *udata)
    if (g_wait)
    {
       v->wait_ii = ii;
-      SNP_DEFER(v, ii->vaddr, W_COUNTER, false);
+      SNP_DEFER(v, ii->vaddr, W_COUNTER, false, ii->tb_left);
    }
    counter_body(v, ii, cpu_index);
 }
@@ -1683,7 +1687,7 @@ void sync_exec(unsigned int cpu_index, void *udata)
    if (deferred)
    {
       v->wait_site = site;
-      SNP_DEFER(v, ii->vaddr, W_SYNC, false);
+      SNP_DEFER(v, ii->vaddr, W_SYNC, false, ii->tb_left);
    }
 }
 
