@@ -500,6 +500,7 @@ struct VCPU
    bool          ctr_valid  = false;
    uint64_t      icount_base = 0;   /* g_icount at the thread's start: its instructions are counted from there */
    uint64_t      ctr_time_ns = 0, ctr_core_cycles = 0, ctr_global_cycles = 0, ctr_instructions = 0;
+   uint64_t      ctr_block = 0;     /* the instruction scoreboard when they were taken: the same block */
 };
 
 /* One slot per vCPU, sized once and never resized.
@@ -1585,6 +1586,9 @@ void counter_exec(unsigned int cpu_index, void *udata)
 {
    const InsnInfo *ii = (const InsnInfo *)udata;
    VCPU *v = vcpu_get(cpu_index);
+   /* this execution's block, a resumed one too (the answer a wait got
+    * stands for the instruction executed again) */
+   v->ctr_block = g_icount_sb ? qemu_plugin_u64_get(g_icount, cpu_index) : 0;
    if (!stage_begin(v, ii->vaddr, S_COUNTER))
       return;
    v->ctr_valid = false;
@@ -1611,6 +1615,11 @@ void counter_exec(unsigned int cpu_index, void *udata)
 uint64_t counter_read(unsigned int vcpu_index, int counter, uint64_t freq_hz, uint64_t host_value, void *)
 {
    VCPU *v = vcpu_get(vcpu_index);
+   /* Taken for this instruction only: the scoreboard moves at every block's
+    * entry, and a read that faulted after counter_exec ended its block --
+    * a later read the translation did not recognise took its answer */
+   if (v->ctr_valid && g_icount_sb && qemu_plugin_u64_get(g_icount, vcpu_index) != v->ctr_block)
+      v->ctr_valid = false;
    if (!v->ctr_valid)
       counter_one_ipc(v, thread_instructions(v, vcpu_index, 0));
    v->ctr_valid = false;
