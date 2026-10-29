@@ -65,6 +65,11 @@ if(TARGET Sniper::SdeTool)
 
   add_custom_command(
     OUTPUT "${_recorder_so}"
+    # mbuild relinks the tool only when one of its own objects changed, not
+    # when libsift.a did: a fix in sift/ was built into the library and the
+    # recorder kept running the old code.  Whatever brought us here, the tool
+    # is relinked (its objects are kept; only what changed is compiled).
+    COMMAND "${CMAKE_COMMAND}" -E rm -f "${_recorder_so}"
     COMMAND "${CMAKE_COMMAND}" -E env
             "SDE_BUILD_KIT=${Pin_SDE_KIT}"
             # mfile.py only adds the kit's mbuild to sys.path when SDE_BUILD_KIT
