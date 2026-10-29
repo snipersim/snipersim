@@ -267,7 +267,10 @@ def collectMcPATData(verbose = False):
       resultsdir = resultsdir,
       partial = ["periodic-"+str(i*interval),"periodic-"+str((i+1)*interval)],
       powertype = 'dynamic',
-      outputfile = 'power',
+      # McPAT's input and output for the interval (power.xml, .txt, .py):
+      # in the visualization's directory, not the current one (the Sniper
+      # root, under run-sniper), nor the run's own power.* (the whole run's)
+      outputfile = os.path.join(outputdir, 'power'),
       no_graph = True,
       print_stack = False,
       return_data = True
