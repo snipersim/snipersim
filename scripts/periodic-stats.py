@@ -30,7 +30,7 @@ class PeriodicStats:
 
   def periodic(self, time, time_delta):
     if self.max_snapshots and self.num_snapshots > self.max_snapshots:
-      self.num_snapshots /= 2
+      self.num_snapshots //= 2
       for t in range(self.interval, time, self.interval * 2):
         sim.util.db_delete('periodic-%d' % t)
       self.interval *= 2
