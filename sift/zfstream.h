@@ -154,7 +154,17 @@ class cvofstream : public vostream
       std::FILE *stream;
       char *filename;
       bool reported;      // a failed write has been reported (once per stream)
+      size_t buffered;    // bytes in stdio's buffer (only kept when guarding SIGPIPE)
+      static bool s_guard_sigpipe;
+      void report();
    public:
+      /* A write into a pipe whose reader has gone raises SIGPIPE in the
+         writing thread.  The SDE recorder ignores the signal; a front end
+         that cannot -- the QEMU plugin, where QEMU's handler hands it to the
+         guest, which then dies of it -- asks for every write that reaches
+         the pipe to hold it back and drop it instead: the write fails with
+         EPIPE, as in the recorder.  Before the first stream is opened. */
+      static void guardSigpipe() { s_guard_sigpipe = true; }
       cvofstream(const char * filename);
       virtual ~cvofstream();
       virtual void write(const char* s, std::streamsize n);

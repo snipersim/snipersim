@@ -72,6 +72,7 @@ extern "C" {
 #include <linux/futex.h>
 
 #include "sift_writer.h"
+#include "zfstream.h"         /* cvofstream::guardSigpipe */
 #include "sim_api.h"         /* the SIM_CMD_ numbers */
 #include "pacsim_qemu.h"      /* Pac-Sim: the sampler behind the plugin */
 #include "sift_format.h"
@@ -3831,6 +3832,14 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
                       " build the guest for x86-64, or run it in full-system mode\n");
       return -1;
    }
+
+   /* A trace thread whose application ended (a sibling's exit_group) closes
+    * its channel while the guest thread behind it may still be writing.  The write
+    * raises SIGPIPE, which QEMU's handler gives to the guest, and a guest
+    * that has not asked for it dies of it: exitalive (four workers running
+    * when main returns) ended with status 141 in three runs of three at
+    * -n 2.  The writes hold it back instead and see EPIPE. */
+   cvofstream::guardSigpipe();
 
    /* Needed before any xed_decode(). */
    xed_tables_init();

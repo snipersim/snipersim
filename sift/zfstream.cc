@@ -15,6 +15,10 @@
 #include <algorithm>
 #include <cassert>
 #include <ios>
+#if !defined(PIN_CRT)
+# include <signal.h>
+# include <pthread.h>
+#endif
 
 #if !SIFT_USE_ZLIB
 
@@ -225,8 +229,49 @@ static int open_writer_without_waiting(const char * filename)
 	}
 }
 
+bool cvofstream::s_guard_sigpipe = false;
+
+/* stdio's buffer when SIGPIPE is guarded: its size is ours to know, so that
+   only a write that can reach the pipe pays for the guard */
+static const size_t GUARDED_BUFFER = 64 * 1024;
+
+/* SIGPIPE held back in this thread for one write that may reach the pipe,
+   and, if that write raised it, taken back before the thread's mask is
+   restored (a signal pending before, from elsewhere, is left alone) */
+class SigpipeGuard
+{
+#if !defined(PIN_CRT)
+	sigset_t pipe, old;
+	bool pending_before;
+   public:
+	SigpipeGuard()
+	{
+		sigemptyset(&this->pipe);
+		sigaddset(&this->pipe, SIGPIPE);
+		pthread_sigmask(SIG_BLOCK, &this->pipe, &this->old);
+		sigset_t pending;
+		this->pending_before = sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE);
+	}
+	~SigpipeGuard()
+	{
+		int saved = errno;
+		if (!this->pending_before)
+		{
+			struct timespec zero = { 0, 0 };
+			while (sigtimedwait(&this->pipe, NULL, &zero) == SIGPIPE)
+				;
+		}
+		pthread_sigmask(SIG_SETMASK, &this->old, NULL);
+		errno = saved;
+	}
+#else
+   public:
+	SigpipeGuard() {}         // never asked for: the recorder ignores SIGPIPE
+#endif
+};
+
 cvofstream::cvofstream(const char * filename)
-	: stream(NULL), filename(strdup(filename)), reported(false)
+	: stream(NULL), filename(strdup(filename)), reported(false), buffered(0)
 {
 	int fd = open_writer_without_waiting(filename);
 	this->stream = fd < 0 ? NULL : ::fdopen(fd, "wb");
@@ -235,32 +280,63 @@ cvofstream::cvofstream(const char * filename)
 		std::cerr << "[SIFT] fdopen(" << filename << ") failed: " << strerror(errno) << std::endl;
 		::close(fd);
 	}
+	if (this->stream && s_guard_sigpipe)
+		std::setvbuf(this->stream, NULL, _IOFBF, GUARDED_BUFFER);
 }
 cvofstream::~cvofstream()
 {
 	if (this->stream)
-		std::fclose(this->stream);
+	{
+		if (s_guard_sigpipe)
+		{
+			SigpipeGuard guard;
+			std::fclose(this->stream);
+		}
+		else
+			std::fclose(this->stream);
+	}
 	free(this->filename);
 }
 /* A write the simulator never receives ends the thread's stream short, and
    the simulator can only report the end, not why: say why here, once. */
+void cvofstream::report()
+{
+	if (this->reported)
+		return;
+	this->reported = true;
+	std::cerr << "[SIFT] write to " << this->filename << " failed: " << strerror(errno)
+	          << " -- the simulator will see this thread's stream end early" << std::endl;
+}
 void cvofstream::write(const char* s, std::streamsize n)
 {
-	if (std::fwrite(s, 1, n, this->stream) != (size_t)n && !this->reported)
+	/* A write that fits in what is left of the buffer stays in it; one that
+	   does not may reach the pipe, and is followed by a flush, so that the
+	   buffer is known to be empty again */
+	if (s_guard_sigpipe && this->buffered + n >= GUARDED_BUFFER)
 	{
-		this->reported = true;
-		std::cerr << "[SIFT] write to " << this->filename << " failed: " << strerror(errno)
-		          << " -- the simulator will see this thread's stream end early" << std::endl;
+		SigpipeGuard guard;
+		if (std::fwrite(s, 1, n, this->stream) != (size_t)n || std::fflush(this->stream) != 0)
+			this->report();
+		this->buffered = 0;
+		return;
 	}
+	if (std::fwrite(s, 1, n, this->stream) != (size_t)n)
+		this->report();
+	this->buffered += n;
 }
 void cvofstream::flush()
 {
-	if (std::fflush(this->stream) != 0 && !this->reported)
+	int r;
+	if (s_guard_sigpipe)
 	{
-		this->reported = true;
-		std::cerr << "[SIFT] write to " << this->filename << " failed: " << strerror(errno)
-		          << " -- the simulator will see this thread's stream end early" << std::endl;
+		SigpipeGuard guard;
+		r = std::fflush(this->stream);
 	}
+	else
+		r = std::fflush(this->stream);
+	this->buffered = 0;
+	if (r != 0)
+		this->report();
 }
 bool cvofstream::fail()
 {
