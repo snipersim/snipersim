@@ -71,7 +71,7 @@ void Simulator::createDecoder()
       if (Sim()->getCfg()->hasKey("perf_model/core/interval_timer/num_outstanding_loadstores"))
          LOG_PRINT_ERROR("perf_model/core/interval_timer/num_outstanding_loadstores is no longer used: "
                          "both core models take the L1-D's MSHR count from perf_model/l1_dcache/outstanding_misses "
-                         "(0 = no limit).  Move the value there and remove the old key.");
+                         "(a count of at least 1: 0, no limit, is refused).  Move the value there and remove the old key.");
       /* Every configuration states its L1-D's and its L2's MSHR counts: no
          limit (0, the L1-D's old default) let a core keep any number of line
          misses in flight, which no hardware does, and moved results by up to
