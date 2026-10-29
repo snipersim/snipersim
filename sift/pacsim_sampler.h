@@ -24,6 +24,7 @@
 #include "bbv_count.h"
 
 #include <stdint.h>
+#include <atomic>
 #include <map>
 #include <set>
 #include <string>
@@ -207,6 +208,7 @@ private:
    void gotoFastForward(unsigned tid);
    uint64_t sinceCut() const;
    bool warmupDue(uint64_t extra) const;
+   uint64_t activeShare() const;
    unsigned activeThreads() const;
    void markRegionStart(uint64_t pc);
    void start(unsigned tid, uint64_t pc);
@@ -239,7 +241,18 @@ private:
    std::vector<uint64_t> m_cluster_history;
    std::map<uint64_t, Predictor> m_predictors;
    History m_global_history;              /* the run's cluster sequence, for a cut point not seen before */
-   std::map<uint64_t, std::set<unsigned> > m_arrived;  /* per synchronisation site: the threads that reached it since the region began */
+   /* Per synchronisation site: how many times each thread has reached it
+      since the region began, and per thread the site of an arrival whose cut
+      was left to the front end's second call (not counted again there).
+      Under m_arrival_lock, a spin lock held for the bookkeeping only: the
+      main lock is held across the simulator's answers, and an arrival that
+      could not take it was dropped (syncPoint). */
+   std::map<uint64_t, std::vector<unsigned> > m_arrived;
+   std::vector<uint64_t> m_sync_deferred;
+   std::atomic_flag m_arrival_lock = ATOMIC_FLAG_INIT;
+   void arrivalLock() { while (m_arrival_lock.test_and_set(std::memory_order_acquire)) ; }
+   void arrivalUnlock() { m_arrival_lock.clear(std::memory_order_release); }
+   bool allArrived(uint64_t addr, unsigned tid);
    std::map<uint64_t, Region> m_global;                 /* cluster -> measured representative, any cut point */
 };
 

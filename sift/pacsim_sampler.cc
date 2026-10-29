@@ -171,7 +171,7 @@ Sampler::Sampler(const Options &options, FrontEnd &front_end)
    , m_loop_min(options.loop_min == 0 ? (options.region_size / 100 > 0 ? options.region_size / 100 : 1) : options.loop_min)
    , m_clusterer(options.cluster_threshold)
    , m_ins(m_nt, 0), m_region_ins(m_nt, 0), m_bbv(m_nt, (Bbv *)NULL), m_region_bbv(m_nt, std::vector<uint64_t>(DIM, 0)), m_flush(m_nt, false)
-   , m_last_edge(m_nt)
+   , m_last_edge(m_nt), m_sync_deferred(m_nt, 0)
 {
    for (unsigned t = 0; t < m_nt; t++) m_bbv[t] = new Bbv();
 }
@@ -237,12 +237,18 @@ uint64_t Sampler::sinceCut() const
    return n;
 }
 
-/* threads that ran a meaningful share of the region so far */
-unsigned Sampler::activeThreads() const
+/* what a thread must have run of the region so far to count as active in it */
+uint64_t Sampler::activeShare() const
 {
    uint64_t mx = 0;
    for (unsigned t = 0; t < m_nthreads; t++) if (m_ins[t] - m_region_ins[t] > mx) mx = m_ins[t] - m_region_ins[t];
-   const uint64_t share = mx / 100 > 1000 ? mx / 100 : 1000;
+   return mx / 100 > 1000 ? mx / 100 : 1000;
+}
+
+/* threads that ran a meaningful share of the region so far */
+unsigned Sampler::activeThreads() const
+{
+   const uint64_t share = activeShare();
    unsigned n = 0;
    for (unsigned t = 0; t < m_nthreads; t++) if (m_ins[t] - m_region_ins[t] >= share) n++;
    return n;
@@ -251,7 +257,10 @@ unsigned Sampler::activeThreads() const
 void Sampler::markRegionStart(uint64_t pc)
 {
    m_region_pc = pc;
+   arrivalLock();
    m_arrived.clear();
+   for (unsigned t = 0; t < m_nt; t++) m_sync_deferred[t] = 0;
+   arrivalUnlock();
    m_region_lag = 0;
    for (unsigned t = 0; t < m_nt; t++) { m_region_ins[t] = m_ins[t]; for (unsigned d = 0; d < DIM; d++) m_region_bbv[t][d] = m_bbv[t]->getDimension(d); }
 }
@@ -634,26 +643,74 @@ bool Sampler::backEdge(unsigned tid, uint64_t addr, bool conditional, bool can_b
 /* The region ends with the last active thread's arrival, so that the
    threads' phases line up inside it -- cutting at the first arrival would
    put the other threads' tails into the next region, and a tail run by one
-   thread looks nothing like the phase it belongs to. */
+   thread looks nothing like the phase it belongs to.
+
+   Every arrival is counted, under a lock of its own.  It was recorded under
+   the main lock, taken with tryLock() -- the main lock is held across the
+   simulator's answers, so nobody may block on it -- and an arrival that
+   found it held was dropped: the threads of a barrier arrive together, and
+   under QEMU, whose vCPU threads run side by side on the host, two of them
+   took it at once often enough (testing/apps/phased_rv_mt.c on AArch64, one
+   arrival lost in most runs once the simulator's trace threads were no
+   longer pinned to one host CPU).  The cut was then missed, and the
+   arrivals that were counted stayed: one call site serves every barrier of
+   the phase loop, so at the next barrier the other threads' arrivals made
+   up the number while the thread whose arrival was lost was still in its
+   phase.  Each thread's arrivals are therefore counted per site, and the
+   cut is the arrival that completes a round: every active thread has
+   reached the site as many times as the arriving thread.  A missed cut now
+   merges two phases into one region instead of cutting one in the middle
+   (13 to 16% under the full run at 8 host CPUs: a chase phase cut in two,
+   most of it extrapolated at the compute phase's rate). */
+bool Sampler::allArrived(uint64_t addr, unsigned tid)
+{
+   const std::vector<unsigned> &here = m_arrived[addr];
+   if (here.size() <= tid) return false;
+   const uint64_t share = activeShare();
+   unsigned active = 0, arrived = 0;
+   for (unsigned t = 0; t < m_nthreads; t++)
+   {
+      if (m_ins[t] - m_region_ins[t] < share) continue;
+      active++;
+      if (t < here.size() && here[t] >= here[tid]) arrived++;
+   }
+   return active > 0 && arrived >= active;
+}
+
 bool Sampler::syncPoint(unsigned tid, uint64_t addr, bool can_block)
 {
-   if (!m_started || m_finished || !m_fe.inRoi() || !m_fe.channelAlive(tid)) return false;
-   if (!m_fe.tryLock()) return false;
-   bool deferred = false;
-   if (!m_finished)
-   {
-      std::set<unsigned> &here = m_arrived[addr];
-      here.insert(tid);            /* the arrival counts either way; a second call finds it there */
-      if (here.size() >= activeThreads() && sinceCut() >= m_min)
-      {
-         if (can_block)
-            cut(tid, addr, RecordType::MultiThread);
-         else
-            deferred = true;
-      }
-   }
+   if (!m_started || m_finished || !m_fe.inRoi() || !m_fe.channelAlive(tid) || tid >= m_nt) return false;
+   arrivalLock();
+   std::vector<unsigned> &here = m_arrived[addr];
+   if (here.size() < m_nt) here.resize(m_nt, 0);
+   if (m_sync_deferred[tid] == addr)
+      m_sync_deferred[tid] = 0;    /* the second call of a deferred cut: its arrival is counted */
+   else
+      here[tid]++;
+   const bool last = allArrived(addr, tid) && sinceCut() >= m_min;
+   if (last && !can_block)
+      m_sync_deferred[tid] = addr;
+   arrivalUnlock();
+   if (!last)
+      return false;
+   if (!can_block)
+      return true;                 /* the front end calls again where it can wait */
+   /* The cut, under the main lock.  It is held by another thread only for a
+      cut of its own (a back-edge's), which ends within the simulator's
+      answer; wait for that, but not for ever, as finish() does (that answer
+      may need instructions this thread holds back while it waits). */
+   bool locked = false;
+   for (int i = 0; i < 2000 && !(locked = m_fe.tryLock()); i++)
+      usleep(1000);
+   if (!locked)
+      return false;
+   arrivalLock();
+   const bool still = !m_finished && allArrived(addr, tid);   /* a cut elsewhere meanwhile started a new region */
+   arrivalUnlock();
+   if (still && sinceCut() >= m_min)
+      cut(tid, addr, RecordType::MultiThread);
    m_fe.unlock();
-   return deferred;
+   return false;
 }
 
 void Sampler::threadStart(unsigned tid)

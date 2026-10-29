@@ -365,7 +365,15 @@ the original's method:
   (default 2,000K) joins the next.  Any thread may cut; the cut takes a
   mutex without ever blocking on it, because the cutting thread waits for
   the simulator's answer and that answer needs every other thread to keep
-  delivering instructions.
+  delivering instructions.  The arrivals at a synchronisation point are
+  counted under a short lock of their own, per thread and per site, and
+  the cut is the arrival that completes a round (every active thread has
+  reached the site as often as the arriving one).  Counted under the
+  mutex, an arrival that found it held was dropped; QEMU's vCPU threads
+  reach a barrier side by side on the host, the cut was missed, and with
+  one call site for every barrier of a loop the next barrier was cut while
+  the thread whose arrival was lost was still in its phase -- the AArch64
+  barrier shape came out 8% to 16% under the full run at 8 host CPUs.
 - **Clusters and prediction.**  A finished region is clustered by the
   L1 distance between block mixes: its vectors summed over the threads
   that ran at least 1% of its longest thread, unit-normalised
