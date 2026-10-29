@@ -494,6 +494,11 @@ void TraceManager::endApplication(TraceThread *thread, SubsecondTime time)
          ScopedLock sl(Sim()->getThreadManager()->getLock());
          (*it)->getThread()->abort();
          Sim()->getSyscallServer()->abortWaits((*it)->getThread()->getId(), time);
+         /* A sibling parked in the barrier would wait there for the thread
+            that runs this exit_group, which waits for its stream to end,
+            which needs the sibling gone (BarrierSyncServer::abortThread). */
+         if (Sim()->getClockSkewMinimizationServer())
+            Sim()->getClockSkewMinimizationServer()->abortThread((*it)->getThread()->getId());
          /* Woken from a futex or sleep, or past it, a sibling may be waiting
             for a core instead (Thread::reschedule); the abort ends that wait
             too, once it is woken to see it. */

@@ -81,6 +81,11 @@ BarrierSyncServer::synchronize(core_id_t core_id, SubsecondTime time)
    Core *master_core = Sim()->getCoreManager()->getCoreFromID(core_id);
    thread_id_t thread_me = core->getThread()->getId();
 
+   /* An aborted thread -- its application ended (TraceManager::endApplication)
+      -- only leaves: it does not wait for the others.  See abortThread(). */
+   if (core->getThread()->isAborted())
+      return;
+
    CLOG("barrier", "Core %d entry (master core %d, thread %d, ffwd %d)", core_id, master_core_id, thread_me, m_fastforward);
    LOG_PRINT("Received 'SIM_BARRIER_WAIT' from Core(%i), Time(%s)", core_id, itostr(time).c_str());
 
@@ -375,6 +380,41 @@ BarrierSyncServer::doRelease(int n)
       core_id_t core_id = m_to_release.back();
       m_to_release.pop_back();
       m_core_cond[core_id]->signal();
+   }
+}
+
+void
+BarrierSyncServer::abortThread(thread_id_t thread_id)
+{
+   /* Called with the thread manager lock held, for a thread whose application
+      ended (a sibling's exit_group).  Such a thread can be parked here, waiting
+      for a core that has not reached the barrier: the thread that ran the
+      exit_group, which is reading its stream until the front end ends it.
+      The front end ends it only once the process has exited, and the process
+      cannot exit while the parked thread's recorder thread is blocked writing
+      to a pipe this thread no longer reads (Pin waits for every thread).  So
+      it is let go now: it sees its stop, closes its channel, and exits,
+      freeing the recorder thread.  With four workers running when main
+      returned, all four sat here and the run hung, every time. */
+   for(core_id_t core_id = 0; core_id < (core_id_t) Sim()->getConfig()->getApplicationCores(); core_id++)
+   {
+      if (m_barrier_acquire_list[core_id] && m_core_thread[core_id] == thread_id)
+      {
+         m_barrier_acquire_list[core_id] = false;
+         Core *core = Sim()->getCoreManager()->getCoreFromID(core_id);
+         core->getPerformanceModel()->barrierExit();
+         m_core_cond[core_id]->signal();
+      }
+      else if (m_core_thread[core_id] == thread_id)
+      {
+         // Released already, but not yet woken: wake it now, and once
+         auto it = std::find(m_to_release.begin(), m_to_release.end(), core_id);
+         if (it != m_to_release.end())
+         {
+            m_to_release.erase(it);
+            m_core_cond[core_id]->signal();
+         }
+      }
    }
 }
 
