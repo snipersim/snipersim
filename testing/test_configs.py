@@ -157,8 +157,6 @@ EXPECTED_ERROR = {
     'physical_memory_allocators/eager_paging': r'no VMAs for application',
     'address_translation_schemes/rmm': r'no VMAs for application',
     'pagetable_configs/3_level_radix_sv39': r'does not fit the 39-bit virtual addre',
-    'dram_configs/m3d': r'missing config value perf_model/dram/ddr/address_mapping',
-    'dram_configs/readwrite_2ctrl_153gbps': r"Num Memory Controllers\(2\)|DRAM controllers may only be at 'master' node",
     'mmu_configs/mmu_spec': r'missing config value perf_model/mmu/spec/type',
     'mmu_configs/mmu_virt': r'The virt MMU needs a host MMU',
 }
@@ -340,6 +338,11 @@ FRAGMENT_CORES = {
     'address_translation_schemes/multicore/parametric_baseline_8c': (8,),
     'address_translation_schemes/multicore/parametric_baseline_16c': (16,),
     'address_translation_schemes/multicore/parametric_asp_4c': (4,),
+    # Two memory controllers, at cores 0 and n/2, each of which must be the
+    # master of a last-level cache: gainestown's L3 is shared by four cores,
+    # so it takes 8 (two sockets) -- at 4 the second controller would sit
+    # at core 2, inside the first socket's L3.
+    'dram_configs/readwrite_2ctrl_153gbps': (8,),
 }
 
 # Known to fail in detailed mode at one core count only, with the reason;
@@ -407,6 +410,8 @@ FRAGMENT_REQUIRE_NONZERO = {
     'dram_configs/ddr4_2400_open_page': ('ddr.page-hits', 'ddr.page-miss'),
     'dram_configs/ddr4_2400_open_page_split_column': ('ddr.page-hits', 'ddr.page-miss'),
     'dram_configs/ddr4_2400_closed_page': ('ddr.page-hits', 'ddr.page-miss'),
+    'dram_configs/m3d': ('ddr.page-hits', 'ddr.page-miss'),
+    'dram_configs/readwrite_2ctrl_153gbps': ('dram.total-access-latency',),
     'directory_configs/limited_no_broadcast': ('directory.entries-allocated',),
     'directory_configs/limitless': ('directory.entries-allocated',),
     'scheduler_configs/sequential': ('thread.l1d_load_miss', 'thread.l1d_store_miss'),
@@ -698,11 +703,6 @@ FRAGMENT_EXPECT_FAIL = {
     'core_configs/cortex_a720': 'ARM core, x86-64 workload: refused (the trace ISA check)',
     'core_configs/cortex_x4': 'ARM core, x86-64 workload: refused (the trace ISA check)',
     'core_configs/oryon_xelite': 'ARM core, x86-64 workload: refused (the trace ISA check)',
-    'dram_configs/m3d':
-        'needs perf_model/dram/ddr/address_mapping, which no shipped config sets',
-    'dram_configs/readwrite_2ctrl_153gbps':
-        'two memory controllers, but they may only sit at the master node of a '
-        'shared cache, which no shipped base provides',
     'mmu_configs/mmu_spec':
         'the speculative MMU needs an engine and the allocator it predicts '
         'from (address_translation_schemes/revelator layers all three)',
