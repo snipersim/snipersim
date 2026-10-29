@@ -162,7 +162,7 @@ namespace Sift
 
       GuestClocks(unsigned max, Instructions instructions, void *arg)
          : m_instructions(instructions), m_arg(arg), m_max(max), m_t(new Thread[max]),
-           m_wake(0), m_exited_insns(0), m_epoch(0)
+           m_event(NO_DEADLINE), m_wake(0), m_exited_insns(0), m_epoch(0)
       {
          for (unsigned i = 0; i < WORDS; i++)
             m_words[i].word = m_words[i].time = 0;
@@ -276,6 +276,8 @@ namespace Sift
                   low = t;
             }
          }
+         if (m_event < earliest)
+            earliest = m_event;      /* a timer due before the deadline comes first */
          int r = 0;
          if (d != NO_DEADLINE)
          {
@@ -289,18 +291,72 @@ namespace Sift
          return r;
       }
 
+      /* The earliest armed timer's expiry (GuestTimers), or NO_DEADLINE */
+      void set_event(uint64_t at)
+      {
+         m_lock.lock();
+         if (m_event != at)
+         {
+            m_event = at;
+            m_epoch++;   /* only a change: the idle look compares epochs */
+         }
+         m_lock.unlock();
+      }
+
+      /* The time every thread has reached, for the timers: the earliest
+         running thread's (returns 1); with no thread running, the earliest
+         waiter's deadline or timer, where the time jumps to (returns 2, to be
+         seen twice with the same epoch, as may_expire's 2); 0: no thread */
+      int process_time(uint64_t *time, uint64_t *epoch)
+      {
+         m_lock.lock();
+         bool any = false, running = false;
+         uint64_t low = NO_DEADLINE, earliest = m_event;
+         for (unsigned i = 0; i < m_max; i++)
+         {
+            if (!m_t[i].used)
+               continue;
+            any = true;
+            if (m_t[i].waiting)
+            {
+               if (m_t[i].deadline < earliest)
+                  earliest = m_t[i].deadline;
+            }
+            else
+            {
+               running = true;
+               const uint64_t t = now_locked(i);
+               if (t < low)
+                  low = t;
+            }
+         }
+         *time = running ? low : earliest;
+         *epoch = m_epoch;
+         m_lock.unlock();
+         return !any ? 0 : running ? 1 : 2;
+      }
+
+      /* A timer fired at its expiry: whoever it wakes takes that time */
+      void woke_at(uint64_t time)
+      {
+         m_lock.lock();
+         woke_locked(time, 0);
+         m_epoch++;
+         m_lock.unlock();
+      }
+
       enum End { WOKEN, TIMED_OUT, INTERRUPTED };
 
       /* The wait ended: at its deadline, or woken -- then at its waker's
          time, if later than the thread's own -- or interrupted by a signal
-         (the thread's own time) */
+         (at the latest wake of any kind: a signal sent, a timer fired) */
       void wait_end(unsigned slot, End how)
       {
          m_lock.lock();
          Thread &t = m_t[slot];
          const uint64_t own = now_locked(slot);
          const bool timed_out = how == TIMED_OUT;
-         uint64_t to = how == INTERRUPTED ? own : timed_out ? t.deadline : wake_time(t.word);
+         uint64_t to = timed_out ? t.deadline : wake_time(how == INTERRUPTED ? 0 : t.word);
          if (!timed_out && t.deadline != NO_DEADLINE && to > t.deadline)
             to = t.deadline;
          if (to != NO_DEADLINE && to > own)
@@ -362,9 +418,262 @@ namespace Sift
       unsigned m_max;
       Thread *m_t;
       Wake m_words[WORDS];
+      uint64_t m_event;          /* the earliest armed timer's expiry */
       uint64_t m_wake;           /* the latest time a thread woke others at */
       uint64_t m_exited_insns;   /* the instructions of the threads that ended */
       uint64_t m_epoch;
+   };
+   /* The guest's timers, in the guest's time.
+    *
+    * alarm, setitimer and the POSIX timers (timer_create) send a signal when
+    * they expire, a timerfd becomes readable: the kernel would time them in
+    * host seconds.  A front end keeps them here instead and fires them when
+    * the guest's time passes their expiry -- the simulator's time, live, or
+    * the time every thread has reached in the one-IPC model
+    * (GuestClocks::process_time) -- checking at system calls, in its wait
+    * loops and every so many instructions.  It fires them with calls that
+    * carry no time: a signal (rt_sigqueueinfo, as the kernel's, SI_TIMER and
+    * the timer's value for a POSIX timer), or the timerfd, the real one the
+    * guest created, armed to expire at once.
+    *
+    * Ids: 0-2 the itimers (ITIMER_REAL, ITIMER_VIRTUAL, ITIMER_PROF; alarm is
+    * ITIMER_REAL), POSIX timers from FIRST_POSIX (the guest's timer id is the
+    * id less FIRST_POSIX), timerfds by their fd. */
+   enum TimerClock { TIMER_TIME, TIMER_PROCESS_CPU, TIMER_THREAD_CPU };
+   enum TimerNotify { NOTIFY_NONE, NOTIFY_SIGNAL, NOTIFY_THREAD, NOTIFY_TIMERFD, NOTIFY_ITIMER };
+
+   struct GuestTimer
+   {
+      bool used;
+      TimerClock clock;
+      unsigned cpu_slot;        /* TIMER_THREAD_CPU: whose */
+      TimerNotify notify;
+      int signo;
+      uint64_t value;           /* the POSIX timer's sigval */
+      int tid;                  /* NOTIFY_THREAD: the thread signalled */
+      int fd;                   /* NOTIFY_TIMERFD */
+      int id;
+      uint64_t expiry;          /* 0: disarmed */
+      uint64_t interval;
+      uint64_t overrun;         /* the expirations missed at the last one fired */
+      GuestTimer() : used(false), clock(TIMER_TIME), cpu_slot(0), notify(NOTIFY_NONE), signo(0), value(0),
+                     tid(0), fd(-1), id(0), expiry(0), interval(0), overrun(0) {}
+   };
+
+   template <class Lock>
+   class GuestTimers
+   {
+   public:
+      enum { ITIMERS = 3, FIRST_POSIX = 3, MAX = 1024 };
+      typedef uint64_t (*ThreadCpu)(unsigned slot, void *arg);
+
+      GuestTimers() : m_armed(0)
+      {
+         static const int sig[ITIMERS] = { 14, 26, 27 };   /* SIGALRM, SIGVTALRM, SIGPROF */
+         for (int i = 0; i < ITIMERS; i++)
+         {
+            m_t[i].used = true;
+            m_t[i].id = i;
+            m_t[i].clock = i == 0 ? TIMER_TIME : TIMER_PROCESS_CPU;
+            m_t[i].notify = NOTIFY_ITIMER;
+            m_t[i].signo = sig[i];
+         }
+      }
+
+      /* A POSIX timer (timer_create): its id, or -1 when none is left */
+      int create(const GuestTimer &spec)
+      {
+         m_lock.lock();
+         int id = -1;
+         for (int i = FIRST_POSIX; i < MAX && id < 0; i++)
+            if (!m_t[i].used)
+            {
+               m_t[i] = spec;
+               m_t[i].used = true;
+               m_t[i].id = id = i;
+               m_t[i].expiry = 0;
+            }
+         m_lock.unlock();
+         return id;
+      }
+
+      /* The timerfd on fd (made on its first timerfd_settime): its id */
+      int timerfd(int fd, TimerClock clock)
+      {
+         m_lock.lock();
+         int id = find_fd(fd);
+         for (int i = FIRST_POSIX; i < MAX && id < 0; i++)
+            if (!m_t[i].used)
+            {
+               m_t[i] = GuestTimer();
+               m_t[i].used = true;
+               m_t[i].id = id = i;
+               m_t[i].notify = NOTIFY_TIMERFD;
+               m_t[i].fd = fd;
+               m_t[i].clock = clock;
+            }
+         m_lock.unlock();
+         return id;
+      }
+
+      /* fd closed, or a new timerfd made on it: its timer goes */
+      void forget_fd(int fd)
+      {
+         m_lock.lock();
+         const int id = find_fd(fd);
+         if (id >= 0)
+            drop(id);
+         m_lock.unlock();
+      }
+
+      /* The value a POSIX timer's signal carries */
+      void set_value(int id, uint64_t value)
+      {
+         m_lock.lock();
+         m_t[id].value = value;
+         m_lock.unlock();
+      }
+
+      bool valid(int id)
+      {
+         m_lock.lock();
+         const bool v = id >= 0 && id < MAX && m_t[id].used;
+         m_lock.unlock();
+         return v;
+      }
+
+      int find(int fd)
+      {
+         m_lock.lock();
+         const int id = find_fd(fd);
+         m_lock.unlock();
+         return id;
+      }
+
+      GuestTimer get(int id)
+      {
+         m_lock.lock();
+         const GuestTimer t = m_t[id];
+         m_lock.unlock();
+         return t;
+      }
+
+      void remove(int id)
+      {
+         m_lock.lock();
+         if (id >= FIRST_POSIX && id < MAX)
+            drop(id);
+         m_lock.unlock();
+      }
+
+      /* Arm (expiry, on the timer's clock; 0 disarms) and say what was left:
+         the time to the old expiry from now, the old interval */
+      void settime(int id, uint64_t now, uint64_t expiry, uint64_t interval, uint64_t *old_left, uint64_t *old_interval)
+      {
+         m_lock.lock();
+         GuestTimer &t = m_t[id];
+         if (old_left)
+            *old_left = t.expiry ? (t.expiry > now ? t.expiry - now : 1) : 0;
+         if (old_interval)
+            *old_interval = t.interval;
+         if (t.expiry)
+            m_armed--;
+         t.expiry = expiry;
+         t.interval = expiry ? interval : 0;
+         t.overrun = 0;
+         if (t.expiry)
+            m_armed++;
+         m_lock.unlock();
+      }
+
+      void gettime(int id, uint64_t now, uint64_t *left, uint64_t *interval)
+      {
+         m_lock.lock();
+         const GuestTimer &t = m_t[id];
+         *left = t.expiry ? (t.expiry > now ? t.expiry - now : 1) : 0;
+         *interval = t.interval;
+         m_lock.unlock();
+      }
+
+      uint64_t overrun(int id)
+      {
+         m_lock.lock();
+         const uint64_t o = m_t[id].overrun;
+         m_lock.unlock();
+         return o;
+      }
+
+      bool armed() const { return m_armed != 0; }
+
+      /* The earliest expiry of the timers on the guest's time */
+      uint64_t next_time()
+      {
+         m_lock.lock();
+         uint64_t at = NO_DEADLINE;
+         for (int i = 0; i < MAX; i++)
+            if (m_t[i].used && m_t[i].expiry && m_t[i].clock == TIMER_TIME && m_t[i].expiry < at)
+               at = m_t[i].expiry;
+         m_lock.unlock();
+         return at;
+      }
+
+      /* The timers due at the given time and CPU times: copied to out (at
+         most max), each re-armed by its interval (the expirations missed in
+         between its overrun) or disarmed.  The caller fires them. */
+      unsigned due(uint64_t time, uint64_t process_cpu, ThreadCpu thread_cpu, void *arg, GuestTimer *out, unsigned max)
+      {
+         if (!m_armed)
+            return 0;
+         unsigned n = 0;
+         m_lock.lock();
+         for (int i = 0; i < MAX && n < max; i++)
+         {
+            GuestTimer &t = m_t[i];
+            if (!t.used || !t.expiry)
+               continue;
+            const uint64_t now = t.clock == TIMER_TIME ? time
+                               : t.clock == TIMER_PROCESS_CPU ? process_cpu : thread_cpu(t.cpu_slot, arg);
+            if (now == NO_DEADLINE || now < t.expiry)
+               continue;
+            if (t.interval)
+            {
+               const uint64_t missed = (now - t.expiry) / t.interval;
+               t.overrun = missed;
+               t.expiry += (missed + 1) * t.interval;
+            }
+            else
+            {
+               t.overrun = 0;
+               t.expiry = 0;
+               m_armed--;
+            }
+            out[n] = t;
+            out[n].expiry = now;   /* when it fired */
+            n++;
+         }
+         m_lock.unlock();
+         return n;
+      }
+
+   private:
+      int find_fd(int fd) const
+      {
+         for (int i = FIRST_POSIX; i < MAX; i++)
+            if (m_t[i].used && m_t[i].notify == NOTIFY_TIMERFD && m_t[i].fd == fd)
+               return i;
+         return -1;
+      }
+
+      void drop(int id)
+      {
+         if (m_t[id].expiry)
+            m_armed--;
+         m_t[id] = GuestTimer();
+      }
+
+      Lock m_lock;
+      GuestTimer m_t[MAX];
+      volatile int m_armed;
    };
 }
 

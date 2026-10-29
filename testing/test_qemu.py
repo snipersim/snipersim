@@ -2513,6 +2513,8 @@ def qemu_can_wait(qemu):
 COUNTER_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'counter_probe.c')
 TIMED_RAW = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'timed_raw.c')
 TIMED_WAITS = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'timed_waits.c')
+TIMERS_RAW = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'timers_raw.c')
+TIMERS = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'timers.c')
 TIME_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'time_probe.c')
 # Sniper's osemu/time_start default, which the front ends share
 # (Sift::TIME_START_DEFAULT, sift/sift_format.h)
@@ -2668,6 +2670,79 @@ def case_user_timed_libc(p, g, workdir):
     if why:
         return False, why
     return True, 'to a file %d waits, live %d, each at its deadline in the guest\'s time' % (len(TIMED_WAITS_ALL), len(live))
+
+
+TIMERS_RAW_NAMES = ('itimer', 'posix-timer', 'timerfd')
+TIMERS_NAMES = ('itimer-spin', 'itimer-pause', 'posix-timer', 'timerfd')
+
+
+def timers_case(workdir, arch, cc_cmd, config):
+    """The guest's timers in the guest's time (testing/apps/timers_raw.c, raw
+    calls; on x86-64 testing/apps/timers.c too, through libc): setitimer,
+    a POSIX timer's real-time signal with its value (QEMU maps the guest's
+    real-time signals onto other host ones; the plugin sends the host's),
+    a timerfd read -- kept by the plugin and fired at their expiry in the
+    guest's time, to a file (the one-IPC model) and live (the simulator's);
+    the libc guest adds a timer caught while computing and a periodic one
+    around pause().  The kernel timed them in host seconds before."""
+    qemu = user_qemu(arch)
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-%s' % arch
+    if not qemu_can_run_syscall(qemu):
+        return None, 'this QEMU has no plugin system call (tools/qemu-11.1.1-plugin-syscall.patch)'
+    guests = []
+    raw = os.path.join(workdir, 'timers_raw_' + arch)
+    rc, out = run(cc_cmd + ['-O1', '-ffreestanding', '-nostdlib', '-static', '-Wl,-e,_start', '-o', raw, TIMERS_RAW], 120)
+    if rc != 0:
+        return None, 'could not build timers_raw.c (%s)' % exit_text(rc)
+    guests.append((raw, 'timers_raw', TIMERS_RAW_NAMES, 'timers_raw: done ok'))
+    if arch == 'x86_64':
+        libc = os.path.join(workdir, 'timers')
+        rc, out = run(['gcc', '-O1', '-static', '-pthread', '-o', libc, TIMERS, '-lrt'], 120)
+        if rc != 0:
+            return None, 'could not build timers.c statically (%s)' % exit_text(rc)
+        guests.append((libc, 'timers', TIMERS_NAMES, 'timers: done'))
+    n = 0
+    for guest, prefix, names, done in guests:
+        name = os.path.basename(guest)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'record-trace'), '--frontend=qemu', '-o', os.path.join(workdir, 'file-' + name),
+                       '--', guest], 300, cwd=workdir)
+        if rc != 0 or done not in out:
+            return False, '%s to a file: the guest failed (%s): %s' % (name, exit_text(rc), out.strip()[-400:])
+        why = timed_check('%s to a file' % name, timed_lines(out, prefix), names)
+        if why:
+            return False, why
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', config, '-d', os.path.join(workdir, 'live-' + name),
+                       '--frontend=qemu', '--', guest], 900, cwd=SNIPER_ROOT)
+        if rc != 0 or done not in out:
+            return False, '%s live: the guest failed (%s): %s' % (name, exit_text(rc), sniper_failed(rc, out))
+        why = timed_check('%s live' % name, timed_lines(out, prefix), names)
+        if why:
+            return False, why
+        n += 2 * len(names)
+    return True, '%d timer expiries at their deadlines in the guest\'s time, to a file and live' % n
+
+
+def case_user_timers(p, g, workdir):
+    """x86-64 timers in the guest's time (timers_case)."""
+    return timers_case(workdir, 'x86_64', ['gcc'], 'gainestown')
+
+
+def case_riscv_user_timers(p, g, workdir):
+    """RISC-V timers in the guest's time (timers_case)."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    return timers_case(workdir, 'riscv64', [os.environ['SNIPER_RISCV_CC'], '--target=riscv64-linux-gnu',
+                       '-march=rv64gc', '-mabi=lp64d', '-fuse-ld=lld'], 'riscv')
+
+
+def case_aarch64_user_timers(p, g, workdir):
+    """AArch64 timers in the guest's time (timers_case)."""
+    qemu, cc, why = aarch64_tools()
+    if why:
+        return None, why
+    return timers_case(workdir, 'aarch64', [cc, '--target=aarch64-linux-gnu', '-fuse-ld=lld'], 'cortex-a72')
 
 
 def counters_case(workdir, arch, cc_cmd, config):
@@ -3064,6 +3139,9 @@ CASES = {
     'user-timed-libc':  case_user_timed_libc,
     'riscv-user-timed': case_riscv_user_timed,
     'aarch64-user-timed': case_aarch64_user_timed,
+    'user-timers':      case_user_timers,
+    'riscv-user-timers': case_riscv_user_timers,
+    'aarch64-user-timers': case_aarch64_user_timers,
     'user-counters':    case_user_counters,
     'time-start-default': case_time_start_default,
     'riscv-user-counters': case_riscv_user_counters,

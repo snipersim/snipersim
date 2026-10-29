@@ -64,6 +64,9 @@ extern "C" {
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <thread>
+#include <signal.h>
+#include <fcntl.h>
 #include <unordered_set>
 #include <sys/syscall.h>
 #include <linux/futex.h>
@@ -487,6 +490,8 @@ struct VCPU
    uint64_t      restart_args[6] = {0, 0, 0, 0, 0, 0};
    uint64_t      restart_deadline = 0;
    bool          clock_waiting = false;
+   int64_t       timerfd_clock = -1;    /* a timerfd_create in flight: its clock */
+   uint64_t      timer_check_at = 0;    /* live: the instructions at the last look at the timers */
    /* The simulator's clocks for the counter read in flight (counter_exec),
     * taken by the counter callback QEMU calls within the instruction */
    bool          ctr_valid  = false;
@@ -1399,6 +1404,8 @@ inline bool flow_due(const VCPU *v, int mode)
    return v->ff_pending >= (mode == MODE_MEMORY ? 200u : opt_flow);
 }
 
+void timers_flow(VCPU *v);
+
 void flow_report(VCPU *v)
 {
    const int mode = g_mode.load();
@@ -1409,6 +1416,7 @@ void flow_report(VCPU *v)
    }
    else if (mode != MODE_OFF)
       ff_report(v);
+   timers_flow(v);
 }
 
 /* Every block's start: the sampler counts it (the block is a basic block
@@ -2144,6 +2152,8 @@ static bool syscall_entry(unsigned int vcpu_index, int64_t num, const uint64_t a
  *
  * The calls are numbered as on x86-64 (guest_number maps the others). */
 
+void timers_check(VCPU *v, bool flushed = true);   /* the timers, below */
+
 const int64_t E_INTR = 4, E_AGAIN = 11, E_FAULT = 14, E_INVAL = 22, E_NOSYS = 38, E_TIMEDOUT = 110;
 const int64_t Q_ERESTARTSYS = 512;          /* QEMU's: a guest signal is pending, restart the call */
 const uint64_t SLICE_NS = 1000000;          /* the host time between looks, without a simulator */
@@ -2161,7 +2171,7 @@ const SysPair SYS_PAIRS[] = {
    { 107, 222 }, { 110, 223 }, { 108, 224 }, { 109, 225 }, { 111, 226 }, { 113, 228 }, { 114, 229 },
    { 115, 230 }, { 131, 234 }, { 182, 242 }, { 183, 243 }, { 95, 247 }, { 72, 270 }, { 73, 271 },
    { 22, 281 }, { 85, 283 }, { 86, 286 }, { 87, 287 }, { 242, 288 }, { 240, 297 }, { 243, 299 },
-   { 269, 307 }, { 292, 333 }, { 441, 441 }, { 449, 449 },
+   { 269, 307 }, { 292, 333 }, { 441, 441 }, { 449, 449 }, { 135, 14 },
    { -1, 7 }, { -1, 23 }, { -1, 34 }, { -1, 37 }, { -1, 201 }, { -1, 232 },
 };
 /* riscv32 has only the time64 calls, with a 64-bit time_t: the same layouts */
@@ -2482,6 +2492,7 @@ bool timed_one_ipc(VCPU *v, int64_t num, int x86, const uint64_t args[6], const 
    uint64_t idle_epoch = 0;
    for (;;)
    {
+      timers_check(v);
       /* May the deadline pass?  When every running thread is past it, or
        * (twice in a row, nothing having changed) when no thread runs */
       bool expire = deadline <= now;
@@ -2618,6 +2629,7 @@ bool timed_live(VCPU *v, int64_t num, int x86, const uint64_t args[6], const Sif
           || !emulated || !sim_time(v, &now))
          break;                     /* the channel went: what the probe found */
       sleep = std::min(sleep * 2, LIVE_SLEEP_MAX);
+      timers_check(v);
    }
    if (r == -E_INTR || r == -Q_ERESTARTSYS)
       r = interrupted(v, num, x86, tc, args, deadline, r);
@@ -2696,6 +2708,549 @@ bool timed_call(VCPU *v, int64_t num, const uint64_t args[6], int64_t *sysret)
    return false;
 }
 
+/* ----------------------------------------------------------------- timers
+ *
+ * alarm, setitimer, the POSIX timers and timerfd in the guest's time
+ * (Sift::GuestTimers): the kernel would time them in host seconds.  The
+ * plugin keeps them, and fires them when the guest's time passes their
+ * expiry -- the simulator's time, live; otherwise the time every thread has
+ * reached in the one-IPC model -- with host calls that carry no time: a
+ * signal queued as the kernel's (SI_TIMER and the timer's value for a POSIX
+ * timer, which QEMU passes on to the guest), or the timerfd itself, armed to
+ * expire at once.  They are looked at in every system call, in the timed
+ * waits' loops, live at flow control every TIMER_CHECK instructions, and
+ * without a simulator by a host thread every millisecond (a thread blocked
+ * in a read looks at nothing).  pause and sigsuspend wait in steps too (a
+ * ppoll that does not wait, with the call's signal mask), so that a timer
+ * can end them.  times() and getrusage() report the one-IPC model's CPU
+ * time. */
+
+typedef Sift::GuestTimers<ClockLock> Timers;
+Timers *g_timers = nullptr;
+const uint64_t TIMER_CHECK = 65536;
+
+uint64_t timer_thread_cpu(unsigned slot, void *)
+{
+   return Sift::one_ipc_ns(clock_instructions(slot, nullptr));
+}
+
+/* A timer fires: host calls that carry no time.  The signal by its host
+ * number (QEMU maps the guest's real-time signals), which QEMU delivers to
+ * the guest as the guest's, its siginfo translated */
+void timer_fire(const Sift::GuestTimer &t)
+{
+   if (t.notify == Sift::NOTIFY_NONE)
+      return;
+   if (t.notify == Sift::NOTIFY_TIMERFD)
+   {
+      const struct itimerspec now = { { 0, 0 }, { 0, 1 } };   /* expire at once */
+      syscall(SYS_timerfd_settime, t.fd, 0, &now, nullptr);
+      return;
+   }
+   const int sig = SNP_HOST_SIGNAL(t.signo);
+   if (sig <= 0)
+   {
+      static std::atomic<bool> warned(false);
+      if (!warned.exchange(true))
+         fprintf(stderr, "[SNIPER-QEMU] warning: guest signal %d has no host signal (qemu_plugin_host_signal()): a timer's signal is lost\n", t.signo);
+      return;
+   }
+   /* An itimer's signal by kill(): the kernel refuses a queued signal with a
+    * code of zero or more (the kernel's own, SI_KERNEL) from any thread but
+    * the process's first, and the host thread that looks at the timers
+    * without a simulator is another */
+   if (t.notify == Sift::NOTIFY_ITIMER)
+   {
+      kill(getpid(), sig);
+      return;
+   }
+   siginfo_t si;
+   memset(&si, 0, sizeof(si));
+   si.si_signo = sig;
+   {
+      si.si_code = SI_TIMER;
+      si.si_timerid = t.id - Timers::FIRST_POSIX;
+      si.si_overrun = (int)t.overrun;
+      si.si_value.sival_ptr = (void *)t.value;
+   }
+   if (t.notify == Sift::NOTIFY_THREAD)
+      syscall(SYS_rt_tgsigqueueinfo, getpid(), t.tid, sig, &si);
+   else
+      syscall(SYS_rt_sigqueueinfo, getpid(), sig, &si);
+}
+
+bool sim_time(VCPU *v, uint64_t *ns);
+
+/* The simulator's time without flushing the instruction in flight: from flow
+ * control, inside the run loop */
+bool sim_time_reported(VCPU *v, uint64_t *ns)
+{
+   Sift::EmuRequest req;
+   Sift::EmuReply res;
+   if (!channel_open(v) || !v->writer->Emulate(Sift::EmuTypeCounters, req, res))
+      return false;
+   *ns = res.counters.time_ns;
+   return true;
+}
+
+/* Fire what is due.  v: the thread looking (live: the simulator's time on
+ * its channel; flushed: whether its instruction in flight may be flushed),
+ * or null (the host thread, without a simulator) */
+void timers_check(VCPU *v, bool flushed)
+{
+   if (!g_timers || !g_timers->armed())
+      return;
+   uint64_t time = Sift::NO_DEADLINE;
+   const bool live = v && channel_open(v);
+   if (live)
+   {
+      uint64_t t;
+      if (flushed ? sim_time(v, &t) : sim_time_reported(v, &t))
+         time = t;
+   }
+   else
+   {
+      /* every thread is past it; with none running, the time jumps to the
+       * earliest event, once nothing changed between two looks */
+      static std::atomic<uint64_t> idle_epoch(~0ull);
+      uint64_t t, epoch;
+      const int r = g_clocks->process_time(&t, &epoch);
+      if (r == 1)
+         time = t;
+      else if (r == 2 && idle_epoch.exchange(epoch) == epoch)
+         time = t;
+   }
+   Sift::GuestTimer due[16];
+   const unsigned n = g_timers->due(time, g_clocks->process_cpu(), timer_thread_cpu, nullptr, due, 16);
+   for (unsigned i = 0; i < n; i++)
+   {
+      if (!live && due[i].clock == Sift::TIMER_TIME)
+         g_clocks->woke_at(due[i].expiry);
+      timer_fire(due[i]);
+   }
+   if (!live)
+      g_clocks->set_event(g_timers->next_time());
+}
+
+/* Live, at flow control (in the run loop): the timers every TIMER_CHECK of
+ * the thread's instructions */
+void timers_flow(VCPU *v)
+{
+   if (!g_timers || !g_timers->armed())
+      return;
+   const uint64_t n = thread_instructions(v, v->vcpu_index, 0);
+   if (n - v->timer_check_at < TIMER_CHECK)
+      return;
+   v->timer_check_at = n;
+   timers_check(v, false);
+}
+
+/* Without a simulator, a host thread looks every millisecond */
+void timers_helper_start()
+{
+   static std::atomic<bool> started(false);
+   if (opt_response || started.exchange(true))
+      return;
+   std::thread([] {
+      /* a signal sent to the process must reach a vCPU's thread (QEMU's
+       * handler queues it for the guest there), never this one: the kernel
+       * gives a process's signal to any thread that does not block it */
+      sigset_t all;
+      sigfillset(&all);
+      pthread_sigmask(SIG_BLOCK, &all, nullptr);
+      for (;;)
+      {
+         usleep(1000);
+         timers_check(nullptr);
+      }
+   }).detach();
+}
+
+/* A timer's clock now: the guest's time (the simulator's live, else the
+ * thread's), or a CPU time */
+uint64_t timer_now(VCPU *v, Sift::TimerClock clock, unsigned cpu_slot)
+{
+   if (clock == Sift::TIMER_PROCESS_CPU)
+      return g_clocks->process_cpu();
+   if (clock == Sift::TIMER_THREAD_CPU)
+      return timer_thread_cpu(cpu_slot, nullptr);
+   uint64_t t;
+   if (channel_open(v) && sim_time(v, &t))
+      return t;
+   return g_clocks->now(v->vcpu_index);
+}
+
+/* A clock id's timer clock; false for one the kernel refuses */
+bool timer_clock(VCPU *v, int64_t clockid, Sift::TimerClock *clock, unsigned *slot)
+{
+   *slot = v->vcpu_index;
+   switch (clockid)
+   {
+      case 0: case 1: case 4: case 5: case 6: case 7: case 8: case 9: case 11:
+         *clock = Sift::TIMER_TIME;
+         return true;
+      case 2:
+         *clock = Sift::TIMER_PROCESS_CPU;
+         return true;
+      case 3:
+         *clock = Sift::TIMER_THREAD_CPU;
+         return true;
+      default:
+         if (clockid < 0)
+         {
+            /* a dynamic CPU clock: a thread's (CPUCLOCK_PERTHREAD), taken as
+             * the caller's, or the process's */
+            *clock = (clockid & 4) ? Sift::TIMER_THREAD_CPU : Sift::TIMER_PROCESS_CPU;
+            return true;
+         }
+         return false;
+   }
+}
+
+bool read_spec(uint64_t addr, uint64_t *interval, uint64_t *value, bool timeval)
+{
+   int64_t w[4];
+   if (!read_guest(addr, w, sizeof(w)))
+      return false;
+   const int64_t frac = timeval ? 1000000 : 1000000000, mul = timeval ? 1000 : 1;
+   for (int i = 0; i < 4; i += 2)
+      if (w[i] < 0 || w[i + 1] < 0 || w[i + 1] >= frac)
+         return false;
+   *interval = (uint64_t)w[0] * Sift::NS_PER_S + (uint64_t)w[1] * mul;
+   *value = (uint64_t)w[2] * Sift::NS_PER_S + (uint64_t)w[3] * mul;
+   return true;
+}
+
+bool write_spec(uint64_t addr, uint64_t interval, uint64_t value, bool timeval)
+{
+   const uint64_t div = timeval ? 1000 : 1;
+   const uint64_t w[4] = { interval / Sift::NS_PER_S, interval % Sift::NS_PER_S / div,
+                           value / Sift::NS_PER_S, value % Sift::NS_PER_S / div };
+   return write_guest(addr, w, sizeof(w));
+}
+
+/* Arm a timer from the guest's spec: value 0 disarms; absolute: a deadline on
+ * the timer's clock (the guest's time clocks start at osemu/time_start) */
+int64_t timer_arm(VCPU *v, int id, uint64_t new_addr, uint64_t old_addr, bool absolute, bool timeval)
+{
+   const Sift::GuestTimer t = g_timers->get(id);
+   uint64_t interval = 0, value = 0;
+   if (new_addr && !read_spec(new_addr, &interval, &value, timeval))
+      return -E_INVAL;
+   const uint64_t now = timer_now(v, t.clock, t.cpu_slot);
+   uint64_t expiry = 0;
+   if (value)
+   {
+      if (!absolute)
+         expiry = now + value;
+      else if (t.clock == Sift::TIMER_TIME)
+      {
+         const uint64_t zero = opt_time_start * Sift::NS_PER_S;
+         expiry = value > zero ? value - zero : 1;
+      }
+      else
+         expiry = value;
+      if (!expiry)
+         expiry = 1;
+   }
+   uint64_t old_left, old_interval;
+   g_timers->settime(id, now, expiry, interval, &old_left, &old_interval);
+   if (old_addr && !write_spec(old_addr, old_interval, old_left, timeval))
+      return -E_FAULT;
+   if (expiry)
+      timers_helper_start();
+   if (!channel_open(v))
+      g_clocks->set_event(g_timers->next_time());
+   timers_check(v);
+   return 0;
+}
+
+int64_t timer_get(VCPU *v, int id, uint64_t addr, bool timeval)
+{
+   const Sift::GuestTimer t = g_timers->get(id);
+   uint64_t left, interval;
+   g_timers->gettime(id, timer_now(v, t.clock, t.cpu_slot), &left, &interval);
+   return write_spec(addr, interval, left, timeval) ? 0 : -E_FAULT;
+}
+
+/* pause and sigsuspend: steps that look for a signal (a ppoll that does not
+ * wait, with the call's mask: a signal's handler runs and it returns EINTR)
+ * and between them, live, a sleep in simulated time, otherwise a 1 ms wait
+ * for a signal on the host */
+int64_t suspend_loop(VCPU *v, uint64_t mask_addr, uint64_t mask_size)
+{
+   const uint64_t scratch = scratch_page(v);
+   if (!scratch)
+      return -E_FAULT;
+   bool live = channel_open(v);
+   uint64_t mask = mask_addr;
+   if (!mask)
+   {
+      /* pause: the thread's own mask, as it is */
+      const uint64_t a[6] = { 0 /* SIG_BLOCK */, 0, scratch + 32, 8, 0, 0 };
+      int64_t r;
+      if (!run_guest(guest_number(14 /* rt_sigprocmask */), a, &r) || r < 0)
+         return -E_FAULT;
+      mask = scratch + 32;
+      mask_size = 8;
+   }
+   if (!live)
+   {
+      g_clocks->wait_begin(v->vcpu_index, Sift::NO_DEADLINE, 0);
+      timers_helper_start();
+   }
+   uint64_t sleep = LIVE_SLEEP_MIN;
+   int64_t r = 0;
+   for (;;)
+   {
+      timers_check(v);
+      const uint64_t a[6] = { 0, 0, scratch, mask, mask_size, 0 };
+      if (!put_timespec(scratch, live ? 0 : SLICE_NS) || !run_guest(guest_number(Sift::X86_ppoll), a, &r))
+      {
+         r = -E_FAULT;
+         break;
+      }
+      if (r != 0)
+         break;                     /* EINTR (or QEMU_ERESTARTSYS): a signal came */
+      if (live)
+      {
+         const uint64_t sa[6] = { scratch + 16, 0, 0, 0, 0, 0 };
+         uint64_t sret;
+         bool emulated = false;
+         if (!put_timespec(scratch + 16, sleep) || !forward_syscall(v, guest_number(Sift::X86_nanosleep), sa, &sret, &emulated) || !emulated)
+            live = false, g_clocks->wait_begin(v->vcpu_index, Sift::NO_DEADLINE, 0);
+         sleep = std::min(sleep * 2, LIVE_SLEEP_MAX);
+      }
+   }
+   if (!channel_open(v))
+      g_clocks->wait_end(v->vcpu_index, Clocks::INTERRUPTED);
+   return r == -Q_ERESTARTSYS ? -E_INTR : r;
+}
+
+/* Live, a blocking read of a timerfd the plugin keeps: the simulator would
+ * see the thread stalled in a read that only a timer -- looked at by no one
+ * meanwhile -- can end.  It waits for the fd to be readable as a timed wait
+ * does: probes (ppoll on the fd, no waiting), between them a sleep in
+ * simulated time and a look at the timers; then the read runs.  0, or the
+ * error to return (EINTR) */
+int64_t timerfd_wait_live(VCPU *v, int fd)
+{
+   const int fl = fcntl(fd, F_GETFL);
+   if (fl < 0 || (fl & O_NONBLOCK))
+      return 0;                     /* the read does not wait */
+   const uint64_t scratch = scratch_page(v);
+   if (!scratch)
+      return 0;
+   uint64_t sleep = LIVE_SLEEP_MIN;
+   for (;;)
+   {
+      timers_check(v);
+      const struct { int32_t fd; int16_t events, revents; } pfd = { fd, 1 /* POLLIN */, 0 };
+      int64_t r;
+      const uint64_t a[6] = { scratch + 64, 1, scratch, 0, 8, 0 };
+      if (!write_guest(scratch + 64, &pfd, sizeof(pfd)) || !put_timespec(scratch, 0)
+          || !run_guest(guest_number(Sift::X86_ppoll), a, &r))
+         return 0;
+      if (r != 0)
+         return r < 0 && r != -E_INTR && r != -Q_ERESTARTSYS ? 0 : r > 0 ? 0 : -E_INTR;
+      const uint64_t sa[6] = { scratch + 16, 0, 0, 0, 0, 0 };
+      uint64_t sret;
+      bool emulated = false;
+      if (!put_timespec(scratch + 16, sleep) || !forward_syscall(v, guest_number(Sift::X86_nanosleep), sa, &sret, &emulated) || !emulated)
+         return 0;
+      sleep = std::min(sleep * 2, LIVE_SLEEP_MAX);
+   }
+}
+
+/* The timer calls, times and getrusage, pause and sigsuspend: true when
+ * answered here */
+bool timer_call(VCPU *v, int64_t num, int x86, const uint64_t args[6], int64_t *sysret)
+{
+   switch (x86)
+   {
+      case 37:   /* alarm */
+      {
+         const uint64_t now = timer_now(v, Sift::TIMER_TIME, 0);
+         uint64_t left;
+         const uint64_t secs = (uint32_t)args[0];
+         g_timers->settime(0, now, secs ? now + secs * Sift::NS_PER_S : 0, 0, &left, nullptr);
+         if (secs)
+            timers_helper_start();
+         if (!channel_open(v))
+            g_clocks->set_event(g_timers->next_time());
+         /* the seconds left, rounded as the kernel rounds them */
+         uint64_t s = left / Sift::NS_PER_S + (left % Sift::NS_PER_S >= 500000000 ? 1 : 0);
+         if (left && !s)
+            s = 1;
+         *sysret = (int64_t)s;
+         return true;
+      }
+      case 38:   /* setitimer(which, new, old) */
+         if (args[0] > 2)
+            *sysret = -E_INVAL;
+         else
+            *sysret = timer_arm(v, (int)args[0], args[1], args[2], false, true);
+         return true;
+      case 36:   /* getitimer(which, cur) */
+         *sysret = args[0] > 2 ? -E_INVAL : timer_get(v, (int)args[0], args[1], true);
+         return true;
+      case 222:  /* timer_create(clockid, sevp, timerid) */
+      {
+         Sift::GuestTimer spec;
+         if (!timer_clock(v, (int64_t)(int32_t)args[0], &spec.clock, &spec.cpu_slot))
+         {
+            *sysret = -E_INVAL;
+            return true;
+         }
+         spec.notify = Sift::NOTIFY_SIGNAL;
+         spec.signo = 14;   /* SIGALRM, with the timer's id as its value (set below) */
+         bool value_is_id = true;
+         if (args[1])
+         {
+            struct { uint64_t value; int32_t signo, notify, tid; } ev;
+            if (!read_guest(args[1], &ev, sizeof(ev)))
+            {
+               *sysret = -E_FAULT;
+               return true;
+            }
+            value_is_id = false;
+            spec.value = ev.value;
+            spec.signo = ev.signo;
+            spec.tid = ev.tid;
+            switch (ev.notify)
+            {
+               case 0: spec.notify = Sift::NOTIFY_SIGNAL; break;   /* SIGEV_SIGNAL */
+               case 1: spec.notify = Sift::NOTIFY_NONE; break;     /* SIGEV_NONE */
+               case 4: spec.notify = Sift::NOTIFY_THREAD; break;   /* SIGEV_THREAD_ID */
+               default: *sysret = -E_INVAL; return true;           /* SIGEV_THREAD is the C library's */
+            }
+            if (spec.notify != Sift::NOTIFY_NONE && (spec.signo < 1 || spec.signo > 64))
+            {
+               *sysret = -E_INVAL;
+               return true;
+            }
+         }
+         const int id = g_timers->create(spec);
+         if (id < 0)
+         {
+            *sysret = -E_AGAIN;
+            return true;
+         }
+         if (value_is_id)
+            g_timers->set_value(id, (uint64_t)(id - Timers::FIRST_POSIX));
+         const int32_t guest_id = id - Timers::FIRST_POSIX;
+         *sysret = write_guest(args[2], &guest_id, sizeof(guest_id)) ? 0 : -E_FAULT;
+         if (*sysret)
+            g_timers->remove(id);
+         return true;
+      }
+      case 223:  /* timer_settime(id, flags, new, old) */
+      case 224:  /* timer_gettime(id, cur) */
+      case 225:  /* timer_getoverrun(id) */
+      case 226:  /* timer_delete(id) */
+      {
+         const int id = (int)(int32_t)args[0] + Timers::FIRST_POSIX;
+         if ((int32_t)args[0] < 0 || !g_timers->valid(id) || g_timers->get(id).notify == Sift::NOTIFY_TIMERFD)
+         {
+            *sysret = -E_INVAL;
+            return true;
+         }
+         if (x86 == 223)
+            *sysret = timer_arm(v, id, args[2], args[3], (args[1] & 1) != 0, false);
+         else if (x86 == 224)
+            *sysret = timer_get(v, id, args[1], false);
+         else if (x86 == 225)
+            *sysret = (int64_t)std::min<uint64_t>(g_timers->overrun(id), 0x7fffffff);
+         else
+         {
+            g_timers->remove(id);
+            *sysret = 0;
+         }
+         return true;
+      }
+      case 286:  /* timerfd_settime(fd, flags, new, old) */
+      case 287:  /* timerfd_gettime(fd, cur) */
+      {
+         int id = g_timers->find((int)args[0]);
+         if (id < 0)
+            id = g_timers->timerfd((int)args[0], Sift::TIMER_TIME);
+         if (id < 0)
+         {
+            *sysret = -E_AGAIN;
+            return true;
+         }
+         if (x86 == 287)
+         {
+            *sysret = timer_get(v, id, args[1], false);
+            return true;
+         }
+         /* the real timerfd disarmed, its count of expirations cleared, as
+          * the kernel's settime does; then armed in the guest's time */
+         const struct itimerspec off = { { 0, 0 }, { 0, 0 } };
+         if (syscall(SYS_timerfd_settime, (int)args[0], 0, &off, nullptr) != 0)
+         {
+            *sysret = -errno;
+            g_timers->forget_fd((int)args[0]);
+            return true;
+         }
+         *sysret = timer_arm(v, id, args[2], args[3], (args[1] & 1) != 0, false);
+         return true;
+      }
+      case 283:  /* timerfd_create(clockid, flags): made by QEMU, its clock noted at the return */
+         v->timerfd_clock = (int64_t)(int32_t)args[0];
+         return false;
+      case 3:    /* close: a timerfd's timer goes with it */
+         g_timers->forget_fd((int)args[0]);
+         return false;
+      case 0: case 19:   /* read, readv: live, of a timerfd, wait for it first */
+         if (channel_open(v) && g_timers->find((int)args[0]) >= 0)
+         {
+            const int64_t r = timerfd_wait_live(v, (int)args[0]);
+            if (r)
+            {
+               *sysret = r;
+               return true;
+            }
+         }
+         return false;
+      case 34:   /* pause */
+         *sysret = suspend_loop(v, 0, 0);
+         return true;
+      case 130:  /* rt_sigsuspend(mask, size) */
+         *sysret = suspend_loop(v, args[0], args[1]);
+         return true;
+      case 100:  /* times(buf): the CPU time in clock ticks (100 Hz) */
+      {
+         const uint64_t ticks = g_clocks->process_cpu() / 10000000;
+         const uint64_t tms[4] = { ticks, 0, 0, 0 };
+         if (args[0] && !write_guest(args[0], tms, sizeof(tms)))
+         {
+            *sysret = -E_FAULT;
+            return true;
+         }
+         *sysret = (int64_t)((opt_time_start * Sift::NS_PER_S + timer_now(v, Sift::TIMER_TIME, 0)) / 10000000);
+         return true;
+      }
+      case 98:   /* getrusage(who, usage): the kernel's, but the CPU times */
+      {
+         int64_t r;
+         if (!run_guest(num, args, &r))
+            return false;
+         if (r == 0 && args[1] && ((int64_t)args[0] == 0 || (int64_t)args[0] == 1))
+         {
+            const uint64_t user = (int64_t)args[0] == 1 ? timer_thread_cpu(v->vcpu_index, nullptr) : g_clocks->process_cpu();
+            const uint64_t tv[4] = { user / Sift::NS_PER_S, user % Sift::NS_PER_S / 1000, 0, 0 };
+            if (!write_guest(args[1], tv, sizeof(tv)))
+               r = -E_FAULT;
+         }
+         *sysret = r;
+         return true;
+      }
+      default:
+         return false;
+   }
+}
+
 /* The emulated calls are skipped and answered with the simulator's value, as
  * the Pin recorder does (it turns them into getpid and sets the result).
  * Before this QEMU ran them too and the answer was dropped: a nanosleep slept
@@ -2762,6 +3317,9 @@ bool syscall_filter(SNP_SYSCALL_FILTER_ARGS)
       return false;
    VCPU *v = vcpu_get(vcpu_index);
    const int x86 = x86_number(num);
+   timers_check(v);
+   if (x86 >= 0 && g_timers && timer_call(v, num, x86, args, sysret))
+      return true;
    /* the time calls: the simulator's (live), else the one-IPC model's;
     * time(2), which the simulator does not model, from its time */
    if (x86 == 201 && channel_open(v))
@@ -2781,6 +3339,8 @@ bool syscall_filter(SNP_SYSCALL_FILTER_ARGS)
    return timed_call(v, num, args, sysret);
 }
 #else
+void timers_flow(VCPU *) {}
+
 /* Plugin API before v7: no filter, so the call is reported and QEMU runs it;
  * the simulator's answer cannot reach the guest. */
 void syscall_enter(SNP_SYSCALL_ARGS)
@@ -2799,6 +3359,18 @@ void syscall_enter(SNP_SYSCALL_ARGS)
 void syscall_ret(SNP_SYSCALL_RET_ARGS)
 {
    VCPU *v = vcpu_get(vcpu_index);
+   if (v->timerfd_clock >= 0)
+   {
+      /* a new timerfd: a timer on its clock, none left from an fd before */
+      Sift::TimerClock clock;
+      unsigned slot;
+      if (ret >= 0 && g_timers && timer_clock(v, v->timerfd_clock, &clock, &slot))
+      {
+         g_timers->forget_fd((int)ret);
+         g_timers->timerfd((int)ret, clock);
+      }
+      v->timerfd_clock = -1;
+   }
    if (v->clock_waiting)
    {
       /* a call the thread waited in (the one-IPC model): it returned */
@@ -3285,6 +3857,9 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    {
       SNP_REG_SYSCALL_RET(id, syscall_ret);
       g_clocks = new Clocks(MAX_VCPUS, clock_instructions, nullptr);
+#ifdef SNP_HAVE_SYSCALL_FILTER
+      g_timers = new Timers();
+#endif
    }
    SNP_REG_VCPU_INIT(id, vcpu_init);
 #if QEMU_PLUGIN_VERSION >= 7

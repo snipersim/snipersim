@@ -91,10 +91,15 @@ extern "C" {
 __attribute__((weak)) bool qemu_plugin_run_syscall(int64_t num, uint64_t a1, uint64_t a2, uint64_t a3,
                                                    uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
                                                    uint64_t a8, int64_t *sysret);
+__attribute__((weak)) int qemu_plugin_host_signal(int sig);
 }
 #define SNP_HAVE_RUN_SYSCALL (qemu_plugin_run_syscall != nullptr)
+/* the host's number for a guest signal: QEMU's mapping, or, without the
+ * call, the standard signals' own numbers (real-time ones are remapped) */
+#define SNP_HOST_SIGNAL(s)   (qemu_plugin_host_signal != nullptr ? qemu_plugin_host_signal(s) : (s) < 32 ? (s) : -1)
 #else
 #define SNP_HAVE_RUN_SYSCALL false
+#define SNP_HOST_SIGNAL(s)   ((s) < 32 ? (s) : -1)
 #endif
 
 #endif
