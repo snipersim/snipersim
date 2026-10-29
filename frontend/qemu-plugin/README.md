@@ -67,7 +67,8 @@ exclusive sections), leaves the reason in `<output>.app<N>.refused`, and
 run-sniper fails the run with it.  A guest that creates a process (fork, vfork,
 posix_spawn) is refused the same way in user mode, live or recorded to
 files: the child stops at once with the reason (it would write into the
-parent's streams) and the parent runs on.
+parent's streams) and the parent runs on.  A functional run (`trace=0`)
+has no streams, and its children run.
 System calls: the ones the simulator models are sent with the simulator's
 numbers whatever the guest's architecture, and the emulated ones (futex,
 sched_yield, the affinity calls, nanosleep, clock_nanosleep, clock_gettime,

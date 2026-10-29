@@ -35,6 +35,7 @@
  */
 
 #include <stdarg.h>
+#include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <cinttypes>
@@ -516,29 +517,67 @@ struct VCPU
  * so status 1 alone could not tell run-sniper a refusal from a guest that
  * exits 1, and the partial simulation passed as a run; the file is what
  * run-sniper looks for. */
-static void refuse(const char *fmt, ...) __attribute__((noreturn, format(printf, 1, 2)));
-static void refuse(const char *fmt, ...)
+/* The marker's path, set once the options are read (refuse_path()): what a
+ * refusal in a forked child writes to without formatting anything. */
+static char g_refused_path[4096];
+
+static void refuse_path(void)
 {
-   char msg[2048];
-   va_list ap;
-   va_start(ap, fmt);
-   vsnprintf(msg, sizeof(msg), fmt, ap);
-   va_end(ap);
-   fputs(msg, stderr);
-   char path[4096];
-   snprintf(path, sizeof(path), "%s.app%u.refused", opt_output.c_str(), opt_app);
-   if (FILE *f = fopen(path, "w"))
+   snprintf(g_refused_path, sizeof(g_refused_path), "%s.app%u.refused", opt_output.c_str(), opt_app);
+}
+
+/* write(2) all of it, or as much as goes */
+static void write_all(int fd, const char *p, size_t n)
+{
+   while (n > 0)
    {
-      fputs(msg, f);
-      fclose(f);
+      const ssize_t w = write(fd, p, n);
+      if (w < 0 && errno == EINTR)
+         continue;
+      if (w <= 0)
+         return;
+      p += w;
+      n -= (size_t)w;
+   }
+}
+
+/* The refusal itself, with system calls only -- no stdio, no allocation --
+ * so that the fork handler can use it in the child, where only
+ * async-signal-safe calls are (another thread may have held stdio's or
+ * malloc's lock at the fork). */
+static void refuse_msg(const char *msg, size_t len) __attribute__((noreturn));
+static void refuse_msg(const char *msg, size_t len)
+{
+   write_all(2, msg, len);
+   if (g_refused_path[0])
+   {
+      const int fd = open(g_refused_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+      if (fd >= 0)
+      {
+         write_all(fd, msg, len);
+         close(fd);
+      }
    }
    /* _exit, not exit: a refusal comes from one vCPU's callback while the
       others run on, and exit() ran QEMU's and our exit handlers (at_exit
       closing every stream) and the static destructors under them -- QEMU
       then died of SIGSEGV in one refusal in four (riscv-user-mt's live run).
       Nothing those handlers do is wanted for a run being refused. */
-   fflush(stderr);
    _exit(1);
+}
+
+static void refuse(const char *fmt, ...) __attribute__((noreturn, format(printf, 1, 2)));
+static void refuse(const char *fmt, ...)
+{
+   char msg[2048];
+   va_list ap;
+   va_start(ap, fmt);
+   const int n = vsnprintf(msg, sizeof(msg), fmt, ap);
+   va_end(ap);
+   if (!g_refused_path[0])
+      refuse_path();
+   fflush(stderr);   /* what this thread printed before, ahead of the reason */
+   refuse_msg(msg, n < 0 ? 0 : std::min<size_t>((size_t)n, sizeof(msg) - 1));
 }
 
 /* A guest process created by fork (QEMU user mode runs a guest's fork,
@@ -547,13 +586,17 @@ static void refuse(const char *fmt, ...)
    writers and write its instructions into the parent's streams, or into the
    parent's channel to Sniper, corrupting both.  Until children are given
    streams of their own, the child is refused with the reason, which fails the
-   run (run-sniper reads the .refused marker); the parent runs on. */
+   run (run-sniper reads the .refused marker); the parent runs on.  Only when
+   tracing (a functional run, trace=0, has no streams for a child to share);
+   in the child after fork, so system calls only (refuse_msg). */
 static void refuse_forked_child(void)
 {
-   refuse("[SNIPER-QEMU] error: the guest created a process (fork, vfork or posix_spawn).\n"
+   static const char msg[] =
+          "[SNIPER-QEMU] error: the guest created a process (fork, vfork or posix_spawn).\n"
           "  The QEMU front end records one process; a child would write into the\n"
           "  parent's streams.  Record each program on its own, or use the SDE\n"
-          "  front end (--follow) for programs that create processes.\n");
+          "  front end (--follow) for programs that create processes.\n";
+   refuse_msg(msg, sizeof(msg) - 1);
 }
 
 const unsigned int MAX_VCPUS = 4096;
@@ -4108,7 +4151,10 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
 #endif
    SNP_REG_VCPU_EXIT(id, vcpu_exit);
    SNP_REG_ATEXIT(id, at_exit);
-   if (!in_system_mode)
+   if (!in_system_mode && opt_trace)
+   {
+      refuse_path();   /* the child formats nothing */
       pthread_atfork(NULL, NULL, refuse_forked_child);
+   }
    return 0;
 }
