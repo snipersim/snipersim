@@ -177,6 +177,30 @@ def add_block_type_totals(stats):
   return stats
 
 
+def idle_times(config, elapsed, nonidle):
+  """Each core's idle time (fs): the run's elapsed time less the core's
+  non-idle time.  A core runs up to one barrier quantum past the last global
+  barrier, so its non-idle time can exceed the run's by that much; that
+  overshoot was reported as a negative idle time (-155 ns on a one-core run)
+  and is clamped to zero.  A larger negative is not that, and is kept and
+  warned about: clamping any negative to zero hid it."""
+  try:
+    quantum = float(sniper_config.get_config_default(config, 'clock_skew_minimization/barrier/quantum', 0)) * 1e6
+  except (TypeError, ValueError):
+    quantum = 0.
+  idle = []
+  for c, n in enumerate(nonidle):
+    t = elapsed - n
+    if t < 0:
+      if -t <= quantum:
+        t = 0
+      else:
+        print('Warning: core %d was busy %.1f ns longer than the run lasted, more than the barrier quantum (%.1f ns); '
+              'its idle time is negative' % (c, -t / 1e6, quantum / 1e6), file = sys.stderr)
+    idle.append(t)
+  return idle
+
+
 def stats_process(config, results):
   ncores = int(config['general/total_cores'])
   stats = {}
@@ -227,13 +251,10 @@ def stats_process(config, results):
       stats['performance_model.elapsed_time'][c] - stats['performance_model.idle_elapsed_time'][c]
       for c in range(ncores)
     ]
-    # A core runs up to a quantum past the last global barrier, so its
-    # non-idle time can exceed the run's time; it was then reported idle for a
-    # negative time (-155 ns on a one-core run).  It was not idle at all.
-    stats['performance_model.idle_elapsed_time'] = [
-      max(0, time0_end - time0_begin - stats['performance_model.nonidle_elapsed_time'][c])
-      for c in range(ncores)
-    ]
+    # A core runs up to a quantum past the last global barrier: idle_times
+    # clamps that overshoot, and only that
+    stats['performance_model.idle_elapsed_time'] = idle_times(
+      config, time0_end - time0_begin, stats['performance_model.nonidle_elapsed_time'])
     stats['performance_model.elapsed_time'] = [ time0_end - time0_begin for c in range(ncores) ]
   # DVFS-enabled runs: emulate cycle_count asuming constant (initial) frequency
   if 'performance_model.elapsed_time' in stats and 'performance_model.cycle_count' not in stats:
