@@ -107,6 +107,7 @@ class TraceThread : public Runnable
       
       UInt64 m_bbv_base;
       UInt64 m_bbv_count;
+      UInt64 m_instructions_retired;   // the thread's instructions in every mode, but m_bbv_count's
       UInt64 m_bbv_last;
       bool m_bbv_end;
       static int m_isa;

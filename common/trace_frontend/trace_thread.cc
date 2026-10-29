@@ -93,6 +93,7 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_stop(false)
    , m_bbv_base(0)
    , m_bbv_count(0)
+   , m_instructions_retired(0)
    , m_bbv_last(0)
    , m_bbv_end(false)
    , m_output_leftover_size(0)
@@ -503,13 +504,15 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
             front end that answers them (the QEMU plugin): the simulated
             time, without the wall-clock start that clock_gettime adds, in
             nanoseconds and in the core's and the global clock's cycles,
-            and the core's instruction count. */
+            and the thread's instructions retired: in every mode (the
+            performance model's count is the detailed ones only, and the
+            core's, not the thread's), the current basic block's included. */
          const SubsecondTime now = getCurrentTime();
          Core *core = m_thread->getCore();
          res.counters.time_ns = now.getNS();
          res.counters.global_cycles = SubsecondTime::divideRounded(now, *Sim()->getDvfsManager()->getGlobalDomain());
          res.counters.core_cycles = core ? SubsecondTime::divideRounded(now, *core->getDvfsDomain()) : res.counters.global_cycles;
-         res.counters.instructions = core ? core->getPerformanceModel()->getInstructionCount() : 0;
+         res.counters.instructions = m_instructions_retired + m_bbv_count;
          return true;
       }
       case Sift::EmuTypeCpuTime:
@@ -791,6 +794,7 @@ Sift::Mode TraceThread::handleInstructionCountFunc(uint32_t icount)
    LOG_ASSERT_ERROR(core, "We cannot execute instructions while not on a core");
    SubsecondTime time = core->getPerformanceModel()->getElapsedTime();
    core->countInstructions(0, icount);
+   m_instructions_retired += icount;
 
    if (Sim()->getInstrumentationMode() == InstMode::DETAILED && icount)
    {
@@ -832,7 +836,10 @@ void TraceThread::handleCacheOnlyFunc(uint8_t icount, Sift::CacheOnlyType type, 
    //LOG_ASSERT_ERROR(core, "We cannot perform warmup while not on a core");
 
    if (icount)
+   {
       core->countInstructions(0, icount);
+      m_instructions_retired += icount;
+   }
 
    switch(type)
    {
@@ -1706,6 +1713,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
          {
             // We're the start of a new basic block
             core->countInstructions(m_bbv_base, m_bbv_count);
+            m_instructions_retired += m_bbv_count;
             // In cache-only mode, we'll want to do I-cache warmup
             if (m_bbv_base)
             {
@@ -2018,6 +2026,7 @@ void TraceThread::m_run_func_default()
       {
          // We're the start of a new basic block
          core->countInstructions(m_bbv_base, m_bbv_count);
+         m_instructions_retired += m_bbv_count;
          // In cache-only mode, we'll want to do I-cache warmup
          if (m_bbv_base)
          {
