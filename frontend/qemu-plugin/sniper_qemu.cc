@@ -69,6 +69,7 @@ extern "C" {
 #include <signal.h>
 #include <fcntl.h>
 #include <unordered_set>
+#include <unordered_map>
 #include <sys/syscall.h>
 #include <linux/futex.h>
 
@@ -3796,53 +3797,57 @@ void vcpu_exit(SNP_VCPU_ARGS)
    writer_close(vcpu_get(cpu_index));
 }
 
-void tb_trans(SNP_TB_TRANS_ARGS)
+/* What a translation fixes about its block: the instructions' facts
+ * (InsnInfo), the block's mode (TBInfo) and count (TBCount), the callbacks'
+ * arguments for as long as QEMU keeps the code.  QEMU has no callback for a
+ * translation it drops, so nothing can be freed; but the same code at the
+ * same address translates to the same facts, so a translation of code seen
+ * before -- after a full code cache was flushed, or code rewritten and back
+ * (a guest's self-modifying code), or a page unmapped and mapped again --
+ * reuses them.  Keyed by everything they derive from: the instructions'
+ * addresses (physical too, in system mode), sizes and bytes, and whether
+ * the plugin claimed each at translation.  Memory so grows with the
+ * distinct code the guest runs, not with the number of translations. */
+struct TBData
 {
-   const size_t n = qemu_plugin_tb_n_insns(tb);
-   TBInfo *ti = new TBInfo();
-   ti->mode_mask = MODE_16 | MODE_32 | MODE_64;
-   if (g_icount_sb)   /* every mode, traced or not: the one-IPC model's clock */
-      qemu_plugin_register_vcpu_tb_exec_inline_per_vcpu(tb, QEMU_PLUGIN_INLINE_ADD_U64, g_icount, n);
+   TBInfo   ti;
+   TBCount  tc{};
+   std::vector<InsnInfo> insns;
+};
+std::mutex g_tbdata_lock;
+std::unordered_map<std::string, TBData *> g_tbdata;
+uint64_t g_tbdata_reused = 0;   /* translations that found their data (g_tbdata_lock) */
 
+/* An instruction as translated: what TBData's key and facts are made of */
+struct TransInsn
+{
+   uint64_t vaddr, paddr = 0, paddr2 = 0;
+   uint8_t  size, got;
+   bool     claimed = false;
+   uint8_t  bytes[XED_MAX_INSTRUCTION_BYTES];
+};
+
+/* The facts of a block's instructions, decoded once per distinct
+ * translation, so the cost is amortised over every execution. */
+TBData *tb_data_new(const std::vector<TransInsn> &raw)
+{
+   const size_t n = raw.size();
+   TBData *td = new TBData();
+   TBInfo *ti = &td->ti;
+   ti->mode_mask = MODE_16 | MODE_32 | MODE_64;
+   td->insns.resize(n);
    for (size_t i = 0; i < n; i++)
    {
-      struct qemu_plugin_insn *insn = qemu_plugin_tb_get_insn(tb, i);
-
-      /* One record per static instruction, reused by every execution. */
-      InsnInfo *ii = new InsnInfo();
-      ii->vaddr = qemu_plugin_insn_vaddr(insn);
+      InsnInfo *ii = &td->insns[i];
+      const uint8_t *bytes = raw[i].bytes;
+      const size_t got = raw[i].got;
+      ii->vaddr = raw[i].vaddr;
+      ii->paddr = raw[i].paddr;
+      ii->paddr2 = raw[i].paddr2;
       ii->tb_left = (uint32_t)(n - i);
       if (i == 0)
          ti->vaddr = ii->vaddr;
-      ii->size  = (uint8_t)qemu_plugin_insn_size(insn);
-
-      /* Decoded once per translation, so the cost is amortised over every
-       * execution of the block. */
-      uint8_t bytes[XED_MAX_INSTRUCTION_BYTES] = {0};
-      size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(bytes));
-      if (in_system_mode)
-      {
-         /* Where the code is in physical memory: what identifies it in a
-          * full-system trace (Writer::Mapping, CodePhysical) */
-         uint64_t pa = 0;
-         if (qemu_plugin_translate_vaddr(ii->vaddr, &pa))
-            ii->paddr = pa;
-         const uint64_t last = ii->vaddr + (got ? got : 1) - 1;
-         if ((last & ~0xfffULL) != (ii->vaddr & ~0xfffULL) && qemu_plugin_translate_vaddr(last & ~0xfffULL, &pa))
-            ii->paddr2 = pa;
-      }
-      if (got && !in_system_mode)
-         Sift::CodeTracker::observe(ii->vaddr, bytes, (uint32_t)got);
-      else if (got && ii->paddr)
-      {
-         /* Code rewritten in place, by physical page, the writer's key; one
-          * piece per page an instruction spans, since the next virtual page
-          * need not be the next physical one */
-         const uint64_t first = std::min<uint64_t>(got, 0x1000 - (ii->vaddr & 0xfff));
-         Sift::CodeTracker::observe(ii->paddr | Sift::CODE_KEY_PHYSICAL, bytes, (uint32_t)first);
-         if (first < got && ii->paddr2)
-            Sift::CodeTracker::observe((ii->paddr2 & ~0xfffULL) | Sift::CODE_KEY_PHYSICAL, bytes + first, (uint32_t)(got - first));
-      }
+      ii->size  = raw[i].size;
       if (g_arch == ARCH_RISCV)
       {
          ii->is_branch = got ? riscv_is_conditional_branch(bytes, got) : false;
@@ -3874,12 +3879,107 @@ void tb_trans(SNP_TB_TRANS_ARGS)
       ii->magic = got && is_magic(bytes, got);
       ii->counter = got && is_counter_read(bytes, got);
       ii->is_jump = got ? is_direct_jump(bytes, got) : false;
+      ii->claimed = ii->ame && raw[i].claimed;
+   }
+   td->tc.n = (uint32_t)n;
+   td->tc.vaddr = n ? raw[0].vaddr : 0;
+   return td;
+}
 
-      if (ii->ame)
+void tb_trans(SNP_TB_TRANS_ARGS)
+{
+   const size_t n = qemu_plugin_tb_n_insns(tb);
+   if (g_icount_sb)   /* every mode, traced or not: the one-IPC model's clock */
+      qemu_plugin_register_vcpu_tb_exec_inline_per_vcpu(tb, QEMU_PLUGIN_INLINE_ADD_U64, g_icount, n);
+
+   std::vector<TransInsn> raw(n);
+   std::string key;
+   key.reserve(16 + n * (sizeof(uint64_t) * 3 + 3 + XED_MAX_INSTRUCTION_BYTES));
+   auto put = [&key](const void *p, size_t len) { key.append((const char *)p, len); };
+   put(&n, sizeof(n));
+   for (size_t i = 0; i < n; i++)
+   {
+      struct qemu_plugin_insn *insn = qemu_plugin_tb_get_insn(tb, i);
+      TransInsn &r = raw[i];
+      r.vaddr = qemu_plugin_insn_vaddr(insn);
+      r.size  = (uint8_t)qemu_plugin_insn_size(insn);
+      uint8_t *bytes = r.bytes;
+      memset(bytes, 0, sizeof(r.bytes));
+      size_t got = qemu_plugin_insn_data(insn, bytes, sizeof(r.bytes));
+      r.got = (uint8_t)got;
+      if (in_system_mode)
       {
-         std::lock_guard<std::mutex> lock(g_claim_lock);
-         ii->claimed = g_claimed.erase(insn) > 0;
+         /* Where the code is in physical memory: what identifies it in a
+          * full-system trace (Writer::Mapping, CodePhysical) */
+         uint64_t pa = 0;
+         if (qemu_plugin_translate_vaddr(r.vaddr, &pa))
+            r.paddr = pa;
+         const uint64_t last = r.vaddr + (got ? got : 1) - 1;
+         if ((last & ~0xfffULL) != (r.vaddr & ~0xfffULL) && qemu_plugin_translate_vaddr(last & ~0xfffULL, &pa))
+            r.paddr2 = pa;
       }
+      /* every translation, a reused one too: code rewritten and back is
+       * still code rewritten */
+      if (got && !in_system_mode)
+         Sift::CodeTracker::observe(r.vaddr, bytes, (uint32_t)got);
+      else if (got && r.paddr)
+      {
+         /* Code rewritten in place, by physical page, the writer's key; one
+          * piece per page an instruction spans, since the next virtual page
+          * need not be the next physical one */
+         const uint64_t first = std::min<uint64_t>(got, 0x1000 - (r.vaddr & 0xfff));
+         Sift::CodeTracker::observe(r.paddr | Sift::CODE_KEY_PHYSICAL, bytes, (uint32_t)first);
+         if (first < got && r.paddr2)
+            Sift::CodeTracker::observe((r.paddr2 & ~0xfffULL) | Sift::CODE_KEY_PHYSICAL, bytes + first, (uint32_t)(got - first));
+      }
+   }
+   {
+      /* claimed in this translation (insn_claim): taken out of the set
+       * whether the data is new or reused */
+      std::lock_guard<std::mutex> lock(g_claim_lock);
+      if (!g_claimed.empty())
+         for (size_t i = 0; i < n; i++)
+            raw[i].claimed = g_claimed.erase(qemu_plugin_tb_get_insn(tb, i)) > 0;
+   }
+   for (const TransInsn &r : raw)
+   {
+      put(&r.vaddr, sizeof(r.vaddr));
+      put(&r.paddr, sizeof(r.paddr));
+      put(&r.paddr2, sizeof(r.paddr2));
+      put(&r.size, 1);
+      put(&r.got, 1);
+      put(&r.claimed, 1);
+      put(r.bytes, r.got);
+   }
+
+   TBData *td = nullptr;
+   {
+      std::lock_guard<std::mutex> lock(g_tbdata_lock);
+      auto it = g_tbdata.find(key);
+      if (it != g_tbdata.end())
+      {
+         td = it->second;
+         g_tbdata_reused++;
+      }
+   }
+   if (!td)
+   {
+      TBData *made = tb_data_new(raw);
+      std::lock_guard<std::mutex> lock(g_tbdata_lock);
+      auto ins = g_tbdata.emplace(std::move(key), made);
+      td = ins.first->second;
+      if (!ins.second)   /* another vCPU translated the same code meanwhile */
+         delete made;
+   }
+   TBInfo *ti = &td->ti;
+
+   for (size_t i = 0; i < n; i++)
+   {
+      struct qemu_plugin_insn *insn = qemu_plugin_tb_get_insn(tb, i);
+      /* One record per static instruction, reused by every execution. */
+      InsnInfo *ii = &td->insns[i];
+      const uint8_t *bytes = raw[i].bytes;
+      const size_t got = raw[i].got;
       if (!opt_trace)
       {
          if (ii->ame)
@@ -3919,10 +4019,8 @@ void tb_trans(SNP_TB_TRANS_ARGS)
 
    if ((pacsim_qemu::enabled() || g_wait) && opt_trace)
    {
-      TBCount *tc = new TBCount();  /* the sampler counts every block, in every mode; waiting: flow control from here */
-      tc->n = (uint32_t)n;
-      tc->vaddr = qemu_plugin_insn_vaddr(qemu_plugin_tb_get_insn(tb, 0));
-      qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_begin, g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_NO_REGS, tc);
+      /* the sampler counts every block, in every mode; waiting: flow control from here */
+      qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_begin, g_wait ? QEMU_PLUGIN_CB_RW_REGS_PC : QEMU_PLUGIN_CB_NO_REGS, &td->tc);
    }
 
    /* R_REGS so mode_from_registers() has something to read; it runs before the
@@ -3931,8 +4029,7 @@ void tb_trans(SNP_TB_TRANS_ARGS)
    if (g_arch == ARCH_X86)
       qemu_plugin_register_vcpu_tb_exec_cb(tb, tb_mode_check,
                                            QEMU_PLUGIN_CB_R_REGS, ti);
-   else
-      delete ti;                    /* one ISA, nothing to check per block */
+   /* otherwise one ISA, nothing to check per block */
 }
 
 void at_exit(SNP_UDATA_ARGS)
@@ -3973,6 +4070,12 @@ void at_exit(SNP_UDATA_ARGS)
       fprintf(stderr, "[SNIPER-QEMU] %" PRIu64 " cache lines touched beyond the spans their records hold (counted, not timed)\n", g_ndropped_lines);
    if (g_exec_claimed || g_exec_trapped)
       fprintf(stderr, "[SNIPER-QEMU] plugin-emulated instructions: %" PRIu64 " claimed at translation, %" PRIu64 " through the exception path\n", g_exec_claimed, g_exec_trapped);
+   if (opt_verbose)
+   {
+      std::lock_guard<std::mutex> lock(g_tbdata_lock);
+      fprintf(stderr, "[SNIPER-QEMU] translations: %zu distinct blocks, %" PRIu64 " translations reused their data\n",
+              g_tbdata.size(), g_tbdata_reused);
+   }
    if (opt_verbose || getcode_fail)
       fprintf(stderr, "[SNIPER-QEMU] guest code reads: %" PRIu64 ", failed: %" PRIu64 "\n",
               getcode_calls, getcode_fail);
