@@ -155,7 +155,7 @@ index af45234..dbd9cd3 100644
       */
 -    return cpu_get_clock() / gt_cntfrq_period_ns(cpu);
 +    return qemu_plugin_counter_read(env_cpu(env), QEMU_PLUGIN_COUNTER_TIME,
-+                                    NANOSECONDS_PER_SECOND / gt_cntfrq_period_ns(cpu),
++                                    cpu->gt_cntfrq_hz,
 +                                    cpu_get_clock() / gt_cntfrq_period_ns(cpu));
  }
 diff --git a/target/riscv/tcg/csr.c b/target/riscv/tcg/csr.c
