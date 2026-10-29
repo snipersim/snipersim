@@ -151,6 +151,11 @@ private:
         std::deque<UInt64> &run = m_runs[core_id];
         if (run.empty())
         {
+            /* Ask first: a run's request with no 64-page block left would log
+               the buddy's "Out of memory" for every 4 KiB fault that the
+               single-page fallback then serves */
+            if (!buddy_allocator->hasFreeBlock(4096ULL << RUN_ORDER))
+                return buddy_allocator->allocate(4096, address, core_id);
             const UInt64 base = buddy_allocator->allocate(4096ULL << RUN_ORDER, address, core_id);
             if (base == static_cast<UInt64>(-1))
                 return buddy_allocator->allocate(4096, address, core_id);

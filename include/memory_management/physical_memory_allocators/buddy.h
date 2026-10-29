@@ -97,6 +97,18 @@ public:
 
     int getMaxOrder() const { return m_max_order; }
 
+    /* Whether allocate(bytes) would find a block, without allocating or
+       reporting anything: a caller with a fallback asks first, so the
+       out-of-memory report is left to a request that really fails. */
+    bool hasFreeBlock(UInt64 bytes) const
+    {
+        int ind = ceil(log2(bytes / 4096));
+        for (int i = ind; i <= m_max_order; i++)
+            if (!free_list[i].empty())
+                return true;
+        return false;
+    }
+
     bool checkIfFree(UInt64 physical_page, bool allocate)
     {
 #if DEBUG_BUDDY >= DEBUG_BASIC
