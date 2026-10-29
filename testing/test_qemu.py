@@ -2827,7 +2827,8 @@ def counters_case(workdir, arch, cc_cmd, config):
 def case_time_start_default(p, g, workdir):
     """The guest's time recorded to a file, with no simulator to answer it:
     every front end gives the one-IPC model (one instruction per cycle at an
-    assumed 1 GHz, from the thread's start) from Sniper's time zero
+    assumed 1 GHz, from the thread's start, its sleeps charged) from Sniper's
+    time zero
     (osemu/time_start's default, 1337000000 s), never the host's clock --
     the same for the SIFT recorder (SDE) and the QEMU plugin, and the same
     every time.  The libc probe (testing/apps/time_probe.c: clock_gettime,
@@ -2886,7 +2887,9 @@ def case_time_start_default(p, g, workdir):
     if lines[0].split(' ns=')[1] != lines[1].split(' ns=')[1] or lines[0].split(' ns=')[0] != lines[1].split(' ns=')[0]:
         return False, 'sde: two recordings read different counters: %s / %s' % (lines[0], lines[1])
     start, ns, cycles = (int(x) for x in re.search(r'start=(\d+) ns=(\d+) time=\d+ freq=\d+ cycles=(\d+)', lines[0]).groups())
-    if start != TIME_START_DEFAULT or not 0 < ns < 10000 or abs(cycles - ns) > 0.05 * ns + 2:
+    # the three 10 ms sleeps are charged (a thread's time includes what it
+    # waited), plus the few instructions between the reads
+    if start != TIME_START_DEFAULT or not 30000000 < ns < 30010000 or abs(cycles - ns) > 0.05 * ns + 2:
         return False, 'sde, raw system calls: start %d s, %d ns and %d TSC cycles over the sleeps' % (start, ns, cycles)
     seen.append('sde raw calls from %d s, %d ns and %d cycles over the sleeps' % (start, ns, cycles))
     for arch, cc_cmd in (('riscv64', [os.environ.get('SNIPER_RISCV_CC', ''), '--target=riscv64-linux-gnu', '-march=rv64gc', '-mabi=lp64d', '-fuse-ld=lld']),
@@ -2911,13 +2914,15 @@ def case_time_start_default(p, g, workdir):
         start, ns, time_, freq, cycles, instret, loop = (int(x) for x in re.search(r'start=(\d+) ns=(\d+) time=(\d+) freq=(\d+) cycles=(\d+) instret=(\d+) loop_instret=(\d+)', lines[0]).groups())
         if start != TIME_START_DEFAULT:
             return False, '%s: CLOCK_REALTIME started at %d s, not at the time zero %d' % (arch, start, TIME_START_DEFAULT)
-        # the sleeps run no instructions: the one-IPC clock moves by the few between the reads
-        if not 0 < ns < 10000:
-            return False, '%s: %d ns over the sleeps; the one-IPC clock moves by the instructions run' % (arch, ns)
+        # the three 10 ms sleeps are charged, plus the few instructions between the reads
+        if not 30000000 < ns < 30010000:
+            return False, '%s: %d ns over three 10 ms sleeps' % (arch, ns)
         rate = freq or 10000000
         if abs(time_ - ns * rate / 1e9) > 0.05 * ns * rate / 1e9 + 2:
             return False, '%s: the timer moved %d at %d Hz for %d ns' % (arch, time_, rate, ns)
-        if arch == 'riscv64' and (abs(cycles - instret) > 2 or not 100000 * 2 <= loop <= 100000 * 12):
+        # cycles count the time (1 GHz, the sleeps too), instret the instructions only
+        if arch == 'riscv64' and (abs(cycles - ns) > 0.05 * ns + 2 or not 0 < instret < 10000
+                                  or not 100000 * 2 <= loop <= 100000 * 12):
             return False, '%s: cycles %d, instret %d over the sleeps, %d over the loop' % (arch, cycles, instret, loop)
         seen.append('%s from %d s, %d ns and timer %d over the sleeps' % (arch, start, ns, time_))
     return True, '; '.join(seen)
