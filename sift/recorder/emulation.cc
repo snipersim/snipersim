@@ -3,6 +3,7 @@
 #include "sift_assert.h"
 #include "globals.h"
 #include "threads.h"
+#include "timed_calls.h"
 #include "papi.h"
 
 #include <pin.H>
@@ -10,23 +11,27 @@
 static AFUNPTR ptr_exit = NULL;
 
 /* The guest's time where the simulator does not answer it (a trace written
-   to a file: no response channel): the one-IPC model's, from the same time
-   zero as the simulator's (sift/sift_format.h), never the host's.  With
-   time_ns the thread's instructions in nanoseconds; the CPU-time clocks
-   count from zero. */
+   to a file: no response channel): the one-IPC model's (sift/guest_time.h,
+   timed_calls.cc), from the same time zero as the simulator's, never the
+   host's: a thread's instructions in nanoseconds from its parent's time at
+   its start, plus the time it waited; the CPU-time clocks count
+   instructions from zero, the thread's or the process's. */
 static bool live(THREADID threadid)
 {
    return thread_data[threadid].output && KnobEmulateSyscalls.Value();
 }
 
-static uint64_t one_ipc_ns(THREADID threadid)
+static uint64_t one_ipc_ns(THREADID threadid, clockid_t clk_id)
 {
-   return Sift::one_ipc_ns(thread_data[threadid].icount_total);
+   const bool thread_cpu = clk_id == CLOCK_THREAD_CPUTIME_ID || (clk_id < 0 && (clk_id & 4));
+   const bool process_cpu = !thread_cpu && (clk_id == CLOCK_PROCESS_CPUTIME_ID || clk_id < 0);
+   return thread_cpu ? timedThreadCpu(threadid) : process_cpu ? timedProcessCpu()
+        : Sift::TIME_START_DEFAULT * Sift::NS_PER_S + timedNow(threadid);
 }
 
 static void handleRdtsc(THREADID threadid, ADDRINT * gax, ADDRINT * gdx)
 {
-   uint64_t cycles = thread_data[threadid].icount_total;   // the one-IPC model: a cycle an instruction
+   uint64_t cycles = timedNow(threadid) * Sift::ONE_IPC_HZ / Sift::NS_PER_S;   // the one-IPC model: the TSC counts time
    Sift::EmuRequest req;
    Sift::EmuReply res;
    if (live(threadid) && thread_data[threadid].output->Emulate(Sift::EmuTypeRdtsc, req, res))
@@ -103,7 +108,7 @@ ADDRINT emuClockGettime(THREADID threadid, clockid_t clk_id, struct timespec *tp
       one-IPC model's.  The CPU-time clocks -- the process's, the thread's,
       the dynamic ones (negative ids) -- returned failure before. */
    const bool cputime = clk_id == CLOCK_PROCESS_CPUTIME_ID || clk_id == CLOCK_THREAD_CPUTIME_ID || clk_id < 0;
-   uint64_t ns = (cputime ? 0 : Sift::TIME_START_DEFAULT * 1000000000ull) + one_ipc_ns(threadid);
+   uint64_t ns = one_ipc_ns(threadid, clk_id);
    if (live(threadid))
    {
       Sift::EmuRequest req;
@@ -127,17 +132,14 @@ ADDRINT emuGettimeofday(THREADID threadid, struct timeval *tv, struct timezone *
    if (tv == NULL)
       return 0;
 
-   uint64_t ns = Sift::TIME_START_DEFAULT * 1000000000ull + one_ipc_ns(threadid);
+   uint64_t ns = one_ipc_ns(threadid, CLOCK_REALTIME);
    Sift::EmuRequest req;
    Sift::EmuReply res;
    if (live(threadid) && thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res))
       ns = res.gettime.time_ns;
-
-   // Make sure time seems to always increase (even in fast-forward mode when there is no timing model)
-   static uint64_t t_last = 0;
-   if (t_last >= ns)
-      ns = t_last + 1000;
-   t_last = ns;
+   /* The simulator's time and the one-IPC model's go forward by
+      themselves; this made every reading a microsecond later than the last
+      of any thread's, with a counter the threads raced on. */
 
    tv->tv_sec = ns / 1000000000;
    tv->tv_usec = (ns / 1000) % 1000000;

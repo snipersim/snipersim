@@ -1,4 +1,5 @@
 #include "threads.h"
+#include "timed_calls.h"
 #include "sift_assert.h"
 #include "recorder_control.h"
 
@@ -36,6 +37,7 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    // its core), so the joiner reads results that were never written.  The
    // clone passed the child's TLS base (CLONE_SETTLS), which is the FS base
    // the child starts with: that identifies the entry exactly.
+   INT32 parent = -1;
    PIN_GetLock(&new_threadid_lock, threadid);
    if (tidptrs.size() > 0)
    {
@@ -51,6 +53,7 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
       if (it == tidptrs.end())
          it = tidptrs.begin();   // no TLS to match on: the oldest-first pairing
       thread_data[threadid].tid_ptr = it->tid_ptr;
+      parent = it->parent;
       tidptrs.erase(it);
    }
    PIN_ReleaseLock(&new_threadid_lock);
@@ -58,6 +61,7 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
    thread_data[threadid].thread_num = num_threads++;
    thread_data[threadid].icount_total = 0;
    thread_data[threadid].bbv = new Bbv();
+   timedThreadStart(threadid, parent);   /* its clock, from its parent's time */
 
    if (threadid > 0 && (any_thread_in_detail || KnobEmulateSyscalls.Value()))
    {
@@ -75,7 +79,9 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 static VOID threadFinishHelper(VOID *arg)
 {
    uint64_t threadid = reinterpret_cast<uint64_t>(arg);
-   if (thread_data[threadid].tid_ptr)
+   /* live only: without a simulator the kernel clears the word and wakes the
+      joiner itself */
+   if (thread_data[threadid].tid_ptr && thread_data[threadid].output && KnobEmulateSyscalls.Value())
    {
       // Set this pointer to 0 to indicate that this thread is complete
       intptr_t tid = (intptr_t)thread_data[threadid].tid_ptr;
@@ -113,6 +119,7 @@ static VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VO
    }
 
    thread_data[threadid].running = false;
+   timedThreadExit(threadid);
 
    // To prevent deadlocks during simulation, start a new thread to handle this thread's
    // cleanup.  This is needed because this function could be called in the context of

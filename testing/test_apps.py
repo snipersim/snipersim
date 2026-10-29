@@ -452,6 +452,25 @@ def post_roi_check(out, rc):
 post_roi_check.needs_simulation = True
 
 
+def timed_waits_check(out, rc):
+    """test/timed-waits: every timed wait ended at its deadline in the guest's
+    time (want <= got <= want * 1.01 + 100 us), to a file and live, the 2 s
+    one included; and each guest finished"""
+    if rc != 0:
+        return False, 'exit %s' % rc
+    lines = re.findall(r'(file: )?(?:\[app\d+\] )?(timed_raw|timed_waits): (\S+) want=(\d+) got=(\d+) ret=(-?\d+)', out)
+    if out.count('timed_raw: done ok') != 2 or out.count('timed_waits: done') != 2:
+        return False, 'a guest did not finish cleanly'
+    if len(lines) < 30:
+        return False, 'only %d waits reported' % len(lines)
+    for file_, guest, name, want, got, ret in lines:
+        want, got = int(want), int(got)
+        if want and not want <= got <= want * 1.01 + 100000:
+            return False, '%s %s %s ended after %d ns of the guest\'s time, not its %d' % ('file' if file_ else 'live', guest, name, got, want)
+    return True, '%d timed waits at their deadlines in the guest\'s time, to a file and live' % len(lines)
+timed_waits_check.needs_simulation = True
+
+
 def exits_zero(out, rc):
     return (rc == 0, 'exit %s' % rc)
 exits_zero.needs_simulation = True
@@ -528,6 +547,7 @@ CASES = {
     'fork':            (prints('Hello world', 'forked child ran'), None),
     'spinloop':        (prints('done', 'threads finished'), None),
     'post-roi':        (post_roi_check, None),
+    'timed-waits':     (timed_waits_check, None),
     'true':            (exits_zero, None),
     'sniper-in-sniper': (sniper_in_sniper_check, None),
 }

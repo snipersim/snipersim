@@ -2,6 +2,7 @@
 #include "sift_assert.h"
 #include "globals.h"
 #include "threads.h"
+#include "timed_calls.h"
 
 #include <iostream>
 #include <unistd.h>
@@ -87,25 +88,87 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    // Default: not emulated, override later when needed
    thread_data[threadid].last_syscall_emulated = false;
 
+   const bool live = KnobEmulateSyscalls.Value() && thread_data[threadid].output;
+
    /* A raw clock_gettime or gettimeofday with no simulator to answer it (a
       trace written to a file): the one-IPC model's time from the
       simulator's time zero, as the libc routines get (emulation.cc), never
-      the host's.  The call is skipped as an emulated one is. */
-   if (!(KnobEmulateSyscalls.Value() && thread_data[threadid].output) && !replayingPinball()
-       && (syscall_number == SYS_clock_gettime || syscall_number == SYS_gettimeofday))
+      the host's.  time(2) too, which the simulator does not model: its
+      time, live.  The call is skipped as an emulated one is. */
+   if (!live && !replayingPinball()
+       && (syscall_number == SYS_clock_gettime || syscall_number == SYS_gettimeofday || syscall_number == SYS_time))
    {
-      const bool tod = syscall_number == SYS_gettimeofday;
-      const int clk = tod ? 0 : (int)args[0];
-      const bool cputime = clk == CLOCK_PROCESS_CPUTIME_ID || clk == CLOCK_THREAD_CPUTIME_ID || clk < 0;
-      const uint64_t ns = (cputime ? 0 : Sift::TIME_START_DEFAULT * 1000000000ull)
-                        + Sift::one_ipc_ns(thread_data[threadid].icount_total);
+      const bool tod = syscall_number == SYS_gettimeofday, secs = syscall_number == SYS_time;
+      const int clk = tod || secs ? 0 : (int)args[0];
+      const bool thread_cpu = clk == CLOCK_THREAD_CPUTIME_ID || (clk < 0 && (clk & 4));
+      const bool process_cpu = !thread_cpu && (clk == CLOCK_PROCESS_CPUTIME_ID || clk < 0);
+      const uint64_t ns = thread_cpu ? timedThreadCpu(threadid) : process_cpu ? timedProcessCpu()
+                        : Sift::TIME_START_DEFAULT * Sift::NS_PER_S + timedNow(threadid);
       const uint64_t words[2] = { ns / 1000000000ull, tod ? ns / 1000 % 1000000 : ns % 1000000000ull };
-      const ADDRINT out = tod ? args[0] : args[1];
+      const ADDRINT out = tod || secs ? args[0] : args[1];
       if (out)
-         PIN_SafeCopy((void*)out, words, sizeof(words));
-      thread_data[threadid].last_syscall_returnval = 0;
+         PIN_SafeCopy((void*)out, words, secs ? sizeof(words[0]) : sizeof(words));
+      thread_data[threadid].last_syscall_returnval = secs ? words[0] : 0;
       thread_data[threadid].last_syscall_emulated = true;
       return;
+   }
+   if (live && !replayingPinball() && syscall_number == SYS_time)
+   {
+      Sift::EmuRequest req;
+      Sift::EmuReply res;
+      if (thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res))
+      {
+         const uint64_t s = res.gettime.time_ns / Sift::NS_PER_S;
+         if (args[0])
+            PIN_SafeCopy((void*)args[0], &s, sizeof(s));
+         thread_data[threadid].last_syscall_returnval = s;
+         thread_data[threadid].last_syscall_emulated = true;
+         return;
+      }
+   }
+
+   /* Every thread clone, live or not: the child's clear-tid word (for the
+      joiner's wake, live), its TLS (which pairs it with the child) and its
+      parent (whose time the child's clock starts at).  The simulator hears
+      of a new thread on a live channel. */
+   if ((syscall_number == SYS_clone && (args[0] & CLONE_THREAD))
+       || (syscall_number == SYS_clone3_sniper && args[0] && (((struct clone_args_sniper*)args[0])->flags & CLONE_THREAD)))
+   {
+      ADDRINT tidptr, tls;
+      if (syscall_number == SYS_clone3_sniper)
+      {
+         struct clone_args_sniper* clone3_args = (struct clone_args_sniper*)args[0];
+         /* the word the kernel clears at the child's exit (CLONE_CHILD_CLEARTID) */
+         tidptr = (clone3_args->flags & CLONE_CHILD_CLEARTID) ? clone3_args->child_tid : 0;
+         tls = (clone3_args->flags & CLONE_SETTLS) ? clone3_args->tls : 0;
+      }
+      else
+      {
+      #if defined(TARGET_IA32)
+         tidptr = args[2];
+         tls = 0;   // i386 passes a user_desc, not a base: oldest-first pairing
+      #else
+         tidptr = args[3];
+         tls = (args[0] & CLONE_SETTLS) ? args[4] : 0;
+      #endif
+      }
+      PIN_GetLock(&new_threadid_lock, threadid);
+      tidptrs.push_back({tidptr, tls, (INT32)threadid});
+      PIN_ReleaseLock(&new_threadid_lock);
+      if (live)
+         thread_data[threadid].output->NewThread();   /* New thread */
+   }
+
+   /* The timed waits the simulator does not model, in the guest's time
+      (timed_calls.cc) */
+   {
+      ADDRINT r;
+      if (timedSyscall(threadid, syscall_number, args, &r))
+      {
+         thread_data[threadid].last_syscall_returnval = r;
+         thread_data[threadid].last_syscall_emulated = true;
+         return;
+      }
    }
 
    if (syscall_number == SYS_write && thread_data[threadid].output)
@@ -122,62 +185,6 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    {
       switch(syscall_number)
       {
-         // Handle SYS_clone child tid capture for proper pthread_join emulation.
-         // When the CLONE_CHILD_CLEARTID option is enabled, remember its child_tidptr and
-         // then when the thread ends, write 0 to the tid mutex and futex_wake it
-         case SYS_clone3_sniper:
-         {
-            struct clone_args_sniper* clone3_args = (struct clone_args_sniper*)args[0];
-            // The flags are in the argument struct: testing the pointer
-            // (`args[0] && CLONE_THREAD`, always true) treated every clone3 --
-            // posix_spawn's included -- as a new thread.
-            if (clone3_args && (clone3_args->flags & CLONE_THREAD))
-            {
-               ADDRINT tidptr = clone3_args->parent_tid;
-               ADDRINT tls = (clone3_args->flags & CLONE_SETTLS) ? clone3_args->tls : 0;
-               PIN_GetLock(&new_threadid_lock, threadid);
-               tidptrs.push_back({tidptr, tls});
-               PIN_ReleaseLock(&new_threadid_lock);
-               /* New thread */
-               thread_data[threadid].output->NewThread();
-            }
-            else
-            {
-               /* New process */
-               // Nothing to do there, handled in fork() -> to check SYS_clone3 is new
-            }
-            break;
-         }
-         case SYS_clone:
-         {
-            if (args[0] & CLONE_THREAD)
-            {
-               // Store the thread's tid ptr for later use
-
-               #if defined(TARGET_IA32)
-                  ADDRINT tidptr = args[2];
-                  ADDRINT tls = 0;   // i386 passes a user_desc, not a base: oldest-first pairing
-               #elif defined(TARGET_INTEL64) || defined(TARGET_IA32E)
-                  ADDRINT tidptr = args[3];
-                  ADDRINT tls = (args[0] & CLONE_SETTLS) ? args[4] : 0;
-               #else
-                  #error "Unknown target architecture, require either TARGET_IA32 or TARGET_INTEL64 | TARGET_IA32E"
-               #endif
-
-               PIN_GetLock(&new_threadid_lock, threadid);
-               tidptrs.push_back({tidptr, tls});
-               PIN_ReleaseLock(&new_threadid_lock);
-               /* New thread */
-               thread_data[threadid].output->NewThread();
-            }
-            else
-            {
-               /* New process */
-               // Nothing to do there, handled in fork()
-            }
-            break;
-         }
-
          // System calls not emulated (passed through to OS)
          case SYS_read:
          case SYS_write:
@@ -228,6 +235,7 @@ static VOID syscallEntryCallback(THREADID threadid, CONTEXT *ctxt, SYSCALL_STAND
 
 static VOID syscallExitCallback(THREADID threadid, CONTEXT *ctxt, SYSCALL_STANDARD syscall_standard, VOID *v)
 {
+   timedSyscallReturned(threadid, PIN_GetSyscallReturn(ctxt, syscall_standard));
    if (!thread_data[threadid].last_syscall_emulated)
    {
       return;

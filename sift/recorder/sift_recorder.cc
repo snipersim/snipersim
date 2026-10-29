@@ -25,6 +25,7 @@
 
 
 #include "globals.h"
+#include "timed_calls.h"
 #include "threads.h"
 #include "recorder_control.h"
 #include "recorder_base.h"
@@ -326,6 +327,7 @@ int main(int argc, char **argv)
    if (KnobEmulateSyscalls.Value() || !replayingPinball())
       initSyscallModeling();
 
+   timedInit();   /* the one-IPC model's clocks, which the threads start */
    initThreads();
    initRecorderControl();
    // Code rewritten in place (JITs, loaders, self-modifying code) is tracked
