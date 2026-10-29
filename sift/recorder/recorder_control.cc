@@ -92,25 +92,16 @@ void endROI(THREADID threadid, const CONTEXT * ctxt)
    if (KnobPacSimEnable.Value())
       pacsim::roiEnd(threadid);
 
-   if (KnobEmulateSyscalls.Value())
-   {
-        // In simulations with MPI, generate the app crash
-        // with the first MPI_Finalize
-        if (!KnobMPIImplicitROI.Value())
-        {
-           // Send SYS_exit_group to the simulator to end the application
-           syscall_args_t args = {0};
-           args[0] = 0; // Assume success
-           thread_data[threadid].output->Syscall(SYS_exit_group, (char*)args, sizeof(args));
-           thread_data[threadid].output->End();
-           /* The simulator has ended the application: it stops every other
-              thread's stream and answers nothing more.  From here on every
-              thread's system calls run natively -- a sibling that keeps
-              emulating into a closed channel gets a failed request back as
-              a return value, which glibc's futex wait treats as fatal. */
-           emulation_ended = true;
-       }
-    }
+   /* A live run stays live after its region of interest: the threads go on
+      counting their instructions to the simulator (instrumentation mode
+      Icount below), so its clock goes on, and every emulated call -- futex,
+      sleeps, the time calls -- stays its: a thread that waited in its futex
+      model is woken there, a join waits there, a thread started after the
+      ROI is the simulator's too, and the simulator ends with the
+      application.  The recorder used to end the application for the
+      simulator here (an exit_group on the main thread's stream) and let the
+      program finish natively, on the host's clock and the host's futexes,
+      with threads still parked in the simulator's model. */
 
    // Delete our .appid file
    char filename[1024] = {0};

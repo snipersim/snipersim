@@ -62,7 +62,6 @@ std::deque<cloned_thread_t> tidptrs;
 PIN_LOCK output_lock;
 INT32 child_app_id = -1;
 BOOL in_roi = false;
-BOOL emulation_ended = false;
 BOOL any_thread_in_detail = false;
 Sift::Mode current_mode = Sift::ModeIcount;
 std::unordered_map<ADDRINT, bool> routines;

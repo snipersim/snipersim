@@ -81,7 +81,6 @@ extern std::deque<cloned_thread_t> tidptrs;
 extern INT32 child_app_id;
 extern BOOL in_roi;
 /* set at ROI end with syscall emulation: the simulator has ended the application, no more emulated calls */
-extern BOOL emulation_ended;
 extern BOOL any_thread_in_detail;
 extern Sift::Mode current_mode;
 extern const bool verbose;

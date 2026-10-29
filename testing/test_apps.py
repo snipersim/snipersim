@@ -436,6 +436,22 @@ def prints(needle, note):
     return check
 
 
+def post_roi_check(out, rc):
+    """test/post-roi: after the ROI the clock went on (1 ms of spinning on
+    clock_gettime ended), two threads started after it were joined, and a
+    10 ms timed wait timed out in simulated time."""
+    m = re.search(r'roi_time: elapsed_ns=(\d+) reads=(\d+) tsc_moved=(\d)', out)
+    n = re.search(r'roi_threads: joined=(\d+) timedwait=(\w+) waited_ns=(-?\d+)', out)
+    if rc != 0 or not m or not n:
+        return False, 'exit %s; %s' % (rc, 'no roi_time line' if not m else 'no roi_threads line' if not n else 'a guest failed')
+    if int(m.group(1)) < 1000000 or m.group(3) != '1':
+        return False, 'after the ROI the clock moved %s ns, tsc_moved=%s' % (m.group(1), m.group(3))
+    if n.group(1) != '2' or n.group(2) != 'ETIMEDOUT' or not 10000000 <= int(n.group(3)) <= 11000000:
+        return False, 'after the ROI: %s threads joined, the timed wait %s after %s ns' % n.groups()
+    return True, 'after the ROI: the clock went on (%s ns), 2 threads joined, the timed wait timed out at %s ns' % (m.group(1), n.group(3))
+post_roi_check.needs_simulation = True
+
+
 def exits_zero(out, rc):
     return (rc == 0, 'exit %s' % rc)
 exits_zero.needs_simulation = True
@@ -511,6 +527,7 @@ CASES = {
     'page-colour':     (page_colour_check, None),
     'fork':            (prints('Hello world', 'forked child ran'), None),
     'spinloop':        (prints('done', 'threads finished'), None),
+    'post-roi':        (post_roi_check, None),
     'true':            (exits_zero, None),
     'sniper-in-sniper': (sniper_in_sniper_check, None),
 }
