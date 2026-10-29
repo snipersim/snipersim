@@ -100,6 +100,19 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
    {
       const bool tod = syscall_number == SYS_gettimeofday, secs = syscall_number == SYS_time;
       const int clk = tod || secs ? 0 : (int)args[0];
+      /* the kernel's answers: a clock id it does not know, no timespec */
+      const bool bad_clock = !tod && !secs && (clk == 10 || clk > 11 || (clk < 0 && (clk & 3) == 3));
+      if (bad_clock || (!tod && !secs && !args[1]))
+      {
+         thread_data[threadid].last_syscall_returnval = (ADDRINT)(bad_clock ? -22 : -14);   /* EINVAL, EFAULT */
+         thread_data[threadid].last_syscall_emulated = true;
+         return;
+      }
+      if (tod && args[1])
+      {
+         const int32_t tz[2] = { 0, 0 };   /* gettimeofday's timezone: none */
+         PIN_SafeCopy((void*)args[1], tz, sizeof(tz));
+      }
       const bool thread_cpu = clk == CLOCK_THREAD_CPUTIME_ID || (clk < 0 && (clk & 4));
       const bool process_cpu = !thread_cpu && (clk == CLOCK_PROCESS_CPUTIME_ID || clk < 0);
       const uint64_t ns = thread_cpu ? timedThreadCpu(threadid) : process_cpu ? timedProcessCpu()

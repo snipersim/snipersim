@@ -1548,7 +1548,7 @@ void clocks_exit(VCPU *v)
 void counter_one_ipc(VCPU *v, uint64_t instructions)
 {
    v->ctr_time_ns = g_clocks ? g_clocks->at(v->vcpu_index, instructions) : Sift::one_ipc_ns(instructions);
-   v->ctr_core_cycles = v->ctr_global_cycles = v->ctr_time_ns * Sift::ONE_IPC_HZ / Sift::NS_PER_S;
+   v->ctr_core_cycles = v->ctr_global_cycles = Sift::one_ipc_cycles(v->ctr_time_ns);   /* exact, no overflow */
    v->ctr_instructions = instructions;
    v->ctr_valid = true;
 }
@@ -3397,6 +3397,18 @@ static bool time_one_ipc(VCPU *v, int x86, const uint64_t args[6], int64_t *sysr
    if (!tod && !secs && x86 != 228)
       return false;
    const int32_t clock = tod || secs ? 0 : (int32_t)args[0];
+   /* the kernel's answers: a clock id it does not know (10 was
+    * CLOCK_SGI_CYCLE; a dynamic id of type 3), and no timespec */
+   if (!tod && !secs && (clock == 10 || clock > 11 || (clock < 0 && (clock & 3) == 3)))
+   {
+      *sysret = -E_INVAL;
+      return true;
+   }
+   if (!tod && !secs && !args[1])
+   {
+      *sysret = -E_FAULT;
+      return true;
+   }
    /* the thread's CPU-time clock: CLOCK_THREAD_CPUTIME_ID, a dynamic
     * thread clock (CPUCLOCK_PERTHREAD); the process's: the rest */
    const bool thread_cpu = clock == 3 || (clock < 0 && (clock & 4));
@@ -3424,6 +3436,15 @@ static bool time_one_ipc(VCPU *v, int x86, const uint64_t args[6], int64_t *sysr
       if (!ok)
       {
          *sysret = -14;   /* EFAULT, as the kernel answers an unmapped pointer */
+         return true;
+      }
+   }
+   if (tod && args[1])
+   {
+      const int32_t tz[2] = { 0, 0 };   /* gettimeofday's timezone: minutes west, DST: none */
+      if (!write_guest(args[1], tz, sizeof(tz)))
+      {
+         *sysret = -E_FAULT;
          return true;
       }
    }
