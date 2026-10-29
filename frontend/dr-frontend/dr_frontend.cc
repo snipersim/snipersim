@@ -88,6 +88,24 @@ uint DRFrontend::tls_offs;
 app_pc DRFrontend::last_opnd;
 int DRFrontend::last_mode = -1;
 
+/* DynamoRIO's dr_isa_mode_t and Sniper's dl_isa number the ISAs differently:
+   DR_ISA_ARM_A32 is 2, which as a dl_isa is DL_ISA_RISCV, and DR_ISA_ARM_THUMB
+   3, which is DL_ISA_ARM32.  A mode is mapped, never passed through; -1 for
+   one Sniper has no ISA for (a DynamoRIO newer than this list). */
+static inline int sniperIsaOf(int dr_mode)
+{
+  switch (dr_mode)
+  {
+    case DR_ISA_IA32:        return dl::DL_ISA_IA32;
+    case DR_ISA_AMD64:       return dl::DL_ISA_X86_64;
+    case DR_ISA_ARM_A32:     return dl::DL_ISA_ARM32;
+    case DR_ISA_ARM_THUMB:   return dl::DL_ISA_THUMB;
+    case DR_ISA_ARM_A64:     return dl::DL_ISA_AARCH64;
+    case DR_ISA_RV64IMAFDC:  return dl::DL_ISA_RISCV;
+    default:                 return -1;
+  }
+}
+
 // -----------------------------------------------------------
 // Specialization of functions declared in frontend.h classes
 // -----------------------------------------------------------
@@ -405,7 +423,14 @@ void DRFrontend::process_instructions_buffer(void *drcontext)
     (
       if(last_mode != instruction->isa_mode)
       {
-        m_callbacks->changeISA((threadid_t)instruction->threadid, instruction->isa_mode);
+        const int isa = sniperIsaOf(instruction->isa_mode);
+        if (isa < 0)
+        {
+          dr_fprintf(STDERR, "[SNIPER_FRONTEND] Error: the application runs in DynamoRIO ISA mode %d "
+                             "(dr_isa_mode_t), which Sniper cannot simulate\n", instruction->isa_mode);
+          dr_abort();
+        }
+        m_callbacks->changeISA((threadid_t)instruction->threadid, isa);
         last_mode = instruction->isa_mode;
       }
     )
