@@ -10,7 +10,7 @@ HOME = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0])))
 def usage():
   print('Collect SIFT instruction trace')
   print('Usage:')
-  print('  %s  -o <output file (default=<outputdir>/trace)> [--roi|--roi-mpi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [-s <sift count offset>] [-x <pin option>] [-X <tool option>] [--gdb|--gdb-wait|--gdb-quit|--gdb-screen] [--follow] [--routine-tracing] [--vma] [--pa] [--pacsim] [--outputdir <outputdir (default: the directory of -o; without -o, $SNIPER_OUTPUT_DIR, or .)>] [--stop-address <insn end address>] [--sde-arch=<-arch>] [--frontend=<dr|qemu|qemu-system-ARCH>] [--frontend-option=<options>] [--qemu-va-bits=<39|48>] [--smc|--no-smc] [--maxthreads <n>] { --pinball=<pinball-basename> [--pinplay-addr-trans] | --pid <pid> [--pid-continue] | -- <cmdline> }' % sys.argv[0])
+  print('  %s  -o <output file (default=<outputdir>/trace)> [--roi|--roi-mpi] [-f <fast-forward instrs (default=none)] [-d <detailed instrs (default=all)] [-b <block size (instructions, default=all)> [-e <syscall emulation> (default=0)] [-r <use response files (default=0)>] [-s <sift count offset>] [-x <pin option>] [-X <tool option>] [--gdb|--gdb-wait|--gdb-quit|--gdb-screen] [--follow] [--routine-tracing] [--vma] [--pa] [--pacsim] [--outputdir <outputdir (default: the directory of -o; without -o, $SNIPER_OUTPUT_DIR, or .)>] [--stop-address <insn end address>] [--sde-arch=<-arch>] [--frontend=<dr|qemu|qemu-system-ARCH>] [--frontend-option=<options>] [--qemu-va-bits=<39|48>] [--smc|--no-smc] [--maxthreads <n>] [--time-start=<seconds since the epoch>] { --pinball=<pinball-basename> [--pinplay-addr-trans] | --pid <pid> [--pid-continue] | -- <cmdline> }' % sys.argv[0])
   print('  SNIPER_OUTPUT_DIR, SNIPER_QEMU_X86_64 / SNIPER_QEMU_AARCH64 / SNIPER_QEMU_RISCV (the QEMU binaries),')
   print('  SNIPER_QEMU_RISCV_IME_CPU (the -cpu string for riscv64) are read from the environment.')
   sys.exit(2)
@@ -55,6 +55,7 @@ GDB_PAUSE_SECONDS = 10     # Pin's pause for gdb to attach (--gdb)
 pid_continue = False
 stop_address = 0
 maxthreads = None
+time_start = None         # --time-start: the guest's time zero (osemu/time_start), seconds since the epoch
 sde_arch = ''
 log_vma = False
 
@@ -70,7 +71,7 @@ enable_smc = False
 track_smc = True
 
 try:
-  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "qemu-va-bits=", "frontend-option=", "maxthreads=", "sde-arch=", "pacsim", "smc", "no-smc" ])
+  opts, cmdline = getopt.getopt(sys.argv[1:], "hvo:d:f:b:e:s:r:X:x:", [ "roi", "roi-mpi", "gdb", "gdb-wait", "gdb-quit", "gdb-screen", "follow","vma", "pa", "routine-tracing", "pinball=", "outputdir=", "pinplay-addr-trans", "pid=", "stop-address=", "pid-continue", "frontend=", "qemu-va-bits=", "frontend-option=", "maxthreads=", "sde-arch=", "pacsim", "smc", "no-smc", "time-start=" ])
 except getopt.GetoptError as e:
   # print help information and exit:
   print(e)
@@ -148,6 +149,11 @@ for o, a in opts:
   if o == '--maxthreads':
     maxthreads = int(a)
     extra_tool_args.append('-sniper:maxthreads %s' % a)
+  if o == '--time-start':
+    # The guest's clocks start here (the simulator's osemu/time_start; run-sniper
+    # passes the run's): the front end answers what the simulator does not with
+    # the same time zero
+    time_start = int(a)
   if o == '--sde-arch':
     sde_arch = a
     if not sde_arch.startswith('-'):
@@ -442,7 +448,7 @@ def qemu_command():
     # doubled comma as one: a value with commas (pacsim-sync=a,b, a path)
     # was cut at the first, and the rest taken for options of its own
     return ','.join(o.replace(',', ',,') for o in [ plugin ] + popts)
-  popts = [ 'output=%s' % outputfile, 'app=%d' % siftcountoffset ]
+  popts = [ 'output=%s' % outputfile, 'app=%d' % siftcountoffset ] + (['time_start=%d' % time_start] if time_start is not None else [])
   if use_roi:
     popts.append('roi=1')
   if enable_pacsim:
@@ -578,7 +584,7 @@ else:
   # from the trace's directory.  SDE sets Pin's logfile knob itself, so this
   # is SDE's option for it, not Pin's.
   pinlog = os.path.join(os.path.dirname(os.path.abspath(outputfile)), 'pin.log')
-  cmd = '%(sde_home)s/sde64 %(sde_arch)s -pin-log-file %(pinlog)s %(pinoptions)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals()) + smc_knob() + ' -- ' + ' '.join(cmdline)
+  cmd = '%(sde_home)s/sde64 %(sde_arch)s -pin-log-file %(pinlog)s %(pinoptions)s -t64 %(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so -sniper:verbose %(value_verbose)d -sniper:debug %(gdb_screen)d -sniper:roi %(value_roi)d -sniper:vma %(value_vma)d -sniper:roi-mpi %(value_roi_mpi)d -sniper:f %(fastforward)d -sniper:d %(detailed)d -sniper:b %(blocksize)d -sniper:o %(outputfile)s -sniper:e %(syscallemulation)d  -sniper:s %(siftcountoffset)d -sniper:r %(useresponsefiles)d  -sniper:pa %(value_pa)d -sniper:rtntrace  %(value_routine_tracing)d -sniper:stop %(stop_address)d %(pinballoptions)s %(extra_tool_args)s %(extrae)s' % locals() + (' -sniper:time_start %d' % time_start if time_start is not None else '') + pacsim_knob('%(HOME)s/sift/recorder/obj-%(arch)s/sde_sift_recorder.so' % locals()) + smc_knob() + ' -- ' + ' '.join(cmdline)
 
 if verbose:
   print('[SIFT_RECORDER]', 'Running', cmd)

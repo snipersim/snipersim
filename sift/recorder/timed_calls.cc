@@ -132,7 +132,7 @@ bool call_deadline(const Sift::TimedCall &tc, const syscall_args_t &args, UINT64
       *deadline = now + (v > cpu_now ? v - cpu_now : 0);
    else
    {
-      const UINT64 zero = Sift::TIME_START_DEFAULT * Sift::NS_PER_S;
+      const UINT64 zero = guestTimeZeroNs();
       *deadline = v > zero ? v - zero : 0;
    }
    return true;
@@ -743,7 +743,7 @@ long timer_arm(THREADID threadid, int id, ADDRINT new_addr, ADDRINT old_addr, bo
          expiry = now + value;
       else if (t.clock == Sift::TIMER_TIME)
       {
-         const UINT64 zero = Sift::TIME_START_DEFAULT * Sift::NS_PER_S;
+         const UINT64 zero = guestTimeZeroNs();
          expiry = value > zero ? value - zero : 1;
       }
       else
@@ -978,7 +978,7 @@ bool timer_call(THREADID threadid, int x86, const syscall_args_t &args, ADDRINT 
          if (args[0] && !write_mem(args[0], tms, sizeof(tms)))
             r = -EFAULT;
          else
-            r = (long)((Sift::TIME_START_DEFAULT * Sift::NS_PER_S + timer_now(threadid, Sift::TIMER_TIME, 0)) / 10000000);
+            r = (long)((guestTimeZeroNs() + timer_now(threadid, Sift::TIMER_TIME, 0)) / 10000000);
          break;
       }
       case 98:   /* getrusage(who, usage): the kernel's, but the CPU times */

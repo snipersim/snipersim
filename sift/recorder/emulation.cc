@@ -26,7 +26,7 @@ static uint64_t one_ipc_ns(THREADID threadid, clockid_t clk_id)
    const bool thread_cpu = clk_id == CLOCK_THREAD_CPUTIME_ID || (clk_id < 0 && (clk_id & 4));
    const bool process_cpu = !thread_cpu && (clk_id == CLOCK_PROCESS_CPUTIME_ID || clk_id < 0);
    return thread_cpu ? timedThreadCpu(threadid) : process_cpu ? timedProcessCpu()
-        : Sift::TIME_START_DEFAULT * Sift::NS_PER_S + timedNow(threadid);
+        : guestTimeZeroNs() + timedNow(threadid);
 }
 
 static void handleRdtsc(THREADID threadid, ADDRINT * gax, ADDRINT * gdx)

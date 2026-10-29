@@ -57,6 +57,9 @@ extern KNOB<BOOL> KnobTrackVMAs;
 extern KNOB_COMMENT pinplay_driver_knob_family;
 extern KNOB<BOOL>KnobReplayer;
 extern KNOB<BOOL>KnobPinballReplay;
+extern KNOB<UINT64>KnobTimeStart;
+/* the guest's time zero in ns: osemu/time_start (Sift::TIME_START_DEFAULT unless told) */
+inline UINT64 guestTimeZeroNs() { return KnobTimeStart.Value() * Sift::NS_PER_S; }
 /* A pinball being replayed (PinPlay's knob, or SDE's -replay as record-trace
    says): its execution must be the recorded one */
 inline bool replayingPinball() { return KnobReplayer.Value() || KnobPinballReplay.Value(); }

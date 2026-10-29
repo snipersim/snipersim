@@ -103,7 +103,7 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       const bool thread_cpu = clk == CLOCK_THREAD_CPUTIME_ID || (clk < 0 && (clk & 4));
       const bool process_cpu = !thread_cpu && (clk == CLOCK_PROCESS_CPUTIME_ID || clk < 0);
       const uint64_t ns = thread_cpu ? timedThreadCpu(threadid) : process_cpu ? timedProcessCpu()
-                        : Sift::TIME_START_DEFAULT * Sift::NS_PER_S + timedNow(threadid);
+                        : guestTimeZeroNs() + timedNow(threadid);
       const uint64_t words[2] = { ns / 1000000000ull, tod ? ns / 1000 % 1000000 : ns % 1000000000ull };
       const ADDRINT out = tod || secs ? args[0] : args[1];
       if (out)

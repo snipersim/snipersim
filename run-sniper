@@ -681,6 +681,35 @@ elif sim_end == 'last-restart':
   sniperoptions.append('-g --traceinput/stop_with_first_app=false')
   sniperoptions.append('-g --traceinput/restart_apps=true')
 
+def config_value(key, default = None):
+  """A configuration value as the simulator will see it: base.cfg, the
+  configuration files in order (each after the ones it includes), then the
+  options of the command line (-c section/key=value, -g), the last one given
+  winning."""
+  value = default
+  for f in [ os.path.join(HOME, 'config', 'base.cfg') ] + configfiles:
+    try:
+      cfg = sniper_config.parse_config(open(f).read())
+    except Exception:
+      continue
+    if key in cfg:
+      value = cfg[key]
+  for opt in sniperoptions:
+    for tok in shlex.split(opt):
+      if tok.startswith('--%s=' % key):
+        value = tok.split('=', 1)[1]
+  return str(value).strip().strip('"') if value is not None else None
+
+# The guest's time zero (osemu/time_start): the front ends answer what the
+# simulator does not -- a trace written to a file, the one-IPC model's clock
+# -- from the same zero, and keep the guest's timers on it; they assumed the
+# default whatever the run's configuration said.
+try:
+  trace_extra_args += [ '--time-start=%d' % int(config_value('osemu/time_start', 1337000000)) ]
+except ValueError:
+  print('[SNIPER] Error: osemu/time_start is not a number of seconds: %s' % config_value('osemu/time_start'), file=sys.stderr)
+  sys.exit(1)
+
 if use_viz:
   scripts.append('periodic-stats:1000:2000')
   scripts.append('markers:markers')
