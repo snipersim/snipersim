@@ -23,18 +23,24 @@ RobContentionCortexA72::RobContentionCortexA72(const Core *core, const CoreModel
       cortex_a720, cortex_x4, oryon_xelite) gives its own counts;
       load_store bounds loads and stores together, for cores whose
       load/store pipelines take either. */
+   /* Each core's own counts (a list gives one per core, as the rob_timer
+      keys do: a heterogeneous configuration's cores need not agree).  The
+      pipelines themselves are this object's, one per core. */
    const String k = "perf_model/core/cortex_a72_ports/";
-   m_branch = Sim()->getCfg()->getIntDefault(k + "branch", 1);
-   m_integer = Sim()->getCfg()->getIntDefault(k + "integer", 2);
-   m_multi = Sim()->getCfg()->getIntDefault(k + "integer_multi", 1);
-   m_fp = Sim()->getCfg()->getIntDefault(k + "fp_asimd", 2);
-   m_load = Sim()->getCfg()->getIntDefault(k + "load", 1);
-   m_store = Sim()->getCfg()->getIntDefault(k + "store", 1);
-   m_memory = Sim()->getCfg()->getIntDefault(k + "load_store", m_load + m_store);
+   const UInt64 id = core->getId();
+   auto ports = [&](const char *key, SInt64 dflt) -> unsigned int
+      { return Sim()->getCfg()->hasKey(k + key) ? Sim()->getCfg()->getIntArray(k + key, id) : dflt; };
+   m_branch = ports("branch", 1);
+   m_integer = ports("integer", 2);
+   m_multi = ports("integer_multi", 1);
+   m_fp = ports("fp_asimd", 2);
+   m_load = ports("load", 1);
+   m_store = ports("store", 1);
+   m_memory = ports("load_store", m_load + m_store);
    /* On the A72 the multi-cycle pipeline takes only multi-cycle µOPs; on
       later cores (the A720's and X4's "Integer Single/Multi-cycle" pipelines)
       it also takes single-cycle ALU µOPs */
-   m_alu_on_multi = Sim()->getCfg()->getBoolDefault(k + "alu_on_multi", false);
+   m_alu_on_multi = Sim()->getCfg()->hasKey(k + "alu_on_multi") && Sim()->getCfg()->getBoolArray(k + "alu_on_multi", id);
    LOG_ASSERT_ERROR(m_branch && m_integer && m_multi && m_fp && m_load && m_store && m_memory,
                     "perf_model/core/cortex_a72_ports: every kind of pipeline needs at least one");
 }
