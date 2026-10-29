@@ -34,36 +34,6 @@
 #include <sstream>
 #include <vector>
 
-// ---------------------------------------------------------------------------
-// Pin calling thread to a distinct host CPU chosen from the process's
-// available set (typically constrained by SLURM's cgroup).  Thread-safe:
-// uses a static atomic counter so each caller gets a different CPU.
-// ---------------------------------------------------------------------------
-static void pinTraceThreadToCPU(int thread_id)
-{
-   cpu_set_t available;
-   CPU_ZERO(&available);
-   if (sched_getaffinity(0, sizeof(available), &available) != 0)
-      return;  // cannot query – leave scheduling to the OS
-
-   // Collect the list of CPUs we are allowed to use
-   std::vector<int> cpus;
-   for (int c = 0; c < CPU_SETSIZE; ++c)
-      if (CPU_ISSET(c, &available))
-         cpus.push_back(c);
-
-   if (cpus.empty())
-      return;
-
-   // Pick a CPU using the thread id (wraps if more threads than CPUs)
-   int target = cpus[thread_id % cpus.size()];
-
-   cpu_set_t mask;
-   CPU_ZERO(&mask);
-   CPU_SET(target, &mask);
-   sched_setaffinity(0, sizeof(mask), &mask);
-}
-
 int TraceThread::m_isa = 0;
 
 TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracefile, String responsefile, app_id_t app_id, bool cleanup)
@@ -1507,8 +1477,7 @@ void TraceThread::m_run_func_with_userpace_mimicos()
    String threadName = String("trace-") + itostr(m_thread->getId());
    SimSetThreadName(threadName.c_str());
 
-   // Pin this trace thread to a distinct host CPU to avoid contention
-   pinTraceThreadToCPU(m_thread->getId());
+   // Not pinned to a host CPU: see m_run_func_default
 
    // Print which host CPU this thread is running on
    int host_cpu = sched_getcpu();
@@ -1964,8 +1933,16 @@ void TraceThread::m_run_func_default()
    String threadName = String("trace-") + itostr(m_thread->getId());
    SimSetThreadName(threadName.c_str());
 
-   // Pin this trace thread to a distinct host CPU to avoid contention
-   pinTraceThreadToCPU(m_thread->getId());
+   /* Trace threads are not pinned to host CPUs: the OS spreads them over
+      the simulator's affinity mask (taskset, a SLURM cgroup).  They were
+      pinned one to a CPU, chosen in the calling thread's own mask, which a
+      new thread inherits from its creator: once the first had pinned itself,
+      every trace thread created on its thread found that one CPU, and a
+      multi-threaded run serialized on it.  Spread correctly over the mask
+      read at start-up, the pinning gained nothing on one run (phased.c, 4
+      threads, 8 CPUs: 51.5 and 50.7 s pinned, 50.2 and 50.7 s not; 119.6 s
+      all on one CPU) and lost on two at once (87 s each pinned to the same
+      CPUs, 53-55 s not). */
 
    // Print which host CPU this thread is running on
    int host_cpu = sched_getcpu();
