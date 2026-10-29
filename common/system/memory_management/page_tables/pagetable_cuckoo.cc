@@ -361,7 +361,7 @@ namespace ParametricDramDirectoryMSI
 		}
 
 		if (count)
-			accesses_per_vpn[address >> 12]++;
+			countVPNAccess(address >> 12);
 
 		m_log->detailed("Walk done: page size ", page_size_result, " ppn ", ppn_result);
 		return PTWResult(page_size_result, visitedAddresses, ppn_result, SubsecondTime::Zero(), is_page_fault_in_every_page_size, 0);
@@ -406,7 +406,7 @@ namespace ParametricDramDirectoryMSI
 		else
 			row->section_header[offset_in_cwt].has_2mb_page = 1;
 
-		accesses_per_vpn[address >> 12] = 1;
+		setVPNAccesses(address >> 12, 1);
 		return 0;
 	}
 

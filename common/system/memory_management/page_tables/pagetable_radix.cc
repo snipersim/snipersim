@@ -228,7 +228,7 @@ namespace ParametricDramDirectoryMSI
                                 ppn_result = current_frame->entries[offset].data.translation.ppn;
                                 LOG_ASSERT_ERROR(ppn_result != static_cast<IntPtr>(-1), "PPN is invalid");
                                
-                                accesses_per_vpn[address >> 12]++; // Increment the access count for the VPN
+                                countVPNAccess(address >> 12); // Increment the access count for the VPN
 
                                 page_size_result = 12 + 9 * (level - 1);   // 4 KiB at level 1, 2 MiB at level 2
                                 break;
@@ -377,7 +377,7 @@ namespace ParametricDramDirectoryMSI
                                         current_frame->entries[offset].data.translation.valid = true;
                                         current_frame->entries[offset].data.translation.ppn = ppn;
                                         current_frame->entries[offset].is_pte = true;
-                                        accesses_per_vpn[address >> 12] = 1; // Set the access count for the VPN to 1
+                                        setVPNAccesses(address >> 12, 1); // Set the access count for the VPN to 1
 
                                         break;
                                 }
@@ -388,7 +388,7 @@ namespace ParametricDramDirectoryMSI
                                         current_frame->entries[offset].data.translation.valid = true;
                                         current_frame->entries[offset].data.translation.ppn = ppn;
                                         current_frame->entries[offset].is_pte = true;
-                                        accesses_per_vpn[address >> 12] = 1; // Set the access count for the VPN to 1
+                                        setVPNAccesses(address >> 12, 1); // Set the access count for the VPN to 1
 
                                         break;
                                 }

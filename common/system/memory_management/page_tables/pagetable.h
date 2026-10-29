@@ -6,6 +6,7 @@
 #include "core.h"
 #include "core_manager.h"
 #include <unordered_map>
+#include <mutex>
 #include <random>
 #include <cstdint>
 #include "pwc.h"
@@ -110,8 +111,26 @@ namespace ParametricDramDirectoryMSI
 		Core *core;
 		bool is_guest;
 
-		// This is used to track the number of accesses per virtual page number (VPN)
+		// This is used to track the number of accesses per virtual page number (VPN).
+		// One page table serves every core of its application, and their walks
+		// run concurrently (a simulator thread per core): the maps below are
+		// reached only under m_maps_lock (countVPNAccess, setVPNAccesses and the
+		// payload calls).  An insertion that rehashed under another core's
+		// increment crashed the simulator (SIGSEGV in initializeWalk).
 		std::unordered_map<IntPtr, UInt64> accesses_per_vpn;
+		mutable std::mutex m_maps_lock;
+
+		void countVPNAccess(IntPtr vpn)
+		{
+			std::lock_guard<std::mutex> lock(m_maps_lock);
+			accesses_per_vpn[vpn]++;
+		}
+
+		void setVPNAccesses(IntPtr vpn, UInt64 n)
+		{
+			std::lock_guard<std::mutex> lock(m_maps_lock);
+			accesses_per_vpn[vpn] = n;
+		}
 
 		// Shadow PTE payload: stores per-VPN temporal offset data for the
 		// TLB prefetchers.  Keyed by VPN (address >> 12).
@@ -145,6 +164,7 @@ namespace ParametricDramDirectoryMSI
 		/** Read the shadow payload word for a given VPN. Returns 0 if none stored. */
 		PayloadWord readPayloadBits(uint64_t vpn) const
 		{
+			std::lock_guard<std::mutex> lock(m_maps_lock);
 			auto it = shadow_pte_payload.find(vpn);
 			return (it != shadow_pte_payload.end()) ? it->second : PayloadWord();
 		}
@@ -152,6 +172,7 @@ namespace ParametricDramDirectoryMSI
 		/** Write (overwrite) the shadow payload word for a given VPN. */
 		void writePayloadBits(uint64_t vpn, const PayloadWord& payload)
 		{
+			std::lock_guard<std::mutex> lock(m_maps_lock);
 			shadow_pte_payload[vpn] = payload;
 		}
 
@@ -164,24 +185,21 @@ namespace ParametricDramDirectoryMSI
 
 		PayloadWord readPMDPayloadBits(uint64_t vpn_2mb) const
 		{
+			std::lock_guard<std::mutex> lock(m_maps_lock);
 			auto it = shadow_pmd_payload.find(vpn_2mb);
 			return (it != shadow_pmd_payload.end()) ? it->second : PayloadWord();
 		}
 
 		void writePMDPayloadBits(uint64_t vpn_2mb, const PayloadWord& payload)
 		{
+			std::lock_guard<std::mutex> lock(m_maps_lock);
 			shadow_pmd_payload[vpn_2mb] = payload;
 		}
 		UInt64 getAccessesPerVPN(IntPtr vpn)
 		{
-			if (accesses_per_vpn.find(vpn) != accesses_per_vpn.end())
-			{
-				return accesses_per_vpn[vpn];
-			}
-			else
-			{
-				return 0;
-			}
+			std::lock_guard<std::mutex> lock(m_maps_lock);
+			auto it = accesses_per_vpn.find(vpn);
+			return it != accesses_per_vpn.end() ? it->second : 0;
 		};
 	};
 }
