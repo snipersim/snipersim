@@ -53,6 +53,7 @@ extra_pin_args = []
 frontend = None
 frontend_options = []
 use_pid = None
+GDB_PAUSE_SECONDS = 10     # Pin's pause for gdb to attach (--gdb)
 pid_continue = False
 stop_address = 0
 maxthreads = None
@@ -272,7 +273,15 @@ outputfile = os.path.realpath(os.path.join(outputfile))
 # --follow followed nothing, -x options were dropped.
 pinoptions = ''
 if use_pid:
-  pinoptions += (' -pid %d' % (use_pid))
+  # SDE's name for Pin's -pid (SDE rejected -pid as an unknown option, and
+  # the recording ended before it began)
+  pinoptions += (' -attach-pid %d' % (use_pid))
+if use_gdb:
+  # Pin pauses after loading the tool and prints the pid and the symbols to
+  # attach gdb with (tools/debugpin.py reads them).  SDE has no -pause_tool of
+  # its own; -p passes a knob to Pin.  Without it nothing was printed, and
+  # debugpin read the closed pipe for ever.
+  pinoptions += ' -p -pause_tool -p %d' % GDB_PAUSE_SECONDS
 if use_follow:
   pinoptions += ' -follow_subprocess 1'
 
@@ -567,7 +576,11 @@ if verbose:
   print('[SIFT_RECORDER]', 'Running', cmd)
   sys.stdout.flush()
 if use_gdb:
-  debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit)
+  # The recording runs under gdb, and once: this fell through to the
+  # Popen below and ran the whole command a second time without it
+  rc = debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, quiet = True, wait = gdb_wait, quit = gdb_quit,
+                            pinbin = os.path.join(sde_home, 'intel64', 'pinbin'), status = True)
+  sys.exit(run_sniper.decode_wait_status(rc, 'SIFT_RECORDER'))
 # close_fds=False: an MPI rank inherits its process manager's socket as an
 # open file descriptor, named in PMI_FD, and Python closes every descriptor
 # above 2 by default.  With it closed the rank cannot talk to mpiexec:
