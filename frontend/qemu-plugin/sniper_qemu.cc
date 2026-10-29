@@ -2215,6 +2215,7 @@ static bool syscall_entry(unsigned int vcpu_index, int64_t num, const uint64_t a
  * The calls are numbered as on x86-64 (guest_number maps the others). */
 
 void timers_check(VCPU *v, bool flushed = true);   /* the timers, below */
+uint64_t process_cpu_now(VCPU *v, bool flushed = true);
 
 const int64_t E_INTR = 4, E_AGAIN = 11, E_FAULT = 14, E_INVAL = 22, E_NOSYS = 38, E_TIMEDOUT = 110;
 const int64_t Q_ERESTARTSYS = 512;          /* QEMU's: a guest signal is pending, restart the call */
@@ -2655,7 +2656,7 @@ bool timed_live(VCPU *v, int64_t num, int x86, const uint64_t args[6], const Sif
    uint64_t deadline = Sift::NO_DEADLINE;
    int64_t err = 0;
    if (!Sift::timeout_infinite(tc, args) && !restarted(v, num, args, &deadline) &&
-       !call_deadline(tc, args, now, now, &deadline, &err))
+       !call_deadline(tc, args, now, Sift::cputime_clock(tc.clock) ? process_cpu_now(v) : now, &deadline, &err))
    {
       *sysret = err;
       return true;
@@ -2869,6 +2870,50 @@ bool sim_time_reported(VCPU *v, uint64_t *ns)
    return true;
 }
 
+/* Live, the simulator's CPU times (EmuTypeCpuTime): the time the thread
+ * ran, and its process's threads (exited ones included); false where there
+ * is no channel, or the simulator does not answer (an older one): the
+ * one-IPC model's then.  flushed: as for sim_time_reported. */
+bool sim_cpu_times(VCPU *v, uint64_t *thread_ns, uint64_t *process_ns, bool flushed = true)
+{
+   if (!v || !channel_open(v))
+      return false;
+   if (flushed)
+   {
+      send_threadinfo(v);
+      flush_pending(v, 0);
+      ff_report(v);
+   }
+   Sift::EmuRequest req;
+   Sift::EmuReply res;
+   req.cputime.clock = 2;   /* CLOCK_PROCESS_CPUTIME_ID: thread_ns and process_ns come with it */
+   if (!v->writer->Emulate(Sift::EmuTypeCpuTime, req, res))
+      return false;
+   if (thread_ns)
+      *thread_ns = res.cputime.thread_ns;
+   if (process_ns)
+      *process_ns = res.cputime.process_ns;
+   return true;
+}
+
+/* The CPU times the timers and times()/getrusage() see: live the
+ * simulator's, otherwise the one-IPC model's */
+uint64_t process_cpu_now(VCPU *v, bool flushed)
+{
+   uint64_t p;
+   if (sim_cpu_times(v, nullptr, &p, flushed))
+      return p;
+   return g_clocks->process_cpu();
+}
+
+uint64_t thread_cpu_now(VCPU *v)
+{
+   uint64_t t;
+   if (sim_cpu_times(v, &t, nullptr))
+      return t;
+   return timer_thread_cpu(v->vcpu_index, nullptr);
+}
+
 /* Fire what is due.  v: the thread looking (live: the simulator's time on
  * its channel; flushed: whether its instruction in flight may be flushed),
  * or null (the host thread, without a simulator) */
@@ -2900,7 +2945,11 @@ void timers_check(VCPU *v, bool flushed)
          time = t;
    }
    Sift::GuestTimer due[16];
-   const unsigned n = g_timers->due(time, g_clocks->process_cpu(), timer_thread_cpu, nullptr, due, 16);
+   /* the CPU-time timers: the process's from the simulator, live; a
+    * thread's (its own or another's) from its instructions -- asking the
+    * simulator for each thread's would take a round trip per timer */
+   const uint64_t pcpu = live && g_timers->cpu_armed() ? process_cpu_now(v, flushed) : g_clocks->process_cpu();
+   const unsigned n = g_timers->due(time, pcpu, timer_thread_cpu, nullptr, due, 16);
    for (unsigned i = 0; i < n; i++)
    {
       if (!live && due[i].clock == Sift::TIMER_TIME)
@@ -2950,9 +2999,9 @@ void timers_helper_start()
 uint64_t timer_now(VCPU *v, Sift::TimerClock clock, unsigned cpu_slot)
 {
    if (clock == Sift::TIMER_PROCESS_CPU)
-      return g_clocks->process_cpu();
+      return process_cpu_now(v);
    if (clock == Sift::TIMER_THREAD_CPU)
-      return timer_thread_cpu(cpu_slot, nullptr);
+      return cpu_slot == v->vcpu_index ? thread_cpu_now(v) : timer_thread_cpu(cpu_slot, nullptr);
    uint64_t t;
    if (channel_open(v) && sim_time(v, &t))
       return t;
@@ -3300,7 +3349,7 @@ bool timer_call(VCPU *v, int64_t num, int x86, const uint64_t args[6], int64_t *
          return true;
       case 100:  /* times(buf): the CPU time in clock ticks (100 Hz) */
       {
-         const uint64_t ticks = g_clocks->process_cpu() / 10000000;
+         const uint64_t ticks = process_cpu_now(v) / 10000000;
          const uint64_t tms[4] = { ticks, 0, 0, 0 };
          if (args[0] && !write_guest(args[0], tms, sizeof(tms)))
          {
@@ -3317,7 +3366,7 @@ bool timer_call(VCPU *v, int64_t num, int x86, const uint64_t args[6], int64_t *
             return false;
          if (r == 0 && args[1] && ((int64_t)args[0] == 0 || (int64_t)args[0] == 1))
          {
-            const uint64_t user = (int64_t)args[0] == 1 ? timer_thread_cpu(v->vcpu_index, nullptr) : g_clocks->process_cpu();
+            const uint64_t user = (int64_t)args[0] == 1 ? thread_cpu_now(v) : process_cpu_now(v);
             const uint64_t tv[4] = { user / Sift::NS_PER_S, user % Sift::NS_PER_S / 1000, 0, 0 };
             if (!write_guest(args[1], tv, sizeof(tv)))
                r = -E_FAULT;

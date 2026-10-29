@@ -246,6 +246,7 @@ bool recvmmsg_untimed(const syscall_args_t &args, ADDRINT *ret)
 }
 
 unsigned timers_check(INT32 threadid);   /* the timers, below */
+UINT64 process_cpu_now(INT32 threadid);
 extern volatile UINT64 timers_fired;
 
 /* A wait a timer's signal ended.  Pin delivers a signal that arrives in the
@@ -352,7 +353,7 @@ bool timed_one_ipc(THREADID threadid, int x86, const syscall_args_t &args, const
    const UINT64 now = clocks->now(threadid);
    UINT64 deadline;
    long err = 0;
-   if (!call_deadline(tc, args, now, clocks->process_cpu(), &deadline, &err))
+   if (!call_deadline(tc, args, now, process_cpu_now(-1), &deadline, &err))
    {
       *ret = (ADDRINT)err;
       return true;
@@ -429,6 +430,33 @@ bool timed_one_ipc(THREADID threadid, int x86, const syscall_args_t &args, const
 }
 
 /* The simulator's time, without the clocks' zero */
+/* Live, the simulator's CPU times (EmuTypeCpuTime): the thread's and its
+   process's; false without a channel or from an older simulator (the
+   one-IPC model's then) */
+bool sim_cpu_times(THREADID threadid, UINT64 *thread_ns, UINT64 *process_ns)
+{
+   if (!live(threadid))
+      return false;
+   Sift::EmuRequest req;
+   Sift::EmuReply res;
+   req.cputime.clock = 2;
+   if (!thread_data[threadid].output->Emulate(Sift::EmuTypeCpuTime, req, res))
+      return false;
+   if (thread_ns)
+      *thread_ns = res.cputime.thread_ns;
+   if (process_ns)
+      *process_ns = res.cputime.process_ns;
+   return true;
+}
+
+UINT64 process_cpu_now(INT32 threadid)
+{
+   UINT64 p;
+   if (threadid >= 0 && sim_cpu_times(threadid, NULL, &p))
+      return p;
+   return clocks->process_cpu();
+}
+
 bool sim_time(THREADID threadid, UINT64 *ns)
 {
    Sift::EmuRequest req;
@@ -640,7 +668,10 @@ unsigned timers_check(INT32 threadid)
          time = t;
    }
    Sift::GuestTimer due[16];
-   const unsigned n = timers->due(time, clocks->process_cpu(), timer_thread_cpu, NULL, due, 16);
+   /* the CPU-time timers: the process's from the simulator, live (see the
+      QEMU plugin's timers_check) */
+   const UINT64 pcpu = on_line && timers->cpu_armed() ? process_cpu_now(threadid) : clocks->process_cpu();
+   const unsigned n = timers->due(time, pcpu, timer_thread_cpu, NULL, due, 16);
    for (unsigned i = 0; i < n; i++)
    {
       if (!on_line && due[i].clock == Sift::TIMER_TIME)
@@ -673,10 +704,11 @@ void timers_helper_start()
 
 UINT64 timer_now(THREADID threadid, Sift::TimerClock clock, unsigned cpu_slot)
 {
+   UINT64 tcpu;
    if (clock == Sift::TIMER_PROCESS_CPU)
-      return clocks->process_cpu();
+      return process_cpu_now(threadid);
    if (clock == Sift::TIMER_THREAD_CPU)
-      return timer_thread_cpu(cpu_slot, NULL);
+      return cpu_slot == threadid && sim_cpu_times(threadid, &tcpu, NULL) ? tcpu : timer_thread_cpu(cpu_slot, NULL);
    UINT64 t;
    if (live(threadid) && sim_time(threadid, &t))
       return t;
@@ -974,7 +1006,7 @@ bool timer_call(THREADID threadid, int x86, const syscall_args_t &args, ADDRINT 
          break;
       case 100:  /* times(buf) */
       {
-         const UINT64 tms[4] = { clocks->process_cpu() / 10000000, 0, 0, 0 };
+         const UINT64 tms[4] = { process_cpu_now(threadid) / 10000000, 0, 0, 0 };
          if (args[0] && !write_mem(args[0], tms, sizeof(tms)))
             r = -EFAULT;
          else
@@ -986,7 +1018,9 @@ bool timer_call(THREADID threadid, int x86, const syscall_args_t &args, ADDRINT 
          r = host_syscall(98, args);
          if (r == 0 && args[1] && ((INT64)args[0] == 0 || (INT64)args[0] == 1))
          {
-            const UINT64 user = (INT64)args[0] == 1 ? timer_thread_cpu(threadid, NULL) : clocks->process_cpu();
+            UINT64 tcpu;
+            const UINT64 user = (INT64)args[0] == 1 ? (sim_cpu_times(threadid, &tcpu, NULL) ? tcpu : timer_thread_cpu(threadid, NULL))
+                                                   : process_cpu_now(threadid);
             const UINT64 tv[4] = { user / Sift::NS_PER_S, user % Sift::NS_PER_S / 1000, 0, 0 };
             if (!write_mem(args[1], tv, sizeof(tv)))
                r = -EFAULT;

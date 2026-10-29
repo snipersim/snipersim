@@ -605,6 +605,19 @@ namespace Sift
 
       bool armed() const { return m_armed != 0; }
 
+      /* Is a timer on a CPU-time clock armed?  (Whether its time is needed.) */
+      bool cpu_armed()
+      {
+         if (!m_armed)
+            return false;
+         m_lock.lock();
+         bool any = false;
+         for (int i = 0; i < MAX && !any; i++)
+            any = m_t[i].used && m_t[i].expiry && m_t[i].clock != TIMER_TIME;
+         m_lock.unlock();
+         return any;
+      }
+
       /* The earliest expiry of the timers on the guest's time */
       uint64_t next_time()
       {
