@@ -2766,6 +2766,23 @@ def case_user_clone_storm(p, g, workdir):
     return True, '3 runs: 16 threads made by 4 at once, every join after its thread had written'
 
 
+def case_user_rep_zero(p, g, workdir):
+    """An x86 rep movsb with a count of zero (testing/apps/rep_zero.c, a
+    third of 1,000 copies) simulates, live: QEMU runs such a pass without a
+    memory access, and the plugin had recorded it without the two addresses
+    the simulator's decoder expects of movsb (an assertion, exit 134).  The
+    plugin drops it, as it does a pass QEMU abandons part-way."""
+    guest = os.path.join(workdir, 'rep_zero')
+    rc, out = run(['gcc', '-O1', '-static', '-o', guest, os.path.join(SNIPER_ROOT, 'testing', 'apps', 'rep_zero.c')], 120)
+    if rc != 0:
+        return None, 'could not build rep_zero.c statically (%s)' % exit_text(rc)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'gainestown',
+                   '-d', os.path.join(workdir, 'rep-zero'), '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+    if rc != 0 or 'rep_zero: 103896 hello' not in out:
+        return False, sniper_failed(rc, out)
+    return True, '1,000 copies, 334 of them of nothing, simulated; the guest\'s sum as native'
+
+
 def counters_case(workdir, arch, cc_cmd, config):
     """The counter probe (testing/apps/counter_probe.c) live through run-sniper
     --frontend=qemu: the guest's direct reads of its clocks and counters --
@@ -3230,6 +3247,7 @@ CASES = {
     'aarch64-user-timers': case_aarch64_user_timers,
     'user-sleep-exit':  case_user_sleep_exit,
     'user-clone-storm': case_user_clone_storm,
+    'user-rep-zero':    case_user_rep_zero,
     'user-counters':    case_user_counters,
     'time-start-default': case_time_start_default,
     'riscv-user-counters': case_riscv_user_counters,

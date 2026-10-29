@@ -224,6 +224,24 @@ std::vector<bool>     g_announce_sent;        /* under g_tid_lock: announcement 
  * The taken flag only means something for an instruction that could have gone
  * either way, which is the same set.
  */
+/* A string instruction with a REP prefix (rep movs, repe cmps, rep ins, ...): QEMU
+ * may run it in several passes, one of which -- the count already zero --
+ * touches no memory (flush_pending).  *mem_ops: the memory operands of an
+ * x86 instruction, the accesses a whole execution of it makes. */
+bool xed_is_rep_string(const uint8_t *bytes, size_t len, uint8_t *mem_ops)
+{
+   xed_decoded_inst_t xedd;
+   xed_decoded_inst_zero(&xedd);
+   xed_decoded_inst_set_mode(&xedd, XED_MACHINE_MODE_LONG_64, XED_ADDRESS_WIDTH_64b);
+   *mem_ops = 0;
+   if (xed_decode(&xedd, bytes, (unsigned int)len) != XED_ERROR_NONE)
+      return false;
+   *mem_ops = (uint8_t)xed_decoded_inst_number_of_memory_operands(&xedd);
+   const xed_category_enum_t c = xed_decoded_inst_get_category(&xedd);
+   return (c == XED_CATEGORY_STRINGOP || c == XED_CATEGORY_IOSTRINGOP)
+          && xed_operand_values_has_real_rep(xed_decoded_inst_operands_const(&xedd));
+}
+
 bool xed_is_conditional_branch(const uint8_t *bytes, size_t len)
 {
    xed_decoded_inst_t xedd;
@@ -400,6 +418,8 @@ struct InsnInfo
    bool     counter = false;    /* reads a clock or counter the simulator answers (is_counter_read) */
    uint32_t tb_left = 0;        /* instructions from this one to its block's end: the block's count is added at its entry */
    bool     is_jump = false;    /* an unconditional direct jump (x86 jmp rel, RISC-V jal x0 / c.j, AArch64 b): a loop's closing jump when backward, not a SIFT branch */
+   bool     rep_string = false; /* x86 rep-prefixed string instruction (xed_is_rep_string) */
+   uint8_t  mem_ops = 0;        /* x86: its memory operands (0: not known, other ISAs) */
 };
 
 /* ------------------------------------------------------------- per-vCPU */
@@ -428,6 +448,8 @@ struct VCPU
    uint64_t pend_paddr2  = 0;
    uint8_t  pend_size    = 0;
    bool     pend_branch  = false;
+   bool     pend_rep_string = false;
+   uint8_t  pend_mem_ops = 0;
    std::vector<uint64_t> pend_addrs;   /* the first MAX_DYNAMIC_ADDRESSES, for the Instruction record */
    std::vector<uint64_t> pend_paddrs;  /* system mode: their physical addresses (0: not known; PADDR_IO: a device) */
    /* System mode: the pages after the first of accesses that cross a page,
@@ -916,6 +938,33 @@ void flush_pending(VCPU *v, uint64_t next_vaddr)
    if (!v->have_pending)
       return;
 
+   /* x86 executions that did not happen, which the simulator's decoder,
+    * expecting an address for each memory operand, asserted on:
+    *
+    * - a rep string instruction's pass that touched no memory: its count
+    *   was zero, and it did nothing.  QEMU runs one after the last
+    *   iteration when it runs one iteration a pass (icount, as full-system
+    *   runs are), and for a count of zero.  The iterations that moved data
+    *   are the instruction's executions.
+    * - an instruction QEMU abandoned part-way and runs again from its start
+    *   (the next instruction is itself), short of some accesses: a store
+    *   into its own translated code -- an option ROM copying itself into
+    *   shadow RAM over the rep movsb doing the copy -- ends the block before
+    *   the store, after the load's callback.  The run that follows is the
+    *   execution.  (A whole execution that repeats itself, a rep pass, has
+    *   all its accesses.) */
+   if ((v->pend_rep_string && v->pend_addrs.empty() && v->pend_accs.empty())
+       || (v->pend_mem_ops && next_vaddr == v->pend_addr && !v->pend_footprint
+           && v->pend_addrs.size() < std::min<size_t>(v->pend_mem_ops, Sift::MAX_DYNAMIC_ADDRESSES)))
+   {
+      v->have_pending = false;
+      v->pend_addrs.clear();
+      v->pend_paddrs.clear();
+      v->pend_more_pages.clear();
+      v->pend_accs.clear();
+      return;
+   }
+
    const bool taken = v->pend_branch &&
                       (next_vaddr != v->pend_addr + v->pend_size);
 
@@ -1248,6 +1297,8 @@ void insn_exec(unsigned int cpu_index, void *udata)
    v->pend_paddr2 = ii->paddr2;
    v->pend_size   = ii->size;
    v->pend_branch = ii->is_branch;
+   v->pend_rep_string = ii->rep_string;
+   v->pend_mem_ops = ii->mem_ops;
    v->pend_footprint = ii->footprint;
    v->have_pending = true;
 
@@ -3873,6 +3924,7 @@ TBData *tb_data_new(const std::vector<TransInsn> &raw)
       {
          ii->is_branch = got ? xed_is_conditional_branch(bytes, got) : false;
          ii->mode_mask = got ? mode_mask_for(bytes, got, ii->size) : 0;
+         ii->rep_string = got && xed_is_rep_string(bytes, got, &ii->mem_ops);
       }
       if (ii->mode_mask)
          ti->mode_mask &= ii->mode_mask;  /* one mode governs the whole block */
