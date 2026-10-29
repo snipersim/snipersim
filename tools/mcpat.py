@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os, sys, math, re, collections, buildstack, gnuplot, getopt, pprint, sniper_lib, sniper_config, sniper_stats
+import os, sys, math, re, subprocess, collections, buildstack, gnuplot, getopt, pprint, sniper_lib, sniper_config, sniper_stats
 import math
 
 #ISSUE_WIDTH = 4
@@ -95,9 +95,46 @@ def mcpat_bin():
   else:
     return os.path.join(mcpatdir, 'mcpat-1.0')   # (the path was computed and not returned: None)
 
+class McPATError(ValueError):
+  """McPAT cannot estimate this run's power; the message says why."""
+  pass
+
+# McPAT 1.0 (cacti/technology.cc) has device tables for 180, 90, 65, 45, 32
+# and 22 nm and interpolates between them; a node outside 22..180 nm it
+# rejects ("Invalid technology nodes") and exits with status 0, printing no
+# results.  The nodes of today's cores (14, 10, 7, 4 nm) are not modelled.
+MCPAT_TECH_NODES = (180, 90, 65, 45, 32, 22)
+
+def check_technology_node(technology_node):
+  if not min(MCPAT_TECH_NODES) <= technology_node <= max(MCPAT_TECH_NODES):
+    raise McPATError('power/technology_node = %s nm, which McPAT 1.0 cannot model: it supports %d to %d nm '
+                     '(tables for %s nm, interpolated between them).  Set power/technology_node in that range, '
+                     'or run without --power'
+                     % (technology_node, min(MCPAT_TECH_NODES), max(MCPAT_TECH_NODES),
+                        ', '.join(str(n) for n in MCPAT_TECH_NODES)))
+
 def mcpat_run(inputfile, outputfile):
-  os.system("LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%s %s -print_level 5 -opt_for_clk 1 -infile %s > %s" % \
-    (mcpat_path(), mcpat_bin(), inputfile, outputfile))
+  env = dict(os.environ)
+  env['LD_LIBRARY_PATH'] = ':'.join(p for p in (env.get('LD_LIBRARY_PATH'), mcpat_path()) if p)
+  with open(outputfile, 'w') as out:
+    proc = subprocess.run([mcpat_bin(), '-print_level', '5', '-opt_for_clk', '1', '-infile', inputfile],
+                          stdout = out, stderr = subprocess.PIPE, env = env, universal_newlines = True)
+  if proc.stderr:
+    sys.stderr.write(proc.stderr)
+  if proc.returncode != 0:
+    raise McPATError('McPAT %s on %s%s' % ('was killed by signal %d' % -proc.returncode if proc.returncode < 0
+                     else 'exited with status %d' % proc.returncode, inputfile,
+                     mcpat_messages(outputfile, proc.stderr)))
+  return proc.stderr
+
+def mcpat_messages(outputfile, stderr = ''):
+  # What McPAT printed before its results: its own error messages, if any
+  try:
+    lines = [l.strip() for l in open(outputfile) if l.strip()]
+  except IOError:
+    lines = []
+  lines = [l for l in lines[:10] if not l.startswith('McPAT (version')] + [l.strip() for l in stderr.split('\n') if l.strip()]
+  return (': ' + ' / '.join(lines[:3])) if lines else ''
 
 
 all_items = [
@@ -137,7 +174,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
   open(tempfile, "w").write('\n'.join(power))
 
   # Run McPAT
-  mcpat_run(tempfile, outputfile + '.txt')
+  mcpat_stderr = mcpat_run(tempfile, outputfile + '.txt')
 
   # Parse output
   power_txt = open(outputfile + '.txt')
@@ -191,7 +228,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
       power_dat[componentname] = values
 
   if not power_dat:
-    raise ValueError('No valid McPAT output found')
+    raise McPATError('McPAT produced no results (its output is in %s.txt)%s' % (outputfile, mcpat_messages(outputfile + '.txt', mcpat_stderr)))
 
   # Add DRAM power
   dram_dyn, dram_stat = dram_power(results['results'], results['config'])
@@ -332,6 +369,7 @@ def edit_XML(statsobj, stats, cfg):
 
   ncores = int(cfg['general/total_cores'])
   technology_node = int(sniper_config.get_config_default(cfg, 'power/technology_node', 45))
+  check_technology_node(technology_node)
   # McPAT's x86 flag models a CISC front end (micro-op decoding, its tables
   # and energy); the ARM and RISC-V cores are not x86, and every core used to
   # be described as one
@@ -1312,4 +1350,8 @@ if __name__ == '__main__':
       partial = a.split(':')
 
 
-  main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, config = config, outputfile = outputfile, no_graph = no_graph, print_stack = not no_text, partial = partial)
+  try:
+    main(jobid = jobid, resultsdir = resultsdir, powertype = powertype, config = config, outputfile = outputfile, no_graph = no_graph, print_stack = not no_text, partial = partial)
+  except McPATError as e:
+    print('[McPAT] ERROR: %s' % e, file=sys.stderr)
+    sys.exit(1)

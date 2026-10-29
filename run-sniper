@@ -99,7 +99,8 @@ appdebug_nowait = False
 follow_execv = False
 build_dir = None
 run_power = False
-power_failed = False
+power_failed = False          # --power: McPAT gave no estimate
+power_only_failure = False    # ... and that alone failed the run: the simulation's results are whole
 enable_pacsim = False
 enable_smc = False
 track_smc = True      # --no-smc: send each code page once (no Sift::CodeTracker)
@@ -1321,6 +1322,9 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
       # --power was asked for and no estimate came of it: the run fails
       if rc == 0:
         rc = 1
+        power_only_failure = True
+    if power_failed:
+      use_viz_mcpat = ''   # viz would run McPAT again, and fail the same way
 
   if use_viz and not interrupted:
     print('[SNIPER] Generating visualization in viz/')
@@ -1354,7 +1358,9 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
       rc = failed[0] if failed[0] > 0 else 128 - failed[0]
       print('[SNIPER] Exiting with status %d: the recorder failed and nothing was simulated' % rc)
   notes = []
-  if rc != 0:
+  if power_only_failure:
+    notes.append('the run ended with exit status %d: McPAT failed and there is no power estimate (the simulation\'s results are whole)' % rc)
+  elif rc != 0:
     notes.append('the run ended with exit status %d; these results are partial' % rc)
   for a, st in (tracegen.get('recorder_status', []) if tracegen else []):
     if st != 0:
