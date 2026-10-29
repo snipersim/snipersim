@@ -352,10 +352,10 @@ void SyscallServer::futexPeriodic(SubsecondTime time)
 SubsecondTime SyscallServer::getNextTimeout(SubsecondTime time)
 {
    SubsecondTime next = SubsecondTime::MaxTime();
-   // Sleeping threads
+   // Sleeping threads: the earliest wake-up, not the last one queued
    for(SimFutex::ThreadQueue::iterator it = m_sleeping.begin(); it != m_sleeping.end(); ++it)
    {
-      if (it->timeout < SubsecondTime::MaxTime())
+      if (it->timeout < next)
          next = it->timeout;
    }
    // Timeout futexes
@@ -452,7 +452,7 @@ SubsecondTime SimFutex::getNextTimeout(SubsecondTime time)
    SubsecondTime next = SubsecondTime::MaxTime();
    for(ThreadQueue::iterator it = m_waiting.begin(); it != m_waiting.end(); ++it)
    {
-      if (it->timeout < SubsecondTime::MaxTime())
+      if (it->timeout < next)
          next = it->timeout;
    }
    return next;
