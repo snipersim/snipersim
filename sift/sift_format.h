@@ -37,7 +37,11 @@ namespace Sift
    const uint64_t TIME_START_DEFAULT = 1337000000;  // seconds since the epoch
    const uint64_t ONE_IPC_HZ = 1000000000;          // the one-IPC model's core: 1 GHz, assumed
    const uint64_t NS_PER_S = 1000000000;
-   inline uint64_t one_ipc_ns(uint64_t instructions) { return instructions * (1000000000 / ONE_IPC_HZ); }
+   /* Exact for any ONE_IPC_HZ (a 128-bit product: 1e9 / ONE_IPC_HZ is no
+      integer above 1 GHz or for a rate that does not divide it), and no
+      overflow of the product for any count */
+   inline uint64_t one_ipc_ns(uint64_t instructions) { return (uint64_t)((unsigned __int128)instructions * NS_PER_S / ONE_IPC_HZ); }
+   inline uint64_t one_ipc_cycles(uint64_t ns) { return (uint64_t)((unsigned __int128)ns * ONE_IPC_HZ / NS_PER_S); }
    const uint64_t PAGE_SIZE_SIFT = 4096;
    const uint32_t ICACHE_SIZE = 0x1000;
    const uint64_t ICACHE_OFFSET_MASK = ICACHE_SIZE - 1;

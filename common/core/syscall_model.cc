@@ -149,7 +149,14 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          const bool simulated = Sim()->getConfig()->getOSEmuClockReplace();
          const bool cputime = isCpuClock(clock);
          struct timespec ts;
-         if (simulated)
+         /* The kernel's answers to what it refuses: a clock id it does not
+            know (0-11 but 10, CLOCK_SGI_CYCLE, removed; a dynamic CPU clock
+            is checked by cpuClockTime), a NULL timespec */
+         if (!is_tod && !cputime && (clock > 11 || clock == 10))
+            m_ret_val = -EINVAL;
+         else if (!is_tod && !out)
+            m_ret_val = -EFAULT;
+         else if (simulated)
          {
             /* The CPU-time clocks count the time the thread ran (the
                process's: its threads'), not the time it slept or waited */
@@ -180,6 +187,14 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
             }
             else
                core->accessMemory(Core::NONE, Core::WRITE, out, (char*) &ts, sizeof(ts));
+         }
+         if (m_ret_val == 0 && is_tod && args.arg1)
+         {
+            /* gettimeofday's timezone: UTC, no DST, as the kernel's default */
+            struct timezone tz;
+            tz.tz_minuteswest = 0;
+            tz.tz_dsttime = 0;
+            core->accessMemory(Core::NONE, Core::WRITE, (IntPtr)args.arg1, (char*) &tz, sizeof(tz));
          }
          m_emulated = true;
          break;

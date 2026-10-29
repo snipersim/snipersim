@@ -31,7 +31,7 @@ static uint64_t one_ipc_ns(THREADID threadid, clockid_t clk_id)
 
 static void handleRdtsc(THREADID threadid, ADDRINT * gax, ADDRINT * gdx)
 {
-   uint64_t cycles = timedNow(threadid) * Sift::ONE_IPC_HZ / Sift::NS_PER_S;   // the one-IPC model: the TSC counts time
+   uint64_t cycles = Sift::one_ipc_cycles(timedNow(threadid));   // the one-IPC model: the TSC counts time
    Sift::EmuRequest req;
    Sift::EmuReply res;
    if (live(threadid) && thread_data[threadid].output->Emulate(Sift::EmuTypeRdtsc, req, res))
