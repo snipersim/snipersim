@@ -560,11 +560,11 @@ one whose chase fits its socket's L3.
 | suite | command | what it holds | size |
 |---|---|---|---|
 | scripting | `testing/test_scripting.py` | 21 Python-hook cases on a threaded workload (`statscb`, `periodic-stats`, `ipcthreadtrace`, `markers`, `no-script`, `static-scheduler`) | 2 minutes |
-| configs | `testing/test_configs.py` | every shipped configuration and fragment at 1, 2 and 4 cores in fast-forward and detailed mode, each required to produce the workload's checksum; unclassified configurations are a failure | 318 checks, over an hour |
-| qemu | `testing/test_qemu.py` | the QEMU frontend: x86 user traces, multi-threaded streams, an exact full-system count, VA-to-PA, mode switches; and the 27 RISC-V and 5 AArch64 cases | hours with the RISC-V cases |
+| configs | `testing/test_configs.py` | every shipped configuration and fragment at 1, 2 and 4 cores in fast-forward and detailed mode, each required to produce the workload's checksum; unclassified configurations are a failure | 735 checks in detailed mode, about four hours |
+| qemu | `testing/test_qemu.py` | the QEMU frontend: x86 user traces, multi-threaded streams, an exact full-system count, VA-to-PA, mode switches; the guest's time (clocks, timed waits, timers, after the ROI); and the 37 RISC-V and 12 AArch64 cases (75 in all) | about 100 minutes with the RISC-V cases |
 | pacsim | `testing/test_pacsim.py [--profile quick]` | three region shapes, each: same program, faster, agrees within tolerance; one core per thread, and the barrier shape once more on two cores; quick or full sizes (section 3.7) | minutes (quick) to an hour (full) |
-| apps | `testing/test_apps.py` | every `test/` workload's `make run` with a check on what came out (the FFT's own verdict, MPI's pi, DVFS read-back, SMC's rewritten code, fork, spin loops, a program running on after its ROI) | 10 minutes |
-| virtuoso | `testing/test_virtuoso.py` | four invariance configurations against host-local goldens (`--bless` once; ASLR pinned with `setarch -R`, a fixed environment and workload path) and 25 feature-activation cases, one per landed Virtuoso feature | 5 minutes |
+| apps | `testing/test_apps.py` | every `test/` workload's `make run` with a check on what came out (the FFT's own verdict, MPI's pi, DVFS read-back, SMC's rewritten code, fork, spin loops, a program running on after its ROI, timed waits and timers under SDE and DynamoRIO, a main thread returning with its workers running) | 37 cases, about 25 minutes |
+| virtuoso | `testing/test_virtuoso.py` | four invariance configurations against host-local goldens (`--bless` once; ASLR pinned with `setarch -R`, a fixed environment and workload path) and 67 feature-activation cases, one per landed Virtuoso feature (71 checks) | about 25 minutes |
 | MMU runner | `testing/run_tests.py --suite smoke_test` | trace-driven MMU experiments from `testing/test_config.yaml` (needs the trace directories it names) | |
 
 `make regress` runs the eight suites in turn, keeps timings in one log and
@@ -801,8 +801,7 @@ three region shapes -- barriers, loops only, a task queue -- and checks
 that both runs printed the same checksum, that the sampled run was
 faster, and that the estimate is within 10% of the full run; the two
 task-queue checks that fail at the quick size for the reason in section
-3.7 are reported as known failures.7 are
-reported as known failures.
+3.7 are reported as known failures.
 
 ### 4.10 The regression suites
 

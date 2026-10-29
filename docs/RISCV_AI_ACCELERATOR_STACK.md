@@ -593,7 +593,7 @@ python3 testing/test_qemu.py --case riscv-user-trace --case riscv-user-simulate 
 make riscv-ime-check      # steps 1-5: decoder drift, build, QEMU, compiler, every riscv-* case
 ```
 
-The full harness (`python3 testing/test_qemu.py`, 46 cases: 27 RISC-V, 5
+The full harness (`python3 testing/test_qemu.py`, 75 cases: 37 RISC-V, 12
 AArch64, the x86-64 user and system cases, and the run-sniper front-end cases)
 is the gate every commit passed.
 
