@@ -15,10 +15,10 @@ wait patch and on the IME one alike.  Used by
 frontend/qemu-plugin/sniper_qemu.cc ("counter").
 
 diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
-index 66bd45c..1dcb3fa 100644
+index f186aed..353f6e0 100644
 --- a/include/plugins/qemu-plugin.h
 +++ b/include/plugins/qemu-plugin.h
-@@ -1207,2 +1207,50 @@ void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, voi
+@@ -1209,2 +1209,50 @@ void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, voi
  
 +/**
 + * enum qemu_plugin_counter - a clock or counter the guest reads directly
@@ -103,10 +103,10 @@ index cea58cb..db3883b 100644
 +                                    cpu_get_host_ticks());
  }
 diff --git a/plugins/api.c b/plugins/api.c
-index 7454ce2..3acf002 100644
+index eb982f9..4367236 100644
 --- a/plugins/api.c
 +++ b/plugins/api.c
-@@ -526,2 +526,21 @@ void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, voi
+@@ -500,2 +500,21 @@ bool qemu_plugin_write_register(struct qemu_plugin_register *reg,
  
 +static qemu_plugin_counter_cb_t counter_cb;
 +static void *counter_udata;
@@ -144,7 +144,7 @@ index 46df659..89e912a 100644
 +                                    cpu_get_host_ticks());
  #endif
 diff --git a/target/arm/helper.c b/target/arm/helper.c
-index af45234..dbd9cd3 100644
+index af45234..e016cae 100644
 --- a/target/arm/helper.c
 +++ b/target/arm/helper.c
 @@ -2334,5 +2334,8 @@ static uint64_t gt_virt_cnt_read(CPUARMState *env, const ARMCPRegInfo *ri)

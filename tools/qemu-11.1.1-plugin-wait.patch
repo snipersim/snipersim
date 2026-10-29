@@ -19,10 +19,10 @@ index 6594f7f..1ce7a3b 100644
 +#define EXCP_PLUGIN_WAIT 0x10006 /* a plugin asked to wait outside the run loop (qemu_plugin_vcpu_wait) */
  
 diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
-index 3e913cd..66bd45c 100644
+index 3e913cd..f186aed 100644
 --- a/include/plugins/qemu-plugin.h
 +++ b/include/plugins/qemu-plugin.h
-@@ -1158,2 +1158,51 @@ void qemu_plugin_set_pc(uint64_t vaddr);
+@@ -1158,2 +1158,53 @@ void qemu_plugin_set_pc(uint64_t vaddr);
  
 +/**
 + * typedef qemu_plugin_vcpu_wait_cb_t - callback run outside the run loop
@@ -57,7 +57,9 @@ index 3e913cd..66bd45c 100644
 + * in the exec callback registered with QEMU -- from a function it calls,
 + * the return address is not in translated code and nothing is restored.
 + * Only from an exec callback registered with QEMU_PLUGIN_CB_RW_REGS or
-+ * QEMU_PLUGIN_CB_RW_REGS_PC.
++ * QEMU_PLUGIN_CB_RW_REGS_PC (asserted), and only in Linux user mode, whose
++ * cpu loops run @cb: in system mode the call reports an error and aborts,
++ * so a plugin checks qemu_info_t.system_emulation before it uses it.
 + */
 +QEMU_PLUGIN_API
 +void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, void *udata,
@@ -145,18 +147,56 @@ index 6f27a06..7f6a46d 100644
 +            qemu_plugin_vcpu_wait_run(cs);
 +            break;
          case RISCV_EXCP_U_ECALL:
-diff --git a/plugins/api.c b/plugins/api.c
-index eb982f9..7454ce2 100644
---- a/plugins/api.c
-+++ b/plugins/api.c
-@@ -500,2 +500,28 @@ bool qemu_plugin_write_register(struct qemu_plugin_register *reg,
- 
+diff --git a/plugins/api-system.c b/plugins/api-system.c
+index fbf905c..4ec7022 100644
+--- a/plugins/api-system.c
++++ b/plugins/api-system.c
+@@ -131 +131,14 @@ void qemu_plugin_update_ns(const void *handle, int64_t new_time)
+ }
++
++/*
++ * Waiting outside the run loop needs a cpu loop that handles
++ * EXCP_PLUGIN_WAIT, which only Linux user mode's do: in system mode the
++ * exit would reach the vcpu thread's loop, which knows nothing of it.  A
++ * plugin checks qemu_info_t.system_emulation before using the call.
++ */
 +void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, void *udata,
 +                              uintptr_t host_pc)
 +{
++    error_report("qemu_plugin_vcpu_wait_at: Linux user mode only, not in system mode");
++    abort();
++}
+diff --git a/plugins/api-user.c b/plugins/api-user.c
+index 28704a8..9f87942 100644
+--- a/plugins/api-user.c
++++ b/plugins/api-user.c
+@@ -15,2 +15,5 @@
+ #include "exec/log.h"
++#include "accel/tcg/cpu-loop.h"
++#include "exec/cpu-common.h"
++#include "hw/core/cpu.h"
+ 
+@@ -57 +60,39 @@ void qemu_plugin_update_ns(const void *handle, int64_t new_time)
+ }
++
++/*
++ * Waiting outside the run loop: EXCP_PLUGIN_WAIT is handled by the
++ * linux-user cpu loops (qemu_plugin_vcpu_wait_run()), so user mode only;
++ * the system-mode call refuses (api-system.c).
++ */
++void qemu_plugin_vcpu_wait_at(uint64_t vaddr, qemu_plugin_vcpu_wait_cb_t cb, void *udata,
++                              uintptr_t host_pc)
++{
++    /*
++     * Only from a callback of a running vcpu (an exec callback, in the run
++     * loop) with register access, and not twice: the cpu loop runs one
++     * wait callback per exit.
++     */
 +    g_assert(current_cpu);
++    g_assert(qatomic_read(&current_cpu->running));
 +    g_assert(qemu_plugin_get_cb_flags() == QEMU_PLUGIN_CB_RW_REGS ||
 +             qemu_plugin_get_cb_flags() == QEMU_PLUGIN_CB_RW_REGS_PC);
++    g_assert(current_cpu->plugin_state && !current_cpu->plugin_state->wait_cb);
 +
 +    current_cpu->plugin_state->wait_cb = cb;
 +    current_cpu->plugin_state->wait_udata = udata;
@@ -176,8 +216,6 @@ index eb982f9..7454ce2 100644
 +    current_cpu->exception_index = EXCP_PLUGIN_WAIT;
 +    cpu_loop_exit(current_cpu);
 +}
-+
- void qemu_plugin_set_pc(uint64_t vaddr)
 diff --git a/plugins/core.c b/plugins/core.c
 index 1113bfe..bc3bae9 100644
 --- a/plugins/core.c

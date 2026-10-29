@@ -15,10 +15,10 @@ tools/qemu-11.1.1-plugin-counters.patch; one line of context.  Used by
 frontend/qemu-plugin/sniper_qemu.cc ("timed").
 
 diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
-index 1dcb3fa..2f16f87 100644
+index 353f6e0..910eaf5 100644
 --- a/include/plugins/qemu-plugin.h
 +++ b/include/plugins/qemu-plugin.h
-@@ -1255,2 +1255,38 @@ void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb
+@@ -1257,2 +1257,38 @@ void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb
  
 +/**
 + * qemu_plugin_run_syscall() - run a guest system call from a syscall filter
@@ -123,10 +123,10 @@ index cfa68df..7ee6451 100644
 +
  abi_long do_syscall(CPUArchState *cpu_env, int num, abi_long arg1,
 diff --git a/plugins/api.c b/plugins/api.c
-index 3acf002..69b5fe8 100644
+index 4367236..c79d4d1 100644
 --- a/plugins/api.c
 +++ b/plugins/api.c
-@@ -545,2 +545,27 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
+@@ -519,2 +519,27 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
  
 +int (*qemu_plugin_user_host_signal)(int sig);
 +
