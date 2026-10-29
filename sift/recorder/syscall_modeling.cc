@@ -198,6 +198,11 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
          // host time while the simulator believes it is running, and its core
          // never arrives at the barrier.
          case SYS_clock_nanosleep:
+         // The clocks, read with a system call rather than through the libc
+         // routines the recorder replaces (emulation.cc): the host's time
+         // otherwise
+         case SYS_clock_gettime:
+         case SYS_gettimeofday:
             thread_data[threadid].last_syscall_number = syscall_number;
             thread_data[threadid].last_syscall_emulated = true;
             thread_data[threadid].last_syscall_returnval = thread_data[threadid].output->Syscall(syscall_number, (char*)args, sizeof(args));
