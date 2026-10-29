@@ -1,6 +1,7 @@
 #include "recorder_base.h"
 #include "globals.h"
 #include "threads.h"
+#include "timed_calls.h"
 #include "sift_assert.h"
 #include "recorder_control.h"
 #include "syscall_modeling.h"
@@ -64,6 +65,7 @@ VOID countInsns(THREADID threadid, INT32 count)
          Sift::Mode mode = thread_data[threadid].output->InstructionCount(thread_data[threadid].icount_reported);
          thread_data[threadid].icount_reported = 0;
          setInstrumentationMode(mode);
+         timedFlow(threadid);   /* live: the guest's timers (timed_calls.cc) */
       }
    }
 
@@ -126,6 +128,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
       Sift::Mode mode = thread_data[threadid].output->Sync();
       thread_data[threadid].flowcontrol_target = thread_data[threadid].icount + KnobFlowControl.Value();
       setInstrumentationMode(mode);
+      timedFlow(threadid);   /* live: the guest's timers (timed_calls.cc) */
    }
 
    if (detailed_target != 0 && thread_data[threadid].icount_detailed >= detailed_target)
@@ -163,6 +166,7 @@ VOID cacheOnlyUpdateInsCount(THREADID threadid, UINT32 icount)
       thread_data[threadid].icount_cacheonly_pending = 0;
       thread_data[threadid].icount_reported = 0;
       setInstrumentationMode(mode);
+      timedFlow(threadid);   /* live: the guest's timers (timed_calls.cc) */
    }
 }
 
@@ -201,6 +205,7 @@ VOID sendCacheOnly(THREADID threadid, UINT32 icount, UINT32 type, ADDRINT eip, A
       Sift::Mode mode = thread_data[threadid].output->Sync();
       thread_data[threadid].icount_reported = 0;
       setInstrumentationMode(mode);
+      timedFlow(threadid);   /* live: the guest's timers (timed_calls.cc) */
    }
 }
 

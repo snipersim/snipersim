@@ -8,6 +8,9 @@
 #include <string.h>
 #include <errno.h>
 #include <vector>
+#include <signal.h>
+#include <fcntl.h>
+#include <sys/timerfd.h>
 
 /* No time the guest gives reaches the host's kernel (sift/guest_time.h).
  *
@@ -242,6 +245,88 @@ bool recvmmsg_untimed(const syscall_args_t &args, ADDRINT *ret)
    return true;
 }
 
+unsigned timers_check(INT32 threadid);   /* the timers, below */
+extern volatile UINT64 timers_fired;
+
+/* A wait a timer's signal ended.  Pin delivers a signal that arrives in the
+   analysis routine before a system call by running the guest's handler and
+   then executing the system call instruction again (its rt_sigreturn in
+   between): the call would start over -- a pause never returned, its
+   handler running at every timer.  The thread's next call, if it is the
+   same one, returns EINTR at once. */
+struct Interrupted { bool valid; ADDRINT num; UINT64 args[6]; };
+Interrupted *interrupted = NULL;
+
+void mark_interrupted(THREADID threadid, ADDRINT num, const syscall_args_t &args)
+{
+   interrupted[threadid].valid = true;
+   interrupted[threadid].num = num;
+   memcpy(interrupted[threadid].args, args, sizeof(interrupted[threadid].args));
+}
+
+/* A thread in a sigtimedwait the recorder runs, and the signals it waits
+   for: a timer's signal among them is handed to it here, with its siginfo,
+   rather than sent.  Sent, Pin would take it for the guest -- the recorder's
+   own sigtimedwait in the analysis routine never sees it, and Pin's handling
+   of the guest's call did not either. */
+struct SigWait { volatile bool waiting, got; UINT64 set; siginfo_t info; };
+SigWait *sigwaits = NULL;
+PIN_LOCK sigwait_lock;
+
+void sigwait_begin(THREADID threadid, const syscall_args_t &args)
+{
+   UINT64 set = 0;
+   read_mem(args[0], &set, args[3] < sizeof(set) ? args[3] : sizeof(set));
+   PIN_GetLock(&sigwait_lock, 0);
+   sigwaits[threadid].set = set;
+   sigwaits[threadid].got = false;
+   sigwaits[threadid].waiting = true;
+   PIN_ReleaseLock(&sigwait_lock);
+}
+
+/* The signal handed to the waiter (its number, its siginfo written), or 0 */
+long sigwait_take(THREADID threadid, const syscall_args_t &args)
+{
+   if (!sigwaits[threadid].got)
+      return 0;
+   if (args[1])
+      write_mem(args[1], &sigwaits[threadid].info, sizeof(siginfo_t));
+   return sigwaits[threadid].info.si_signo;
+}
+
+void sigwait_end(THREADID threadid)
+{
+   PIN_GetLock(&sigwait_lock, 0);
+   sigwaits[threadid].waiting = sigwaits[threadid].got = false;
+   PIN_ReleaseLock(&sigwait_lock);
+}
+
+/* A timer's signal to a waiter whose set has it: true when handed over */
+bool sigwait_give(const siginfo_t &info)
+{
+   bool given = false;
+   PIN_GetLock(&sigwait_lock, 0);
+   for (unsigned i = 0; i < max_num_threads && !given; i++)
+      if (sigwaits[i].waiting && !sigwaits[i].got && (sigwaits[i].set >> (info.si_signo - 1)) & 1)
+      {
+         sigwaits[i].info = info;
+         sigwaits[i].got = true;
+         given = true;
+      }
+   PIN_ReleaseLock(&sigwait_lock);
+   return given;
+}
+
+bool restarted_after_signal(THREADID threadid, ADDRINT num, const syscall_args_t &args)
+{
+   if (num == SYS_rt_sigreturn)
+      return false;   /* the handler's return, between the two */
+   Interrupted &i = interrupted[threadid];
+   const bool match = i.valid && i.num == num && !memcmp(i.args, args, sizeof(i.args));
+   i.valid = false;
+   return match;
+}
+
 /* The one-IPC model's timed wait */
 bool timed_one_ipc(THREADID threadid, int x86, const syscall_args_t &args, const Sift::TimedCall &tc, ADDRINT *ret)
 {
@@ -285,8 +370,14 @@ bool timed_one_ipc(THREADID threadid, int x86, const syscall_args_t &args, const
    bool idle_seen = false;
    UINT64 idle_epoch = 0;
    struct timespec own;
+   const bool sigwait = x86 == Sift::X86_rt_sigtimedwait;
+   if (sigwait)
+      sigwait_begin(threadid, args);
    for (;;)
    {
+      timers_check(threadid);
+      if (sigwait && (r = sigwait_take(threadid, args)) != 0)
+         break;                     /* a timer's signal, handed over */
       bool expire = deadline <= now;
       if (!expire)
       {
@@ -329,6 +420,8 @@ bool timed_one_ipc(THREADID threadid, int x86, const syscall_args_t &args, const
       how = r == -EINTR ? Clocks::INTERRUPTED : Clocks::WOKEN;
       break;
    }
+   if (sigwait)
+      sigwait_end(threadid);
    clocks->wait_end(threadid, how);
    time_left(tc, args, x86, deadline, clocks->now(threadid), r);
    *ret = (ADDRINT)r;
@@ -377,6 +470,8 @@ bool timed_live(THREADID threadid, int x86, const syscall_args_t &args, const Si
    UINT64 sleep = LIVE_SLEEP_MIN;
    long r = 0;
    struct timespec own, nap;
+   if (x86 == Sift::X86_rt_sigtimedwait)
+      sigwait_begin(threadid, args);
    for (;;)
    {
       UINT64 a[6];
@@ -395,8 +490,497 @@ bool timed_live(THREADID threadid, int x86, const syscall_args_t &args, const Si
       if (!sim_time(threadid, &now))
          break;
       sleep = sleep * 2 < LIVE_SLEEP_MAX ? sleep * 2 : LIVE_SLEEP_MAX;
+      if (timers_check(threadid))
+      {
+         if (x86 == Sift::X86_rt_sigtimedwait)
+         {
+            const long s = sigwait_take(threadid, args);
+            if (s)
+            {
+               r = s;               /* the timer's signal, handed over */
+               break;
+            }
+            continue;               /* someone else's */
+         }
+         /* a signal for the guest: the wait ends with EINTR (see Interrupted) */
+         mark_interrupted(threadid, x86, args);
+         r = -EINTR;
+         break;
+      }
    }
+   if (x86 == Sift::X86_rt_sigtimedwait)
+      sigwait_end(threadid);
    time_left(tc, args, x86, deadline, now, r);
+   *ret = (ADDRINT)r;
+   return true;
+}
+
+
+/* ---------------------------------------------------------------- timers
+ *
+ * alarm, setitimer, the POSIX timers and timerfd in the guest's time
+ * (Sift::GuestTimers; see the QEMU plugin's timers): kept here, fired when
+ * the guest's time passes their expiry -- the simulator's, live, else the
+ * time every thread has reached in the one-IPC model -- with calls that
+ * carry no time (rt_sigqueueinfo, as the kernel's signal; the timerfd itself
+ * armed to expire at once).  They are looked at in every system call, in
+ * the wait loops, live at flow control every TIMER_CHECK instructions, and
+ * without a simulator by an internal thread every millisecond.  Live, pause
+ * and sigsuspend wait as a sleep in simulated time until a timer fired here
+ * (Pin keeps the guest's signal mask itself: a probe would not see it);
+ * without a simulator they run, counting as waits, and the internal thread's
+ * signal ends them. */
+
+typedef Sift::GuestTimers<PinLock> Timers;
+Timers *timers = NULL;
+UINT64 *timer_check_at = NULL;
+volatile UINT64 timers_fired = 0;   /* how many fired: a waiter sees one came */
+const UINT64 TIMER_CHECK = 65536;
+
+UINT64 timer_thread_cpu(unsigned slot, void *)
+{
+   return Sift::one_ipc_ns(thread_data[slot].icount_total);
+}
+
+void timer_fire(const Sift::GuestTimer &t)
+{
+   if (t.notify == Sift::NOTIFY_NONE)
+      return;
+   if (t.notify == Sift::NOTIFY_TIMERFD)
+   {
+      const struct itimerspec now = { { 0, 0 }, { 0, 1 } };
+      const UINT64 a[6] = { (UINT64)t.fd, 0, (UINT64)&now, 0, 0, 0 };
+      host_syscall(SYS_timerfd_settime, a);
+      return;
+   }
+   const UINT64 pid = (UINT64)getpid();
+   __sync_fetch_and_add(&timers_fired, 1);
+   {
+      /* a thread in a sigtimedwait for it takes it at once (SigWait) */
+      siginfo_t si;
+      memset(&si, 0, sizeof(si));
+      si.si_signo = t.signo;
+      if (t.notify == Sift::NOTIFY_ITIMER)
+         si.si_code = SI_KERNEL;
+      else
+      {
+         si.si_code = SI_TIMER;
+         si.si_timerid = t.id - Timers::FIRST_POSIX;
+         si.si_overrun = (int)t.overrun;
+         si.si_value.sival_ptr = (void *)t.value;
+      }
+      if (t.notify != Sift::NOTIFY_THREAD && sigwait_give(si))
+         return;
+   }
+   /* an itimer's by kill(): see the QEMU plugin's timer_fire */
+   if (t.notify == Sift::NOTIFY_ITIMER)
+   {
+      const UINT64 a[6] = { pid, (UINT64)t.signo, 0, 0, 0, 0 };
+      host_syscall(SYS_kill, a);
+      return;
+   }
+   siginfo_t si;
+   memset(&si, 0, sizeof(si));
+   si.si_signo = t.signo;
+   {
+      si.si_code = SI_TIMER;
+      si.si_timerid = t.id - Timers::FIRST_POSIX;
+      si.si_overrun = (int)t.overrun;
+      si.si_value.sival_ptr = (void *)t.value;
+   }
+   if (t.notify == Sift::NOTIFY_THREAD)
+   {
+      const UINT64 a[6] = { pid, (UINT64)t.tid, (UINT64)t.signo, (UINT64)&si, 0, 0 };
+      host_syscall(SYS_rt_tgsigqueueinfo, a);
+   }
+   else
+   {
+      const UINT64 a[6] = { pid, (UINT64)t.signo, (UINT64)&si, 0, 0, 0 };
+      host_syscall(SYS_rt_sigqueueinfo, a);
+   }
+}
+
+/* Fire what is due.  threadid: the thread looking, or -1 (the internal
+   thread, without a simulator).  Returns how many fired. */
+unsigned timers_check(INT32 threadid)
+{
+   if (!timers || !timers->armed())
+      return 0;
+   UINT64 time = Sift::NO_DEADLINE;
+   const bool on_line = threadid >= 0 && live(threadid);
+   if (on_line)
+   {
+      UINT64 t;
+      if (sim_time(threadid, &t))
+         time = t;
+   }
+   else
+   {
+      static volatile UINT64 idle_epoch = ~0ull;
+      UINT64 t, epoch;
+      const int r = clocks->process_time(&t, &epoch);
+      if (r == 1)
+         time = t;
+      else if (r == 2 && __sync_lock_test_and_set(&idle_epoch, epoch) == epoch)
+         time = t;
+   }
+   Sift::GuestTimer due[16];
+   const unsigned n = timers->due(time, clocks->process_cpu(), timer_thread_cpu, NULL, due, 16);
+   for (unsigned i = 0; i < n; i++)
+   {
+      if (!on_line && due[i].clock == Sift::TIMER_TIME)
+         clocks->woke_at(due[i].expiry);
+      timer_fire(due[i]);
+   }
+   if (!on_line)
+      clocks->set_event(timers->next_time());
+   return n;
+}
+
+VOID timers_helper(VOID *)
+{
+   struct timespec ms = { 0, 1000000 };
+   const UINT64 a[6] = { (UINT64)&ms, 0, 0, 0, 0, 0 };
+   for (;;)
+   {
+      host_syscall(SYS_nanosleep, a);   /* the recorder's own millisecond */
+      timers_check(-1);
+   }
+}
+
+void timers_helper_start()
+{
+   static volatile int started = 0;
+   if (KnobEmulateSyscalls.Value() || __sync_lock_test_and_set(&started, 1))
+      return;
+   PIN_SpawnInternalThread(timers_helper, NULL, 0, NULL);
+}
+
+UINT64 timer_now(THREADID threadid, Sift::TimerClock clock, unsigned cpu_slot)
+{
+   if (clock == Sift::TIMER_PROCESS_CPU)
+      return clocks->process_cpu();
+   if (clock == Sift::TIMER_THREAD_CPU)
+      return timer_thread_cpu(cpu_slot, NULL);
+   UINT64 t;
+   if (live(threadid) && sim_time(threadid, &t))
+      return t;
+   return clocks->now(threadid);
+}
+
+bool timer_clock(THREADID threadid, INT64 clockid, Sift::TimerClock *clock, unsigned *slot)
+{
+   *slot = threadid;
+   switch (clockid)
+   {
+      case 0: case 1: case 4: case 5: case 6: case 7: case 8: case 9: case 11:
+         *clock = Sift::TIMER_TIME;
+         return true;
+      case 2:
+         *clock = Sift::TIMER_PROCESS_CPU;
+         return true;
+      case 3:
+         *clock = Sift::TIMER_THREAD_CPU;
+         return true;
+      default:
+         if (clockid < 0)
+         {
+            *clock = (clockid & 4) ? Sift::TIMER_THREAD_CPU : Sift::TIMER_PROCESS_CPU;
+            return true;
+         }
+         return false;
+   }
+}
+
+bool read_spec(ADDRINT addr, UINT64 *interval, UINT64 *value, bool timeval)
+{
+   INT64 w[4];
+   if (!read_mem(addr, w, sizeof(w)))
+      return false;
+   const INT64 frac = timeval ? 1000000 : 1000000000, mul = timeval ? 1000 : 1;
+   for (int i = 0; i < 4; i += 2)
+      if (w[i] < 0 || w[i + 1] < 0 || w[i + 1] >= frac)
+         return false;
+   *interval = (UINT64)w[0] * Sift::NS_PER_S + (UINT64)w[1] * mul;
+   *value = (UINT64)w[2] * Sift::NS_PER_S + (UINT64)w[3] * mul;
+   return true;
+}
+
+bool write_spec(ADDRINT addr, UINT64 interval, UINT64 value, bool timeval)
+{
+   const UINT64 div = timeval ? 1000 : 1;
+   const UINT64 w[4] = { interval / Sift::NS_PER_S, interval % Sift::NS_PER_S / div,
+                         value / Sift::NS_PER_S, value % Sift::NS_PER_S / div };
+   return write_mem(addr, w, sizeof(w));
+}
+
+long timer_arm(THREADID threadid, int id, ADDRINT new_addr, ADDRINT old_addr, bool absolute, bool timeval)
+{
+   const Sift::GuestTimer t = timers->get(id);
+   UINT64 interval = 0, value = 0;
+   if (new_addr && !read_spec(new_addr, &interval, &value, timeval))
+      return -EINVAL;
+   const UINT64 now = timer_now(threadid, t.clock, t.cpu_slot);
+   UINT64 expiry = 0;
+   if (value)
+   {
+      if (!absolute)
+         expiry = now + value;
+      else if (t.clock == Sift::TIMER_TIME)
+      {
+         const UINT64 zero = Sift::TIME_START_DEFAULT * Sift::NS_PER_S;
+         expiry = value > zero ? value - zero : 1;
+      }
+      else
+         expiry = value;
+      if (!expiry)
+         expiry = 1;
+   }
+   UINT64 old_left, old_interval;
+   timers->settime(id, now, expiry, interval, &old_left, &old_interval);
+   if (old_addr && !write_spec(old_addr, old_interval, old_left, timeval))
+      return -EFAULT;
+   if (expiry)
+      timers_helper_start();
+   if (!live(threadid))
+      clocks->set_event(timers->next_time());
+   timers_check(threadid);
+   return 0;
+}
+
+long timer_get(THREADID threadid, int id, ADDRINT addr, bool timeval)
+{
+   const Sift::GuestTimer t = timers->get(id);
+   UINT64 left, interval;
+   timers->gettime(id, timer_now(threadid, t.clock, t.cpu_slot), &left, &interval);
+   return write_spec(addr, interval, left, timeval) ? 0 : -EFAULT;
+}
+
+/* Live pause and sigsuspend: sleeps in simulated time until a timer fired */
+long suspend_live(THREADID threadid, int x86, const syscall_args_t &args)
+{
+   const UINT64 fired = timers_fired;
+   UINT64 sleep = LIVE_SLEEP_MIN;
+   struct timespec nap;
+   for (;;)
+   {
+      timers_check(threadid);
+      if (timers_fired != fired)
+      {
+         mark_interrupted(threadid, x86, args);
+         return -EINTR;
+      }
+      put_time(&nap, sleep);
+      syscall_args_t sa = { (UINT64)&nap, 0, 0, 0, 0, 0 };
+      thread_data[threadid].output->Syscall(SYS_nanosleep, (char *)sa, sizeof(sa));
+      sleep = sleep * 2 < LIVE_SLEEP_MAX ? sleep * 2 : LIVE_SLEEP_MAX;
+   }
+}
+
+/* Live, a blocking read of a timerfd kept here: see the QEMU plugin's
+   timerfd_wait_live */
+long timerfd_wait_live(THREADID threadid, int fd)
+{
+   const UINT64 g[6] = { (UINT64)fd, 3 /* F_GETFL */, 0, 0, 0, 0 };
+   const long fl = host_syscall(SYS_fcntl, g);
+   if (fl < 0 || (fl & O_NONBLOCK))
+      return 0;
+   UINT64 sleep = LIVE_SLEEP_MIN;
+   struct timespec zero = { 0, 0 }, nap;
+   for (;;)
+   {
+      timers_check(threadid);
+      struct { INT32 fd; INT16 events, revents; } pfd = { fd, 1, 0 };
+      const UINT64 a[6] = { (UINT64)&pfd, 1, (UINT64)&zero, 0, 8, 0 };
+      const long r = host_syscall(SYS_ppoll, a);
+      if (r != 0)
+         return r == -EINTR ? r : 0;
+      put_time(&nap, sleep);
+      syscall_args_t sa = { (UINT64)&nap, 0, 0, 0, 0, 0 };
+      thread_data[threadid].output->Syscall(SYS_nanosleep, (char *)sa, sizeof(sa));
+      sleep = sleep * 2 < LIVE_SLEEP_MAX ? sleep * 2 : LIVE_SLEEP_MAX;
+   }
+}
+
+/* The timer calls, times, getrusage, and live pause and sigsuspend: true
+   when answered here */
+bool timer_call(THREADID threadid, int x86, const syscall_args_t &args, ADDRINT *ret)
+{
+   long r;
+   switch (x86)
+   {
+      case 37:   /* alarm */
+      {
+         const UINT64 now = timer_now(threadid, Sift::TIMER_TIME, 0);
+         UINT64 left;
+         const UINT64 secs = (UINT32)args[0];
+         timers->settime(0, now, secs ? now + secs * Sift::NS_PER_S : 0, 0, &left, NULL);
+         if (secs)
+            timers_helper_start();
+         if (!live(threadid))
+            clocks->set_event(timers->next_time());
+         UINT64 s = left / Sift::NS_PER_S + (left % Sift::NS_PER_S >= 500000000 ? 1 : 0);
+         if (left && !s)
+            s = 1;
+         *ret = (ADDRINT)s;
+         return true;
+      }
+      case 38:
+         r = args[0] > 2 ? -EINVAL : timer_arm(threadid, (int)args[0], args[1], args[2], false, true);
+         break;
+      case 36:
+         r = args[0] > 2 ? -EINVAL : timer_get(threadid, (int)args[0], args[1], true);
+         break;
+      case 222:  /* timer_create(clockid, sevp, timerid) */
+      {
+         Sift::GuestTimer spec;
+         if (!timer_clock(threadid, (INT64)(INT32)args[0], &spec.clock, &spec.cpu_slot))
+         {
+            r = -EINVAL;
+            break;
+         }
+         spec.notify = Sift::NOTIFY_SIGNAL;
+         spec.signo = SIGALRM;
+         bool value_is_id = true;
+         if (args[1])
+         {
+            struct { UINT64 value; INT32 signo, notify, tid; } ev;
+            if (!read_mem(args[1], &ev, sizeof(ev)))
+            {
+               r = -EFAULT;
+               break;
+            }
+            value_is_id = false;
+            spec.value = ev.value;
+            spec.signo = ev.signo;
+            spec.tid = ev.tid;
+            if (ev.notify == 0)
+               spec.notify = Sift::NOTIFY_SIGNAL;
+            else if (ev.notify == 1)
+               spec.notify = Sift::NOTIFY_NONE;
+            else if (ev.notify == 4)
+               spec.notify = Sift::NOTIFY_THREAD;
+            else
+            {
+               r = -EINVAL;
+               break;
+            }
+            if (spec.notify != Sift::NOTIFY_NONE && (spec.signo < 1 || spec.signo > 64))
+            {
+               r = -EINVAL;
+               break;
+            }
+         }
+         const int id = timers->create(spec);
+         if (id < 0)
+         {
+            r = -EAGAIN;
+            break;
+         }
+         if (value_is_id)
+            timers->set_value(id, (UINT64)(id - Timers::FIRST_POSIX));
+         const INT32 guest_id = id - Timers::FIRST_POSIX;
+         r = write_mem(args[2], &guest_id, sizeof(guest_id)) ? 0 : -EFAULT;
+         if (r)
+            timers->remove(id);
+         break;
+      }
+      case 223: case 224: case 225: case 226:
+      {
+         const int id = (int)(INT32)args[0] + Timers::FIRST_POSIX;
+         if ((INT32)args[0] < 0 || !timers->valid(id) || timers->get(id).notify == Sift::NOTIFY_TIMERFD)
+            r = -EINVAL;
+         else if (x86 == 223)
+            r = timer_arm(threadid, id, args[2], args[3], (args[1] & 1) != 0, false);
+         else if (x86 == 224)
+            r = timer_get(threadid, id, args[1], false);
+         else if (x86 == 225)
+         {
+            const UINT64 o = timers->overrun(id);
+            r = (long)(o < 0x7fffffff ? o : 0x7fffffff);
+         }
+         else
+         {
+            timers->remove(id);
+            r = 0;
+         }
+         break;
+      }
+      case 286: case 287:  /* timerfd_settime, timerfd_gettime */
+      {
+         int id = timers->find((int)args[0]);
+         if (id < 0)
+            id = timers->timerfd((int)args[0], Sift::TIMER_TIME);
+         if (id < 0)
+            r = -EAGAIN;
+         else if (x86 == 287)
+            r = timer_get(threadid, id, args[1], false);
+         else
+         {
+            const struct itimerspec off = { { 0, 0 }, { 0, 0 } };
+            const UINT64 a[6] = { args[0], 0, (UINT64)&off, 0, 0, 0 };
+            r = host_syscall(SYS_timerfd_settime, a);
+            if (r != 0)
+               timers->forget_fd((int)args[0]);
+            else
+               r = timer_arm(threadid, id, args[2], args[3], (args[1] & 1) != 0, false);
+         }
+         break;
+      }
+      case 283:  /* timerfd_create(clockid, flags): made here, its timer on its clock */
+      {
+         Sift::TimerClock clock;
+         unsigned slot;
+         if (!timer_clock(threadid, (INT64)(INT32)args[0], &clock, &slot))
+            return false;              /* the kernel's EINVAL */
+         r = host_syscall(SYS_timerfd_create, args);
+         if (r >= 0)
+         {
+            timers->forget_fd((int)r);
+            timers->timerfd((int)r, clock);
+         }
+         break;
+      }
+      case 3:    /* close: a timerfd's timer goes with it */
+         timers->forget_fd((int)args[0]);
+         return false;
+      case 0: case 19:   /* read, readv: live, of a timerfd, wait for it first */
+         if (live(threadid) && timers->find((int)args[0]) >= 0)
+         {
+            r = timerfd_wait_live(threadid, (int)args[0]);
+            if (r)
+               break;
+         }
+         return false;
+      case 34: case 130:   /* pause, rt_sigsuspend */
+         if (!live(threadid))
+            return false;
+         r = suspend_live(threadid, x86, args);
+         break;
+      case 100:  /* times(buf) */
+      {
+         const UINT64 tms[4] = { clocks->process_cpu() / 10000000, 0, 0, 0 };
+         if (args[0] && !write_mem(args[0], tms, sizeof(tms)))
+            r = -EFAULT;
+         else
+            r = (long)((Sift::TIME_START_DEFAULT * Sift::NS_PER_S + timer_now(threadid, Sift::TIMER_TIME, 0)) / 10000000);
+         break;
+      }
+      case 98:   /* getrusage(who, usage): the kernel's, but the CPU times */
+      {
+         r = host_syscall(98, args);
+         if (r == 0 && args[1] && ((INT64)args[0] == 0 || (INT64)args[0] == 1))
+         {
+            const UINT64 user = (INT64)args[0] == 1 ? timer_thread_cpu(threadid, NULL) : clocks->process_cpu();
+            const UINT64 tv[4] = { user / Sift::NS_PER_S, user % Sift::NS_PER_S / 1000, 0, 0 };
+            if (!write_mem(args[1], tv, sizeof(tv)))
+               r = -EFAULT;
+         }
+         break;
+      }
+      default:
+         return false;
+   }
    *ret = (ADDRINT)r;
    return true;
 }
@@ -448,6 +1032,11 @@ void note_wakes(THREADID threadid, int x86, const syscall_args_t &args)
 void timedInit()
 {
    clocks = new Clocks(max_num_threads, clock_instructions, NULL);
+   timers = new Timers();
+   timer_check_at = new UINT64[max_num_threads]();
+   interrupted = new Interrupted[max_num_threads]();
+   sigwaits = new SigWait[max_num_threads]();
+   PIN_InitLock(&sigwait_lock);
    waiting = new bool[max_num_threads]();
 }
 
@@ -471,6 +1060,14 @@ bool timedSyscall(THREADID threadid, ADDRINT num, const syscall_args_t &args, AD
    if (!TIMED_CALLS || replayingPinball())
       return false;
    const int x86 = (int)num;
+   if (restarted_after_signal(threadid, num, args))
+   {
+      *ret = (ADDRINT)-EINTR;
+      return true;
+   }
+   timers_check(threadid);
+   if (timer_call(threadid, x86, args, ret))
+      return true;
    Sift::TimedCall tc;
    const bool timed = Sift::timed_call(x86, args, &tc);
    if (live(threadid))
@@ -484,6 +1081,17 @@ bool timedSyscall(THREADID threadid, ADDRINT num, const syscall_args_t &args, AD
       waiting[threadid] = true;
    }
    return false;
+}
+
+void timedFlow(THREADID threadid)
+{
+   if (!TIMED_CALLS || !timers || !timers->armed() || !live(threadid))
+      return;
+   const UINT64 n = thread_data[threadid].icount_total;
+   if (n - timer_check_at[threadid] < TIMER_CHECK)
+      return;
+   timer_check_at[threadid] = n;
+   timers_check(threadid);
 }
 
 void timedSyscallReturned(THREADID threadid, ADDRINT ret)

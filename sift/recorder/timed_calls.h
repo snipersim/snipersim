@@ -21,6 +21,8 @@ UINT64 timedProcessCpu();
 /* A system call about to run: true when it was run here (a timed wait) and
    *ret is its result; otherwise the bookkeeping is done and it runs */
 bool timedSyscall(THREADID threadid, ADDRINT num, const syscall_args_t &args, ADDRINT *ret);
+/* Live flow control: the timers, every so many instructions */
+void timedFlow(THREADID threadid);
 /* A system call that ran returned */
 void timedSyscallReturned(THREADID threadid, ADDRINT ret);
 
