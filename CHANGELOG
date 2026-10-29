@@ -127,6 +127,10 @@ Version 9.0 (in preparation)
     lost, the recorder reported as exiting with status 1).  It now waits for
     the recorders, at most --app-exit-wait seconds (60 by default); the
     test_apps case roi-exit checks it
+  * The SIFT recorder closes an exiting thread's writer once: its
+    thread-exit helper and the Fini callback of the thread ending the
+    process both closed it (twice deleted, or deleted under the helper's
+    last request)
   * The trace manager's monitor no longer reads trace threads that were
     deleted at the end of a run (a SIGSEGV on the way out, rare)
   * doc-verify fails a build block whose build failed (it reported only the

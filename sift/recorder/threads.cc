@@ -79,29 +79,44 @@ static VOID threadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 static VOID threadFinishHelper(VOID *arg)
 {
    uint64_t threadid = reinterpret_cast<uint64_t>(arg);
+
+   /* This helper runs alongside whatever the process does next, and when the
+      process is ending -- an exit_group runs every remaining thread's exit
+      callback and then Fini -- that is the Fini callback, which closes every
+      writer it still finds (sift_recorder.cc).  Both closed this thread's writer, and the helper
+      could still be using it -- its FUTEX_WAKE waiting for an answer -- while
+      Fini deleted it.  Taking the writer first makes it this helper's alone,
+      or, when Fini got there first, leaves it to Fini. */
+   Sift::Writer *output = takeOutput(threadid);
+
    /* live only: without a simulator the kernel clears the word and wakes the
       joiner itself */
-   if (thread_data[threadid].tid_ptr && thread_data[threadid].output && KnobEmulateSyscalls.Value())
+   if (thread_data[threadid].tid_ptr && KnobEmulateSyscalls.Value())
    {
       // Set this pointer to 0 to indicate that this thread is complete
       intptr_t tid = (intptr_t)thread_data[threadid].tid_ptr;
       *(int*)tid = 0;
       // Send the FUTEX_WAKE to the simulator to wake up a potential pthread_join() caller
-      syscall_args_t args = {0};
-      args[0] = (intptr_t)tid;
-      args[1] = FUTEX_WAKE;
-      args[2] = 1;
-      thread_data[threadid].output->Syscall(SYS_futex, (char*)args, sizeof(args));
+      if (output)
+      {
+         syscall_args_t args = {0};
+         args[0] = (intptr_t)tid;
+         args[1] = FUTEX_WAKE;
+         args[2] = 1;
+         output->Syscall(SYS_futex, (char*)args, sizeof(args));
+      }
    }
 
-   if (thread_data[threadid].output)
+   if (output)
+      closeOutput(threadid, output);
+
+   // With block files, closing a writer reads the thread's basic-block
+   // vector: one that Fini took may still be closing, and the vector stays.
+   if (output || !blocksize)
    {
-      closeFile(threadid);
+      delete thread_data[threadid].bbv;
+      thread_data[threadid].bbv = NULL;
    }
-
-   delete thread_data[threadid].bbv;
-
-   thread_data[threadid].bbv = NULL;
 }
 
 static VOID threadFinish(THREADID threadid, const CONTEXT *ctxt, INT32 flags, VOID *v)

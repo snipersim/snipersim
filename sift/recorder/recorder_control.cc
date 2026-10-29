@@ -14,6 +14,7 @@
 // #include <sys/stat.h>
 #include <unistd.h>
 #include <cstring>
+#include <cstddef>
 
 static AFUNPTR extrae_event_rtn = NULL;
 
@@ -433,7 +434,26 @@ void openFile(THREADID threadid)
    thread_data[threadid].output->setHandleAccessMemoryFunc(handleAccessMemory, reinterpret_cast<void*>(threadid));
 }
 
+/* Take a thread's writer: whoever gets it non-NULL owns it, and the thread
+   stops writing to it from this point on.  A thread's writer is closed from
+   more than one thread at the end of a run: the cleanup helper its thread
+   exit spawned (threads.cc) and the Fini callback of the thread that ends the
+   process both closed it, each having seen it non-NULL, so the same writer
+   was ended and deleted twice.  The exchange makes it one of them. */
+static_assert(offsetof(thread_data_t, output) == 0, "takeOutput() addresses the writer through the thread's record");
+Sift::Writer *takeOutput(THREADID threadid)
+{
+   return __atomic_exchange_n(reinterpret_cast<Sift::Writer**>(&thread_data[threadid]), (Sift::Writer*)NULL, __ATOMIC_ACQ_REL);
+}
+
 void closeFile(THREADID threadid)
+{
+   Sift::Writer *output = takeOutput(threadid);
+   if (output)
+      closeOutput(threadid, output);
+}
+
+void closeOutput(THREADID threadid, Sift::Writer *output)
 {
    if (KnobVerbose.Value())
    {
@@ -443,9 +463,6 @@ void closeFile(THREADID threadid)
       std::cerr << " instructions" << std::endl;
    }
 
-   Sift::Writer *output = thread_data[threadid].output;
-   thread_data[threadid].output = NULL;
-   // Thread will stop writing to output from this point on
    output->End();
    delete output;
 
