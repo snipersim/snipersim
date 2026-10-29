@@ -37,6 +37,34 @@ def resolve_build_dir(home, explicit = None):
   sys.exit(-1)
 
 
+def ensure_mpich(home, jobs = None):
+  """The MPICH that deps/sniper-deps --mpi builds into <home>/mpich: its
+  mpiexec, fetched on demand when it is not there (linked from the shared
+  dependency cache, or built into it once), or None if that fails.  The MPI
+  cases skipped, and run-sniper --mpi fell back to an mpiexec that is not
+  there, until someone ran the fetch by hand; the other dependencies a run
+  needs on demand are fetched the same way (tools/riscv/ime-check.sh)."""
+  mpiexec = os.path.join(home, 'mpich', 'bin', 'mpiexec')
+  if os.path.isfile(mpiexec):
+    return mpiexec
+  cmd = [ sys.executable, os.path.join(home, 'deps', 'sniper-deps'), '--mpi' ]
+  if jobs:
+    cmd += [ '--jobs', str(jobs) ]
+  cmd += [ 'fetch' ]
+  print('[SNIPER] No MPI in %s; fetching it: %s' % (home, ' '.join(cmd)), file = sys.stderr)
+  sys.stderr.flush()
+  try:
+    # its progress to stderr: stdout may be a caller's parsed output
+    rc = subprocess.call(cmd, stdout = sys.stderr.fileno())
+  except OSError as e:
+    print('[SNIPER] Could not run deps/sniper-deps: %s' % e, file = sys.stderr)
+    return None
+  if rc != 0 or not os.path.isfile(mpiexec):
+    print('[SNIPER] Fetching MPI failed (exit %d)' % rc, file = sys.stderr)
+    return None
+  return mpiexec
+
+
 def va2pa_valid():
   """Can this process read physical frame numbers from /proc/self/pagemap?
 

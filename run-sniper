@@ -797,6 +797,9 @@ elif use_mpi:
     # dependency exists to fix, so it has to be looked for here as well as in
     # the test makefiles.
     bundled = os.path.join(HOME, 'mpich', 'bin', 'mpiexec')
+    if not os.path.exists(bundled) and not shutil.which('mpiexec'):
+      # Neither: fetched on demand, as the test cases do
+      bundled = run_sniper.ensure_mpich(HOME) or bundled
     mpiexec = [bundled if os.path.exists(bundled) else 'mpiexec']
   mpiexec.extend(['-np', str(mpi_ranks)])
   # Set trace recorder options

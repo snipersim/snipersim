@@ -555,8 +555,12 @@ CASES = {
 
 def unavailable(reason):
     if reason == 'mpich':
-        if not os.path.isfile(os.path.join(SNIPER_ROOT, 'mpich', 'bin', 'mpiexec')):
-            return 'no MPI (deps/sniper-deps --mpi fetch)'
+        # Fetched on demand (linked from the dependency cache, or built
+        # there once), as the cases need it, rather than skipped
+        sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
+        import run_sniper
+        if not run_sniper.ensure_mpich(SNIPER_ROOT, jobs=len(os.sched_getaffinity(0))):
+            return 'no MPI, and deps/sniper-deps --mpi fetch failed'
     if reason == 'torch':
         # The nn branch predictor needs libtorch, which the build carries only
         # with TORCH=ON; the build's own config says whether it does.
