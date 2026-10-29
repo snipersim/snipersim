@@ -110,7 +110,17 @@ def sniper_failed(rc, out):
     simulator's backtrace (a crash), its assertion or the error it stopped on
     is; a one-off failure under the whole suite is otherwise unexplained
     once the temporary directory is gone."""
-    tail = [l.strip()[:160] for l in out.splitlines() if l.strip()][-10:]
+    lines = [l.strip()[:160] for l in out.splitlines() if l.strip()]
+    tail = lines[-10:]
+    # A crash: its reason and the backtrace's first frames, where it
+    # crashed -- the last lines are only the bottom of the stack
+    # (spawnedThreadFunc), which said nothing of the one-off SIGSEGV that
+    # first showed this
+    for i, l in enumerate(lines):
+        if 'Internal exception' in l:
+            frames = [f for f in lines[i:] if '.cc:' in f or '.h:' in f][:6]
+            tail = [l] + frames
+            break
     return 'run-sniper %s%s' % (exit_text(rc), (': ' + ' | '.join(tail)) if tail else '')
 
 
