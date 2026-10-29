@@ -180,6 +180,7 @@ class TraceThread : public Runnable
       UInt64 m_riscv_spans_dropped_lines;   /* lines touched beyond the spans a record holds */
       bool m_count_riscv;
       uint32_t staticMemoryOperands(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst);
+      bool lacksAddresses(Sift::Instruction &inst);
       void countExtension(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst);
 
       int fd_read;

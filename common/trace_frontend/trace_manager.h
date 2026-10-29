@@ -182,6 +182,7 @@ class TraceManager
       std::vector<TraceThread *> m_watch_threads;
       std::mutex m_watch_lock;
       bool m_watch_closed = false;   // cleanup() ran: the monitor stops
+      volatile bool m_app_crashed = false;
       void reportHang(unsigned seconds);
       UInt32 m_num_threads_started;
       UInt32 m_num_threads_running;
@@ -249,6 +250,10 @@ class TraceManager
       void endApplication(TraceThread *thread, SubsecondTime time);
       void accessMemory(int core_id, Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size);
       void endFrontEnd(); //Ask all trace_threads to send signal to front-end to shutdown
+      /* An application crashed (its last instruction never completed):
+         the run ends as usual and the simulator's exit status is 1 */
+      void signalAppCrashed() { m_app_crashed = true; }
+      bool appCrashed() const { return m_app_crashed; }
 
       TraceThread *getTraceThread(app_id_t app_id, thread_id_t th);
 

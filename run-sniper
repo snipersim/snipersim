@@ -990,7 +990,9 @@ if tracegen:
           fd = os.open(f, os.O_WRONLY | os.O_NONBLOCK)
           os.close(fd)
           fifos.remove(f)
-          print('[SNIPER] Application %d ended before the simulator had its stream; the simulation cannot continue' % app_id)
+          # (the simulator may also be reading the stream still: the
+          # application crashed mid-run, which the simulator reports)
+          print('[SNIPER] Application %d\'s stream is closed for the simulator: its recorder ended' % app_id)
         except OSError:
           pass
       time.sleep(0.2)

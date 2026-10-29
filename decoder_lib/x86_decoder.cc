@@ -588,12 +588,19 @@ void X86DecodedInst::set_disassembly()
   xed_format_context(s, (&(this->xed_inst)), temp_buffer, 
                       sizeof(temp_buffer) - 1, this->m_address, 0, 0);
   
-  m_disassembly.assign(temp_buffer, sizeof(temp_buffer));
+  m_disassembly.assign(temp_buffer);
 }
 
 std::string X86DecodedInst::disassembly_to_str() const
 {
-  return this->m_disassembly;
+  /* Decoding leaves the text out (set_disassembly is not called there, for
+     speed): made here when asked, in Intel syntax */
+  if (!this->m_disassembly.empty())
+    return this->m_disassembly;
+  char temp_buffer[128];
+  if (!xed_format_context(XED_SYNTAX_INTEL, &(this->xed_inst), temp_buffer, sizeof(temp_buffer) - 1, this->m_address, 0, 0))
+    return std::string();
+  return std::string(temp_buffer);
 }
 
 bool X86DecodedInst::is_nop() const

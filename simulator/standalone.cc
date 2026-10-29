@@ -67,8 +67,12 @@ int main(int argc, char* argv[])
      Sim()->getTraceManager()->run();
    }
 
+   /* An application that crashed (TraceThread: its last instruction never
+      completed) is a failed run, its results written up to the crash */
+   const int status = Sim()->getTraceManager()->appCrashed() ? 1 : 0;
+
    Simulator::release();
    delete cfg;
 
-   return 0;
+   return status;
 }

@@ -1272,6 +1272,29 @@ uint32_t TraceThread::staticMemoryOperands(const Sift::Instruction &inst, const 
    return inst.num_spans ? 0 : Sim()->getDecoder()->num_memory_operands(&dec_inst);
 }
 
+/* Does the instruction have fewer data addresses than its memory operands
+   need (as handleInstructionDetailed and handleInstructionWarmup take them:
+   an AArch64 pair's second element from the first's address)?  An
+   instruction's addresses follow it once it has executed: one cut off by
+   the end of its stream never completed. */
+bool TraceThread::lacksAddresses(Sift::Instruction &inst)
+{
+   if (inst.is_champsim)
+      return false;
+   if (m_decoder_cache.count(inst.sinst) == 0)
+      m_decoder_cache[inst.sinst] = staticDecode(inst);
+   const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst]);
+   if (dec_inst.is_nop())
+      return false;
+   uint32_t need = 0;
+   for (uint32_t mem_idx = 0; mem_idx < staticMemoryOperands(inst, dec_inst); ++mem_idx)
+      if (Sim()->getDecoder()->op_read_mem(&dec_inst, mem_idx) || Sim()->getDecoder()->op_write_mem(&dec_inst, mem_idx))
+         need = mem_idx + 1;
+   if (dec_inst.is_mem_pair() && need > 1)
+      need--;
+   return inst.num_addresses < need;
+}
+
 void TraceThread::countExtension(const Sift::Instruction &inst, const dl::DecodedInst &dec_inst)
 {
    if (!m_count_riscv)
@@ -2043,6 +2066,28 @@ void TraceThread::m_run_func_default()
       // Force BBV end on non-taken branches
       m_bbv_end = inst.is_branch;
 
+
+      /* The stream's last instruction without its data addresses: the
+         application stopped inside it -- a fault (a segmentation fault
+         under QEMU, say) killed it before the access completed.  It is not
+         simulated (it never executed), and the run ends with the
+         application's crash reported, not an assertion on the missing
+         addresses.  A thread stopped from outside (a sibling's exit) may
+         be cut off mid-instruction too: that one ends quietly. */
+      if (last_one && lacksAddresses(inst))
+      {
+         if (!m_stop && !m_thread->isAborted())
+         {
+            const dl::DecodedInst &dec_inst = *(m_decoder_cache[inst.sinst]);
+            fprintf(stderr, "[SNIPER] Error: the application crashed: thread %d stopped in the instruction at 0x%" PRIx64 " (%s)"
+                            " before its memory access completed -- a fault such as a segmentation fault ended it there."
+                            " Simulated up to that instruction.\n",
+                    m_thread->getId(), (uint64_t)inst.sinst->addr, dec_inst.disassembly_to_str().c_str());
+            Sim()->getTraceManager()->signalAppCrashed();
+         }
+         m_bbv_count--;      // counted above, never executed
+         break;
+      }
 
       if (inst.is_champsim)
       {
