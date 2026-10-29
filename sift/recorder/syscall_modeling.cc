@@ -141,6 +141,29 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       }
    }
 
+   /* Live, the simulator answers clock_gettime and gettimeofday by writing
+      through this recorder's memory callback, which cannot report an
+      unwritable buffer: the call returned 0 where the kernel answers
+      EFAULT.  The buffers are tried first (read, and written back as they
+      were). */
+   if (live && !replayingPinball() && (syscall_number == SYS_clock_gettime || syscall_number == SYS_gettimeofday))
+   {
+      const ADDRINT bufs[2] = { syscall_number == SYS_clock_gettime ? args[1] : args[0],
+                                syscall_number == SYS_gettimeofday ? args[1] : 0 };
+      const size_t sizes[2] = { 2 * sizeof(ADDRINT), 2 * sizeof(int32_t) };   /* timespec/timeval; timezone */
+      for (int i = 0; i < 2; i++)
+      {
+         char tmp[2 * sizeof(ADDRINT)];
+         if (bufs[i] && (PIN_SafeCopy(tmp, (void*)bufs[i], sizes[i]) != sizes[i]
+                         || PIN_SafeCopy((void*)bufs[i], tmp, sizes[i]) != sizes[i]))
+         {
+            thread_data[threadid].last_syscall_returnval = (ADDRINT)-14;   /* EFAULT */
+            thread_data[threadid].last_syscall_emulated = true;
+            return;
+         }
+      }
+   }
+
    /* Every thread clone, live or not: the child's clear-tid word (for the
       joiner's wake, live), its TLS (which pairs it with the child) and its
       parent (whose time the child's clock starts at).  The simulator hears

@@ -2027,6 +2027,8 @@ void send_threadinfo(VCPU *v)
  * is not sent (not modelled, no response channel, outside the ROI); else the
  * simulator's return value is in *ret and *emulated says whether it replaces
  * the call. */
+bool read_guest(uint64_t addr, void *dst, size_t size);
+bool write_guest(uint64_t addr, const void *src, size_t size);
 static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
                             uint64_t *ret, bool *emulated)
 {
@@ -2049,6 +2051,26 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
       return false;
 
    send_threadinfo(v);
+
+   /* The simulator answers clock_gettime and gettimeofday by writing through
+    * the plugin's memory callback, which cannot report an unwritable buffer:
+    * the call returned 0 where the kernel answers EFAULT.  The buffers are
+    * tried first (read, and written back as they were). */
+   if (sys == 228 || sys == 96)
+   {
+      const uint64_t bufs[2] = { sys == 228 ? args[1] : args[0], sys == 96 ? args[1] : 0 };
+      const size_t sizes[2] = { 16, 8 };   /* timespec/timeval (64-bit guests), timezone */
+      for (int i = 0; i < 2; i++)
+      {
+         uint8_t tmp[16];
+         if (bufs[i] && (!read_guest(bufs[i], tmp, sizes[i]) || !write_guest(bufs[i], tmp, sizes[i])))
+         {
+            *ret = (uint64_t)-14;   /* EFAULT */
+            *emulated = true;
+            return true;
+         }
+      }
+   }
 
    /* Close out the instruction that issued the syscall first, and the count
     * pending between measured regions, so the call is placed after the
