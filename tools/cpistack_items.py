@@ -74,13 +74,14 @@ def build_itemlist(use_simple_sync = False, use_simple_mem = True):
       [ 'shadow-cache', .01, 'DataCacheshadow-cache' ],
       [ 'page-fault', .01, 'DataCachepage-fault' ],
       [ 'dram',         .01, ('DataCachedram', 'DataCachedram-local', 'DataCachedram-remote',
-                              'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheunknown') ],
+                              'DataCachemiss', 'DataCache????', 'DataCachepredicate-false', 'DataCacheprefetch-no-mapping',
+                              'DataCacheunknown') ],
     ] ],
   ]
 
   if use_simple_sync:
     items += [ [ 'sync', .01, ('SyncFutex', 'SyncPthreadMutex', 'SyncPthreadCond', 'SyncPthreadBarrier', 'SyncJoin',
-                                   'SyncPause', 'SyncSleep', 'SyncUnscheduled', 'SyncMemAccess', 'Recv' ) ] ]
+                                   'SyncPause', 'SyncSleep', 'SyncSyscall', 'SyncUnscheduled', 'SyncMemAccess', 'Recv' ) ] ]
   else:
     items += [
     [ 'sync',     .01, [
@@ -120,14 +121,15 @@ def build_grouplist(legacy = False):
       ('compute',     (0xff,0,0), ('dispatch_width', 'rs_full', 'base', 'issue', 'depend',
                                    'branch', 'serial', 'smt')),
       ('communicate', (0,0xff,0), ('itlb','dtlb','ifetch','mem','fast-fault',)),
-      ('synchronize', (0,0,0xff), ('sync', 'recv', 'dvfs-transition', 'imbalance')),
+      ('synchronize', (0,0,0xff), ('sync', 'dvfs-transition', 'imbalance')),
     ]
   else:
     return [
       ('compute',     (0xff,0,0),    ('dispatch_width', 'rs_full', 'base', 'issue', 'depend', 'serial', 'smt')),
       ('branch',      (0xff,0xff,0), ('branch',)),
       ('memory',      (0,0xff,0),    ('itlb','dtlb','ifetch','mem','fast-fault',)),   # every top-level item needs a group (viz maps them)
-      ('synchronize', (0,0,0xff),    ('sync', 'recv', 'dvfs-transition', 'imbalance')),
+      # Recv is one of sync's (there is no top-level 'recv' item)
+      ('synchronize', (0,0,0xff),    ('sync', 'dvfs-transition', 'imbalance')),
     ]
 
 

@@ -286,6 +286,38 @@ def fft_and(feature):
     return check
 
 
+def cpistack_items_mismatch():
+    """tools/cpistack_items.py's variants must place the same components: a
+    run's component missing from one (DataCacheprefetch-no-mapping from the
+    use_simple_mem=False stack, SyncSyscall from the simple sync item) is
+    reported by cpistack as 'not in all_items' only when a run has it.  And
+    each group's members must be items ('recv' was not).  None when they
+    agree, else what differs."""
+    sys.path.insert(0, os.path.join(SNIPER_ROOT, 'tools'))
+    import cpistack_items
+    def keys(items):
+        out = set()
+        for _name, _threshold, k in items:
+            out |= keys(k) if isinstance(k, list) else set(k if isinstance(k, tuple) else (k,))
+        return out
+    variants = {(sync, mem): keys(cpistack_items.build_itemlist(use_simple_sync=sync, use_simple_mem=mem))
+                for sync in (False, True) for mem in (True, False)}
+    want = variants[(False, True)]                      # cpistack's default
+    for v, got in sorted(variants.items()):
+        if got != want:
+            return 'cpistack_items (use_simple_sync=%s, use_simple_mem=%s) differs from the default: missing %s, extra %s' % (
+                v[0], v[1], sorted(want - got), sorted(got - want))
+    top = {name for name, _t, _k in cpistack_items.build_itemlist()}
+    for legacy in (False, True):
+        for group, _color, members in cpistack_items.build_grouplist(legacy=legacy):
+            if set(members) - top:
+                return 'cpistack_items group %s names %s, which are not items' % (group, sorted(set(members) - top))
+        grouped = set(m for _g, _c, ms in cpistack_items.build_grouplist(legacy=legacy) for m in ms)
+        if top - grouped:
+            return 'cpistack_items items %s are in no group' % sorted(top - grouped)
+    return None
+
+
 def simout_feature(out, outdir):
     """The summary and the CPI stack (E9: nothing checked their contents).
     sim.out must give each core the instruction count sim.stats has and no
@@ -308,6 +340,18 @@ def simout_feature(out, outdir):
     m = re.search(r'^\s*Idle time \(ns\)\s*\|(.*)$', simout, re.M)
     if not m or any(int(v) < 0 for v in m.group(1).replace('|', ' ').split()):
         return False, 'sim.out has a negative idle time: %s' % (m.group(0).strip() if m else 'no idle row')
+    bad = cpistack_items_mismatch()
+    if bad:
+        return False, bad
+    # Every variant of the stack, not only the default: --no-simple-mem
+    # lacked DataCacheprefetch-no-mapping
+    for variant in (['--no-simple-mem'], ['--simplified']):
+        p = subprocess.run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'cpistack.py'), '--cpi', '-d', simdir,
+                            '-o', os.path.join(outdir, 'cpi-stack' + variant[0])] + variant,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if 'not in all_items' in p.stdout or p.returncode != 0:
+            return False, 'cpistack %s: %s' % (variant[0], (re.search(r'Also found.*', p.stdout) or
+                                                           re.search(r'.*$', p.stdout.strip())).group(0)[:200])
     p = subprocess.run([sys.executable, os.path.join(SNIPER_ROOT, 'tools', 'cpistack.py'), '--cpi', '-d', simdir,
                         '-o', os.path.join(outdir, 'cpi-stack')], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if 'not in all_items' in p.stdout:
