@@ -19,6 +19,8 @@ class vostream
       virtual void flush() = 0;
       virtual bool is_open() = 0;
       virtual bool fail() = 0;
+      // The file descriptor written to, or -1 (cvifstream::watchPeer)
+      virtual int fd() { return -1; }
 };
 
 class vofstream : public vostream
@@ -62,6 +64,8 @@ class ozstream : public vostream
          { return output->fail(); }
       virtual bool is_open()
          { return output->is_open(); }
+      virtual int fd()
+         { return output->fd(); }
 };
 
 
@@ -116,8 +120,10 @@ class cvifstream : public vistream
 	   // Sticky: set when a read returns fewer bytes than asked for, whether
 	   // from end of file or from a stream error, and reported by fail().
 	   bool read_failed;
+	   int peer_fd;               // the request pipe's write end, or -1 (watchPeer)
 	   bool fill(char* s, size_t n);
 	   void switchToBlocking();
+	   bool peerGone();
    public:
 	   cvifstream(const char * filename, std::ios_base::openmode mode = std::ios_base::in);
 	   cvifstream(std::FILE *stream);
@@ -125,6 +131,13 @@ class cvifstream : public vistream
 	   virtual void read(char* s, std::streamsize n);
 	   virtual int peek();
 	   virtual bool fail() const;
+	   /* The pipe the requests this stream answers go out on.  While no
+	      writer has connected here, a reader gone from that pipe means the
+	      simulator closed this thread's channel without ever opening this
+	      one -- its trace thread ended before it got a core, its application
+	      having exited -- and no answer will come: the read fails, as at the
+	      end of the file, rather than waiting for ever. */
+	   void watchPeer(int fd) { peer_fd = fd; }
 };
 
 /* A FILE*-backed output stream whose FIFO open never blocks inside the C
@@ -148,6 +161,7 @@ class cvofstream : public vostream
       virtual void flush();
       virtual bool fail();
       virtual bool is_open();
+      virtual int fd();
 };
 
 class izstream : public vistream

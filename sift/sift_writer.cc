@@ -227,7 +227,11 @@ void Sift::Writer::initResponse()
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
      //response = new vifstream(m_response_filename, std::ios::in);
-     response = new cvifstream(m_response_filename, std::ios_base::in);
+     cvifstream *in = new cvifstream(m_response_filename, std::ios_base::in);
+     // The simulator closing this thread's stream ends the wait for its first answer
+     if (output)
+        in->watchPeer(output->fd());
+     response = in;
      sift_assert(!response->fail());
    }
 }

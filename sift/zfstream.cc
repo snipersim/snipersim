@@ -270,9 +270,13 @@ bool cvofstream::is_open()
 {
 	return this->stream != NULL;
 }
+int cvofstream::fd()
+{
+	return this->stream ? ::fileno(this->stream) : -1;
+}
 
 cvifstream::cvifstream(const char * filename, std::ios_base::openmode mode)
-	: fd(-1), filename(strdup(filename)), owned(NULL), writer_seen(false), peek_buffer(0), buffer_in_use(false), read_failed(false)
+	: fd(-1), filename(strdup(filename)), owned(NULL), writer_seen(false), peek_buffer(0), buffer_in_use(false), read_failed(false), peer_fd(-1)
 {
 	// FIXME: Reimplement this correctly
 	if(mode & (std::ios_base::app | std::ios_base::ate | std::ios_base::trunc | std::ios_base::out))
@@ -281,7 +285,7 @@ cvifstream::cvifstream(const char * filename, std::ios_base::openmode mode)
 	assert(this->fd >= 0);
 }
 cvifstream::cvifstream(std::FILE *stream)
-	: fd(::fileno(stream)), filename(NULL), owned(stream), writer_seen(true), peek_buffer(0), buffer_in_use(false), read_failed(false)
+	: fd(::fileno(stream)), filename(NULL), owned(stream), writer_seen(true), peek_buffer(0), buffer_in_use(false), read_failed(false), peer_fd(-1)
 {
 }
 cvifstream::~cvifstream()
@@ -316,6 +320,13 @@ bool cvifstream::fill(char* s, size_t n)
 			}
 			if (r == 0 || (r < 0 && errno == EINTR))
 			{
+				if (this->peerGone())
+				{
+					std::cerr << "[SIFT] response pipe: the simulator closed this thread's stream before it connected"
+					          << " -- no answer will come" << std::endl;
+					this->read_failed = true;
+					return false;
+				}
 				struct timespec ts = { 0, 1000000 };
 				::nanosleep(&ts, NULL);
 				continue;
@@ -331,6 +342,17 @@ bool cvifstream::fill(char* s, size_t n)
 		return false;
 	}
 	return true;
+}
+/* A pipe's write end polls POLLERR once the pipe has no reader left */
+bool cvifstream::peerGone()
+{
+	if (this->peer_fd < 0)
+		return false;
+	struct pollfd p;
+	p.fd = this->peer_fd;
+	p.events = POLLOUT;
+	p.revents = 0;
+	return ::poll(&p, 1, 0) > 0 && (p.revents & POLLERR);
 }
 /* The writer is connected: reopen the FIFO in blocking mode (immediate, the
    writer holds its end) and drop the non-blocking fd.  Both fds share the
