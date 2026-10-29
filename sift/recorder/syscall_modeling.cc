@@ -117,11 +117,13 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       const bool process_cpu = !thread_cpu && (clk == CLOCK_PROCESS_CPUTIME_ID || clk < 0);
       const uint64_t ns = thread_cpu ? timedThreadCpu(threadid) : process_cpu ? timedProcessCpu()
                         : guestTimeZeroNs() + timedNow(threadid);
-      const uint64_t words[2] = { ns / 1000000000ull, tod ? ns / 1000 % 1000000 : ns % 1000000000ull };
+      /* the guest's words: time_t and long, 32 bits each in an i386 process */
+      const ADDRINT words[2] = { (ADDRINT)(ns / 1000000000ull), (ADDRINT)(tod ? ns / 1000 % 1000000 : ns % 1000000000ull) };
       const ADDRINT out = tod || secs ? args[0] : args[1];
-      if (out)
-         PIN_SafeCopy((void*)out, words, secs ? sizeof(words[0]) : sizeof(words));
-      thread_data[threadid].last_syscall_returnval = secs ? words[0] : 0;
+      const size_t size = secs ? sizeof(words[0]) : sizeof(words);
+      /* an unwritable pointer: EFAULT, as the kernel answers */
+      const bool written = !out || PIN_SafeCopy((void*)out, words, size) == size;
+      thread_data[threadid].last_syscall_returnval = !written ? (ADDRINT)-14 : secs ? words[0] : 0;
       thread_data[threadid].last_syscall_emulated = true;
       return;
    }
@@ -131,10 +133,9 @@ VOID emulateSyscallFunc(THREADID threadid, CONTEXT *ctxt)
       Sift::EmuReply res;
       if (thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res))
       {
-         const uint64_t s = res.gettime.time_ns / Sift::NS_PER_S;
-         if (args[0])
-            PIN_SafeCopy((void*)args[0], &s, sizeof(s));
-         thread_data[threadid].last_syscall_returnval = s;
+         const ADDRINT s = (ADDRINT)(res.gettime.time_ns / Sift::NS_PER_S);   /* time_t: the guest's word */
+         const bool written = !args[0] || PIN_SafeCopy((void*)args[0], &s, sizeof(s)) == sizeof(s);
+         thread_data[threadid].last_syscall_returnval = written ? s : (ADDRINT)-14;   /* EFAULT */
          thread_data[threadid].last_syscall_emulated = true;
          return;
       }
