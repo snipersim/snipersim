@@ -557,6 +557,10 @@ static void refuse_forked_child(void)
 
 const unsigned int MAX_VCPUS = 4096;
 VCPU *vcpus[MAX_VCPUS];
+/* The thread whose exit_group the simulator was told of (forward_syscall):
+ * for the simulator its application has ended, and every other thread's
+ * trace thread was stopped, closing its channel */
+std::atomic<VCPU *> g_exit_group_vcpu(nullptr);
 
 VCPU *vcpu_get(unsigned int idx)
 {
@@ -2043,6 +2047,8 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
    ff_report(v);
 
    *ret = v->writer->Syscall((uint16_t)sys, (const char *)args, 6 * sizeof(uint64_t));
+   if (sys == 231)
+      g_exit_group_vcpu.store(v);
    if (!v->writer->IsOpen())
    {
       /* The channel went (the simulator ended the application): the
@@ -3781,6 +3787,19 @@ void at_exit(SNP_UDATA_ARGS)
       std::lock_guard<std::mutex> lock(g_close_lock);
       if (!v || !v->writer)
          continue;
+      /* A sibling of the thread that ran exit_group, its stream still open,
+       * is left alone: it may be inside a call on its writer -- waiting for
+       * an answer that its closed channel ends, or writing into that channel
+       * -- while this thread runs, and ending and deleting the writer under
+       * it freed its streams twice (double free, or a fault in QEMU, three
+       * runs in six of exitalive at -n 2 once SIGPIPE no longer killed the
+       * process first).  The simulator needs nothing more from it. */
+      VCPU *exiting = g_exit_group_vcpu.load();
+      if (exiting && v != exiting && !v->closed)
+      {
+         total += v->icount;
+         continue;
+      }
       writer_close_locked(v);
       delete v->writer;
       v->writer = nullptr;
