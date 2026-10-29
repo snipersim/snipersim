@@ -420,8 +420,16 @@ def kill_stragglers(marker, sig = signal.SIGKILL):
   Each match is killed along with everything below it, so the Pin tool and the
   application under the recorder go too.
 
+  The marker is matched as a path prefix (marker + '/'): every recorder
+  command line and environment names a file in the directory, and the bare
+  name also matched another run's directory whose name it begins
+  (/tmp/tmpab12 in /tmp/tmpab12cd/...) anywhere in a process's environment.
+  protected_pids (the --live dashboard) and what runs below them are left
+  alone, as kill_children() leaves them.
+
   Returns the number of processes signalled.
   """
+  prefix = marker.rstrip('/') + '/'
   matched = []
   for entry in os.listdir('/proc'):
     if not entry.isdigit():
@@ -434,7 +442,7 @@ def kill_stragglers(marker, sig = signal.SIGKILL):
         cmdline = f.read().replace(b'\0', b' ').decode('utf-8', 'replace')
     except (IOError, OSError):
       continue                      # exited while we looked
-    if marker in cmdline:
+    if prefix in cmdline:
       matched.append(pid)
       continue
     # The application under SDE: Pin runs inside it, so its command line is
@@ -444,7 +452,7 @@ def kill_stragglers(marker, sig = signal.SIGKILL):
     # group -- was left behind, waiting on a lock the recorder held.
     try:
       with open('/proc/%u/environ' % pid, 'rb') as f:
-        if marker.encode() in f.read():
+        if prefix.encode() in f.read():
           matched.append(pid)
     except (IOError, OSError):
       pass                          # exited, or another user's
@@ -454,10 +462,14 @@ def kill_stragglers(marker, sig = signal.SIGKILL):
   # caller can signal the whole run on a timeout, and signalling that group
   # here would kill us too.  Children first, so nothing is reparented out of
   # the list while we work through it.
+  spared = set()
+  for pid in protected_pids:
+    spared.update(find_children(pid))
   victims = []
   for pid in matched:
-    victims.extend(find_children(pid))
-    victims.append(pid)
+    victims.extend(find_children(pid))          # the match first, then what runs below it
+  # each once (a match below another was listed twice, and counted twice)
+  victims = [ pid for i, pid in enumerate(victims) if pid not in spared and pid not in victims[:i] ]
 
   killed = 0
   for pid in reversed(victims):
