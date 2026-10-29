@@ -19,7 +19,7 @@ PLUGIN_INC := $(firstword $(wildcard $(QEMU_SRC)/include/plugins) \
 
 CFLAGS  += -O2 -Wall -fPIC -I$(PLUGIN_INC) $(shell pkg-config --cflags glib-2.0)
 
-all: probe.so boot.img boot64.img bootas.img bootsmc.img st mt mtfork
+all: probe.so boot.img boot64.img bootas.img bootsmc.img boottime.img st mt mtfork
 
 probe.so: probe.c compat.h
 	$(CC) $(CFLAGS) -shared -o $@ probe.c
@@ -42,9 +42,15 @@ bootsmc.img: bootsmc.S
 	$(AS) --64 -o bootsmc.o bootsmc.S
 	$(LD) -m elf_x86_64 -Ttext 0x7c00 --oformat binary -o $@ bootsmc.o
 
+# The guest's time in full-system mode: the RTC, rdtsc across a loop and
+# across halts woken by the timer.
+boottime.img: boottime.S
+	$(AS) --32 -o boottime.o boottime.S
+	$(LD) -m elf_i386 -Ttext 0x7c00 --oformat binary -o $@ boottime.o
+
 st mt mtfork: %: %.c
 	$(CC) -O1 -static -o $@ $< $(if $(filter-out st,$*),-lpthread)
 
 clean:
-	rm -f probe.so boot.o boot.img boot64.o boot64.img bootas.o bootas.img bootsmc.o bootsmc.img st mt mtfork
+	rm -f probe.so boot.o boot.img boot64.o boot64.img bootas.o bootas.img bootsmc.o bootsmc.img boottime.o boottime.img st mt mtfork
 .PHONY: all clean

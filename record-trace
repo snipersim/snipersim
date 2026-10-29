@@ -499,6 +499,22 @@ def qemu_command():
     if useresponsefiles:
       qemu_refuse('a live full-system run (response files); record, then simulate the traces')
     qemu = qemu_binary(arch, *QEMU_SYSTEM[arch])
+    # The guest's time is instructions, never the host's: QEMU's virtual
+    # clock advances one nanosecond an instruction (-icount shift=0: the
+    # one-IPC model at 1 GHz, as the user-mode front ends' when no simulator
+    # answers, which a full-system run never has), and an idle machine's
+    # clock jumps to its next timer (sleep=off) rather than waiting for it on
+    # the host -- the guest kernel's timeouts and timers are its own.  The
+    # wall clock (the RTC) starts at the time zero (osemu/time_start) and
+    # runs on that clock.  icount runs the vCPUs in one thread.  A -icount
+    # or -rtc of the user's, given with --frontend-option, is kept, and the
+    # plugin's own time control (its 'time' option, which sets the virtual
+    # clock from the instructions itself) takes the place of icount.
+    if not any(o == '-icount' for o in qopts) and 'time' not in popts:
+      qopts += [ '-icount', 'shift=0,sleep=off' ]
+    if not any(o == '-rtc' for o in qopts):
+      zero = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(time_start if time_start is not None else 1337000000))
+      qopts += [ '-rtc', 'base=%s,clock=vm' % zero ]
     argv = [ qemu ] + qopts + [ '-plugin', plugin_arg(plugin, popts) ] + cmdline
   else:
     if not cmdline:

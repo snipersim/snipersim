@@ -121,7 +121,12 @@ Version 9.0 (in preparation)
       the earliest one;
     - every clock starts at osemu/time_start (1337000000 s, the same for
       Sniper, the recorder and the plugin; run-sniper passes the run's to
-      the front ends, record-trace --time-start)
+      the front ends, record-trace --time-start);
+    - full-system QEMU runs its virtual clock on instructions (-icount
+      shift=0,sleep=off: the one-IPC model, an idle machine's clock jumping
+      to its next timer) with the RTC from the time zero; the DynamoRIO
+      client on AArch64, which cannot keep the guest's time, refuses the
+      guest's first use of it rather than let the host's through
   * A live run stays live after its region of interest: the guest's
     instructions are counted to the simulator as before it, so its clock
     goes on, and its threads, joins and timed waits stay the simulator's

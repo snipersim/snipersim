@@ -141,6 +141,17 @@ x86-64) then answer with the same one-IPC model:
 So a recording reads the same clock every time it is made, under either
 front end.
 
+In full system the guest's kernel keeps its own time, from QEMU's virtual
+clock; record-trace (run-sniper `--frontend=qemu-system-<arch>`) runs that
+clock on instructions, never the host's: `-icount shift=0,sleep=off` (one
+nanosecond an instruction, the same 1 GHz one-IPC model; an idle machine's
+clock jumps to its next timer instead of waiting for it on the host) and
+`-rtc base=<time zero>,clock=vm` (the wall clock starts at osemu/time_start
+and runs on that clock).  icount runs the vCPUs in one host thread.  A
+`-icount` or `-rtc` given with `--frontend-option` is kept, and the `time`
+option below replaces icount.  `testing/test_qemu.py --case system-time`
+checks it (test/qemu-plugin-probe/boottime.S).
+
 Three options the other front ends take are accepted and have no effect
 here, because run-sniper passes them on every live run: `-e` (system calls are emulated by QEMU itself;
 the simulator only times them), `--follow` (QEMU user mode runs one process)

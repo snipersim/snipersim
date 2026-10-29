@@ -130,7 +130,7 @@ def build_guests(workdir):
     if rc != 0:
         raise RuntimeError('cannot build the probe:\n' + out)
     return {n: os.path.join(probe, n)
-            for n in ('probe.so', 'boot.img', 'boot64.img', 'bootas.img', 'bootsmc.img', 'st', 'mt')}
+            for n in ('probe.so', 'boot.img', 'boot64.img', 'bootas.img', 'bootsmc.img', 'boottime.img', 'st', 'mt')}
 
 
 # --- cases ------------------------------------------------------------------
@@ -2198,6 +2198,43 @@ def case_run_sniper_qemu_riscv_units(p, g, workdir):
     return True, 'live through run-sniper, no CPU option: ' + ', '.join(summary)
 
 
+def case_system_time(p, g, workdir):
+    """Full-system QEMU keeps the guest's time on instructions, never the
+    host's: record-trace runs it with -icount shift=0,sleep=off and the RTC
+    from the time zero.  boottime.S, through run-sniper: the CMOS clock reads
+    osemu/time_start (the default's 2012-05-14 12:53:20, then one given with
+    -g), rdtsc across 300,000 instructions reads about 300,000 cycles (1 GHz,
+    one instruction a nanosecond; the host's TSC reads about twice that),
+    and across 36 halts woken by the BIOS's 18.2 Hz timer about 36 x 54.9 ms
+    of guest time, which the host does not wait for."""
+    summary = []
+    for start, rtc in ((None, '12-05-14 12:53:20'), (1500000000, '17-07-14 02:40:00')):
+        outdir = os.path.join(workdir, 'time-sim-%s' % (start or 'default'))
+        shutil.rmtree(outdir, ignore_errors=True)
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', 'gainestown', '-d', outdir]
+                      + (['-g', 'osemu/time_start=%d' % start] if start else [])
+                      + ['--frontend=qemu-system-x86_64', '--',
+                         '-nographic', '-display', 'none', '-accel', 'tcg', '-m', '64',
+                         '-drive', 'file=%s,format=raw,if=floppy' % g['boottime.img'],
+                         '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04', '-no-reboot'], 900, cwd=SNIPER_ROOT)
+        if rc != 0 or 'QEMU exited with status 33' not in out:
+            return False, 'boottime: %s' % sniper_failed(rc, out)
+        got = re.search(r'rtc=(\d\d-\d\d-\d\d \d\d:\d\d:\d\d)', out)
+        loop = re.search(r'loop=([0-9A-F]{8})', out)
+        halt = re.search(r'halt=([0-9A-F]{8})', out)
+        if not (got and loop and halt):
+            return False, 'boottime printed no rtc, loop or halt line'
+        if got.group(1) != rtc:
+            return False, 'the guest\'s clock started at %s, not the time zero %s' % (got.group(1), rtc)
+        loop, halt = int(loop.group(1), 16), int(halt.group(1), 16)
+        if not 297000 <= loop <= 303000:
+            return False, 'rdtsc across 300,000 instructions read %d cycles, not about 300,000' % loop
+        if not 35 * 54900000 <= halt <= 37 * 54900000:
+            return False, 'rdtsc across 36 timer halts read %d cycles, not about %d' % (halt, 36 * 54900000)
+        summary.append('%s: rtc %s, loop %d, halts %.3f s' % ('default' if start is None else start, rtc, loop, halt / 1e9))
+    return True, '; '.join(summary)
+
+
 def case_run_sniper_qemu_system(p, g, workdir):
     """run-sniper drives full-system QEMU: --frontend=qemu-system-<arch> runs the
     machine, recording, then simulates the traces.  RISC-V: a bare-metal
@@ -3299,6 +3336,7 @@ CASES = {
     'aarch64-sve-simulate': case_aarch64_sve_simulate,
     'run-sniper-qemu-roi': case_run_sniper_qemu_roi,
     'run-sniper-qemu-system': case_run_sniper_qemu_system,
+    'system-time':      case_system_time,
     'run-sniper-qemu-riscv-units': case_run_sniper_qemu_riscv_units,
     'user-pacsim':         case_user_pacsim,
     'riscv-user-pacsim':   case_riscv_user_pacsim,
