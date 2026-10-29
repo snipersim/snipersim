@@ -222,6 +222,19 @@ MT_FREESTANDING = {
 }
 
 
+# The recorder's knobs the QEMU plugin has no option for (it refuses an
+# unknown one and ends the run): left out of its runs.  flowff, the
+# fast-forward window, is fixed at 1000 instructions in the plugin.
+QEMU_RECORDER_ONLY = ('flowff',)
+
+
+def knob_name(trace_arg):
+    """'--trace-args=-sniper:flowff 1000' -> 'flowff'"""
+    a = trace_arg.split('=', 1)[1] if trace_arg.startswith('--trace-args=') else trace_arg
+    a = a.split()[0] if a.split() else a
+    return a[len('-sniper:'):] if a.startswith('-sniper:') else a
+
+
 def spec_for(mode, arch='x86_64'):
     if mode == 'single':
         return SINGLE
@@ -456,8 +469,6 @@ def measure(p, workdir, mode, args):
 
     samp_dir = os.path.join(workdir, mode + '-sampled')
     trace_args = list(PROFILE_TRACE_ARGS[args.profile])
-    if args.frontend == 'qemu':
-        trace_args = [a for a in trace_args if 'flowff' not in a]     # the plugin's window is 1000 already
     for knob in ('region_size', 'min_region_size'):
         value = spec_for(mode, args.arch).get(args.profile + '_' + knob)
         if isinstance(value, dict):
@@ -468,6 +479,10 @@ def measure(p, workdir, mode, args):
             trace_args.append('--trace-args=-sniper:pacsim-%s %d' % (knob.replace('_', '-'), value))
     for knob in spec_for(mode, args.arch).get(args.profile + '_knobs', {}).get(args.arch, []):
         trace_args.append('--trace-args=' + knob)
+    if args.frontend == 'qemu':
+        # The profile's and the mode's knobs alike: the plugin refuses an
+        # option it does not know, and its window is 1000 already
+        trace_args = [a for a in trace_args if knob_name(a) not in QEMU_RECORDER_ONLY]
     if args.frontend == 'qemu' and spec_for(mode, args.arch).get('sync'):
         # the program's own barrier routine, found in its ELF by name
         trace_args.append('--trace-args=-sniper:pacsim-sync ' + spec_for(mode, args.arch)['sync'])
