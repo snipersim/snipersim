@@ -3154,6 +3154,15 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
               info->target_name);
       return -1;
    }
+   /* An i386 process makes i386 system calls (another table, 32-bit
+    * structures), which the plugin would read as x86-64's: gettimeofday
+    * (96 on x86-64) is i386's setpriority.  Full-system i386 makes none. */
+   if (!in_system_mode && !strcmp(info->target_name, "i386"))
+   {
+      fprintf(stderr, "[SNIPER-QEMU] error: i386 user-mode guests are not supported (the plugin models x86-64's system calls);"
+                      " build the guest for x86-64, or run it in full-system mode\n");
+      return -1;
+   }
 
    /* Needed before any xed_decode(). */
    xed_tables_init();
