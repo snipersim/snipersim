@@ -472,6 +472,8 @@ struct VCPU
    uint64_t      done_vaddr = 0;
    unsigned      done_mask  = 0;
    bool          resuming   = false;    /* the next block begins at a wait's instruction */
+   bool          resume_saved = false;  /* a diversion (a signal's handler) ran first: the wait's stages, kept */
+   unsigned      resume_mask = 0;
    bool          wait_tb_level = false; /* the wait was a block-level stage's */
    int           wait_kind  = W_NONE;
    uint64_t      wait_vaddr = 0;
@@ -587,15 +589,36 @@ inline bool stage_begin(VCPU *v, uint64_t vaddr, unsigned bit)
 }
 
 /* A block begins: after a wait, at the wait's instruction, with the stages
- * that ran still marked; otherwise a fresh visit. */
+ * that ran still marked; otherwise a fresh visit.  A block elsewhere first
+ * -- a guest signal delivered after the wait, its handler -- is a fresh
+ * visit, and the wait's stages are kept for when the instruction runs
+ * again: the handler's blocks reset them, and the instruction's callbacks
+ * ran a second time (records, requests to the simulator, counts). */
 inline void block_begin(VCPU *v, uint64_t vaddr)
 {
    if (!g_wait)
       return;
+   if (v->resuming && vaddr != v->wait_vaddr)
+   {
+      if (!v->resume_saved)
+      {
+         v->resume_saved = true;
+         v->resume_mask = v->done_vaddr == v->wait_vaddr ? v->done_mask : 0;
+      }
+      v->done_vaddr = vaddr;
+      v->done_mask = 0;
+      return;
+   }
    if (v->resuming)
    {
       v->resuming = false;
-      if (v->done_vaddr != vaddr)
+      if (v->resume_saved)
+      {
+         v->resume_saved = false;
+         v->done_vaddr = vaddr;
+         v->done_mask = v->resume_mask;
+      }
+      else if (v->done_vaddr != vaddr)
       {
          v->done_vaddr = vaddr;
          v->done_mask = 0;
