@@ -32,8 +32,9 @@ Version 9.0 (in preparation)
     thread's stack when nothing has moved for N seconds; SIGUSR1 prints it
     on demand
   * One stamped output stream per run, an lnav format, a live feed and dashboard
-  * make regress: seven suites (scripting, decoder tables, configurations,
-    QEMU, Pac-Sim, workloads, Virtuoso); Python 3 throughout; C++20
+  * make regress: eight suites (scripting, decoder tables, configurations,
+    QEMU, Pac-Sim, workloads, Virtuoso, magic instructions); Python 3
+    throughout; C++20
   * Address translation per architecture: the radix page table takes any
     level count and refuses an address outside its space; the riscv
     configurations model Sv39 (pagetable_configs/3_level_radix_sv39.cfg,
@@ -50,8 +51,7 @@ Version 9.0 (in preparation)
     including one at exit; every harness keeps it in the failure message
   * Every test suite runs in a fresh temporary directory, removed unless
     --keep; run-sniper and dumpstats honour SNIPER_OUTPUT_DIR; Pin's log goes
-    with the trace; MimicOS reports go to the run's directory; make regress
-    runs the magic suite too (eight suites)
+    with the trace; MimicOS reports go to the run's directory
   * The Virtuoso invariance baselines are reproducible across checkouts and
     users: the guest's environment is built from constants through a
     fixed-length link, and the baseline records the recorder's size and the
@@ -99,12 +99,32 @@ Version 9.0 (in preparation)
     plugin wait for the simulator outside QEMU's run loop, and threads are
     announced, joined and ended as under the SIFT recorder; a QEMU without
     the call still runs single-threaded guests and refuses a second thread
-  * Guests under a live QEMU run see simulated time however they read it:
-    clock_gettime and gettimeofday are answered by the simulator, and the
-    counter instructions QEMU's user mode answered from the host's clock --
-    RISC-V time, cycle and instret, AArch64 CNTVCT, x86 rdtsc --
-    by the plugin, through tools/qemu-11.1.1-plugin-counters.patch (applied to
-    every user-mode QEMU deps/sniper-deps builds)
+  * The guest's time is simulated time, under every front end that models
+    it (SDE and QEMU; the DynamoRIO client does not yet):
+    - its clocks: clock_gettime, gettimeofday and time(2), through libc or
+      raw system calls, and the counter instructions QEMU's user mode
+      answered from the host's clock -- RISC-V time, cycle and instret,
+      AArch64 CNTVCT, x86 rdtsc -- through tools/qemu-11.1.1-plugin-counters.patch;
+    - its timeouts: no time the guest gives reaches the host's kernel.  The
+      simulator times futex and the sleeps; every other timed wait (poll,
+      select, epoll, sigtimedwait, semtimedop, mq_timed*, io_getevents) the
+      front end runs in steps with timeouts of its own, ending at the
+      deadline in the guest's time (tools/qemu-11.1.1-plugin-syscall.patch:
+      a plugin runs a guest system call itself);
+    - its timers: alarm, setitimer, the POSIX timers and timerfd are kept by
+      the front end and fired at their expiry in the guest's time;
+    - where no simulator answers (a trace written to a file, a functional
+      run), the one-IPC model: one instruction per cycle on a core of an
+      assumed 1 GHz (Sift::ONE_IPC_HZ), per thread from its parent's time at
+      its start, plus the time it waited; a timed wait ends when every
+      running thread is past its deadline, or, with every thread waiting, at
+      the earliest one;
+    - every clock starts at osemu/time_start (1337000000 s, the same for
+      Sniper, the recorder and the plugin; run-sniper passes the run's to
+      the front ends, record-trace --time-start)
+  * A live run stays live after its region of interest: the guest's
+    instructions are counted to the simulator as before it, so its clock
+    goes on, and its threads, joins and timed waits stay the simulator's
   * The QEMU plugin no longer crashes at exit when a guest's threads end
     together (closing the streams raced), nor when it refuses a run (it now
     ends with _exit); the SIFT reader ends a stream cut inside an

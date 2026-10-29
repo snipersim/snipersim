@@ -74,51 +74,73 @@ sched_yield, the affinity calls, nanosleep, clock_nanosleep, clock_gettime,
 gettimeofday) are answered by the simulator through QEMU's syscall filter,
 so the guest sees simulated time and the simulated cores.
 
-Time: a guest under a live run sees simulated time however it reads it.
-The calls above answer clock_gettime and gettimeofday (QEMU's vDSO makes
-the system call); the counter instructions, which QEMU's user mode answers
-from the host's clock, are answered by the plugin through
-`tools/qemu-11.1.1-plugin-counters.patch`: RISC-V's time, cycle and instret
-CSRs (`rdtime`, `rdcycle`, `rdinstret`), AArch64's CNTVCT_EL0, x86's TSC
-(`rdtsc`, `rdtscp`).  (AArch64's PMCCNTR_EL0 is hooked too, but user mode
-traps it at EL0, as Linux does by default.)  The plugin recognises them at
-translation, asks the simulator before the instruction runs (outside the
-run loop), and QEMU's counter callback returns the answer within it: the
-timer at its rate (AArch64's CNTFRQ as QEMU reports it; RISC-V's timebase,
-which user mode does not define, from the `timebase=` option, 10 MHz by
-default, QEMU's virt board's), cycles in the core's clock (the TSC in the
-global clock, as the SIFT recorder's rdtsc), instret the core's instruction
-count.  It holds after the ROI too: a live run stays live after
-`SimRoiEnd()`, counting the guest's instructions to the simulator as before
-the ROI, so the simulated clock goes on, every emulated call (futex, sleeps,
-the time calls) is still the simulator's, threads started after the ROI are
-announced and joined in its model, and the simulator ends with the guest.
+Time: a guest sees simulated time, not the host's.
 
-Where the simulator does not answer -- a trace written to a file, a read
-outside a live channel -- the guest still never reads the host's clock,
-whose time has nothing to do with the program's.  Every front end (this
-plugin, the SIFT recorder under SDE) then answers with the same one-IPC
-model, from the same time zero as the simulator's:
+* Its clocks.  The calls above answer clock_gettime and gettimeofday
+  (QEMU's vDSO makes the system call); time(2), which the simulator does
+  not model, is answered from its time.  The counter instructions, which
+  QEMU's user mode answers from the host's clock, are answered by the
+  plugin through `tools/qemu-11.1.1-plugin-counters.patch`: RISC-V's time,
+  cycle and instret CSRs (`rdtime`, `rdcycle`, `rdinstret`), AArch64's
+  CNTVCT_EL0, x86's TSC (`rdtsc`, `rdtscp`).  (AArch64's PMCCNTR_EL0 is
+  hooked too, but user mode traps it at EL0, as Linux does by default.)  The
+  plugin recognises them at translation, asks the simulator before the
+  instruction runs (outside the run loop), and QEMU's counter callback
+  returns the answer within it: the timer at its rate (AArch64's CNTFRQ;
+  RISC-V's timebase, which user mode does not define, from the `timebase=`
+  option, 10 MHz by default, QEMU's virt board's), cycles in the core's
+  clock (the TSC in the global clock, as the SIFT recorder's rdtsc), instret
+  the core's instruction count.
+* Its timeouts.  No time the guest gives reaches the host's kernel
+  (`sift/guest_time.h`).  The simulator times futex and the sleeps; every
+  other timed wait -- poll, select, epoll, sigtimedwait, semtimedop,
+  mq_timed*, io_getevents -- the plugin runs itself
+  (`tools/qemu-11.1.1-plugin-syscall.patch`'s `qemu_plugin_run_syscall()`)
+  with timeouts of its own, in a scratch page of the thread's in the guest:
+  live, as probes that do not wait, between which the simulator lets the
+  thread sleep in simulated time (1 us doubling to 1 ms); otherwise in 1 ms
+  host slices until the one-IPC model's time (below) passes the deadline.
+  select, pselect6 and ppoll leave the time left in their timeout, as the
+  kernel does; recvmmsg's timeout is replaced by MSG_WAITFORONE.
+* Its timers.  alarm, setitimer, the POSIX timers and timerfd are kept by
+  the plugin and fired at their expiry in the guest's time (a signal by the
+  host's number for the guest's, `qemu_plugin_host_signal()`; a timerfd
+  armed to expire at once).  pause and sigsuspend wait in steps, so that a
+  timer can end them.
 
-* time zero: 1337000000 seconds since the epoch, Sniper's `osemu/time_start`
-  default (`Sift::TIME_START_DEFAULT` in `sift/sift_format.h`; the plugin's
-  `time_start=` option overrides it);
+It holds after the ROI too: a live run stays live after `SimRoiEnd()`,
+counting the guest's instructions to the simulator as before the ROI, so
+the simulated clock goes on, every emulated call is still the simulator's,
+threads started after the ROI are announced and joined in its model, and
+the simulator ends with the guest.
+
+Where the simulator does not answer -- a trace written to a file, a
+functional run, a channel the simulator closed -- the guest still never
+reads the host's clock, whose time has nothing to do with the program's.
+This plugin and the SIFT recorder under SDE then answer with the same
+one-IPC model (the DynamoRIO client does not model time yet):
+
+* time zero: osemu/time_start, 1337000000 seconds since the epoch by
+  default (`Sift::TIME_START_DEFAULT` in `sift/sift_format.h`); run-sniper
+  passes the run's value (the plugin's `time_start=` option, the recorder's
+  `-sniper:time_start`, record-trace's `--time-start`);
 * **assumed: one instruction per cycle on a 1 GHz core**
-  (`Sift::ONE_IPC_HZ`): a thread's time is its instruction count in
-  nanoseconds, its cycle counter and the TSC the instruction count, its
-  instret the instruction count;
-* the real-time and monotonic clocks are time zero plus that time, the
-  CPU-time clocks that time alone; the timer counters count it at their
-  rate.
+  (`Sift::ONE_IPC_HZ`): a thread's time is its instructions in
+  nanoseconds, from its parent's time when it started, plus the time it
+  waited; the TSC and the cycle counter count that time, instret the
+  instructions;
+* a timed wait ends at its deadline in that time: when every running
+  thread's clock has passed it, or, when every thread waits, at the
+  earliest deadline or timer, to which the time jumps; a thread woken takes
+  its waker's time if it is later;
+* the real-time and monotonic clocks are time zero plus that time; the
+  CPU-time clocks the thread's or the process's instructions.
 
-So a recording reads the same clock every time it is made, and the same
-under every front end.  A thread that sleeps runs no instructions, and its
-clock does not move while it sleeps; a live run, where the simulator charges
-the sleep, is what times sleeps.  Both answer the libc routines and the raw
-clock_gettime and gettimeofday system calls (the plugin through the syscall
-filter, the recorder by skipping the call), and the counter instructions.  Three options the
-other front ends take are accepted and have no effect here, because run-sniper
-passes them on every live run: `-e` (system calls are emulated by QEMU itself;
+So a recording reads the same clock every time it is made, under either
+front end.
+
+Three options the other front ends take are accepted and have no effect
+here, because run-sniper passes them on every live run: `-e` (system calls are emulated by QEMU itself;
 the simulator only times them), `--follow` (QEMU user mode runs one process)
 and `--routine-tracing`.
 

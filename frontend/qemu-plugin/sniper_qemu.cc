@@ -1963,13 +1963,15 @@ void mem_access(unsigned int cpu_index, qemu_plugin_meminfo_t info,
  * affinity calls, nanosleep and clock_nanosleep are emulated -- the kernel
  * does not run them and the guest gets the simulator's return value -- while
  * read, write, wait4 and exit_group are reported and run as usual.
- * clock_gettime and gettimeofday are emulated too, here only: the Pin
- * recorder replaces the libc routines instead (osemu/clock_replace), while
- * a guest under QEMU reaches them through QEMU's vDSO, which makes the system
- * call, and read the host's clock -- a simulated program timed itself in host
- * seconds.  The simulator answers them with simulated time.  The guest's
- * cycle and time counters (rdtime, rdcycle, CNTVCT) are instructions, not
- * calls, and still read the host's. */
+ * clock_gettime and gettimeofday are emulated too: a guest under QEMU
+ * reaches them through QEMU's vDSO, which makes the system call, and read
+ * the host's clock -- a simulated program timed itself in host seconds.  The
+ * simulator answers them with simulated time (the Pin recorder replaces the
+ * libc routines and sends the raw calls the same way).  The guest's cycle
+ * and time counters (rdtime, rdcycle, CNTVCT, the TSC) are instructions, not
+ * calls: the counter callback answers them ("counter", below); the timed
+ * waits and timers the simulator does not model are kept in the guest's
+ * time too ("timed calls", "timers"). */
 static int modelled_syscall(int64_t num, bool *emulated)
 {
    struct Entry { int generic, x86; bool emulated; };
