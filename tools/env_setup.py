@@ -15,7 +15,12 @@ def sniper_root():
       if not os.path.isfile(os.path.join(root,'run-sniper')):
         raise EnvironmentError((errno.EINVAL, 'Invalid %s directory [%s]' % (rootname, root)))
       else:
-        if os.path.realpath(root) != local_sniper_root():
+        # The same tree reached through links (a directory of links to its
+        # entries, as testing/test_virtuoso.py's canonical root is) is this
+        # tree: its run-sniper is this tree's
+        same = os.path.realpath(root) == local_sniper_root() or \
+               os.path.realpath(os.path.join(root, 'run-sniper')) == os.path.join(local_sniper_root(), 'run-sniper')
+        if not same:
           print('Warning: %s is different from current script directory [%s]!=[%s]' % (rootname, os.path.realpath(root), local_sniper_root()), file=sys.stderr)
         return root
 

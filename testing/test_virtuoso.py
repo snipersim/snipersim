@@ -61,7 +61,8 @@ change to the options record-trace gives the recorder moves the guest's
 stack: adding -pin-log-file moved 197 counters by up to 0.3% with nothing in
 the model changed.  Such a change is a re-bless, and the commit that makes it
 should say so.)  So every run goes through a symlink of fixed length (CANON_ROOT, under
-/tmp, named by uid and a hash of the checkout) that points at this tree:
+/tmp, named by uid and a hash of the checkout) that points at this tree
+(by way of a shadow of it in the user's cache, see canon_root):
 run-sniper is invoked by that path with it as the working directory and as
 SNIPER_ROOT, the workload too, and the environment holds nothing else but a
 constant PATH and HOME=CANON_ROOT.  Every string on the guest's stack then has
@@ -1668,7 +1669,7 @@ def have_setarch():
 
 
 # The guest's environment, built from constants rather than inherited; see the
-# module docstring.  CANON_ROOT is a symlink to SNIPER_ROOT whose name has the
+# module docstring.  CANON_ROOT is a symlink to SNIPER_ROOT (its shadow) whose name has the
 # same length for every checkout and every user; run-sniper is invoked through
 # it, and the paths it derives (and puts into the guest's environment) all
 # start with it.
@@ -1677,17 +1678,75 @@ CANON_ROOT = '/tmp/sniper-vt-%08x-%s' % (os.getuid(), hashlib.sha1(
 CANON_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
 
-def canon_root():
-    """Make CANON_ROOT point at this tree (it is ours alone: the name hashes
-    the tree's real path) and return it."""
-    target = os.path.realpath(SNIPER_ROOT)
+# CANON_ROOT points not at the tree itself but at a shadow of it in the
+# user's cache: a directory of links to the tree's entries, except for the
+# two test directories the MimicOS checks build and record in (SHADOW_OWN),
+# which are directories of the shadow's own holding links to the tree's
+# files and, beside them, the files made there -- test/fft/fft and
+# test/sniper-in-sniper/fft.sift.  They were made in the source tree, where
+# two runs at once (or a test_apps run) deleted and re-recorded each other's
+# trace.  Every path the guests see is the same string as before: run-sniper
+# and the workloads by CANON_ROOT, the kernel's trace as
+# test/sniper-in-sniper/fft.sift from CANON_ROOT.
+SHADOW = os.path.join(os.environ.get('XDG_CACHE_HOME') or os.path.join(os.path.expanduser('~'), '.cache'),
+                      'sniper', 'virtuoso', os.path.basename(CANON_ROOT))
+SHADOW_OWN = {
+    'test': None,                                       # a directory of its own, for the two below
+    os.path.join('test', 'fft'): ('fft', 'fft.o'),      # the files made there, not linked
+    os.path.join('test', 'sniper-in-sniper'): ('fft', 'fft.sift', 'fft.sift.env', 'pin.log'),
+}
+
+
+def _link(target, path):
+    """Make path a symlink to target, atomically (several runs may be
+    making the same links at once)."""
     try:
-        if os.readlink(CANON_ROOT) == target:
-            return CANON_ROOT
-        os.unlink(CANON_ROOT)
+        if os.readlink(path) == target:
+            return
     except FileNotFoundError:
         pass
-    os.symlink(target, CANON_ROOT)
+    except OSError:                                     # a directory or a file: not ours to replace
+        return
+    tmp = '%s.tmp%d' % (path, os.getpid())
+    try:
+        os.unlink(tmp)
+    except FileNotFoundError:
+        pass
+    os.symlink(target, tmp)
+    os.replace(tmp, path)
+
+
+def _mirror(rel=''):
+    """The shadow of the tree's directory rel: a link per entry of the tree,
+    a directory of its own for those in SHADOW_OWN; links whose entry has
+    gone from the tree are removed."""
+    src, dst = os.path.join(os.path.realpath(SNIPER_ROOT), rel), os.path.join(SHADOW, rel)
+    os.makedirs(dst, exist_ok=True)
+    made_here = SHADOW_OWN.get(rel) or ()
+    entries = set()
+    for e in os.listdir(src):
+        sub = os.path.join(rel, e)
+        if e in made_here:
+            continue
+        entries.add(e)
+        if sub in SHADOW_OWN:
+            _mirror(sub)
+        else:
+            _link(os.path.join(src, e), os.path.join(dst, e))
+    for e in os.listdir(dst):
+        p = os.path.join(dst, e)
+        if e not in entries and os.path.islink(p):
+            try:
+                os.unlink(p)
+            except FileNotFoundError:
+                pass
+
+
+def canon_root():
+    """Make CANON_ROOT point at this tree's shadow (it is ours alone: the
+    name hashes the tree's real path) and return it."""
+    _mirror()
+    _link(SHADOW, CANON_ROOT)
     return CANON_ROOT
 
 
@@ -1798,15 +1857,16 @@ def record_trace(app, name, expect):
 
 
 def canon_path(path):
-    """A path under this tree, spelled through CANON_ROOT (its argv[0] is on
-    the guest's stack too); any other path as it is."""
-    real, tree = os.path.realpath(path), os.path.realpath(SNIPER_ROOT)
-    if real == tree or real.startswith(tree + os.sep):
-        return canon_root() + real[len(tree):]
+    """A path under this tree or its shadow, spelled through CANON_ROOT (its
+    argv[0] is on the guest's stack too); any other path as it is."""
+    real = os.path.realpath(path)
+    for tree in (os.path.realpath(SNIPER_ROOT), os.path.realpath(SHADOW)):
+        if real == tree or real.startswith(tree + os.sep):
+            return canon_root() + real[len(tree):]
     return path
 
 
-def sniper_in_sniper_trace(sift):
+def sniper_in_sniper_trace():
     """test/sniper-in-sniper/fft.sift, the trace the MimicOS checks hand the
     kernel, recorded here with ASLR off under the controlled environment and
     through CANON_ROOT, so that it is the same bytes for every checkout and
@@ -1814,29 +1874,48 @@ def sniper_in_sniper_trace(sift):
     A trace recorded any other way -- test/sniper-in-sniper/Makefile records
     one under make's environment -- is a different guest layout and different
     counts; a sidecar notes the environment digest the trace was recorded
-    under, and a trace without it, or with another, is recorded again."""
-    tracedir = os.path.dirname(sift)
-    sidecar = sift + '.env'
-    if (os.path.exists(sift) and os.path.exists(sidecar)
-            and open(sidecar).read().strip() == env_digest()):
-        return
-    fft = os.path.join(SNIPER_ROOT, 'test', 'fft', 'fft')
-    if not os.path.exists(fft):
-        subprocess.run(['make', '-s', '-C', os.path.dirname(fft), 'fft'],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    for f in (sift, sidecar):
-        if os.path.exists(f):
-            os.unlink(f)
+    under, and a trace without it, or with another, is recorded again.
+
+    In the shadow (see canon_root), not the source tree, as is the fft it
+    records; under a lock, recorded beside the trace and renamed into place,
+    so a run that finds it reads a whole trace, and two runs do not record
+    over each other."""
+    import fcntl
     root = canon_root()
-    cmd = (['setarch', '-R'] if have_setarch() else []) + [
-        os.path.join(root, 'record-trace'), '--roi',
-        '-o', canon_path(os.path.join(tracedir, 'fft')), '--', canon_path(fft)]
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                       cwd=root, env=run_env(), start_new_session=True)
-    if p.returncode != 0 or not os.path.exists(sift):
-        raise RuntimeError('recording %s failed (exit %s):\n%s' % (sift, p.returncode, p.stdout[-2000:]))
-    with open(sidecar, 'w') as f:
-        f.write(env_digest() + '\n')
+    tracedir = os.path.join(SHADOW, 'test', 'sniper-in-sniper')
+    sift = os.path.join(tracedir, 'fft.sift')
+    sidecar = sift + '.env'
+    with open(os.path.join(SHADOW, '.trace.lock'), 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if (os.path.exists(sift) and os.path.exists(sidecar)
+                and open(sidecar).read().strip() == env_digest()):
+            return sift
+        fft = os.path.join(SHADOW, 'test', 'fft', 'fft')
+        if not os.path.exists(fft):
+            subprocess.run(['make', '-s', '-C', os.path.dirname(fft), 'fft'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        # Recorded under the trace's own name (-o is in the guest's
+        # environment: SDE_COMMAND_LINE), with the previous one moved aside
+        # rather than deleted -- a run still reading it keeps its copy
+        for f in (sidecar, sift):
+            if os.path.exists(f):
+                os.replace(f, f + '.old')
+        cmd = (['setarch', '-R'] if have_setarch() else []) + [
+            os.path.join(root, 'record-trace'), '--roi',
+            '-o', canon_path(os.path.join(tracedir, 'fft')), '--', canon_path(fft)]
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                           cwd=root, env=run_env(), start_new_session=True)
+        if p.returncode != 0 or not os.path.exists(sift):
+            raise RuntimeError('recording %s failed (exit %s):\n%s' % (sift, p.returncode, p.stdout[-2000:]))
+        with open(sidecar + '.tmp', 'w') as f:
+            f.write(env_digest() + '\n')
+        os.replace(sidecar + '.tmp', sidecar)
+        for f in (sidecar, sift):
+            try:
+                os.unlink(f + '.old')
+            except FileNotFoundError:
+                pass
+        return sift
 
 
 def run_sniper(names, ncores, outdir, workload, timeout, expect=WORKLOAD_OUTPUT,
@@ -2164,7 +2243,7 @@ def main():
                 app_args = [a.replace('{workdir}', workdir) for a in (app_args or [])]
                 for a in app_args:
                     if a.endswith('sniper-in-sniper/fft.sift'):
-                        sniper_in_sniper_trace(os.path.join(SNIPER_ROOT, a))
+                        sniper_in_sniper_trace()
                 expect = re.compile(pattern)
             else:
                 cfgs, ncores, check = entry
