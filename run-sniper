@@ -844,6 +844,32 @@ elif use_sift:
     ([], other_options + ['-e', '1', '-s', '0', '-r', '1', '--routine-tracing', '--' ] + cmdline)
   ]
 
+# Ctrl-C and SIGTERM (a job scheduler, a test harness's timeout).  Installed
+# before the recorders start, so that a signal while they start is not the
+# default's: SIGTERM ended run-sniper with no cleanup at all, and SIGINT's
+# KeyboardInterrupt came out of the startup as a traceback, the FIFOs and the
+# recorders left behind.  The first signal is recorded and every later one
+# ignored until the cleanup is done -- a second Ctrl-C during the cleanup or
+# the post-processing raised a traceback there, and could leave
+# cleanup_frontends() half done.  The handler raises only where the run waits
+# for the simulator (interrupt_raises); anywhere else the run looks at
+# `interrupted` when it gets to a point where stopping is safe.
+import signal as _signal
+interrupted = []                 # the signal that interrupted the run, once there is one
+interrupt_raises = [False]
+def _interrupt(signum, frame):
+  if interrupted:
+    return
+  interrupted.append(signum)
+  _signal.signal(_signal.SIGINT, _signal.SIG_IGN)
+  _signal.signal(_signal.SIGTERM, _signal.SIG_IGN)
+  if interrupt_raises[0]:
+    interrupt_raises[0] = False
+    raise KeyboardInterrupt()
+_signal.signal(_signal.SIGINT, _interrupt)
+_signal.signal(_signal.SIGTERM, _interrupt)
+recorders_lock = threading.Lock()   # a recorder is not started once the cleanup has begun
+
 # Setup common generated trace files
 tracecmds = []
 stopping = False       # set once the simulator has exited; the recorder threads read it
@@ -871,6 +897,12 @@ if tracegen:
     sys.stdout.flush()
     sys.stderr.flush()
     time.sleep(1)
+    with recorders_lock:
+      # An interrupt during that second: the cleanup may already have run,
+      # and a recorder started now would outlive it
+      if interrupted:
+        return 128 + interrupted[0]
+      p = subprocess.Popen(tracecmd)
     # Its own process group, and the group id recorded where the cleanup can
     # find it.
     #
@@ -890,7 +922,7 @@ if tracegen:
     # left alive to clean up, because run-sniper has been killed and never
     # reaches its own cleanup.  The reparenting problem is solved at cleanup
     # time instead, by finding these processes by name rather than by lineage.
-    return subprocess.Popen(tracecmd).wait()
+    return p.wait()
 
   def recorder_done(app_id, rc):
     """In run-sniper's own process, once application app_id's recorder has
@@ -1043,7 +1075,9 @@ def execute():
     except OSError:
       # Already dead, never mind
       pass
-    return 130     # 128 + SIGINT, as a shell reports it
+    # Passed on: returning a status here ran the whole normal end -- the
+    # post-processing, McPAT, the dashboard's wait -- after a Ctrl-C
+    raise
 
   return run_sniper.decode_wait_status(rc)
 
@@ -1103,7 +1137,6 @@ def cleanup_frontends():
   exit before this and leave recorders, FIFOs and the directory behind."""
   if not tracegen or tracegen.get('cleaned'):
     return
-  tracegen['cleaned'] = True
   # If we get here, there might still be some front-end processes running (maybe a deadlocked sift recorder trace?). If so, kill those processes
   sniper_lib.kill_children()
   # kill_children() only sees processes still descended from us.  The recorder
@@ -1129,6 +1162,9 @@ def cleanup_frontends():
   # recorders left in it (os.rmdir failed quietly on a directory that was not
   # empty, and left it in /tmp)
   shutil.rmtree(tracegen['tracetempdir'], ignore_errors = True)
+  # Only now: set first, an exception part way through left the rest undone
+  # for good
+  tracegen['cleaned'] = True
 
 
 def restore_live_terminal():
@@ -1148,35 +1184,47 @@ def restore_live_terminal():
     pass
   shutil.rmtree(live_dir, ignore_errors = True)
 
-# SIGTERM (a job scheduler, a test harness's timeout) gets the Ctrl-C path:
-# its cleanup rather than none
-import signal as _signal
-def _terminate(signum, frame):
-  raise KeyboardInterrupt()
-_signal.signal(_signal.SIGTERM, _terminate)
+def interrupt_status():
+  """128 + the signal, as a shell reports it: 130 for SIGINT, 143 for SIGTERM."""
+  return 128 + interrupted[0]
 
 t_start = time.time()
 print('[SNIPER] Start')
 
 try:
+  interrupt_raises[0] = True
+  if interrupted:                                      # a signal while the recorders started
+    raise KeyboardInterrupt()
   if use_gdb and not standalone:
     rc = debugpin.execute_gdb(cmd = cmd, env = env, pin_home = pin_home, arch = arch, wait = gdb_wait, quit = gdb_quit)
   elif use_appdebug and not (appdebug_manual or appdebug_nowait):
     rc = execute_appdebug()
   else:
     rc = execute()
+  interrupt_raises[0] = False
 
 except KeyboardInterrupt:
   # Make sure Sniper itself is stopped, even if it didn't respond to the SIGINT,
-  # and that the front end's processes, FIFOs and directory go with it
-  _signal.signal(_signal.SIGINT, _signal.SIG_IGN)     # a second Ctrl-C does not cut the cleanup short
-  _signal.signal(_signal.SIGTERM, _signal.SIG_IGN)
-  print('\n[SNIPER] Ctrl-C detected: Killing all child processes')
+  # and that the front end's processes, FIFOs and directory go with it.  No
+  # post-processing: the results are those of a killed simulator.  Further
+  # signals are ignored from the first one on (_interrupt).
+  interrupt_raises[0] = False
+  if not interrupted:                                  # not from a signal: one of our own
+    interrupted.append(_signal.SIGINT)
+    _signal.signal(_signal.SIGINT, _signal.SIG_IGN)
+    _signal.signal(_signal.SIGTERM, _signal.SIG_IGN)
+  print('\n[SNIPER] %s detected: Killing all child processes'
+        % ('Ctrl-C' if interrupted[0] == _signal.SIGINT else _signal.Signals(interrupted[0]).name))
+  with recorders_lock:
+    pass                                               # no recorder starts from here on (run_sift_recorder)
+  # The memory logger and the recorder threads run until this is set, and
+  # the exit waits for them: without it the run hung here for good
+  stopping = True
   time.sleep(1)
   sniper_lib.kill_children()
   cleanup_frontends()
   restore_live_terminal()
-  sys.exit(130)                                        # 128 + SIGINT, as a shell reports it
+  sys.exit(interrupt_status())
 
 
 stopping = True
@@ -1221,21 +1269,32 @@ print('[SNIPER] Elapsed time:', '%.02f' % t_elapsed, 'seconds')
 
 cleanup_frontends()
 
+def post_process(cmd):
+  """A post-processing step, by the shell; its exit status.  Not os.system:
+  system() ignores SIGINT in the caller while the step runs, so a Ctrl-C
+  there killed the step and run-sniper went on to the next one, never
+  having seen it."""
+  return subprocess.call(cmd, shell = True)
+
 if os.path.exists(backtracefile) and os.path.getsize(backtracefile) > 0:
-  os.system('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
+  post_process('%(sim_root)s/tools/gen_backtrace.py "%(backtracefile)s"' % locals())
 
 elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
 
-  if use_profile:
-    os.system('%(sim_root)s/tools/gen_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
+  # A signal from here on (the handler no longer raises) skips the steps
+  # still to come that take time -- the estimates, McPAT, the
+  # visualisations -- and keeps the quick ones that put the results in order.
 
-  if use_memory_profile:
-    os.system('%(sim_root)s/tools/gen_memory_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
+  if use_profile and not interrupted:
+    post_process('%(sim_root)s/tools/gen_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
 
-  if use_cheetah:
-    os.system('%(sim_root)s/tools/gen_cheetah.py -d %(outputdir)s -o %(outputdir)s/cheetah' % locals())
+  if use_memory_profile and not interrupted:
+    post_process('%(sim_root)s/tools/gen_memory_profile.py -d %(outputdir)s -o %(outputdir)s' % locals())
 
-  if enable_pacsim:
+  if use_cheetah and not interrupted:
+    post_process('%(sim_root)s/tools/gen_cheetah.py -d %(outputdir)s -o %(outputdir)s/cheetah' % locals())
+
+  if enable_pacsim and not interrupted:
     # Imported, not shelled out to pacsim.py.  The estimate is part of the run,
     # so it should not be reachable only by remembering to invoke a second
     # script afterwards -- and the moment there are two entry points they
@@ -1249,28 +1308,28 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
     except Exception as e:
       print('[PacSim] Could not estimate run time:', e, file=sys.stderr)
 
-  if run_power:
+  if run_power and not interrupted:
     print('[SNIPER] Running McPAT')
     # Its status was ignored: a McPAT run that died (a statistic it expected
     # and the run did not have) left no power files and the run passed
-    if os.system('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals()) != 0:
+    if post_process('%(sim_root)s/tools/mcpat.py -d %(outputdir)s -o %(outputdir)s/power' % locals()) != 0 and not interrupted:
       print('[SNIPER] ERROR: McPAT failed (see above); no power estimate was written')
       power_failed = True
       # --power was asked for and no estimate came of it: the run fails
       if rc == 0:
         rc = 1
 
-  if use_viz:
+  if use_viz and not interrupted:
     print('[SNIPER] Generating visualization in viz/')
-    os.system('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s %(use_viz_profile)s %(use_viz_aso)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+    post_process('%(sim_root)s/tools/viz/viz.py %(use_viz_mcpat)s %(use_viz_profile)s %(use_viz_aso)s -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
-  if genstats:
+  if genstats and not interrupted:
     print('[SNIPER] Generating statistics')
-    os.system('%(sim_root)s/tools/dumpstats.py -d %(outputdir)s > %(outputdir)s/sim.stats' % locals())
+    post_process('%(sim_root)s/tools/dumpstats.py -d %(outputdir)s > %(outputdir)s/sim.stats' % locals())
 
-  if use_viz_aso and not use_viz:
+  if use_viz_aso and not use_viz and not interrupted:
     print('[SNIPER] Generating ASO visualization in viz/levels/functionbased/')
-    os.system('%(sim_root)s/tools/viz/functionbased.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
+    post_process('%(sim_root)s/tools/viz/functionbased.py -d %(outputdir)s -o %(outputdir)s/viz >/dev/null' % locals())
 
   # On a failed run the results are partial; sim.out gets what can be made of
   # them and a note, and a traceback here must not replace the exit status.
@@ -1359,6 +1418,13 @@ if 'BENCHMARKS_ROOT' in os.environ:
   stats['benchmarks_root'] = os.getenv('BENCHMARKS_ROOT'),
   stats['benchmarks_revision'] = subprocess.getoutput('cd $BENCHMARKS_ROOT && (if [ -e .git ]; then git rev-parse HEAD; else cat .gitid; fi)'),
 open(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats)+'\n')
+
+if interrupted:
+  # Interrupted after the simulator ended: no waiting for the dashboard
+  restore_live_terminal()
+  print('[SNIPER] Interrupted (%s): the remaining post-processing was skipped'
+        % _signal.Signals(interrupted[0]).name)
+  sys.exit(interrupt_status())
 
 if live_dash:
   # Leave the final picture up until the dashboard is closed (q).  Then put
