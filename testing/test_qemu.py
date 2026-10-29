@@ -3080,6 +3080,34 @@ def case_user_roi_threads(p, g, workdir):
     return post_roi_case(workdir, 'roi_threads', 4, r'roi_threads: joined=(\d+) timedwait=(\w+) waited_ns=(-?\d+)', check)
 
 
+def case_user_sleep_exit(p, g, workdir):
+    """One thread sleeping 100 us at a time while another works and exits
+    (testing/apps/sleepexit.c), run live on x86-64: the sleeps are emulated,
+    so the sleeper waits for simulated time to reach its wake-up, and the
+    worker's exit must not leave it there.  It did, every time, with every
+    simulator thread idle: only a running core moved time forward, and the
+    exiting worker was the last one (ThreadManager::onThreadExit).  A second
+    run has the worker sleep too."""
+    guest = os.path.join(workdir, 'sleepexit')
+    rc, out = run(['gcc', '-O1', '-static', '-pthread', '-o', guest,
+                   os.path.join(SNIPER_ROOT, 'testing', 'apps', 'sleepexit.c')], 120)
+    if rc != 0:
+        return None, 'could not build sleepexit.c statically (%s)' % exit_text(rc)
+    rc, out = run([guest, '2000'], 120)
+    if rc != 0 or 'sleepexit: joined' not in out:
+        return None, 'the guest did not run natively (%s)' % exit_text(rc)
+    notes = []
+    for args in (['20000'], ['20000', '2000']):
+        outdir = os.path.join(workdir, 'sleep-exit-' + '-'.join(args))
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '2', '-c', 'gainestown', '-d', outdir,
+                       '--frontend=qemu', '--', guest] + args, 600, cwd=SNIPER_ROOT)
+        ok, live = mt_live_check(rc, out, 'sleepexit: joined', user_qemu('x86_64'))
+        if not ok:
+            return False, 'sleepexit %s: %s' % (' '.join(args), live)
+        notes.append('sleepexit %s: %s' % (' '.join(args), live))
+    return True, '; '.join(notes)
+
+
 def case_riscv_user_mt(p, g, workdir):
     """Multi-threaded RISC-V guest: traces per thread, and the live refusal."""
     r, why = riscv_prerequisites(workdir)
@@ -3142,6 +3170,7 @@ CASES = {
     'user-timers':      case_user_timers,
     'riscv-user-timers': case_riscv_user_timers,
     'aarch64-user-timers': case_aarch64_user_timers,
+    'user-sleep-exit':  case_user_sleep_exit,
     'user-counters':    case_user_counters,
     'time-start-default': case_time_start_default,
     'riscv-user-counters': case_riscv_user_counters,

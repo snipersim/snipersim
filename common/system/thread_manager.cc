@@ -201,6 +201,21 @@ void ThreadManager::onThreadExit(thread_id_t thread_id)
    HooksManager::ThreadTime args = { thread_id: thread_id, time: time };
    Sim()->getHooksManager()->callHooks(HookType::HOOK_THREAD_EXIT, (UInt64)&args);
    CLOG("thread", "Exit %d", thread_id);
+
+   /* The last running thread is gone, but a sibling may be parked until a
+      point in simulated time: in an emulated sleep, or in a futex wait with
+      a timeout.  Only the barrier moves time forward, and it does so only
+      while some core runs and checks in -- so, as in stallThread() when the
+      last running thread stalls, advance it here until that sibling wakes.
+      Without this, a thread that sleeps in a loop while another one finishes
+      its work and exits slept forever: the worker exited at 66.7 us, its
+      sibling's wake-up was due at 160.6 us, and every simulator thread sat
+      idle (test/sleepexit).  An application that ended through exit_group
+      had its other threads aborted, and their waits cleared, before its
+      last thread gets here (TraceManager::endApplication): nothing to wait
+      for then. */
+   while (!anyThreadRunning() && Sim()->getSyscallServer()->getNextTimeout(time) < SubsecondTime::MaxTime())
+      Sim()->getClockSkewMinimizationServer()->advance();
 }
 
 thread_id_t ThreadManager::spawnThread(thread_id_t thread_id, app_id_t app_id)

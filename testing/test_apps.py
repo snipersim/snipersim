@@ -561,6 +561,19 @@ def exits_zero(out, rc):
 exits_zero.needs_simulation = True
 
 
+def sleepexit_check(out, rc):
+    """Both runs of test/sleepexit end: the main thread sleeping while its
+    worker exits, then the worker sleeping too.  A thread in an emulated
+    sleep when the last running thread exited slept forever -- nothing moved
+    simulated time to its wake-up -- and the case ran to its timeout."""
+    n = len(re.findall(r'sleepexit: joined$', out, re.M))
+    if rc != 0 or n != 2:
+        return False, 'exit %s, %d of 2 runs joined their worker' % (rc, n)
+    sleeps = re.findall(r'sleepexit: (\d+) sleeps, done=1$', out, re.M)
+    return True, 'both runs joined (%s sleeps)' % ' and '.join(sleeps)
+sleepexit_check.needs_simulation = True
+
+
 # Checks that cannot pass yet, with the reason.  Recorded rather than dropped,
 # on the same principle as EXPECT_FAIL in test_configs.py: a test that starts
 # working should be reported, not silently absorbed.
@@ -635,6 +648,7 @@ CASES = {
     'timed-waits':     (timed_waits_check, None),
     'timers':          (timers_check, None),
     'roi-exit':        (roi_exit_check, None),
+    'sleepexit':       (sleepexit_check, None),
     'true':            (exits_zero, None),
     'sniper-in-sniper': (sniper_in_sniper_check, None),
 }

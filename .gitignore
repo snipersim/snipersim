@@ -138,6 +138,7 @@ test/mpi-omp/hybrid
 test/mpi/pi
 test/pinplay/fft
 test/smc/smc
+test/sleepexit/sleepexit
 test/spinloop/spinloop
 test/true/true
 
