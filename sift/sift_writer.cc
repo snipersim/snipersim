@@ -1072,7 +1072,12 @@ bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuR
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
-      sift_assert(!response->fail());
+      if (response->fail())
+      {
+         // The simulator closed this thread's channel (its application ended)
+         channelLost();
+         return false;
+      }
       sift_assert(respRec.Other.zero == 0);
 
       switch(respRec.Other.type)
