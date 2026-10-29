@@ -70,6 +70,7 @@ set(DR_FRONTEND_HEADERS
 
 add_library(dr_frontend SHARED
   dr_frontend.cc
+  dr_fe_time.cc
   ${SNIPER_FRONTEND_DIR}/bbv_count.cc
   ${DR_FRONTEND_HEADERS})
 

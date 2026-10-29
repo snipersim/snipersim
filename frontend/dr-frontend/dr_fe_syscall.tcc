@@ -25,11 +25,38 @@ bool FrontendSyscallModel<DRFrontend>::event_pre_syscall(void *drcontext, int sy
   syscall_args_t args;
   for (int i = 0; i < MAX_SYSCALL_ARGS; i++)
     args[i] = dr_syscall_get_param(drcontext, i);
-  
-  // 3: Process the syscall and send to the backend to check if it has to be emulated
-  doSyscall(threadid, syscall_number, args);
 
-  // 4: Post-process
+  // The instructions before the call first: the guest's clocks count them,
+  // and the simulator sees them before the call
+  DRFrontend::process_instructions_buffer(drcontext);
+  const bool emulate = m_options->get_emulate_syscalls();
+  if (emulate && m_thread_data[threadid].output && m_thread_data[threadid].icount_reported > 0)
+  {
+    m_thread_data[threadid].output->InstructionCount(m_thread_data[threadid].icount_reported);
+    m_thread_data[threadid].icount_reported = 0;
+  }
+
+  // 3: The guest's time (dr_fe_time.cc): the clocks without a simulator --
+  // answered there, the call skipped
+  {
+    uint64_t a[MAX_SYSCALL_ARGS], ret;
+    for (int i = 0; i < MAX_SYSCALL_ARGS; i++)
+      a[i] = args[i];
+    if (drtime::syscall(threadid, syscall_number, a, &ret))
+    {
+      m_thread_data[threadid].last_syscall_emulated = false;
+      dr_syscall_set_result(drcontext, (reg_t)ret);
+      return false;
+    }
+  }
+
+  // 4: Process the syscall and send to the backend to check if it has to be emulated
+  if (emulate)
+    doSyscall(threadid, syscall_number, args);
+  else
+    m_thread_data[threadid].last_syscall_emulated = false;
+
+  // 5: Post-process
   if (!m_thread_data[threadid].last_syscall_emulated)  // Not emulated syscall, execute normally
   {
     // The thread's last system call: end its trace now, while DynamoRIO

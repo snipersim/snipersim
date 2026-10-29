@@ -3,6 +3,7 @@
 
 #include "droption.h"
 #include "frontend_options.h"
+#include "sift_format.h"
 
 /* -f, -d, -b and -stop are 64-bit: an instruction count past 4 G or a code
    address above 4 GB (any PIE executable) did not fit the unsigned int they
@@ -64,6 +65,9 @@ static droption_t<unsigned long long> DRStopAddress
 static droption_t<unsigned int> DRSmcTrack
 (DROPTION_SCOPE_CLIENT, "smc", 1, "track code rewritten in place",
  "If not 0 (the default), code that is rewritten after it was traced (JITs, loaders, self-modifying code) is detected when DynamoRIO re-translates it, and its pages are sent to the simulator again.");
+static droption_t<unsigned long long> DRTimeStart
+(DROPTION_SCOPE_CLIENT, "time_start", Sift::TIME_START_DEFAULT, "the guest's time zero",
+ "The guest's time zero, in seconds since the epoch (Sniper's osemu/time_start; default 1337000000): where no simulator answers (a trace written to a file), the guest's clocks read this plus the one-IPC model's time (dr_fe_time.cc).");
 static droption_t<unsigned int> DRTrackVMAs
 (DROPTION_SCOPE_CLIENT, "vma", 0, "track VMAs",
  "If not 0, record the process's memory map to <output>.vma every 10,000 detailed instructions (the recorder's -sniper:vma).");

@@ -6,6 +6,9 @@
 
 #include "dr_fe_options.h"
 
+#include <errno.h>
+#include <string.h>
+
 /* The magic instruction (sim_api.h) and the registers it uses: x86
  * "xchg %bx, %bx" with the command and answer in RAX and the arguments in RBX
  * and RCX; AArch64 "bfm x0, x0, #0, #0" with the answer in X0, the command in
@@ -66,6 +69,7 @@ static drvector_t *scratch_allowed(instrlist_t *bb)
 }
 
 #include "dr_fe_copy.h"
+#include "dr_fe_time.h"
 #include "dr_fe_syscall.h"
 #include "dr_fe_lock.h"
 #include "dr_fe_control.h"
@@ -166,16 +170,37 @@ void DRFrontend::init()
   dr_free_module_data(exe);
 
   // Init syscall emulation if response files
-  if (DREmulateSyscalls.get_value()) 
+  if (DREmulateSyscalls.get_value() && !DRUseResponseFiles.get_value())
   {
-    if (!DRUseResponseFiles.get_value())
-    {
-      std::cerr << "Error, Response files are required when using syscall emulation." << std::endl;
-      exit(1);
-    }
+    std::cerr << "Error, Response files are required when using syscall emulation." << std::endl;
+    exit(1);
+  }
 
+  // The guest's time (dr_fe_time.cc): its system calls are looked at with
+  // or without a simulator -- without one, the one-IPC model answers the
+  // clocks
+  drtime::init(m_thread_data, DREmulateSyscalls.get_value() != 0, DRTimeStart.get_value());
+  if (DREmulateSyscalls.get_value() || drtime::supported())
+  {
     m_sysmodel->set_map_threads(&map_threadids);
     m_sysmodel->initSyscallModeling();
+  }
+  if (drtime::supported())
+  {
+    // The vDSO's clocks (glibc's clock_gettime, gettimeofday and time make
+    // no system call) and rdtsc
+    if (!drmgr_register_module_load_event(event_module_load) ||
+        !drmgr_register_bb_app2app_event(event_app2app, NULL))
+      DR_ASSERT(false);
+    // the vDSO is mapped before the client starts
+    dr_module_iterator_t *mi = dr_module_iterator_start();
+    while (dr_module_iterator_hasnext(mi))
+    {
+      module_data_t *mod = dr_module_iterator_next(mi);
+      event_module_load(NULL, mod, true);
+      dr_free_module_data(mod);
+    }
+    dr_module_iterator_stop(mi);
   }
 
   // Init callbacks
@@ -248,6 +273,8 @@ void DRFrontend::event_thread_init(void *drcontext)
   if (dr_get_mcontext(drcontext, &mc))
     start_sp = (uint64_t)mc.xsp;
   m_threads->threadStart(my_threadid, start_sp);
+  // Its clock starts at its parent's time
+  drtime::thread_start(my_threadid, start_sp);
 
   if (m_options->get_verbose())
   {
@@ -262,6 +289,7 @@ void DRFrontend::finish_thread(void *drcontext)
     return;
   data->finished = true;
   process_instructions_buffer(drcontext); // dump remaining contents
+  drtime::thread_exit(fe_tid(drcontext));
   m_threads->threadFinish(fe_tid(drcontext), 0);  // TODO are flags here relevant?
 }
 
@@ -306,6 +334,12 @@ void DRFrontend::event_exit(void)
     DR_ASSERT(false);
         
   drvector_delete(&magic_free_regs);
+  if (drtime::supported())
+  {
+    drmgr_unregister_module_load_event(event_module_load);
+    drmgr_unregister_bb_app2app_event(event_app2app);
+  }
+  drtime::exit();
   if (!drmgr_unregister_tls_field(tls_idx) ||
       !drmgr_unregister_thread_init_event(event_thread_init) ||
       !drmgr_unregister_thread_exit_event(event_thread_exit)||
@@ -382,6 +416,8 @@ void DRFrontend::process_instructions_buffer(void *drcontext)
 {
   per_thread_t *data = (per_thread_t*)drmgr_get_tls_field(drcontext, tls_idx);
   instruction_t *buf_ptr = BUF_PTR(data->seg_base);
+  // The instructions the thread ran, for its clock
+  drtime::count(data->fe_tid, buf_ptr - data->inst_buf);
   
   for (instruction_t *instruction = (instruction_t *)data->inst_buf; instruction < buf_ptr; instruction++) 
   {
@@ -449,6 +485,158 @@ void DRFrontend::clean_call(void)
 {
   void *drcontext = dr_get_current_drcontext();
   process_instructions_buffer(drcontext);
+}
+
+void DRFrontend::count_clean_call(threadid_t threadid, int32_t count)
+{
+  m_callbacks->countInsns(threadid, count);
+  drtime::count(threadid, count);
+}
+
+// ---------------------------------------------------------------- the guest's time
+//
+// glibc reads the clocks in the vDSO, with rdtsc and the kernel's data page:
+// no system call, so the host's time.  The vDSO's clock_gettime,
+// gettimeofday and time are replaced, as the SIFT recorder replaces the
+// libc routines: the block at each entry becomes a clean call and a ret
+// (event_app2app).  The clean call writes the guest's time (dr_fe_time.cc:
+// the simulator's, live, else the one-IPC model's) where the caller asked
+// and the result in RAX; the ret returns to the caller.  Neither is traced:
+// the replaced routine runs no instruction of the guest's.  (Returning from
+// the clean call with dr_redirect_execution cost 60 us a call.)  rdtsc and
+// rdtscp are left to run, their result replaced after them by the guest's
+// TSC.
+
+enum { VDSO_CLOCK_GETTIME, VDSO_GETTIMEOFDAY, VDSO_TIME, VDSO_COUNT };
+static app_pc vdso_entry[VDSO_COUNT][2];   // __vdso_<name> and its alias <name>
+
+static int vdso_which(app_pc pc)
+{
+  for (int i = 0; i < VDSO_COUNT; i++)
+    if (pc != NULL && (vdso_entry[i][0] == pc || vdso_entry[i][1] == pc))
+      return i;
+  return -1;
+}
+
+void DRFrontend::event_module_load(void *drcontext, const module_data_t *info, bool loaded)
+{
+  const char *name = dr_module_preferred_name(info);
+  if (name == NULL || strstr(name, "vdso") == NULL)
+    return;
+  static const char *names[VDSO_COUNT][2] = {
+    { "__vdso_clock_gettime", "clock_gettime" },
+    { "__vdso_gettimeofday", "gettimeofday" },
+    { "__vdso_time", "time" },
+  };
+  for (int i = 0; i < VDSO_COUNT; i++)
+    for (int j = 0; j < 2; j++)
+      vdso_entry[i][j] = (app_pc)dr_get_proc_address(info->handle, names[i][j]);
+}
+
+void DRFrontend::vdso_clean_call(int which)
+{
+#if defined(X86_64)   // x86-64's registers and calling convention (and only there drtime::supported())
+  void *drcontext = dr_get_current_drcontext();
+  process_instructions_buffer(drcontext);   // the clock counts them
+  const threadid_t threadid = fe_tid(drcontext);
+  dr_mcontext_t mc;
+  mc.size = sizeof(mc);
+  mc.flags = DR_MC_INTEGER;
+  dr_get_mcontext(drcontext, &mc);
+  reg_t ret = 0;
+  uint64_t ns = 0;
+  size_t done;
+  if (which == VDSO_CLOCK_GETTIME)
+  {
+    if (!drtime::clock_ns(threadid, (int64_t)(int32_t)mc.xdi, &ns))
+      ret = (reg_t)-EINVAL;
+    else if (mc.xsi)
+    {
+      const uint64_t ts[2] = { ns / Sift::NS_PER_S, ns % Sift::NS_PER_S };
+      if (!dr_safe_write((void *)mc.xsi, sizeof(ts), ts, &done))
+        ret = (reg_t)-EFAULT;
+    }
+  }
+  else
+  {
+    drtime::clock_ns(threadid, 0, &ns);
+    if (which == VDSO_GETTIMEOFDAY)
+    {
+      const uint64_t tv[2] = { ns / Sift::NS_PER_S, ns / 1000 % 1000000 };
+      const int32_t tz[2] = { 0, 0 };
+      if ((mc.xdi && !dr_safe_write((void *)mc.xdi, sizeof(tv), tv, &done)) ||
+          (mc.xsi && !dr_safe_write((void *)mc.xsi, sizeof(tz), tz, &done)))
+        ret = (reg_t)-EFAULT;
+    }
+    else
+    {
+      const uint64_t s = ns / Sift::NS_PER_S;
+      ret = (reg_t)s;
+      if (mc.xdi && !dr_safe_write((void *)mc.xdi, sizeof(s), &s, &done))
+        ret = (reg_t)-EFAULT;
+    }
+  }
+  // The result in RAX; the block's ret returns to the caller
+  mc.xax = ret;
+  dr_set_mcontext(drcontext, &mc);
+#endif
+}
+
+void DRFrontend::rdtsc_clean_call()
+{
+#if defined(X86_64)
+  void *drcontext = dr_get_current_drcontext();
+  process_instructions_buffer(drcontext);
+  dr_mcontext_t mc;
+  mc.size = sizeof(mc);
+  mc.flags = (dr_mcontext_flags_t)(DR_MC_INTEGER | DR_MC_CONTROL);
+  dr_get_mcontext(drcontext, &mc);
+  const uint64_t t = drtime::tsc(fe_tid(drcontext));
+  mc.xax = (reg_t)(t & 0xffffffff);
+  mc.xdx = (reg_t)(t >> 32);
+  dr_set_mcontext(drcontext, &mc);
+#endif
+}
+
+static bool is_rdtsc(instr_t *instr)
+{
+  return IF_X86_ELSE(instr_get_opcode(instr) == OP_rdtsc || instr_get_opcode(instr) == OP_rdtscp, false);
+}
+
+static int vdso_block(void *tag)
+{
+  return vdso_which(dr_fragment_app_pc(tag));
+}
+
+// The block at a vDSO clock's entry becomes a ret, before which the clean
+// call goes (event_app_instruction).  An rdtsc ends its block, so that its
+// clean call follows it at the block's end, where no scratch register is
+// held.
+dr_emit_flags_t DRFrontend::event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, bool translating)
+{
+#if defined(X86_64)
+  if (vdso_block(tag) >= 0)
+  {
+    instrlist_clear(drcontext, bb);
+    instr_t *ret = INSTR_CREATE_ret(drcontext);
+    instr_set_translation(ret, dr_fragment_app_pc(tag));
+    instrlist_append(bb, ret);
+    return DR_EMIT_DEFAULT;
+  }
+#endif
+  for (instr_t *instr = instrlist_first_app(bb); instr != NULL; instr = instr_get_next_app(instr))
+  {
+    if (!is_rdtsc(instr))
+      continue;
+    instr_t *next;
+    while ((next = instr_get_next(instr)) != NULL)
+    {
+      instrlist_remove(bb, next);
+      instr_destroy(drcontext, next);
+    }
+    break;
+  }
+  return DR_EMIT_DEFAULT;
 }
 
 void DRFrontend::insert_load_buf_ptr(void *drcontext, instrlist_t *bb, instr_t *instr, reg_id_t reg_ptr)
@@ -641,6 +829,22 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
     if (!instr_is_app(instr))
       return DR_EMIT_DEFAULT;
       
+    // A vDSO clock: the clean call before the block's ret (event_app2app),
+    // and nothing traced
+    {
+      const int which = vdso_block(tag);
+      if (which >= 0)
+      {
+        if (drmgr_is_first_instr(drcontext, instr))
+          dr_insert_clean_call(drcontext, bb, instr, (void *)vdso_clean_call, false, 1, OPND_CREATE_INT32(which));
+        return DR_EMIT_DEFAULT;
+      }
+    }
+    // rdtsc: its result replaced by the guest's TSC, after it (the block's
+    // last instruction: event_app2app)
+    if (is_rdtsc(instr))
+      dr_insert_clean_call(drcontext, bb, NULL, (void *)rdtsc_clean_call, false, 0);
+
     // Check Magic instructions
     if (is_magic_instr(instr))
       dr_insert_clean_call(drcontext, bb, instr, (void *)magic_clean_call, false, 0);
@@ -672,7 +876,7 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
 
       // Insert clean call to count instructions
       dr_insert_clean_call( drcontext, bb, instrlist_first_app(bb),
-                            (void *)m_callbacks->countInsns, // frontend's function to call 
+                            (void *)count_clean_call, // the frontend's countInsns, and the guest's clock
                             false, // save fpstate 
                             2, // number of operands
                             OPND_CREATE_INT32(threadid),
