@@ -60,6 +60,8 @@ class DRFrontend : public frontend::Frontend<DRFrontend>
     static void resume_at(void *drcontext, app_pc pc);
     static void vdso_clean_call(int which);
     static void rdtsc_clean_call();
+    static void refuse_time_clean_call(int which);
+    static void counter_clean_call(int kind, int dst);
     static void event_module_load(void *drcontext, const module_data_t *info, bool loaded);
     static dr_signal_action_t event_signal(void *drcontext, dr_siginfo_t *siginfo);
     static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, bool translating);

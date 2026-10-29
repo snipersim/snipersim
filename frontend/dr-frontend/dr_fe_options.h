@@ -68,6 +68,9 @@ static droption_t<unsigned int> DRSmcTrack
 static droption_t<unsigned long long> DRTimeStart
 (DROPTION_SCOPE_CLIENT, "time_start", Sift::TIME_START_DEFAULT, "the guest's time zero",
  "The guest's time zero, in seconds since the epoch (Sniper's osemu/time_start; default 1337000000): where no simulator answers (a trace written to a file), the guest's clocks read this plus the one-IPC model's time (dr_fe_time.cc).");
+static droption_t<bool> DRRefuseTime
+(DROPTION_SCOPE_CLIENT, "refuse_time", false, "refuse the guest's use of time",
+ "End the run, with the reason, at the guest's first clock read, wait with a timeout or timer, rather than keep the guest's time: what this front end does on an ISA other than x86-64, where it cannot keep it.  For testing that path on x86-64.");
 static droption_t<unsigned int> DRTrackVMAs
 (DROPTION_SCOPE_CLIENT, "vma", 0, "track VMAs",
  "If not 0, record the process's memory map to <output>.vma every 10,000 detailed instructions (the recorder's -sniper:vma).");

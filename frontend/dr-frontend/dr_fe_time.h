@@ -16,9 +16,11 @@
  * deadlines in that time.  The timers (alarm, setitimer, the POSIX timers,
  * timerfd) are kept here and fired in the guest's time.
  *
- * x86-64 only: on another ISA init() says so and every call here is a
- * no-op (the guest then reads the host's clocks and its timeouts are the
- * host kernel's). */
+ * x86-64 only: on another ISA (or with -refuse_time, which tests it on
+ * x86-64) the guest's time is not kept, and its first use of time -- a
+ * clock read, a wait with a timeout, a timer -- ends the run with the
+ * reason in <output>.app<N>.refused, rather than the host's time reaching
+ * the guest. */
 
 #include <stdint.h>
 #include "frontend_defs.h"
@@ -26,11 +28,21 @@
 namespace drtime
 {
    /* td: the front end's thread data; emulate: -e (a simulator answers);
-      time_start: the guest's time zero, seconds since the epoch */
-   void init(thread_data_t *td, bool emulate, uint64_t time_start);
+      time_start: the guest's time zero, seconds since the epoch;
+      refuse_time: refuse the guest's use of time, as on another ISA;
+      output and app_id name the refusal's file */
+   void init(thread_data_t *td, bool emulate, uint64_t time_start, bool refuse_time, const char *output, int app_id);
    void exit();
-   /* false on an ISA this module does not handle */
+   /* false where the guest's time is not kept (another ISA, -refuse_time) */
    bool supported();
+   /* the guest's time is not kept: its first use ends the run */
+   bool refusing();
+   /* end the run: the guest used time (what) where it is not kept */
+   void refuse(const char *what);
+   /* where the guest's time is not kept, a counter read's value: the
+      instructions run (at 1 GHz), never less than another thread read */
+   const uint64_t COUNTER_HZ = 1000000000;
+   uint64_t counter_ticks(threadid_t threadid);
 
    /* A thread starts (its stack pointer at its first instruction, 0 if
       unknown, pairs it with its clone and so with its parent) and ends */

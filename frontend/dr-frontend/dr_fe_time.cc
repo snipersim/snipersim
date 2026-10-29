@@ -8,6 +8,8 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
 #include <vector>
 
 #ifndef CLONE_THREAD
@@ -49,7 +51,13 @@
  * over as under Pin.  The front end's calls are made with the syscall
  * instruction: libc's would be the private loader's.
  *
- * x86-64 numbers and calling convention; another ISA is refused (init). */
+ * x86-64 numbers and calling convention.  On another ISA (or with
+ * -refuse_time) the guest's time is not kept, and the guest's first use of
+ * time -- a clock read, a timed wait with a timeout, a timer -- ends the run
+ * with the reason (refuse), rather than letting the host's time reach it.
+ * A read of the counter (rdtsc; AArch64's CNTVCT_EL0) is not refused, as
+ * the dynamic loader reads it at every start: it reads the instructions run
+ * (counter_ticks), at a rate of 1 GHz (AArch64's CNTFRQ_EL0 says so). */
 
 #if defined(X86_64)
 # define DR_TIME 1
@@ -71,6 +79,8 @@ struct DrLock
 
 thread_data_t *thread_data = NULL;
 bool emulate = false;
+bool refusing_time = false;          /* the guest's time is not kept: its first use ends the run */
+char refused_path[1024];             /* <output>.app<N>.refused: the reason, for run-sniper */
 uint64_t time_start = Sift::TIME_START_DEFAULT;
 const unsigned MAX_THREADS = MAX_NUM_THREADS;
 
@@ -232,6 +242,75 @@ long host_syscall(long num, const uint64_t a[6])
    return -ENOSYS;
 #endif
 }
+
+/* A timeout at addr that is not zero: a wait that would take the host's
+   time.  (A zero timeout only polls; an unreadable one fails without
+   waiting.) */
+bool waits(uint64_t addr, size_t size)
+{
+   uint64_t v[2] = { 0, 0 };
+   size_t done = 0;
+   if (addr == 0 || size > sizeof(v) || !dr_safe_read((void *)addr, size, v, &done))
+      return false;
+   return v[0] != 0 || v[1] != 0;
+}
+
+/* The guest's use of time in system call num (this ISA's number), or NULL:
+   a clock, a timer, or a wait with a timeout */
+const char *host_time_call(int num, const uint64_t a[6])
+{
+   const size_t TS = 2 * sizeof(uint64_t);
+   switch (num)
+   {
+#define ALWAYS(n) case SYS_##n: return #n;
+#ifdef SYS_time
+      ALWAYS(time)
+#endif
+#ifdef SYS_alarm
+      ALWAYS(alarm)
+#endif
+      ALWAYS(clock_gettime) ALWAYS(gettimeofday) ALWAYS(clock_nanosleep) ALWAYS(nanosleep)
+      ALWAYS(setitimer) ALWAYS(getitimer) ALWAYS(timer_create) ALWAYS(timer_settime) ALWAYS(timer_gettime)
+      ALWAYS(timerfd_settime) ALWAYS(timerfd_gettime) ALWAYS(times) ALWAYS(getrusage) ALWAYS(clock_adjtime)
+      ALWAYS(adjtimex)
+#undef ALWAYS
+      case SYS_futex:
+      {
+         const int cmd = (int)a[1] & FUTEX_CMD_MASK;
+         if ((cmd == FUTEX_WAIT || cmd == FUTEX_WAIT_BITSET || cmd == FUTEX_LOCK_PI || cmd == FUTEX_WAIT_REQUEUE_PI)
+             && a[3] != 0)
+            return "futex (with a timeout)";
+         return NULL;
+      }
+#ifdef SYS_poll
+      case SYS_poll: return (int)a[2] > 0 ? "poll (with a timeout)" : NULL;
+#endif
+#ifdef SYS_select
+      case SYS_select: return waits(a[4], TS) ? "select (with a timeout)" : NULL;
+#endif
+#ifdef SYS_epoll_wait
+      case SYS_epoll_wait: return (int)a[3] > 0 ? "epoll_wait (with a timeout)" : NULL;
+#endif
+      case SYS_ppoll: return waits(a[2], TS) ? "ppoll (with a timeout)" : NULL;
+      case SYS_pselect6: return waits(a[4], TS) ? "pselect6 (with a timeout)" : NULL;
+      case SYS_epoll_pwait: return (int)a[3] > 0 ? "epoll_pwait (with a timeout)" : NULL;
+#ifdef SYS_epoll_pwait2
+      case SYS_epoll_pwait2: return waits(a[3], TS) ? "epoll_pwait2 (with a timeout)" : NULL;
+#endif
+      case SYS_rt_sigtimedwait: return a[2] != 0 ? "rt_sigtimedwait (with a timeout)" : NULL;
+      case SYS_recvmmsg: return a[4] != 0 ? "recvmmsg (with a timeout)" : NULL;
+      case SYS_semtimedop: return a[3] != 0 ? "semtimedop (with a timeout)" : NULL;
+      case SYS_mq_timedsend: return a[4] != 0 ? "mq_timedsend (with a timeout)" : NULL;
+      case SYS_mq_timedreceive: return a[4] != 0 ? "mq_timedreceive (with a timeout)" : NULL;
+      case SYS_io_getevents: return a[4] != 0 ? "io_getevents (with a timeout)" : NULL;
+#ifdef SYS_io_pgetevents
+      case SYS_io_pgetevents: return a[4] != 0 ? "io_pgetevents (with a timeout)" : NULL;
+#endif
+      default: return NULL;
+   }
+}
+
+uint64_t last_ticks = 0;            /* counter_ticks: the highest given, for every thread */
 
 void put_time(struct timespec *ts, uint64_t ns)
 {
@@ -1218,18 +1297,53 @@ void note_wakes(threadid_t threadid, int x86, const uint64_t args[6])
 namespace drtime
 {
 
-bool supported() { return DR_TIME; }
+bool supported() { return DR_TIME && !refusing_time; }
+bool refusing() { return refusing_time; }
 
-void init(thread_data_t *td, bool emulate_, uint64_t time_start_)
+void refuse(const char *what)
+{
+   char why[512];
+   dr_snprintf(why, sizeof(why), "the guest used time (%s), and the DynamoRIO front end keeps the guest's time only "
+               "on x86-64: here it would be the host's.  Use the QEMU front end, which keeps it on every ISA", what);
+   why[sizeof(why) - 1] = 0;
+   dr_fprintf(STDERR, "[SNIPER_FRONTEND] error: %s.\n", why);
+   if (refused_path[0])
+   {
+      file_t f = dr_open_file(refused_path, DR_FILE_WRITE_OVERWRITE);
+      if (f != INVALID_FILE)
+      {
+         dr_write_file(f, why, strlen(why));
+         dr_close_file(f);
+      }
+   }
+   dr_exit_process(1);
+}
+
+uint64_t counter_ticks(threadid_t threadid)
+{
+   /* the thread's instructions, never less than another thread was given */
+   const uint64_t mine = threadid < MAX_THREADS ? __atomic_load_n(&insns[threadid], __ATOMIC_RELAXED) : 0;
+   uint64_t seen = __atomic_load_n(&last_ticks, __ATOMIC_RELAXED);
+   while (mine > seen)
+      if (__atomic_compare_exchange_n(&last_ticks, &seen, mine, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+         return mine;
+   return seen;
+}
+
+void init(thread_data_t *td, bool emulate_, uint64_t time_start_, bool refuse_time, const char *output, int app_id)
 {
    thread_data = td;
    app_pid = (uint64_t)dr_get_process_id();
    emulate = emulate_;
    time_start = time_start_;
-   if (!DR_TIME)
+   refusing_time = refuse_time || !DR_TIME;
+   if (refusing_time)
    {
-      dr_fprintf(STDERR, "[SNIPER_FRONTEND] Warning: the guest's time is kept only on x86-64 under DynamoRIO: "
-                         "here the guest reads the host's clocks and its timeouts and timers are the host kernel's\n");
+      dr_snprintf(refused_path, sizeof(refused_path), "%s.app%d.refused", output, app_id < 0 ? 0 : app_id);
+      refused_path[sizeof(refused_path) - 1] = 0;
+      if (!DR_TIME)
+         dr_fprintf(STDERR, "[SNIPER_FRONTEND] Note: the guest's time is kept only on x86-64 under DynamoRIO: "
+                            "a guest that reads a clock, waits with a timeout or sets a timer is refused\n");
       return;
    }
    clocks = new Clocks(MAX_THREADS, clock_instructions, NULL);
@@ -1241,7 +1355,7 @@ void init(thread_data_t *td, bool emulate_, uint64_t time_start_)
 
 void exit()
 {
-   if (!DR_TIME)
+   if (!supported())
       return;
    helper_stop = true;
    /* DynamoRIO has stopped the other threads, the client thread among them */
@@ -1258,7 +1372,7 @@ void exit()
 
 void thread_start(threadid_t threadid, uint64_t start_sp)
 {
-   if (!DR_TIME || threadid >= MAX_THREADS)
+   if (!supported() || threadid >= MAX_THREADS)
       return;
    int parent = -1;
    tid_words[threadid] = 0;
@@ -1286,7 +1400,7 @@ void thread_start(threadid_t threadid, uint64_t start_sp)
 
 void thread_exit(threadid_t threadid)
 {
-   if (!DR_TIME || threadid >= MAX_THREADS)
+   if (!supported() || threadid >= MAX_THREADS)
       return;
    host_tids[threadid] = 0;
    clocks->exit(threadid, tid_words[threadid]);
@@ -1300,7 +1414,7 @@ void count(threadid_t threadid, uint64_t n)
 
 bool flow(threadid_t threadid)
 {
-   if (!DR_TIME || threadid >= MAX_THREADS)
+   if (!supported() || threadid >= MAX_THREADS)
       return false;
    if (kicks[threadid] > 0)
    {
@@ -1318,7 +1432,13 @@ bool flow(threadid_t threadid)
 
 bool syscall(threadid_t threadid, int num, const uint64_t args[6], uint64_t *ret)
 {
-   if (!DR_TIME || threadid >= MAX_THREADS)
+   if (refusing_time)
+   {
+      if (const char *what = host_time_call(num, args))
+         refuse(what);
+      return false;
+   }
+   if (!supported() || threadid >= MAX_THREADS)
       return false;
    const int x86 = num;
    if (time_call(threadid, x86, args, ret))
@@ -1351,7 +1471,7 @@ void signal_delivered(threadid_t threadid)
 
 void syscall_returned(threadid_t threadid, int64_t ret)
 {
-   if (!DR_TIME || threadid >= MAX_THREADS || !waiting[threadid])
+   if (!supported() || threadid >= MAX_THREADS || !waiting[threadid])
       return;
    waiting[threadid] = false;
    clocks->wait_end(threadid, ret == -EINTR ? Clocks::INTERRUPTED : Clocks::WOKEN);

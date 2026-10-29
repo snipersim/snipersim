@@ -30,9 +30,20 @@ between which the simulator lets the thread sleep in simulated time; to a
 file they end at their deadlines in the one-IPC model's time.  alarm,
 setitimer, the POSIX timers and timerfd are kept by the client and fired at
 their expiry in the guest's time.  A clone's child starts at its parent's
-time.  On AArch64 the client says at start that it does not do this (the
-guest then reads the host's clocks).  `testing/test_apps.py --only
-dr-timed-waits --only dr-timers` checks it, to a file and live.
+time.  `testing/test_apps.py --only dr-timed-waits --only dr-timers`
+checks it, to a file and live.
+
+On AArch64 the client does not keep the guest's time (the system call
+numbers and calling convention are x86-64's), and it does not let the
+host's time through either: the guest's first clock read (a vDSO clock or a
+system call), wait with a timeout or timer ends the run, exit 1, with the
+reason, which run-sniper prints.  A program that uses no time runs.  A read
+of the counter (CNTVCT_EL0, which the dynamic loader reads at every start)
+reads the instructions run, at the 1 GHz CNTFRQ_EL0 then reports.  Use the
+QEMU front end to keep the guest's time on AArch64.  The client's
+`-refuse_time` does the same on x86-64; `testing/test_apps.py --only
+dr-refuse-time` checks it there (the AArch64 lines are only syntax-checked, for
+want of an ARM host).
 
 Sources: `dr_frontend.{cc,h}` specialise the generic front-end layer in
 `frontend/` (`frontend.h`, `frontend_control`, `frontend_syscall`,

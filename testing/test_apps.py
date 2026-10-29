@@ -619,6 +619,32 @@ def dr_timers_check(out, rc):
 dr_timers_check.needs_simulation = True
 
 
+def dr_refuse_time_check(out, rc):
+    """test/dr-refuse-time: the DynamoRIO front end with -refuse_time, as
+    on an ISA where it does not keep the guest's time: a program that uses
+    no time, a poll that does not wait and counter reads run (the counter
+    reads the instructions run, never the host's TSC); a vDSO clock, the
+    clock system call, a sleep and a poll with a timeout each end the run
+    (exit 1) with the reason named"""
+    exits = dict(re.findall(r'time_uses: mode (\w+) exit (\d+)', out))
+    if len(exits) != 7:
+        return False, '%d of the 7 runs ended' % len(exits)
+    for m in ('none', 'poll0', 'rdtsc'):
+        if exits[m] != '0' or ('time_uses: %s done' % m) not in out:
+            return False, '%s: exit %s, it should run to its end' % (m, exits[m])
+    tsc = re.search(r'time_uses: tsc=(\d+) dtsc=(\d+)', out)
+    if not tsc or not 0 < int(tsc.group(2)) < 100000 or int(tsc.group(1)) > 10**10:
+        return False, 'the counter read %s, not the instructions run' % (tsc.group(0) if tsc else 'nothing')
+    for m, what in (('vdso', "the vDSO's clock_gettime"), ('raw', 'clock_gettime'), ('sleep', 'clock_nanosleep'),
+                    ('poll', 'poll (with a timeout)')):
+        if exits[m] != '1':
+            return False, '%s: exit %s, not 1' % (m, exits[m])
+        if ('refused the run: the guest used time (%s)' % what) not in out:
+            return False, '%s: refused without the reason (%s)' % (m, what)
+    return True, '3 runs without time ran (counter %s instructions over the loop), 4 that used time refused with the reason' % tsc.group(2)
+dr_refuse_time_check.needs_simulation = True
+
+
 def exits_zero(out, rc):
     return (rc == 0, 'exit %s' % rc)
 exits_zero.needs_simulation = True
@@ -712,6 +738,7 @@ CASES = {
     'timers':          (timers_check, None),
     'dr-timed-waits':  (dr_timed_waits_check, 'dynamorio'),
     'dr-timers':       (dr_timers_check, 'dynamorio'),
+    'dr-refuse-time':  (dr_refuse_time_check, 'dynamorio'),
     'roi-exit':        (roi_exit_check, None),
     'sleepexit':       (sleepexit_check, None),
     'exitalive':       (exitalive_check, None),

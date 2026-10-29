@@ -179,16 +179,19 @@ void DRFrontend::init()
   // The guest's time (dr_fe_time.cc): its system calls are looked at with
   // or without a simulator -- without one, the one-IPC model answers the
   // clocks and times the waits and the timers
-  drtime::init(m_thread_data, DREmulateSyscalls.get_value() != 0, DRTimeStart.get_value());
-  if (DREmulateSyscalls.get_value() || drtime::supported())
+  // Where it is not kept (another ISA than x86-64, -refuse_time), the
+  // guest's first use of time ends the run, with the reason
+  drtime::init(m_thread_data, DREmulateSyscalls.get_value() != 0, DRTimeStart.get_value(),
+               DRRefuseTime.get_value(), DROutputFile.get_value().c_str(), DRSiftAppId.get_value());
+  if (DREmulateSyscalls.get_value() || drtime::supported() || drtime::refusing())
   {
     m_sysmodel->set_map_threads(&map_threadids);
     m_sysmodel->initSyscallModeling();
   }
-  if (drtime::supported())
+  if (drtime::supported() || drtime::refusing())
   {
     // The vDSO's clocks (glibc's clock_gettime, gettimeofday and time make
-    // no system call) and rdtsc
+    // no system call) and rdtsc (AArch64: the counter's mrs)
     if (!drmgr_register_module_load_event(event_module_load) ||
         !drmgr_register_bb_app2app_event(event_app2app, NULL) ||
         !drmgr_register_signal_event(event_signal))
@@ -554,14 +557,20 @@ void DRFrontend::event_module_load(void *drcontext, const module_data_t *info, b
   const char *name = dr_module_preferred_name(info);
   if (name == NULL || strstr(name, "vdso") == NULL)
     return;
+  // x86-64's names, else AArch64's (whose vDSO has no time)
   static const char *names[VDSO_COUNT][2] = {
     { "__vdso_clock_gettime", "clock_gettime" },
     { "__vdso_gettimeofday", "gettimeofday" },
     { "__vdso_time", "time" },
   };
+  static const char *names_a64[VDSO_COUNT] = { "__kernel_clock_gettime", "__kernel_gettimeofday", NULL };
   for (int i = 0; i < VDSO_COUNT; i++)
     for (int j = 0; j < 2; j++)
+    {
       vdso_entry[i][j] = (app_pc)dr_get_proc_address(info->handle, names[i][j]);
+      if (vdso_entry[i][j] == NULL && j == 0 && names_a64[i] != NULL)
+        vdso_entry[i][j] = (app_pc)dr_get_proc_address(info->handle, names_a64[i]);
+    }
 }
 
 void DRFrontend::vdso_clean_call(int which)
@@ -640,6 +649,63 @@ static bool is_rdtsc(instr_t *instr)
   return IF_X86_ELSE(instr_get_opcode(instr) == OP_rdtsc || instr_get_opcode(instr) == OP_rdtscp, false);
 }
 
+// A read of the host's counter or its rate: rdtsc, or AArch64's mrs of
+// CNTVCT_EL0, CNTPCT_EL0 or CNTFRQ_EL0; 0 for another instruction, else
+// 1 + the register it writes (AArch64), or 1 (rdtsc: EDX:EAX)
+enum { COUNTER_NONE = 0, COUNTER_VALUE = 1, COUNTER_RATE = 2 };
+static int counter_read(instr_t *instr, reg_id_t *dst)
+{
+#ifdef AARCH64
+  if (instr_get_opcode(instr) == OP_mrs && instr_num_srcs(instr) > 0 && opnd_is_reg(instr_get_src(instr, 0))
+      && instr_num_dsts(instr) > 0 && opnd_is_reg(instr_get_dst(instr, 0)))
+  {
+    const reg_id_t r = opnd_get_reg(instr_get_src(instr, 0));
+    *dst = opnd_get_reg(instr_get_dst(instr, 0));
+    if (r == DR_REG_CNTVCT_EL0 || r == DR_REG_CNTPCT_EL0)
+      return COUNTER_VALUE;
+    if (r == DR_REG_CNTFRQ_EL0)
+      return COUNTER_RATE;
+  }
+  return COUNTER_NONE;
+#else
+  *dst = DR_REG_NULL;
+  return is_rdtsc(instr) ? COUNTER_VALUE : COUNTER_NONE;
+#endif
+}
+
+// Where the guest's time is not kept: a vDSO clock ends the run
+// (drtime::refuse)
+void DRFrontend::refuse_time_clean_call(int which)
+{
+  static const char *what[] = { "the vDSO's clock_gettime", "the vDSO's gettimeofday", "the vDSO's time" };
+  drtime::refuse(what[which >= 0 && which < VDSO_COUNT ? which : 0]);
+}
+
+// Where the guest's time is not kept, after a counter read: the
+// instructions run at 1 GHz (drtime::counter_ticks), or that rate, in place
+// of the host's.  dst: the register written (AArch64), DR_REG_NULL for
+// rdtsc's EDX:EAX
+void DRFrontend::counter_clean_call(int kind, int dst)
+{
+  void *drcontext = dr_get_current_drcontext();
+  process_instructions_buffer(drcontext);   // the count includes them
+  dr_mcontext_t mc;
+  mc.size = sizeof(mc);
+  mc.flags = DR_MC_INTEGER;
+  dr_get_mcontext(drcontext, &mc);
+  const uint64_t v = kind == COUNTER_RATE ? drtime::COUNTER_HZ : drtime::counter_ticks(fe_tid(drcontext));
+#ifdef X86_64
+  if (dst == DR_REG_NULL)
+  {
+    mc.xax = (reg_t)(v & 0xffffffff);
+    mc.xdx = (reg_t)(v >> 32);
+  }
+  else
+#endif
+    reg_set_value((reg_id_t)dst, &mc, (reg_t)v);
+  dr_set_mcontext(drcontext, &mc);
+}
+
 static int vdso_block(void *tag)
 {
   return vdso_which(dr_fragment_app_pc(tag));
@@ -652,7 +718,7 @@ static int vdso_block(void *tag)
 dr_emit_flags_t DRFrontend::event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, bool translating)
 {
 #if defined(X86_64)
-  if (vdso_block(tag) >= 0)
+  if (!drtime::refusing() && vdso_block(tag) >= 0)
   {
     instrlist_clear(drcontext, bb);
     instr_t *ret = INSTR_CREATE_ret(drcontext);
@@ -663,7 +729,8 @@ dr_emit_flags_t DRFrontend::event_app2app(void *drcontext, void *tag, instrlist_
 #endif
   for (instr_t *instr = instrlist_first_app(bb); instr != NULL; instr = instr_get_next_app(instr))
   {
-    if (!is_rdtsc(instr))
+    reg_id_t dst;
+    if (!(drtime::refusing() ? counter_read(instr, &dst) != COUNTER_NONE : is_rdtsc(instr)))
       continue;
     instr_t *next;
     while ((next = instr_get_next(instr)) != NULL)
@@ -866,8 +933,23 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
     if (!instr_is_app(instr))
       return DR_EMIT_DEFAULT;
       
+    // Where the guest's time is not kept: a vDSO clock ends the run before
+    // it runs; a counter read reads the instructions run, after it (the
+    // block's last instruction: event_app2app)
+    if (drtime::refusing())
+    {
+      const int which = vdso_block(tag);
+      reg_id_t dst;
+      int kind;
+      if (which >= 0 && drmgr_is_first_instr(drcontext, instr))
+        dr_insert_clean_call(drcontext, bb, instr, (void *)refuse_time_clean_call, false, 1, OPND_CREATE_INT32(which));
+      else if ((kind = counter_read(instr, &dst)) != COUNTER_NONE)
+        dr_insert_clean_call(drcontext, bb, NULL, (void *)counter_clean_call, false, 2,
+                             OPND_CREATE_INT32(kind), OPND_CREATE_INT32((int)dst));
+    }
     // A vDSO clock: the clean call before the block's ret (event_app2app),
     // and nothing traced
+    else
     {
       const int which = vdso_block(tag);
       if (which >= 0)
@@ -879,7 +961,7 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
     }
     // rdtsc: its result replaced by the guest's TSC, after it (the block's
     // last instruction: event_app2app)
-    if (is_rdtsc(instr))
+    if (!drtime::refusing() && is_rdtsc(instr))
       dr_insert_clean_call(drcontext, bb, NULL, (void *)rdtsc_clean_call, false, 0);
 
     // Check Magic instructions
