@@ -1067,6 +1067,11 @@ namespace
 /* A mode the simulator asked for, in the answer to a count or a sync. */
 void apply_mode(Sift::Mode mode)
 {
+   /* Outside a region of interest a live run only counts: an answer the
+    * simulator gave before another thread's ROI end (or its start) arrived
+    * can say detailed or memory, and would record what is not the ROI */
+   if (opt_roi && !g_in_roi && (mode == Sift::ModeDetailed || mode == Sift::ModeMemory))
+      mode = Sift::ModeIcount;
    switch (mode)
    {
       case Sift::ModeDetailed: g_mode.store(MODE_DETAILED); break;
@@ -1332,12 +1337,15 @@ void magic_body(VCPU *v, const InsnInfo *ii, uint64_t cmd, uint64_t arg0, uint64
    {
       if (pacsim_qemu::enabled())
          pacsim_qemu::roi_end(cpu_index);      /* measures the last region, writes the file */
-      /* The guest runs on, recorded no more; the channel stays open so the
-       * magic instructions after the ROI (a SimInSimulator(), a marker) are
-       * still answered, and the simulator ends with the guest, as under the
-       * other front ends. */
+      /* The guest runs on, recorded no more.  A live run stays live: the
+       * instructions are counted to the simulator as before the ROI, so its
+       * clock goes on (a guest timing itself or waiting on a deadline after
+       * the ROI saw it frozen), every emulated call is still the simulator's
+       * -- a thread that waited in its futex model is woken there, a join
+       * waits there, a thread started after the ROI is announced -- and the
+       * simulator ends with the guest.  A trace written to a file stops. */
       g_in_roi = false;
-      g_mode.store(MODE_OFF);
+      g_mode.store(opt_response ? MODE_ICOUNT : MODE_OFF);
       if (opt_verbose)
          fprintf(stderr, "[SNIPER-QEMU] ROI end: %" PRIu64 " instructions recorded on vcpu %u\n", v->icount, cpu_index);
    }
@@ -1884,19 +1892,12 @@ static int modelled_syscall(int64_t num, bool *emulated)
    return -1;
 }
 
-/* Does this thread's channel take requests now?  Before a live ROI the
- * channel is counting (and syscalls are modelled, as under the recorder);
- * after it (MODE_OFF) the guest runs natively and nothing is sent. */
+/* Does this thread's channel take requests now?  Throughout a live run,
+ * before, in and after the ROI (counting outside it, as the recorder does);
+ * a trace written to a file has no channel to ask (MODE_OFF). */
 inline bool channel_open(const VCPU *v)
 {
    return v->writer && opt_response && !v->closed && g_mode.load() != MODE_OFF;
-}
-
-/* Does this thread's futex calls go to Sniper?  As long as there is a
- * channel, inside the ROI and after it (see forward_syscall). */
-inline bool futex_channel(const VCPU *v)
-{
-   return v->writer && opt_response && !v->closed;
 }
 
 /* Send a modelled system call to the simulator.  Returns false when the call
@@ -1921,17 +1922,7 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
    if (sys < 0)
       return false;
 
-   /* After the ROI (MODE_OFF) the guest runs natively, except for futex,
-    * which goes on to the simulator for as long as the channel is open.  A
-    * thread that waited in the simulator's futex model during the ROI is
-    * still parked there; a wake run natively never reached it, and a guest
-    * whose worker was waiting at SimRoiEnd() and woken after it hung every
-    * time.  All of the program's futex calls stay in the one model, waits
-    * as well as wakes: a wake sent to the simulator does not run natively,
-    * so a thread waiting natively would miss it. */
-   /* and so do the time calls: the guest's clock stays the simulator's */
-   const bool futex_after_roi = (sys == 202 || sys == 228 || sys == 96) && g_mode.load() == MODE_OFF && futex_channel(v);
-   if (!channel_open(v) && !futex_after_roi)
+   if (!channel_open(v))
       return false;
 
    /* A thread's tid goes with the first system call on its channel, as the
@@ -1989,9 +1980,7 @@ void thread_exit(VCPU *v)
       flush_pending(v, 0);
       ff_report(v);
    }
-   /* After the ROI too: the futex calls stay in Sniper's model for as long
-    * as the channel is open (forward_syscall), so a joiner waits there. */
-   if (futex_channel(v))
+   if (channel_open(v))
    {
       if (v->tid_ptr)
       {

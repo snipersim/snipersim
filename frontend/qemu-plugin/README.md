@@ -88,7 +88,11 @@ timer at its rate (AArch64's CNTFRQ as QEMU reports it; RISC-V's timebase,
 which user mode does not define, from the `timebase=` option, 10 MHz by
 default, QEMU's virt board's), cycles in the core's clock (the TSC in the
 global clock, as the SIFT recorder's rdtsc), instret the core's instruction
-count.  It holds after the ROI too, for as long as the channel is open.
+count.  It holds after the ROI too: a live run stays live after
+`SimRoiEnd()`, counting the guest's instructions to the simulator as before
+the ROI, so the simulated clock goes on, every emulated call (futex, sleeps,
+the time calls) is still the simulator's, threads started after the ROI are
+announced and joined in its model, and the simulator ends with the guest.
 
 Where the simulator does not answer -- a trace written to a file, a read
 outside a live channel -- the guest still never reads the host's clock,

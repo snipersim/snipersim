@@ -2797,6 +2797,54 @@ def case_user_roi_wait(p, g, workdir):
     return mt_live_check(rc, out, m.group(0), user_qemu('x86_64'))
 
 
+def post_roi_case(workdir, name, ncores, rx, check):
+    """A static x86-64 guest run live through run-sniper --frontend=qemu --roi,
+    with what it does after SimRoiEnd() checked: a live run stays live after
+    the ROI (counting, every call the simulator's), so its clock goes on and
+    its threads and timed waits are the simulator's."""
+    guest = os.path.join(workdir, name)
+    rc, out = run(['gcc', '-O1', '-static', '-pthread', '-I', os.path.join(SNIPER_ROOT, 'include'),
+                   '-o', guest, os.path.join(SNIPER_ROOT, 'testing', 'apps', name + '.c')], 120)
+    if rc != 0:
+        return None, 'could not build %s.c statically (%s)' % (name, exit_text(rc))
+    outdir = os.path.join(workdir, 'post-roi-' + name)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', str(ncores), '-c', 'gainestown', '--roi', '-d', outdir,
+                   '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+    if rc is None:
+        return False, 'the run hung after the ROI (timed out)'
+    m = re.search(rx, out)
+    if rc != 0 or not m:
+        return False, 'the guest failed after the ROI (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
+    return check(m)
+
+
+def case_user_roi_time(p, g, workdir):
+    """After the ROI the guest's clock goes on: testing/apps/roi_time.c spins on
+    clock_gettime until 1 ms has passed and the TSC moved (it froze before:
+    nothing was counted to the simulator after SimRoiEnd())."""
+    def check(m):
+        ns, reads, moved = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if ns < 1000000 or not moved:
+            return False, 'after the ROI the clock moved %d ns in %d reads, the TSC %s' % (ns, reads, 'moved' if moved else 'stood still')
+        return True, 'after the ROI the clock reached %d ns in %d reads and the TSC moved' % (ns, reads)
+    return post_roi_case(workdir, 'roi_time', 2, r'roi_time: elapsed_ns=(\d+) reads=(\d+) tsc_moved=(\d)', check)
+
+
+def case_user_roi_threads(p, g, workdir):
+    """After the ROI, threads, joins and timed waits stay the simulator's:
+    testing/apps/roi_threads.c starts a thread that starts another, joins
+    both, and times out a condition wait at an absolute deadline 10 ms
+    ahead, in simulated time.  Needs the plugin wait call in QEMU."""
+    if not qemu_can_wait(user_qemu('x86_64')):
+        return None, 'this QEMU has no plugin wait call: a second thread is refused live'
+    def check(m):
+        joined, how, waited = int(m.group(1)), m.group(2), int(m.group(3))
+        if joined != 2 or how != 'ETIMEDOUT' or not 10000000 <= waited <= 11000000:
+            return False, 'after the ROI: %d threads joined, the timed wait %s after %d ns' % (joined, how, waited)
+        return True, 'after the ROI: 2 threads started and joined, the 10 ms timed wait timed out at %d ns of simulated time' % waited
+    return post_roi_case(workdir, 'roi_threads', 4, r'roi_threads: joined=(\d+) timedwait=(\w+) waited_ns=(-?\d+)', check)
+
+
 def case_riscv_user_mt(p, g, workdir):
     """Multi-threaded RISC-V guest: traces per thread, and the live refusal."""
     r, why = riscv_prerequisites(workdir)
@@ -2850,6 +2898,8 @@ CASES = {
     'user-mt-streams':  case_user_mt_streams,
     'user-mt-live':     case_user_mt_live,
     'user-roi-wait':    case_user_roi_wait,
+    'user-roi-time':    case_user_roi_time,
+    'user-roi-threads': case_user_roi_threads,
     'user-counters':    case_user_counters,
     'time-start-default': case_time_start_default,
     'riscv-user-counters': case_riscv_user_counters,
