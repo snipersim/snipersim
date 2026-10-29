@@ -3091,6 +3091,37 @@ def case_user_roi_time(p, g, workdir):
     return post_roi_case(workdir, 'roi_time', 2, r'roi_time: elapsed_ns=(\d+) reads=(\d+) tsc_moved=(\d)', check)
 
 
+def case_user_exit_alive(p, g, workdir):
+    """The main thread returns -- exit_group -- while four workers still
+    compute (testing/apps/exitalive.c), live on x86-64 at -n 5 and -n 2, twice
+    each: the simulator ends the application and closes the workers'
+    channels while QEMU runs them on.  Their writes into the closed channels
+    killed QEMU with SIGPIPE (-n 2, every time), and at exit QEMU freed a
+    working thread's streams under it (double free, fault).  Every run must
+    print main's line and exit 0.  Needs the plugin wait call in QEMU."""
+    if not qemu_can_wait(user_qemu('x86_64')):
+        return None, 'this QEMU has no plugin wait call: a second thread is refused live'
+    guest = os.path.join(workdir, 'exitalive')
+    rc, out = run(['gcc', '-O1', '-static', '-pthread', '-o', guest,
+                   os.path.join(SNIPER_ROOT, 'testing', 'apps', 'exitalive.c')], 120)
+    if rc != 0:
+        return None, 'could not build exitalive.c statically (%s)' % exit_text(rc)
+    done = []
+    for i in range(2):
+        for n in ('5', '2'):
+            outdir = os.path.join(workdir, 'exit-alive-%s-%d' % (n, i))
+            rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', n, '-c', 'gainestown', '-d', outdir,
+                           '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+            if rc is None:
+                return False, '-n %s: the run hung (timed out)' % n
+            if rc != 0:
+                return False, '-n %s: %s' % (n, sniper_failed(rc, out))
+            if 'exitalive: main returns' not in out:
+                return False, '-n %s: main\'s line is missing' % n
+            done.append(n)
+    return True, '%d runs (-n 5, -n 2) ended with main\'s line and exit 0' % len(done)
+
+
 def case_user_roi_threads(p, g, workdir):
     """After the ROI, threads, joins and timed waits stay the simulator's:
     testing/apps/roi_threads.c starts a thread that starts another, joins
@@ -3187,6 +3218,7 @@ CASES = {
     'user-mt-streams':  case_user_mt_streams,
     'user-mt-live':     case_user_mt_live,
     'user-roi-wait':    case_user_roi_wait,
+    'user-exit-alive':  case_user_exit_alive,
     'user-roi-time':    case_user_roi_time,
     'user-roi-threads': case_user_roi_threads,
     'user-timed':       case_user_timed,

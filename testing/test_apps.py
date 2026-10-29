@@ -538,6 +538,28 @@ def roi_exit_check(out, rc):
 roi_exit_check.needs_simulation = True
 
 
+def exitalive_check(out, rc):
+    """test/exitalive: main returns while four workers still compute, under
+    the SDE front end at -n 5 and -n 2.  Every run printed main's line and
+    exited 0, and no recorder reported a status.  It hung every time: aborted
+    workers parked in the barrier (-n 5), and workers that never had a core
+    left their recorder threads waiting for an answer (-n 2)."""
+    runs = re.findall(r'exitalive: run-sniper -n (\d+) exit status (\d+)', out)
+    if not runs:
+        return False, 'no run reported'
+    printed = out.count('exitalive: main returns')
+    if printed != len(runs):
+        return False, 'main\'s line printed in %d of %d runs' % (printed, len(runs))
+    bad = ['-n %s: %s' % r for r in runs if r[1] != '0']
+    if bad:
+        return False, 'run-sniper exited non-zero (%s)' % ', '.join(bad)
+    m = re.search(r'The recorder for application \d+ exited with status -?\d+', out)
+    if m:
+        return False, m.group(0)
+    return True, '%d runs (-n %s) ran to their end' % (len(runs), '/'.join(sorted(set(r[0] for r in runs), reverse=True)))
+exitalive_check.needs_simulation = True
+
+
 def timers_check(out, rc):
     """test/timers: every timer fired at its expiry in the guest's time
     (want <= got <= want * 1.01 + 100 us), to a file and live"""
@@ -649,6 +671,7 @@ CASES = {
     'timers':          (timers_check, None),
     'roi-exit':        (roi_exit_check, None),
     'sleepexit':       (sleepexit_check, None),
+    'exitalive':       (exitalive_check, None),
     'true':            (exits_zero, None),
     'sniper-in-sniper': (sniper_in_sniper_check, None),
 }
