@@ -246,6 +246,7 @@ bool recvmmsg_untimed(const syscall_args_t &args, ADDRINT *ret)
 }
 
 unsigned timers_check(INT32 threadid);   /* the timers, below */
+UINT64 sleep_to_timer(UINT64 s, UINT64 now);
 UINT64 process_cpu_now(INT32 threadid);
 extern volatile UINT64 timers_fired;
 
@@ -509,7 +510,7 @@ bool timed_live(THREADID threadid, int x86, const syscall_args_t &args, const Si
       r = host_syscall(x86, a);
       if (r != timeout_result(x86) || (deadline != Sift::NO_DEADLINE && now >= deadline))
          break;
-      UINT64 s = sleep;
+      UINT64 s = sleep_to_timer(sleep, now);
       if (deadline != Sift::NO_DEADLINE && deadline - now < s)
          s = deadline - now;
       put_time(&nap, s);
@@ -568,6 +569,16 @@ volatile UINT64 timer_sim_ns = 0;   /* live: the simulator's time at the last lo
 
 /* Live, the instructions until the next look (see the QEMU plugin's
    timer_check_interval) */
+/* Live, a sleep between probes ends at the next timer's expiry at the
+   latest (see the QEMU plugin's sleep_to_timer) */
+UINT64 sleep_to_timer(UINT64 s, UINT64 now)
+{
+   const UINT64 next = timers ? timers->next_time() : Sift::NO_DEADLINE;
+   if (next != Sift::NO_DEADLINE && next > now && next - now < s)
+      return next - now;
+   return s;
+}
+
 UINT64 timer_check_interval()
 {
    const UINT64 next = timers->next_time(), now = timer_sim_ns;
@@ -817,7 +828,7 @@ long suspend_live(THREADID threadid, int x86, const syscall_args_t &args)
          mark_interrupted(threadid, x86, args);
          return -EINTR;
       }
-      put_time(&nap, sleep);
+      put_time(&nap, sleep_to_timer(sleep, timer_sim_ns));
       syscall_args_t sa = { (UINT64)&nap, 0, 0, 0, 0, 0 };
       thread_data[threadid].output->Syscall(SYS_nanosleep, (char *)sa, sizeof(sa));
       sleep = sleep * 2 < LIVE_SLEEP_MAX ? sleep * 2 : LIVE_SLEEP_MAX;
@@ -842,7 +853,7 @@ long timerfd_wait_live(THREADID threadid, int fd)
       const long r = host_syscall(SYS_ppoll, a);
       if (r != 0)
          return r == -EINTR ? r : 0;
-      put_time(&nap, sleep);
+      put_time(&nap, sleep_to_timer(sleep, timer_sim_ns));
       syscall_args_t sa = { (UINT64)&nap, 0, 0, 0, 0, 0 };
       thread_data[threadid].output->Syscall(SYS_nanosleep, (char *)sa, sizeof(sa));
       sleep = sleep * 2 < LIVE_SLEEP_MAX ? sleep * 2 : LIVE_SLEEP_MAX;

@@ -2238,6 +2238,7 @@ static bool syscall_entry(unsigned int vcpu_index, int64_t num, const uint64_t a
 
 void timers_check(VCPU *v, bool flushed = true);   /* the timers, below */
 uint64_t process_cpu_now(VCPU *v, bool flushed = true);
+uint64_t sleep_to_timer(uint64_t s, uint64_t now);   /* the timers, below */
 
 const int64_t E_INTR = 4, E_AGAIN = 11, E_FAULT = 14, E_INVAL = 22, E_NOSYS = 38, E_TIMEDOUT = 110;
 const int64_t Q_ERESTARTSYS = 512;          /* QEMU's: a guest signal is pending, restart the call */
@@ -2704,7 +2705,7 @@ bool timed_live(VCPU *v, int64_t num, int x86, const uint64_t args[6], const Sif
       }
       if (r != timeout_result(x86) || (deadline != Sift::NO_DEADLINE && now >= deadline))
          break;
-      uint64_t s = sleep;
+      uint64_t s = sleep_to_timer(sleep, now);
       if (deadline != Sift::NO_DEADLINE && deadline - now < s)
          s = deadline - now;
       const uint64_t sa[6] = { scratch + 16, 0, 0, 0, 0, 0 };
@@ -2982,6 +2983,18 @@ void timers_check(VCPU *v, bool flushed)
       g_clocks->set_event(g_timers->next_time());
 }
 
+/* Live, a sleep between probes ends at the next timer's expiry at the
+ * latest (now: the simulator's time), so that the timer is not caught a
+ * sleep late -- a periodic itimer was, by up to 117 us under the DynamoRIO
+ * client before it capped its sleeps so */
+uint64_t sleep_to_timer(uint64_t s, uint64_t now)
+{
+   const uint64_t next = g_timers ? g_timers->next_time() : Sift::NO_DEADLINE;
+   if (next != Sift::NO_DEADLINE && next > now && next - now < s)
+      return next - now;
+   return s;
+}
+
 /* Live, at flow control (in the run loop): the timers every TIMER_CHECK of
  * the thread's instructions */
 void timers_flow(VCPU *v)
@@ -3167,7 +3180,7 @@ int64_t suspend_loop(VCPU *v, uint64_t mask_addr, uint64_t mask_size)
          const uint64_t sa[6] = { scratch + 16, 0, 0, 0, 0, 0 };
          uint64_t sret;
          bool emulated = false;
-         if (!put_timespec(scratch + 16, sleep) || !forward_syscall(v, guest_number(Sift::X86_nanosleep), sa, &sret, &emulated) || !emulated)
+         if (!put_timespec(scratch + 16, sleep_to_timer(sleep, g_timer_sim_ns.load())) || !forward_syscall(v, guest_number(Sift::X86_nanosleep), sa, &sret, &emulated) || !emulated)
             live = false, g_clocks->wait_begin(v->vcpu_index, Sift::NO_DEADLINE, 0);
          sleep = std::min(sleep * 2, LIVE_SLEEP_MAX);
       }
@@ -3206,7 +3219,7 @@ int64_t timerfd_wait_live(VCPU *v, int fd)
       const uint64_t sa[6] = { scratch + 16, 0, 0, 0, 0, 0 };
       uint64_t sret;
       bool emulated = false;
-      if (!put_timespec(scratch + 16, sleep) || !forward_syscall(v, guest_number(Sift::X86_nanosleep), sa, &sret, &emulated) || !emulated)
+      if (!put_timespec(scratch + 16, sleep_to_timer(sleep, g_timer_sim_ns.load())) || !forward_syscall(v, guest_number(Sift::X86_nanosleep), sa, &sret, &emulated) || !emulated)
          return 0;
       sleep = std::min(sleep * 2, LIVE_SLEEP_MAX);
    }
