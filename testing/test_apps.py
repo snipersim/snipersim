@@ -596,13 +596,17 @@ def unavailable(reason):
 
 def tracked_files(d):
     """The files of directory d that belong to the tree: git's list when the
-    tree is a checkout, otherwise everything in it."""
+    tree is a checkout -- what it tracks, and what it would track (untracked
+    and not ignored: a file being added, which the case may need) --
+    otherwise everything in it."""
     try:
-        out = subprocess.run(['git', 'ls-files', '-z', '--', '.'], cwd=d, stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, check=True).stdout
-        files = [f for f in out.decode().split('\0') if f]
+        files = []
+        for extra in ([], ['--others', '--exclude-standard']):
+            out = subprocess.run(['git', 'ls-files', '-z'] + extra + ['--', '.'], cwd=d, stdout=subprocess.PIPE,
+                                 stderr=subprocess.DEVNULL, check=True).stdout
+            files += [f for f in out.decode().split('\0') if f]
         if files:
-            return files
+            return sorted(set(files))
     except (OSError, subprocess.CalledProcessError):
         pass
     return [os.path.relpath(os.path.join(r, f), d) for r, _, fs in os.walk(d) for f in fs]
@@ -637,6 +641,11 @@ def private_tree(name, root):
             s = os.path.join(src, f)
             if os.path.islink(s):
                 os.symlink(os.readlink(s), dst)
+            elif not os.path.exists(s):
+                # tracked but deleted in this checkout: copy2 raised, and
+                # the whole suite stopped
+                print('warning: %s is tracked but missing; not copied' % os.path.relpath(s, SNIPER_ROOT),
+                      file=sys.stderr)
             else:
                 shutil.copy2(s, dst)
     return os.path.join(root, 'test', name)
