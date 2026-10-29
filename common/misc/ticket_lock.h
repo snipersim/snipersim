@@ -35,7 +35,7 @@ public:
       while (_now_serving.load(std::memory_order_acquire) != my_ticket)
       {
          // Yield to avoid burning CPU in a tight spin
-         __builtin_ia32_pause();
+         cpuRelax();
       }
    }
 
@@ -46,6 +46,19 @@ public:
    }
 
 private:
+   // A spin-wait hint: x86's pause, AArch64's yield; elsewhere (RISC-V, whose
+   // pause needs Zihintpause) a compiler barrier, so the loop still re-reads
+   static inline void cpuRelax()
+   {
+#if defined(__x86_64__) || defined(__i386__)
+      __builtin_ia32_pause();
+#elif defined(__aarch64__)
+      asm volatile("yield" ::: "memory");
+#else
+      asm volatile("" ::: "memory");
+#endif
+   }
+
    std::atomic<uint64_t> _next_ticket;
    std::atomic<uint64_t> _now_serving;
 };
