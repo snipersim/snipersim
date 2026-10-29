@@ -21,6 +21,7 @@
 #include "sim_api.h"
 #include "mimicos.h"
 #include "stats.h"
+#include "thread_stats_manager.h"
 #include "riscv_isa.h"
 #include "parametric_dram_directory_msi/memory_manager.h"
 
@@ -509,6 +510,23 @@ bool TraceThread::handleEmuFunc(Sift::EmuType type, Sift::EmuRequest &req, Sift:
          res.counters.global_cycles = SubsecondTime::divideRounded(now, *Sim()->getDvfsManager()->getGlobalDomain());
          res.counters.core_cycles = core ? SubsecondTime::divideRounded(now, *core->getDvfsDomain()) : res.counters.global_cycles;
          res.counters.instructions = core ? core->getPerformanceModel()->getInstructionCount() : 0;
+         return true;
+      }
+      case Sift::EmuTypeCpuTime:
+      {
+         /* The CPU-time clocks (clock_gettime with a CPU clock, times,
+            getrusage, the CPU-time timers): the time the thread ran, its
+            application's threads' total, and the requested clock's, as
+            SYS_clock_gettime answers them (SyscallMdl::cpuClockTime) */
+         ThreadStatsManager *tsm = Sim()->getThreadStatsManager();
+         {
+            ScopedLock sl(Sim()->getThreadManager()->getLock());
+            res.cputime.thread_ns = tsm->getThreadCpuTime(m_thread->getId()).getNS();
+            res.cputime.process_ns = tsm->getAppCpuTime(m_thread->getAppId()).getNS();
+         }
+         UInt64 ns = 0;
+         res.cputime.clock_valid = SyscallMdl::cpuClockTime(m_thread, req.cputime.clock, &ns) == 0;
+         res.cputime.clock_ns = ns;
          return true;
       }
       case Sift::EmuTypeCpuid:

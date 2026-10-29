@@ -104,18 +104,28 @@ static ADDRINT emuGetCPU(THREADID threadid)
 ADDRINT emuClockGettime(THREADID threadid, clockid_t clk_id, struct timespec *tp)
 {
    /* Every clock is simulated time: the simulator's (GetTime, from its
-      osemu/time_start; Counters for the CPU-time clocks, from zero), or the
-      one-IPC model's.  The CPU-time clocks -- the process's, the thread's,
-      the dynamic ones (negative ids) -- returned failure before. */
+      osemu/time_start; CpuTime for the CPU-time clocks: the time the thread,
+      or the process's threads, ran, from zero), or the one-IPC model's.
+      The CPU-time clocks -- the process's, the thread's, the dynamic ones
+      (negative ids) -- returned failure before.  (They read the core's
+      elapsed time from the simulator, sleeps included, before CpuTime.) */
    const bool cputime = clk_id == CLOCK_PROCESS_CPUTIME_ID || clk_id == CLOCK_THREAD_CPUTIME_ID || clk_id < 0;
    uint64_t ns = one_ipc_ns(threadid, clk_id);
    if (live(threadid))
    {
       Sift::EmuRequest req;
       Sift::EmuReply res;
-      if (cputime && thread_data[threadid].output->Emulate(Sift::EmuTypeCounters, req, res))
-         ns = res.counters.time_ns;
-      else if (!cputime && thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res))
+      if (cputime)
+      {
+         req.cputime.clock = clk_id;
+         if (thread_data[threadid].output->Emulate(Sift::EmuTypeCpuTime, req, res))
+         {
+            if (!res.cputime.clock_valid)
+               return (ADDRINT)-1;   /* no such clock (EINVAL) */
+            ns = res.cputime.clock_ns;
+         }
+      }
+      else if (thread_data[threadid].output->Emulate(Sift::EmuTypeGetTime, req, res))
          ns = res.gettime.time_ns;
    }
    if (tp)

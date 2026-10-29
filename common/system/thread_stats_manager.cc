@@ -71,6 +71,40 @@ void ThreadStatsManager::update(thread_id_t thread_id, SubsecondTime time)
    }
 }
 
+UInt64 ThreadStatsManager::getThreadStatisticNow(thread_id_t thread_id, ThreadStatType type)
+{
+   if (thread_id < 0 || thread_id >= MAX_THREADS || !m_threads_stats[thread_id])
+      return 0;
+   ThreadStats *ts = m_threads_stats[thread_id];
+   auto count = ts->m_counts.find(type);
+   if (count == ts->m_counts.end())
+      return 0;
+   UInt64 value = count->second;
+   const Core::State state = Sim()->getThreadManager()->getThreadState(thread_id);
+   Core *core = ts->m_thread->getCore();
+   if (state != Core::IDLE && state != Core::INITIALIZING && core && core->getId() == ts->m_core_id)
+   {
+      const UInt64 now = callThreadStatCallback(type, thread_id, core), last = ts->m_last[type];
+      if (now > last)
+         value += now - last;
+   }
+   return value;
+}
+
+SubsecondTime ThreadStatsManager::getThreadCpuTime(thread_id_t thread_id)
+{
+   return SubsecondTime::FS(getThreadStatisticNow(thread_id, ELAPSED_NONIDLE_TIME));
+}
+
+SubsecondTime ThreadStatsManager::getAppCpuTime(app_id_t app_id)
+{
+   SubsecondTime total = SubsecondTime::Zero();
+   for (thread_id_t thread_id = 0; thread_id < (thread_id_t)Sim()->getThreadManager()->getNumThreads(); ++thread_id)
+      if (m_threads_stats[thread_id] && m_threads_stats[thread_id]->m_thread->getAppId() == app_id)
+         total += getThreadCpuTime(thread_id);
+   return total;
+}
+
 void ThreadStatsManager::calculateWaitingCosts(SubsecondTime time)
 {
    // Calculate a waiting cost for all threads.

@@ -158,6 +158,11 @@ namespace Sift
       EmuTypePAPIstart,
       EmuTypePAPIread,
       EmuTypeCounters,     // the guest's clocks and counters, for a front end that answers its reads of them
+      /* The CPU-time clocks: the time the thread ran, the time its process's
+         threads ran (not the time they slept or waited), and the clock the
+         request names.  Appended: a simulator that does not know it answers
+         false, and the front end keeps its own answer. */
+      EmuTypeCpuTime,
    } EmuType;
 
    typedef union {
@@ -176,6 +181,9 @@ namespace Sift
       struct {
          int eventset;
       } papi;
+      struct {
+         int32_t clock;           // a CPU-time clock id: 2, 3, or a dynamic (negative) one
+      } cputime;
    } EmuRequest;
 
    typedef union {
@@ -194,6 +202,12 @@ namespace Sift
          uint64_t global_cycles;  // that time in the global clock (as rdtsc's)
          uint64_t instructions;   // instructions the core has run for the thread's application
       } counters;
+      struct {
+         uint64_t thread_ns;      // the time the thread ran
+         uint64_t process_ns;     // the time its process's threads ran, exited ones included
+         uint64_t clock_ns;       // the requested clock's time
+         uint32_t clock_valid;    // 0: the requested clock names no CPU clock (EINVAL)
+      } cputime;
       struct {
          uint32_t eax, ebx, ecx, edx;
       } cpuid;

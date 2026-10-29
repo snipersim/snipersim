@@ -50,6 +50,14 @@ class SyscallMdl
       const syscall_args_t getCurrentSyscallArguments() const { return m_syscall_args; }
       String formatSyscall() const;
 
+      /* A CPU-time clock (CLOCK_PROCESS_CPUTIME_ID, CLOCK_THREAD_CPUTIME_ID,
+         a dynamic one: a negative id, as clock_getcpuclockid and
+         pthread_getcpuclockid make them) read by thread: the time the
+         thread, or its application's threads, ran.  0, or -EINVAL for a
+         clock id that names no CPU clock or no thread. */
+      static IntPtr cpuClockTime(Thread *thread, int clock, UInt64 *ns);
+      static bool isCpuClock(int clock) { return clock == 2 || clock == 3 || clock < 0; }
+
    private:
       static const char *futex_names[];
 

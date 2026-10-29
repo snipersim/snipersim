@@ -14,6 +14,7 @@
 #include "stats.h"
 #include "syscall_strings.h"
 #include "circular_log.h"
+#include "thread_stats_manager.h"
 
 #include <errno.h>
 #include <time.h>
@@ -60,6 +61,37 @@ SyscallMdl::SyscallMdl(Thread *thread)
 SyscallMdl::~SyscallMdl()
 {
    free(futex_counters);
+}
+
+IntPtr SyscallMdl::cpuClockTime(Thread *thread, int clock, UInt64 *ns)
+{
+   /* A dynamic id: ~pid << 3 | type, with bit 2 (CPUCLOCK_PERTHREAD) set
+      for a thread's clock; type 3 is none.  Pid (tid) 0 is the caller's
+      own.  A thread is found by the tid its front end reported; while a
+      front end reports none (the caller's tid unknown), the caller's. */
+   bool per_thread = clock == CLOCK_THREAD_CPUTIME_ID;
+   Thread *target = thread;
+   if (clock < 0)
+   {
+      if ((clock & 3) == 3)
+         return -EINVAL;
+      per_thread = (clock & 4) != 0;
+      const pid_t pid = ~(clock >> 3);
+      if (per_thread && pid != 0 && thread->m_os_info.tid != 0 && pid != thread->m_os_info.tid)
+      {
+         ScopedLock sl(Sim()->getThreadManager()->getLock());
+         target = Sim()->getThreadManager()->findThreadByTid(pid);
+         if (!target || target->getAppId() != thread->getAppId())
+            return -EINVAL;
+      }
+   }
+   else if (clock != CLOCK_PROCESS_CPUTIME_ID && clock != CLOCK_THREAD_CPUTIME_ID)
+      return -EINVAL;
+
+   ScopedLock sl(Sim()->getThreadManager()->getLock());
+   *ns = (per_thread ? Sim()->getThreadStatsManager()->getThreadCpuTime(target->getId())
+                     : Sim()->getThreadStatsManager()->getAppCpuTime(thread->getAppId())).getNS();
+   return 0;
 }
 
 bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
@@ -115,15 +147,23 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          const clockid_t clock = is_tod ? CLOCK_REALTIME : (clockid_t)args.arg0;
          const IntPtr out = is_tod ? (IntPtr)args.arg0 : (IntPtr)args.arg1;
          const bool simulated = Sim()->getConfig()->getOSEmuClockReplace();
-         const bool cputime = clock == CLOCK_PROCESS_CPUTIME_ID || clock == CLOCK_THREAD_CPUTIME_ID || clock < 0;
+         const bool cputime = isCpuClock(clock);
          struct timespec ts;
          if (simulated)
          {
-            const UInt64 time_ns = (cputime ? 0 : Sim()->getConfig()->getOSEmuTimeStart() * 1000000000)
-                                 + m_thread->getCore()->getPerformanceModel()->getElapsedTime().getNS();
+            /* The CPU-time clocks count the time the thread ran (the
+               process's: its threads'), not the time it slept or waited */
+            UInt64 time_ns = 0;
+            if (cputime)
+               m_ret_val = cpuClockTime(m_thread, clock, &time_ns);
+            else
+            {
+               time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000
+                       + m_thread->getCore()->getPerformanceModel()->getElapsedTime().getNS();
+               m_ret_val = 0;
+            }
             ts.tv_sec = time_ns / 1000000000;
             ts.tv_nsec = time_ns % 1000000000;
-            m_ret_val = 0;
          }
          else
          {

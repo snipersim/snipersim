@@ -55,6 +55,14 @@ class ThreadStatsManager
       const ThreadStatTypeList& getThreadStatTypes() { return m_thread_stat_types; }
       const char* getThreadStatName(ThreadStatType type) { return m_thread_stat_callbacks[type].m_name; }
       UInt64 getThreadStatistic(thread_id_t thread_id, ThreadStatType type) { return m_threads_stats[thread_id]->m_counts[type]; }
+      // A statistic's value now, without updating anything: its total at the
+      // last update plus the progress of the core the thread runs on since
+      // (the caller holds the thread manager's lock)
+      UInt64 getThreadStatisticNow(thread_id_t thread_id, ThreadStatType type);
+      // CPU time: the time the thread ran (its non-idle time on the cores it
+      // ran on), and the sum over an application's threads, exited ones included
+      SubsecondTime getThreadCpuTime(thread_id_t thread_id);
+      SubsecondTime getAppCpuTime(app_id_t app_id);
 
       ThreadStatType registerThreadStatMetric(ThreadStatType type, const char* name, ThreadStatCallback func, UInt64 user);
 
