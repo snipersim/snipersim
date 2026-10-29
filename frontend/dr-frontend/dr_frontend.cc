@@ -178,7 +178,7 @@ void DRFrontend::init()
 
   // The guest's time (dr_fe_time.cc): its system calls are looked at with
   // or without a simulator -- without one, the one-IPC model answers the
-  // clocks
+  // clocks and times the waits and the timers
   drtime::init(m_thread_data, DREmulateSyscalls.get_value() != 0, DRTimeStart.get_value());
   if (DREmulateSyscalls.get_value() || drtime::supported())
   {
@@ -190,7 +190,8 @@ void DRFrontend::init()
     // The vDSO's clocks (glibc's clock_gettime, gettimeofday and time make
     // no system call) and rdtsc
     if (!drmgr_register_module_load_event(event_module_load) ||
-        !drmgr_register_bb_app2app_event(event_app2app, NULL))
+        !drmgr_register_bb_app2app_event(event_app2app, NULL) ||
+        !drmgr_register_signal_event(event_signal))
       DR_ASSERT(false);
     // the vDSO is mapped before the client starts
     dr_module_iterator_t *mi = dr_module_iterator_start();
@@ -338,6 +339,7 @@ void DRFrontend::event_exit(void)
   {
     drmgr_unregister_module_load_event(event_module_load);
     drmgr_unregister_bb_app2app_event(event_app2app);
+    drmgr_unregister_signal_event(event_signal);
   }
   drtime::exit();
   if (!drmgr_unregister_tls_field(tls_idx) ||
@@ -412,14 +414,17 @@ dr_emit_flags_t DRFrontend::event_bb_analysis(void *drcontext, void *tag, instrl
     return DR_EMIT_DEFAULT;
 }
 
-void DRFrontend::process_instructions_buffer(void *drcontext)
+// hold_last: the last instruction recorded has not run (it will be recorded
+// again): it is not sent, only looked at for the branch before it
+void DRFrontend::process_instructions_buffer(void *drcontext, bool hold_last)
 {
   per_thread_t *data = (per_thread_t*)drmgr_get_tls_field(drcontext, tls_idx);
   instruction_t *buf_ptr = BUF_PTR(data->seg_base);
+  instruction_t *buf_end = hold_last && buf_ptr > data->inst_buf ? buf_ptr - 1 : buf_ptr;
   // The instructions the thread ran, for its clock
-  drtime::count(data->fe_tid, buf_ptr - data->inst_buf);
+  drtime::count(data->fe_tid, buf_end - data->inst_buf);
   
-  for (instruction_t *instruction = (instruction_t *)data->inst_buf; instruction < buf_ptr; instruction++) 
+  for (instruction_t *instruction = (instruction_t *)data->inst_buf; instruction < buf_end; instruction++) 
   {
     // Update branch information
     bool taken = false;
@@ -481,14 +486,40 @@ void DRFrontend::process_instructions_buffer(void *drcontext)
 
 }
 
-void DRFrontend::clean_call(void)
+// A signal for the thread that waits in DynamoRIO (drtime::flow: a timer
+// fired here, from a clean call, where DynamoRIO only notes it, or the
+// client thread signalled it while it was in one): DynamoRIO delivers a
+// signal as the thread leaves the code cache, and a thread computing in
+// linked blocks never did -- the SIGALRM of an ITIMER_REAL armed before a
+// loop never came.  So the thread leaves: back to the start of its block
+// (pc), through DynamoRIO, which delivers the signal first.  The block's
+// first instruction, recorded before the clean call but not run, is not
+// sent: it is recorded again.
+void DRFrontend::resume_at(void *drcontext, app_pc pc)
+{
+  dr_mcontext_t mc;
+  mc.size = sizeof(mc);
+  mc.flags = DR_MC_ALL;
+  dr_get_mcontext(drcontext, &mc);
+  mc.pc = pc;
+  dr_redirect_execution(&mc);
+}
+
+void DRFrontend::clean_call(app_pc pc)
 {
   void *drcontext = dr_get_current_drcontext();
+  if (drtime::flow(fe_tid(drcontext)))
+  {
+    process_instructions_buffer(drcontext, true);
+    resume_at(drcontext, pc);
+  }
   process_instructions_buffer(drcontext);
 }
 
-void DRFrontend::count_clean_call(threadid_t threadid, int32_t count)
+void DRFrontend::count_clean_call(threadid_t threadid, int32_t count, app_pc pc)
 {
+  if (drtime::flow(threadid))
+    resume_at(dr_get_current_drcontext(), pc);   // the block is counted when it runs again
   m_callbacks->countInsns(threadid, count);
   drtime::count(threadid, count);
 }
@@ -580,6 +611,12 @@ void DRFrontend::vdso_clean_call(int which)
   mc.xax = ret;
   dr_set_mcontext(drcontext, &mc);
 #endif
+}
+
+dr_signal_action_t DRFrontend::event_signal(void *drcontext, dr_siginfo_t *siginfo)
+{
+  drtime::signal_delivered(fe_tid(drcontext));
+  return DR_SIGNAL_DELIVER;
 }
 
 void DRFrontend::rdtsc_clean_call()
@@ -878,9 +915,10 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
       dr_insert_clean_call( drcontext, bb, instrlist_first_app(bb),
                             (void *)count_clean_call, // the frontend's countInsns, and the guest's clock
                             false, // save fpstate 
-                            2, // number of operands
+                            3, // number of operands
                             OPND_CREATE_INT32(threadid),
-                            OPND_CREATE_INT32(num_instrs));
+                            OPND_CREATE_INT32(num_instrs),
+                            OPND_CREATE_INTPTR(instr_get_app_pc(instrlist_first_app(bb))));
     }
     else  // detailed simulation: send instructions to Sniper's backend
     {
@@ -970,7 +1008,8 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
           IF_ARM_ELSE(!instr_is_predicated(instr), true)
           IF_AARCHXX(&& !instr_is_exclusive_store(instr)))
       {
-        dr_insert_clean_call(drcontext, bb, instr, (void *)clean_call, false, 0);
+        dr_insert_clean_call(drcontext, bb, instr, (void *)clean_call, false, 1,
+                             OPND_CREATE_INTPTR(instr_get_app_pc(instr)));
       }
       
       

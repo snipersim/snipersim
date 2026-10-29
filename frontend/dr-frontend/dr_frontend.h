@@ -47,8 +47,8 @@ class DRFrontend : public frontend::Frontend<DRFrontend>
     static void event_exit();
     
     /// DR clean call to process and send instructions from a buffer to the backend.
-    static void process_instructions_buffer(void *drcontext);
-    static void clean_call(void);
+    static void process_instructions_buffer(void *drcontext, bool hold_last = false);
+    static void clean_call(app_pc pc);
     
     /// DR clean call to process magic instructions.
     static void magic_clean_call();
@@ -56,10 +56,12 @@ class DRFrontend : public frontend::Frontend<DRFrontend>
     /// The guest's time (dr_fe_time.cc): the instruction count of a block
     /// in fast-forward, a call into the vDSO's clocks answered in place, an
     /// rdtsc's result replaced.
-    static void count_clean_call(threadid_t threadid, int32_t count);
+    static void count_clean_call(threadid_t threadid, int32_t count, app_pc pc);
+    static void resume_at(void *drcontext, app_pc pc);
     static void vdso_clean_call(int which);
     static void rdtsc_clean_call();
     static void event_module_load(void *drcontext, const module_data_t *info, bool loaded);
+    static dr_signal_action_t event_signal(void *drcontext, dr_siginfo_t *siginfo);
     static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, bool translating);
     
     /// Specialization of the method to invoke the end of a Region of Interest if the end address has been reached.

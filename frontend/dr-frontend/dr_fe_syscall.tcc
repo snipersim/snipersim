@@ -36,8 +36,9 @@ bool FrontendSyscallModel<DRFrontend>::event_pre_syscall(void *drcontext, int sy
     m_thread_data[threadid].icount_reported = 0;
   }
 
-  // 3: The guest's time (dr_fe_time.cc): the clocks without a simulator --
-  // answered there, the call skipped
+  // 3: The guest's time (dr_fe_time.cc): the clocks without a simulator,
+  // the timers, the timed waits the simulator does not model -- answered
+  // there, the call skipped
   {
     uint64_t a[MAX_SYSCALL_ARGS], ret;
     for (int i = 0; i < MAX_SYSCALL_ARGS; i++)
@@ -74,6 +75,12 @@ bool FrontendSyscallModel<DRFrontend>::event_pre_syscall(void *drcontext, int sy
    //return true;
 }
 
+void FrontendSyscallModel<DRFrontend>::event_post_syscall(void *drcontext, int syscall_number)
+{
+  // A call the thread may have waited in returned (the one-IPC model)
+  drtime::syscall_returned(DRFrontend::fe_tid(drcontext), (int64_t)dr_syscall_get_result(drcontext));
+}
+
 bool FrontendSyscallModel<DRFrontend>::event_filter_syscall(void *drcontext, int sysnum)
 {
     return true; // intercept everything
@@ -83,6 +90,7 @@ void FrontendSyscallModel<DRFrontend>::initSyscallModeling()
 {
   dr_register_filter_syscall_event(event_filter_syscall);
   drmgr_register_pre_syscall_event(event_pre_syscall);
+  drmgr_register_post_syscall_event(event_post_syscall);
 }
 
 } // end namespace frontend

@@ -12,6 +12,7 @@ template <> class FrontendSyscallModel<DRFrontend> : public FrontendSyscallModel
   public:
     void initSyscallModeling();
     static bool event_pre_syscall(void *drcontext, int sysnum);
+    static void event_post_syscall(void *drcontext, int sysnum);
     static bool event_filter_syscall(void *drcontext, int sysnum);
     void set_map_threads(std::unordered_map<int, threadid_t>* mt){ this->map_threadids = mt; }
 

@@ -17,6 +17,22 @@ Run: `run-sniper --frontend=dr ... -- ./app` on the simulation host, or
 fast-forward and detailed-instruction options translated to the client's
 flags (`frontend/dr-frontend/dr_fe_options.h`).
 
+Time (x86-64): no time the guest gives reaches the host's kernel, and the
+guest reads simulated time, never the host's (`sift/guest_time.h`, as the
+SIFT recorder and the QEMU plugin; `dr_fe_time.{cc,h}`).  The clocks --
+clock_gettime, gettimeofday and time, through the vDSO (whose entries are
+replaced: glibc makes no system call) or as system calls, and rdtsc/rdtscp
+-- are the simulator's live, and otherwise the one-IPC model's from the
+time zero (the client's `-time_start <seconds>`, default 1337000000,
+osemu/time_start's).  Live, futex and the sleeps are the simulator's, and
+the other timed waits (poll, select, epoll, sigtimedwait, ...) run as probes
+between which the simulator lets the thread sleep in simulated time; to a
+file they end at their deadlines in the one-IPC model's time.  alarm,
+setitimer, the POSIX timers and timerfd are kept by the client and fired at
+their expiry in the guest's time.  A clone's child starts at its parent's
+time.  On AArch64 the client says at start that it does not do this (the
+guest then reads the host's clocks).
+
 Sources: `dr_frontend.{cc,h}` specialise the generic front-end layer in
 `frontend/` (`frontend.h`, `frontend_control`, `frontend_syscall`,
 `frontend_threads`, `frontend_callbacks`); `dr_fe_*.{h,tcc}` are the

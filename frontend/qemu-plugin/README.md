@@ -117,13 +117,14 @@ the simulator ends with the guest.
 Where the simulator does not answer -- a trace written to a file, a
 functional run, a channel the simulator closed -- the guest still never
 reads the host's clock, whose time has nothing to do with the program's.
-This plugin and the SIFT recorder under SDE then answer with the same
-one-IPC model (the DynamoRIO client does not model time yet):
+This plugin, the SIFT recorder under SDE and the DynamoRIO client (on
+x86-64) then answer with the same one-IPC model:
 
 * time zero: osemu/time_start, 1337000000 seconds since the epoch by
   default (`Sift::TIME_START_DEFAULT` in `sift/sift_format.h`); run-sniper
   passes the run's value (the plugin's `time_start=` option, the recorder's
-  `-sniper:time_start`, record-trace's `--time-start`);
+  `-sniper:time_start`, the DynamoRIO client's `-time_start`, record-trace's
+  `--time-start`);
 * **assumed: one instruction per cycle on a 1 GHz core**
   (`Sift::ONE_IPC_HZ`): a thread's time is its instructions in
   nanoseconds, from its parent's time when it started, plus the time it
