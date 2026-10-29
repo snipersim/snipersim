@@ -6,16 +6,19 @@ keeps the guest's time runs a timed wait -- a futex wait with a deadline,
 a poll, a sleep -- in steps of its own instead of handing the guest's
 timeout to the host's kernel, which would time it in host seconds.  An
 interrupted call returns QEMU_ERESTARTSYS, which the filter returns as it
-is.  Applied by deps/sniper-deps to the x86-64, RISC-V and AArch64
+is.  qemu_plugin_host_signal() gives the host's number for a guest
+signal (real-time signals are mapped, QEMU_RTSIG_MAP), for a plugin that
+sends the guest a signal from a thread of its own -- a timer it keeps.
+Applied by deps/sniper-deps to the x86-64, RISC-V and AArch64
 user-mode builds, after tools/qemu-11.1.1-plugin-wait.patch and
 tools/qemu-11.1.1-plugin-counters.patch; one line of context.  Used by
 frontend/qemu-plugin/sniper_qemu.cc ("timed").
 
 diff --git a/include/plugins/qemu-plugin.h b/include/plugins/qemu-plugin.h
-index 1dcb3fa..73f275d 100644
+index 1dcb3fa..2f16f87 100644
 --- a/include/plugins/qemu-plugin.h
 +++ b/include/plugins/qemu-plugin.h
-@@ -1255,2 +1255,25 @@ void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb
+@@ -1255,2 +1255,38 @@ void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, qemu_plugin_counter_cb
  
 +/**
 + * qemu_plugin_run_syscall() - run a guest system call from a syscall filter
@@ -40,44 +43,69 @@ index 1dcb3fa..73f275d 100644
 +                              uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
 +                              uint64_t a8, int64_t *sysret);
 +
++/**
++ * qemu_plugin_host_signal() - the host's number for a guest signal
++ * @sig: the guest's signal number
++ *
++ * Linux user mode maps the guest's real-time signals onto other host ones
++ * (QEMU_RTSIG_MAP).  A plugin that sends the guest a signal from a thread
++ * of its own -- a timer it keeps, where no syscall filter runs -- sends the
++ * host's, which QEMU delivers to the guest as @sig.  Returns -1 for a guest
++ * signal with no host one, or in system mode.
++ */
++QEMU_PLUGIN_API
++int qemu_plugin_host_signal(int sig);
++
  /**
 diff --git a/include/qemu/plugin.h b/include/qemu/plugin.h
-index 153efe8..6b90da5 100644
+index 153efe8..e17b9a4 100644
 --- a/include/qemu/plugin.h
 +++ b/include/qemu/plugin.h
-@@ -175,2 +175,11 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
+@@ -175,2 +175,12 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
                                    uint64_t freq_hz, uint64_t host_value);
 +/*
 + * Linux user mode's system call, without the filters, for
 + * qemu_plugin_run_syscall(): set by syscall_init(), NULL in system mode.
 + */
 +extern __thread bool qemu_plugin_in_syscall_filter;   /* plugins/core.c */
++extern int (*qemu_plugin_user_host_signal)(int sig);   /* qemu_plugin_host_signal() */
 +extern int64_t (*qemu_plugin_user_syscall)(CPUState *cpu, int64_t num,
 +                                           uint64_t a1, uint64_t a2, uint64_t a3,
 +                                           uint64_t a4, uint64_t a5, uint64_t a6,
 +                                           uint64_t a7, uint64_t a8);
  void qemu_plugin_tb_trans_cb(CPUState *cpu, struct qemu_plugin_tb *tb);
 diff --git a/linux-user/syscall.c b/linux-user/syscall.c
-index cfa68df..4033ee2 100644
+index cfa68df..7ee6451 100644
 --- a/linux-user/syscall.c
 +++ b/linux-user/syscall.c
-@@ -7692,2 +7692,9 @@ _syscall2(int, sys_setregid, gid_t, rgid, gid_t, egid);
+@@ -7692,2 +7692,19 @@ _syscall2(int, sys_setregid, gid_t, rgid, gid_t, egid);
  
 +#ifdef CONFIG_PLUGIN
 +static int64_t plugin_user_syscall(CPUState *cpu, int64_t num,
 +                                   uint64_t a1, uint64_t a2, uint64_t a3,
 +                                   uint64_t a4, uint64_t a5, uint64_t a6,
 +                                   uint64_t a7, uint64_t a8);
++
++/* qemu_plugin_host_signal() */
++static int plugin_user_host_signal(int sig)
++{
++    if (sig < 1 || sig > TARGET_NSIG) {
++        return -1;
++    }
++    sig = target_to_host_signal(sig);
++    return sig > 0 && sig < _NSIG ? sig : -1;
++}
 +#endif
 +
  void syscall_init(void)
-@@ -7698,2 +7705,5 @@ void syscall_init(void)
+@@ -7698,2 +7715,6 @@ void syscall_init(void)
  
 +#ifdef CONFIG_PLUGIN
 +    qemu_plugin_user_syscall = plugin_user_syscall;
++    qemu_plugin_user_host_signal = plugin_user_host_signal;
 +#endif
      thunk_init(STRUCT_MAX);
-@@ -14692,2 +14702,16 @@ static bool send_through_syscall_filters(CPUState *cpu, int num,
+@@ -14692,2 +14713,16 @@ static bool send_through_syscall_filters(CPUState *cpu, int num,
  
 +#ifdef CONFIG_PLUGIN
 +/*
@@ -95,11 +123,18 @@ index cfa68df..4033ee2 100644
 +
  abi_long do_syscall(CPUArchState *cpu_env, int num, abi_long arg1,
 diff --git a/plugins/api.c b/plugins/api.c
-index 3acf002..d76d101 100644
+index 3acf002..69b5fe8 100644
 --- a/plugins/api.c
 +++ b/plugins/api.c
-@@ -545,2 +545,20 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
+@@ -545,2 +545,27 @@ uint64_t qemu_plugin_counter_read(CPUState *cpu, enum qemu_plugin_counter counte
  
++int (*qemu_plugin_user_host_signal)(int sig);
++
++int qemu_plugin_host_signal(int sig)
++{
++    return qemu_plugin_user_host_signal ? qemu_plugin_user_host_signal(sig) : -1;
++}
++
 +int64_t (*qemu_plugin_user_syscall)(CPUState *cpu, int64_t num,
 +                                    uint64_t a1, uint64_t a2, uint64_t a3,
 +                                    uint64_t a4, uint64_t a5, uint64_t a6,
