@@ -121,6 +121,12 @@ Version 9.0 (in preparation)
     simulator aborts at the end of the ROI get their channels closed instead
     of a Shutdown, which made the recorder exit the still-running process
     (and Pin then printed "ptrace_attach_pid ... Operation not permitted")
+  * A program recorded with --roi runs to its end after the region of
+    interest: run-sniper killed the front end as soon as the simulator
+    exited, which cut off whatever the program did after its ROI (its output
+    lost, the recorder reported as exiting with status 1).  It now waits for
+    the recorders, at most --app-exit-wait seconds (60 by default); the
+    test_apps case roi-exit checks it
   * The trace manager's monitor no longer reads trace threads that were
     deleted at the end of a run (a SIGSEGV on the way out, rare)
   * doc-verify fails a build block whose build failed (it reported only the

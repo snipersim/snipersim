@@ -515,6 +515,29 @@ def timed_waits_check(out, rc):
 timed_waits_check.needs_simulation = True
 
 
+def roi_exit_check(out, rc):
+    """Every run of the program got to its last line, printed after its ROI,
+    and every recorder exited 0.  run-sniper used to kill the front end the
+    moment the simulator exited, which cut the program off after its ROI
+    whenever it had more to do than the simulator took to wind down (the
+    join shape, nearly every time), and its recorder was reported as exiting
+    with status 1."""
+    runs = len(re.findall(r'roi-exit: run-sniper exit status', out))
+    done = len(re.findall(r'roi-exit: (?:join|exit) total=\S+ ran to its end after the ROI', out))
+    if not runs:
+        return False, 'no run reported'
+    if done != runs:
+        return False, '%d of %d runs ran to their end after the ROI' % (done, runs)
+    bad = re.findall(r'roi-exit: run-sniper exit status ([1-9]\d*)', out)
+    if bad:
+        return False, 'run-sniper exited with status %s' % ', '.join(sorted(set(bad)))
+    m = re.search(r'The recorder for application \d+ exited with status -?\d+', out)
+    if m:
+        return False, m.group(0)
+    return True, '%d of %d runs ran to their end after the ROI' % (done, runs)
+roi_exit_check.needs_simulation = True
+
+
 def exits_zero(out, rc):
     return (rc == 0, 'exit %s' % rc)
 exits_zero.needs_simulation = True
@@ -592,6 +615,7 @@ CASES = {
     'spinloop':        (prints('done', 'threads finished'), None),
     'post-roi':        (post_roi_check, None),
     'timed-waits':     (timed_waits_check, None),
+    'roi-exit':        (roi_exit_check, None),
     'true':            (exits_zero, None),
     'sniper-in-sniper': (sniper_in_sniper_check, None),
 }

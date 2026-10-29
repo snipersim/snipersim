@@ -49,7 +49,7 @@ def usage():
         '  [--build-dir=<build directory>] [--curdir=<dir>]' + \
         '  [--trace-args="<recorder options>"] [--trace-pin-args="<pin options>"] [--record-trace-option=<option>]' + \
         '  [--frontend-option=<qemu option>] [--qemu-va-bits=<39|48>] [--maxthreads=<n>] [--stop-address=<address>]' + \
-        '  [--follow-execv=<0|1>] [--valgrind] [--response-traces=<trace0>,...]' + \
+        '  [--follow-execv=<0|1>] [--valgrind] [--response-traces=<trace0>,...] [--app-exit-wait=<seconds>]' + \
         '  [--mpi [--mpi-ranks=<ranks>] [--mpi-exec="<mpiexec -mpiarg...>"] ]' + \
         '  {--traces=<trace0>,<trace1>,... [--sim-end=<first|last|last-restart (default: first)>]' + \
         '  |  --pinballs=<pinball-basename>,*' + \
@@ -81,6 +81,9 @@ roi_only = False
 roi_script = False
 sim_end = 'first'
 sim_end_valid = ('first', 'last', 'last-restart')
+# How long the application may run on once the simulation has ended -- after
+# its ROI, natively -- before the front end is stopped (seconds)
+app_exit_wait = 60
 use_viz = False
 use_viz_profile = ''
 use_viz_aso = ''
@@ -247,7 +250,7 @@ try:
       "build-dir=",
       "pin-stats",
       "traces=", "response-traces=", "trace-manual", "trace-args=", "trace-pin-args=",
-      "sim-end=",
+      "sim-end=", "app-exit-wait=",
       "mpi", "mpi-ranks=", "mpi-exec=",
       "pinballs=", "pinplay-addr-trans",
       "sift",
@@ -292,6 +295,8 @@ for o, a in opts:
     roi_only = True
   if o == '--roi-script':
     roi_script = True
+  if o == '--app-exit-wait':
+    app_exit_wait = float(a)
   if o == '--sim-end':
     if a not in sim_end_valid:
       print('--sim-end value', a, 'invalid, need one of', sim_end_valid, file=sys.stderr)
@@ -884,6 +889,7 @@ if tracegen:
   sniperoptions.append('-g --traceinput/num_apps=%d' % tracegen['num_apps'])
   tracegen['tracefiles_created'] = [] # FIFOs to be cleaned up
   tracegen['recorder_status'] = []     # (application, exit status), as each recorder exits
+  tracegen['recorder_threads'] = []    # one per application, done when its recorder has exited
   basefname = 'run_benchmarks'
   tracegen['tracetempdir'] = tempfile.mkdtemp()
   traceprefix = os.path.join(tracegen['tracetempdir'], basefname)
@@ -984,9 +990,11 @@ if tracegen:
     if tracegen['redirect']: # redirect output
       # The userspace MimicOS kernel is tagged for what it is, not as an app.
       tag = 'kernel' if any(os.path.basename(a) == 'startup_mimicos' for a in app_cmd) else None
-      threading.Thread(target = run_recorder, args = (app_id, tracecmd, tag)).start()
+      t = threading.Thread(target = run_recorder, args = (app_id, tracecmd, tag))
     else:                    # inline output
-      threading.Thread(target = run_recorder, args = (app_id, tracecmd, None)).start()
+      t = threading.Thread(target = run_recorder, args = (app_id, tracecmd, None))
+    t.start()
+    tracegen['recorder_threads'].append(t)
 
 sniperoptions = ' '.join(sniperoptions)
 
@@ -1231,6 +1239,26 @@ except KeyboardInterrupt:
   sys.exit(interrupt_status())
 
 
+# The simulation ends at the end of the ROI, and the application does not: the
+# recorder ends the main thread's stream there and the program runs on
+# natively, joining its threads and printing its results.  The cleanup below
+# kills whatever of the front end is still running, and it ran the moment the
+# simulator exited, so a program with anything left to do after its ROI was
+# killed at a point that depended on how quickly the simulator wound down: its
+# output after the ROI was lost, and its recorder was reported as exiting with
+# status 1 (the redirecting child, killed).  Wait for the recorders first, for
+# a bounded time, so a program that never ends cannot hold the run.  With
+# several applications and --sim-end=first the others are meant to be cut off
+# when the first ends, and are not waited for.
+if tracegen and rc == 0 and not (tracegen['num_apps'] > 1 and sim_end == 'first'):
+  deadline = time.time() + app_exit_wait
+  try:
+    for t in tracegen['recorder_threads']:
+      t.join(max(0, deadline - time.time()))
+  except KeyboardInterrupt:
+    pass                    # Ctrl-C or SIGTERM: stop waiting, the cleanup stops it
+  if any(t.is_alive() for t in tracegen['recorder_threads']):
+    print('[SNIPER] The application was still running %g s after the simulation ended; stopping it (--app-exit-wait)' % app_exit_wait)
 stopping = True
 # The recorder's exit status was collected and dropped: a recorder (Pin, QEMU
 # or the application under it) killed by a signal mid-run closed its stream,
