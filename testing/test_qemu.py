@@ -2743,6 +2743,29 @@ def case_aarch64_user_timers(p, g, workdir):
     return timers_case(workdir, 'aarch64', [cc, '--target=aarch64-linux-gnu', '-fuse-ld=lld'], 'cortex-a72')
 
 
+def case_user_clone_storm(p, g, workdir):
+    """Threads created at once by several threads, joined, live
+    (testing/apps/clone_storm.c, four threads making four children each): a
+    child takes the clear-tid word of its own clone, matched on the TLS it
+    starts with, not the oldest queued -- one taking a sibling's woke the
+    sibling's joiner at its exit, before the sibling had written.  Run three
+    times; needs the plugin wait call."""
+    if not qemu_can_wait(user_qemu('x86_64')):
+        return None, 'this QEMU has no plugin wait call: a second thread is refused live'
+    guest = os.path.join(workdir, 'clone_storm')
+    rc, out = run(['gcc', '-O1', '-static', '-pthread', '-o', guest,
+                   os.path.join(SNIPER_ROOT, 'testing', 'apps', 'clone_storm.c')], 120)
+    if rc != 0:
+        return None, 'could not build clone_storm.c statically (%s)' % exit_text(rc)
+    for k in range(3):
+        rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '4', '-c', 'gainestown',
+                       '-d', os.path.join(workdir, 'storm-%d' % k), '--frontend=qemu', '--', guest], 600, cwd=SNIPER_ROOT)
+        if rc != 0 or 'clone_storm: ok' not in out:
+            m = re.search(r'clone_storm: .*', out)
+            return False, 'run %d: %s (%s)' % (k + 1, m.group(0) if m else sniper_failed(rc, out), exit_text(rc))
+    return True, '3 runs: 16 threads made by 4 at once, every join after its thread had written'
+
+
 def counters_case(workdir, arch, cc_cmd, config):
     """The counter probe (testing/apps/counter_probe.c) live through run-sniper
     --frontend=qemu: the guest's direct reads of its clocks and counters --
@@ -3169,6 +3192,7 @@ CASES = {
     'riscv-user-timers': case_riscv_user_timers,
     'aarch64-user-timers': case_aarch64_user_timers,
     'user-sleep-exit':  case_user_sleep_exit,
+    'user-clone-storm': case_user_clone_storm,
     'user-counters':    case_user_counters,
     'time-start-default': case_time_start_default,
     'riscv-user-counters': case_riscv_user_counters,

@@ -190,7 +190,7 @@ enum { W_NONE = 0, W_TB_COUNT, W_FLOW, W_MAGIC, W_SYNC, W_BACKEDGE, W_COUNTER };
 std::atomic<unsigned> g_num_threads(0);
 std::atomic<bool>     g_main_started(false);
 std::mutex            g_tid_lock;
-struct Clone { uint64_t tid_ptr; int parent; };
+struct Clone { uint64_t tid_ptr; int parent; uint64_t tls; };   /* tls: CLONE_SETTLS's, 0 if none */
 std::vector<Clone>    g_tid_ptrs;
 /* Sniper creates a thread's channels when it hears NewThread, which the
  * parent sends when its clone returns -- and the child may be running by
@@ -2121,19 +2121,26 @@ void thread_exit(VCPU *v)
  * fork handler refuses (refuse_forked_child). */
 void clone_entry(VCPU *v, bool clone3, const uint64_t args[6])
 {
+   const uint64_t CLONE_SETTLS_FLAG = 0x80000;
    uint64_t flags = args[0], child_tidptr = g_arch == ARCH_X86 ? args[3] : args[4];
+   uint64_t tls = g_arch == ARCH_X86 ? args[4] : args[3];
    if (clone3)
    {
-      uint64_t words[3] = {0, 0, 0};
+      /* struct clone_args: flags, pidfd, child_tid, parent_tid, exit_signal,
+       * stack, stack_size, tls */
+      uint64_t words[8] = {0, 0, 0, 0, 0, 0, 0, 0};
       if (!read_guest(args[0], words, sizeof(words)))
          return;
       flags = words[0];
       child_tidptr = words[2];
+      tls = words[7];
    }
    if (!(flags & CLONE_THREAD_FLAG))
       return;
+   if (!(flags & CLONE_SETTLS_FLAG))
+      tls = 0;
    std::lock_guard<std::mutex> lock(g_tid_lock);
-   g_tid_ptrs.push_back(Clone{child_tidptr, (int)v->vcpu_index});
+   g_tid_ptrs.push_back(Clone{child_tidptr, (int)v->vcpu_index, tls});
    v->clone_tidptr = child_tidptr;
    v->clone_pending = true;
 }
@@ -3448,6 +3455,29 @@ void syscall_ret(SNP_SYSCALL_RET_ARGS)
       }
 }
 
+/* The calling vCPU's thread pointer (x86-64's FS base, RISC-V's tp,
+ * AArch64's TPIDR_EL0), from the gdbstub's registers; 0 where it has none */
+uint64_t thread_tls()
+{
+   const char *name = g_arch == ARCH_X86 ? "fs_base" : g_arch == ARCH_RISCV ? "tp" : "tpidr";
+   uint64_t value = 0;
+   GArray *regs = qemu_plugin_get_registers();
+   for (guint i = 0; regs && i < regs->len; i++)
+   {
+      qemu_plugin_reg_descriptor *d = &g_array_index(regs, qemu_plugin_reg_descriptor, i);
+      if (strcmp(d->name, name) != 0)
+         continue;
+      GByteArray *buf = g_byte_array_new();
+      if (qemu_plugin_read_register(d->handle, buf) > 0)
+         memcpy(&value, buf->data, std::min<size_t>(buf->len, sizeof(value)));
+      g_byte_array_free(buf, TRUE);
+      break;
+   }
+   if (regs)
+      g_array_free(regs, TRUE);
+   return value;
+}
+
 void vcpu_init(SNP_VCPU_ARGS)
 {
    /* In user mode a vCPU index is reused by a thread started after another
@@ -3469,18 +3499,30 @@ void vcpu_init(SNP_VCPU_ARGS)
    if (pacsim_qemu::enabled())
       pacsim_qemu::thread_start(cpu_index);
    /* The thread's clone (the first thread has none): its tid word, and its
-    * parent, whose time its clock starts at */
+    * parent, whose time its clock starts at.  Its own: the clone whose TLS
+    * the thread starts with (threads cloned at once by different threads
+    * start in either order, and one taking the other's tid word woke the
+    * other's joiner at its exit, before the other had run); the oldest
+    * where there is no TLS to match on. */
    if (!in_system_mode)
    {
       int parent = -1;
       if (g_main_started.exchange(true))
       {
+         const uint64_t tls = thread_tls();
          std::lock_guard<std::mutex> lock(g_tid_lock);
          if (!g_tid_ptrs.empty())
          {
-            v->tid_ptr = g_tid_ptrs.front().tid_ptr;
-            parent = g_tid_ptrs.front().parent;
-            g_tid_ptrs.erase(g_tid_ptrs.begin());
+            auto it = g_tid_ptrs.begin();
+            for (auto j = g_tid_ptrs.begin(); tls && j != g_tid_ptrs.end(); ++j)
+               if (j->tls == tls)
+               {
+                  it = j;
+                  break;
+               }
+            v->tid_ptr = it->tid_ptr;
+            parent = it->parent;
+            g_tid_ptrs.erase(it);
          }
       }
       clocks_start(v, parent);
