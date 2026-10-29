@@ -79,6 +79,22 @@ __attribute__((weak)) void qemu_plugin_register_counter_cb(qemu_plugin_id_t id, 
 #define SNP_COUNTER_CB(f)   ((qemu_plugin_counter_cb_t)(f))
 #else
 #define SNP_HAVE_COUNTERS   false
+#define SNP_COUNTER_CB(f)   (f)
+#endif
+
+/* qemu_plugin_run_syscall() (tools/qemu-11.1.1-plugin-syscall.patch): a
+ * syscall filter runs a guest system call of its own -- a timed wait with
+ * the plugin's timeout, never the guest's.  Bound weakly, as above: the
+ * full-system build is not patched. */
+#if QEMU_PLUGIN_VERSION >= 7
+extern "C" {
+__attribute__((weak)) bool qemu_plugin_run_syscall(int64_t num, uint64_t a1, uint64_t a2, uint64_t a3,
+                                                   uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                                                   uint64_t a8, int64_t *sysret);
+}
+#define SNP_HAVE_RUN_SYSCALL (qemu_plugin_run_syscall != nullptr)
+#else
+#define SNP_HAVE_RUN_SYSCALL false
 #endif
 
 #endif

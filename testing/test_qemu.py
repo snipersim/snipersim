@@ -2494,6 +2494,8 @@ def qemu_can_wait(qemu):
 
 
 COUNTER_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'counter_probe.c')
+TIMED_RAW = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'timed_raw.c')
+TIMED_WAITS = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'timed_waits.c')
 TIME_PROBE = os.path.join(SNIPER_ROOT, 'testing', 'apps', 'time_probe.c')
 # Sniper's osemu/time_start default, which the front ends share
 # (Sift::TIME_START_DEFAULT, sift/sift_format.h)
@@ -2508,6 +2510,147 @@ def qemu_has_counters(qemu):
             return b'qemu_plugin_register_counter_cb' in f.read()
     except IOError:
         return False
+
+
+def qemu_can_run_syscall(qemu):
+    """Does this QEMU let the plugin run a system call of its own
+    (tools/qemu-11.1.1-plugin-syscall.patch)?  Without it the guest's
+    timeouts are handed to the host's kernel."""
+    try:
+        with open(qemu, 'rb') as f:
+            return b'qemu_plugin_run_syscall' in f.read()
+    except IOError:
+        return False
+
+
+def timed_lines(out, prefix):
+    """{name: (want, got, ret)} from a timed-wait guest's lines"""
+    return {m.group(1): (int(m.group(2)), int(m.group(3)), int(m.group(4)))
+            for m in re.finditer(prefix + r': (\S+) want=(\d+) got=(\d+) ret=(-?\d+)', out)}
+
+
+def timed_check(what, lines, expect):
+    """Every wait ended at its deadline in the guest's time (got: want, and at
+    most 1% and 100 us more), the ones another thread ends (want 0) before
+    their 1 s timeout; and each wait the guest runs reported"""
+    for name in expect:
+        if name not in lines:
+            return '%s: no line for %s' % (what, name)
+        want, got, ret = lines[name]
+        if want and not want <= got <= want * 1.01 + 100000:
+            return '%s: %s ended after %d ns of the guest\'s time, not its %d' % (what, name, got, want)
+        if not want and got >= 1000000000:
+            return '%s: %s ran to its timeout (%d ns) instead of being woken' % (what, name, got)
+    return None
+
+
+TIMED_RAW_WAITS = ('clock_nanosleep-abs', 'ppoll', 'pselect6', 'epoll_pwait', 'futex-wait',
+                   'futex-bitset-realtime', 'rt_sigtimedwait', 'ppoll-2s')
+
+
+def timed_case(workdir, arch, cc_cmd, config):
+    """The guest's timeouts in the guest's time (testing/apps/timed_raw.c,
+    raw system calls): every timed wait ends at its deadline in the guest's
+    clock, the one-IPC model's in a trace written to a file, the simulator's
+    live -- never the host's kernel's, which timed them in host seconds (or
+    took a deadline from the guest's clock, 14 years off the host's, as one
+    of its own).  The 2 s wait takes 2 s of no clock but the guest's: the
+    recording to a file finishes in less (it took 2 s more before)."""
+    qemu = user_qemu(arch)
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-%s' % arch
+    if not qemu_can_run_syscall(qemu):
+        return None, 'this QEMU has no plugin system call (tools/qemu-11.1.1-plugin-syscall.patch): the guest\'s timeouts run in host time'
+    guest = os.path.join(workdir, 'timed_raw_' + arch)
+    rc, out = run(cc_cmd + ['-O1', '-ffreestanding', '-nostdlib', '-static', '-Wl,-e,_start', '-o', guest, TIMED_RAW], 120)
+    if rc != 0:
+        return None, 'could not build timed_raw.c (%s)' % exit_text(rc)
+    seen = []
+    t0 = time.time()
+    rc, out = run([os.path.join(SNIPER_ROOT, 'record-trace'), '--frontend=qemu', '-o', os.path.join(workdir, 'timed-' + arch),
+                   '--', guest], 300, cwd=workdir)
+    host = time.time() - t0
+    if rc != 0 or 'timed_raw: done ok' not in out:
+        return False, 'to a file: the probe failed (%s): %s' % (exit_text(rc), out.strip()[-400:])
+    why = timed_check('to a file', timed_lines(out, 'timed_raw'), TIMED_RAW_WAITS)
+    if why:
+        return False, why
+    if host >= 2.0:
+        return False, 'to a file: the recording took %.1f s of the host\'s time: the 2 s wait was timed by the host' % host
+    seen.append('to a file every wait at its deadline (%.1f s of host time)' % host)
+    outdir = os.path.join(workdir, 'timed-live-' + arch)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '1', '-c', config, '-d', outdir,
+                   '--frontend=qemu', '--', guest], 900, cwd=SNIPER_ROOT)
+    if rc != 0 or 'timed_raw: done ok' not in out:
+        return False, 'live: the probe failed (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
+    why = timed_check('live', timed_lines(out, 'timed_raw'), TIMED_RAW_WAITS)
+    if why:
+        return False, why
+    seen.append('live every wait at its deadline in simulated time')
+    return True, '; '.join(seen)
+
+
+def case_user_timed(p, g, workdir):
+    """x86-64 timed waits in the guest's time (timed_case)."""
+    return timed_case(workdir, 'x86_64', ['gcc'], 'gainestown')
+
+
+def case_riscv_user_timed(p, g, workdir):
+    """RISC-V timed waits in the guest's time (timed_case)."""
+    r, why = riscv_prerequisites(workdir)
+    if r is None:
+        return None, why
+    return timed_case(workdir, 'riscv64', [os.environ['SNIPER_RISCV_CC'], '--target=riscv64-linux-gnu',
+                      '-march=rv64gc', '-mabi=lp64d', '-fuse-ld=lld'], 'riscv')
+
+
+def case_aarch64_user_timed(p, g, workdir):
+    """AArch64 timed waits in the guest's time (timed_case)."""
+    qemu, cc, why = aarch64_tools()
+    if why:
+        return None, why
+    return timed_case(workdir, 'aarch64', [cc, '--target=aarch64-linux-gnu', '-fuse-ld=lld'], 'cortex-a72')
+
+
+TIMED_WAITS_ALL = ('nanosleep', 'clock_nanosleep-abs', 'poll', 'ppoll', 'select', 'epoll_wait', 'sigtimedwait',
+                   'cond_timedwait-realtime', 'sem_timedwait', 'poll-2s', 'poll-ready', 'sem_timedwait-posted')
+
+
+def case_user_timed_libc(p, g, workdir):
+    """The libc's timed waits on x86-64 (testing/apps/timed_waits.c: nanosleep,
+    poll, select, epoll, sigtimedwait, a condition variable's and a
+    semaphore's timed waits, a 2 s poll) at their deadlines in the guest's
+    time, to a file and live; a poll and a semaphore wait that another thread
+    ends before their 1 s timeouts end then."""
+    qemu = user_qemu('x86_64')
+    if not os.path.isfile(qemu):
+        return None, 'no qemu-x86_64'
+    if not qemu_can_run_syscall(qemu):
+        return None, 'this QEMU has no plugin system call (tools/qemu-11.1.1-plugin-syscall.patch)'
+    guest = os.path.join(workdir, 'timed_waits')
+    rc, out = run(['gcc', '-O1', '-static', '-pthread', '-o', guest, TIMED_WAITS], 120)
+    if rc != 0:
+        return None, 'could not build timed_waits.c statically (%s)' % exit_text(rc)
+    rc, out = run([os.path.join(SNIPER_ROOT, 'record-trace'), '--frontend=qemu', '-o', os.path.join(workdir, 'timed-libc'),
+                   '--', guest], 300, cwd=workdir)
+    if rc != 0 or 'timed_waits: done' not in out:
+        return False, 'to a file: the guest failed (%s): %s' % (exit_text(rc), out.strip()[-400:])
+    why = timed_check('to a file', timed_lines(out, 'timed_waits'), TIMED_WAITS_ALL)
+    if why:
+        return False, why
+    # Live, the waits another thread ends are left out for now: a thread that
+    # sleeps in the simulator while another runs is not woken (the sleep fix)
+    live = [w for w in TIMED_WAITS_ALL if w not in ('poll-ready', 'sem_timedwait-posted')]
+    outdir = os.path.join(workdir, 'timed-libc-live')
+    rc, out = run([os.path.join(SNIPER_ROOT, 'run-sniper'), '-n', '2', '-c', 'gainestown', '-d', outdir,
+                   '--frontend=qemu', '--', guest], 900, cwd=SNIPER_ROOT,
+                  env=dict(os.environ, TIMED_WAITS_ONLY=','.join(live)))
+    if rc != 0 or 'timed_waits: done' not in out:
+        return False, 'live: the guest failed (%s): %s' % (exit_text(rc), sniper_failed(rc, out))
+    why = timed_check('live', timed_lines(out, 'timed_waits'), live)
+    if why:
+        return False, why
+    return True, 'to a file %d waits, live %d, each at its deadline in the guest\'s time' % (len(TIMED_WAITS_ALL), len(live))
 
 
 def counters_case(workdir, arch, cc_cmd, config):
@@ -2900,6 +3043,10 @@ CASES = {
     'user-roi-wait':    case_user_roi_wait,
     'user-roi-time':    case_user_roi_time,
     'user-roi-threads': case_user_roi_threads,
+    'user-timed':       case_user_timed,
+    'user-timed-libc':  case_user_timed_libc,
+    'riscv-user-timed': case_riscv_user_timed,
+    'aarch64-user-timed': case_aarch64_user_timed,
     'user-counters':    case_user_counters,
     'time-start-default': case_time_start_default,
     'riscv-user-counters': case_riscv_user_counters,

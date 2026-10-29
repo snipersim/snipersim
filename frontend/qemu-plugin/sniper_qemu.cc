@@ -72,6 +72,7 @@ extern "C" {
 #include "sim_api.h"         /* the SIM_CMD_ numbers */
 #include "pacsim_qemu.h"      /* Pac-Sim: the sampler behind the plugin */
 #include "sift_format.h"
+#include "guest_time.h"        /* timeouts in the guest's time */
 
 extern "C" {
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
@@ -181,10 +182,13 @@ enum { W_NONE = 0, W_TB_COUNT, W_FLOW, W_MAGIC, W_SYNC, W_BACKEDGE, W_COUNTER };
  * clone's child tid pointer is queued by the parent's clone and taken by the
  * next thread to start, for the futex wake that lets the joiner go at its
  * exit (the kernel's own wake goes to the kernel, not to Sniper's model of
- * the futex). */
+ * the futex), with the parent's vCPU, whose time the child's clock starts
+ * from (the one-IPC model, guest_time.h). */
 std::atomic<unsigned> g_num_threads(0);
+std::atomic<bool>     g_main_started(false);
 std::mutex            g_tid_lock;
-std::vector<uint64_t> g_tid_ptrs;
+struct Clone { uint64_t tid_ptr; int parent; };
+std::vector<Clone>    g_tid_ptrs;
 /* Sniper creates a thread's channels when it hears NewThread, which the
  * parent sends when its clone returns -- and the child may be running by
  * then.  It waits, in its init hook (outside the run loop), until as many
@@ -472,6 +476,17 @@ struct VCPU
    uint64_t      wait_site  = 0;        /* W_SYNC: the call site */
    uint64_t      wait_a[3]  = {0, 0, 0};/* W_MAGIC: the command and its arguments */
    const InsnInfo *wait_ii  = nullptr;  /* W_MAGIC: the instruction */
+   unsigned      vcpu_index = 0;        /* its index (user mode: the thread's slot, reused after it ends) */
+   /* Timed calls (guest_time.h): the thread's scratch page in the guest
+    * (timeouts of the plugin's own, never the guest's), a wait interrupted
+    * by a signal and restarted (its deadline), a call in which the thread
+    * counts as waiting (the one-IPC model) */
+   uint64_t      scratch    = 0;
+   bool          restart_valid = false;
+   int64_t       restart_num = 0;
+   uint64_t      restart_args[6] = {0, 0, 0, 0, 0, 0};
+   uint64_t      restart_deadline = 0;
+   bool          clock_waiting = false;
    /* The simulator's clocks for the counter read in flight (counter_exec),
     * taken by the counter callback QEMU calls within the instruction */
    bool          ctr_valid  = false;
@@ -542,7 +557,10 @@ VCPU *vcpu_get(unsigned int idx)
       refuse("[SNIPER-QEMU] error: vcpu %u exceeds the %u this frontend tracks\n", idx, MAX_VCPUS);
    }
    if (!vcpus[idx])
+   {
       vcpus[idx] = new VCPU();
+      vcpus[idx]->vcpu_index = idx;
+   }
    return vcpus[idx];
 }
 
@@ -1446,12 +1464,51 @@ uint64_t thread_instructions(VCPU *v, unsigned int vcpu_index, uint32_t tb_left)
    return now > v->icount_base ? now - v->icount_base : 0;
 }
 
+/* ------------------------------------------------- the one-IPC model's clocks
+ *
+ * Where the simulator does not answer (a trace written to a file, a
+ * functional run, a channel lost), the guest's time is the one-IPC model's
+ * (sift/guest_time.h): per thread, its instructions at 1 GHz from its
+ * parent's time at its start, plus the time it waited; timed waits end at
+ * their deadline in that time.  User mode; slots are vCPU indices. */
+struct ClockLock
+{
+   std::mutex m;
+   void lock() { m.lock(); }
+   void unlock() { m.unlock(); }
+};
+uint64_t clock_instructions(unsigned slot, void *)
+{
+   VCPU *v = vcpus[slot];
+   return v ? thread_instructions(v, slot, 0) : 0;
+}
+typedef Sift::GuestClocks<ClockLock> Clocks;
+Clocks *g_clocks = nullptr;
+
+void clocks_start(VCPU *v, int parent)
+{
+   v->scratch = 0;                  /* a slot reused: its last thread's page went with it */
+   v->restart_valid = false;
+   v->clock_waiting = false;
+   if (g_clocks)
+      g_clocks->start(v->vcpu_index, parent);
+}
+
+void clocks_exit(VCPU *v)
+{
+   if (g_clocks && !in_system_mode)
+      g_clocks->exit(v->vcpu_index, v->tid_ptr);
+}
+
 /* The one-IPC model's counters, where the simulator does not answer: one
- * instruction per cycle at Sift::ONE_IPC_HZ (1 GHz, assumed) */
+ * instruction per cycle at Sift::ONE_IPC_HZ (1 GHz, assumed); the time, and
+ * the cycles of a counter that counts while the thread waits (the TSC, the
+ * cycle CSR, which count time), from the thread's clock */
 void counter_one_ipc(VCPU *v, uint64_t instructions)
 {
-   v->ctr_time_ns = Sift::one_ipc_ns(instructions);
-   v->ctr_core_cycles = v->ctr_global_cycles = v->ctr_instructions = instructions;
+   v->ctr_time_ns = g_clocks ? g_clocks->at(v->vcpu_index, instructions) : Sift::one_ipc_ns(instructions);
+   v->ctr_core_cycles = v->ctr_global_cycles = v->ctr_time_ns * Sift::ONE_IPC_HZ / Sift::NS_PER_S;
+   v->ctr_instructions = instructions;
    v->ctr_valid = true;
 }
 
@@ -1900,6 +1957,21 @@ inline bool channel_open(const VCPU *v)
    return v->writer && opt_response && !v->closed && g_mode.load() != MODE_OFF;
 }
 
+/* A thread's tid goes with the first request on its channel, as the
+ * recorder sends it (the simulator's model of the thread needs it, and the
+ * channel is opened by the first request). */
+void send_threadinfo(VCPU *v)
+{
+   if (v->threadinfo_pending)
+   {
+      v->threadinfo_pending = false;
+      Sift::EmuRequest req;
+      Sift::EmuReply res;
+      req.setthreadinfo.tid = (uint64_t)syscall(SYS_gettid);   /* the guest's gettid is the host thread's */
+      v->writer->Emulate(Sift::EmuTypeSetThreadInfo, req, res);
+   }
+}
+
 /* Send a modelled system call to the simulator.  Returns false when the call
  * is not sent (not modelled, no response channel, outside the ROI); else the
  * simulator's return value is in *ret and *emulated says whether it replaces
@@ -1925,17 +1997,7 @@ static bool forward_syscall(VCPU *v, int64_t num, const uint64_t args[6],
    if (!channel_open(v))
       return false;
 
-   /* A thread's tid goes with the first system call on its channel, as the
-    * recorder sends it (the simulator's model of the thread needs it, and
-    * the channel is opened by the first request). */
-   if (v->threadinfo_pending)
-   {
-      v->threadinfo_pending = false;
-      Sift::EmuRequest req;
-      Sift::EmuReply res;
-      req.setthreadinfo.tid = (uint64_t)syscall(SYS_gettid);   /* the guest's gettid is the host thread's */
-      v->writer->Emulate(Sift::EmuTypeSetThreadInfo, req, res);
-   }
+   send_threadinfo(v);
 
    /* Close out the instruction that issued the syscall first, and the count
     * pending between measured regions, so the call is placed after the
@@ -1973,15 +2035,19 @@ void writer_close(VCPU *v);
  * vCPU's exit hook: QEMU runs that hook holding the lock its clone and exit
  * paths share, and a wait for Sniper under it stops every sibling that
  * reaches either -- one of which Sniper may be waiting for. */
+void scratch_release(VCPU *v);
 void thread_exit(VCPU *v)
 {
+#ifdef SNP_HAVE_SYSCALL_FILTER
+   scratch_release(v);
+#endif
+   clocks_exit(v);
+   if (!v->writer)
+      return;
    if (channel_open(v))
    {
       flush_pending(v, 0);
       ff_report(v);
-   }
-   if (channel_open(v))
-   {
       if (v->tid_ptr)
       {
          const uint32_t zero = 0;
@@ -2001,7 +2067,9 @@ void thread_exit(VCPU *v)
  * return (syscall_ret), when the clone is known to have happened -- glibc's
  * clone3 attempt gets ENOSYS from QEMU before it falls back to clone, and a
  * thread announced for each attempt would leave Sniper waiting for one that
- * never starts.  clone(flags, stack, parent_tid, child_tid, tls) on x86-64;
+ * never starts.  Followed for every thread (the one-IPC model's clocks
+ * start a child at its parent's time); Sniper is only told on a live
+ * channel.  clone(flags, stack, parent_tid, child_tid, tls) on x86-64;
  * clone(flags, stack, parent_tid, tls, child_tid) on RISC-V and AArch64
  * (CLONE_BACKWARDS); clone3(struct clone_args *, size): flags at 0,
  * child_tid at 16.  A clone without CLONE_THREAD makes a process, which the
@@ -2020,7 +2088,7 @@ void clone_entry(VCPU *v, bool clone3, const uint64_t args[6])
    if (!(flags & CLONE_THREAD_FLAG))
       return;
    std::lock_guard<std::mutex> lock(g_tid_lock);
-   g_tid_ptrs.push_back(child_tidptr);
+   g_tid_ptrs.push_back(Clone{child_tidptr, (int)v->vcpu_index});
    v->clone_tidptr = child_tidptr;
    v->clone_pending = true;
 }
@@ -2037,23 +2105,597 @@ static bool syscall_entry(unsigned int vcpu_index, int64_t num, const uint64_t a
                           uint64_t *ret, bool *emulated)
 {
    VCPU *v = vcpu_get(vcpu_index);
-   if (!v->writer)
-      return false;
+   /* Every thread's start and end, traced or not, recording or not: the
+    * one-IPC model's clocks follow them too */
    if (!in_system_mode && num == (g_arch == ARCH_X86 ? X86_SYS_EXIT : GENERIC_SYS_EXIT))
    {
       thread_exit(v);
       return false;
    }
-   if (g_wait && !v->closed &&
+   if (!in_system_mode &&
        (num == (g_arch == ARCH_X86 ? X86_SYS_CLONE : GENERIC_SYS_CLONE) || num == SYS_CLONE3_ANY))
    {
       clone_entry(v, num == SYS_CLONE3_ANY, args);
       return false;
    }
+   if (!v->writer)
+      return false;
    return forward_syscall(v, num, args, ret, emulated);
 }
 
 #ifdef SNP_HAVE_SYSCALL_FILTER
+/* ------------------------------------------------------------ timed calls
+ *
+ * No time the guest gives reaches the host's kernel (sift/guest_time.h): a
+ * timeout is the guest's, in the guest's time.  The calls the simulator
+ * models (futex, the sleeps) it times itself, on a live channel.  Every
+ * other timed wait the plugin runs itself (qemu_plugin_run_syscall(),
+ * tools/qemu-11.1.1-plugin-syscall.patch) with timeouts of its own, in a
+ * scratch page of the thread's in the guest, never with the guest's:
+ *
+ * - live, as probes that do not wait (a zero timeout), between which the
+ *   simulator lets the thread sleep in simulated time (a nanosleep it
+ *   models, of 1 us doubling to 1 ms), until the guest's deadline in
+ *   simulated time;
+ * - where the simulator does not answer, in slices of SLICE_NS of host time
+ *   that only let the plugin look again, until the one-IPC model says the
+ *   deadline has passed (GuestClocks: every running thread is past it, or
+ *   no thread runs and it is the earliest).
+ *
+ * The calls are numbered as on x86-64 (guest_number maps the others). */
+
+const int64_t E_INTR = 4, E_AGAIN = 11, E_FAULT = 14, E_INVAL = 22, E_NOSYS = 38, E_TIMEDOUT = 110;
+const int64_t Q_ERESTARTSYS = 512;          /* QEMU's: a guest signal is pending, restart the call */
+const uint64_t SLICE_NS = 1000000;          /* the host time between looks, without a simulator */
+const uint64_t LIVE_SLEEP_MIN = 1000, LIVE_SLEEP_MAX = 1000000;  /* the simulated sleeps between live probes */
+bool g_rv32 = false;                        /* riscv32: the time64 calls */
+
+/* x86-64 number <-> the guest's: { generic, x86-64 } (-1: none) */
+struct SysPair { int generic, x86; };
+const SysPair SYS_PAIRS[] = {
+   { 63, 0 }, { 64, 1 }, { 57, 3 }, { 67, 17 }, { 68, 18 }, { 65, 19 }, { 66, 20 },
+   { 222, 9 }, { 215, 11 }, { 101, 35 }, { 103, 38 }, { 102, 36 }, { 203, 42 }, { 202, 43 },
+   { 206, 44 }, { 207, 45 }, { 211, 46 }, { 212, 47 }, { 93, 60 }, { 260, 61 }, { 129, 62 },
+   { 193, 65 }, { 189, 69 }, { 188, 70 }, { 32, 73 }, { 169, 96 }, { 165, 98 }, { 153, 100 },
+   { 137, 128 }, { 138, 129 }, { 133, 130 }, { 130, 200 }, { 98, 202 }, { 4, 208 }, { 192, 220 },
+   { 107, 222 }, { 110, 223 }, { 108, 224 }, { 109, 225 }, { 111, 226 }, { 113, 228 }, { 114, 229 },
+   { 115, 230 }, { 131, 234 }, { 182, 242 }, { 183, 243 }, { 95, 247 }, { 72, 270 }, { 73, 271 },
+   { 22, 281 }, { 85, 283 }, { 86, 286 }, { 87, 287 }, { 242, 288 }, { 240, 297 }, { 243, 299 },
+   { 269, 307 }, { 292, 333 }, { 441, 441 }, { 449, 449 },
+   { -1, 7 }, { -1, 23 }, { -1, 34 }, { -1, 37 }, { -1, 201 }, { -1, 232 },
+};
+/* riscv32 has only the time64 calls, with a 64-bit time_t: the same layouts */
+const SysPair RV32_TIME64[] = {
+   { 403, 228 }, { 406, 229 }, { 407, 230 }, { 409, 223 }, { 408, 224 }, { 411, 286 }, { 410, 287 },
+   { 413, 270 }, { 414, 271 }, { 416, 333 }, { 417, 299 }, { 418, 242 }, { 419, 243 }, { 420, 220 },
+   { 421, 128 }, { 422, 202 },
+};
+
+int x86_number(int64_t num)
+{
+   if (g_arch == ARCH_X86)
+      return (int)num;
+   if (g_rv32)
+      for (const SysPair &p : RV32_TIME64)
+         if (p.generic == num)
+            return p.x86;
+   for (const SysPair &p : SYS_PAIRS)
+      if (p.generic == num)
+         return p.x86;
+   return -1;
+}
+
+int64_t guest_number(int x86)
+{
+   if (g_arch == ARCH_X86)
+      return x86;
+   if (g_rv32)
+      for (const SysPair &p : RV32_TIME64)
+         if (p.x86 == x86)
+            return p.generic;
+   for (const SysPair &p : SYS_PAIRS)
+      if (p.x86 == x86)
+         return p.generic;
+   return -1;
+}
+
+bool run_guest(int64_t num, const uint64_t a[6], int64_t *ret)
+{
+   return SNP_HAVE_RUN_SYSCALL && num >= 0 && qemu_plugin_run_syscall(num, a[0], a[1], a[2], a[3], a[4], a[5], 0, 0, ret);
+}
+
+bool write_guest(uint64_t addr, const void *src, size_t size)
+{
+   GByteArray *b = g_byte_array_new();
+   g_byte_array_append(b, (const guint8 *)src, size);
+   const bool ok = qemu_plugin_write_memory_vaddr(addr, b);
+   g_byte_array_free(b, TRUE);
+   return ok;
+}
+
+/* The thread's scratch page in the guest: the plugin's own timeouts, at 0
+ * (a probe's or a slice's) and 16 (a live sleep's).  Mapped on the first
+ * timed wait, unmapped at the thread's exit. */
+uint64_t scratch_page(VCPU *v)
+{
+   if (!v->scratch)
+   {
+      const uint64_t a[6] = { 0, 4096, 3 /* PROT_READ|PROT_WRITE */, 0x22 /* MAP_PRIVATE|MAP_ANONYMOUS */, (uint64_t)-1, 0 };
+      int64_t r;
+      if (run_guest(guest_number(9), a, &r) && r > 0 && (uint64_t)r < (uint64_t)-4096)
+         v->scratch = (uint64_t)r;
+   }
+   return v->scratch;
+}
+
+void scratch_release(VCPU *v)
+{
+   if (v->scratch)
+   {
+      const uint64_t a[6] = { v->scratch, 4096, 0, 0, 0, 0 };
+      int64_t r;
+      run_guest(guest_number(11), a, &r);
+      v->scratch = 0;
+   }
+}
+
+bool put_timespec(uint64_t addr, uint64_t ns, bool timeval = false)
+{
+   const uint64_t w[2] = { ns / Sift::NS_PER_S, timeval ? ns % Sift::NS_PER_S / 1000 : ns % Sift::NS_PER_S };
+   return write_guest(addr, w, sizeof(w));
+}
+
+/* The time a timed call ends at: now plus its timeout, or its deadline less
+ * the clocks' zero (osemu/time_start).  now and cpu_now in the same time
+ * (the simulator's, or the thread's in the one-IPC model).  false and *err
+ * for a timeout the kernel would refuse. */
+bool call_deadline(const Sift::TimedCall &tc, const uint64_t args[6], uint64_t now, uint64_t cpu_now,
+                   uint64_t *deadline, int64_t *err)
+{
+   uint64_t v;
+   if (tc.form == Sift::TO_MS)
+      v = (uint64_t)(int64_t)(int32_t)args[tc.arg] * 1000000ull;
+   else
+   {
+      int64_t w[2];
+      if (!read_guest(args[tc.arg], w, sizeof(w)))
+      {
+         *err = -E_FAULT;
+         return false;
+      }
+      const int64_t frac_max = tc.form == Sift::TO_TIMEVAL ? 1000000 : 1000000000;
+      if (w[0] < 0 || w[1] < 0 || w[1] >= frac_max)
+      {
+         *err = -E_INVAL;
+         return false;
+      }
+      const uint64_t sec = (uint64_t)w[0] > 9000000000ull ? 9000000000ull : (uint64_t)w[0];   /* ~285 years: no overflow */
+      v = sec * Sift::NS_PER_S + (uint64_t)w[1] * (tc.form == Sift::TO_TIMEVAL ? 1000 : 1);
+   }
+   if (!tc.absolute)
+      *deadline = now + v;
+   else if (Sift::cputime_clock(tc.clock))
+      *deadline = now + (v > cpu_now ? v - cpu_now : 0);
+   else
+   {
+      const uint64_t zero = opt_time_start * Sift::NS_PER_S;
+      *deadline = v > zero ? v - zero : 0;
+   }
+   return true;
+}
+
+/* The guest's arguments with the timeout replaced by the plugin's: ns of
+ * waiting (0: none, a probe), in the scratch page */
+bool own_timeout(const Sift::TimedCall &tc, uint64_t scratch, uint64_t a[6], uint64_t ns)
+{
+   switch (tc.form)
+   {
+      case Sift::TO_MS:
+         a[tc.arg] = ns ? (ns + 999999) / 1000000 : 0;
+         return true;
+      case Sift::TO_TIMEVAL:
+         a[tc.arg] = scratch;
+         return put_timespec(scratch, ns, true);
+      default:
+         a[tc.arg] = scratch;
+         if (tc.absolute)
+         {
+            /* a deadline on the host's clock, a slice ahead (zero: the epoch, past) */
+            uint64_t at = 0;
+            if (ns)
+            {
+               struct timespec ts;
+               clock_gettime(tc.clock == 0 ? CLOCK_REALTIME : CLOCK_MONOTONIC, &ts);
+               at = (uint64_t)ts.tv_sec * Sift::NS_PER_S + (uint64_t)ts.tv_nsec + ns;
+            }
+            return put_timespec(scratch, at);
+         }
+         return put_timespec(scratch, ns);
+   }
+}
+
+/* What the call returns when its timeout passed with nothing to report */
+int64_t timeout_result(int x86)
+{
+   switch (x86)
+   {
+      case Sift::X86_futex: case Sift::X86_futex_waitv:
+      case Sift::X86_mq_timedsend: case Sift::X86_mq_timedreceive:
+         return -E_TIMEDOUT;
+      case Sift::X86_rt_sigtimedwait: case Sift::X86_semtimedop:
+         return -E_AGAIN;
+      default:
+         return 0;   /* poll, select, epoll, io_getevents: nothing ready */
+   }
+}
+
+/* poll, select and epoll end with EINTR when a signal's handler runs, as in
+ * the kernel; the sleeps too.  The other waits are restarted after the
+ * handler, waiting on to the same deadline. */
+bool eintr_call(int x86, const Sift::TimedCall &tc)
+{
+   return tc.cls == Sift::TC_SLEEP || timeout_result(x86) == 0;
+}
+
+/* select's and pselect6's fd sets, which every call rewrites: the guest's, to
+ * give each probe or slice */
+struct FdSets
+{
+   std::vector<uint8_t> set[3];
+   bool have[3] = {false, false, false};
+   bool save(const uint64_t args[6])
+   {
+      const uint64_t n = args[0];
+      if (n > 1u << 20)
+         return false;
+      const size_t bytes = (n + 63) / 64 * 8;
+      for (int i = 0; i < 3; i++)
+      {
+         have[i] = args[1 + i] != 0 && bytes;
+         if (have[i])
+         {
+            set[i].resize(bytes);
+            if (!read_guest(args[1 + i], set[i].data(), bytes))
+               return false;
+         }
+      }
+      return true;
+   }
+   void restore(const uint64_t args[6]) const
+   {
+      for (int i = 0; i < 3; i++)
+         if (have[i])
+            write_guest(args[1 + i], set[i].data(), set[i].size());
+   }
+};
+
+/* What the wait leaves behind, as the kernel does: the time left in
+ * select's timeval and in pselect6's and ppoll's timespec (glibc's select
+ * is pselect6, and reports it), a sleep's in its rem (relative sleeps, when
+ * interrupted) */
+void time_left(const Sift::TimedCall &tc, const uint64_t args[6], int x86, uint64_t deadline, uint64_t now, int64_t ret)
+{
+   const uint64_t left = deadline != Sift::NO_DEADLINE && deadline > now ? deadline - now : 0;
+   if ((x86 == Sift::X86_select || x86 == Sift::X86_pselect6 || x86 == Sift::X86_ppoll)
+       && args[tc.arg] && deadline != Sift::NO_DEADLINE)
+      put_timespec(args[tc.arg], left, x86 == Sift::X86_select);
+   if (tc.cls == Sift::TC_SLEEP && ret == -E_INTR && !tc.absolute && tc.rem_arg >= 0 && args[tc.rem_arg])
+      put_timespec(args[tc.rem_arg], left);
+}
+
+/* A signal interrupted the wait: EINTR, or (QEMU_ERESTARTSYS) a restart that
+ * waits on to the same deadline */
+int64_t interrupted(VCPU *v, int64_t num, int x86, const Sift::TimedCall &tc, const uint64_t args[6],
+                    uint64_t deadline, int64_t r)
+{
+   if (r != -Q_ERESTARTSYS)
+      return r;
+   if (eintr_call(x86, tc))
+      return -E_INTR;
+   v->restart_valid = true;
+   v->restart_num = num;
+   memcpy(v->restart_args, args, sizeof(v->restart_args));
+   v->restart_deadline = deadline;
+   return r;
+}
+
+/* A restarted wait's deadline (see interrupted) */
+bool restarted(VCPU *v, int64_t num, const uint64_t args[6], uint64_t *deadline)
+{
+   const bool match = v->restart_valid && v->restart_num == num && !memcmp(v->restart_args, args, sizeof(v->restart_args));
+   v->restart_valid = false;
+   if (match)
+      *deadline = v->restart_deadline;
+   return match;
+}
+
+void no_run_syscall_warning()
+{
+   static std::atomic<bool> warned(false);
+   if (!warned.exchange(true))
+      fprintf(stderr, "[SNIPER-QEMU] warning: this QEMU has no qemu_plugin_run_syscall()"
+                      " (tools/qemu-11.1.1-plugin-syscall.patch): the guest's timeouts run in host time\n");
+}
+
+/* recvmmsg's timeout is only looked at after a datagram has arrived: the
+ * call is run without it, ending after the first datagram and whatever else
+ * has arrived (MSG_WAITFORONE) -- as if the timeout passed then */
+bool recvmmsg_untimed(const uint64_t args[6], int64_t *sysret)
+{
+   uint64_t a[6];
+   memcpy(a, args, sizeof(a));
+   a[3] |= 0x10000;   /* MSG_WAITFORONE */
+   a[4] = 0;
+   return run_guest(guest_number(Sift::X86_recvmmsg), a, sysret);
+}
+
+/* The one-IPC model's timed wait (no simulator to answer) */
+bool timed_one_ipc(VCPU *v, int64_t num, int x86, const uint64_t args[6], const Sift::TimedCall &tc, int64_t *sysret)
+{
+   const unsigned slot = v->vcpu_index;
+   const uint64_t word = x86 == Sift::X86_futex ? args[0] : 0;
+   if (!SNP_HAVE_RUN_SYSCALL)
+   {
+      no_run_syscall_warning();
+      return false;
+   }
+   if (x86 == Sift::X86_recvmmsg && args[4])
+   {
+      g_clocks->wait_begin(slot, Sift::NO_DEADLINE, 0);
+      const bool ran = recvmmsg_untimed(args, sysret);
+      g_clocks->wait_end(slot, Clocks::WOKEN);
+      return ran;
+   }
+   if (Sift::timeout_infinite(tc, args))
+   {
+      if (tc.cls == Sift::TC_SLEEP)
+      {
+         *sysret = -E_FAULT;
+         return true;
+      }
+      /* no time to keep: the call runs as the guest made it, counting as a wait */
+      g_clocks->wait_begin(slot, Sift::NO_DEADLINE, word);
+      v->clock_waiting = true;
+      return false;
+   }
+   const uint64_t now = g_clocks->now(slot);
+   uint64_t deadline;
+   int64_t err = 0;
+   if (!restarted(v, num, args, &deadline) &&
+       !call_deadline(tc, args, now, g_clocks->process_cpu(), &deadline, &err))
+   {
+      *sysret = err;
+      return true;
+   }
+   FdSets sets;
+   const uint64_t scratch = scratch_page(v);
+   if (!scratch || (tc.fdsets && !sets.save(args)))
+   {
+      *sysret = -E_FAULT;
+      return true;
+   }
+
+   g_clocks->wait_begin(slot, deadline, word);
+   Clocks::End how = Clocks::WOKEN;
+   int64_t r = 0;
+   bool idle_seen = false;
+   uint64_t idle_epoch = 0;
+   for (;;)
+   {
+      /* May the deadline pass?  When every running thread is past it, or
+       * (twice in a row, nothing having changed) when no thread runs */
+      bool expire = deadline <= now;
+      if (!expire)
+      {
+         uint64_t epoch;
+         const int m = g_clocks->may_expire(slot, &epoch);
+         expire = m == 1 || (m == 2 && idle_seen && epoch == idle_epoch);
+         idle_seen = m == 2;
+         idle_epoch = epoch;
+      }
+      uint64_t a[6];
+      memcpy(a, args, sizeof(a));
+      if (tc.cls == Sift::TC_SLEEP)
+      {
+         if (expire)
+         {
+            how = Clocks::TIMED_OUT;
+            r = 0;
+            break;
+         }
+         const uint64_t s[6] = { scratch, 0, 0, 0, 0, 0 };
+         if (!put_timespec(scratch, SLICE_NS) || !run_guest(guest_number(Sift::X86_nanosleep), s, &r))
+            r = -E_FAULT;
+         if (r == 0)
+            continue;
+         how = Clocks::INTERRUPTED;
+         break;
+      }
+      /* the last look, once the deadline has passed, waits not at all */
+      sets.restore(args);
+      if (!own_timeout(tc, scratch, a, expire ? 0 : SLICE_NS) || !run_guest(num, a, &r))
+      {
+         r = -E_FAULT;
+         break;
+      }
+      if (r == timeout_result(x86))
+      {
+         if (expire)
+         {
+            how = Clocks::TIMED_OUT;
+            break;
+         }
+         continue;
+      }
+      how = r == -E_INTR || r == -Q_ERESTARTSYS ? Clocks::INTERRUPTED : Clocks::WOKEN;
+      break;
+   }
+   g_clocks->wait_end(slot, how);
+   if (how == Clocks::INTERRUPTED)
+      r = interrupted(v, num, x86, tc, args, deadline, r);
+   time_left(tc, args, x86, deadline, g_clocks->now(slot), r);
+   *sysret = r;
+   return true;
+}
+
+/* The simulator's time (without the clocks' zero), after the instructions
+ * that led here */
+void send_threadinfo(VCPU *v);
+bool sim_time(VCPU *v, uint64_t *ns)
+{
+   if (!channel_open(v))
+      return false;
+   send_threadinfo(v);
+   flush_pending(v, 0);
+   ff_report(v);
+   Sift::EmuRequest req;
+   Sift::EmuReply res;
+   if (!v->writer->Emulate(Sift::EmuTypeCounters, req, res))
+      return false;
+   *ns = res.counters.time_ns;
+   return true;
+}
+
+/* A live timed wait the simulator does not model: probes that do not wait,
+ * and between them a sleep in simulated time */
+bool timed_live(VCPU *v, int64_t num, int x86, const uint64_t args[6], const Sift::TimedCall &tc, int64_t *sysret)
+{
+   if (tc.cls == Sift::TC_SLEEP || x86 == Sift::X86_futex)
+      return false;                 /* the simulator's (forward_syscall) */
+   if (x86 == Sift::X86_futex_waitv)
+   {
+      /* a futex wait outside the simulator's model of the futexes, which no
+       * wake it models would reach */
+      *sysret = -E_NOSYS;
+      return true;
+   }
+   if (!SNP_HAVE_RUN_SYSCALL)
+   {
+      no_run_syscall_warning();
+      return false;
+   }
+   if (x86 == Sift::X86_recvmmsg)
+      return args[4] && recvmmsg_untimed(args, sysret);
+   uint64_t now;
+   if (!sim_time(v, &now))
+      return false;
+   uint64_t deadline = Sift::NO_DEADLINE;
+   int64_t err = 0;
+   if (!Sift::timeout_infinite(tc, args) && !restarted(v, num, args, &deadline) &&
+       !call_deadline(tc, args, now, now, &deadline, &err))
+   {
+      *sysret = err;
+      return true;
+   }
+   FdSets sets;
+   const uint64_t scratch = scratch_page(v);
+   if (!scratch || (tc.fdsets && !sets.save(args)))
+   {
+      *sysret = -E_FAULT;
+      return true;
+   }
+   uint64_t sleep = LIVE_SLEEP_MIN;
+   int64_t r = 0;
+   for (;;)
+   {
+      uint64_t a[6];
+      memcpy(a, args, sizeof(a));
+      sets.restore(args);
+      if (!own_timeout(tc, scratch, a, 0) || !run_guest(num, a, &r))
+      {
+         r = -E_FAULT;
+         break;
+      }
+      if (r != timeout_result(x86) || (deadline != Sift::NO_DEADLINE && now >= deadline))
+         break;
+      uint64_t s = sleep;
+      if (deadline != Sift::NO_DEADLINE && deadline - now < s)
+         s = deadline - now;
+      const uint64_t sa[6] = { scratch + 16, 0, 0, 0, 0, 0 };
+      uint64_t sret;
+      bool emulated = false;
+      if (!put_timespec(scratch + 16, s) || !forward_syscall(v, guest_number(Sift::X86_nanosleep), sa, &sret, &emulated)
+          || !emulated || !sim_time(v, &now))
+         break;                     /* the channel went: what the probe found */
+      sleep = std::min(sleep * 2, LIVE_SLEEP_MAX);
+   }
+   if (r == -E_INTR || r == -Q_ERESTARTSYS)
+      r = interrupted(v, num, x86, tc, args, deadline, r);
+   time_left(tc, args, x86, deadline, now, r);
+   *sysret = r;
+   return true;
+}
+
+/* Where the simulator does not answer, the calls that can block (the
+ * thread counts as waiting in the one-IPC model while in them) and those
+ * that wake others (a waiter woken takes at least the waker's time) */
+bool can_block(int x86, const uint64_t args[6])
+{
+   switch (x86)
+   {
+      case 0: case 17: case 19: case 45: case 47: case 43: case 288: case 42: case 61: case 247:
+      case 70: case 69: case 65: case 34: case 130: case 73:
+      case 1: case 20: case 44: case 46: case 307:
+         return true;
+      case Sift::X86_futex:
+      {
+         bool absolute;
+         int clock;
+         return Sift::futex_timed_op(args[1], &absolute, &clock);   /* the waits; the timed ones do not reach here */
+      }
+      default:
+         return false;
+   }
+}
+
+void note_wakes(VCPU *v, int x86, const uint64_t args[6])
+{
+   switch (x86)
+   {
+      case 1: case 18: case 20: case 44: case 46: case 307: case 3:      /* write, send, close */
+      case 62: case 200: case 234: case 129: case 297:                   /* signals */
+         g_clocks->woke(v->vcpu_index, 0);
+         break;
+      case Sift::X86_futex:
+         switch (args[1] & 127)
+         {
+            case 1: case 7: case 10:           /* WAKE, UNLOCK_PI, WAKE_BITSET */
+               g_clocks->woke(v->vcpu_index, args[0]);
+               break;
+            case 3: case 4: case 5: case 12:   /* REQUEUE, CMP_REQUEUE, WAKE_OP, CMP_REQUEUE_PI */
+               g_clocks->woke(v->vcpu_index, args[0]);
+               g_clocks->woke(v->vcpu_index, args[4]);
+               break;
+         }
+         break;
+   }
+}
+
+/* A call the simulator did not answer: a timed wait, kept in the guest's
+ * time (live: the simulator's; otherwise the one-IPC model's); otherwise the
+ * one-IPC model's bookkeeping, and QEMU runs the call */
+bool timed_call(VCPU *v, int64_t num, const uint64_t args[6], int64_t *sysret)
+{
+   const int x86 = x86_number(num);
+   if (x86 < 0)
+      return false;
+   Sift::TimedCall tc;
+   const bool timed = Sift::timed_call(x86, args, &tc);
+   if (channel_open(v))
+      return timed && timed_live(v, num, x86, args, tc, sysret);
+   if (!g_clocks)
+      return false;
+   note_wakes(v, x86, args);
+   if (timed)
+      return timed_one_ipc(v, num, x86, args, tc, sysret);
+   if (can_block(x86, args))
+   {
+      g_clocks->wait_begin(v->vcpu_index, Sift::NO_DEADLINE, x86 == Sift::X86_futex ? args[0] : 0);
+      v->clock_waiting = true;
+   }
+   return false;
+}
+
 /* The emulated calls are skipped and answered with the simulator's value, as
  * the Pin recorder does (it turns them into getpid and sets the result).
  * Before this QEMU ran them too and the answer was dropped: a nanosleep slept
@@ -2066,16 +2708,29 @@ static bool syscall_entry(unsigned int vcpu_index, int64_t num, const uint64_t a
  * the simulator's, never the host's.  The CPU-time clocks (the process's, the
  * thread's, the dynamic ones: negative ids) count from zero, as the
  * simulator's do. */
-static bool time_one_ipc(unsigned int vcpu_index, int64_t num, const uint64_t args[6], int64_t *sysret)
+static bool time_one_ipc(VCPU *v, int x86, const uint64_t args[6], int64_t *sysret)
 {
-   const bool tod = num == (g_arch == ARCH_X86 ? 96 : 169);
-   if (!tod && num != (g_arch == ARCH_X86 ? 228 : 113))
+   const bool tod = x86 == 96, secs = x86 == 201;
+   if (!tod && !secs && x86 != 228)
       return false;
-   VCPU *v = vcpu_get(vcpu_index);
-   const int32_t clock = tod ? 0 : (int32_t)args[0];
+   const int32_t clock = tod || secs ? 0 : (int32_t)args[0];
+   /* the thread's CPU-time clock: CLOCK_THREAD_CPUTIME_ID, a dynamic
+    * thread clock (CPUCLOCK_PERTHREAD); the process's: the rest */
+   const bool thread_cpu = clock == 3 || (clock < 0 && (clock & 4));
+   const bool process_cpu = !thread_cpu && Sift::cputime_clock(clock);
+   const uint64_t ns = thread_cpu ? Sift::one_ipc_ns(thread_instructions(v, v->vcpu_index, 0))
+                     : process_cpu ? (g_clocks ? g_clocks->process_cpu() : 0)
+                     : opt_time_start * Sift::NS_PER_S + (g_clocks ? g_clocks->now(v->vcpu_index) : 0);
+   if (secs)
+   {
+      /* time(2): seconds, also stored at its argument */
+      const uint64_t s = ns / Sift::NS_PER_S;
+      *sysret = (int64_t)s;
+      if (args[0] && !write_guest(args[0], &s, sizeof(s)))
+         *sysret = -E_FAULT;
+      return true;
+   }
    const uint64_t out = tod ? args[0] : args[1];
-   const bool cputime = clock == 2 || clock == 3 || clock < 0;
-   const uint64_t ns = (cputime ? 0 : opt_time_start * 1000000000ull) + Sift::one_ipc_ns(thread_instructions(v, vcpu_index, 0));
    if (out)
    {
       const uint64_t words[2] = { ns / 1000000000ull, tod ? ns / 1000 % 1000000 : ns % 1000000000ull };
@@ -2098,10 +2753,32 @@ bool syscall_filter(SNP_SYSCALL_FILTER_ARGS)
    const uint64_t args[6] = { a1, a2, a3, a4, a5, a6 };
    uint64_t ret = 0;
    bool emulated = false;
-   if (!syscall_entry(vcpu_index, num, args, &ret, &emulated) || !emulated)
-      return !in_system_mode && time_one_ipc(vcpu_index, num, args, sysret);
-   *sysret = (int64_t)ret;
-   return true;
+   if (syscall_entry(vcpu_index, num, args, &ret, &emulated) && emulated)
+   {
+      *sysret = (int64_t)ret;
+      return true;
+   }
+   if (in_system_mode)
+      return false;
+   VCPU *v = vcpu_get(vcpu_index);
+   const int x86 = x86_number(num);
+   /* the time calls: the simulator's (live), else the one-IPC model's;
+    * time(2), which the simulator does not model, from its time */
+   if (x86 == 201 && channel_open(v))
+   {
+      uint64_t now;
+      if (sim_time(v, &now))
+      {
+         const uint64_t s = opt_time_start + now / Sift::NS_PER_S;
+         *sysret = (int64_t)s;
+         if (args[0] && !write_guest(args[0], &s, sizeof(s)))
+            *sysret = -E_FAULT;
+         return true;
+      }
+   }
+   if (x86 >= 0 && !channel_open(v) && time_one_ipc(v, x86, args, sysret))
+      return true;
+   return timed_call(v, num, args, sysret);
 }
 #else
 /* Plugin API before v7: no filter, so the call is reported and QEMU runs it;
@@ -2122,6 +2799,13 @@ void syscall_enter(SNP_SYSCALL_ARGS)
 void syscall_ret(SNP_SYSCALL_RET_ARGS)
 {
    VCPU *v = vcpu_get(vcpu_index);
+   if (v->clock_waiting)
+   {
+      /* a call the thread waited in (the one-IPC model): it returned */
+      v->clock_waiting = false;
+      if (g_clocks)
+         g_clocks->wait_end(vcpu_index, ret == -4 || ret == -512 ? Clocks::INTERRUPTED : Clocks::WOKEN);
+   }
    if (!v->clone_pending)
       return;
    v->clone_pending = false;
@@ -2148,7 +2832,7 @@ void syscall_ret(SNP_SYSCALL_RET_ARGS)
    }
    std::lock_guard<std::mutex> lock(g_tid_lock);
    for (size_t i = g_tid_ptrs.size(); i-- > 0; )
-      if (g_tid_ptrs[i] == v->clone_tidptr)
+      if (g_tid_ptrs[i].tid_ptr == v->clone_tidptr && g_tid_ptrs[i].parent == (int)v->vcpu_index)
       {
          g_tid_ptrs.erase(g_tid_ptrs.begin() + i);
          break;
@@ -2175,6 +2859,23 @@ void vcpu_init(SNP_VCPU_ARGS)
       ame_register_state(v, cpu_index);
    if (pacsim_qemu::enabled())
       pacsim_qemu::thread_start(cpu_index);
+   /* The thread's clone (the first thread has none): its tid word, and its
+    * parent, whose time its clock starts at */
+   if (!in_system_mode)
+   {
+      int parent = -1;
+      if (g_main_started.exchange(true))
+      {
+         std::lock_guard<std::mutex> lock(g_tid_lock);
+         if (!g_tid_ptrs.empty())
+         {
+            v->tid_ptr = g_tid_ptrs.front().tid_ptr;
+            parent = g_tid_ptrs.front().parent;
+            g_tid_ptrs.erase(g_tid_ptrs.begin());
+         }
+      }
+      clocks_start(v, parent);
+   }
 
    /* Checked before anything is opened, so a user who asks for this gets the
     * explanation rather than whatever the SIFT writer says about its response
@@ -2203,11 +2904,6 @@ void vcpu_init(SNP_VCPU_ARGS)
    {
       v->thread_num = g_num_threads.fetch_add(1);
       std::unique_lock<std::mutex> lock(g_tid_lock);
-      if (v->thread_num > 0 && !g_tid_ptrs.empty())
-      {
-         v->tid_ptr = g_tid_ptrs.front();
-         g_tid_ptrs.erase(g_tid_ptrs.begin());
-      }
       if (v->thread_num > 0 && opt_response)
       {
          /* This hook runs in the cpu loop, outside cpu_exec(): waiting here
@@ -2444,7 +3140,10 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
 {
    in_system_mode = info->system_emulation;
    if (!strncmp(info->target_name, "riscv", 5))
+   {
       g_arch = ARCH_RISCV;
+      g_rv32 = !strcmp(info->target_name, "riscv32");
+   }
    else if (!strcmp(info->target_name, "x86_64") || !strcmp(info->target_name, "i386"))
       g_arch = ARCH_X86;
    else if (!strcmp(info->target_name, "aarch64"))
@@ -2574,7 +3273,10 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id,
    SNP_REG_SYSCALL(id, syscall_enter);
 #endif
    if (!in_system_mode)
+   {
       SNP_REG_SYSCALL_RET(id, syscall_ret);
+      g_clocks = new Clocks(MAX_VCPUS, clock_instructions, nullptr);
+   }
    SNP_REG_VCPU_INIT(id, vcpu_init);
 #if QEMU_PLUGIN_VERSION >= 7
    if (SNP_HAVE_CLAIM)

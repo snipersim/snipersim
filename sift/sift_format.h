@@ -36,6 +36,7 @@ namespace Sift
       count, its instret the instruction count. */
    const uint64_t TIME_START_DEFAULT = 1337000000;  // seconds since the epoch
    const uint64_t ONE_IPC_HZ = 1000000000;          // the one-IPC model's core: 1 GHz, assumed
+   const uint64_t NS_PER_S = 1000000000;
    inline uint64_t one_ipc_ns(uint64_t instructions) { return instructions * (1000000000 / ONE_IPC_HZ); }
    const uint64_t PAGE_SIZE_SIFT = 4096;
    const uint32_t ICACHE_SIZE = 0x1000;
