@@ -70,6 +70,7 @@ extern "C" {
 #include <fcntl.h>
 #include <unordered_set>
 #include <unordered_map>
+#include <poll.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>
 
@@ -2940,6 +2941,20 @@ void timer_fire(const Sift::GuestTimer &t)
    {
       const struct itimerspec now = { { 0, 0 }, { 0, 1 } };   /* expire at once */
       syscall(SYS_timerfd_settime, t.fd, 0, &now, nullptr);
+      /* Fired at once in the guest's time, and readable before this
+         returns: the host's 1 ns timer runs when the host's kernel gets to
+         it, which on a loaded host was after the reader's poll had found
+         the fd empty and slept another millisecond of the guest's time (a
+         4 ms timerfd read at 5.0 ms, live).  The wait is the front end's,
+         a millisecond at a time, at most a second; it stands for no time of
+         the guest's. */
+      struct timespec ms = { 0, 1000000 };
+      for (int i = 0; i < 1000; i++)
+      {
+         struct pollfd pfd = { t.fd, POLLIN, 0 };
+         if (syscall(SYS_ppoll, &pfd, 1, &ms, nullptr, 8) != 0)
+            break;                   /* readable, or an error: no wait here */
+      }
       return;
    }
    const int sig = SNP_HOST_SIGNAL(t.signo);

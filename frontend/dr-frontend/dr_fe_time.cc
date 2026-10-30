@@ -798,6 +798,21 @@ void timer_fire(const Sift::GuestTimer &t, int threadid)
       const struct itimerspec now = { { 0, 0 }, { 0, 1 } };
       const uint64_t a[6] = { (uint64_t)t.fd, 0, (uint64_t)&now, 0, 0, 0 };
       host_syscall(X_timerfd_settime, a);
+      /* Fired at once in the guest's time, and readable before this
+         returns: the host's 1 ns timer runs when the host's kernel gets to
+         it, which on a loaded host was after the reader's poll had found
+         the fd empty and slept another millisecond of the guest's time (a
+         4 ms timerfd read at 5.0 ms, live).  The wait is the front end's,
+         a millisecond at a time, at most a second; it stands for no time of
+         the guest's. */
+      struct timespec ms = { 0, 1000000 };
+      for (int i = 0; i < 1000; i++)
+      {
+         struct { int32_t fd; int16_t events, revents; } pfd = { t.fd, 1 /* POLLIN */, 0 };
+         const uint64_t p[6] = { (uint64_t)&pfd, 1, (uint64_t)&ms, 0, 8, 0 };
+         if (host_syscall(Sift::X86_ppoll, p) != 0)
+            break;                   /* readable, or an error: no wait here */
+      }
       return;
    }
    const uint64_t pid = app_pid;
