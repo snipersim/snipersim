@@ -3070,7 +3070,7 @@ void timers_check(VCPU *v, bool flushed)
    const unsigned n = g_timers->due(time, pcpu, timer_thread_cpu, nullptr, due, 16);
    for (unsigned i = 0; i < n; i++)
    {
-      if (!live && due[i].clock == Sift::TIMER_TIME)
+      if (!live && due[i].clock == Sift::TIMER_TIME && due[i].notify != Sift::NOTIFY_NONE)
          g_clocks->woke_at(due[i].expiry);
       timer_fire(due[i]);
    }

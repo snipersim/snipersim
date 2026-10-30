@@ -162,7 +162,8 @@ namespace Sift
 
       GuestClocks(unsigned max, Instructions instructions, void *arg)
          : m_instructions(instructions), m_arg(arg), m_max(max), m_t(new Thread[max]),
-           m_event(NO_DEADLINE), m_wake(0), m_exited_insns(0), m_epoch(0)
+           m_event(NO_DEADLINE), m_wake(0), m_exited_insns(0), m_epoch(0),
+           m_in_flight(false), m_in_flight_time(0), m_in_flight_looks(0)
       {
          for (unsigned i = 0; i < WORDS; i++)
             m_words[i].word = m_words[i].time = 0;
@@ -189,6 +190,7 @@ namespace Sift
             woke_locked(now_locked(slot), tid_word);
             m_exited_insns += m_instructions(slot, m_arg);
             m_t[slot].used = false;
+            m_in_flight = false;
             m_epoch++;
          }
          m_lock.unlock();
@@ -278,6 +280,12 @@ namespace Sift
          }
          if (m_event < earliest)
             earliest = m_event;      /* a timer due before the deadline comes first */
+         if (!running && m_in_flight)
+         {
+            /* a wake on its way (woke_at): its thread runs from then */
+            running = true;
+            low = m_in_flight_time;
+         }
          int r = 0;
          if (d != NO_DEADLINE)
          {
@@ -330,17 +338,48 @@ namespace Sift
                   low = t;
             }
          }
+         if (any && !running && m_in_flight)
+         {
+            /* A wake on its way (woke_at): its thread runs from the wake's
+               time, which time holds at until its wait ends -- a jump to the
+               next expiry first fired that timer into a signal the thread
+               had not yet taken, and the two were one (a periodic itimer
+               lost an expiry on a loaded host).  A wake no wait ends for (a
+               signal blocked or ignored) is let go after IN_FLIGHT_LOOKS. */
+            if (++m_in_flight_looks > IN_FLIGHT_LOOKS)
+               m_in_flight = false;
+            else
+            {
+               running = true;
+               low = m_in_flight_time;
+            }
+         }
          *time = running ? low : earliest;
          *epoch = m_epoch;
          m_lock.unlock();
          return !any ? 0 : running ? 1 : 2;
       }
 
-      /* A timer fired at its expiry: whoever it wakes takes that time */
+      /* A timer fired at its expiry: whoever it wakes takes that time.  With
+         no thread running, the wake is on its way to a waiting thread (a
+         signal, a timerfd made readable) until a wait ends: time does not
+         jump past it meanwhile (process_time, may_expire).  For a timer that
+         notifies someone; one that notifies no one (SIGEV_NONE) is not
+         passed here. */
       void woke_at(uint64_t time)
       {
          m_lock.lock();
          woke_locked(time, 0);
+         bool running = false;
+         for (unsigned i = 0; i < m_max && !running; i++)
+            running = m_t[i].used && !m_t[i].waiting;
+         if (!running)
+         {
+            if (!m_in_flight || time > m_in_flight_time)
+               m_in_flight_time = time;
+            m_in_flight = true;
+            m_in_flight_looks = 0;
+         }
          m_epoch++;
          m_lock.unlock();
       }
@@ -363,6 +402,7 @@ namespace Sift
             t.offset += to - own;
          t.waiting = false;
          t.deadline = NO_DEADLINE;
+         m_in_flight = false;       /* a thread runs: the wake, if any, arrived */
          m_epoch++;
          m_lock.unlock();
       }
@@ -422,6 +462,14 @@ namespace Sift
       uint64_t m_wake;           /* the latest time a thread woke others at */
       uint64_t m_exited_insns;   /* the instructions of the threads that ended */
       uint64_t m_epoch;
+      /* woke_at: a wake sent while no thread ran, not yet taken by a wait's
+         end; its time; the idle looks since (a blocked or ignored signal
+         ends no wait: let go after IN_FLIGHT_LOOKS, a fifth of a second of
+         the front ends' 1 ms looks) */
+      static const unsigned IN_FLIGHT_LOOKS = 200;
+      bool m_in_flight;
+      uint64_t m_in_flight_time;
+      unsigned m_in_flight_looks;
    };
    /* The guest's timers, in the guest's time.
     *

@@ -886,7 +886,7 @@ unsigned timers_check(int threadid)
    const unsigned n = timers->due(time, clocks->process_cpu(), timer_thread_cpu, NULL, due, 16);
    for (unsigned i = 0; i < n; i++)
    {
-      if (!on_line && due[i].clock == Sift::TIMER_TIME)
+      if (!on_line && due[i].clock == Sift::TIMER_TIME && due[i].notify != Sift::NOTIFY_NONE)
          clocks->woke_at(due[i].expiry);
       timer_fire(due[i], threadid);
    }
