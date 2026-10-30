@@ -112,6 +112,7 @@ class MovingArithmeticMean : public MovingAverage<T>
          this->addToWindow(next_num);
       }
 
+      using MovingAverage<T>::compute;   // compute(next_num) stays visible
       T compute() const
       {
          UInt32 curr_window_size = (this->m_curr_window_back - this->m_curr_window_front).getValue(); // recompute
@@ -132,6 +133,7 @@ class MovingGeometricMean : public MovingAverage<T>
          this->addToWindow(next_num);
       }
 
+      using MovingAverage<T>::compute;   // compute(next_num) stays visible
       T compute() const
       {
          UInt32 curr_window_size = (this->m_curr_window_back - this->m_curr_window_front).getValue();
@@ -162,6 +164,7 @@ class MovingMedian : public MovingAverage<T>
          this->addToWindow(next_num);
       }
 
+      using MovingAverage<T>::compute;   // compute(next_num) stays visible
       T compute() const
       {
          UInt32 curr_window_size = (this->m_curr_window_back - this->m_curr_window_front).getValue();

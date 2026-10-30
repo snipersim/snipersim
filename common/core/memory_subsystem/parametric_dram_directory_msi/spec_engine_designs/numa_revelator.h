@@ -248,6 +248,7 @@ namespace ParametricDramDirectoryMSI
         ~NumaRevelator();
 
         // ---- SpecEngineBase interface ------------------------------------
+        using SpecEngineBase::invokeSpecEngine;   // the visited-page-table overload stays visible
         void invokeSpecEngine(IntPtr address, int count, Core::lock_signal_t lock,
                               IntPtr eip, bool modeled, SubsecondTime invoke_start_time,
                               IntPtr physical_address, bool page_table_speculation = false);

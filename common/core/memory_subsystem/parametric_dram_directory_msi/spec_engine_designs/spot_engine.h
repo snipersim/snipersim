@@ -76,6 +76,7 @@ namespace ParametricDramDirectoryMSI
         Spot(Core *core, MemoryManagerBase *_memory_manager, ShmemPerfModel *shmem_perf_model, String _name);
         ~Spot();
 
+        using SpecEngineBase::invokeSpecEngine;   // the visited-page-table overload stays visible
         void invokeSpecEngine(IntPtr address, int count, Core::lock_signal_t lock, IntPtr eip, bool modeled, SubsecondTime invoke_start_time, IntPtr physical_address, bool page_table_speculation = false) override;
         void allocateInSpecEngine(IntPtr address, IntPtr ppn, int count, Core::lock_signal_t lock, IntPtr eip, bool modeled) override;
 
