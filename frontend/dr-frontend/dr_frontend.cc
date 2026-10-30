@@ -152,7 +152,10 @@ void DRFrontend::init()
 
   this->num_threads = 0;
   // Initialize options for scratch registers - We need 2 reg slots beyond drreg's eflags slots => 3 slots 
-  drreg_options_t ops = {sizeof(ops), 3, false};  
+  drreg_options_t ops = {};
+  ops.struct_size = sizeof(ops);
+  ops.num_spill_slots = 3;
+  ops.conservative = false;  
 
   if(!drmgr_init() || drreg_init(&ops) != DRREG_SUCCESS)
     DR_ASSERT(false);
@@ -445,22 +448,13 @@ void DRFrontend::process_instructions_buffer(void *drcontext, bool hold_last)
                                               instruction->is_before, instruction->is_pause);*/
     
     // Update dynamic addresses information in the thread data structure      
+    // (at most Sift::MAX_DYNAMIC_ADDRESSES, 2: addMemoryModeling asserts it
+    // when it instruments the instruction)
     m_thread_data[instruction->threadid].num_dyn_addresses = instruction->ndynaddr;
-    for (unsigned int i = 0; i < m_thread_data[instruction->threadid].num_dyn_addresses; i++)
-    {
-      switch(i)
-      {
-        case 0:
-          m_thread_data[instruction->threadid].dyn_addresses[0] = (ptr_uint_t)instruction->dynaddr_0;
-          break;
-        case 1:
-          m_thread_data[instruction->threadid].dyn_addresses[1] = (ptr_uint_t)instruction->dynaddr_1;
-          break;
-        case 2:
-          m_thread_data[instruction->threadid].dyn_addresses[2] = (ptr_uint_t)instruction->dynaddr_2;
-          break;        
-      }
-    }
+    if (instruction->ndynaddr > 0)
+      m_thread_data[instruction->threadid].dyn_addresses[0] = (ptr_uint_t)instruction->dynaddr_0;
+    if (instruction->ndynaddr > 1)
+      m_thread_data[instruction->threadid].dyn_addresses[1] = (ptr_uint_t)instruction->dynaddr_1;
     
     // Do we have to change the ISA mode? (ARM-32 only)
     IF_ARM
@@ -892,7 +886,9 @@ void DRFrontend::magic_clean_call()
      a marker fell in the wrong place.  The SDE and QEMU front ends send
      instructions as they go. */
   process_instructions_buffer(drcontext);
-  dr_mcontext_t mc = {sizeof(mc),DR_MC_ALL,};
+  dr_mcontext_t mc = {};
+  mc.size = sizeof(mc);
+  mc.flags = DR_MC_ALL;
   dr_get_mcontext(drcontext, &mc);
   /* The simulator's answer goes into the result register before the magic
      instruction runs (it leaves that register alone), as the SDE and QEMU
@@ -1054,7 +1050,9 @@ dr_emit_flags_t DRFrontend::event_app_instruction(void *drcontext, void *tag, in
       bool this_is_executing = true;
       if (this_is_predicated) {
         // get the machine context
-        dr_mcontext_t mcontext = {sizeof(mcontext),DR_MC_ALL,};
+        dr_mcontext_t mcontext = {};
+        mcontext.size = sizeof(mcontext);
+        mcontext.flags = DR_MC_ALL;
         dr_get_mcontext(drcontext, &mcontext);
         // Will the predicated instruction instr execute under current machine context?
         this_is_executing = (instr_predicate_triggered(instr, &mcontext) 

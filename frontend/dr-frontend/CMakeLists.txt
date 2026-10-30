@@ -97,6 +97,10 @@ configure_DynamoRIO_client(dr_frontend)
 foreach(_ext drmgr droption drreg drutil)
   use_DynamoRIO_extension(dr_frontend ${_ext})
 endforeach()
+# DynamoRIO's headers as system headers: its macros (XINST_CREATE_add's
+# conditional of an enum and an int) warned in every file expanding them.
+target_include_directories(dr_frontend SYSTEM PRIVATE
+  "${DynamoRIO_DIR}/../include" "${DynamoRIO_DIR}/../ext/include")
 
 # Config file telling drrun how to load the client.
 #
