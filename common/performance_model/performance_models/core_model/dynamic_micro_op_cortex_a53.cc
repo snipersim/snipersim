@@ -38,6 +38,7 @@ DynamicMicroOpCortexA53::uop_issue_slot_t DynamicMicroOpCortexA53::getIssueSlot(
     case ARM64_INS_ADD:
        if (uop->getOperandSize() > 64)
           return DynamicMicroOpCortexA53::UOP_ISSUE_SLOT_01;
+       [[fallthrough]];   // a scalar add issues as any other instruction
     default:
         return DynamicMicroOpCortexA53::UOP_ISSUE_SLOT_11;
     }
@@ -61,6 +62,7 @@ DynamicMicroOpCortexA53::uop_port_t DynamicMicroOpCortexA53::getPort(const Micro
         case ARM64_INS_SUB:
            if (uop->getOperandSize() > 64)
               return DynamicMicroOpCortexA53::UOP_PORT34;
+           [[fallthrough]];   // a scalar add or sub is an ALU operation, as those below
         case ARM64_INS_AND:
         case ARM64_INS_BIC:
         case ARM64_INS_EON:
