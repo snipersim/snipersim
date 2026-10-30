@@ -625,12 +625,12 @@ namespace Sift
          if (old_interval)
             *old_interval = t.interval;
          if (t.expiry)
-            m_armed--;
+            __atomic_store_n(&m_armed, m_armed - 1, __ATOMIC_RELAXED);
          t.expiry = expiry;
          t.interval = expiry ? interval : 0;
          t.overrun = 0;
          if (t.expiry)
-            m_armed++;
+            __atomic_store_n(&m_armed, m_armed + 1, __ATOMIC_RELAXED);
          m_lock.unlock();
       }
 
@@ -651,12 +651,12 @@ namespace Sift
          return o;
       }
 
-      bool armed() const { return m_armed != 0; }
+      bool armed() const { return __atomic_load_n(&m_armed, __ATOMIC_RELAXED) != 0; }
 
       /* Is a timer on a CPU-time clock armed?  (Whether its time is needed.) */
       bool cpu_armed()
       {
-         if (!m_armed)
+         if (!__atomic_load_n(&m_armed, __ATOMIC_RELAXED))
             return false;
          m_lock.lock();
          bool any = false;
@@ -683,7 +683,7 @@ namespace Sift
          between its overrun) or disarmed.  The caller fires them. */
       unsigned due(uint64_t time, uint64_t process_cpu, ThreadCpu thread_cpu, void *arg, GuestTimer *out, unsigned max)
       {
-         if (!m_armed)
+         if (!__atomic_load_n(&m_armed, __ATOMIC_RELAXED))
             return 0;
          unsigned n = 0;
          m_lock.lock();
@@ -706,7 +706,7 @@ namespace Sift
             {
                t.overrun = 0;
                t.expiry = 0;
-               m_armed--;
+               __atomic_store_n(&m_armed, m_armed - 1, __ATOMIC_RELAXED);
             }
             out[n] = t;
             out[n].expiry = now;   /* when it fired */
@@ -728,13 +728,13 @@ namespace Sift
       void drop(int id)
       {
          if (m_t[id].expiry)
-            m_armed--;
+            __atomic_store_n(&m_armed, m_armed - 1, __ATOMIC_RELAXED);
          m_t[id] = GuestTimer();
       }
 
       Lock m_lock;
       GuestTimer m_t[MAX];
-      volatile int m_armed;
+      int m_armed;   /* written under the lock; read without it (armed, the quick looks): relaxed atomics */
    };
 }
 
