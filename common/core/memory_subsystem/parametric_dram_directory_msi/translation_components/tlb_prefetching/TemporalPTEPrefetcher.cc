@@ -413,6 +413,17 @@ TemporalPTEPrefetcher::TemporalPTEPrefetcher(
       m_current_is_instruction(false),
       m_learn_on_hit(learn_on_hit),
       m_prefetch_on_hit(prefetch_on_hit),
+      m_payload_in_side_table(payload_in_side_table),
+      m_side_table_base_pa(side_table_base_pa),
+      m_side_table_bytes(0),
+      m_side_table_payload_bits(side_table_payload_bits),
+      m_side_table_reserved(false),
+      m_side_table_radix(side_table_radix),
+      m_side_table_levels(side_table_levels < 1 ? 1 : side_table_levels),
+      m_side_table_bits_per_level(side_table_bits_per_level < 1 ? 1 : side_table_bits_per_level),
+      m_side_table_pwc_entries(side_table_pwc_entries),
+      m_model_payload_writeback(model_payload_writeback),
+      m_prefetch_install_pq(prefetch_install_pq),
       m_stride_conf_threshold(stride_conf_threshold),
       m_stride_direct_prefetch(stride_direct_prefetch),
       m_stride_direct_degree(stride_direct_degree),
@@ -430,18 +441,7 @@ TemporalPTEPrefetcher::TemporalPTEPrefetcher(
       m_stride_value(0),
       m_stride_has_prev(false),
       m_pc_table_mask(0),
-      m_virtualize_pc_table(virtualize_pc_table),
-      m_payload_in_side_table(payload_in_side_table),
-      m_side_table_base_pa(side_table_base_pa),
-      m_side_table_bytes(0),
-      m_side_table_payload_bits(side_table_payload_bits),
-      m_side_table_reserved(false),
-      m_side_table_radix(side_table_radix),
-      m_side_table_levels(side_table_levels < 1 ? 1 : side_table_levels),
-      m_side_table_bits_per_level(side_table_bits_per_level < 1 ? 1 : side_table_bits_per_level),
-      m_side_table_pwc_entries(side_table_pwc_entries),
-      m_model_payload_writeback(model_payload_writeback),
-      m_prefetch_install_pq(prefetch_install_pq)
+      m_virtualize_pc_table(virtualize_pc_table)
 {
     // --- Validate codec layout ---
     assert(m_codec.config().fitsInPayload() && "PTE offset layout does not fit in 128-bit payload");
