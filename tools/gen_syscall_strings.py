@@ -2,8 +2,8 @@
 
 import re
 
-rx = re.compile('#define __NR_(.*?)\s+(.*)')
-ry = re.compile('\(__NR_(.*?)\+(\d+)\)')
+rx = re.compile(r'#define __NR_(.*?)\s+(.*)')
+ry = re.compile(r'\(__NR_(.*?)\+(\d+)\)')
 
 out_cc = open('common/misc/syscall_strings.cc', 'w')
 out_py = open('scripts/syscall_strings.py', 'w')

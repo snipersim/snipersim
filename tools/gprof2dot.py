@@ -1227,7 +1227,7 @@ class AXEParser(Parser):
         '^-----+ '
     )
 
-    _cg_footer_re = re.compile('^Index\s+Function\s*$')
+    _cg_footer_re = re.compile(r'^Index\s+Function\s*$')
 
     _cg_primary_re = re.compile(
         r'^\[(?P<index>\d+)\]?' +
@@ -1452,7 +1452,7 @@ class CallgrindParser(LineParser):
     - http://valgrind.org/docs/manual/cl-format.html
     """
 
-    _call_re = re.compile('^calls=\s*(\d+)\s+((\d+|\+\d+|-\d+|\*)\s+)+$')
+    _call_re = re.compile(r'^calls=\s*(\d+)\s+((\d+|\+\d+|-\d+|\*)\s+)+$')
 
     def __init__(self, infile, event_selected = None, **options):
         LineParser.__init__(self, infile)
@@ -1647,7 +1647,7 @@ class CallgrindParser(LineParser):
 
         return True
 
-    _position_re = re.compile('^(?P<position>[cj]?(?:ob|fl|fi|fe|fn))=\s*(?:\((?P<id>\d+)\))?(?:\s*(?P<name>.+))?')
+    _position_re = re.compile(r'^(?P<position>[cj]?(?:ob|fl|fi|fe|fn))=\s*(?:\((?P<id>\d+)\))?(?:\s*(?P<name>.+))?')
 
     _position_table_map = {
         'ob': 'ob',

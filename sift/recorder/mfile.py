@@ -178,7 +178,7 @@ if have_pin_crt:
 env.add_link_dir(os.environ['SNIPER_SIFT_LIBDIR'])
 if env.on_linux():
     env['LINKFLAGS'] += ' -Wl,--hash-style=sysv '
-    env['LINKFLAGS'] += ' -Wl,--rpath,\$ORIGIN/../../../../%(arch)s/pin_lib:\$ORIGIN/../../../../%(arch)s/xed_lib:\$ORIGIN/pin_lib:\$ORIGIN/xed_lib'
+    env['LINKFLAGS'] += ' -Wl,--rpath,\\$ORIGIN/../../../../%(arch)s/pin_lib:\\$ORIGIN/../../../../%(arch)s/xed_lib:\\$ORIGIN/pin_lib:\\$ORIGIN/xed_lib'
 
 # Tools sources
 tool_sources = {}

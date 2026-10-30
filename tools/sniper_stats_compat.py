@@ -52,7 +52,7 @@ class SniperStatsCompat(sniper_stats.SniperStatsBase):
         value -= stats_begin[key]
         stats[key] = value
       if '[' in key:
-        key = re.match('(.*)\[(.*)\](.*)', key).groups()
+        key = re.match(r'(.*)\[(.*)\](.*)', key).groups()
         key, core = key[0] + key[2], int(key[1])
       else:
         core = -1
