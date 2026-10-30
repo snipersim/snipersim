@@ -76,7 +76,7 @@ public:
         stats.total_allocations++;
 
         if (is_pagetable_alloc) { 	// If the allocation is for a page table, handle it separately
-            UInt64 phys = handle_page_table_allocations(bytes);
+            UInt64 phys = buddy_page_table_frames(bytes);
             return {phys, 12}; // Return the physical address and the page size
         }
         // Instruction allocations go to the reserved instruction area
@@ -167,8 +167,13 @@ private:
         return frame;
     }
 
-    /* original helper for page‑table pages */
-    UInt64 handle_page_table_allocations(UInt64 bytes)
+    /* original helper for page‑table pages, those allocate() is asked for.
+       Named apart from PhysicalMemoryAllocator's virtual
+       handle_page_table_allocations(bytes, core_id), which it never
+       overrode (a parameter fewer): callers through the base -- the page
+       tables, the exception handlers -- get the base's kernel-region frames,
+       and only allocate() gets these. */
+    UInt64 buddy_page_table_frames(UInt64 bytes)
     {
         /* 4 KiB pages only – mirrors old behaviour */
         return buddy_allocator->allocate(bytes, 0, (UInt64)-1);

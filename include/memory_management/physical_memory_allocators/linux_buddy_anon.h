@@ -103,7 +103,7 @@ public:
         stats.total_allocations++;
 
         if (is_pagetable_alloc) {
-            UInt64 phys = handle_page_table_allocations(bytes);
+            UInt64 phys = buddy_page_table_frames(bytes);
             return {phys, 12};
         }
         if (is_instruction_alloc) {
@@ -184,7 +184,10 @@ public:
 private:
     BuddyType* buddy_allocator {nullptr};
 
-    UInt64 handle_page_table_allocations(UInt64 bytes)
+    /* The page-table frames allocate() is asked for, from the buddy.  Named
+       apart from the base's virtual handle_page_table_allocations(bytes,
+       core_id), which this never overrode (see baseline.h). */
+    UInt64 buddy_page_table_frames(UInt64 bytes)
     {
         std::lock_guard<std::mutex> zl(m_zone_lock);
         return buddy_allocator->allocate(bytes, 0, (UInt64)-1);
