@@ -348,7 +348,7 @@ public:
         return allocated;
     }
 
-    std::tuple<UInt64, UInt64, bool, UInt64> reserve_2mb_page(UInt64 address, UInt64 core_id)
+    std::tuple<UInt64, UInt64, bool, UInt64> reserve_2mb_page([[maybe_unused]] UInt64 address, [[maybe_unused]] UInt64 core_id)   // read only in DEBUG_BUDDY's logs
     {
 	// check if there is a 2MB region available
 #if DEBUG_BUDDY >= DEBUG_BASIC

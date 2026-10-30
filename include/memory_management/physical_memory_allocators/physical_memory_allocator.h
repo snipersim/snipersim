@@ -97,7 +97,7 @@ public:
      * @param ppn Physical page number (4KB granularity)
      * @return NUMA node ID (0-based)
      */
-    virtual UInt32 getNumaNodeForPPN(UInt64 ppn) const { return 0; }
+    virtual UInt32 getNumaNodeForPPN(UInt64 /*ppn*/) const { return 0; }
 
     /**
      * @brief Dump any final statistics before simulation ends

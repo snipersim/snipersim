@@ -95,7 +95,7 @@ public:
     __attribute__((noinline, optimize("O0")))
 #endif
     std::pair<UInt64, UInt64> allocate(UInt64 bytes,
-                                       UInt64 address               = 0,
+                                       UInt64 /*address*/           = 0,
                                        UInt64 core_id               = (UInt64)-1,
                                        bool   is_pagetable_alloc    = false,
                                        bool   is_instruction_alloc  = false) override

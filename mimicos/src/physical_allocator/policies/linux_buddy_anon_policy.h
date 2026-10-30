@@ -7,7 +7,7 @@ namespace Virtuoso {
         struct NoMetricsPolicy
         {
             template <typename Alloc>
-            void on_init(const String& name,
+            void on_init(const String& /*name*/,
                          int /*mem*/,
                          int /*kernel*/,
                          Alloc* /*alloc*/)

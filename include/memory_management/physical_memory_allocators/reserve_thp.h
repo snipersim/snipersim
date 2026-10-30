@@ -118,7 +118,7 @@ public:
      * Returns:
      *   ( physical_address , page_size_in_bits ) or ( -1 , 12 ) if no memory is available.
      */
-    std::pair<UInt64, UInt64> allocate(UInt64 size, UInt64 address = 0, UInt64 core_id = -1, bool is_pagetable_allocation = false, bool is_instruction_allocation = false) override
+    std::pair<UInt64, UInt64> allocate(UInt64 size, UInt64 address = 0, UInt64 core_id = -1, bool is_pagetable_allocation = false, bool /*is_instruction_allocation*/ = false) override
     {
         stats.total_allocations++;
         this->log("allocate: size=", size, "addr=", address, "core=", core_id);
@@ -184,7 +184,7 @@ public:
     /*
     * allocate_ranges(...) => Not used in this model. Could be extended if needed.
     */
-    std::vector<Range> allocate_ranges(IntPtr start_va, IntPtr end_va, int app_id)
+    std::vector<Range> allocate_ranges(IntPtr /*start_va*/, IntPtr /*end_va*/, int /*app_id*/)
     {
         std::vector<Range> ranges;
         return ranges;
@@ -319,7 +319,7 @@ public:
     /*
     * deallocate(...) => Not implemented. Could free 4KB or 2MB pages from the relevant structures.
     */
-    void deallocate(UInt64 region, UInt64 core_id = -1) override
+    void deallocate(UInt64 /*region*/, UInt64 /*core_id*/ = -1) override
     {
         // TODO: Implement
     }
