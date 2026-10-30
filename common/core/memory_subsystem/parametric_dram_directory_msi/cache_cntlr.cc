@@ -476,7 +476,7 @@ namespace ParametricDramDirectoryMSI
 		if (m_master->m_prefetcher)
 			m_prefetch_on_prefetch_hit = Sim()->getCfg()->getBoolArray("perf_model/" + cache_params.configName + "/prefetcher/prefetch_on_prefetch_hit", core_id);
 
-		bzero(&stats, sizeof(stats));
+		stats = {};
 		registerStatsMetric(name, core_id, String("tloads"), &stats.tloads);
 		registerStatsMetric(name, core_id, String("tstores"), &stats.tstores);
 		registerStatsMetric(name, core_id, String("tload-misses"), &stats.tload_misses);

@@ -198,7 +198,7 @@ namespace ParametricDramDirectoryMSI
      */
 	void MemoryManagementUnitVirt::registerMMUStats()
 	{
-		bzero(&translation_stats, sizeof(translation_stats));
+		translation_stats = {};
 
 		// Statistics for the whole MMU
 

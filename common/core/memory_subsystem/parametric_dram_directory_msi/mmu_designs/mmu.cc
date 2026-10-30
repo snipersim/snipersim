@@ -282,7 +282,7 @@ namespace ParametricDramDirectoryMSI
      */
     void MemoryManagementUnit::registerMMUStats()
     {
-        bzero(&translation_stats, sizeof(translation_stats));
+        translation_stats = {};
 
         // Initialize sanity check state
         try { sanity_checks_enabled = Sim()->getCfg()->getBool("perf_model/mmu/sanity_checks_enabled"); } 

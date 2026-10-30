@@ -45,7 +45,7 @@ SyscallMdl::SyscallMdl(Thread *thread)
    UInt32 futex_counters_size = sizeof(struct futex_counters_t);
    __attribute__((unused)) int rc = posix_memalign((void**)&futex_counters, 64, futex_counters_size); // Align by cache line size to prevent thread contention
    LOG_ASSERT_ERROR (rc == 0, "posix_memalign failed to allocate memory");
-   bzero(futex_counters, futex_counters_size);
+   new (futex_counters) futex_counters_t();   // the raw memory constructed: zero counts and delays
 
    // Register the metrics
    for (unsigned int e = 0; e < sizeof(futex_names) / sizeof(futex_names[0]); e++)

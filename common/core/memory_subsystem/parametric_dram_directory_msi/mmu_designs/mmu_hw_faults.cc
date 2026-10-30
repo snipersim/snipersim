@@ -232,7 +232,7 @@ namespace ParametricDramDirectoryMSI
      */
 	void MemoryManagementUnitHWFault::registerMMUStats()
 	{
-		bzero(&translation_stats, sizeof(translation_stats));
+		translation_stats = {};
 
 		// Statistics for the whole MMU
 		registerStatsMetric(name, core->getId(), "num_translations", &translation_stats.num_translations);

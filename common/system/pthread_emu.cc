@@ -72,7 +72,8 @@ void init()
       UInt32 pthread_counters_size = sizeof(struct pthread_counters_t) * num_cores;
       __attribute__((unused)) int rc = posix_memalign((void**)&pthread_counters, 64, pthread_counters_size); // Align by cache line size to prevent thread contention
       LOG_ASSERT_ERROR (rc == 0, "posix_memalign failed to allocate memory");
-      bzero(pthread_counters, pthread_counters_size);
+      for (UInt32 c = 0; c < num_cores; c++)
+         new (&pthread_counters[c]) pthread_counters_t();   // the raw memory constructed: zero counts and delays
 
       // Register the metrics
       for (uint32_t c = 0 ; c < num_cores ; c++ )

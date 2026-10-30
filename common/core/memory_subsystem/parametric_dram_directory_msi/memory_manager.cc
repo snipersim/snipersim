@@ -439,7 +439,7 @@ namespace ParametricDramDirectoryMSI
 
 		std::cout << "[Memory Hierarchy] Memory Hierarchy Initialized" << std::endl;
 
-		bzero(&memory_access_stats, sizeof(memory_access_stats));
+		memory_access_stats = {};
 
 		registerStatsMetric("memory_manager", core->getId(), "memory_access_latency", &memory_access_stats.m_memory_access_latency);
 		registerStatsMetric("memory_manager", core->getId(), "translation_latency", &memory_access_stats.m_translation_latency);

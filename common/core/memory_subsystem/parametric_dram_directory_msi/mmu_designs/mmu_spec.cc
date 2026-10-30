@@ -218,7 +218,7 @@ namespace ParametricDramDirectoryMSI
      */
     void MemoryManagementUnitSpec::registerMMUStats()
     {
-        bzero(&translation_stats, sizeof(translation_stats));
+        translation_stats = {};
 
         // Core translation statistics
         registerStatsMetric(name, core->getId(), "num_translations", &translation_stats.num_translations);
