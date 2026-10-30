@@ -28,6 +28,22 @@ if not 'SDE_BUILD_KIT' in os.environ:
 import mbuild
 import build_kit
 
+# A verbose build (VERBOSE=1, as make and cmake --build take it) shows what
+# mbuild and the kit set up and every command line.  Otherwise their setup
+# messages (include paths, the toolchain found) are left out, as are the
+# commands of what built (work_queue.build below): the build shows the
+# files it made, its result, and in full whatever failed (mbuild.die and a
+# failed command do not go through msgb).
+verbose_build = os.environ.get('VERBOSE', '') not in ('', '0')
+if not verbose_build:
+    _msgb = mbuild.msgb
+    def _quiet_msgb(s, t='', pad=''):
+        if s in ('SUCCESS',):
+            _msgb(s, t, pad)
+    for _name, _mod in list(sys.modules.items()):
+        if (_name == 'mbuild' or _name.startswith('mbuild.') or _name == 'build_kit') and getattr(_mod, 'msgb', None) is _msgb:
+            _mod.msgb = _quiet_msgb
+
 
 def add_link_libs(env):
     # Support PIN CRT link
@@ -254,7 +270,9 @@ for program in programs:
 # Do the build based on the dag
 ####################################################
 work_queue = mbuild.work_queue_t(env['jobs'])
-okay = work_queue.build(dag)
+# Each command built is reported as its target ("BUILT: <file>"); its
+# command line and output only when the build is verbose or it failed.
+okay = work_queue.build(dag, show_errors_only=not verbose_build)
 if not okay:
     mbuild.die("build failed")
 mbuild.msgb("SUCCESS")
