@@ -546,7 +546,7 @@ static inline void pcp_alloc_cost(PcpAllocState& s, uint64_t va) {
        cost.  Without this split the per-iteration null check added
        ~5-8 insts/iter × 8 iter, enough to perturb Sniper's ROB model
        and produce phase-mean variance of ±5-20× across runs. */
-    static volatile uint64_t sink;
+    [[maybe_unused]] static volatile uint64_t sink;   /* the store keeps the walk */
     if (g_capture_target) {
         sink = _cold_chain_reads_capturing(s.freelist_pool,
                                            PcpAllocState::LINES, seed, n);
@@ -639,7 +639,7 @@ static inline void install_pte(PteInstallState& s, uint64_t pa, uint64_t vpn) {
        4 MiB scratch so Sniper stalls on each L2/LLC-miss line.  ~200 cyc
        of real work that our prior single-cache-line PteInstallState
        missed. */
-    static volatile uint64_t sink;
+    [[maybe_unused]] static volatile uint64_t sink;   /* the store keeps the walk */
     uint64_t seed = s.cursor++ ^ vpn;
     if (g_capture_target) {
         sink = _cold_chain_reads_capturing(s.scratch,
@@ -733,7 +733,7 @@ static inline void kernel_entry_hw_trap(KernelEntryState& k, uint64_t error_code
 
     /* 6 dep-chained cold loads against idt_shadow.  Split dispatch so
        the hot path has no per-iteration capture overhead. */
-    static volatile uint64_t sink;
+    [[maybe_unused]] static volatile uint64_t sink;   /* the store keeps the walk */
     if (g_capture_target) {
         sink = _cold_chain_reads_capturing(k.idt_shadow,
                                            KernelEntryState::LINES, seed, 6);

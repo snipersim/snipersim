@@ -34,9 +34,6 @@ void RevelatorExceptionHandler::handle_page_fault(FaultCtx &ctx)
 #endif
 
     int core_id = this->m_core->getId();
-    Core *core_faulter = Sim()->getCoreManager()->getCoreFromID(core_id);
-    Thread *thread_faulter = core_faulter->getThread();
-    int app_id = thread_faulter->getAppId();
 
     // 1. Allocate the data frame via the revelator allocator
     assert(this->getAllocator() != NULL);

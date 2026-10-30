@@ -560,11 +560,8 @@ void MimicOS::boot()
 
     /* Count how many live apps need the per-thread ROI barrier. */
     int num_live = 0;
-    bool has_trace = false;
-    for (auto& p : m_app_paths) {
+    for (auto& p : m_app_paths)
         if (p.rfind("live:", 0) == 0) num_live++;
-        else has_trace = true;
-    }
     m_num_live_apps = num_live;  // visible to kernel_worker via member
 
     LineOut() << "[MimicOS]: Provisioning " << m_num_cores << " core(s), "

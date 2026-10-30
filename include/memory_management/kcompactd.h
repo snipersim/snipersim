@@ -200,7 +200,6 @@ public:
 
             auto& src_entry = (*m_two_mb_map)[src_region];
             auto& src_bitset = std::get<1>(src_entry);
-            UInt64 src_base = std::get<0>(src_entry);
 
             // For each allocated page in the source region, try to migrate it
             // to a target region that has a free slot

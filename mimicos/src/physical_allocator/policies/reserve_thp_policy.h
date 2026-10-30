@@ -16,8 +16,7 @@ namespace Virtuoso {
         struct NoMetricsPolicy
         {
             template <typename Allocator>
-            void on_init(const String& name, int memory_size, int kernel_size, int threshold_for_promotion, Allocator* phys_mem_alloc) {
-                auto& stats = phys_mem_alloc->getStats();
+            void on_init(const String& /*name*/, int /*memory_size*/, int /*kernel_size*/, int threshold_for_promotion, Allocator* /*phys_mem_alloc*/) {
                 std::cout << "[MimicOS] Reservation-based THP Allocator" << std::endl;
                 std::cout << "[MimicOS] ReserveTHP: threshold_for_promotion = " << threshold_for_promotion << std::endl;
             }

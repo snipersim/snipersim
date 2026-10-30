@@ -119,15 +119,12 @@ namespace ParametricDramDirectoryMSI
         else
         {
             // get predicted addresses
-            bool temp;
             std::vector<IntPtr> predictions = predict(address, number_of_predictions, page_table_speculation);
             relevator_prefetches++;
 
             for (int k = 0; k < (int)predictions.size(); k++)
             {
                 IntPtr cache_address = ((IntPtr)(predictions[k])) & (~((64 - 1)));
-
-                bool revelator_hashf_prediction;
 
 #ifdef DEBUG_REVELATOR
                 log_file << "[Revelator] Hash: " << k << " Address: " << cache_address << std::endl;
