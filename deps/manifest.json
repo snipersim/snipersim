@@ -230,7 +230,7 @@
       "command": [
         "sh",
         "-c",
-        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=x86_64-softmmu,x86_64-linux-user --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
+        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=x86_64-softmmu,x86_64-linux-user --disable-pixman --disable-png --disable-vnc --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
       "description": "QEMU built with TCG plugin support the plugin wait call from tools/qemu-11.1.1-plugin-wait.patch (a vCPU waits for Sniper outside the run loop: multi-threaded guests in user mode, live), the counter callback from tools/qemu-11.1.1-plugin-counters.patch (the guest's clocks and counters read simulated time) and the plugin system call from tools/qemu-11.1.1-plugin-syscall.patch (timed waits in simulated time); the frontend is loaded with -plugin"
     },
@@ -279,7 +279,7 @@
       "command": [
         "sh",
         "-c",
-        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-softmmu --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
+        "mkdir -p build && cd build && ../configure --enable-plugins --target-list=riscv64-softmmu --disable-pixman --disable-png --disable-vnc --disable-docs --disable-werror --disable-tools --disable-guest-agent && ninja -j{jobs}"
       ],
       "description": "QEMU riscv64 full system (the virt board) with the IME patch and TCG plugin support: RISC-V full-system traces, physical addresses included"
     },
