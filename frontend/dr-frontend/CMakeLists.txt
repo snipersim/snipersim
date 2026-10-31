@@ -89,7 +89,9 @@ target_link_libraries(dr_frontend sift z)
 # which is what docs/ARM64.md and the tool config below both name.
 set_target_properties(dr_frontend PROPERTIES
   OUTPUT_NAME dr-frontend
-  CXX_STANDARD 11
+  # C++20, as the rest of the tree (sniper_base): the client uses C++17's
+  # insert_or_assign (see the droption flag below).
+  CXX_STANDARD 20
   CXX_EXTENSIONS OFF
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
@@ -97,6 +99,16 @@ configure_DynamoRIO_client(dr_frontend)
 foreach(_ext drmgr droption drreg drutil)
   use_DynamoRIO_extension(dr_frontend ${_ext})
 endforeach()
+# use_DynamoRIO_extension(droption) appends -std=c++11 to the client's
+# COMPILE_FLAGS (droption's minimum).  Older CMake put that before the
+# standard's -std=c++20, and the later flag won; CMake 3.31 puts it after,
+# so the client was compiled as C++11 and its insert_or_assign (C++17) did
+# not compile.  The flag is taken out: CXX_STANDARD above decides.
+get_target_property(_dr_flags dr_frontend COMPILE_FLAGS)
+if(_dr_flags)
+  string(REPLACE "-std=c++11" "" _dr_flags "${_dr_flags}")
+  set_target_properties(dr_frontend PROPERTIES COMPILE_FLAGS "${_dr_flags}")
+endif()
 # DynamoRIO's headers as system headers: its macros (XINST_CREATE_add's
 # conditional of an enum and an int) warned in every file expanding them.
 target_include_directories(dr_frontend SYSTEM PRIVATE
