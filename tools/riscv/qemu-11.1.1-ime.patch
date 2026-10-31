@@ -745,7 +745,7 @@ Regenerate from the pipeline when the specification moves.
  RISCVException smstateen_acc_ok(CPURISCVState *env, int index, uint64_t bit)
 --- /dev/null
 +++ b/target/riscv/tcg/ime.h
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,44 @@
 +/* SPDX-License-Identifier: GPL-2.0-or-later */
 +/* Generated from IME 0.9 UDB (Zvvm freeze, not ratified).
 + * QEMU parent 11.1.1. CPU properties x-zvvmm/x-zvvfmm/x-zvvmtls/x-zvvmttls
@@ -757,12 +757,15 @@ Regenerate from the pipeline when the specification moves.
 +
 +#include "qemu/osdep.h"
 +
++#ifndef IME_GEOM_DEFINED   /* ime.h and ime_kern.h both define it, the same */
++#define IME_GEOM_DEFINED
 +typedef struct IMEGeom {
 +    int L, M, N, Nmax, Keff, EMUL_C, linesize;
 +    int EEW_C, EEW_A, lambda, lmul, W;
 +    int vlen, sew, vl;
 +    int illegal;
 +} IMEGeom;
++#endif
 +
 +int ime_decode_vlambda(int enc);
 +int ime_permissible(int L, int lambda);
@@ -789,12 +792,13 @@ Regenerate from the pipeline when the specification moves.
 +#endif
 --- /dev/null
 +++ b/target/riscv/tcg/ime_helper.c
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,219 @@
 +#include "qemu/osdep.h"
 +#include "cpu.h"
 +#include "exec/helper-proto.h"
 +#include "accel/tcg/cpu-ldst.h"
 +#include "ime.h"
++#include "ime_kern.h"   /* the kernels it calls (ime_kern.c) */
 +
 +static G_NORETURN void ime_illegal(CPURISCVState *env)
 +{
@@ -1451,17 +1455,20 @@ Regenerate from the pipeline when the specification moves.
 +}
 --- /dev/null
 +++ b/target/riscv/tcg/ime_kern.h
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,46 @@
 +#ifndef IME_KERN_H
 +#define IME_KERN_H
 +#include <stdint.h>
 +
-+typedef struct {
++#ifndef IME_GEOM_DEFINED   /* ime.h and ime_kern.h both define it, the same */
++#define IME_GEOM_DEFINED
++typedef struct IMEGeom {
 +    int L, M, N, Nmax, Keff, EMUL_C, linesize;
 +    int EEW_C, EEW_A, lambda, lmul, W;
 +    int vlen, sew, vl;
 +    int illegal;
 +} IMEGeom;
++#endif
 +
 +int ime_decode_vlambda(int enc);
 +int ime_emul_c(int L, int lambda);
