@@ -410,7 +410,12 @@ FRAGMENT_REQUIRE_NONZERO = {
     'dram_configs/ddr4_2400_open_page': ('ddr.page-hits', 'ddr.page-miss'),
     'dram_configs/ddr4_2400_open_page_split_column': ('ddr.page-hits', 'ddr.page-miss'),
     'dram_configs/ddr4_2400_closed_page': ('ddr.page-hits', 'ddr.page-miss'),
-    'dram_configs/m3d': ('ddr.page-hits', 'ddr.page-miss'),
+    # m3d closes an idle row after bank_keep_open (120 cycles) across 2,048
+    # banks, so an access that misses an open row finds its bank empty: on
+    # the workload ~3,170 page-empty and ~500 page-hits, and 0 or 1
+    # page-miss -- 1 under gcc 12, 0 at one core once gcc 14 built it.  Its
+    # row model is shown by the hits and the closed rows.
+    'dram_configs/m3d': ('ddr.page-hits', 'ddr.page-empty'),
     'dram_configs/readwrite_2ctrl_153gbps': ('dram.total-access-latency',),
     'directory_configs/limited_no_broadcast': ('directory.entries-allocated',),
     'directory_configs/limitless': ('directory.entries-allocated',),
@@ -502,8 +507,13 @@ FRAGMENT_REQUIRE_NONZERO = {
         ('revelator.total_prefetches', 'revelator_simple.total_data_allocations'),
     'spec_engine_configs/spec_engine_numa_revelator':
         ('numa_revelator.total_prefetches', 'numa_revelator_allocator.hash1_tries'),
-    'dram_configs/ddr4_2666_6ch': ('ddr.page-hits', 'ddr.page-miss'),
-    'dram_configs/ddr5_4800_4channel': ('ddr.page-hits', 'ddr.page-miss'),
+    # Six channels, rows closed after 120 cycles: ~2,800 page-empty and ~820
+    # page-hits on the workload, and 1 to 3 page-miss (as m3d above).
+    'dram_configs/ddr4_2666_6ch': ('ddr.page-hits', 'ddr.page-empty'),
+    # Four channels, rows kept open: ~3,570 page-hits and ~95 page-empty (each
+    # row's first access) on the workload, and 1 to 4 page-miss -- one event
+    # from failing, as m3d's did under gcc 14.
+    'dram_configs/ddr5_4800_4channel': ('ddr.page-hits', 'ddr.page-empty'),
     'prefetcher_configs/ghb_l1': ('L1-D.prefetches',),
     # The ip_stride and streamer data prefetchers (port series step 4),
     # on the counter each registers for the addresses it generated and the
