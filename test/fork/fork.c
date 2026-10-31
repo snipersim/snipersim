@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 int main()
 {
@@ -8,5 +10,5 @@ int main()
   printf("Hello world from %s\n", pid ? "parent" : "child");
 
   while(waitpid(-1, &status, 0) > 0);
-  return;
+  return 0;
 }

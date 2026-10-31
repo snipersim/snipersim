@@ -6,8 +6,9 @@
 volatile int shared = 0;
 float sum = 0.;
 
-void * work(void * id)
+void * work(void * arg)
 {
+   const int id = (int)(long)arg;   // the thread's number, 1 or 2
    for(int i = 0; i < 5; ++i)
    {
       printf("%d waiting\n", id);
@@ -30,6 +31,7 @@ void * work(void * id)
    }
 
    printf("%d done\n", id);
+   return NULL;
 }
 
 int main()
@@ -37,9 +39,9 @@ int main()
    SimRoiStart();
 
    pthread_t thread;
-   pthread_create(&thread, NULL, work, 1);
+   pthread_create(&thread, NULL, work, (void *)1L);
 
-   work(2);
+   work((void *)2L);
 
    pthread_join(thread, NULL);
 

@@ -55,6 +55,7 @@
 
 
 #include <stdlib.h>
+#include <unistd.h>      /* getopt */
 #include <sys/time.h>
 #include <pthread.h>
 #define PARMACS_MAX_THREADS 1024
@@ -114,21 +115,37 @@ double ck1;
 double ck3;                        /* checksums for testing answer */
 int pad_length;
 
-void SlaveStart();
+void SlaveStart(int MyNum);
 double TouchArray(double *,double *,double *,double *,int,int,int,int);
 void FFT1D(int,int,int,double *,double *,double *,double *,int,int *,int,
      int,int,int,int,int,int,struct GlobalMemory *);
-double CheckSum();
-double drand48();
 int log_2(int);
 void printerr(char *);
 
 
-main(argc, argv)
+/* The functions below, declared before their first use (they were K&R
+   definitions, called undeclared) */
+void FFT1D(int direction, int M, int N, double *x, double *scratch, double *upriv,
+           double *umain2, int MyNum, int *l_transtime, int MyFirst, int MyLast,
+           int pad_length, int P, int test_result, int doprint, int dostats,
+           struct GlobalMemory *Global);
+double TouchArray(double *x, double *scratch, double *u, double *upriv, int N, int MyNum, int MyFirst, int MyLast);
+double CheckSum(int N, double *x);
+void InitX(int N, double *x);
+void InitU(int N, double *u);
+void InitU2(int N, double *u, int n1);
+int BitReverse(int M, int k);
+void TwiddleOneCol(int direction, int n1, int N, int j, double *u, double *x, int pad_length);
+void Scale(int n1, int N, double *x);
+void Transpose(int n1, double *src, double *dest, int MyNum, int MyFirst, int MyLast, int pad_length);
+void CopyColumn(int n1, double *src, double *dest);
+void Reverse(int N, int M, double *x);
+void FFT1DOnce(int direction, int M, int N, double *u, double *x);
+void PrintArray(int N, double *x);
+void printerr(char *s);
+int log_2(int number);
 
-int argc;
-char *argv;
-
+int main(int argc, char **argv)
 {
   int i;
   int j;
@@ -604,17 +621,7 @@ void SlaveStart(int MyNum)
 }
 
 
-double TouchArray(x, scratch, u, upriv, N, MyNum, MyFirst, MyLast)
-
-double *x;
-double *scratch;
-double *u;
-double *upriv;
-int N;
-int MyNum;
-int MyFirst;
-int MyLast;
-
+double TouchArray(double *x, double *scratch, double *u, double *upriv, int N, int MyNum, int MyFirst, int MyLast)
 {
   int i,j,k;
   double tot = 0.0;
@@ -635,11 +642,7 @@ int MyLast;
 }
 
 
-double CheckSum(N, x)
-
-int N;
-double *x;
-
+double CheckSum(int N, double *x)
 {
   int i,j,k;
   double cks;
@@ -656,11 +659,7 @@ double *x;
 }
 
 
-InitX(N, x)
-
-int N;
-double *x;
-
+void InitX(int N, double *x)
 {
   int i,j,k;
 
@@ -675,11 +674,7 @@ double *x;
 }
 
 
-InitU(N, u)
-
-int N;
-double *u;
-
+void InitU(int N, double *u)
 {
   int q;
   int j;
@@ -700,12 +695,7 @@ double *u;
 }
 
 
-InitU2(N, u, n1)
-
-int N;
-double *u;
-int n1;
-
+void InitU2(int N, double *u, int n1)
 {
   int i,j,k;
   int base;
@@ -720,11 +710,7 @@ int n1;
 }
 
 
-BitReverse(M, k)
-
-int M;
-int k;
-
+int BitReverse(int M, int k)
 {
   int i;
   int j;
@@ -740,27 +726,10 @@ int k;
 }
 
 
-void FFT1D(direction, M, N, x, scratch, upriv, umain2, MyNum, l_transtime,
-           MyFirst, MyLast, pad_length, P, test_result, doprint, dostats,
-     Global)
-
-int direction;
-int M;
-int N;
-int *l_transtime;
-double *x;
-double *upriv;
-double *scratch;
-double *umain2;
-int MyFirst;
-int MyLast;
-int pad_length;
-int P;
-int test_result;
-int doprint;
-int dostats;
-struct GlobalMemory *Global;
-
+void FFT1D(int direction, int M, int N, double *x, double *scratch, double *upriv,
+           double *umain2, int MyNum, int *l_transtime, int MyFirst, int MyLast,
+           int pad_length, int P, int test_result, int doprint, int dostats,
+           struct GlobalMemory *Global)
 {
   int i;
   int j;
@@ -1008,16 +977,7 @@ struct GlobalMemory *Global;
 }
 
 
-TwiddleOneCol(direction, n1, N, j, u, x, pad_length)
-
-int direction;
-int n1;
-int N;
-int j;
-double *u;
-double *x;
-int pad_length;
-
+void TwiddleOneCol(int direction, int n1, int N, int j, double *u, double *x, int pad_length)
 {
   int i;
   double omega_r;
@@ -1040,12 +1000,7 @@ int pad_length;
 }
 
 
-Scale(n1, N, x)
-
-int n1;
-int N;
-double *x;
-
+void Scale(int n1, int N, double *x)
 {
   int i;
 
@@ -1056,16 +1011,7 @@ double *x;
 }
 
 
-Transpose(n1, src, dest, MyNum, MyFirst, MyLast, pad_length)
-
-int n1;
-double *src;
-double *dest;
-int MyNum;
-int MyFirst;
-int MyLast;
-int pad_length;
-
+void Transpose(int n1, double *src, double *dest, int MyNum, int MyFirst, int MyLast, int pad_length)
 {
   int i;
   int j;
@@ -1148,12 +1094,7 @@ int pad_length;
 }
 
 
-CopyColumn(n1, src, dest)
-
-int n1;
-double *src;
-double *dest;
-
+void CopyColumn(int n1, double *src, double *dest)
 {
   int i;
 
@@ -1164,12 +1105,7 @@ double *dest;
 }
 
 
-Reverse(N, M, x)
-
-int N;
-int M;
-double *x;
-
+void Reverse(int N, int M, double *x)
 {
   int j, k;
 
@@ -1183,14 +1119,7 @@ double *x;
 }
 
 
-FFT1DOnce(direction, M, N, u, x)
-
-int direction;
-int M;
-int N;
-double *u;
-double *x;
-
+void FFT1DOnce(int direction, int M, int N, double *u, double *x)
 {
   int j;
   int k;
@@ -1235,11 +1164,7 @@ double *x;
 }
 
 
-PrintArray(N, x)
-
-int N;
-double *x;
-
+void PrintArray(int N, double *x)
 {
   int i, j, k;
 
@@ -1260,19 +1185,13 @@ double *x;
 }
 
 
-void printerr(s)
-
-char *s;
-
+void printerr(char *s)
 {
   fprintf(stderr,"ERROR: %s\n",s);
 }
 
 
-int log_2(number)
-
-int number;
-
+int log_2(int number)
 {
   int cumulative = 1;
   int out = 0;
