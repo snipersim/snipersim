@@ -41,6 +41,22 @@ more information about building the simulator and usage, please see
 
 ## Building
 
+The system packages a build needs, as checked on Debian 13:
+
+```bash
+sudo apt install build-essential cmake git python3 python3-dev \
+    zlib1g-dev libbz2-dev libsqlite3-dev liblzma-dev \
+    pkgconf libglib2.0-dev ninja-build python3-venv
+```
+
+`python3-dev` is the embedded Python of the scripting hooks; `liblzma-dev` is
+optional (`.xz` traces); `pkgconf` and `libglib2.0-dev` are for `QEMU=ON`'s
+plugin; `ninja-build` and `python3-venv` are what QEMU's own build needs, when
+the dependencies are built.  Without `python3-dev`, or `pkgconf` and
+`libglib2.0-dev` with `QEMU=ON`, configuration stops and names the package.
+Everything else -- SDE, XED, QEMU, DynamoRIO, McPAT -- the build fetches and
+builds itself, into a shared cache.
+
 ```bash
 make -j$(nproc)          # fetch dependencies, configure, build
 make -C test/fft fft     # the example workload

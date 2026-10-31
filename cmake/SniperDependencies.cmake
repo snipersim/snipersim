@@ -13,7 +13,17 @@ include(CheckCXXSourceCompiles)
 # makefiles asked python3-config for --includes and --libs but never --ldflags,
 # so the link failed against any interpreter outside the default search path
 # (conda, pyenv, spack, an HPC `module load python`).
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Embed)
+find_package(Python3 COMPONENTS Interpreter Development.Embed)
+if(NOT Python3_Development.Embed_FOUND)
+  # CMake's own message ("missing: Python3_INCLUDE_DIRS Development.Embed")
+  # does not say that the interpreter's development package is what is
+  # missing -- the usual case on a fresh system.
+  message(FATAL_ERROR
+    "Python ${Python3_VERSION} found (${Python3_EXECUTABLE}), but not its headers and library, "
+    "which the simulator embeds for its scripting hooks.  Install the development package: "
+    "python3-dev on Debian and Ubuntu, python3-devel on Fedora and RHEL; or set Python3_EXECUTABLE "
+    "(make CMAKE_ARGS=-DPython3_EXECUTABLE=...) to an interpreter that has them.")
+endif()
 
 if(Python3_VERSION VERSION_LESS 3.8)
   message(FATAL_ERROR

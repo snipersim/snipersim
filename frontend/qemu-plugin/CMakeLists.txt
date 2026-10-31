@@ -26,8 +26,19 @@ if(NOT SNIPER_QEMU_PLUGIN_INCLUDE)
     "  or turn the frontend off with -DSNIPER_ENABLE_QEMU=OFF.")
 endif()
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0)
+# The plugin API passes GLib types (qemu-plugin.h includes glib.h).  CMake's
+# own messages ("Could NOT find PkgConfig (missing: PKG_CONFIG_EXECUTABLE)")
+# do not say which packages are missing.
+find_package(PkgConfig)
+if(PkgConfig_FOUND)
+  pkg_check_modules(GLIB2 IMPORTED_TARGET glib-2.0)
+endif()
+if(NOT PkgConfig_FOUND OR NOT GLIB2_FOUND)
+  message(FATAL_ERROR
+    "The QEMU front end needs GLib's headers, found through pkg-config.  Install "
+    "pkgconf and libglib2.0-dev on Debian and Ubuntu, pkgconf and glib2-devel on "
+    "Fedora and RHEL; or build without QEMU=ON.")
+endif()
 
 # riscv_isa*.cc: the generated RISC-V instruction tables, shared with Sniper's
 # decoder, so the plugin knows which instructions are branches and which need
