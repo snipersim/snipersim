@@ -225,10 +225,12 @@ def mimicos_daemons_check(stats):
           # gettimeofday itself (the guest's time is never the host's), the
           # guest no longer runs the host's vDSO, whose code page and time
           # data page were two of its mappings -- 66 faults and 27 mappings
-          # before, 57 and 25 now.
+          # before, 57 and 25 after.  Measured again with test/fft built by
+          # gcc 14.2 against glibc 2.41 (Debian 13; fft.c in ANSI C): 59
+          # faults and 25 mappings, the same under reservethp_32GB.ini.
           and '[TRACE:0] -- DONE --' in out
           and 'shutdown event received' in out
-          and faults == 57
+          and faults == 59
           and ('Core 0 checked 25 unique VA->PA mappings, 25 unique PA->VA '
                'mappings, 0 violations') in out)
     return ok, ('kcompactd/khugepaged/kswapd scans %d/%d/%d (expected %d +-1 '
