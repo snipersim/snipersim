@@ -1138,6 +1138,7 @@ def execute():
       pid, rc, usage = os.wait4(subproc.pid, 0)
     except AttributeError:
       pid, rc = os.waitpid(subproc.pid, 0)
+    run_sniper.mark_reaped(subproc, rc)
   except KeyboardInterrupt:
     try:
       os.kill(subproc.pid, 9)

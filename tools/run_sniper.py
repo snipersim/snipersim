@@ -85,6 +85,16 @@ def va2pa_valid():
   return False
 
 
+def mark_reaped(proc, status):
+  """A subprocess.Popen whose process was reaped by os.wait4/os.waitpid
+  (for its resource usage): its returncode, as wait() would have set it, so
+  that it does not report the process as still running when it is freed
+  (ResourceWarning: subprocess N is still running)."""
+  if hasattr(os, 'waitstatus_to_exitcode'):
+    proc.returncode = os.waitstatus_to_exitcode(status)
+  else:
+    proc.returncode = -os.WTERMSIG(status) if os.WIFSIGNALED(status) else os.WEXITSTATUS(status)
+
 def decode_wait_status(rc, tag = 'SNIPER'):
   """Turn a raw os.wait4() status into an exit code, explaining signals.
 

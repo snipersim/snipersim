@@ -2,6 +2,16 @@
 
 import threading, subprocess, sys, os, tempfile
 
+def _reap(proc):
+  """os.waitpid's raw status, and the Popen told its process is gone (else
+  it reports it as still running when freed: a ResourceWarning)"""
+  _, st = os.waitpid(proc.pid, 0)
+  if hasattr(os, 'waitstatus_to_exitcode'):
+    proc.returncode = os.waitstatus_to_exitcode(st)
+  else:
+    proc.returncode = -os.WTERMSIG(st) if os.WIFSIGNALED(st) else os.WEXITSTATUS(st)
+  return st
+
 def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = False, pinbin = None, status = False):
   """Run cmd, a Pin command line with Pin's -pause_tool, and attach gdb to
   Pin once it pauses.  Returns gdb's exit status; with status=True, waits for
@@ -28,7 +38,7 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
       # The pipe closed before Pin paused: no pause knob on the command
       # line, or Pin failed first.  This read the closed pipe for ever.
       print('[DEBUGPIN] The command ended before Pin paused for gdb', file=sys.stderr)
-      _, st = os.waitpid(p_graphite.pid, 0)
+      st = _reap(p_graphite)
       return st if status else 1
     if line.startswith('Pausing to attach to pid') or (line.startswith('Pausing for') and 'to attach to process' in line):
       g_pid = line.split()[-1]
@@ -72,6 +82,6 @@ def execute_gdb(cmd, env, pin_home, arch, quiet = False, wait = False, quit = Fa
   rc >>= 8
 
   if status:
-    _, st = os.waitpid(p_graphite.pid, 0)
+    st = _reap(p_graphite)
     return st
   return rc

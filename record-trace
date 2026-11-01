@@ -628,6 +628,7 @@ if use_pid and pid_continue:
     usleep(100)
   os.kill(use_pid, signal.SIGCONT)
 pid, rc, usage = os.wait4(subproc.pid, 0)
+run_sniper.mark_reaped(subproc, rc)
 
 # The recorder's exit status is ours.  This line was missing: rc was collected
 # and the script fell off the end, exiting 0 whatever had happened.
