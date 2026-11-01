@@ -90,6 +90,7 @@ machine.  Bless once at the start of a series, check after every step:
     testing/test_virtuoso.py                  # must be clean
 """
 
+import pathlib
 import argparse
 import hashlib
 import json
@@ -114,7 +115,7 @@ WORKLOAD_OUTPUT = re.compile(r'workload isum=1419064784 fsum=100638720\.000')
 # The run stream's line shape, taken from the lnav format so the two agree.
 def _stamped_line_regex():
     fmt = os.path.join(SNIPER_ROOT, 'tools', 'lnav', 'formats', 'sniper', 'sniper_run.json')
-    pattern = json.load(open(fmt))['sniper_run']['regex']['std']['pattern']
+    pattern = json.loads(pathlib.Path(fmt).read_text())['sniper_run']['regex']['std']['pattern']
     return re.compile(pattern.replace('(?<', '(?P<'))
 STAMPED = _stamped_line_regex()
 
@@ -1872,11 +1873,16 @@ def sniper_in_sniper_trace():
     """test/sniper-in-sniper/fft.sift, the trace the MimicOS checks hand the
     kernel, recorded here with ASLR off under the controlled environment and
     through CANON_ROOT, so that it is the same bytes for every checkout and
-    user and the checks can expect exact counts (57 page faults, 25 mappings).
+    user and the checks can expect exact counts (59 page faults, 25 mappings).
     A trace recorded any other way -- test/sniper-in-sniper/Makefile records
     one under make's environment -- is a different guest layout and different
     counts; a sidecar notes the environment digest the trace was recorded
-    under, and a trace without it, or with another, is recorded again.
+    under, and the digests of the fft binary and the recorder that made it,
+    and a trace without it, or with another, is recorded again.  fft is made
+    on every call (make does nothing when it is up to date): built only when
+    missing, the shadow's kept the binary of an older fft.c, compiler and C
+    library -- across an OS upgrade, a gcc 12 / glibc 2.36 build that gave 57
+    faults where the current source on the current system gives 59.
 
     In the shadow (see canon_root), not the source tree, as is the fft it
     records; under a lock, recorded beside the trace and renamed into place,
@@ -1889,13 +1895,14 @@ def sniper_in_sniper_trace():
     sidecar = sift + '.env'
     with open(os.path.join(SHADOW, '.trace.lock'), 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if (os.path.exists(sift) and os.path.exists(sidecar)
-                and open(sidecar).read().strip() == env_digest()):
-            return sift
         fft = os.path.join(SHADOW, 'test', 'fft', 'fft')
-        if not os.path.exists(fft):
-            subprocess.run(['make', '-s', '-C', os.path.dirname(fft), 'fft'],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        subprocess.run(['make', '-s', '-C', os.path.dirname(fft), 'fft'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        stamp = '%s fft=%s recorder=%s' % (env_digest(), file_sha1(fft),
+                                           file_sha1(RECORDER_SO) if os.path.exists(RECORDER_SO) else '-')
+        if (os.path.exists(sift) and os.path.exists(sidecar)
+                and pathlib.Path(sidecar).read_text().strip() == stamp):
+            return sift
         # Recorded under the trace's own name (-o is in the guest's
         # environment: SDE_COMMAND_LINE), with the previous one moved aside
         # rather than deleted -- a run still reading it keeps its copy
@@ -1910,7 +1917,7 @@ def sniper_in_sniper_trace():
         if p.returncode != 0 or not os.path.exists(sift):
             raise RuntimeError('recording %s failed (exit %s):\n%s' % (sift, p.returncode, p.stdout[-2000:]))
         with open(sidecar + '.tmp', 'w') as f:
-            f.write(env_digest() + '\n')
+            f.write(stamp + '\n')
         os.replace(sidecar + '.tmp', sidecar)
         for f in (sidecar, sift):
             try:
