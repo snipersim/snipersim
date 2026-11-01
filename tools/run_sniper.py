@@ -210,6 +210,13 @@ class Tee:
     os.dup2(self.w, sys.stdout.fileno())
     os.dup2(self.w, sys.stderr.fileno())
 
+  def finish(self):
+    """Without a redirect: close the write end and drain, so every line
+    written to it is out."""
+    os.close(self.w)
+    self.thread.join(10)
+    os.close(self.out_fd)
+
   def close(self):
     """Restore stdout/stderr, then drain: every line written so far is out."""
     sys.stdout.flush(); sys.stderr.flush()
@@ -233,14 +240,46 @@ def __run_program_redirect(app_id, program_func, program_arg, outputdir, run_id 
   if status is not None and isinstance(rc, int):
     status.value = rc
 
+def _takes_output(func):
+  """program_func(program_arg, out): it runs its program with stdout and
+  stderr on the file descriptor out"""
+  import inspect
+  try:
+    return len(inspect.signature(func).parameters) >= 2
+  except (TypeError, ValueError):
+    return False
+
 def run_program_redirect(app_id, program_func, program_arg, outputdir, run_id = 0, tag = None):
-  """Run program_func(program_arg) in a child process with its output tagged
-  and logged; return what the function returned (0 when it returned nothing;
-  for a subprocess's status, negative when the program was killed by a
-  signal), or None when the child itself failed."""
+  """Run program_func with its output tagged and logged; return what the
+  function returned (0 when it returned nothing; for a subprocess's status,
+  negative when the program was killed by a signal), or None when it failed.
+
+  A program_func(program_arg, out) -- run-sniper's -- is called here, in the
+  calling thread, and gives its program the tee's pipe, out, as stdout and
+  stderr: nothing is forked.  A program_func(program_arg) of another caller
+  is run in a forked child whose stdout and stderr are the tee's."""
+  if _takes_output(program_func):
+    tee = Tee(os.path.join(outputdir, 'benchmark-app%d-run%d.log' % (app_id, run_id)), '[%s] ' % (tag or 'app%d' % app_id))
+    try:
+      rc = program_func(program_arg, tee.w)
+    except Exception:
+      import traceback
+      traceback.print_exc()
+      return None                     # the function itself failed
+    finally:
+      tee.finish()
+    return rc if isinstance(rc, int) else 0
   import multiprocessing # module does not exist in Python <= 2.5, import only when needed
-  status = multiprocessing.Value('l', 0)
-  proc = multiprocessing.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id, tag, status))
+  # fork, named: the child runs program_func in a copy of this process and
+  # redirects its own output.  Python 3.14 made forkserver Linux's default
+  # start method, which pickles the target and imports the main module in
+  # the child: a function of a script's own body fails there ("An attempt
+  # has been made to start a new process before the current process has
+  # finished its bootstrapping phase", which run-sniper hit before it gave
+  # its function an output).
+  ctx = multiprocessing.get_context('fork')
+  status = ctx.Value('l', 0)
+  proc = ctx.Process(target = __run_program_redirect, args = (app_id, program_func, program_arg, outputdir, run_id, tag, status))
   proc.start()
   proc.join()
   if proc.exitcode != 0:
