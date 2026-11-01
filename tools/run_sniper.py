@@ -1,3 +1,4 @@
+import pathlib
 import sys, os, re, time, subprocess, threading, tempfile, sniper_lib
 
 
@@ -138,7 +139,7 @@ def load_build_config(build_dir):
   """Read a build directory's config/sniper.py."""
   configfile = os.path.join(build_dir, 'config', 'sniper.py')
   config = {}
-  exec(compile(open(configfile, "rb").read(), configfile, 'exec'), {}, config)
+  exec(compile(pathlib.Path(configfile).read_bytes(), configfile, 'exec'), {}, config)
   return configfile, config
 
 # The run stream.
@@ -349,7 +350,7 @@ def get_cxx_inuse(sim_root, clear_ldlibpath = False):
     os.system('ldd %s > %s 2> /dev/null' % (pin_sim, ldd_out_name))
     if ldlpsave:
       os.environ['LD_LIBRARY_PATH'] = ldlpsave
-    ldd_out = open(ldd_out_name).read()
+    ldd_out = pathlib.Path(ldd_out_name).read_text()
     os.unlink(ldd_out_name)
     libcxx_path = os.path.dirname([ line.split()[2] for line in ldd_out.split('\n') if 'libstdc++.so.6' in line ][0])
   except Exception as e:

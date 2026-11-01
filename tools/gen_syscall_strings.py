@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import pathlib
+import io
 import re
 
 rx = re.compile(r'#define __NR_(.*?)\s+(.*)')
@@ -26,7 +28,7 @@ print('''\
 def make(bits):
   seen = set()
   names = {}
-  for line in open('/usr/include/asm/unistd_%d.h' % bits, 'r').readlines():
+  for line in io.StringIO(pathlib.Path('/usr/include/asm/unistd_%d.h' % bits).read_text()).readlines():
     m = rx.match(line)
     if m:
       name, number = m.group(1), m.group(2)

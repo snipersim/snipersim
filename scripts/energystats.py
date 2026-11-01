@@ -8,6 +8,7 @@ Works by registering a PRE_STAT_WRITE hook, which, before a stats snapshot write
 - Finally the actual snapshot is written, including updated values for all energy counters
 """
 
+import pathlib
 import sys, os, sim
 
 
@@ -152,7 +153,7 @@ vdd[] = %s
     ))
 
     result = {}
-    exec(compile(open(outputbase + '.py', "rb").read(), outputbase + '.py', 'exec'), {}, result)
+    exec(compile(pathlib.Path(outputbase + '.py').read_bytes(), outputbase + '.py', 'exec'), {}, result)
     return result['power']
 
 # All scripts execute in global scope, so other scripts will be able to call energystats.update()

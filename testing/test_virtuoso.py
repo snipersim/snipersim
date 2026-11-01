@@ -151,7 +151,8 @@ def live_feed_check(stats):
     path = os.path.join(stats['__outdir__'], 'simulation', 'sim.live')
     if not os.path.exists(path):
         return False, 'no sim.live written'
-    recs = [json.loads(l) for l in open(path) if l.strip()]
+    with open(path) as f:
+        recs = [json.loads(l) for l in f if l.strip()]
     evs = [r['ev'] for r in recs]
     samples = [r for r in recs if r['ev'] == 'sample']
     busy = [any(c['instrs'] > 0 for c in r['cores']) for r in samples]
@@ -1649,7 +1650,7 @@ def take_lock(lock):
             if attempt:
                 raise
         try:
-            pid = int(open(lock).read().split()[1])
+            pid = int(pathlib.Path(lock).read_text().split()[1])
         except (OSError, ValueError, IndexError):
             pid = None                       # unreadable: nobody we can ask
         if pid is not None:
@@ -2039,7 +2040,7 @@ def compare(name, stats, tol_abs=TOL_ABS, tol_rel=TOL_REL):
     path = golden_path(name)
     if not os.path.exists(path):
         return None, 'no baseline (run --bless at the base commit)'
-    rec = json.load(open(path))
+    rec = json.loads(pathlib.Path(path).read_text())
     if rec.get('env_digest') not in (None, env_digest()):
         return None, ('baseline was blessed under a different environment '
                       '(%s, now %s); re-bless' % (rec['env_digest'], env_digest()))
@@ -2109,7 +2110,7 @@ def git_head():
 
 
 def file_sha1(path):
-    return hashlib.sha1(open(path, 'rb').read()).hexdigest()[:12]
+    return hashlib.sha1(pathlib.Path(path).read_bytes()).hexdigest()[:12]
 
 
 def main():

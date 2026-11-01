@@ -36,6 +36,8 @@ Usage:
   python3 testing/test_apps.py --only fft --only dvfs
 """
 
+import pathlib
+import io
 import argparse
 import os
 import shutil
@@ -256,7 +258,7 @@ def simulated_instructions(outdir):
     total = 0
     for root, dirs, files in os.walk(outdir):
         if 'sim.stats' in files:
-            for line in open(os.path.join(root, 'sim.stats')):
+            for line in io.StringIO(pathlib.Path(os.path.join(root, 'sim.stats')).read_text()):
                 if line.startswith('performance_model.instruction_count = '):
                     total += sum(int(float(v)) for v in line.split('=', 1)[1].split(',') if v.strip())
     return total
@@ -267,7 +269,7 @@ def run_stats(outdir):
     for root, dirs, files in os.walk(outdir):
         if 'sim.stats' in files:
             st = {}
-            for line in open(os.path.join(root, 'sim.stats')):
+            for line in io.StringIO(pathlib.Path(os.path.join(root, 'sim.stats')).read_text()):
                 if ' = ' in line:
                     k, v = line.split(' = ', 1)
                     st[k.strip()] = [x.strip() for x in v.split(',') if x.strip()]
@@ -333,7 +335,7 @@ def simout_feature(out, outdir):
     if not simdir:
         return False, 'no sim.stats'
     try:
-        simout = open(os.path.join(simdir, 'sim.out')).read()
+        simout = pathlib.Path(os.path.join(simdir, 'sim.out')).read_text()
     except OSError:
         return False, 'no sim.out'
     insns = [int(float(v)) for v in st.get('performance_model.instruction_count', [])]
@@ -395,7 +397,7 @@ def dvfs_feature(out, outdir):
 
 def hetero_cfg_feature(out, outdir):
     st, root = run_stats(outdir)
-    cfg = open(os.path.join(root, 'sim.cfg')).read() if root else ''
+    cfg = pathlib.Path(os.path.join(root, 'sim.cfg')).read_text() if root else ''
     if 'dispatch_width[] = 1,2,4,1' not in cfg:
         return False, 'the per-core configurations (tiny, small, big, tiny) did not reach sim.cfg as dispatch widths 1,2,4,1'
     return True, 'per-core dispatch widths 1,2,4,1'
@@ -408,11 +410,11 @@ def power_feature(out, outdir):
     txt, xml = os.path.join(outdir, 'power.txt'), os.path.join(outdir, 'power.xml')
     if not os.path.isfile(txt) or not os.path.isfile(xml):
         return False, 'no power.txt / power.xml: McPAT did not run or failed'
-    t = open(txt).read()
+    t = pathlib.Path(txt).read_text()
     m = re.search(r'^Processor:.*?Runtime Dynamic = ([0-9.]+) W', t, re.S | re.M)
     if not m or float(m.group(1)) <= 0:
         return False, 'power.txt has no processor runtime power'
-    if 'name="x86" value="1"' not in open(xml).read():
+    if 'name="x86" value="1"' not in pathlib.Path(xml).read_text():
         return False, 'power.xml does not describe the x86 core as x86'
     node = re.search(r'Technology (\d+) nm', t)
     return True, 'McPAT: %s W runtime dynamic at %s nm' % (m.group(1), node.group(1) if node else '?')
@@ -454,7 +456,7 @@ def page_colour_check(out, rc, outdir):
     old fault-order allocation two runs in four missed 17 to 37 times as often."""
     def misses(d):
         try:
-            for line in open(os.path.join(outdir, d, 'simulation', 'sim.stats')):
+            for line in io.StringIO(pathlib.Path(os.path.join(outdir, d, 'simulation', 'sim.stats')).read_text()):
                 if line.startswith('L2.load-misses-data = '):
                     return [int(v) for v in line.split('=', 1)[1].split(',')]
         except OSError:
@@ -691,7 +693,7 @@ def sniper_in_sniper_check(out, rc, outdir):
     for name, path in (('outer', outer), ('inner', inner)):
         n = 0
         if os.path.exists(path):
-            for line in open(path):
+            for line in io.StringIO(pathlib.Path(path).read_text()):
                 # core.instructions: the outer fast-forwards its region, and in
                 # fast-forward only the core counts (the timing model's count stays 0)
                 if line.startswith('core.instructions = '):
@@ -760,7 +762,7 @@ def unavailable(reason):
         # with TORCH=ON; the build's own config says whether it does.
         build = os.environ.get('SNIPER_BUILD_DIR', os.path.join(SNIPER_ROOT, 'build', 'default'))
         try:
-            cfg = open(os.path.join(build, 'config', 'sniper.py')).read()
+            cfg = pathlib.Path(os.path.join(build, 'config', 'sniper.py')).read_text()
         except OSError:
             cfg = ''
         if re.search(r'^torch_home=""', cfg, re.M) or 'torch_home=' not in cfg:
@@ -827,7 +829,7 @@ def private_tree(name, root):
     for e in os.listdir(SNIPER_ROOT):
         if e != 'test':
             os.symlink(os.path.join(SNIPER_ROOT, e), os.path.join(root, e))
-    makefile = open(os.path.join(TEST_DIR, name, 'Makefile')).read()
+    makefile = pathlib.Path(os.path.join(TEST_DIR, name, 'Makefile')).read_text()
     dirs = {name, 'shared'} | set(re.findall(r'\.\./([A-Za-z0-9_.-]+)', makefile)) - {'..'}
     for d in sorted(dirs):
         src = os.path.join(TEST_DIR, d)

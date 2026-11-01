@@ -1,3 +1,4 @@
+import pathlib
 import os, sys, json, collections
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend( [os.path.abspath(os.path.join(HOME, '..'))] )
@@ -19,9 +20,10 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, verbose = Fal
   topodir = os.path.join(outputdir,'levels','topology')
   mkdir_p(topodir)
 
-  gen_topology.gen_topology(resultsdir = resultsdir, outputobj = open(os.path.join(topodir, 'topo.svg'), 'w'), format = 'svg', embedded = True)
+  with open(os.path.join(topodir, 'topo.svg'), 'w') as svg:
+    gen_topology.gen_topology(resultsdir = resultsdir, outputobj = svg, format = 'svg', embedded = True)
 
-  config = sniper_config.parse_config(open(os.path.join(resultsdir, 'sim.cfg'), "r").read())
+  config = sniper_config.parse_config(pathlib.Path(os.path.join(resultsdir, 'sim.cfg')).read_text())
   ncores = int(config['general/total_cores'])
   stats = sniper_stats.SniperStats(resultsdir)
 

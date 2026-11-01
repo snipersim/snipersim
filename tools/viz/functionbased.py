@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+import pathlib
 import os, sys, getopt, re, math, subprocess,json,copy
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend( [os.path.abspath(os.path.join(HOME, '..'))] )
@@ -177,7 +178,7 @@ def createJSONData(resultsdir, outputdir, title = None, source = None, doxygenpa
   title = title.replace(' ', '_')
 
   global config, stats
-  config = sniper_config.parse_config(open(os.path.join(resultsdir, 'sim.cfg'), "r").read())
+  config = sniper_config.parse_config(pathlib.Path(os.path.join(resultsdir, 'sim.cfg')).read_text())
   stats = sniper_stats.SniperStats(resultsdir)
 
   readInputData(os.path.join(resultsdir,"sim.rtntrace"))

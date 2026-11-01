@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import pathlib
+import io
 import sys, os, time, getopt, tempfile, subprocess, threading, platform, pprint, queue, shlex
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
 import shutil
@@ -177,7 +179,7 @@ def add_config_file(filename, extension='.cfg'):
     print('Cannot find config file', filename, file=sys.stderr)
     sys.exit(1)
   # Handle #include
-  for line in open(configfile, 'r'):
+  for line in io.StringIO(pathlib.Path(configfile).read_text()):
     if line.startswith('#include'):
       config_files += add_config_file(line.split()[1], extension)
   config_files.append(configfile)
@@ -189,7 +191,7 @@ def make_hetero_config(confignames, objname='core', extension='.cfg'):
     notfound = [ name for name, found in zip(confignames, configfiles) if not found ]
     print('Config file not found:', ', '.join(notfound), file=sys.stderr)
     sys.exit(1)
-  configfiledata = [open(x).read() for x in configfiles]
+  configfiledata = [pathlib.Path(x).read_text() for x in configfiles]
   configs = list(map(sniper_config.parse_config, configfiledata))
 
   # Generate a set of all config options
@@ -567,7 +569,7 @@ if use_profile and use_memory_profile:
 
 yama_ptrace_file = '/proc/sys/kernel/yama/ptrace_scope'
 if use_gdb and os.path.isfile(yama_ptrace_file):
-  y_pt = int(open(yama_ptrace_file).readline())
+  y_pt = int(pathlib.Path(yama_ptrace_file).read_text().split()[0])
   if y_pt != 0:
     print('\nError: Unable to enable debugging via gdb when the yama ptrace_scope protection is enabled.', file=sys.stderr)
     print(' Disable ptrace_scope by setting /proc/sys/kernel/yama/ptrace_scope to 0', file=sys.stderr)
@@ -689,7 +691,7 @@ def config_value(key, default = None):
   value = default
   for f in [ os.path.join(HOME, 'config', 'base.cfg') ] + configfiles:
     try:
-      cfg = sniper_config.parse_config(open(f).read())
+      cfg = sniper_config.parse_config(pathlib.Path(f).read_text())
     except Exception:
       continue
     if key in cfg:
@@ -1105,7 +1107,7 @@ def log_memory(pid):
       _memusage = 0
       for _pid in pids:
         try:
-          proc = open('/proc/%u/statm' % int(_pid), "r").read()
+          proc = pathlib.Path('/proc/%u/statm' % int(_pid)).read_text()
           _memusage += int(proc.split()[0]) * 4096
         except:
           # process already dead, or something
@@ -1161,7 +1163,7 @@ def execute_appdebug():
   while True:
     line = p_sniper.stdout.readline()
     if line.startswith('  target remote :'):
-      info = open(os.path.join(outputdir, 'appdebug_port.out'), "r").read()
+      info = pathlib.Path(os.path.join(outputdir, 'appdebug_port.out')).read_text()
       g_pid, g_remote = list(map(int, info.split()))
       break
 
@@ -1345,7 +1347,7 @@ if tracegen and tracegen.get('tracetempdir'):
   import glob as _glob
   for f in sorted(_glob.glob(os.path.join(tracegen['tracetempdir'], '*.refused'))):
     try:
-      why = open(f).read().strip().split('\n')[0]
+      why = pathlib.Path(f).read_text().strip().split('\n')[0]
     except OSError:
       why = '(no reason recorded)'
     print('[SNIPER] The front end refused the run: %s' % why)
@@ -1428,7 +1430,8 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
   # On a failed run the results are partial; sim.out gets what can be made of
   # them and a note, and a traceback here must not replace the exit status.
   try:
-    gen_simout.generate_simout(resultsdir = outputdir, output = open(os.path.join(outputdir, 'sim.out'), 'w'), silent = True)
+    with open(os.path.join(outputdir, 'sim.out'), 'w') as simout:
+      gen_simout.generate_simout(resultsdir = outputdir, output = simout, silent = True)
   except Exception as e:
     print('[SNIPER] Could not generate sim.out:', e, file=sys.stderr)
   # A recorder that failed before it streamed anything (its options refused,
@@ -1437,7 +1440,7 @@ elif os.path.exists(os.path.join(outputdir, 'sim.cfg')):
   # and the run's status.
   if rc == 0 and tracegen and any(st != 0 for a, st in tracegen.get('recorder_status', [])):
     try:
-      insns = [ int(x) for x in open(os.path.join(outputdir, 'sim.out')).read().split('Instructions', 1)[1].split('\n', 1)[0].replace('|', ' ').split() ]
+      insns = [ int(x) for x in pathlib.Path(os.path.join(outputdir, 'sim.out')).read_text().split('Instructions', 1)[1].split('\n', 1)[0].replace('|', ' ').split() ]
     except (IOError, IndexError, ValueError):
       insns = [ 0 ]
     if sum(insns) == 0:
@@ -1513,7 +1516,7 @@ stats = dict(
 if 'BENCHMARKS_ROOT' in os.environ:
   stats['benchmarks_root'] = os.getenv('BENCHMARKS_ROOT'),
   stats['benchmarks_revision'] = subprocess.getoutput('cd $BENCHMARKS_ROOT && (if [ -e .git ]; then git rev-parse HEAD; else cat .gitid; fi)'),
-open(os.path.join(outputdir, 'sim.info'), 'w').write(pprint.pformat(stats)+'\n')
+pathlib.Path(os.path.join(outputdir, 'sim.info')).write_text(pprint.pformat(stats)+'\n')
 
 if interrupted:
   # Interrupted after the simulator ended: no waiting for the dashboard

@@ -159,6 +159,11 @@ class LogTail:
       self.lines = collections.deque(maxlen = keep)
       self.tags = []
 
+   def close(self):
+      if self.fd is not None:
+         self.fd.close()
+         self.fd = None
+
    def poll(self):
       if self.fd is None:
          for p in self.paths:
@@ -535,6 +540,14 @@ def main():
       path = next((c for c in cand if os.path.exists(c)), cand[0])
    feed = Feed(path)
    args.logtail = LogTail(log_paths) if log_paths else None
+   try:
+      show(feed, args, path, run)
+   finally:
+      if args.logtail:
+         args.logtail.close()
+
+
+def show(feed, args, path, run):
    if args.once:
       if not os.path.exists(path):
          sys.exit('no feed at %s' % path)

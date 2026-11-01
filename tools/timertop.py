@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import pathlib
+import io
 import sys, os, subprocess, addr2line
 
 def ex(cmd):
@@ -9,9 +11,9 @@ if len(sys.argv) > 1:
   if sys.argv[1] == '-':
     data = sys.stdin.readlines()
   else:
-    data = open(sys.argv[1], "r").readlines()
+    data = io.StringIO(pathlib.Path(sys.argv[1]).read_text()).readlines()
 else:
-  data = open('sim_timers.out', "r").readlines()
+  data = io.StringIO(pathlib.Path('sim_timers.out').read_text()).readlines()
 
 addr2line.set_rdtsc(int(data[0]))
 

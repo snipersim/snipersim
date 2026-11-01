@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import pathlib
 import os, sys, math, re, subprocess, collections, buildstack, gnuplot, getopt, pprint, sniper_lib, sniper_config, sniper_stats
 import math
 
@@ -130,7 +131,8 @@ def mcpat_run(inputfile, outputfile):
 def mcpat_messages(outputfile, stderr = ''):
   # What McPAT printed before its results: its own error messages, if any
   try:
-    lines = [l.strip() for l in open(outputfile) if l.strip()]
+    with open(outputfile) as f:
+      lines = [l.strip() for l in f if l.strip()]
   except IOError:
     lines = []
   lines = [l for l in lines[:10] if not l.startswith('McPAT (version')] + [l.strip() for l in stderr.split('\n') if l.strip()]
@@ -166,21 +168,20 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
 
   results = sniper_lib.get_results(jobid, resultsdir, partial = partial)
   if config:
-    results['config'] = sniper_config.parse_config(open(config, "r").read(), results['config'])
+    results['config'] = sniper_config.parse_config(pathlib.Path(config).read_text(), results['config'])
   stats = sniper_stats.SniperStats(resultsdir = resultsdir, jobid = jobid)
 
   power, nuca_at_level = edit_XML(stats, results['results'], results['config'])
   power = [v[0] for v in power]
-  open(tempfile, "w").write('\n'.join(power))
+  pathlib.Path(tempfile).write_text('\n'.join(power))
 
   # Run McPAT
   mcpat_stderr = mcpat_run(tempfile, outputfile + '.txt')
 
   # Parse output
-  power_txt = open(outputfile + '.txt')
   power_dat = {}
 
-  components = power_txt.read().split('*'*89)[2:-1]
+  components = pathlib.Path(outputfile + '.txt').read_text().split('*'*89)[2:-1]
   for component in components:
     lines = component.strip().split('\n')
     componentname = lines[0].strip().strip(':')
@@ -241,7 +242,7 @@ def main(jobid, resultsdir, outputfile, powertype = 'dynamic', config = None, no
     'Area': 0,
   }
   # Write back
-  open(outputfile + '.py', 'w').write("power = " + pprint.pformat(power_dat))
+  pathlib.Path(outputfile + '.py').write_text("power = " + pprint.pformat(power_dat))
 
 
   # Build stack

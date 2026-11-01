@@ -6,6 +6,19 @@ class SniperStatsSqlite(sniper_stats.SniperStatsBase):
     self.db.text_factory = str # Don't try to convert database contents to UTF-8
     self.names = self.read_metricnames()
 
+  def close(self):
+    if self.db is not None:
+      self.db.close()
+      self.db = None
+
+  # The connection was left to the garbage collector by every reader that
+  # does not close it (ResourceWarning: unclosed database)
+  def __del__(self):
+    try:
+      self.close()
+    except Exception:
+      pass
+
   def get_snapshots(self):
     snapshots = []
     c = self.db.cursor()

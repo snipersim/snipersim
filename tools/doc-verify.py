@@ -4,9 +4,10 @@ runs them in order (the env block sourced into the shell, every other block in
 a subshell), printing a banner and the exit status per block, and exiting non-zero
 if any block failed.  Usage:
   doc-verify.py DOC.md [--long] > run.sh"""
+import pathlib
 import re, sys
 doc = sys.argv[1]; want_long = '--long' in sys.argv
-text = open(doc).read()
+text = pathlib.Path(doc).read_text()
 blocks = re.findall(r'```bash\n(# verify:[^\n]*)\n(.*?)```', text, re.S)
 out = ['#!/bin/bash', 'export PS4="+ "', 'fail=0']
 for head, body in blocks:

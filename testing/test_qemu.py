@@ -20,6 +20,8 @@ Usage:
   python3 testing/test_qemu.py --case system-exact
 """
 
+import pathlib
+import io
 import argparse
 import glob
 import collections
@@ -208,7 +210,7 @@ def case_user_fork_refused(p, g, workdir):
     prefix = os.path.join(workdir, 'fork')
     rc, out = run([p['user'], '-plugin', '%s,output=%s' % (p['frontend'], prefix), '--', guest], 300, cwd=workdir)
     marker = prefix + '.app0.refused'
-    if not os.path.isfile(marker) or reason not in open(marker).read():
+    if not os.path.isfile(marker) or reason not in pathlib.Path(marker).read_text():
         return False, 'recorded to files: no refusal marker for the child (qemu exit %s): %s' % (exit_text(rc), out[-300:])
     if 'fork_child parent sum=' not in out or 'fork_child child sum=' in out:
         return False, 'recorded to files: the parent should run on and the child stop: %s' % out[-300:]
@@ -478,7 +480,7 @@ def case_riscv_system_simulate(p, g, workdir):
     if rc != 0:
         return False, 'simulating the trace failed (%s)' % exit_text(rc)
     stats = {}
-    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+    for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
         if ' = ' in line:
             k, v = line.split(' = ', 1)
             stats[k.strip()] = v.strip().split(',')[0]
@@ -565,7 +567,7 @@ def case_aarch64_user_simulate(p, g, workdir):
                     return None, 'Sniper built without the ARM decoder (make ARM=ON)'
                 return False, '%s on %s: %s' % (name, cfg, sniper_failed(rc, out))
             stats = {}
-            for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+            for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
                 if ' = ' in line:
                     k, v = line.split(' = ', 1)
                     stats[k.strip()] = v.strip().split(',')[0]
@@ -694,13 +696,13 @@ def case_riscv_power(p, g, workdir):
     txt, xml = os.path.join(outdir, 'power.txt'), os.path.join(outdir, 'power.xml')
     if not os.path.isfile(txt) or not os.path.isfile(xml):
         return False, 'no power.txt / power.xml'
-    t = open(txt).read()
+    t = pathlib.Path(txt).read_text()
     m = re.search(r'^Processor:.*?Runtime Dynamic = ([0-9.]+) W', t, re.S | re.M)
     if not m or float(m.group(1)) <= 0:
         return False, 'power.txt has no processor runtime power'
     if 'Technology 22 nm' not in t:
         return False, 'McPAT did not use the configuration\'s 22 nm'
-    if 'name="x86" value="0"' not in open(xml).read():
+    if 'name="x86" value="0"' not in pathlib.Path(xml).read_text():
         return False, 'power.xml describes the RISC-V core as x86'
     return True, 'McPAT: %s W runtime dynamic at 22 nm, a non-x86 core' % m.group(1)
 
@@ -726,7 +728,7 @@ def case_riscv_user_simulate(p, g, workdir):
             return None, 'Sniper built without the RISC-V core model (make RISCV=ON)'
         return False, sniper_failed(rc, out)
     stats = {}
-    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+    for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
         if ' = ' in line:
             k, v = line.split(' = ', 1)
             stats[k.strip()] = v.strip().split(',')[0]
@@ -889,7 +891,7 @@ def case_riscv_ime_simulate(p, g, workdir):
     if 'undecoded instruction' in out:
         return False, 'the decoder did not recognise an instruction: %s' % re.search(r'undecoded instruction[^\n]*', out).group(0)
     stats = {}
-    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+    for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
         if ' = ' in line:
             k, v = line.split(' = ', 1)
             stats[k.strip()] = v.strip().split(',')[0]
@@ -1011,7 +1013,7 @@ def llm_build(cc, out, extra):
 
 def llm_dims(keys='DLV'):
     d = {}
-    for line in open(os.path.join(LLM_DIR, 'model_weights.h')):
+    for line in io.StringIO(pathlib.Path(os.path.join(LLM_DIR, 'model_weights.h')).read_text()):
         m = re.match(r'#define GPT_([DLVH]) (\d+)', line)
         if m:
             d[m.group(1)] = int(m.group(2))
@@ -1204,7 +1206,7 @@ def case_riscv_llm_simulate(p, g, workdir):
         if 'undecoded instruction' in out:
             return False, re.search(r'undecoded instruction[^\n]*', out).group(0)
         stats = {}
-        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
             if ' = ' in line:
                 k, v = line.split(' = ', 1)
                 stats[k.strip()] = v.strip().split(',')[0]
@@ -1310,7 +1312,7 @@ def case_riscv_llm_couplings(p, g, workdir):
             if rc is None or rc != 0:
                 return False, '%s/%s: %s' % (variant, coupling, sniper_failed(rc, out))
             stats = {}
-            for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+            for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
                 if ' = ' in line:
                     k, v = line.split(' = ', 1)
                     stats[k.strip()] = v.strip().split(',')[0]
@@ -1409,7 +1411,7 @@ def case_riscv_llm_size32(p, g, workdir):
         if rc is None or rc != 0:
             return False, '%s/%s: %s' % (variant, coupling, sniper_failed(rc, out))
         stats = {}
-        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
             if ' = ' in line:
                 k, v = line.split(' = ', 1)
                 stats[k.strip()] = v.strip().split(',')[0]
@@ -1514,7 +1516,7 @@ def case_riscv_footprint_lines(p, g, workdir):
         if rc is None or rc != 0:
             return False, '%s at %d bits' % (sniper_failed(rc, out), vlen)
         stats = {}
-        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
             if ' = ' in line:
                 k, v = line.split(' = ', 1)
                 stats[k.strip()] = v.strip().split(',')[0]
@@ -1550,7 +1552,7 @@ def case_riscv_vector_datapath(p, g, workdir):
         if rc is None or rc != 0:
             return False, '%s (datapath %d)' % (sniper_failed(rc, out), width)
         stats = {}
-        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
             if ' = ' in line:
                 k, v = line.split(' = ', 1)
                 stats[k.strip()] = v.strip().split(',')[0]
@@ -1749,7 +1751,7 @@ def case_riscv_ame_couplings(p, g, workdir):
         if rc is None or rc != 0:
             return False, '%s: %s' % (coupling, sniper_failed(rc, out))
         stats = {}
-        for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+        for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
             if ' = ' in line:
                 k, v = line.split(' = ', 1)
                 stats[k.strip()] = v.strip().split(',')[0]
@@ -1784,7 +1786,7 @@ def case_riscv_ame_couplings(p, g, workdir):
 # --- code rewritten in place, and run-sniper driving QEMU ----------------------
 
 def sim_instructions(outdir):
-    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+    for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
         if line.split(' = ')[0].strip() == 'core.instructions':
             return int(line.split(' = ', 1)[1].split(',')[0])
     return 0
@@ -2295,7 +2297,7 @@ def case_run_sniper_qemu_system(p, g, workdir):
 
 def stats_of(outdir):
     stats = {}
-    for line in open(os.path.join(outdir, 'simulation', 'sim.stats')):
+    for line in io.StringIO(pathlib.Path(os.path.join(outdir, 'simulation', 'sim.stats')).read_text()):
         if ' = ' in line:
             k, v = line.split(' = ', 1)
             stats[k.strip()] = v.strip().split(',')[0]
@@ -2861,7 +2863,7 @@ def counters_case(workdir, arch, cc_cmd, config):
     if not 30000000 <= ns <= 31000000:
         return False, 'clock_gettime saw %d ns over 30 ms of simulated sleep' % ns
     try:
-        cfg = open(os.path.join(outdir, 'simulation', 'sim.cfg')).read()
+        cfg = pathlib.Path(os.path.join(outdir, 'simulation', 'sim.cfg')).read_text()
         ghz = float(re.search(r'\[perf_model/core\][^\[]*?\nfrequency\s*=\s*"?([0-9.]+)', cfg).group(1))
     except (IOError, AttributeError) as e:
         return False, 'no core frequency in the run\'s sim.cfg (%s)' % e

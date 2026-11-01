@@ -18,6 +18,8 @@ vl*SEW/8.  Sniper's riscv.* counters (per thread) and the recorded span
 bytes must match these exactly; the cache-level load and store counts
 must be at least the vector and tile accesses (scalar traffic adds to
 them)."""
+import pathlib
+import io
 import argparse, sys
 
 def expected(vlen, sew, m, n, k, lam=2, lmul=1, ame=False, ame_n=4):
@@ -62,7 +64,7 @@ def expected(vlen, sew, m, n, k, lam=2, lmul=1, ame=False, ame_n=4):
 
 def read_stats(path):
     stats = {}
-    for line in open(path):
+    for line in io.StringIO(pathlib.Path(path).read_text()):
         if ' = ' in line:
             kk, v = line.split(' = ', 1)
             stats[kk.strip()] = sum(int(x) for x in v.strip().split(',') if x.strip().lstrip('-').isdigit())

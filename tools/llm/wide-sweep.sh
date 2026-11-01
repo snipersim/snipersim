@@ -47,9 +47,10 @@ one() {
 import sys
 cfg, n, bw, S = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
 st = {}
-for line in open(S):
-    if ' = ' in line:
-        k, v = line.split(' = ', 1); st[k.strip()] = v.strip().split(',')[0]
+with open(S) as f:
+    for line in f:
+        if ' = ' in line:
+            k, v = line.split(' = ', 1); st[k.strip()] = v.strip().split(',')[0]
 cyc, ins = float(st['performance_model.cycle_count']), int(st['performance_model.instruction_count'])
 reads, writes = int(st.get('dram.reads', 0)), int(st.get('dram.writes', 0))
 print('%-16s %d tokens  %10.0f cycles/token  %10.0f insn/token  dram/token %d reads + %d writes (%.1f MB at %s GB/s)' % (cfg, n, cyc / n, ins / n, reads / n, writes / n, (reads + writes) * 64 / n / 1e6, bw))

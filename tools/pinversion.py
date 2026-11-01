@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import pathlib
+import io
 import sys, os, re, subprocess
 
 def ex_ret(cmd):
@@ -33,7 +35,7 @@ if not headerfile:
     sys.exit(0)
 
 version = {}
-for line in open(headerfile, "r"):
+for line in io.StringIO(pathlib.Path(headerfile).read_text()):
   for var in ('PIN_PRODUCT_VERSION_MAJOR', 'PIN_PRODUCT_VERSION_MINOR', 'PIN_BUILD_NUMBER'):
     res = re.search(r'#define\s+%s\s+(\d+)' % var, line)
     if res:

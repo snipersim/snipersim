@@ -43,6 +43,7 @@ Usage:
   python3 testing/test_pacsim.py --mode loop --tolerance 0.05
 """
 
+import pathlib
 import argparse
 import os
 import re
@@ -508,7 +509,7 @@ def measure(p, workdir, mode, args):
     dumpstats_output = p.stdout
 
     # The work saved: instructions of measured regions over all of them
-    regions = json.load(open(os.path.join(samp_dir, 'pacsim_regions.json')))['feature_stack']
+    regions = json.loads(pathlib.Path(os.path.join(samp_dir, 'pacsim_regions.json')).read_text())['feature_stack']
     total = sum(sum(rg['insnums']) for rg in regions)
     detailed = sum(sum(rg['insnums']) for rg in regions if rg['feature_level'] == 1)
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Create the scripts that define linker flags needed for running an app under Graphite.
 
+import pathlib
 import sys, os, subprocess
 
 sim_root, sde_home, pin_home, dynamorio_home, cc, cxx, arch = sys.argv[1:]
@@ -62,13 +63,13 @@ message = '# This file is auto-generated, changes made to it will be lost. Pleas
 env_check_sh = 'if [ -z "${SNIPER_ROOT}" ] ; then SNIPER_ROOT=$(readlink -f "$(dirname "${BASH_SOURCE[0]}")/..") ; fi'
 env_check_make = 'SELF_DIR := $(dir $(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST)))\nSNIPER_ROOT ?= $(shell readlink -f $(SELF_DIR)/..)'
 
-open('config/buildconf.sh', 'w').write('\n'.join(
+pathlib.Path('config/buildconf.sh').write_text('\n'.join(
   [ message, '' ] +
   [ env_check_sh, '' ] +
   [ '%s="%s"' % i for i in sorted(flags.items(),key=lambda x:x[0]) ]
 ) + '\n')
 
-open('config/buildconf.makefile', 'w').write('\n'.join(
+pathlib.Path('config/buildconf.makefile').write_text('\n'.join(
   [ message, '' ] +
   [ env_check_make, '' ] +
   [ '%s:=%s' % i for i in sorted(flags.items(),key=lambda x:x[0]) ]

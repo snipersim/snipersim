@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import pathlib
 import os, sys, getopt, re, math, subprocess
 HOME = os.path.abspath(os.path.dirname(__file__))
 sys.path.extend([ os.path.abspath(os.path.join(HOME, '..')) ])
@@ -20,7 +21,7 @@ def createJSONData(interval, num_intervals, resultsdir, outputdir, title, verbos
     print('Generate JSON data for Level 3')
 
   stats = sniper_stats.SniperStats(resultsdir)
-  config = sniper_config.parse_config(open(os.path.join(resultsdir, 'sim.cfg'), "r").read())
+  config = sniper_config.parse_config(pathlib.Path(os.path.join(resultsdir, 'sim.cfg')).read_text())
 
   ncores = int(config['general/total_cores'])
   if verbose:

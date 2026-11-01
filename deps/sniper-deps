@@ -25,6 +25,7 @@ the top-level make forwards its own -j, so a dependency build does not quietly
 take more parallelism than the build that asked for it.
 """
 
+import pathlib
 import argparse
 import hashlib
 import json
@@ -420,7 +421,7 @@ def cmd_fetch(args):
 def cmd_pin(args):
     """Download each named tarball once and record its digest."""
     man = load_manifest()
-    raw = open(MANIFEST).read()
+    raw = pathlib.Path(MANIFEST).read_text()
     names = args.names or [n for n, d in man['dependencies'].items()
                            if d['kind'] == 'tarball' and not d.get('sha256')]
     changed = False
@@ -444,7 +445,7 @@ def cmd_pin(args):
         raw = raw.replace(old, new)
         changed = True
     if changed:
-        open(MANIFEST, 'w').write(raw)
+        pathlib.Path(MANIFEST).write_text(raw)
         print('\nmanifest updated')
     return 0
 

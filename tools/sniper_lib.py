@@ -1,5 +1,6 @@
 # A copy of this file is distributed with the binaries of Sniper and Benchmarks
 
+import pathlib
 import sys, os, re, signal, subprocess, io, json, sniper_stats, sniper_config
 
 
@@ -54,7 +55,7 @@ def get_config(jobid = None, resultsdir = None, force_deleted = True):
     cfgfile = os.path.join(resultsdir, 'sim.cfg')
     if not os.path.exists(cfgfile):
       raise ValueError('Cannot find config file at %s' % resultsdir)
-    simcfg = open(cfgfile, 'r').read()
+    simcfg = pathlib.Path(cfgfile).read_text()
   config = sniper_config.parse_config(simcfg)
   return config
 
@@ -287,7 +288,7 @@ def parse_results_from_dir(resultsdir, partial = None, metrics = None):
   simcfg = os.path.join(resultsdir, 'sim.cfg')
   if not os.path.exists(simcfg):
     raise SniperResultsException("No valid configuration found")
-  simcfg = sniper_config.parse_config(open(simcfg).read())
+  simcfg = sniper_config.parse_config(pathlib.Path(simcfg).read_text())
   ncores = int(simcfg['general/total_cores'])
 
   results += [ ('ncores', -1, ncores) ]
@@ -297,9 +298,9 @@ def parse_results_from_dir(resultsdir, partial = None, metrics = None):
   siminfo = os.path.join(resultsdir, 'sim.info')
   graphiteout = os.path.join(resultsdir, 'graphite.out')
   if os.path.exists(siminfo):
-    siminfo = eval(open(siminfo).read())
+    siminfo = eval(pathlib.Path(siminfo).read_text())
   elif os.path.exists(graphiteout):
-    siminfo = eval(open(graphiteout).read())
+    siminfo = eval(pathlib.Path(graphiteout).read_text())
   else:
     siminfo = None
   if siminfo:
@@ -314,7 +315,11 @@ def parse_results_from_dir(resultsdir, partial = None, metrics = None):
     k1, k2 = 'roi-begin', 'roi-end'
 
   stats = sniper_stats.SniperStats(resultsdir)
-  results += stats.parse_stats((k1, k2), ncores, metrics = metrics)
+  try:
+    results += stats.parse_stats((k1, k2), ncores, metrics = metrics)
+  finally:
+    if hasattr(stats, 'close'):
+      stats.close()
 
   if not partial:
     walltime = [ v for k, _, v in results if k == 'time.walltime' ]
@@ -331,7 +336,7 @@ def parse_results_from_dir(resultsdir, partial = None, metrics = None):
   power = {}
   powerfile = os.path.join(resultsdir, 'power.py')
   if os.path.exists(powerfile):
-    exec(open(powerfile).read())
+    exec(pathlib.Path(powerfile).read_text())
     for key, value in power.items():
       results.append(('power.%s' % key, -1, value))
 
@@ -344,7 +349,7 @@ def get_results_file(filename, jobid = None, resultsdir = None, force = False):
   else:
     filename = os.path.join(resultsdir, filename)
     if os.path.exists(filename):
-      return open(filename).read()
+      return pathlib.Path(filename).read_text()
     else:
       return None
 
@@ -414,7 +419,7 @@ def find_children(pid):
     except ValueError:
       continue # not a pid
     try:
-      stat = open('/proc/%u/stat' % _pid, 'r').read()
+      stat = pathlib.Path('/proc/%u/stat' % _pid).read_text()
     except IOError:
       continue # pid already gone
     ppid = parse_stat_line_for_ppid(stat)

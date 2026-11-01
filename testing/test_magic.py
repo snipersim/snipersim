@@ -36,6 +36,7 @@ Usage:
   python3 testing/test_magic.py [--only x86_64-qemu ...]
 """
 
+import pathlib
 import argparse
 import os
 import re
@@ -185,7 +186,7 @@ def check_simulated(arch, frontend, workdir, timeout):
             'mhz_after_set': 1234, 'user': 42, 'time_grew': 1, 'work': WORK}
     bad = ['%s=%s (want %s)' % (k, got.get(k), v) for k, v in want.items() if got.get(k) != v]
     # the configuration's own clock, before the change
-    m = re.search(r'^\s*frequency\s*=\s*([\d.]+)', open(os.path.join(outdir, 'simulation', 'sim.cfg')).read(), re.M)
+    m = re.search(r'^\s*frequency\s*=\s*([\d.]+)', pathlib.Path(os.path.join(outdir, 'simulation', 'sim.cfg')).read_text(), re.M)
     clock = int(round(float(m.group(1)) * 1000)) if m else None
     if got.get('mhz_initial') != clock:
         bad.append('mhz_initial=%s (want the configured %s)' % (got.get('mhz_initial'), clock))
@@ -197,7 +198,10 @@ def check_simulated(arch, frontend, workdir, timeout):
         bad.append('markers %s (want 7/8, then 9 named api-marker)' % markers)
     try:
         db = sqlite3.connect(os.path.join(outdir, 'simulation', 'sim.stats.sqlite3'))
-        names = [r[0] for r in db.execute('select description from event where event = 2')]   # EVENT_THREAD_NAME
+        try:
+            names = [r[0] for r in db.execute('select description from event where event = 2')]   # EVENT_THREAD_NAME
+        finally:
+            db.close()
     except sqlite3.Error as e:
         names = ['(%s)' % e]
     if names != ['api-worker']:

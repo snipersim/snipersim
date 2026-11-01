@@ -24,6 +24,7 @@ Usage:
   python3 testing/test_scripting.py --repeat 5      # shake out races
 """
 
+import pathlib
 import argparse
 import os
 import re
@@ -81,7 +82,7 @@ def file_has_lines(name, minimum):
         path = os.path.join(outdir, name)
         if not os.path.exists(path):
             return False, '%s not written' % name
-        n = len(open(path).read().splitlines())
+        n = len(pathlib.Path(path).read_text().splitlines())
         if n < minimum:
             return False, '%s has %d lines, expected at least %d' % (name, n, minimum)
         return True, '%s: %d lines' % (name, n)

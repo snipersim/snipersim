@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import pathlib
+import io
 import sys
 from PIL import Image, ImageDraw
 
@@ -24,7 +26,7 @@ NTHREADS = 0
 _ROI_BEGIN = None
 _ROI_END = None
 
-for line in open(FILENAME, "r"):
+for line in io.StringIO(pathlib.Path(FILENAME).read_text()):
   try:
     cpu, time, state = map(int, line.split())
   except ValueError:
@@ -57,7 +59,7 @@ laststate = {}
 
 states = [[ 0 for i in range(NTHREADS) ] for j in range(WIDTH) ]
 
-for line in open(FILENAME, "r"):
+for line in io.StringIO(pathlib.Path(FILENAME).read_text()):
   try:
     cpu, time, state = map(int, line.split())
   except ValueError:

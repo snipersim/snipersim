@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import pathlib
+import io
 import sys, os, getopt, subprocess, tarfile, shlex, shutil
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
 import debugpin, run_sniper
@@ -17,7 +19,7 @@ def usage():
 
 # From http://stackoverflow.com/questions/6767649/how-to-get-process-status-using-pid
 def procStatus(pid):
-    for line in open("/proc/%d/status" % pid).readlines():
+    for line in io.StringIO(pathlib.Path("/proc/%d/status" % pid).read_text()).readlines():
         if line.startswith("State:"):
             return line.split(":",1)[1].strip().split(' ')[0]
     return None

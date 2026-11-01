@@ -44,6 +44,8 @@ Usage:
   python3 testing/test_configs.py --mode detailed
 """
 
+import pathlib
+import io
 import argparse
 import os
 import re
@@ -769,7 +771,7 @@ def build_features():
     cache = os.path.join(build_dir(), 'CMakeCache.txt')
     feats = set()
     if os.path.exists(cache):
-        for line in open(cache):
+        for line in io.StringIO(pathlib.Path(cache).read_text()):
             m = re.match(r'SNIPER_ENABLE_(\w+):BOOL=(ON|TRUE|1)\s*$', line.strip())
             if m:
                 feats.add(m.group(1).lower())

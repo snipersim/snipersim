@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import pathlib
 import sys, os, tempfile
 
 pid = int(sys.argv[1])
@@ -12,7 +13,7 @@ mytid = int(sys.argv[2])
 #  os.system('screen -d -m -S gdb-%d -- gdb $SNIPER_ROOT/pin_kit/intel64/bin/pinbin %d' % (tid, tid))
 
 cmdfile = '/tmp/gdbcmd-%d' % mytid
-open(cmdfile, 'w').write('''\
+pathlib.Path(cmdfile).write_text('''\
 # Continue execution past the sleep in pinboost_debugme() and into the real exception
 continue
 # Show a backtrace at the exception
