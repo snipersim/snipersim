@@ -218,7 +218,15 @@ def fetch_tarball(name, dep, offline):
             for m in members:
                 if m.name.startswith('/') or '..' in m.name.split('/'):
                     raise SystemExit('error: %s contains an unsafe path %r' % (name, m.name))
-            tf.extractall(unpacked, members=members)
+            # and tarfile's own, named: Python 3.14 applies the 'data' filter
+            # by default (3.12 and 3.13 warn that it will), which also refuses
+            # links out of the destination, device files and setuid bits --
+            # none of which a dependency archive has.  Older Pythons without
+            # it rely on the check above.
+            if hasattr(tarfile, 'data_filter'):
+                tf.extractall(unpacked, members=members, filter='data')
+            else:
+                tf.extractall(unpacked, members=members)
 
         for rel in dep.get('post_prune', []):
             victim = os.path.join(unpacked, rel)
