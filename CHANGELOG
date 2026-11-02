@@ -1,4 +1,4 @@
-Version 9.0 (in preparation)
+Version 9.0
   * The build is CMake behind a make forwarder, with presets; every external
     dependency is declared in deps/manifest.json with a pinned version and
     digest and fetched into a shared cache by deps/sniper-deps
