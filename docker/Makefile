@@ -1,4 +1,4 @@
-UBUNTU_VERSION?=22.04
+UBUNTU_VERSION?=26.04
 DOCKER_IMAGE?=ubuntu:$(UBUNTU_VERSION)-sniper-$(USER)
 DOCKER_FILE?=Dockerfile-ubuntu-$(UBUNTU_VERSION)
 DOCKER_FILES=$(wildcard Dockerfile*)
@@ -27,6 +27,6 @@ run-root:
 	docker run --rm -it $(DOCKER_RUN_OPT) -v "${HOME}:${HOME}" $(DOCKER_IMAGE)
 
 run:
-	docker run --rm -it $(DOCKER_RUN_OPT) -v "${HOME}:${HOME}" --user $(shell id -u):$(shell id -g) -w "${PWD}" $(DOCKER_IMAGE)
+	docker run --rm -it $(DOCKER_RUN_OPT) -v "${HOME}:${HOME}" --user $(shell id -u):$(shell id -g) -w "${PWD}" -e HOME="${HOME}" $(DOCKER_IMAGE)
 
 .PHONY: all build-all run-root run
